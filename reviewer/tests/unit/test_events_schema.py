@@ -8,10 +8,11 @@ here even when the literal table in T008 is still in step with the schema.
 
 Three things it pins down:
 
-1. **Every event type the runner and the tools can emit** is produced by a real run and
-   validated. The one type nothing emits yet (`disposition`) belongs to the US1 chat
-   server's disposition endpoint and is named in `NOT_YET_EMITTED` rather than quietly
-   missing.
+1. **Every event type in the contract** is produced by a real run and validated, so
+   `NOT_YET_EMITTED` is empty: the last type without a producer, `disposition`, is now
+   written by `chat/sessions.py`'s `record_disposition`, which is what the chat server's
+   disposition endpoint calls. A type that loses its producer fails here rather than
+   quietly disappearing from the stream.
 2. **`events.jsonl` round-trips.** Each line parses back into an `AgentEvent` and
    re-serializes to the identical bytes, `seq` is contiguous from 1 across every turn of
    the session, and the file is appended to rather than rewritten - the pane replays it
@@ -39,6 +40,7 @@ from referencing.exceptions import Unresolvable
 from swreview.agent import runner
 from swreview.agent.providers import AgentEvent, EventType
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.chat.sessions import record_disposition
 from swreview.findings import build_finding
 from swreview.ir.models import SourceRef
 from tests.support.contracts import (
@@ -54,14 +56,15 @@ EVENTS_CONTRACT = "chat-events.schema.json"
 EVENTS_SCHEMA = load_any_contract(EVENTS_CONTRACT)
 SCHEMA_EVENT_TYPES: set[str] = set(EVENTS_SCHEMA["properties"]["type"]["enum"])
 
-NOT_YET_EMITTED: frozenset[str] = frozenset({"disposition"})
-"""Event types the contract carries that no producer emits yet.
+NOT_YET_EMITTED: frozenset[str] = frozenset()
+"""Event types the contract carries that no producer emits yet. There are none left.
 
 `finding`, `evidence.requested` and `coverage` are emitted by the tool layer as it writes
-them (`ToolContext.record_finding` and its two siblings), so they are in the run below. A
-`disposition` is an engineer's judgement on a finding, not the model's: it arrives through
-the US1 chat server's disposition endpoint, and until that exists it is validated from a
-hand-written body in `test_provider_protocol.py`.
+them (`ToolContext.record_finding` and its two siblings). `disposition` is an engineer's
+judgement on a finding rather than the model's, so it has no place in a turn: it is written
+by `record_disposition`, which the chat server's disposition endpoint calls and the run
+below calls directly. The constant stays, empty, because it is the thing that would have to
+be edited to let a type go unproduced again.
 """
 
 EVIDENCE_ARGUMENTS: dict[str, Any] = {
@@ -129,8 +132,9 @@ def full_run(start: Callable[..., runner.ReviewRun]) -> runner.ReviewRun:
     fails (an id the package does not hold) so `tool.finished` is exercised on both
     branches. Answering the request runs a second turn, which records coverage and a
     drawing finding, so the three types the tool layer emits are all in the stream. The
-    third turn is asked for after the script has run out, which is a provider failure: the
-    runner reports `error`, ends the turn and finalizes before re-raising (data-model
+    engineer then dispositions that finding, which is the only producer of `disposition`.
+    The third turn is asked for after the script has run out, which is a provider failure:
+    the runner reports `error`, ends the turn and finalizes before re-raising (data-model
     section 3, rule 5).
     """
     run = start(
@@ -156,6 +160,13 @@ def full_run(start: Callable[..., runner.ReviewRun]) -> runner.ReviewRun:
     )
     run.start()
     run.answer_evidence(REQUEST_ID, "Tapped 12 mm deep, per the shop drawing.")
+    record_disposition(
+        run,
+        run.session.findings[0].id,
+        decision="accepted",
+        note="the callout is being fixed in the next revision",
+        by="a.engineer",
+    )
     with pytest.raises(ValueError, match="the script has 2 turn"):
         run.continue_session("Anything else?")
     return run

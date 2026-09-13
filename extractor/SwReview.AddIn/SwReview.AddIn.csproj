@@ -39,6 +39,14 @@
       SOLIDWORKS cannot float its native loader.
     -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+    <!--
+      Settings/UserSettings.cs reads and writes %APPDATA%\SwReview\settings.json directly, so
+      the reference is stated here rather than inherited through SwReview.Extractor; the
+      version is pinned to the extractor's so one copy ships. DPAPI (ProtectedData) is in the
+      .NET Framework's System.Security assembly, which is a framework reference, not a package.
+    -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <Reference Include="System.Security" />
   </ItemGroup>
 
   <ItemGroup>

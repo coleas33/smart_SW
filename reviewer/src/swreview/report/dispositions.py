@@ -20,7 +20,9 @@ from swreview.report.session import ReviewSession, load_session, save_session
 SESSION_FILE_NAME = "session.json"
 REPORT_FILE_NAME = "report.md"
 
-_DECISIONS: frozenset[str] = frozenset({"accepted", "rejected", "deferred"})
+DECISIONS: frozenset[str] = frozenset({"accepted", "rejected", "deferred"})
+"""The three decisions an engineer can record. Public because the chat server validates a
+request body against them before it reaches `set_disposition` (`chat/server.py`)."""
 _ALLOWED_FROM_DEFERRED: frozenset[str] = frozenset({"accepted", "rejected"})
 
 
@@ -53,6 +55,40 @@ def _validate_transition(finding: Finding, decision: str) -> None:
     )
 
 
+def set_disposition(
+    session: ReviewSession,
+    finding_id: str,
+    decision: str,
+    note: str,
+    by: str,
+    at: datetime | None = None,
+) -> Finding:
+    """Set the disposition of `finding_id` on a session **in memory**, and hand it back.
+
+    The validated half of `apply_disposition`, split out because a live chat cannot use
+    the file-based form: its session is held by the running review and written again at
+    the end of every turn, so a decision applied to a freshly loaded copy would be
+    overwritten by the next finalization (`chat/sessions.py`, `record_disposition`).
+
+    Raises `ValueError` for an unknown decision or a transition the state machine forbids,
+    and `KeyError` for a finding id that is not in the session. Nothing is changed on
+    either path.
+    """
+    if decision not in DECISIONS:
+        raise ValueError(f"decision must be one of {sorted(DECISIONS)}, got {decision!r}")
+
+    finding = find_finding(session, finding_id)
+    _validate_transition(finding, decision)
+
+    finding.disposition = Disposition(
+        decision=decision,  # type: ignore[arg-type]
+        note=note,
+        by=by,
+        at=at if at is not None else datetime.now(UTC),
+    )
+    return finding
+
+
 def apply_disposition(
     run_dir: Path,
     finding_id: str,
@@ -66,21 +102,10 @@ def apply_disposition(
     Raises `ValueError` for an unknown decision or a transition the state machine forbids,
     and `KeyError` for a finding id that is not in the session.
     """
-    if decision not in _DECISIONS:
-        raise ValueError(f"decision must be one of {sorted(_DECISIONS)}, got {decision!r}")
-
     run_dir = Path(run_dir)
     session = load_session(run_dir / SESSION_FILE_NAME)
 
-    finding = find_finding(session, finding_id)
-    _validate_transition(finding, decision)
-
-    finding.disposition = Disposition(
-        decision=decision,  # type: ignore[arg-type]
-        note=note,
-        by=by,
-        at=at if at is not None else datetime.now(UTC),
-    )
+    set_disposition(session, finding_id, decision, note, by, at)
 
     save_session(session, run_dir / SESSION_FILE_NAME)
     (run_dir / REPORT_FILE_NAME).write_text(render_report(session), encoding="utf-8")
@@ -88,4 +113,4 @@ def apply_disposition(
     return session
 
 
-__all__ = ["apply_disposition", "find_finding"]
+__all__ = ["DECISIONS", "apply_disposition", "find_finding", "set_disposition"]
