@@ -23,6 +23,14 @@ public sealed class GapCollector
     /// <summary>A snapshot in the order the gaps were recorded.</summary>
     public IReadOnlyList<Gap> Gaps => _gaps.ToArray();
 
+    /// <summary>
+    /// The <c>GetTypeName2</c> names the dump saw and did not read. It lives here because
+    /// this collector is the one object all three feature read sites already hold, and
+    /// because an unread feature type is the same kind of unresolved coverage as a gap.
+    /// PackageWriter turns it into gaps once the traversal is over.
+    /// </summary>
+    public TypeNameCensus TypeNames { get; } = new TypeNameCensus();
+
     /// <summary>How many gaps have been recorded so far.</summary>
     public int Count => _gaps.Count;
 

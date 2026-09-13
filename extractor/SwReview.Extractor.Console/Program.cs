@@ -15,6 +15,11 @@ using static System.Console;
 using IrCapture = SwReview.Extractor.Ir.Capture;
 using IrInterference = SwReview.Extractor.Ir.Interference;
 
+// The five option lists and KnownOptions are the shipped definition of what each
+// command accepts; the tests assert against THEM rather than against copies, which
+// would pass with the real lists untouched.
+[assembly: InternalsVisibleTo("SwReview.Extractor.Tests")]
+
 namespace SwReview.Extractor.Console;
 
 /// <summary>
@@ -31,19 +36,58 @@ public static class Program
     private const int ExitSuccess = 0;
     private const int ExitError = 1;
 
-    private static readonly string[] DumpOptionNames = { "doc", "config", "out", "meshes", "faces" };
+    internal static readonly string[] DumpOptionNames = { "doc", "config", "out", "meshes", "faces" };
 
-    private static readonly string[] ResolveOptionNames = { "ref", "doc", "out" };
+    internal static readonly string[] ResolveOptionNames = { "ref", "doc", "out" };
 
-    private static readonly string[] InterferenceOptionNames =
+    internal static readonly string[] InterferenceOptionNames =
     {
         "config", "pairs", "coincident-as-interference", "subassemblies-as-components",
         "include-multibody", "ignore-hidden", "fasteners", "out", "truncate-after",
     };
 
-    private static readonly string[] CaptureOptionNames = { "ref", "doc", "view", "out", "note" };
+    internal static readonly string[] CaptureOptionNames = { "ref", "doc", "view", "out", "note" };
 
-    private static readonly string[] ServeOptionNames = { "pipe", "doc", "config", "out" };
+    internal static readonly string[] ServeOptionNames = { "pipe", "doc", "config", "out" };
+
+    /// <summary>
+    /// Every command attaches, so every command accepts <c>--allow-start</c>. It is added
+    /// here rather than repeated in all five lists, where one omission would make the flag
+    /// a usage error on exactly one command.
+    /// </summary>
+    internal static string[] KnownOptions(string[] commandOptions)
+    {
+        var known = new List<string>(commandOptions) { "allow-start" };
+        return known.ToArray();
+    }
+
+    /// <summary>
+    /// Attaches and says which happened. Shared by all five commands so the wording - and
+    /// the attach-only default - cannot drift between them.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static ISldWorks Connect(bool allowStart, ExtractLog log)
+    {
+        ISldWorks swApp = SwAttach.Connect(allowStart, out bool started, out string? diagnosis);
+        if (!started)
+        {
+            log.Write("Attached to the running SOLIDWORKS session.");
+            return swApp;
+        }
+
+        // The log must not say "nothing was running": all that is known is that the running
+        // object table lookup failed, and the diagnosis below is printed precisely when an
+        // SLDWORKS.exe WAS running that COM could not see (constitution, Principle I).
+        if (diagnosis != null)
+        {
+            log.Write(diagnosis);
+        }
+
+        log.Write("Attach failed and --allow-start was given, so a SOLIDWORKS session was "
+            + "requested (it has none of your open documents).");
+
+        return swApp;
+    }
 
     /// <summary>
     /// STA is mandatory: every SOLIDWORKS COM call in this process must run on one STA
@@ -97,10 +141,12 @@ public static class Program
     {
         CommandLine parsed;
         DumpOptions options;
+        bool allowStart;
 
         try
         {
-            parsed = CommandLine.Parse(args, 1, DumpOptionNames);
+            parsed = CommandLine.Parse(args, 1, KnownOptions(DumpOptionNames));
+            allowStart = parsed.Flag("allow-start");
             options = new DumpOptions
             {
                 OutputDirectory = parsed.Required("out"),
@@ -115,11 +161,11 @@ public static class Program
             return ExitError;
         }
 
-        return ExecuteDump(options, parsed.Value("doc"));
+        return ExecuteDump(options, parsed.Value("doc"), allowStart);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static int ExecuteDump(DumpOptions options, string? documentPath)
+    private static int ExecuteDump(DumpOptions options, string? documentPath, bool allowStart)
     {
         using (var log = new ExtractLog(options.OutputDirectory))
         {
@@ -129,10 +175,7 @@ public static class Program
                     + $"--meshes {options.Meshes.ToString().ToLowerInvariant()} "
                     + $"--faces {options.Faces.ToString().ToLowerInvariant()}");
 
-                ISldWorks swApp = SwAttach.Connect(out bool started);
-                log.Write(started
-                    ? "Started a new SOLIDWORKS session (nothing was running)."
-                    : "Attached to the running SOLIDWORKS session.");
+                ISldWorks swApp = Connect(allowStart, log);
 
                 SwSession session = SwSession.Attach(swApp, documentPath, options.Configuration);
                 log.Write($"Document: {session.DocumentPath}");
@@ -168,10 +211,12 @@ public static class Program
     {
         CommandLine parsed;
         string reference;
+        bool allowStart;
 
         try
         {
-            parsed = CommandLine.Parse(args, 1, ResolveOptionNames);
+            parsed = CommandLine.Parse(args, 1, KnownOptions(ResolveOptionNames));
+            allowStart = parsed.Flag("allow-start");
             reference = parsed.Required("ref");
         }
         catch (UsageError error)
@@ -180,20 +225,18 @@ public static class Program
             return ExitError;
         }
 
-        return ExecuteResolve(reference, parsed.Value("doc"), parsed.Value("out"));
+        return ExecuteResolve(reference, parsed.Value("doc"), parsed.Value("out"), allowStart);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static int ExecuteResolve(string reference, string? documentPath, string? outputDirectory)
+    private static int ExecuteResolve(
+        string reference, string? documentPath, string? outputDirectory, bool allowStart)
     {
         using (var log = new ExtractLog(outputDirectory))
         {
             try
             {
-                ISldWorks swApp = SwAttach.Connect(out bool started);
-                log.Write(started
-                    ? "Started a new SOLIDWORKS session (nothing was running)."
-                    : "Attached to the running SOLIDWORKS session.");
+                ISldWorks swApp = Connect(allowStart, log);
 
                 SwSession session = SwSession.Attach(swApp, documentPath, null);
                 var refs = new PersistRefService(session.Gate);
@@ -227,10 +270,12 @@ public static class Program
         InterferenceRunSettings settings;
         IReadOnlyList<string[]> namedPairs;
         int? truncateAfter;
+        bool allowStart;
 
         try
         {
-            parsed = CommandLine.Parse(args, 1, InterferenceOptionNames);
+            parsed = CommandLine.Parse(args, 1, KnownOptions(InterferenceOptionNames));
+            allowStart = parsed.Flag("allow-start");
             outputDirectory = parsed.Required("out");
             namedPairs = parsed.Pairs();
             truncateAfter = parsed.Int("truncate-after");
@@ -250,7 +295,7 @@ public static class Program
         }
 
         return ExecuteInterference(
-            outputDirectory, parsed.Value("config"), namedPairs, settings, truncateAfter);
+            outputDirectory, parsed.Value("config"), namedPairs, settings, truncateAfter, allowStart);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -259,7 +304,8 @@ public static class Program
         string? configuration,
         IReadOnlyList<string[]> namedPairs,
         InterferenceRunSettings settings,
-        int? truncateAfter)
+        int? truncateAfter,
+        bool allowStart)
     {
         using (var log = new ExtractLog(outputDirectory))
         {
@@ -273,10 +319,7 @@ public static class Program
                 // and finding that out after a two-second attach helps nobody.
                 EvidencePackage package = PackageAppender.Load(outputDirectory);
 
-                ISldWorks swApp = SwAttach.Connect(out bool started);
-                log.Write(started
-                    ? "Started a new SOLIDWORKS session (nothing was running)."
-                    : "Attached to the running SOLIDWORKS session.");
+                ISldWorks swApp = Connect(allowStart, log);
 
                 SwSession session = SwSession.Attach(swApp, null, configuration);
                 SwScope scope = SwScope.Open(swApp, session);
@@ -374,10 +417,12 @@ public static class Program
         string reference;
         string outputDirectory;
         string view;
+        bool allowStart;
 
         try
         {
-            parsed = CommandLine.Parse(args, 1, CaptureOptionNames);
+            parsed = CommandLine.Parse(args, 1, KnownOptions(CaptureOptionNames));
+            allowStart = parsed.Flag("allow-start");
             reference = parsed.Required("ref");
             outputDirectory = parsed.Required("out");
             view = parsed.CaptureView();
@@ -389,12 +434,22 @@ public static class Program
         }
 
         return ExecuteCapture(
-            reference, parsed.Value("doc"), view, outputDirectory, parsed.Value("note") ?? string.Empty);
+            reference,
+            parsed.Value("doc"),
+            view,
+            outputDirectory,
+            parsed.Value("note") ?? string.Empty,
+            allowStart);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static int ExecuteCapture(
-        string reference, string? documentPath, string view, string outputDirectory, string note)
+        string reference,
+        string? documentPath,
+        string view,
+        string outputDirectory,
+        string note,
+        bool allowStart)
     {
         using (var log = new ExtractLog(outputDirectory))
         {
@@ -404,10 +459,7 @@ public static class Program
 
                 EvidencePackage package = PackageAppender.Load(outputDirectory);
 
-                ISldWorks swApp = SwAttach.Connect(out bool started);
-                log.Write(started
-                    ? "Started a new SOLIDWORKS session (nothing was running)."
-                    : "Attached to the running SOLIDWORKS session.");
+                ISldWorks swApp = Connect(allowStart, log);
 
                 SwSession session = SwSession.Attach(swApp, documentPath, null);
                 SwScope scope = SwScope.Open(swApp, session);
@@ -447,10 +499,12 @@ public static class Program
     {
         CommandLine parsed;
         string pipeName;
+        bool allowStart;
 
         try
         {
-            parsed = CommandLine.Parse(args, 1, ServeOptionNames);
+            parsed = CommandLine.Parse(args, 1, KnownOptions(ServeOptionNames));
+            allowStart = parsed.Flag("allow-start");
             pipeName = parsed.Required("pipe");
         }
         catch (UsageError error)
@@ -459,12 +513,17 @@ public static class Program
             return ExitError;
         }
 
-        return ExecuteServe(pipeName, parsed.Value("doc"), parsed.Value("config"), parsed.Value("out"));
+        return ExecuteServe(
+            pipeName, parsed.Value("doc"), parsed.Value("config"), parsed.Value("out"), allowStart);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static int ExecuteServe(
-        string pipeName, string? documentPath, string? configuration, string? outputDirectory)
+        string pipeName,
+        string? documentPath,
+        string? configuration,
+        string? outputDirectory,
+        bool allowStart)
     {
         // Captures need somewhere to go, and the client never names a path (research R4).
         string captureDirectory = string.IsNullOrWhiteSpace(outputDirectory)
@@ -490,7 +549,8 @@ public static class Program
 
                     using (var server = new PipeServer(
                         pipeName,
-                        () => BuildDispatcher(documentPath, configuration, captureDirectory, log),
+                        () => BuildDispatcher(
+                            documentPath, configuration, captureDirectory, allowStart, log),
                         System.Console.Error))
                     {
                         log.Write($@"Listening on \\.\pipe\{pipeName}. Ctrl+C to stop.");
@@ -515,12 +575,13 @@ public static class Program
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static IBridgeDispatcher BuildDispatcher(
-        string? documentPath, string? configuration, string captureDirectory, ExtractLog log)
+        string? documentPath,
+        string? configuration,
+        string captureDirectory,
+        bool allowStart,
+        ExtractLog log)
     {
-        ISldWorks swApp = SwAttach.Connect(out bool started);
-        log.Write(started
-            ? "Started a new SOLIDWORKS session (nothing was running)."
-            : "Attached to the running SOLIDWORKS session.");
+        ISldWorks swApp = Connect(allowStart, log);
 
         SwSession session = SwSession.Attach(swApp, documentPath, configuration);
         SwScope scope = SwScope.Open(swApp, session);
@@ -622,6 +683,11 @@ public static class Program
         writer.WriteLine("  serve         --pipe <name> [--doc <path>] [--config <name>] [--out <dir>]");
         writer.WriteLine("                Run the read-only bridge: one JSON request per line.");
         writer.WriteLine("                Wire format: Serve/PROTOCOL.md.");
+        writer.WriteLine(string.Empty);
+        writer.WriteLine("Every command attaches to the running SOLIDWORKS and does not start one:");
+        writer.WriteLine("  --allow-start  Start a SOLIDWORKS session if none is running. Off by default:");
+        writer.WriteLine("                 a started session holds a licence and has none of your");
+        writer.WriteLine("                 open documents, so it would describe a different model.");
         writer.WriteLine(string.Empty);
         writer.WriteLine("Exit codes: 0 success, 1 error. extract.log is written next to --out.");
     }

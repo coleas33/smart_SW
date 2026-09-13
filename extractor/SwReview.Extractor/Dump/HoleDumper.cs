@@ -97,6 +97,7 @@ public sealed class HoleDumper : IHoleSource
     {
         SwGate gate = _session.Gate;
         string modelPath = gate.Call("GetPathName", () => model.GetPathName());
+        var sightings = new List<TypeNameSighting>();
 
         var feature = gate.Call("Component.FirstFeature", () => handle.FirstFeature()) as IFeature;
         while (feature != null)
@@ -104,20 +105,30 @@ public sealed class HoleDumper : IHoleSource
             IFeature current = feature;
             string typeName = gate.Call("GetTypeName2", () => current.GetTypeName2()) ?? string.Empty;
             string name = gate.Call("Feature.Name", () => current.Name) ?? string.Empty;
+            bool consumed = false;
 
             if (typeName == WizardHoleFeatureType)
             {
+                consumed = true;
                 scope.Gaps.TryStep("hole", null, $"read Hole Wizard feature '{name}'", () =>
                     ReadHole(current, model, modelPath, name, component, scope, result));
             }
             else if (typeName == CosmeticThreadFeatureType)
             {
+                consumed = true;
                 scope.Gaps.TryStep("thread", null, $"read cosmetic thread '{name}'", () =>
                     ReadCosmeticThread(current, model, modelPath, name, component, scope, result));
             }
 
+            sightings.Add(new TypeNameSighting(typeName, consumed));
             feature = gate.Call("GetNextFeature", () => current.GetNextFeature()) as IFeature;
         }
+
+        // The component's document, not the instance: a part used forty times is walked
+        // forty times and the census must not report its feature types forty times. The
+        // node's path is the one PackageWriter already proved non-blank when it allocated
+        // this component's id.
+        scope.Gaps.TypeNames.AddPass(component.Node.DocumentPath, sightings);
     }
 
     private void ReadHole(
