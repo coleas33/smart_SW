@@ -1,0 +1,13 @@
+result:
+- calculation: null
+  check: fastener.unsupported
+  coverage_limits:
+  - 'out_of_scope: pin'
+  inputs:
+  - fst:1
+  observed: fst:1 is a pin; this phase models screw and bolt joints into a tapped
+    hole only.
+  recommended_action: Review the pin joint at fst:1 by hand.
+  requirement: joint kinds outside the pilot are reported out of scope, never as passed
+  severity: info
+  status: unresolved
