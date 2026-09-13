@@ -25,7 +25,6 @@ nothing here reformats a value. The rules that keep this side honest:
 from __future__ import annotations
 
 import json
-
 from pathlib import Path, PurePosixPath
 from typing import Any
 

@@ -153,7 +153,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 
 - [X] T062 [P] [US3] Unit tests in `reviewer/tests/unit/test_checks_interference.py`: same pattern pair collapses into one grouped finding with member list; `truncated`/`failed` entries become `unresolved` coverage and no `checked_within_scope` is emitted for the run; volume unit preserved; mechanism positions produce the coverage statement text
 - [X] T063 [P] [US3] Unit tests in `reviewer/tests/unit/test_exceptions.py`: `geometry_fingerprint` stable across reorderings; changing a face radius or configuration flips `active` to `needs_review`; accepting a finding creates an exception bound to its persist refs; `exceptions.json` round-trips
-- [ ] T064 [P] [US3] Unit tests in `reviewer/tests/unit/test_bridge_client.py` with a fake named-pipe server: request/response framing, timeout, error status mapped to `failed` coverage, circuit breaker after three failures
+- [X] T064 [P] [US3] Unit tests in `reviewer/tests/unit/test_bridge_client.py` with a fake named-pipe server: request/response framing, timeout, error status mapped to `failed` coverage, circuit breaker after three failures
 - [X] T065 [P] [US3] `extractor/SwReview.Extractor.Tests/InterferenceSettingsTests.cs`: settings map to `IInterferenceDetectionManager` properties and are echoed into the IR; `--truncate-after` marks remaining pairs `truncated`
 
 ### Implementation for User Story 3
