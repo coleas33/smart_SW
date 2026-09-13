@@ -1,0 +1,6 @@
+{
+  "name": "pilot",
+  "packages": [
+    { "package_id": "cover-blind-tap", "path": "benchmarks/packages/cover-blind-tap", "held_out": false }
+  ]
+}

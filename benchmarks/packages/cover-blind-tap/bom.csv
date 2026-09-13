@@ -1,0 +1,4 @@
+item,part_number,document_id,description,quantity,configuration
+1,PRT-1001,PRT-1001,Housing 6061-T6,1,Default
+2,PRT-1002,PRT-1002,Cover 6061-T6,1,Default
+3,PRT-1003,PRT-1003,Socket head cap screw M6 x 20 ISO 4762,4,M6 x 20

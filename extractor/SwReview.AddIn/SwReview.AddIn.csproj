@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SwReview.AddIn</RootNamespace>
+    <AssemblyName>SwReview.AddIn</AssemblyName>
+    <Description>In-process SOLIDWORKS add-in host for the SwReview extractor.</Description>
+    <!-- regasm needs a COM-visible assembly; see SwReviewAddIn.cs for the registration steps. -->
+    <EnableComHosting>false</EnableComHosting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SwReview.Extractor\SwReview.Extractor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="SolidWorks.Interop.sldworks">
+      <HintPath>$(SwRedist)\SolidWorks.Interop.sldworks.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swconst">
+      <HintPath>$(SwRedist)\SolidWorks.Interop.swconst.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swpublished">
+      <HintPath>$(SwRedist)\SolidWorks.Interop.swpublished.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

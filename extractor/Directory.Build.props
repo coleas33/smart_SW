@@ -1,0 +1,31 @@
+<Project>
+
+  <!--
+    Shared build settings for every extractor project.
+
+    SwRedist points at the SOLIDWORKS 2024 interop assemblies shipped with the seat
+    (research.md R12: "interops from <install>\api\redist with Embed Interop Types false,
+    build x64"). Override it on a machine with a different install location:
+
+        dotnet build extractor/SwReview.sln -c Release -p:SwRedist="D:\SW\api\redist"
+  -->
+  <PropertyGroup>
+    <SwRedist Condition="'$(SwRedist)' == ''">C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\api\redist</SwRedist>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <NeutralLanguage>en-US</NeutralLanguage>
+    <Company>smart_SW</Company>
+    <Product>SwReview</Product>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+</Project>

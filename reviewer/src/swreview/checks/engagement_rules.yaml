@@ -1,0 +1,35 @@
+# Minimum usable thread engagement, expressed as a multiple of the nominal thread
+# diameter, by the material of the tapped part. Values are common design guidance for
+# steel fasteners of property class 8.8 / 10.9 in a tapped hole; the rule that applied is
+# cited in every finding so an engineer can override it per project.
+#
+# Source notes:
+#   steel        1.0 x d   general machine-design guidance (e.g. Machinery's Handbook,
+#                          "length of engagement" for equal-strength steel)
+#   cast_iron    1.5 x d   common guidance for lower-shear-strength ferrous castings
+#   aluminum     1.5 x d   common guidance; many companies use 2.0 x d for 6061-T6
+#   plastic      2.5 x d   common guidance for thermoplastics with metal inserts absent
+#   unknown      (none)    no rule applied; the check stays unresolved
+version: 1
+default_material_class: unknown
+material_classes:
+  steel:
+    min_engagement_ratio: 1.0
+    matches: ["steel", "stainless", "aisi", "sae 10", "4140", "4340", "a36", "s355", "17-4"]
+    source: "Machinery's Handbook, length of engagement for steel into steel"
+  cast_iron:
+    min_engagement_ratio: 1.5
+    matches: ["cast iron", "gray iron", "ductile", "gg", "ggg", "astm a48"]
+    source: "Common guidance for ferrous castings"
+  aluminum:
+    min_engagement_ratio: 1.5
+    matches: ["aluminum", "aluminium", "6061", "7075", "5052", "2024", "al "]
+    source: "Common guidance for aluminum alloys; consider 2.0 x d for high-load joints"
+  plastic:
+    min_engagement_ratio: 2.5
+    matches: ["abs", "nylon", "pa6", "pa66", "delrin", "acetal", "pom", "peek", "polycarbonate", "pc", "pla", "petg"]
+    source: "Common guidance for thermoplastics without inserts"
+  unknown:
+    min_engagement_ratio: null
+    matches: []
+    source: "No rule; material not recognized"

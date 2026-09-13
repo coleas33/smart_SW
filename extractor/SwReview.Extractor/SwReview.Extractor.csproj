@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SwReview.Extractor</RootNamespace>
+    <AssemblyName>SwReview.Extractor</AssemblyName>
+    <Description>SOLIDWORKS evidence extraction: IR DTOs, dumpers, guards.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <!--
+    SOLIDWORKS 2024 interop. EmbedInteropTypes must be false (research.md R12) so the
+    add-in and the console host share one set of interop types, and Private=false keeps
+    the redist DLLs out of the output folder - SOLIDWORKS loads its own copies.
+  -->
+  <ItemGroup>
+    <Reference Include="SolidWorks.Interop.sldworks">
+      <HintPath>$(SwRedist)\SolidWorks.Interop.sldworks.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swconst">
+      <HintPath>$(SwRedist)\SolidWorks.Interop.swconst.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
