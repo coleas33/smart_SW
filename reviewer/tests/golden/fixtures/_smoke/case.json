@@ -1,0 +1,4 @@
+{
+  "callable": "swreview.ir.summary:summarize",
+  "kwargs": {}
+}
