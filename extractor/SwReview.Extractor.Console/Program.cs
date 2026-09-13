@@ -1,11 +1,19 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using SolidWorks.Interop.sldworks;
+using SwReview.Extractor.Capture;
+using SwReview.Extractor.Console.Serve;
 using SwReview.Extractor.Dump;
+using SwReview.Extractor.Interference;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.PersistRefs;
 using SwReview.Extractor.Sw;
 using static System.Console;
+using IrCapture = SwReview.Extractor.Ir.Capture;
+using IrInterference = SwReview.Extractor.Ir.Interference;
 
 namespace SwReview.Extractor.Console;
 
@@ -26,6 +34,16 @@ public static class Program
     private static readonly string[] DumpOptionNames = { "doc", "config", "out", "meshes", "faces" };
 
     private static readonly string[] ResolveOptionNames = { "ref", "doc", "out" };
+
+    private static readonly string[] InterferenceOptionNames =
+    {
+        "config", "pairs", "coincident-as-interference", "subassemblies-as-components",
+        "include-multibody", "ignore-hidden", "fasteners", "out", "truncate-after",
+    };
+
+    private static readonly string[] CaptureOptionNames = { "ref", "doc", "view", "out", "note" };
+
+    private static readonly string[] ServeOptionNames = { "pipe", "doc", "config", "out" };
 
     /// <summary>
     /// STA is mandatory: every SOLIDWORKS COM call in this process must run on one STA
@@ -54,11 +72,13 @@ public static class Program
                 return RunResolve(args);
 
             case "interference":
+                return RunInterference(args);
+
             case "capture":
+                return RunCapture(args);
+
             case "serve":
-                Error.WriteLine($"swreview-extract: '{command}' is not implemented yet.");
-                Error.WriteLine("  interference, capture   T071    serve   T072");
-                return ExitError;
+                return RunServe(args);
 
             default:
                 Error.WriteLine($"swreview-extract: unknown command '{command}'.");
@@ -195,6 +215,345 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// T071. Runs interference detection and merges the results into the package.json that
+    /// <c>dump</c> already wrote in <c>--out</c>, so the results sit next to the components
+    /// they name (contracts/cli.md).
+    /// </summary>
+    private static int RunInterference(string[] args)
+    {
+        CommandLine parsed;
+        string outputDirectory;
+        InterferenceRunSettings settings;
+        IReadOnlyList<string[]> namedPairs;
+        int? truncateAfter;
+
+        try
+        {
+            parsed = CommandLine.Parse(args, 1, InterferenceOptionNames);
+            outputDirectory = parsed.Required("out");
+            namedPairs = parsed.Pairs();
+            truncateAfter = parsed.Int("truncate-after");
+            settings = new InterferenceRunSettings
+            {
+                TreatCoincidentAsInterference = parsed.Flag("coincident-as-interference"),
+                TreatSubassembliesAsComponents = parsed.Flag("subassemblies-as-components"),
+                IncludeMultibody = parsed.Flag("include-multibody"),
+                IgnoreHidden = parsed.Flag("ignore-hidden"),
+                Fasteners = parsed.FastenerTreatment(),
+            };
+        }
+        catch (UsageError error)
+        {
+            Error.WriteLine($"swreview-extract interference: {error.Message}");
+            return ExitError;
+        }
+
+        return ExecuteInterference(
+            outputDirectory, parsed.Value("config"), namedPairs, settings, truncateAfter);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static int ExecuteInterference(
+        string outputDirectory,
+        string? configuration,
+        IReadOnlyList<string[]> namedPairs,
+        InterferenceRunSettings settings,
+        int? truncateAfter)
+    {
+        using (var log = new ExtractLog(outputDirectory))
+        {
+            try
+            {
+                log.Write($"interference --out \"{outputDirectory}\" "
+                    + $"--pairs {(namedPairs.Count == 0 ? "all" : namedPairs.Count + " pair(s)")} "
+                    + $"--fasteners {PackageSerializer.EnumToJsonName(settings.Fasteners)}");
+
+                // Loaded before SOLIDWORKS is touched: a missing package is a usage mistake,
+                // and finding that out after a two-second attach helps nobody.
+                EvidencePackage package = PackageAppender.Load(outputDirectory);
+
+                ISldWorks swApp = SwAttach.Connect(out bool started);
+                log.Write(started
+                    ? "Started a new SOLIDWORKS session (nothing was running)."
+                    : "Attached to the running SOLIDWORKS session.");
+
+                SwSession session = SwSession.Attach(swApp, null, configuration);
+                SwScope scope = SwScope.Open(swApp, session);
+                log.Write($"Document: {session.DocumentPath} [{session.Configuration.Name}], "
+                    + $"{scope.Components.Count} components");
+
+                List<InterferencePair> pairs = BuildPairs(scope, namedPairs);
+
+                InterferenceRunResult result = new InterferenceRunner(scope.InterferenceSource()).Run(
+                    session.Configuration.Name,
+                    pairs,
+                    settings,
+                    handle => scope.Components.IdOf(handle),
+                    id => scope.Components.PatternOf(id),
+                    truncateAfter);
+
+                PackageAppender.Merge(
+                    package, session.Configuration.Name, result.Interferences, result.Gaps);
+                string path = PackageAppender.Save(outputDirectory, package);
+
+                int computed = 0;
+                int truncated = 0;
+                int failed = 0;
+                foreach (IrInterference row in result.Interferences)
+                {
+                    if (row.Status == InterferenceStatus.Computed)
+                    {
+                        computed++;
+                    }
+                    else if (row.Status == InterferenceStatus.Truncated)
+                    {
+                        truncated++;
+                    }
+                    else
+                    {
+                        failed++;
+                    }
+                }
+
+                log.Write($"{computed} computed, {truncated} truncated, {failed} failed, "
+                    + $"{result.Gaps.Count} gaps -> {path}");
+
+                Out.WriteLine(path);
+                return ExitSuccess;
+            }
+            catch (Exception error)
+            {
+                log.WriteError("interference failed.", error);
+                return ExitError;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>--pairs all</c> is one whole-assembly unit of work; named pairs are resolved
+    /// against the live tree, and an id this document does not have is refused by name
+    /// rather than skipped - skipping it would report no interference for a pair that was
+    /// never checked (Principle I).
+    /// </summary>
+    private static List<InterferencePair> BuildPairs(SwScope scope, IReadOnlyList<string[]> namedPairs)
+    {
+        var pairs = new List<InterferencePair>();
+        if (namedPairs.Count == 0)
+        {
+            pairs.Add(InterferencePair.WholeAssembly());
+            return pairs;
+        }
+
+        foreach (string[] ids in namedPairs)
+        {
+            InterferenceComponent? first = scope.Components.ById(ids[0]);
+            InterferenceComponent? second = scope.Components.ById(ids[1]);
+
+            if (first == null || second == null)
+            {
+                throw new InvalidOperationException(
+                    $"'{(first == null ? ids[0] : ids[1])}' is not a component of this assembly. "
+                    + "Component ids come from the package.json that dump wrote for this document "
+                    + "and this configuration.");
+            }
+
+            pairs.Add(InterferencePair.Of(first, second));
+        }
+
+        return pairs;
+    }
+
+    /// <summary>
+    /// T071. Frames one entity and saves a PNG under <c>--out</c>/<c>captures</c>, then
+    /// appends the <c>Capture</c> row to the package.
+    /// </summary>
+    private static int RunCapture(string[] args)
+    {
+        CommandLine parsed;
+        string reference;
+        string outputDirectory;
+        string view;
+
+        try
+        {
+            parsed = CommandLine.Parse(args, 1, CaptureOptionNames);
+            reference = parsed.Required("ref");
+            outputDirectory = parsed.Required("out");
+            view = parsed.CaptureView();
+        }
+        catch (UsageError error)
+        {
+            Error.WriteLine($"swreview-extract capture: {error.Message}");
+            return ExitError;
+        }
+
+        return ExecuteCapture(
+            reference, parsed.Value("doc"), view, outputDirectory, parsed.Value("note") ?? string.Empty);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static int ExecuteCapture(
+        string reference, string? documentPath, string view, string outputDirectory, string note)
+    {
+        using (var log = new ExtractLog(outputDirectory))
+        {
+            try
+            {
+                log.Write($"capture --view {view} --out \"{outputDirectory}\"");
+
+                EvidencePackage package = PackageAppender.Load(outputDirectory);
+
+                ISldWorks swApp = SwAttach.Connect(out bool started);
+                log.Write(started
+                    ? "Started a new SOLIDWORKS session (nothing was running)."
+                    : "Attached to the running SOLIDWORKS session.");
+
+                SwSession session = SwSession.Attach(swApp, documentPath, null);
+                SwScope scope = SwScope.Open(swApp, session);
+
+                var captures = new CaptureService(scope.CaptureView(), PackageAppender.CaptureIds(package));
+                CaptureResult result = captures.Capture(
+                    reference, documentPath, view, outputDirectory, note);
+
+                PackageAppender.Merge(package, result.Capture, result.Gap);
+                string path = PackageAppender.Save(outputDirectory, package);
+
+                if (!result.Succeeded)
+                {
+                    log.Write($"No image: {result.Gap!.Reason} ({result.Gap.Error})");
+                    log.Write($"Gap appended to {path}");
+                    return ExitError;
+                }
+
+                log.Write($"Wrote {result.Capture!.File} and appended {result.Capture.Id} to {path}");
+                Out.WriteLine(Path.Combine(outputDirectory, result.Capture.File.Replace('/', Path.DirectorySeparatorChar)));
+                return ExitSuccess;
+            }
+            catch (Exception error)
+            {
+                log.WriteError("capture failed.", error);
+                return ExitError;
+            }
+        }
+    }
+
+    /// <summary>
+    /// T072. Runs the read-only bridge until Ctrl+C: one JSON request per line on a named
+    /// pipe, one STA worker thread owning the SldWorks pointer. The wire format is
+    /// Serve/PROTOCOL.md.
+    /// </summary>
+    private static int RunServe(string[] args)
+    {
+        CommandLine parsed;
+        string pipeName;
+
+        try
+        {
+            parsed = CommandLine.Parse(args, 1, ServeOptionNames);
+            pipeName = parsed.Required("pipe");
+        }
+        catch (UsageError error)
+        {
+            Error.WriteLine($"swreview-extract serve: {error.Message}");
+            return ExitError;
+        }
+
+        return ExecuteServe(pipeName, parsed.Value("doc"), parsed.Value("config"), parsed.Value("out"));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static int ExecuteServe(
+        string pipeName, string? documentPath, string? configuration, string? outputDirectory)
+    {
+        // Captures need somewhere to go, and the client never names a path (research R4).
+        string captureDirectory = string.IsNullOrWhiteSpace(outputDirectory)
+            ? Path.Combine(Path.GetTempPath(), "swreview-bridge", SafeName(pipeName))
+            : outputDirectory!;
+
+        using (var log = new ExtractLog(outputDirectory))
+        {
+            using (var stopping = new CancellationTokenSource())
+            {
+                CancelKeyPress += (sender, e) =>
+                {
+                    // Ctrl+C stops the accept loop rather than killing the process mid-call,
+                    // so the STA worker finishes the request it is on.
+                    e.Cancel = true;
+                    stopping.Cancel();
+                };
+
+                try
+                {
+                    log.Write($"serve --pipe {pipeName}");
+                    log.Write($"Captures go to {captureDirectory}");
+
+                    using (var server = new PipeServer(
+                        pipeName,
+                        () => BuildDispatcher(documentPath, configuration, captureDirectory, log),
+                        System.Console.Error))
+                    {
+                        log.Write($@"Listening on \\.\pipe\{pipeName}. Ctrl+C to stop.");
+                        server.Run(stopping.Token);
+                    }
+
+                    log.Write("serve stopped.");
+                    return ExitSuccess;
+                }
+                catch (Exception error)
+                {
+                    log.WriteError("serve failed.", error);
+                    return ExitError;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs ON the STA worker thread (see <see cref="PipeServer"/>): every COM pointer below
+    /// is created there and never leaves it.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static IBridgeDispatcher BuildDispatcher(
+        string? documentPath, string? configuration, string captureDirectory, ExtractLog log)
+    {
+        ISldWorks swApp = SwAttach.Connect(out bool started);
+        log.Write(started
+            ? "Started a new SOLIDWORKS session (nothing was running)."
+            : "Attached to the running SOLIDWORKS session.");
+
+        SwSession session = SwSession.Attach(swApp, documentPath, configuration);
+        SwScope scope = SwScope.Open(swApp, session);
+        log.Write($"Bridge attached to {session.DocumentPath} [{session.Configuration.Name}], "
+            + $"{scope.Components.Count} components");
+
+        var services = new BridgeServices(
+            scope.CaptureView(),
+            scope.MeasureSource(),
+            scope.InterferenceSource(),
+            scope.Components,
+            captureDirectory)
+        {
+            SwVersion = session.SwVersion,
+            DocumentPath = session.DocumentPath,
+            Configuration = session.Configuration.Name,
+        };
+
+        return new SwBridgeDispatcher(services);
+    }
+
+    /// <summary>A pipe name is user input and ends up in a path; strip anything a path cannot hold.</summary>
+    private static string SafeName(string pipeName)
+    {
+        var safe = new System.Text.StringBuilder(pipeName.Length);
+        foreach (char c in pipeName)
+        {
+            safe.Append(char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '_');
+        }
+
+        return safe.Length == 0 ? "bridge" : safe.ToString();
+    }
+
     /// <summary>What kind of entity came back. Interop hands back RCWs, so this is by interface.</summary>
     private static string DescribeType(object? entity)
     {
@@ -252,14 +611,17 @@ public static class Program
         writer.WriteLine("                Write package.json and meshes/ for the active or named document.");
         writer.WriteLine("  interference  --config <name> --pairs all|<id,id>... --out <dir>");
         writer.WriteLine("                --coincident-as-interference --subassemblies-as-components");
+        writer.WriteLine("                --include-multibody --ignore-hidden");
         writer.WriteLine("                --fasteners include|exclude|only --truncate-after <n>");
-        writer.WriteLine("                Append interference results to package.json.");
-        writer.WriteLine("  capture       --ref <persist_ref> --view iso|front|top|right|fit --out <dir>");
-        writer.WriteLine("                Zoom to the entity and save a PNG.");
+        writer.WriteLine("                Append interference results to the package.json in --out.");
+        writer.WriteLine("  capture       --ref <persist_ref> [--doc <path>] --out <dir>");
+        writer.WriteLine("                --view iso|front|top|right|fit [--note <text>]");
+        writer.WriteLine("                Zoom to the entity, save a PNG, append a Capture.");
         writer.WriteLine("  resolve       --ref <persist_ref> [--doc <path>] [--out <dir>]");
         writer.WriteLine("                Print what a persistent reference resolves to (round-trip test).");
-        writer.WriteLine("  serve         --pipe <name>");
+        writer.WriteLine("  serve         --pipe <name> [--doc <path>] [--config <name>] [--out <dir>]");
         writer.WriteLine("                Run the read-only bridge: one JSON request per line.");
+        writer.WriteLine("                Wire format: Serve/PROTOCOL.md.");
         writer.WriteLine(string.Empty);
         writer.WriteLine("Exit codes: 0 success, 1 error. extract.log is written next to --out.");
     }

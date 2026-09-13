@@ -3,7 +3,11 @@ using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swpublished;
+using SwReview.Extractor.Capture;
 using SwReview.Extractor.Dump;
+using SwReview.Extractor.Interference;
+using SwReview.Extractor.Ir;
+using SwReview.Extractor.PersistRefs;
 using SwReview.Extractor.Sw;
 
 namespace SwReview.AddIn;
@@ -12,9 +16,11 @@ namespace SwReview.AddIn;
 /// In-process SOLIDWORKS 2024 add-in host (research R1: in-process traversal is 10 to 100x
 /// faster than out-of-process COM, and several many-parameter API members fail late-bound).
 ///
-/// It owns the ISldWorks pointer and a Task Pane with a <b>Dump IR</b> button that runs
-/// <see cref="PackageWriter"/> on the active document (T060). Interference and Capture
-/// buttons arrive with T076.
+/// It owns the ISldWorks pointer and a Task Pane with three buttons, all acting on the
+/// active document: <b>Dump IR</b> runs <see cref="PackageWriter"/> (T060),
+/// <b>Interference</b> runs <see cref="InterferenceRunner"/> and <b>Capture selection</b>
+/// runs <see cref="CaptureService"/> (T076). The latter two append to the package.json that
+/// Dump IR wrote in the same folder, so their results can name its components.
 ///
 /// Registration (research R12, "Add-in hosting"). Both steps need an elevated x64 prompt;
 /// the registry keys are written by the [ComRegisterFunction] below, so step 1 does both:
@@ -81,6 +87,8 @@ public class SwReviewAddIn : ISwAddin
         if (_panel != null)
         {
             _panel.DumpRequested -= OnDumpRequested;
+            _panel.InterferenceRequested -= OnInterferenceRequested;
+            _panel.CaptureRequested -= OnCaptureRequested;
             _panel.Dispose();
             _panel = null;
         }
@@ -115,6 +123,8 @@ public class SwReviewAddIn : ISwAddin
 
         _panel = new DumpIrPanel();
         _panel.DumpRequested += OnDumpRequested;
+        _panel.InterferenceRequested += OnInterferenceRequested;
+        _panel.CaptureRequested += OnCaptureRequested;
 
         // x64 build, so the 64-bit handle overload is the correct one; the Int32 version
         // truncates the window handle and silently shows nothing.
@@ -168,6 +178,147 @@ public class SwReviewAddIn : ISwAddin
         {
             _panel.SetBusy(false);
         }
+    }
+
+    /// <summary>
+    /// T076. Runs interference detection on the active document with the dialog's default
+    /// settings and merges the results into the package.json already in the chosen folder.
+    ///
+    /// The settings are the defaults on purpose: the Task Pane is for the engineer standing
+    /// at the model, and a row of checkboxes here would be a second, quieter place for the
+    /// run configuration to differ from the console's. Anyone who needs other settings runs
+    /// <c>swreview-extract interference</c>, which echoes them into the IR.
+    /// </summary>
+    private void OnInterferenceRequested(object sender, string outputDirectory)
+    {
+        if (_swApp == null || _panel == null)
+        {
+            return;
+        }
+
+        _panel.SetBusy(true);
+        try
+        {
+            _panel.ShowProgress("Attaching to the active document...");
+            SwSession session = SwSession.Attach(_swApp, documentPath: null, configurationName: null);
+
+            EvidencePackage package = PackageAppender.Load(outputDirectory);
+
+            _panel.ShowProgress("Walking the component tree...");
+            SwScope scope = SwScope.Open(_swApp, session);
+
+            _panel.ShowProgress($"Detecting interferences in {scope.Components.Count} components...");
+            InterferenceRunResult result = new InterferenceRunner(scope.InterferenceSource()).Run(
+                session.Configuration.Name,
+                new[] { InterferencePair.WholeAssembly() },
+                new InterferenceRunSettings(),
+                handle => scope.Components.IdOf(handle),
+                id => scope.Components.PatternOf(id));
+
+            PackageAppender.Merge(
+                package, session.Configuration.Name, result.Interferences, result.Gaps);
+            string path = PackageAppender.Save(outputDirectory, package);
+
+            _panel.ShowResult(
+                $"{result.Interferences.Count} interference rows and {result.Gaps.Count} gaps "
+                + $"appended to{System.Environment.NewLine}{path}");
+        }
+        catch (Exception error)
+        {
+            _panel.ShowError("Interference detection did not finish.", error);
+        }
+        finally
+        {
+            _panel.SetBusy(false);
+        }
+    }
+
+    /// <summary>
+    /// T076. Captures whatever is selected in SOLIDWORKS right now.
+    ///
+    /// The selection is the input, so the engineer picks the face or component in the
+    /// graphics area and presses the button. Its persistent reference is taken first and
+    /// the capture is driven from that reference, which is the same path the console and the
+    /// bridge take - so a capture made here is navigable from the report exactly like one
+    /// made from a review (Principle IV).
+    /// </summary>
+    private void OnCaptureRequested(object sender, CaptureRequest request)
+    {
+        if (_swApp == null || _panel == null)
+        {
+            return;
+        }
+
+        _panel.SetBusy(true);
+        try
+        {
+            _panel.ShowProgress("Attaching to the active document...");
+            SwSession session = SwSession.Attach(_swApp, documentPath: null, configurationName: null);
+
+            object? selected = SelectedEntity(session);
+            if (selected == null)
+            {
+                _panel.ShowResult("Select a face, edge or component in the graphics area first.");
+                return;
+            }
+
+            EvidencePackage package = PackageAppender.Load(request.OutputDirectory);
+            SwScope scope = SwScope.Open(_swApp, session);
+
+            ScopedPersistRef reference = scope.Refs.Get(session.Document, selected);
+
+            _panel.ShowProgress($"Capturing the selection ({request.View})...");
+            var captures = new CaptureService(
+                scope.CaptureView(), PackageAppender.CaptureIds(package));
+            CaptureResult result = captures.Capture(
+                reference.Base64, null, request.View, request.OutputDirectory, "Task Pane capture");
+
+            PackageAppender.Merge(package, result.Capture, result.Gap);
+            string path = PackageAppender.Save(request.OutputDirectory, package);
+
+            if (!result.Succeeded)
+            {
+                _panel.ShowResult(
+                    $"No image: {result.Gap!.Reason}."
+                    + $"{System.Environment.NewLine}The gap was appended to {path}.");
+                return;
+            }
+
+            _panel.ShowResult(
+                $"Wrote {result.Capture!.File}"
+                + $"{System.Environment.NewLine}and appended {result.Capture.Id} to {path}");
+        }
+        catch (Exception error)
+        {
+            _panel.ShowError("The capture did not finish.", error);
+        }
+        finally
+        {
+            _panel.SetBusy(false);
+        }
+    }
+
+    /// <summary>The first selected object, or null when nothing is selected.</summary>
+    private static object? SelectedEntity(ISwSession session)
+    {
+        var selection = session.Gate.Call(
+            "SelectionManager", () => session.Document.SelectionManager) as ISelectionMgr;
+
+        if (selection == null)
+        {
+            return null;
+        }
+
+        int count = session.Gate.Call(
+            "GetSelectedObjectCount2", () => selection.GetSelectedObjectCount2(-1));
+
+        if (count < 1)
+        {
+            return null;
+        }
+
+        // 1-based, and -1 means "in any configuration".
+        return session.Gate.Call("GetSelectedObject6", () => selection.GetSelectedObject6(1, -1));
     }
 
     /// <summary>

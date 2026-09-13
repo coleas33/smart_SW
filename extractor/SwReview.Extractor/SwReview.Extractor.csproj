@@ -11,6 +11,15 @@
   </ItemGroup>
 
   <!--
+    Capture writes a PNG. SOLIDWORKS' SaveBMP is the only image call the read-only guard
+    allows (SaveAs3 is denied outright), so the BMP is converted here - see
+    Capture/SwCaptureView.cs. System.Drawing is a .NET Framework assembly, not a package.
+  -->
+  <ItemGroup>
+    <Reference Include="System.Drawing" />
+  </ItemGroup>
+
+  <!--
     SOLIDWORKS 2024 interop. EmbedInteropTypes must be false (research.md R12) so the
     add-in and the console host share one set of interop types, and Private=false keeps
     the redist DLLs out of the output folder - SOLIDWORKS loads its own copies.
