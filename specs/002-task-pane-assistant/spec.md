@@ -48,7 +48,7 @@ The engineer opens the Settings section of the Review tab, chooses OpenAI (the d
 
 ### User Story 3 - General Chat in an Embedded Terminal (Priority: P3)
 
-The engineer switches to the Terminal tab, picks Codex or Gemini, and gets that CLI running inside the Task Pane in the current run folder. The CLI can inspect the open assembly through the same read-only tools the reviewer uses (queries over the extracted package, measurements, captures), can read files in the run folder, and cannot modify the SOLIDWORKS model, save documents, or write outside the run folder. The engineer can ask anything: "what is the heaviest part", "show me the mates on the cover", "screenshot the screw pattern".
+The engineer switches to the Terminal tab, picks Codex or Gemini, and gets that CLI running inside the Task Pane in the current run folder. The CLI can inspect the open assembly through the same read-only tools the reviewer uses (queries over the extracted package, measurements, captures), and cannot run shell commands, modify the SOLIDWORKS model, save documents, or write files. The Codex CLI ships first; the Gemini CLI terminal is deferred to a later verification on the workstation (Gemini remains a review-mode provider). The engineer can ask anything: "what is the heaviest part", "show me the mates on the cover", "screenshot the screw pattern".
 
 **Why this priority**: It is the second half of the request and the fastest way for an engineer to ask ad hoc questions, but it depends on the tool server and the bridge from the first two stories.
 
@@ -58,7 +58,7 @@ The engineer switches to the Terminal tab, picks Codex or Gemini, and gets that 
 
 1. **Given** Codex or Gemini is installed, **When** the engineer chooses it and presses Start, **Then** the CLI appears in the pane with our tool server connected and the run folder as its working directory.
 2. **Given** the CLI is running, **When** the engineer asks a question that needs the model, **Then** the CLI answers through our read-only tools, and every tool call is recorded in the run folder's chat log.
-3. **Given** the CLI is running, **When** the model attempts a file write or a shell command outside the read-only sandbox, **Then** the CLI refuses it under the generated profile and the engineer sees the refusal.
+3. **Given** the CLI is running, **When** the model attempts a file write or a shell command, **Then** the CLI refuses it under the generated profile (the tools are not offered) and the engineer sees the refusal.
 4. **Given** the chosen CLI is not installed, **When** the engineer presses Start, **Then** the pane shows the install steps and the version requirement instead of an empty terminal.
 5. **Given** the pane is resized, **When** the terminal is visible, **Then** the terminal reflows to the new size without losing scrollback.
 
@@ -135,9 +135,11 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 **General chat**
 
 - **FR-020**: The Terminal tab MUST run the chosen CLI (Codex or Gemini) inside the pane with the run folder as its working directory and MUST reflow on resize.
-- **FR-021**: The pane MUST generate the CLI's profile on every launch such that our tool server is registered, file writes are refused, shell use is limited to the read-only sandbox, and SOLIDWORKS is reachable only through our tools; the profile MUST be regenerated even if the engineer edited it.
+- **FR-021**: The pane MUST generate the CLI's profile on every launch such that our tool server is registered, file writes are refused, the CLI's shell and file-editing tools are disabled, and SOLIDWORKS and the run folder are reachable only through our tools; the profile MUST be regenerated even if the engineer edited it.
 - **FR-022**: The tool server exposed to the CLI MUST offer exactly the read-only subset of the feature 001 contract (package query tools, measurement tools, `request_capture`, and the bridge capture and measure tools) and MUST record every call in a chat log in the run folder.
 - **FR-023**: The pane MUST detect a missing or too-old CLI before launch and MUST show the install steps and versions.
+
+- **FR-030**: The pane MUST let the engineer stop a running turn; the turn ends at the next tool boundary and the session records `turn.ended` with reason `stopped`.
 
 **Boundaries**
 

@@ -78,11 +78,11 @@ windows at most per workstation.
 | IV. Semantic fidelity and traceability | Persistent references drive navigation | Show in SOLIDWORKS resolves `persist_ref` with its scope through the in-process dispatcher and reports the state code on failure | PASS |
 | V. Engineered enough | No speculative abstraction | One provider protocol with two adapters and one fake; one event schema shared by pane and CLI; no plugin system; SSE not WebSocket | PASS |
 | VI. Inspectable findings, coverage tracked | Coverage and dispositions persist | Dispositions and evidence answers write through the existing session module; general chat writes a chat log | PASS |
-| Technical constraints | STA COM, no exec tool, licenses | In-process dispatcher on the application thread; our own tool surface stays curated (no exec tool of ours; the MCP toolset for general chat is the read-only subset); CLI profiles deny writes through a read-only sandbox; SwpilotCLI reimplemented, not copied; xterm.js and MiniTerm are MIT | **PASS with a documented exception**: the generated Codex profile enables that CLI's own read-only shell, which is generic command execution. See Complexity Tracking. |
+| Technical constraints | STA COM, no exec tool, licenses | In-process dispatcher on the application thread; our own tool surface stays curated (no exec tool of ours; the MCP toolset for general chat is the read-only subset); CLI profiles deny writes through a read-only sandbox; SwpilotCLI reimplemented, not copied; xterm.js and MiniTerm are MIT | PASS |
 | Development workflow | Spec Kit cycle | This document; tasks.md follows | PASS |
 
-Post-design re-check: one documented exception (Codex's read-only shell), recorded in
-Complexity Tracking below. No other violations.
+Post-design re-check: no violations. Decision 2026-09-13: the generated Codex profile disables
+the CLI's shell (`features.shell_tool = false`); general chat has MCP tools only.
 
 ## Project Structure
 
@@ -209,7 +209,7 @@ Key design points tasks must honor:
 | 2 | US2 | Settings model, DPAPI store, settings section, env precedence, redaction | No |
 | 3 | US1 | Chat backend (HTTP + SSE), events, Review tab page and host, extraction on Review, findings cards, dispositions, evidence answers, follow-ups | Show in SOLIDWORKS needs it |
 | 4 | US4 | Dispatcher moved to the library, in-process pipe server, tool service host, backend lifecycle | Yes |
-| 5 | US3 | ConPTY, terminal page, CLI locator, profile writer, MCP server, chat log | CLIs installed |
+| 5 | US3 | ConPTY, terminal page, CLI locator, Codex profile writer, MCP server, chat log. Gemini terminal deferred (decision 2026-09-13): verified later on the workstation, T055a | Codex CLI installed |
 
 ## Risks and mitigations
 
@@ -229,6 +229,4 @@ Key design points tasks must honor:
 
 > **Fill ONLY if Constitution Check has violations that must be justified**
 
-| Violation | Why needed | Simpler alternative rejected because |
-|-----------|------------|--------------------------------------|
-| `[features] shell_tool = true` in the generated Codex profile, against the constitution's Technical Constraints ("Generic code execution tools ... MUST NOT be exposed to the agent. Expose a curated set of inspection operations") | FR-021 and US3 acceptance scenario 3 are written around a shell that the sandbox confines; Codex's agent loop is built around its shell tool, and research R4 records that `apply_patch` has no off switch and is blocked by the sandbox rather than by configuration. Disabling the shell is unverified and risks a Terminal tab that cannot work at all. | The simpler alternative - MCP resources (`swreview://package/summary`, `swreview://report`) plus a narrow read-only run-folder file tool - does not reach `captures/`, `chat-log.jsonl`, `events.jsonl` or `session.json`, and would mean reimplementing file reading the CLI already has. The exception is bounded: read-only sandbox, `approval_policy = "never"`, `web_search = "disabled"`, unelevated Windows sandbox, run folder as working directory, and it grants the model no privilege the engineer lacks on their own workstation. The Codex/Gemini asymmetry is deliberate: the Gemini policy denies `run_shell_command` outright because that loop does not need it. |
+None.
