@@ -31,7 +31,15 @@ from anthropic.lib.tools import BetaFunctionTool, ToolError
 from pydantic_core import to_jsonable_python
 
 from swreview.report.session import CoverageItem, CoverageScope, InvestigationStep
-from swreview.tools import checks_fit, query, session
+from swreview.tools import (
+    bridge,
+    checks_fastener,
+    checks_fit,
+    checks_interference,
+    measure,
+    query,
+    session,
+)
 from swreview.tools.context import ToolContext, use_context
 
 Registration = Callable[[], tuple[Callable[..., Any], ...]]
@@ -56,11 +64,24 @@ def query_tools() -> tuple[Callable[..., Any], ...]:
     )
 
 
+def measurement_tools() -> tuple[Callable[..., Any], ...]:
+    """Measurement tools: deterministic geometry, no verdict and no finding."""
+    return (
+        measure.measure_axis_distance,
+        measure.measure_face_gap,
+        measure.check_tool_envelope,
+        measure.bounding_box,
+    )
+
+
 def check_tools() -> tuple[Callable[..., Any], ...]:
     """Check tools: deterministic checks that write a finding to the session."""
     return (
         checks_fit.check_fit,
         checks_fit.check_axial_stack,
+        checks_fastener.check_fastener_joint,
+        checks_fastener.check_hole_alignment,
+        checks_interference.check_interference_group,
     )
 
 
@@ -75,15 +96,30 @@ def session_tools() -> tuple[Callable[..., Any], ...]:
     )
 
 
+def bridge_tools() -> tuple[Callable[..., Any], ...]:
+    """Live SOLIDWORKS bridge tools: workstation only, and only with `--bridge`.
+
+    Deliberately outside `REGISTRATIONS`: these three are added by `ToolRegistry.build`
+    when the context carries a bridge, which only `--bridge` arranges. A package reviewed
+    from exported files cannot see them at all (contracts/agent-tools.md).
+    """
+    return (
+        bridge.bridge_capture,
+        bridge.bridge_measure,
+        bridge.bridge_interference,
+    )
+
+
 REGISTRATIONS: tuple[Registration, ...] = (
     query_tools,
+    measurement_tools,
     check_tools,
     session_tools,
 )
 """The extension point for a new group of tools: write a registration function that
-returns them and add it here, in the order of contracts/agent-tools.md. The measurement
-tools, and the fastener, alignment and interference check tools, arrive this way with
-their own tasks; nothing else about the registry has to change when they do."""
+returns them and add it here, in the order of contracts/agent-tools.md. The bridge tools
+are the one group that is not here: they depend on the run, not on the build, so
+`ToolRegistry.build` adds them when the context carries a bridge."""
 
 TOOL_FUNCTIONS: tuple[Callable[..., Any], ...] = tuple(
     function for registration in REGISTRATIONS for function in registration()
@@ -179,15 +215,26 @@ class RecordedTool(BetaFunctionTool[Any]):
         )
 
 
+BRIDGE_TOOL_FUNCTIONS: tuple[Callable[..., Any], ...] = bridge_tools()
+"""The tools a `--bridge` run adds on top of `TOOL_FUNCTIONS`."""
+
+
 @dataclass(frozen=True)
 class ToolRegistry:
     """The curated tool surface. `build` is the only entry point callers need."""
 
     functions: tuple[Callable[..., Any], ...] = TOOL_FUNCTIONS
+    bridge_functions: tuple[Callable[..., Any], ...] = BRIDGE_TOOL_FUNCTIONS
 
     @property
     def names(self) -> tuple[str, ...]:
         return tuple(function.__name__ for function in self.functions)
+
+    def functions_for(self, context: ToolContext) -> tuple[Callable[..., Any], ...]:
+        """The tools this run gets: the curated list, plus the bridge when one is wired."""
+        if context.bridge is None:
+            return self.functions
+        return (*self.functions, *self.bridge_functions)
 
     def build(
         self,
@@ -200,13 +247,15 @@ class ToolRegistry:
         test hook that proves a failed tool ends up in `failed` coverage rather than
         stopping the review. An unknown name is a caller mistake and raises.
         """
+        functions = self.functions_for(context)
+        names = [function.__name__ for function in functions]
         forced = set(fail_tool)
-        unknown = sorted(forced - set(self.names))
+        unknown = sorted(forced - set(names))
         if unknown:
-            raise ValueError(f"fail_tool names no such tool: {unknown}; known: {list(self.names)}")
+            raise ValueError(f"fail_tool names no such tool: {unknown}; known: {names}")
         return [
             RecordedTool(function, context=context, forced_failure=function.__name__ in forced)
-            for function in self.functions
+            for function in functions
         ]
 
 

@@ -26,6 +26,7 @@ from typing import Any
 from uuid import uuid4
 
 from swreview.agent.checklist import Checklist, load_checklist
+from swreview.exceptions import ExceptionStore
 from swreview.findings import FindingIdAllocator
 from swreview.ir.loader import LoadedPackage
 from swreview.ir.models import (
@@ -66,12 +67,17 @@ class ToolContext:
     `exceptions` and `bridge` are the two hooks US3 fills in: the retained-exception
     store and the live SOLIDWORKS bridge. Both stay `None` for a US1 run, and the tools
     that would use them say so in their result instead of guessing.
+
+    `exceptions` is normally an `ExceptionStore` (the runner loads `exceptions.json` from
+    the package directory into one). A plain list of records is also accepted, because a
+    fixture and a golden case carry the exceptions inline; `exception_store()` is how a
+    tool gets the store either way.
     """
 
     package: LoadedPackage
     session: ReviewSession
     checklist: Checklist
-    exceptions: list[Any] | None = None
+    exceptions: ExceptionStore | list[Any] | None = None
     bridge: Any | None = None
     finding_ids: FindingIdAllocator = field(default_factory=FindingIdAllocator)
     evidence_request_ids: EvidenceRequestIdAllocator = field(
@@ -89,6 +95,21 @@ class ToolContext:
     def ir(self) -> EvidencePackage:
         """The evidence package itself."""
         return self.package.package
+
+    def exception_store(self) -> ExceptionStore | None:
+        """The retained exceptions as a store, or `None` when this run has none.
+
+        Raises `pydantic.ValidationError` when `exceptions` holds records that are not
+        complete exceptions: an exception the reviewer cannot read is not silently
+        dropped, because dropping it would re-raise a condition an engineer accepted.
+        """
+        if self.exceptions is None:
+            return None
+        if isinstance(self.exceptions, ExceptionStore):
+            return self.exceptions
+        if not self.exceptions:
+            return ExceptionStore()
+        return ExceptionStore.from_records([dict(record) for record in self.exceptions])
 
     def component(self, component_id: str) -> ComponentInstance | None:
         return self._components.get(component_id)
@@ -182,7 +203,7 @@ def build_context(
     *,
     model: str = DEFAULT_MODEL,
     checklist: Checklist | None = None,
-    exceptions: list[Any] | None = None,
+    exceptions: ExceptionStore | list[Any] | None = None,
     bridge: Any | None = None,
 ) -> ToolContext:
     """A context over `package` with a fresh session and the versioned checklist."""

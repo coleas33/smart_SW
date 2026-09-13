@@ -13,9 +13,9 @@ Matching is on document, sheet and annotation - the locators a drawing dimension
 (`Dimension.source`). `view`, `page` and `bbox` are not matched on: they describe where
 the value sits on the page, not which value it is.
 
-TODO(polish): `swreview.checks.golden.find_dimension` duplicates this resolution for the
-golden harness and should delegate to `resolve_dimension`; that file belongs to another
-task in flight, so the two are kept message-for-message identical until then.
+`swreview.checks.golden.find_dimension`, the golden harness's way in, is a one-line
+delegation to this function: a fixture and a tool call resolve a reference identically or
+the baseline is not testing what the model does.
 """
 
 from __future__ import annotations

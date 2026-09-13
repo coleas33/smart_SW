@@ -28,6 +28,7 @@ from typer.testing import CliRunner
 from swreview import cli
 from swreview.ir.loader import save_package
 from swreview.ir.models import EvidencePackage
+from tests.unit.test_tools_checks_fastener import joint_package
 from tests.unit.test_tools_checks_fit import drawing_package
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -199,6 +200,44 @@ def fit_package_dir(tmp_path: Path, make_package: MakePackage) -> Path:
     directory = tmp_path / "fit-package"
     save_package(drawing_package(make_package), directory)
     return directory
+
+
+@pytest.fixture
+def joint_package_dir(tmp_path: Path, make_package: MakePackage) -> Path:
+    """A written package carrying the joint the fastener and alignment commands check."""
+    directory = tmp_path / "joint-package"
+    save_package(joint_package(make_package), directory)
+    return directory
+
+
+JOINT_SCRIPT: tuple[Turn, ...] = (
+    Turn(
+        "tool_use",
+        (
+            (
+                "check_fastener_joint",
+                {
+                    "fastener_id": "fst:1",
+                    "hole_id": "hole:1",
+                    "clamped_component_ids": ["cmp:0002"],
+                },
+            ),
+        ),
+    ),
+    Turn("end_turn"),
+)
+
+
+@pytest.fixture
+def joint_run_dir(
+    tmp_path: Path, tmp_package_dir: Path, fake_client: Callable[..., FakeClient]
+) -> Path:
+    """A finished review whose findings name components, so they can be excepted."""
+    fake_client(JOINT_SCRIPT)
+    out = tmp_path / "joint-run"
+    result = invoke("review", str(tmp_package_dir), "--out", str(out))
+    assert result.exit_code == 0, result.stdout
+    return out
 
 
 @pytest.fixture
@@ -408,15 +447,29 @@ def test_review_with_an_unknown_effort_is_a_usage_error(
     assert result.exit_code == 2
 
 
-def test_review_with_the_bridge_exits_1(
+def test_review_with_the_bridge_adds_the_bridge_tools(
     tmp_package_dir: Path, tmp_path: Path, fake_client: Callable[..., FakeClient]
 ) -> None:
-    fake_client()
+    """`--bridge` wires a client and the three bridge tools; nothing opens the pipe."""
+    client = fake_client()
 
     result = invoke("review", str(tmp_package_dir), "--out", str(tmp_path / "run"), "--bridge")
 
-    assert result.exit_code == 1
-    assert "US3" in result.stderr
+    assert result.exit_code == 0, result.stdout + result.stderr
+    names = {tool.name for tool in client.beta.messages.kwargs["tools"]}
+    assert {"bridge_capture", "bridge_measure", "bridge_interference"} <= names
+
+
+def test_review_without_the_bridge_has_no_bridge_tools(
+    tmp_package_dir: Path, tmp_path: Path, fake_client: Callable[..., FakeClient]
+) -> None:
+    client = fake_client()
+
+    result = invoke("review", str(tmp_package_dir), "--out", str(tmp_path / "run"))
+
+    assert result.exit_code == 0
+    names = {tool.name for tool in client.beta.messages.kwargs["tools"]}
+    assert not names & {"bridge_capture", "bridge_measure", "bridge_interference"}
 
 
 # --- report ----------------------------------------------------------------------
@@ -634,6 +687,314 @@ def test_check_stack_on_a_missing_package_exits_1(tmp_path: Path) -> None:
         "--dims",
         "doc:3:Sheet1:DIM-A:+1",
     )
+
+    assert result.exit_code == 1
+
+
+# --- check fastener | alignment --------------------------------------------------
+
+
+def test_check_fastener_prints_every_finding_of_the_joint(joint_package_dir: Path) -> None:
+    body = payload(
+        invoke(
+            "check",
+            "fastener",
+            "--package",
+            str(joint_package_dir),
+            "--fastener",
+            "fst:screw",
+            "--hole",
+            "hole:tapped",
+            "--clamped",
+            "cmp:0003",
+            "--json",
+        )
+    )
+
+    checks = [finding["check"] for finding in body["findings"]]
+    assert checks == [
+        "fastener.bottoming",
+        "fastener.engagement",
+        "fastener.thread_match",
+        "fastener.head_clearance",
+    ]
+    assert body["clamped"][0]["thickness"]["value"] == 8.0
+
+
+def test_check_fastener_human_output_names_each_check(joint_package_dir: Path) -> None:
+    result = invoke(
+        "check",
+        "fastener",
+        "--package",
+        str(joint_package_dir),
+        "--fastener",
+        "fst:screw",
+        "--hole",
+        "hole:tapped",
+        "--clamped",
+        "cmp:0003",
+    )
+
+    assert result.exit_code == 0
+    assert "fastener.bottoming" in result.stdout
+    assert "fastener.engagement" in result.stdout
+
+
+def test_check_fastener_takes_several_clamped_components(joint_package_dir: Path) -> None:
+    body = payload(
+        invoke(
+            "check",
+            "fastener",
+            "--package",
+            str(joint_package_dir),
+            "--fastener",
+            "fst:screw",
+            "--hole",
+            "hole:tapped",
+            "--clamped",
+            "cmp:0003,cmp:0006",
+            "--json",
+        )
+    )
+
+    assert [layer["component_id"] for layer in body["clamped"]] == ["cmp:0003", "cmp:0006"]
+
+
+def test_check_fastener_reports_an_out_of_scope_joint(joint_package_dir: Path) -> None:
+    body = payload(
+        invoke(
+            "check",
+            "fastener",
+            "--package",
+            str(joint_package_dir),
+            "--fastener",
+            "fst:pin",
+            "--hole",
+            "hole:tapped",
+            "--clamped",
+            "cmp:0003",
+            "--json",
+        )
+    )
+
+    assert body["status"] == "out_of_scope"
+    assert "pin" in body["coverage_item"]["reason"]
+
+
+def test_check_fastener_with_an_unknown_id_exits_1(joint_package_dir: Path) -> None:
+    result = invoke(
+        "check",
+        "fastener",
+        "--package",
+        str(joint_package_dir),
+        "--fastener",
+        "fst:nope",
+        "--hole",
+        "hole:tapped",
+        "--clamped",
+        "cmp:0003",
+    )
+
+    assert result.exit_code == 1
+    assert "fst:nope" in result.stderr
+
+
+def test_check_alignment_against_a_drawn_tolerance(joint_package_dir: Path) -> None:
+    body = payload(
+        invoke(
+            "check",
+            "alignment",
+            "--package",
+            str(joint_package_dir),
+            "--hole-a",
+            "hole:tapped",
+            "--hole-b",
+            "hole:far",
+            "--tolerance",
+            "doc:9:Sheet1:dim-1-1",
+            "--json",
+        )
+    )
+
+    finding = body["finding"]
+    assert finding["check"] == "hole.coaxiality"
+    assert finding["status"] == "demonstrated"
+    assert finding["calculation"]["result"]["tolerance_mm"] == 0.2
+
+
+def test_check_alignment_without_a_tolerance_is_unresolved(joint_package_dir: Path) -> None:
+    body = payload(
+        invoke(
+            "check",
+            "alignment",
+            "--package",
+            str(joint_package_dir),
+            "--hole-a",
+            "hole:tapped",
+            "--hole-b",
+            "hole:far",
+            "--json",
+        )
+    )
+
+    assert body["finding"]["status"] == "unresolved"
+
+
+def test_check_alignment_with_a_malformed_tolerance_is_a_usage_error(
+    joint_package_dir: Path,
+) -> None:
+    result = invoke(
+        "check",
+        "alignment",
+        "--package",
+        str(joint_package_dir),
+        "--hole-a",
+        "hole:tapped",
+        "--hole-b",
+        "hole:far",
+        "--tolerance",
+        "dim-1-1",
+    )
+
+    assert result.exit_code == 2
+
+
+def test_check_alignment_with_an_unknown_hole_exits_1(joint_package_dir: Path) -> None:
+    result = invoke(
+        "check",
+        "alignment",
+        "--package",
+        str(joint_package_dir),
+        "--hole-a",
+        "hole:tapped",
+        "--hole-b",
+        "hole:nope",
+    )
+
+    assert result.exit_code == 1
+    assert "hole:nope" in result.stderr
+
+
+# --- exceptions accept | list ----------------------------------------------------
+
+
+def accept(run_dir: Path, package_dir: Path, finding_id: str = "F-001", *extra: str) -> Any:
+    return invoke(
+        "exceptions",
+        "accept",
+        str(run_dir),
+        finding_id,
+        "--package",
+        str(package_dir),
+        "--note",
+        "press fit, intended",
+        "--by",
+        "cole",
+        *extra,
+    )
+
+
+def test_exceptions_accept_writes_an_exception_bound_to_the_finding(
+    joint_run_dir: Path, tmp_package_dir: Path
+) -> None:
+    body = payload(accept(joint_run_dir, tmp_package_dir, "F-001", "--json"))
+
+    assert body["exception"]["id"] == "EX-001"
+    assert body["exception"]["check"] == "fastener.bottoming"
+    assert body["exception"]["configuration"] == "Default"
+    assert body["exception"]["note"] == "press fit, intended"
+    assert body["exception"]["accepted_by"] == "cole"
+    assert body["exception"]["geometry_fingerprint"]
+
+    stored = json.loads((tmp_package_dir / "exceptions.json").read_text(encoding="utf-8"))
+    assert [item["id"] for item in stored["exceptions"]] == ["EX-001"]
+
+
+def test_exceptions_accept_records_the_exception_on_the_finding(
+    joint_run_dir: Path, tmp_package_dir: Path
+) -> None:
+    accept(joint_run_dir, tmp_package_dir)
+
+    session = json.loads((joint_run_dir / "session.json").read_text(encoding="utf-8"))
+    assert session["findings"][0]["exception_id"] == "EX-001"
+    assert (joint_run_dir / "report.md").is_file()
+
+
+def test_a_second_acceptance_gets_the_next_id(
+    joint_run_dir: Path, tmp_package_dir: Path
+) -> None:
+    accept(joint_run_dir, tmp_package_dir, "F-001")
+
+    body = payload(accept(joint_run_dir, tmp_package_dir, "F-002", "--json"))
+
+    assert body["exception"]["id"] == "EX-002"
+
+
+def test_exceptions_accept_refuses_a_finding_that_names_no_component(
+    run_dir: Path, tmp_package_dir: Path
+) -> None:
+    """A drawing finding is not geometry; there is nothing to bind an exception to."""
+    result = accept(run_dir, tmp_package_dir, "F-001")
+
+    assert result.exit_code == 1
+    assert "component" in result.stderr
+
+
+def test_exceptions_accept_on_an_unknown_finding_exits_1(
+    joint_run_dir: Path, tmp_package_dir: Path
+) -> None:
+    result = accept(joint_run_dir, tmp_package_dir, "F-404")
+
+    assert result.exit_code == 1
+    assert "F-404" in result.stderr
+
+
+def test_exceptions_list_shows_what_is_active(
+    joint_run_dir: Path, tmp_package_dir: Path
+) -> None:
+    accept(joint_run_dir, tmp_package_dir)
+
+    body = payload(invoke("exceptions", "list", str(tmp_package_dir), "--json"))
+
+    assert [item["id"] for item in body["exceptions"]] == ["EX-001"]
+    assert body["exceptions"][0]["status"] == "active"
+    assert body["counts"] == {"active": 1, "needs_review": 0, "retired": 0}
+
+
+def test_exceptions_list_human_output_names_the_check_and_the_note(
+    joint_run_dir: Path, tmp_package_dir: Path
+) -> None:
+    accept(joint_run_dir, tmp_package_dir)
+
+    result = invoke("exceptions", "list", str(tmp_package_dir))
+
+    assert result.exit_code == 0
+    assert "EX-001" in result.stdout
+    assert "press fit, intended" in result.stdout
+
+
+def test_exceptions_list_flags_one_whose_geometry_moved(
+    joint_run_dir: Path, tmp_package_dir: Path
+) -> None:
+    accept(joint_run_dir, tmp_package_dir)
+    package = json.loads((tmp_package_dir / "package.json").read_text(encoding="utf-8"))
+    package["design"]["active_configuration"] = "Machining"
+    (tmp_package_dir / "package.json").write_text(json.dumps(package), encoding="utf-8")
+
+    body = payload(invoke("exceptions", "list", str(tmp_package_dir), "--json"))
+
+    assert body["exceptions"][0]["status"] == "needs_review"
+    assert body["counts"]["needs_review"] == 1
+
+
+def test_exceptions_list_on_a_package_with_none(tmp_package_dir: Path) -> None:
+    body = payload(invoke("exceptions", "list", str(tmp_package_dir), "--json"))
+
+    assert body["exceptions"] == []
+
+
+def test_exceptions_list_on_a_missing_package_exits_1(tmp_path: Path) -> None:
+    result = invoke("exceptions", "list", str(tmp_path / "nowhere"))
 
     assert result.exit_code == 1
 

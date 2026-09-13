@@ -236,6 +236,81 @@ def test_counterbore_callout_gives_diameter_and_depth(tmp_path: Path) -> None:
     assert [d.nominal.value for d in sheet.dimensions] == [11.0, 6.5]
 
 
+# --- annotation ids ---------------------------------------------------------------
+
+
+def test_every_dimension_gets_a_stable_annotation_id(tmp_path: Path) -> None:
+    """`document_id:sheet:annotation` is how a check addresses a parsed dimension."""
+    path = build_pdf(
+        tmp_path / "d.pdf",
+        [title_block(), (100.0, 200.0, "12.5"), (400.0, 200.0, "60"), (100.0, 400.0, "8.0")],
+    )
+
+    sheet = parse_drawing_pdf(path, "DRW-2001")[0]
+
+    assert [d.source.annotation for d in sheet.dimensions] == ["dim-1-1", "dim-1-2", "dim-1-3"]
+    assert [d.nominal.value for d in sheet.dimensions] == [12.5, 60.0, 8.0]
+
+
+def test_annotation_ids_number_per_page(tmp_path: Path) -> None:
+    path = build_pdf(
+        tmp_path / "d.pdf",
+        [title_block(), (100.0, 200.0, "12.5")],
+        [title_block(), (100.0, 200.0, "8.0")],
+    )
+
+    sheets = parse_drawing_pdf(path, "DRW-2002")
+
+    assert [d.source.annotation for sheet in sheets for d in sheet.dimensions] == [
+        "dim-1-1",
+        "dim-2-1",
+    ]
+
+
+@needs_symbol_font
+def test_one_callout_that_parses_into_two_dimensions_gets_two_ids(tmp_path: Path) -> None:
+    """A counterbore callout is one cluster and two dimensions; each needs its own id."""
+    path = build_pdf(
+        tmp_path / "d.pdf",
+        [title_block(), (100.0, 300.0, "4X ⌴ Ø11 ↧ 6.5")],
+        fontfile=SYMBOL_FONT,
+    )
+
+    sheet = parse_drawing_pdf(path, "D")[0]
+
+    assert len(sheet.dimensions) == 2
+    assert [d.source.annotation for d in sheet.dimensions] == ["dim-1-1", "dim-1-2"]
+
+
+def test_annotation_ids_are_stable_across_reparses(tmp_path: Path) -> None:
+    path = build_pdf(
+        tmp_path / "d.pdf",
+        [title_block(), (100.0, 200.0, "12.5"), (400.0, 200.0, "60")],
+    )
+
+    first = parse_drawing_pdf(path, "D")[0]
+    second = parse_drawing_pdf(path, "D")[0]
+
+    assert [d.source.annotation for d in first.dimensions] == [
+        d.source.annotation for d in second.dimensions
+    ]
+
+
+def test_every_general_note_gets_an_annotation_id(tmp_path: Path) -> None:
+    path = build_pdf(
+        tmp_path / "d.pdf",
+        [
+            title_block(),
+            (60.0, 400.0, "NOTES:", 9.0),
+            (60.0, 420.0, "MATERIAL: 6061-T6", 9.0),
+        ],
+    )
+
+    sheet = parse_drawing_pdf(path, "D")[0]
+
+    assert [note.source.annotation for note in sheet.general_notes] == ["note-1-1", "note-1-2"]
+
+
 # --- notes ------------------------------------------------------------------------
 
 
@@ -406,6 +481,18 @@ class TestCoverBlindTapDrawings:
         assert thread.nominal.value == 14.0
         assert thread.tolerance.kind == "none"
         assert not any("THREAD" in text.upper() for text in callouts)
+
+    def test_housing_dimensions_are_addressable_by_annotation(self) -> None:
+        sheet = parse_drawing_pdf(BENCHMARK_DRAWINGS / "housing.pdf", "DRW-2001")[0]
+
+        assert [d.source.annotation for d in sheet.dimensions] == [
+            "dim-1-1",
+            "dim-1-2",
+            "dim-1-3",
+        ]
+        assert {d.source.annotation: d.text_as_read for d in sheet.dimensions}[
+            "dim-1-1"
+        ] == "4X M6x1.0 - 6H ↧ 14"
 
     def test_housing_carries_its_general_notes(self) -> None:
         notes = parse_drawing_pdf(BENCHMARK_DRAWINGS / "housing.pdf", "DRW-2001")[0]

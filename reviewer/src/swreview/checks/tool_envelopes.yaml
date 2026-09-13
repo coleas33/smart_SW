@@ -1,0 +1,41 @@
+# Cylinder each driving tool sweeps behind a fastener head, as a multiple of the
+# fastener's nominal thread diameter d (T090, contracts/agent-tools.md
+# `check_tool_envelope`).
+#
+# These are PILOT DEFAULTS, not standard data. They are deliberately coarse: the pilot
+# asks "is there a body in the way of a driver", not "does this exact bit fit". A real
+# clearance argument needs the tool the shop actually uses, and an engineer changes the
+# ratio here rather than in code - which is why every finding cites the row it used.
+#
+# The swept radius is
+#
+#     radius_mm = envelope_diameter_ratio * d / 2 + clearance_mm
+#
+# so the ratio is read as a *diameter* multiple: the across-flats size of a hex key, the
+# outside diameter of a socket, the barrel diameter of a screwdriver. The envelope is a
+# straight cylinder swept back along the fastener axis; the swing arc of a wrench and the
+# taper of a bit are not modelled (the check reports that as a coverage limit).
+
+version: 1
+
+clearance_mm: 0.5
+# Room for the hand and for the tool not being perfectly on axis. One number for every
+# tool: a finer split would imply knowledge this table does not have.
+
+tools:
+  hex_key:
+    envelope_diameter_ratio: 0.6
+    source: >-
+      pilot default: hex key across flats taken as 0.6 x d (an M6 socket head cap screw
+      drives with a 5 mm key, so this is conservative for small metric sizes and loose
+      for large ones); replace with the shop's key set before relying on it
+  socket:
+    envelope_diameter_ratio: 1.6
+    source: >-
+      pilot default: outside diameter of a hex socket taken as 1.6 x d, which covers a
+      common 1/4 in drive socket over a hex head of the same nominal size
+  screwdriver:
+    envelope_diameter_ratio: 1.2
+    source: >-
+      pilot default: barrel diameter of a driver handle taken as 1.2 x d; the blade
+      itself is smaller, the handle is what runs into a neighbouring boss

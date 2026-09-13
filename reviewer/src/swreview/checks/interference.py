@@ -407,12 +407,17 @@ def _reported(group: InterferenceGroup) -> CheckResult:
     )
 
 
-def run_coverage(package: EvidencePackage) -> list[CoverageItem]:
-    """One unresolved coverage item per truncated or failed pair in the package.
+def run_coverage(
+    package: EvidencePackage, interferences: Sequence[Interference] | None = None
+) -> list[CoverageItem]:
+    """One unresolved coverage item per truncated or failed pair.
 
     These belong in `Coverage.unresolved`. Their presence is what stops a run from being
     summarized as a pass while any pair went uncomputed (FR-019): the report says which
     pairs, in which configuration, and why.
+
+    `interferences` narrows the sweep to a subset - one group's members, when a check tool
+    has just judged that group - and defaults to every interference in the package.
     """
     return [
         CoverageItem(
@@ -429,7 +434,7 @@ def run_coverage(package: EvidencePackage) -> list[CoverageItem]:
             ),
             error=item.error,
         )
-        for item in package.interferences
+        for item in (package.interferences if interferences is None else interferences)
         if item.status != "computed"
     ]
 
