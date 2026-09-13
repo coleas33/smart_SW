@@ -31,32 +31,67 @@ from anthropic.lib.tools import BetaFunctionTool, ToolError
 from pydantic_core import to_jsonable_python
 
 from swreview.report.session import CoverageItem, CoverageScope, InvestigationStep
-from swreview.tools import query, session
+from swreview.tools import checks_fit, query, session
 from swreview.tools.context import ToolContext, use_context
 
-TOOL_FUNCTIONS: tuple[Callable[..., Any], ...] = (
-    query.get_package_summary,
-    query.list_components,
-    query.get_component,
-    query.find_components,
-    query.list_mates,
-    query.list_holes,
-    query.list_fasteners,
-    query.list_interferences,
-    query.get_drawing_sheet,
-    query.find_dimensions,
-    query.list_gaps,
-    query.get_exceptions,
-    session.request_evidence,
-    session.mark_coverage,
-    session.record_drawing_finding,
-    session.get_review_checklist,
-    session.request_capture,
+Registration = Callable[[], tuple[Callable[..., Any], ...]]
+"""One group of tools, named by the table it comes from in contracts/agent-tools.md."""
+
+
+def query_tools() -> tuple[Callable[..., Any], ...]:
+    """Package query tools: everything the model can read out of the package."""
+    return (
+        query.get_package_summary,
+        query.list_components,
+        query.get_component,
+        query.find_components,
+        query.list_mates,
+        query.list_holes,
+        query.list_fasteners,
+        query.list_interferences,
+        query.get_drawing_sheet,
+        query.find_dimensions,
+        query.list_gaps,
+        query.get_exceptions,
+    )
+
+
+def check_tools() -> tuple[Callable[..., Any], ...]:
+    """Check tools: deterministic checks that write a finding to the session."""
+    return (
+        checks_fit.check_fit,
+        checks_fit.check_axial_stack,
+    )
+
+
+def session_tools() -> tuple[Callable[..., Any], ...]:
+    """Session tools: the only tools that write, and they only write to the session."""
+    return (
+        session.request_evidence,
+        session.mark_coverage,
+        session.record_drawing_finding,
+        session.get_review_checklist,
+        session.request_capture,
+    )
+
+
+REGISTRATIONS: tuple[Registration, ...] = (
+    query_tools,
+    check_tools,
+    session_tools,
+)
+"""The extension point for a new group of tools: write a registration function that
+returns them and add it here, in the order of contracts/agent-tools.md. The measurement
+tools, and the fastener, alignment and interference check tools, arrive this way with
+their own tasks; nothing else about the registry has to change when they do."""
+
+TOOL_FUNCTIONS: tuple[Callable[..., Any], ...] = tuple(
+    function for registration in REGISTRATIONS for function in registration()
 )
 """Every tool the model gets, in the order of contracts/agent-tools.md.
 
 There is no code-execution tool, no file tool and no SOLIDWORKS call outside this list
-(FR-006). The measurement and check tools of the contract arrive with their own tasks.
+(FR-006).
 """
 
 SUMMARY_LENGTH = 200
