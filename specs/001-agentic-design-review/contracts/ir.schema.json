@@ -1,0 +1,1547 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smart-sw.local/contracts/ir.schema.json",
+  "title": "EvidencePackage",
+  "description": "Intermediate representation of one SOLIDWORKS design dumped by the extractor and/or assembled from exported files. Field rules: specs/001-agentic-design-review/data-model.md section 2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "package_id",
+    "created_at",
+    "extractor",
+    "manifest",
+    "design",
+    "documents",
+    "components",
+    "gaps"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$",
+      "description": "Major 1. Consumers reject any other major."
+    },
+    "package_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "extractor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "sw_version",
+        "machine"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "sw_version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "e.g. '2024 SP3'; null for exported-file-only packages"
+        },
+        "machine": {
+          "type": "string"
+        }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entries",
+        "discrepancies"
+      ],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ManifestEntry"
+          }
+        },
+        "discrepancies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Discrepancy"
+          }
+        }
+      }
+    },
+    "design": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "design_id",
+        "name",
+        "root_assembly_document_id",
+        "active_configuration",
+        "drawing_document_ids"
+      ],
+      "properties": {
+        "design_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "root_assembly_document_id": {
+          "type": "string"
+        },
+        "active_configuration": {
+          "type": "string"
+        },
+        "drawing_document_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Document"
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ComponentInstance"
+      }
+    },
+    "mates": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Mate"
+      }
+    },
+    "holes": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Hole"
+      }
+    },
+    "threads": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CosmeticThread"
+      }
+    },
+    "fasteners": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Fastener"
+      }
+    },
+    "faces": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/FaceGeometry"
+      }
+    },
+    "bodies": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/BodyRef"
+      }
+    },
+    "interferences": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Interference"
+      }
+    },
+    "captures": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Capture"
+      }
+    },
+    "drawings": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/DrawingSheet"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Gap"
+      }
+    }
+  },
+  "$defs": {
+    "Quantity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "unit"
+      ],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "enum": [
+            "mm",
+            "in",
+            "m"
+          ]
+        }
+      }
+    },
+    "Volume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "unit"
+      ],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "enum": [
+            "mm3",
+            "in3",
+            "m3"
+          ]
+        }
+      }
+    },
+    "Angle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "unit"
+      ],
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "enum": [
+            "deg",
+            "rad"
+          ]
+        }
+      }
+    },
+    "Vec3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      }
+    },
+    "Axis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "direction"
+      ],
+      "properties": {
+        "origin": {
+          "$ref": "#/$defs/Vec3"
+        },
+        "direction": {
+          "$ref": "#/$defs/Vec3"
+        }
+      }
+    },
+    "Transform": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "array",
+        "minItems": 4,
+        "maxItems": 4,
+        "items": {
+          "type": "number"
+        }
+      },
+      "description": "Row-major 4x4, translation in meters"
+    },
+    "PersistRef": {
+      "type": "string",
+      "contentEncoding": "base64",
+      "minLength": 1,
+      "description": "IModelDocExtension.GetPersistReference3 bytes, base64"
+    },
+    "SourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_id"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string"
+        },
+        "sheet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "view": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "annotation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PersistRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "page": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "bbox": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "sheet"
+          ]
+        },
+        {
+          "required": [
+            "annotation"
+          ]
+        },
+        {
+          "required": [
+            "persist_ref"
+          ]
+        },
+        {
+          "required": [
+            "page"
+          ]
+        }
+      ]
+    },
+    "Tolerance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "upper",
+        "lower",
+        "source"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "symmetric",
+            "bilateral",
+            "limits",
+            "basic",
+            "none"
+          ]
+        },
+        "upper": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "$ref": "#/$defs/Angle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lower": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "$ref": "#/$defs/Angle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/SourceRef"
+        }
+      }
+    },
+    "Dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nominal",
+        "tolerance",
+        "source",
+        "text_as_read"
+      ],
+      "properties": {
+        "nominal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "$ref": "#/$defs/Angle"
+            }
+          ]
+        },
+        "tolerance": {
+          "$ref": "#/$defs/Tolerance"
+        },
+        "source": {
+          "$ref": "#/$defs/SourceRef"
+        },
+        "text_as_read": {
+          "type": "string"
+        }
+      }
+    },
+    "ManifestEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_id",
+        "vault_path",
+        "vault_version",
+        "revision",
+        "configuration",
+        "local_modified",
+        "export_method"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string"
+        },
+        "vault_path": {
+          "type": "string"
+        },
+        "vault_version": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "revision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "configuration": {
+          "type": "string"
+        },
+        "local_modified": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "export_method": {
+          "enum": [
+            "native",
+            "pdf",
+            "step",
+            "manual"
+          ]
+        }
+      }
+    },
+    "Discrepancy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_id",
+        "kind",
+        "expected",
+        "actual",
+        "note"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "version_mismatch",
+            "local_modification",
+            "missing_document",
+            "config_mismatch"
+          ]
+        },
+        "expected": {
+          "type": [
+            "string",
+            "integer",
+            "null"
+          ]
+        },
+        "actual": {
+          "type": [
+            "string",
+            "integer",
+            "null"
+          ]
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "MassProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mass_kg",
+        "volume_m3",
+        "center_of_mass",
+        "configuration"
+      ],
+      "properties": {
+        "mass_kg": {
+          "type": "number"
+        },
+        "volume_m3": {
+          "type": "number"
+        },
+        "center_of_mass": {
+          "$ref": "#/$defs/Vec3"
+        },
+        "configuration": {
+          "type": "string"
+        }
+      }
+    },
+    "Document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_id",
+        "kind",
+        "file_name",
+        "path",
+        "configurations",
+        "active_configuration",
+        "custom_properties",
+        "config_properties",
+        "material",
+        "mass"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "part",
+            "assembly",
+            "drawing"
+          ]
+        },
+        "file_name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "configurations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "active_configuration": {
+          "type": "string"
+        },
+        "custom_properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "config_properties": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "material": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mass": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MassProperties"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ComponentInstance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "name",
+        "full_path",
+        "document_id",
+        "parent_id",
+        "referenced_configuration",
+        "transform",
+        "suppression",
+        "is_fixed",
+        "pattern_id",
+        "is_toolbox"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^cmp:[0-9]{4,}$"
+        },
+        "persist_ref": {
+          "$ref": "#/$defs/PersistRef"
+        },
+        "persist_ref_scope": {
+          "type": "string",
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
+        },
+        "name": {
+          "type": "string"
+        },
+        "document_id": {
+          "type": "string"
+        },
+        "parent_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "referenced_configuration": {
+          "type": "string"
+        },
+        "transform": {
+          "$ref": "#/$defs/Transform"
+        },
+        "suppression": {
+          "enum": [
+            "resolved",
+            "lightweight",
+            "suppressed",
+            "unloaded"
+          ]
+        },
+        "is_fixed": {
+          "type": "boolean"
+        },
+        "pattern_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "is_toolbox": {
+          "type": "boolean"
+        },
+        "full_path": {
+          "type": "string",
+          "description": "IComponent2.Name2 full instance path, unique in the assembly"
+        }
+      }
+    },
+    "Mate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "type",
+        "entities",
+        "alignment",
+        "suppressed",
+        "distance",
+        "angle"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "persist_ref": {
+          "$ref": "#/$defs/PersistRef"
+        },
+        "persist_ref_scope": {
+          "type": "string",
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
+        },
+        "type": {
+          "type": "string"
+        },
+        "entities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "component_id",
+              "persist_ref",
+              "entity_kind"
+            ],
+            "properties": {
+              "component_id": {
+                "type": "string"
+              },
+              "persist_ref": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PersistRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "entity_kind": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "alignment": {
+          "enum": [
+            "aligned",
+            "anti_aligned",
+            "closest"
+          ]
+        },
+        "suppressed": {
+          "type": "boolean"
+        },
+        "distance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "angle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Angle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Hole": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "component_id",
+        "feature_name",
+        "hole_type",
+        "standard",
+        "size",
+        "thread_designation",
+        "thread_depth",
+        "hole_depth",
+        "end_condition",
+        "diameter",
+        "axis",
+        "face_ids"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "persist_ref": {
+          "$ref": "#/$defs/PersistRef"
+        },
+        "persist_ref_scope": {
+          "type": "string",
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
+        },
+        "component_id": {
+          "type": "string"
+        },
+        "feature_name": {
+          "type": "string"
+        },
+        "hole_type": {
+          "enum": [
+            "tapped",
+            "clearance",
+            "counterbore",
+            "countersink",
+            "simple",
+            "unknown"
+          ]
+        },
+        "standard": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "size": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thread_designation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thread_depth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Usable thread depth. null = unknown; never derived from hole_depth."
+        },
+        "hole_depth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "end_condition": {
+          "enum": [
+            "blind",
+            "through",
+            "unknown"
+          ]
+        },
+        "diameter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "axis": {
+          "$ref": "#/$defs/Axis"
+        },
+        "face_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "CosmeticThread": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "component_id",
+        "face_id",
+        "designation",
+        "depth",
+        "is_external"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "persist_ref": {
+          "$ref": "#/$defs/PersistRef"
+        },
+        "persist_ref_scope": {
+          "type": "string",
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
+        },
+        "component_id": {
+          "type": "string"
+        },
+        "face_id": {
+          "type": "string"
+        },
+        "designation": {
+          "type": "string"
+        },
+        "depth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "is_external": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Fastener": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "component_id",
+        "kind",
+        "identity_source",
+        "thread_designation",
+        "length",
+        "head_type",
+        "head_diameter",
+        "head_height",
+        "drive",
+        "axis",
+        "material"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "persist_ref": {
+          "$ref": "#/$defs/PersistRef"
+        },
+        "persist_ref_scope": {
+          "type": "string",
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
+        },
+        "component_id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "screw",
+            "bolt",
+            "nut",
+            "washer",
+            "pin",
+            "other"
+          ]
+        },
+        "identity_source": {
+          "enum": [
+            "toolbox",
+            "custom_property",
+            "name_parse",
+            "manual"
+          ]
+        },
+        "thread_designation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "length": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "head_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "head_diameter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "head_height": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "drive": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "axis": {
+          "$ref": "#/$defs/Axis"
+        },
+        "material": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "FaceGeometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "component_id",
+        "body_id",
+        "kind",
+        "cylinder",
+        "plane",
+        "bbox",
+        "area_m2"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "persist_ref": {
+          "$ref": "#/$defs/PersistRef"
+        },
+        "persist_ref_scope": {
+          "type": "string",
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
+        },
+        "component_id": {
+          "type": "string"
+        },
+        "body_id": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "cylinder",
+            "plane",
+            "cone",
+            "torus",
+            "other"
+          ]
+        },
+        "cylinder": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "axis_origin",
+                "axis_dir",
+                "radius_m"
+              ],
+              "properties": {
+                "axis_origin": {
+                  "$ref": "#/$defs/Vec3"
+                },
+                "axis_dir": {
+                  "$ref": "#/$defs/Vec3"
+                },
+                "radius_m": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plane": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "origin",
+                "normal"
+              ],
+              "properties": {
+                "origin": {
+                  "$ref": "#/$defs/Vec3"
+                },
+                "normal": {
+                  "$ref": "#/$defs/Vec3"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bbox": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "$ref": "#/$defs/Vec3"
+            },
+            "max": {
+              "$ref": "#/$defs/Vec3"
+            }
+          }
+        },
+        "area_m2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "BodyRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "component_id",
+        "mesh_file",
+        "triangle_count",
+        "is_solid"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "persist_ref": {
+          "$ref": "#/$defs/PersistRef"
+        },
+        "persist_ref_scope": {
+          "type": "string",
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
+        },
+        "component_id": {
+          "type": "string"
+        },
+        "mesh_file": {
+          "type": "string",
+          "pattern": "\\.(glb|stl)$"
+        },
+        "triangle_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "is_solid": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Interference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "configuration",
+        "component_ids",
+        "volume",
+        "settings",
+        "is_fastener",
+        "is_possible",
+        "status",
+        "error",
+        "group_key"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "configuration": {
+          "type": "string"
+        },
+        "component_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "string"
+          }
+        },
+        "volume": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Volume"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Unit as verified by the extractor on the workstation; IInterference.Volume units are undocumented"
+        },
+        "settings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "treat_coincident_as_interference",
+            "treat_subassemblies_as_components",
+            "include_multibody",
+            "ignore_hidden",
+            "fastener_folder_treatment"
+          ],
+          "properties": {
+            "treat_coincident_as_interference": {
+              "type": "boolean"
+            },
+            "treat_subassemblies_as_components": {
+              "type": "boolean"
+            },
+            "include_multibody": {
+              "type": "boolean"
+            },
+            "ignore_hidden": {
+              "type": "boolean"
+            },
+            "fastener_folder_treatment": {
+              "enum": [
+                "include",
+                "exclude",
+                "only"
+              ]
+            }
+          }
+        },
+        "status": {
+          "enum": [
+            "computed",
+            "truncated",
+            "failed"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group_key": {
+          "type": "string"
+        },
+        "is_fastener": {
+          "type": "boolean",
+          "description": "IInterference.IsFastener"
+        },
+        "is_possible": {
+          "type": "boolean",
+          "description": "IInterference.IsPossibleInterference (coincident/touching)"
+        }
+      }
+    },
+    "Capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "persist_ref",
+        "component_ids",
+        "file",
+        "view",
+        "note"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PersistRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "component_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "file": {
+          "type": "string",
+          "pattern": "\\.png$"
+        },
+        "view": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "Note": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "source",
+        "kind"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/SourceRef"
+        },
+        "kind": {
+          "enum": [
+            "general_tolerance",
+            "material",
+            "finish",
+            "other"
+          ]
+        }
+      }
+    },
+    "DrawingSheet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_id",
+        "sheet_name",
+        "page",
+        "scale",
+        "units",
+        "general_notes",
+        "dimensions",
+        "views",
+        "parse_status",
+        "parser"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string"
+        },
+        "sheet_name": {
+          "type": "string"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "scale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "units": {
+          "enum": [
+            "mm",
+            "in",
+            "unknown"
+          ]
+        },
+        "general_notes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Note"
+          }
+        },
+        "dimensions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Dimension"
+          }
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "bbox"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "bbox": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "items": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "parse_status": {
+          "enum": [
+            "text",
+            "no_text",
+            "failed"
+          ]
+        },
+        "parser": {
+          "type": "string"
+        }
+      }
+    },
+    "Gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "entity_kind",
+        "entity_id",
+        "reason",
+        "error"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "not_extracted",
+            "unsupported",
+            "tool_error",
+            "no_text"
+          ]
+        },
+        "entity_kind": {
+          "type": "string"
+        },
+        "entity_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}
