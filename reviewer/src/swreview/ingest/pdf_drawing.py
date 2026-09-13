@@ -12,6 +12,14 @@ cluster to `dimension_grammar`, and reports what it could not read:
   with no unit is not evidence (constitution Principle I);
 - any exception is `parse_status="failed"` plus a `Gap` carrying the error.
 
+Every dimension and every note is given a stable `annotation` on its `SourceRef` -
+`dim-<page>-<n>` and `note-<page>-<n>`, numbered from one in reading order down the page
+- because that is the only way a check tool can name one: `check_fit` and
+`check_axial_stack` address a dimension as `document_id:sheet:annotation`, and a parsed
+sheet whose dimensions carry no annotation cannot be checked at all. The ids come from
+position, not from content, so re-parsing the same PDF yields the same ids; editing the
+drawing may renumber them, which is why a finding also records the callout it read.
+
 `views` is left empty in this phase. Mapping spans to drawing views is a heuristic
 (research R8) whose output would be `suspected` at best, and no check consumes it yet;
 hole and BOM tables (pdfplumber) are likewise deferred until a check needs them.
@@ -31,7 +39,7 @@ from swreview.ingest.dimension_grammar import (
     normalize_text,
     parse_dimensions,
 )
-from swreview.ir.models import DrawingSheet, Gap, Note, SourceRef
+from swreview.ir.models import Dimension, DrawingSheet, Gap, Note, SourceRef
 
 __all__ = ["NOTE_PREFIXES", "parse_drawing_pdf"]
 
@@ -162,18 +170,28 @@ def _parse_page(
         notes.append(
             Note(
                 text=row.text,
-                source=_source(document_id, sheet_name, number, row.bbox),
+                source=_source(
+                    document_id,
+                    sheet_name,
+                    number,
+                    row.bbox,
+                    annotation=f"note-{number}-{len(notes) + 1}",
+                ),
                 kind=kind,
             )
         )
 
-    dimensions = []
+    dimensions: list[Dimension] = []
     unreadable = 0
-    for cluster in _stack(remaining):
+    for cluster in _reading_order(_stack(remaining)):
         source = _source(document_id, sheet_name, number, cluster.bbox)
         parsed = parse_dimensions(cluster.text, units, source)
         if parsed:
-            dimensions.extend(parsed)
+            first = len(dimensions) + 1
+            dimensions.extend(
+                _annotated(dimension, f"dim-{number}-{first + index}")
+                for index, dimension in enumerate(parsed)
+            )
         elif looks_like_dimension(cluster.text):
             unreadable += 1
 
@@ -294,11 +312,40 @@ def _scale(page_text: str) -> str | None:
     return normalize_text(match.group(1)).replace(" ", "") if match else None
 
 
-def _source(document_id: str, sheet_name: str, page: int, bbox: list[float]) -> SourceRef:
+def _reading_order(clusters: list[_Cluster]) -> list[_Cluster]:
+    """Clusters down the page and then across it, which is how the ids are numbered.
+
+    `_stack` works left to right so a stacked tolerance finds the nominal beside it;
+    that is an internal order, not the order an engineer reads the sheet in.
+    """
+    return sorted(clusters, key=lambda cluster: (cluster.baseline, cluster.bbox[0]))
+
+
+def _annotated(dimension: Dimension, annotation: str) -> Dimension:
+    """`dimension` with `annotation` on its source, so a check tool can address it.
+
+    A tolerance read from the same callout carries the same source and is re-stamped with
+    it; a tolerance that came from somewhere else - a general note - keeps its own.
+    """
+    source = dimension.source.model_copy(update={"annotation": annotation})
+    tolerance = dimension.tolerance
+    if tolerance.source == dimension.source:
+        tolerance = tolerance.model_copy(update={"source": source})
+    return dimension.model_copy(update={"source": source, "tolerance": tolerance})
+
+
+def _source(
+    document_id: str,
+    sheet_name: str,
+    page: int,
+    bbox: list[float],
+    annotation: str | None = None,
+) -> SourceRef:
     return SourceRef(
         document_id=document_id,
         sheet=sheet_name,
         page=page,
+        annotation=annotation,
         bbox=[float(value) for value in bbox],
     )
 

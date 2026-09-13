@@ -10,22 +10,28 @@ adds is everything the SDK has no opinion about:
   as `coverage.closeout` unresolved rather than passed over in silence;
 - a cap on `pause_turn` restarts, so a turn that keeps pausing cannot spin forever;
 - finalization: every evidence request still open and every checklist item still open
-  becomes `unresolved` coverage before the session is written (FR-010, FR-019).
+  becomes `unresolved` coverage before the session is written (FR-010, FR-019);
+- the two US3 hooks on the context: the `exceptions.json` beside the package, loaded when
+  it is there, and the live SOLIDWORKS bridge when the run asked for one. Both are wired
+  here and nowhere else, so the tools only ever see them through `ToolContext`.
 
 `client` is injectable so the whole loop is testable without a network call or an API
-key; `run_review` builds an `Anthropic()` only when no client is supplied.
+key; `run_review` builds an `Anthropic()` only when no client is supplied. `bridge_factory`
+is injectable for the same reason: `--bridge` needs a workstation, a unit test does not.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from swreview.agent.checklist import Checklist, load_checklist
-from swreview.ir.loader import load_package
+from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient
+from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
+from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.session import (
     CoverageItem,
@@ -89,6 +95,20 @@ def _unresolved(
             error=None,
         )
     )
+
+
+def load_exceptions(loaded: LoadedPackage) -> ExceptionStore | None:
+    """The `exceptions.json` beside `package.json`, or `None` when there is none.
+
+    Absent is the normal case and means "no condition has been accepted for this design";
+    the check tools then report every condition they find. A file that is there but
+    unreadable raises rather than being skipped: an exception the reviewer silently
+    dropped would re-raise something an engineer already accepted (FR-013).
+    """
+    path = loaded.base_dir / EXCEPTIONS_FILE_NAME
+    if not path.is_file():
+        return None
+    return ExceptionStore(path).load()
 
 
 def finalize_session(context: ToolContext, started: datetime) -> ReviewSession:
@@ -172,6 +192,8 @@ def run_review(
     max_steps: int = DEFAULT_MAX_STEPS,
     fail_tool: Iterable[str] = (),
     bridge: bool = False,
+    pipe_name: str = DEFAULT_PIPE_NAME,
+    bridge_factory: Callable[[str], Any] | None = None,
     client: Any | None = None,
 ) -> ReviewSession:
     """Review the package in `package_dir` and write `session.json` into `out_dir`.
@@ -183,16 +205,26 @@ def run_review(
         effort: `output_config.effort` for the run.
         max_steps: Tool-call budget. Hitting it is unresolved coverage, not a finish.
         fail_tool: Tool names forced to fail; the `--fail-tool` test hook.
-        bridge: Reserved for the live SOLIDWORKS bridge (US3); not available here.
+        bridge: Open the live SOLIDWORKS bridge and add the three bridge tools (US3).
+            Needs `SwReview.Extractor.Console.exe serve` running on this workstation.
+        pipe_name: Named pipe the bridge listens on.
+        bridge_factory: Builds the bridge client from the pipe name; defaults to
+            `swreview.bridge.client.BridgeClient` and is injectable for tests.
         client: An Anthropic client, or None to build one from the environment.
     """
-    if bridge:
-        raise NotImplementedError(
-            "the live SOLIDWORKS bridge arrives with US3; run without --bridge"
-        )
     loaded = load_package(package_dir)
     checklist = load_checklist()
-    context = build_context(loaded, model=model, checklist=checklist)
+    bridge_client = None
+    if bridge:
+        factory = bridge_factory if bridge_factory is not None else BridgeClient
+        bridge_client = factory(pipe_name)
+    context = build_context(
+        loaded,
+        model=model,
+        checklist=checklist,
+        exceptions=load_exceptions(loaded),
+        bridge=bridge_client,
+    )
     tools = build_tools(context, fail_tool=fail_tool)
 
     if client is None:
@@ -201,15 +233,19 @@ def run_review(
         client = Anthropic()
 
     started = context.session.started_at
-    runner = client.beta.messages.tool_runner(
-        model=model,
-        max_tokens=MAX_TOKENS,
-        output_config={"effort": effort},
-        tools=tools,
-        system=build_system_prompt(checklist, loaded.package),
-        messages=[{"role": "user", "content": OPENING_MESSAGE}],
-    )
-    drive(runner, context, max_steps)
+    try:
+        runner = client.beta.messages.tool_runner(
+            model=model,
+            max_tokens=MAX_TOKENS,
+            output_config={"effort": effort},
+            tools=tools,
+            system=build_system_prompt(checklist, loaded.package),
+            messages=[{"role": "user", "content": OPENING_MESSAGE}],
+        )
+        drive(runner, context, max_steps)
+    finally:
+        if bridge_client is not None:
+            bridge_client.close()
 
     review = finalize_session(context, started)
     save_session(review, Path(out_dir) / SESSION_FILE_NAME)

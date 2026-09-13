@@ -15,10 +15,9 @@ This module holds no logic of its own: every command is a thin shell around the 
 without a network: `REVIEW_CLIENT`, the Anthropic client handed to `run_review`, and
 `_review_fn`, the per-package review the benchmark runner calls.
 
-Sub-apps (`check`, `benchmark`, `exceptions`) are the extension points: the fastener,
-alignment and interference checks add a command to `check_app`, and `exceptions accept`
-and `exceptions list` add theirs to `exceptions_app`, which is registered here with no
-commands so the group already exists.
+Sub-apps (`check`, `benchmark`, `exceptions`) are the extension points: one command per
+deterministic check under `check_app`, and the two retained-exception commands under
+`exceptions_app`.
 """
 
 from __future__ import annotations
@@ -42,14 +41,15 @@ from swreview.benchmark.runner import run_benchmark
 from swreview.benchmark.scorecard import render_scorecard_md, score_run
 from swreview.benchmark.sets import BenchmarkSet, load_set
 from swreview.benchmark.timing import record_timing
+from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.ingest.package_builder import build_package
 from swreview.ir.loader import AnswerKeyAccessError, load_package
 from swreview.ir.models import UnsupportedSchemaVersionError
 from swreview.ir.summary import summarize
 from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition
 from swreview.report.markdown import render_report
-from swreview.report.session import load_session
-from swreview.tools import checks_fit
+from swreview.report.session import load_session, save_session
+from swreview.tools import checks_fastener, checks_fit
 from swreview.tools.context import DEFAULT_MODEL, ToolContext, build_context, use_context
 from swreview.tools.query import ToolResult
 
@@ -68,7 +68,7 @@ benchmark_app = typer.Typer(
 )
 exceptions_app = typer.Typer(
     no_args_is_help=True,
-    help="Retained exceptions: accept a finding, list what is active. (US3; no commands yet.)",
+    help="Retained exceptions: accept a finding, list what is active.",
 )
 app.add_typer(check_app, name="check")
 app.add_typer(benchmark_app, name="benchmark")
@@ -451,14 +451,8 @@ def _context_for(package_dir: Path) -> ToolContext:
     return build_context(load_package(package_dir))
 
 
-def _emit_check(result: ToolResult, json_output: bool) -> None:
-    """Print the finding a check tool produced, or its error result and exit 1."""
-    error = result.get("error")
-    if error is not None:
-        typer.echo(f"error: {error}", err=True)
-        raise typer.Exit(1)
-
-    finding = result["finding"]
+def _finding_lines(finding: dict[str, Any]) -> list[str]:
+    """One finding as the human output: verdict, evidence, and what it did not cover."""
     lines = [
         f"{finding['check']}: {finding['status']} ({finding['severity']})",
         f"observed: {finding['observed']}",
@@ -473,6 +467,42 @@ def _emit_check(result: ToolResult, json_output: bool) -> None:
         lines.append("excluded: " + "; ".join(calculation["excluded_effects"]))
     lines += [f"coverage limit: {limit}" for limit in finding["coverage_limits"]]
     lines.append(f"recommended action: {finding['recommended_action']}")
+    return lines
+
+
+def _emit_check(result: ToolResult, json_output: bool) -> None:
+    """Print what a check tool produced, or its error result and exit 1.
+
+    A check tool returns one finding (`fit`, `stack`, `alignment`), several (a fastener
+    joint is four), or no finding at all when the condition is out of scope - which is
+    coverage, and is printed as such rather than being mistaken for a pass.
+    """
+    error = result.get("error")
+    if error is not None:
+        typer.echo(f"error: {error}", err=True)
+        raise typer.Exit(1)
+
+    if result.get("status") == "out_of_scope":
+        item = result["coverage_item"]
+        _emit(
+            result,
+            [f"{item['check']}: out_of_scope", f"reason: {item['reason']}"],
+            json_output,
+        )
+        return
+
+    findings = result.get("findings")
+    if findings is None:
+        findings = [result["finding"]]
+    lines: list[str] = []
+    for index, finding in enumerate(findings):
+        if index:
+            lines.append("")
+        lines += _finding_lines(finding)
+    for layer in result.get("clamped", []):
+        thickness = layer["thickness"]
+        stated = "unknown" if thickness is None else f"{thickness['value']} {thickness['unit']}"
+        lines.append(f"clamped {layer['component_id']}: {stated} ({layer['source']})")
     _emit(result, lines, json_output)
 
 
@@ -521,6 +551,169 @@ def check_stack_command(
             [ref for ref, _ in parsed], [sign for _, sign in parsed], target_ref
         )
     _emit_check(result, json_output)
+
+
+@check_app.command("fastener")
+def check_fastener_command(
+    package: PackageOption,
+    fastener: Annotated[str, typer.Option("--fastener", help="Fastener id, e.g. fst:1.")],
+    hole: Annotated[str, typer.Option("--hole", help="Tapped hole id, e.g. hole:1.")],
+    clamped: Annotated[
+        str,
+        typer.Option(
+            "--clamped",
+            help="Component ids the screw clamps, from the head down: id,id",
+        ),
+    ] = "",
+    json_output: JsonFlag = False,
+) -> None:
+    """One screw joint: bottoming, engagement, thread match and head clearance."""
+    clamped_ids = [item.strip() for item in clamped.split(",") if item.strip()]
+
+    with _errors_as_exit_1():
+        context = _context_for(package)
+    with use_context(context):
+        result = checks_fastener.check_fastener_joint(fastener, hole, clamped_ids)
+    _emit_check(result, json_output)
+
+
+@check_app.command("alignment")
+def check_alignment_command(
+    package: PackageOption,
+    hole_a: Annotated[str, typer.Option("--hole-a", help="First hole id.")],
+    hole_b: Annotated[str, typer.Option("--hole-b", help="Second hole id.")],
+    tolerance: Annotated[
+        str | None,
+        typer.Option("--tolerance", help="document_id:sheet:annotation of the tolerance."),
+    ] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Coaxiality of two holes against a tolerance read off a drawing."""
+    tolerance_ref = None if tolerance is None else _parse_ref("--tolerance", tolerance)
+
+    with _errors_as_exit_1():
+        context = _context_for(package)
+    with use_context(context):
+        result = checks_fastener.check_hole_alignment(hole_a, hole_b, tolerance_ref)
+    _emit_check(result, json_output)
+
+
+# --- exceptions accept | list ----------------------------------------------------
+
+
+def _store_for(package_dir: Path) -> tuple[ExceptionStore, Any]:
+    """The exception store beside a package, and the package itself."""
+    loaded = load_package(package_dir)
+    store = ExceptionStore(Path(loaded.base_dir) / EXCEPTIONS_FILE_NAME).load()
+    return store, loaded.package
+
+
+@exceptions_app.command("accept")
+def exceptions_accept(
+    run_dir: Annotated[Path, typer.Argument(help="Directory holding session.json.")],
+    finding_id: Annotated[str, typer.Argument(help="Finding id, for example F-001.")],
+    package: Annotated[
+        Path,
+        typer.Option("--package", help="Package directory the finding was reviewed from."),
+    ],
+    note: Annotated[
+        str, typer.Option("--note", help="Why this condition is accepted.")
+    ] = "",
+    by: Annotated[
+        str | None, typer.Option("--by", help="Who accepted it; defaults to the current user.")
+    ] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Accept a finding: bind an exception to its components, geometry and configuration.
+
+    The exception is written to `exceptions.json` beside the package, and the finding
+    records its id. It silences that condition only while the geometry and configuration
+    it was accepted for are unchanged; `exceptions list` shows when that stops being true.
+    """
+    accepted_by = by if by else _default_user()
+    with _errors_as_exit_1():
+        session_file = Path(run_dir).resolve() / SESSION_FILE_NAME
+        session = load_session(session_file)
+        finding = _find_finding(session, finding_id)
+        store, evidence = _store_for(package)
+        exception = store.accept(finding, evidence, by=accepted_by, note=note)
+        store.save()
+        finding.exception_id = exception.id
+        save_session(session, session_file)
+        report_file = Path(run_dir).resolve() / REPORT_FILE_NAME
+        report_file.write_text(render_report(session, evidence), encoding="utf-8")
+
+    payload = {
+        "run_dir": str(Path(run_dir).resolve()),
+        "package_dir": str(Path(package).resolve()),
+        "finding_id": finding_id,
+        "exceptions_file": str(store.path),
+        "report_file": str(report_file),
+        "exception": to_jsonable_python(exception),
+    }
+    lines = [
+        f"{exception.id}: {finding_id} ({exception.check}) accepted by {accepted_by} "
+        f"for configuration {exception.configuration}",
+        f"bound to {len(exception.component_persist_refs)} component(s), "
+        f"fingerprint {exception.geometry_fingerprint[:12]}…",
+        f"wrote {store.path}",
+    ]
+    _emit(payload, lines, json_output)
+
+
+def _find_finding(session: Any, finding_id: str) -> Any:
+    for finding in session.findings:
+        if finding.id == finding_id:
+            return finding
+    raise KeyError(f"no finding {finding_id!r} in this session")
+
+
+@exceptions_app.command("list")
+def exceptions_list(
+    package_dir: Annotated[Path, typer.Argument(help="Directory holding package.json.")],
+    json_output: JsonFlag = False,
+) -> None:
+    """Show the exceptions retained for a package, re-checked against its geometry.
+
+    Every `active` exception is re-checked against the package as it stands now: one whose
+    components, geometry or configuration have moved comes back `needs_review` and no
+    longer silences anything (FR-013). Nothing here ever returns an exception to `active`;
+    only an engineer does that.
+    """
+    with _errors_as_exit_1():
+        store, package = _store_for(package_dir)
+        flagged = store.refresh(package)
+        if flagged:
+            store.save()
+
+    counts = {
+        status: sum(1 for item in store.exceptions if item.status == status)
+        for status in ("active", "needs_review", "retired")
+    }
+    payload = {
+        "package_dir": str(Path(package_dir).resolve()),
+        "exceptions_file": str(store.path),
+        "configuration": package.design.active_configuration,
+        "counts": counts,
+        "flagged_now": [item.id for item in flagged],
+        "exceptions": [to_jsonable_python(item) for item in store.exceptions],
+    }
+    lines = [
+        f"{len(store.exceptions)} exception(s) in {store.path}",
+        _counts_line(counts),
+    ]
+    lines += [
+        f"  {item.id} {item.status} {item.check} ({item.configuration}) "
+        f"by {item.accepted_by}: {item.note}"
+        for item in store.exceptions
+    ]
+    if flagged:
+        lines.append(
+            "needs review now: "
+            + ", ".join(item.id for item in flagged)
+            + " - the geometry or configuration they were accepted for has changed"
+        )
+    _emit(payload, lines, json_output)
 
 
 # --- benchmark -------------------------------------------------------------------

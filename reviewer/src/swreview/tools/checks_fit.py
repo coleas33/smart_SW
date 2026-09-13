@@ -21,74 +21,19 @@ Three rules hold for both:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from pydantic import ValidationError
 
 from swreview.checks import fit, stack
-from swreview.checks.result import CheckResult
-from swreview.findings import Finding
-from swreview.findings import build_finding as build_finding_model
 from swreview.ir.models import SourceRef
-from swreview.tools.context import ToolContext, current_context, error_result
-from swreview.tools.query import ToolResult, as_json
+from swreview.tools.context import current_context, error_result
+from swreview.tools.query import ToolResult
+from swreview.tools.recording import record_result
 from swreview.tools.refs import resolve_dimension
-from swreview.tools.session import _title_from
 
 __all__ = ["check_axial_stack", "check_fit"]
 
 _RESOLUTION_ERRORS = (LookupError, ValidationError, TypeError)
 """What a reference can fail as: not found, not a SourceRef, not a mapping at all."""
-
-
-def _result_to_finding(
-    context: ToolContext,
-    result: CheckResult,
-    component_ids: Sequence[str] = (),
-    drawing_locations: Sequence[SourceRef] = (),
-) -> Finding:
-    """One `CheckResult` as a session-ready `Finding`.
-
-    The check fills everything that comes from the arithmetic; this adds what only the
-    session knows - the next finding id, the package the provenance comes from, and the
-    configuration the review is running against.
-
-    TODO(polish): the fastener, alignment and interference check tools need exactly this
-    conversion. Lift `_result_to_finding` (and `_title_from`, imported from
-    `swreview.tools.session` for the same reason) into a shared module when the second
-    caller appears, rather than copying it.
-    """
-    return build_finding_model(
-        finding_id=next(context.finding_ids),
-        check=result.check,
-        title=_title_from(result.observed),
-        status=result.status,
-        severity=result.severity,
-        package=context.ir,
-        configuration=context.ir.design.active_configuration,
-        observed=result.observed,
-        requirement=result.requirement,
-        recommended_action=result.recommended_action,
-        component_ids=component_ids,
-        drawing_locations=drawing_locations,
-        inputs=result.inputs,
-        calculation=result.calculation,
-        coverage_limits=result.coverage_limits,
-    )
-
-
-def _record(
-    context: ToolContext,
-    result: CheckResult,
-    drawing_locations: Sequence[SourceRef],
-) -> ToolResult:
-    """Append the finding for `result` to the session and return it."""
-    try:
-        finding = _result_to_finding(context, result, drawing_locations=drawing_locations)
-    except ValueError as exc:
-        return error_result(str(exc))
-    context.session.findings.append(finding)
-    return {"status": "recorded", "finding": as_json(finding)}
 
 
 def check_fit(bore_dimension_ref: SourceRef, shaft_dimension_ref: SourceRef) -> ToolResult:
@@ -118,7 +63,7 @@ def check_fit(bore_dimension_ref: SourceRef, shaft_dimension_ref: SourceRef) -> 
         result = fit.check_fit(bore, shaft)
     except TypeError as exc:
         return error_result(f"TypeError: {exc}")
-    return _record(context, result, [bore.source, shaft.source])
+    return record_result(context, result, drawing_locations=[bore.source, shaft.source])
 
 
 def check_axial_stack(
@@ -159,4 +104,4 @@ def check_axial_stack(
     locations = [dimension.source for dimension in dims]
     if target is not None:
         locations.append(target.source)
-    return _record(context, result, locations)
+    return record_result(context, result, drawing_locations=locations)

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
-  "package_id": "a332a012-e982-4596-a585-dc0f57f34d1b",
-  "created_at": "2026-09-13T01:43:49.575125Z",
+  "package_id": "d4b4f0b2-f809-436e-aa56-a8520ad91853",
+  "created_at": "2026-09-13T02:09:57.325841Z",
   "extractor": {
     "name": "swreview-ingest",
     "version": "0.1.0",
@@ -436,7 +436,7 @@
             "document_id": "DRW-2001",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "note-1-1",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -454,7 +454,7 @@
             "document_id": "DRW-2001",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "note-1-2",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -472,7 +472,7 @@
             "document_id": "DRW-2001",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "note-1-3",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -490,7 +490,7 @@
             "document_id": "DRW-2001",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "note-1-4",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -517,7 +517,7 @@
               "document_id": "DRW-2001",
               "sheet": "Sheet1",
               "view": null,
-              "annotation": null,
+              "annotation": "dim-1-1",
               "persist_ref": null,
               "page": 1,
               "bbox": [
@@ -532,7 +532,7 @@
             "document_id": "DRW-2001",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "dim-1-1",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -557,7 +557,7 @@
               "document_id": "DRW-2001",
               "sheet": "Sheet1",
               "view": null,
-              "annotation": null,
+              "annotation": "dim-1-2",
               "persist_ref": null,
               "page": 1,
               "bbox": [
@@ -572,7 +572,7 @@
             "document_id": "DRW-2001",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "dim-1-2",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -603,7 +603,7 @@
               "document_id": "DRW-2001",
               "sheet": "Sheet1",
               "view": null,
-              "annotation": null,
+              "annotation": "dim-1-3",
               "persist_ref": null,
               "page": 1,
               "bbox": [
@@ -618,7 +618,7 @@
             "document_id": "DRW-2001",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "dim-1-3",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -648,7 +648,7 @@
             "document_id": "DRW-2002",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "note-1-1",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -666,7 +666,7 @@
             "document_id": "DRW-2002",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "note-1-2",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -684,7 +684,7 @@
             "document_id": "DRW-2002",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "note-1-3",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -711,7 +711,7 @@
               "document_id": "DRW-2002",
               "sheet": "Sheet1",
               "view": null,
-              "annotation": null,
+              "annotation": "dim-1-1",
               "persist_ref": null,
               "page": 1,
               "bbox": [
@@ -726,7 +726,7 @@
             "document_id": "DRW-2002",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "dim-1-1",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -757,7 +757,7 @@
               "document_id": "DRW-2002",
               "sheet": "Sheet1",
               "view": null,
-              "annotation": null,
+              "annotation": "dim-1-2",
               "persist_ref": null,
               "page": 1,
               "bbox": [
@@ -772,7 +772,7 @@
             "document_id": "DRW-2002",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "dim-1-2",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -797,7 +797,7 @@
               "document_id": "DRW-2002",
               "sheet": "Sheet1",
               "view": null,
-              "annotation": null,
+              "annotation": "dim-1-3",
               "persist_ref": null,
               "page": 1,
               "bbox": [
@@ -812,7 +812,7 @@
             "document_id": "DRW-2002",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "dim-1-3",
             "persist_ref": null,
             "page": 1,
             "bbox": [
@@ -837,7 +837,7 @@
               "document_id": "DRW-2002",
               "sheet": "Sheet1",
               "view": null,
-              "annotation": null,
+              "annotation": "dim-1-4",
               "persist_ref": null,
               "page": 1,
               "bbox": [
@@ -852,7 +852,7 @@
             "document_id": "DRW-2002",
             "sheet": "Sheet1",
             "view": null,
-            "annotation": null,
+            "annotation": "dim-1-4",
             "persist_ref": null,
             "page": 1,
             "bbox": [

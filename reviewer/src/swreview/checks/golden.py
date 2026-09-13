@@ -3,9 +3,10 @@
 `tests/golden/test_golden.py` calls `module:function(package, **kwargs)` with the kwargs
 read from `case.json`, so a check cannot be named there directly: its arguments are
 `Dimension` objects, not JSON. These adapters take the JSON form of a `SourceRef`,
-resolve it against the drawing sheets in the package - the same rule the `check_fit` and
-`check_axial_stack` tools use, so a fixture exercises real references and not
-hand-typed numbers - and return the `CheckResult` as JSON-ready data.
+resolve it against the drawing sheets in the package through the very resolver the
+`check_fit` and `check_axial_stack` tools use (`swreview.tools.refs`), so a fixture
+exercises real references and not hand-typed numbers - and return the `CheckResult` as
+JSON-ready data.
 
 A `TypeError` from a check (an angular dimension where a length belongs) is returned as
 an `error` entry. A fixture that hands an angle to a length check must record that
@@ -20,9 +21,10 @@ from typing import Any
 from pydantic_core import to_jsonable_python
 
 from swreview.checks.fit import check_fit
-from swreview.checks.result import CheckResult, cite
+from swreview.checks.result import CheckResult
 from swreview.checks.stack import check_axial_stack
 from swreview.ir.models import Dimension, EvidencePackage, SourceRef
+from swreview.tools.refs import resolve_dimension
 
 __all__ = ["find_dimension", "fit_case", "stack_case"]
 
@@ -32,25 +34,12 @@ RefArg = Mapping[str, Any] | SourceRef
 def find_dimension(package: EvidencePackage, ref: RefArg) -> Dimension:
     """The one dimension on a drawing sheet that `ref` points at.
 
-    Matching is on document, sheet and annotation: the locators a drawing dimension
-    carries. An ambiguous or unknown reference raises rather than picking one.
+    The same resolution the check tools use (`swreview.tools.refs.resolve_dimension`), so
+    a fixture cannot pass a reference the model could not have passed: matching is on
+    document, sheet and annotation, and an ambiguous or unknown reference raises rather
+    than picking one.
     """
-    source = ref if isinstance(ref, SourceRef) else SourceRef(**ref)
-    matches = [
-        dimension
-        for sheet in package.drawings
-        for dimension in sheet.dimensions
-        if (
-            dimension.source.document_id == source.document_id
-            and dimension.source.sheet == source.sheet
-            and dimension.source.annotation == source.annotation
-        )
-    ]
-    if not matches:
-        raise LookupError(f"no drawing dimension at {cite(source)}")
-    if len(matches) > 1:
-        raise LookupError(f"{len(matches)} drawing dimensions at {cite(source)}; ambiguous")
-    return matches[0]
+    return resolve_dimension(package, ref)
 
 
 def _jsonable(result: CheckResult) -> dict[str, Any]:

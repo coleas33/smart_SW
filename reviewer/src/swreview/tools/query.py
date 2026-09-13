@@ -20,6 +20,7 @@ import re
 from fnmatch import fnmatchcase
 from typing import Any
 
+from swreview.exceptions import ExceptionStore
 from swreview.ir.models import (
     BBox2D,
     Dimension,
@@ -421,6 +422,8 @@ def get_exceptions(check: str | None = None) -> list[dict[str, Any]]:
     context = current_context()
     if not context.exceptions:
         return []
+    if isinstance(context.exceptions, ExceptionStore):
+        return [as_json(item) for item in context.exceptions.for_check(check)]
     entries = [
         item if isinstance(item, dict) else as_json(item)
         for item in context.exceptions

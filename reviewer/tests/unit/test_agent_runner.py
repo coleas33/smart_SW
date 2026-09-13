@@ -308,11 +308,126 @@ def test_pause_turns_under_the_cap_do_not_stop_the_review(
     ]
 
 
-def test_the_bridge_is_not_available_in_this_build(
+# --- the live bridge and the exception store -------------------------------------
+
+
+class FakeBridge:
+    """The two things the runner does with a bridge: hand it over, and close it."""
+
+    def __init__(self, pipe_name: str, timeout_s: float = 60.0) -> None:
+        self.pipe_name = pipe_name
+        self.timeout_s = timeout_s
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def tools_of(run: Run) -> dict[str, Any]:
+    return {tool.name: tool for tool in run.kwargs["tools"]}
+
+
+def test_bridge_true_wires_a_client_into_the_context_and_the_tools(
     review: Callable[..., Run],
 ) -> None:
-    with pytest.raises(NotImplementedError, match="US3"):
-        review([Turn("end_turn")], bridge=True)
+    built: list[FakeBridge] = []
+
+    def factory(pipe_name: str) -> FakeBridge:
+        built.append(FakeBridge(pipe_name))
+        return built[-1]
+
+    run = review([Turn("end_turn")], bridge=True, bridge_factory=factory)
+
+    assert [client.pipe_name for client in built] == ["swreview"]
+    tools = tools_of(run)
+    assert {"bridge_capture", "bridge_measure", "bridge_interference"} <= set(tools)
+    assert tools["bridge_capture"].context.bridge is built[0]
+
+
+def test_the_pipe_name_reaches_the_factory(review: Callable[..., Run]) -> None:
+    seen: list[str] = []
+
+    run = review(
+        [Turn("end_turn")],
+        bridge=True,
+        pipe_name="review-42",
+        bridge_factory=lambda pipe_name: seen.append(pipe_name) or FakeBridge(pipe_name),
+    )
+
+    assert seen == ["review-42"]
+    assert run.session.ended_at is not None
+
+
+def test_the_bridge_is_closed_when_the_review_ends(review: Callable[..., Run]) -> None:
+    built: list[FakeBridge] = []
+
+    review(
+        [Turn("end_turn")],
+        bridge=True,
+        bridge_factory=lambda pipe_name: built.append(FakeBridge(pipe_name)) or built[-1],
+    )
+
+    assert built[0].closed
+
+
+def test_without_the_bridge_there_is_none_and_no_bridge_tools(
+    review: Callable[..., Run],
+) -> None:
+    run = review([Turn("end_turn")])
+
+    tools = tools_of(run)
+    assert not set(tools) & {"bridge_capture", "bridge_measure", "bridge_interference"}
+    assert next(iter(tools.values())).context.bridge is None
+
+
+def test_the_default_factory_builds_a_bridge_client_without_connecting(
+    review: Callable[..., Run],
+) -> None:
+    from swreview.bridge.client import BridgeClient
+
+    run = review([Turn("end_turn")], bridge=True, pipe_name="swreview")
+
+    client = tools_of(run)["bridge_capture"].context.bridge
+    assert isinstance(client, BridgeClient)
+    assert client.pipe_name == "swreview"
+
+
+def test_an_exceptions_file_beside_the_package_is_loaded(
+    review: Callable[..., Run], tmp_package_dir: Path
+) -> None:
+    (tmp_package_dir / "exceptions.json").write_text(
+        json.dumps(
+            {
+                "exceptions": [
+                    {
+                        "id": "EX-001",
+                        "check": "interference.static",
+                        "component_persist_refs": ["Y21wOjAwMDE="],
+                        "persist_ref_scopes": ["doc:1"],
+                        "configuration": "Default",
+                        "geometry_fingerprint": "0" * 64,
+                        "accepted_by": "cole",
+                        "accepted_at": "2026-09-01T00:00:00Z",
+                        "note": "press fit, intended",
+                        "status": "active",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    run = review([Turn("tool_use", (("get_exceptions", {}),)), Turn("end_turn")])
+
+    assert json.loads(run.results[0]["content"])[0]["id"] == "EX-001"
+
+
+def test_no_exceptions_file_means_no_exception_store(
+    review: Callable[..., Run],
+) -> None:
+    run = review([Turn("tool_use", (("get_exceptions", {}),)), Turn("end_turn")])
+
+    assert json.loads(run.results[0]["content"]) == []
 
 
 # --- finalization ----------------------------------------------------------------

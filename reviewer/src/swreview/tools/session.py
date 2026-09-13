@@ -9,8 +9,9 @@ the model must not be able to talk its way around:
 - `record_drawing_finding` cannot claim `demonstrated` or `checked_within_scope`: no
   calculation stands behind a drawing reading, so the strongest status it may take is
   `suspected` (constitution Principle II, FR-009);
-- `request_capture` returns a capture that already exists or says `unresolved`; it never
-  invents one, and the live-bridge path only opens when the bridge is wired (US3).
+- `request_capture` returns a capture that already exists or, with the live bridge wired,
+  asks the bridge for one and records it; without a bridge it says `unresolved` and never
+  invents a view (US3).
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from swreview.tools.context import (
     unknown_id,
 )
 from swreview.tools.query import ToolResult, as_json, sheet_reason
+from swreview.tools.recording import title_from
 
 ModelCoverageBucket = Literal["checked", "skipped", "unresolved", "out_of_scope"]
 MODEL_COVERAGE_BUCKETS: tuple[str, ...] = get_args(ModelCoverageBucket)
@@ -41,17 +43,6 @@ DRAWING_FINDING_SEVERITY: dict[str, str] = {"suspected": "medium", "unresolved":
 
 CaptureView = Literal["iso", "front", "back", "left", "right", "top", "bottom", "current"]
 CAPTURE_VIEWS: tuple[str, ...] = get_args(CaptureView)
-
-TITLE_LENGTH = 80
-
-
-def _title_from(observed: str) -> str:
-    """A one-line title: the first sentence of `observed`, trimmed."""
-    first = observed.strip().split(". ")[0].strip().rstrip(".")
-    if len(first) <= TITLE_LENGTH:
-        return first
-    return first[: TITLE_LENGTH - 1].rstrip() + "…"
-
 
 def request_evidence(what: str, why: str, entity_ids: list[str]) -> ToolResult:
     """Record something you need and the package does not have. Returns its id.
@@ -175,7 +166,7 @@ def record_drawing_finding(
         finding = build_finding(
             finding_id=next(context.finding_ids),
             check=DRAWING_FINDING_CHECK,
-            title=_title_from(observed),
+            title=title_from(observed),
             status=status,
             severity=DRAWING_FINDING_SEVERITY[status],
             package=context.ir,
@@ -249,8 +240,24 @@ def request_capture(entity_id: str, view: CaptureView) -> ToolResult:
         }
     if context.bridge is None:
         return {"status": "unresolved", "reason": "no capture and no bridge"}
-    return {
-        "status": "unresolved",
-        "reason": "the live SOLIDWORKS bridge is wired but capture through it is not "
-        "implemented in this build",
-    }
+
+    from swreview.bridge.client import BRIDGE_VIEWS
+    from swreview.tools.bridge import capture_through_bridge
+
+    entity = (
+        context.component(entity_id) or context.hole(entity_id) or context.fastener(entity_id)
+    )
+    if entity is None:
+        return {
+            "status": "unresolved",
+            "reason": f"{entity_id} carries no persistent reference the bridge could select",
+        }
+    if view not in BRIDGE_VIEWS:
+        # Substituting a view the bridge can frame would answer a different question
+        # from the one that was asked.
+        return {
+            "status": "unresolved",
+            "reason": f"the bridge frames {list(BRIDGE_VIEWS)}, not {view!r}",
+        }
+    component_ids = [getattr(entity, "component_id", entity_id)]
+    return capture_through_bridge(context, entity.persist_ref, view, component_ids)

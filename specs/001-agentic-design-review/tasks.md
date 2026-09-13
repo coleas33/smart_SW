@@ -160,13 +160,13 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 
 - [X] T066 [US3] Implement `reviewer/src/swreview/checks/interference.py` (`group_interferences`, `check_interference_group` honoring exceptions, coverage items for truncated/failed and for mechanism positions)
 - [X] T067 [US3] Implement `reviewer/src/swreview/exceptions.py` (`Exception` model, `fingerprint(package, component_ids)`, `ExceptionStore` load/save/match/`needs_review`)
-- [ ] T068 [US3] Add tools `list_interferences`, `check_interference_group`, `get_exceptions` to `reviewer/src/swreview/tools/checks.py` and register them
+- [X] T068 [US3] Add tools `list_interferences`, `check_interference_group`, `get_exceptions` to `reviewer/src/swreview/tools/checks.py` and register them
 - [X] T069 [US3] Implement `extractor/SwReview.Extractor/Interference/InterferenceRunner.cs` (`IAssemblyDoc.InterferenceDetectionManager` → `IInterferenceDetectionMgr` with `TreatCoincidenceAsInterference`, `TreatSubAssembliesAsComponents`, `IncludeMultibodyPartInterferences`, `IgnoreHiddenBodies`, `CreateFastenersFolder = true`; `GetInterferenceCount`/`GetInterferences`; per result `Volume`, `Components` to persist refs, `IsFastener`, `IsPossibleInterference`; `Done()` in `finally`; per-pair status; `group_key` from pattern ids). Include a one-time workstation check of `Volume` units against a known box overlap (units are undocumented) and record the verified unit in the IR
 - [X] T070 [US3] Implement `extractor/SwReview.Extractor/Capture/CaptureService.cs` (resolve persist ref → `SelectByID2` → `IModelDoc2.ViewZoomToSelection` → optional standard view → `IModelDoc2.SaveBMP` or `IModelDocExtension.SaveAs3` PNG; `Capture` record)
 - [X] T071 [US3] Add console commands `interference` and `capture` to `extractor/SwReview.Extractor.Console/Program.cs`
 - [X] T072 [US3] Implement `extractor/SwReview.Extractor.Console/Serve/PipeServer.cs` (named pipe, one JSON request per line, single STA worker thread owning the `SldWorks` reference, `ReadOnlyGuard` on every request, `CircuitBreaker`, commands `capture|measure|interference`)
-- [ ] T073 [US3] Implement `reviewer/src/swreview/bridge/client.py` and the tools `bridge_capture`, `bridge_measure`, `bridge_interference` in `reviewer/src/swreview/tools/bridge.py`, registered only with `--bridge`; `request_capture` uses the bridge when present
-- [ ] T074 [US3] Add CLI commands `exceptions accept` and `exceptions list` to `reviewer/src/swreview/cli.py`
+- [X] T073 [US3] Implement `reviewer/src/swreview/bridge/client.py` and the tools `bridge_capture`, `bridge_measure`, `bridge_interference` in `reviewer/src/swreview/tools/bridge.py`, registered only with `--bridge`; `request_capture` uses the bridge when present
+- [X] T074 [US3] Add CLI commands `exceptions accept` and `exceptions list` to `reviewer/src/swreview/cli.py`
 - [X] T075 [US3] Create golden fixture `reviewer/tests/golden/fixtures/bracket-assy-interference/` (three seeded interferences, one six-instance pattern, one accepted exception, one truncated pair) with expected grouped findings and coverage
 - [ ] T076 [US3] Add Task Pane buttons **Interference** and **Capture selection** to `extractor/SwReview.AddIn/`; run quickstart Scenario 3 on the workstation and record results in `benchmarks/native/bracket-assy/notes.md`
 
@@ -214,7 +214,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T087 [P] [US5] Create `reviewer/src/swreview/checks/engagement_rules.yaml` (minimum engagement as a multiple of nominal diameter per material class: steel, aluminum, cast iron, plastic; source noted per row) and a loader with tests in `reviewer/tests/unit/test_engagement_rules.py`
 - [X] T088 [US5] Implement `reviewer/src/swreview/checks/fastener.py` (`check_fastener_joint(fastener, hole, clamped, washers) -> list[CheckResult]` for `fastener.bottoming`, `fastener.engagement`, `fastener.thread_match`, `fastener.head_clearance`)
 - [X] T089 [US5] Implement `reviewer/src/swreview/checks/hole_alignment.py`
-- [ ] T090 [US5] Add tools `measure_axis_distance`, `measure_face_gap`, `check_tool_envelope`, `bounding_box`, `check_fastener_joint`, `check_hole_alignment` to `reviewer/src/swreview/tools/` and CLI `check fastener|alignment`
+- [X] T090 [US5] Add tools `measure_axis_distance`, `measure_face_gap`, `check_tool_envelope`, `bounding_box`, `check_fastener_joint`, `check_hole_alignment` to `reviewer/src/swreview/tools/` and CLI `check fastener|alignment`
 - [X] T091 [US5] Create golden fixtures `reviewer/tests/golden/fixtures/{joint-bottoming,joint-ok,joint-unsupported,thread-mismatch,tool-envelope}/` with expected findings
 
 **Checkpoint**: Fastener findings cite fastener, hole, stack and rule; unknown thread depth is never cleared.
