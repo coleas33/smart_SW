@@ -1,0 +1,205 @@
+result:
+  exceptions:
+  - check: interference.static
+    id: EX-001
+    status: active
+  groups:
+  - component_ids:
+    - cmp:0001
+    - cmp:0011
+    - cmp:0012
+    - cmp:0013
+    - cmp:0014
+    - cmp:0015
+    - cmp:0016
+    configuration: Default
+    detection_status: computed
+    group_key: cmp:0001|pat:screws
+    member_interference_ids:
+    - int:001
+    - int:002
+    - int:003
+    - int:004
+    - int:005
+    - int:006
+    result:
+      calculation:
+        assumptions:
+        - the overlap volumes are SOLIDWORKS' own, computed with the settings recorded
+          here; this check converts and compares them but does not recompute them
+        - the volume unit is the one the extractor verified on the workstation (IInterference.Volume
+          units are undocumented)
+        - an overlap above 1.0 mm3 is treated as material rather than a modelling
+          artifact
+        excluded_effects:
+        - 'motion: only the extracted position of each component was evaluated'
+        - 'tolerance excursions: nominal modelled geometry only'
+        - deflection under load
+        - thermal growth
+        - coatings, platings and surface treatments
+        function: swreview.checks.interference.check_interference_group
+        function_version: '1'
+        inputs:
+          configuration: Default
+          fastener_folder_treatment: include
+          group_key: cmp:0001|pat:screws
+          ignore_hidden: 'True'
+          include_multibody: 'False'
+          int:001_pair: cmp:0001+cmp:0011
+          int:001_volume_as_reported: 3.2 mm3
+          int:001_volume_mm3: 3.2 mm3
+          int:002_pair: cmp:0001+cmp:0012
+          int:002_volume_as_reported: 3.2 mm3
+          int:002_volume_mm3: 3.2 mm3
+          int:003_pair: cmp:0001+cmp:0013
+          int:003_volume_as_reported: 3.2 mm3
+          int:003_volume_mm3: 3.2 mm3
+          int:004_pair: cmp:0001+cmp:0014
+          int:004_volume_as_reported: 3.2 mm3
+          int:004_volume_mm3: 3.2 mm3
+          int:005_pair: cmp:0001+cmp:0015
+          int:005_volume_as_reported: 3.2 mm3
+          int:005_volume_mm3: 3.2 mm3
+          int:006_pair: cmp:0001+cmp:0016
+          int:006_volume_as_reported: 4.1 mm3
+          int:006_volume_mm3: 4.1 mm3
+          treat_coincident_as_interference: 'False'
+          treat_subassemblies_as_components: 'True'
+        model: interference.static
+        result:
+          group_key: cmp:0001|pat:screws
+          max_volume_mm3: 4.1
+          measured_count: 6.0
+          member_count: 6.0
+          total_volume_mm3: 20.1
+        units_out: mm3
+      check: interference.static
+      coverage_limits:
+      - interference.static evaluated the components as modelled in one configuration;
+        clearance across any motion path was not established
+      inputs:
+      - int:001 cmp:0001+cmp:0011 Default computed 3.2 mm3
+      - int:002 cmp:0001+cmp:0012 Default computed 3.2 mm3
+      - int:003 cmp:0001+cmp:0013 Default computed 3.2 mm3
+      - int:004 cmp:0001+cmp:0014 Default computed 3.2 mm3
+      - int:005 cmp:0001+cmp:0015 Default computed 3.2 mm3
+      - int:006 cmp:0001+cmp:0016 Default computed 4.1 mm3
+      observed: 'Static interference between cmp:0001 and cmp:0011, cmp:0012, cmp:0013,
+        cmp:0014, cmp:0015, cmp:0016 in configuration Default: largest overlap volume
+        4.1 mm3; SOLIDWORKS reported this pair in the fasteners folder; the same condition
+        repeats across 6 pairs (cmp:0001+cmp:0011, cmp:0001+cmp:0012, cmp:0001+cmp:0013,
+        cmp:0001+cmp:0014, cmp:0001+cmp:0015, cmp:0001+cmp:0016)'
+      recommended_action: Confirm whether this overlap is intended. If it is (a press
+        fit, a thread modelled as a cylinder), accept an exception bound to this geometry
+        and configuration; otherwise revise the parts or their mates.
+      requirement: 'No unintended static interference between components in configuration
+        Default; detection settings: coincident faces ignored, subassemblies as components,
+        multibody excluded, hidden bodies ignored, fasteners folder include'
+      severity: high
+      status: demonstrated
+  - component_ids:
+    - cmp:0002
+    - cmp:0003
+    configuration: Default
+    detection_status: computed
+    group_key: cmp:0002|cmp:0003
+    member_interference_ids:
+    - int:007
+    result:
+      calculation:
+        assumptions:
+        - the overlap volumes are SOLIDWORKS' own, computed with the settings recorded
+          here; this check converts and compares them but does not recompute them
+        - the volume unit is the one the extractor verified on the workstation (IInterference.Volume
+          units are undocumented)
+        - an overlap above 1.0 mm3 is treated as material rather than a modelling
+          artifact
+        excluded_effects:
+        - 'motion: only the extracted position of each component was evaluated'
+        - 'tolerance excursions: nominal modelled geometry only'
+        - deflection under load
+        - thermal growth
+        - coatings, platings and surface treatments
+        function: swreview.checks.interference.check_interference_group
+        function_version: '1'
+        inputs:
+          configuration: Default
+          fastener_folder_treatment: include
+          group_key: cmp:0002|cmp:0003
+          ignore_hidden: 'True'
+          include_multibody: 'False'
+          int:007_pair: cmp:0002+cmp:0003
+          int:007_volume_as_reported: 2.4e-08 m3
+          int:007_volume_mm3: 24.0 mm3
+          treat_coincident_as_interference: 'False'
+          treat_subassemblies_as_components: 'True'
+        model: interference.static
+        result:
+          group_key: cmp:0002|cmp:0003
+          max_volume_mm3: 24.0
+          measured_count: 1.0
+          member_count: 1.0
+          total_volume_mm3: 24.0
+        units_out: mm3
+      check: interference.static
+      coverage_limits:
+      - exception:EX-001
+      - interference.static evaluated the components as modelled in one configuration;
+        clearance across any motion path was not established
+      inputs:
+      - int:007 cmp:0002+cmp:0003 Default computed 2.4e-08 m3
+      observed: 'Static interference between cmp:0002 and cmp:0003 in configuration
+        Default: largest overlap volume 2.4e-08 m3 (24.0 mm3). This condition is excepted
+        by EX-001, accepted by c.sorkness on 2026-08-03 09:15:00+00:00 for this geometry
+        and configuration: shaft/housing press fit is intended; assembled with an
+        arbor press per WI-14'
+      recommended_action: None while the geometry is unchanged. Re-review EX-001 if
+        these components or this configuration change.
+      requirement: 'No unintended static interference between components in configuration
+        Default; detection settings: coincident faces ignored, subassemblies as components,
+        multibody excluded, hidden bodies ignored, fasteners folder include'
+      severity: info
+      status: checked_within_scope
+  - component_ids:
+    - cmp:0001
+    - cmp:0005
+    configuration: Default
+    detection_status: truncated
+    group_key: cmp:0001|cmp:0005
+    member_interference_ids:
+    - int:008
+    result:
+      calculation: null
+      check: interference.static
+      coverage_limits:
+      - 'interference.static not evaluated: the interference result for cmp:0001+cmp:0005
+        in configuration Default (detection reported truncated: detection stopped
+        after 7 pairs (--truncate-after 7)) is unknown'
+      inputs:
+      - int:008 cmp:0001+cmp:0005 Default truncated no volume
+      observed: 'the interference result for cmp:0001+cmp:0005 in configuration Default
+        (detection reported truncated: detection stopped after 7 pairs (--truncate-after
+        7)) is unknown; the check did not run'
+      recommended_action: Re-run interference detection for these pairs without truncation
+        (raise or remove the pair limit, resolve the components) and re-check; do
+        not report the assembly as clear while they are unknown.
+      requirement: 'No unintended static interference between components in configuration
+        Default; detection settings: coincident faces ignored, subassemblies as components,
+        multibody excluded, hidden bodies ignored, fasteners folder include'
+      severity: medium
+      status: unresolved
+  unresolved_coverage:
+  - check: interference.static
+    error: detection stopped after 7 pairs (--truncate-after 7)
+    reason: interference detection truncated for cmp:0001+cmp:0005 in configuration
+      Default; the pair was not evaluated
+    scope:
+      component_ids:
+      - cmp:0001
+      - cmp:0005
+      configuration: Default
+      document_ids: []
+      pairs:
+      - - cmp:0001
+        - cmp:0005
+      positions: []

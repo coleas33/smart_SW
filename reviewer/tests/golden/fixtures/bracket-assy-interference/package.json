@@ -1,0 +1,924 @@
+{
+  "schema_version": "1.0.0",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "created_at": "2026-09-12T12:00:00Z",
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "test"
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:1",
+        "vault_path": "/Designs/bracket-assy.SLDASM",
+        "vault_version": 11,
+        "revision": "C",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:2",
+        "vault_path": "/Designs/bracket.SLDPRT",
+        "vault_version": 5,
+        "revision": "B",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:3",
+        "vault_path": "/Designs/housing.SLDPRT",
+        "vault_version": 9,
+        "revision": "D",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:4",
+        "vault_path": "/Designs/shaft.SLDPRT",
+        "vault_version": 4,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:5",
+        "vault_path": "/Designs/cover.SLDPRT",
+        "vault_version": 2,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:6",
+        "vault_path": "/Library/screw-m6x20.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:bracket",
+    "name": "bracket-assy",
+    "root_assembly_document_id": "doc:1",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:1",
+      "kind": "assembly",
+      "file_name": "bracket-assy.SLDASM",
+      "path": "native/bracket-assy.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Revision": "C"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:2",
+      "kind": "part",
+      "file_name": "bracket.SLDPRT",
+      "path": "native/bracket.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Revision": "B"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    },
+    {
+      "document_id": "doc:3",
+      "kind": "part",
+      "file_name": "housing.SLDPRT",
+      "path": "native/housing.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Revision": "D"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    },
+    {
+      "document_id": "doc:4",
+      "kind": "part",
+      "file_name": "shaft.SLDPRT",
+      "path": "native/shaft.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Revision": "A"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    },
+    {
+      "document_id": "doc:5",
+      "kind": "part",
+      "file_name": "cover.SLDPRT",
+      "path": "native/cover.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Revision": "A"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    },
+    {
+      "document_id": "doc:6",
+      "kind": "part",
+      "file_name": "screw-m6x20.SLDPRT",
+      "path": "native/screw-m6x20.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Revision": "A"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:1",
+      "name": "bracket-1",
+      "document_id": "doc:2",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "bracket-1"
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:1",
+      "name": "housing-1",
+      "document_id": "doc:3",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "housing-1"
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:1",
+      "name": "shaft-1",
+      "document_id": "doc:4",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "shaft-1"
+    },
+    {
+      "id": "cmp:0005",
+      "persist_ref": "Y21wOjAwMDU=",
+      "persist_ref_scope": "doc:1",
+      "name": "cover-1",
+      "document_id": "doc:5",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "cover-1"
+    },
+    {
+      "id": "cmp:0011",
+      "persist_ref": "Y21wOjAwMTE=",
+      "persist_ref_scope": "doc:1",
+      "name": "screw-m6x20-1",
+      "document_id": "doc:6",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.018,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": "pat:screws",
+      "is_toolbox": true,
+      "full_path": "screw-m6x20-1"
+    },
+    {
+      "id": "cmp:0012",
+      "persist_ref": "Y21wOjAwMTI=",
+      "persist_ref_scope": "doc:1",
+      "name": "screw-m6x20-2",
+      "document_id": "doc:6",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.036,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": "pat:screws",
+      "is_toolbox": true,
+      "full_path": "screw-m6x20-2"
+    },
+    {
+      "id": "cmp:0013",
+      "persist_ref": "Y21wOjAwMTM=",
+      "persist_ref_scope": "doc:1",
+      "name": "screw-m6x20-3",
+      "document_id": "doc:6",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.054,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": "pat:screws",
+      "is_toolbox": true,
+      "full_path": "screw-m6x20-3"
+    },
+    {
+      "id": "cmp:0014",
+      "persist_ref": "Y21wOjAwMTQ=",
+      "persist_ref_scope": "doc:1",
+      "name": "screw-m6x20-4",
+      "document_id": "doc:6",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.072,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": "pat:screws",
+      "is_toolbox": true,
+      "full_path": "screw-m6x20-4"
+    },
+    {
+      "id": "cmp:0015",
+      "persist_ref": "Y21wOjAwMTU=",
+      "persist_ref_scope": "doc:1",
+      "name": "screw-m6x20-5",
+      "document_id": "doc:6",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.09,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": "pat:screws",
+      "is_toolbox": true,
+      "full_path": "screw-m6x20-5"
+    },
+    {
+      "id": "cmp:0016",
+      "persist_ref": "Y21wOjAwMTY=",
+      "persist_ref_scope": "doc:1",
+      "name": "screw-m6x20-6",
+      "document_id": "doc:6",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.108,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": "pat:screws",
+      "is_toolbox": true,
+      "full_path": "screw-m6x20-6"
+    }
+  ],
+  "mates": [],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [
+    {
+      "id": "fce:0002-bore",
+      "persist_ref": "ZmNlOjAwMDItYm9yZQ==",
+      "persist_ref_scope": "doc:1",
+      "component_id": "cmp:0002",
+      "body_id": "bdy:0002",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.012
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.012,
+          "y": -0.012,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.012,
+          "y": 0.012,
+          "z": 0.03
+        }
+      },
+      "area_m2": 0.002261947
+    },
+    {
+      "id": "fce:0002-seat",
+      "persist_ref": "ZmNlOjAwMDItc2VhdA==",
+      "persist_ref_scope": "doc:1",
+      "component_id": "cmp:0002",
+      "body_id": "bdy:0002",
+      "kind": "plane",
+      "cylinder": null,
+      "plane": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "normal": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "bbox": {
+        "min": {
+          "x": -0.04,
+          "y": -0.03,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.04,
+          "y": 0.03,
+          "z": 0.0
+        }
+      },
+      "area_m2": 0.0048
+    },
+    {
+      "id": "fce:0003-od",
+      "persist_ref": "ZmNlOjAwMDMtb2Q=",
+      "persist_ref_scope": "doc:1",
+      "component_id": "cmp:0003",
+      "body_id": "bdy:0003",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.01202
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.01202,
+          "y": -0.01202,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.01202,
+          "y": 0.01202,
+          "z": 0.03
+        }
+      },
+      "area_m2": 0.002265717
+    },
+    {
+      "id": "fce:0003-shoulder",
+      "persist_ref": "ZmNlOjAwMDMtc2hvdWxkZXI=",
+      "persist_ref_scope": "doc:1",
+      "component_id": "cmp:0003",
+      "body_id": "bdy:0003",
+      "kind": "plane",
+      "cylinder": null,
+      "plane": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.03
+        },
+        "normal": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "bbox": {
+        "min": {
+          "x": -0.04,
+          "y": -0.03,
+          "z": 0.03
+        },
+        "max": {
+          "x": 0.04,
+          "y": 0.03,
+          "z": 0.03
+        }
+      },
+      "area_m2": 0.0048
+    }
+  ],
+  "bodies": [],
+  "interferences": [
+    {
+      "id": "int:001",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0011"
+      ],
+      "volume": {
+        "value": 3.2,
+        "unit": "mm3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": false,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0001|pat:screws",
+      "is_fastener": true,
+      "is_possible": false
+    },
+    {
+      "id": "int:002",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0012"
+      ],
+      "volume": {
+        "value": 3.2,
+        "unit": "mm3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": false,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0001|pat:screws",
+      "is_fastener": true,
+      "is_possible": false
+    },
+    {
+      "id": "int:003",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0013"
+      ],
+      "volume": {
+        "value": 3.2,
+        "unit": "mm3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": false,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0001|pat:screws",
+      "is_fastener": true,
+      "is_possible": false
+    },
+    {
+      "id": "int:004",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0014"
+      ],
+      "volume": {
+        "value": 3.2,
+        "unit": "mm3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": false,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0001|pat:screws",
+      "is_fastener": true,
+      "is_possible": false
+    },
+    {
+      "id": "int:005",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0015"
+      ],
+      "volume": {
+        "value": 3.2,
+        "unit": "mm3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": false,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0001|pat:screws",
+      "is_fastener": true,
+      "is_possible": false
+    },
+    {
+      "id": "int:006",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0016"
+      ],
+      "volume": {
+        "value": 4.1,
+        "unit": "mm3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": false,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0001|pat:screws",
+      "is_fastener": true,
+      "is_possible": false
+    },
+    {
+      "id": "int:007",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "volume": {
+        "value": 2.4e-8,
+        "unit": "m3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": false,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0002|cmp:0003",
+      "is_fastener": false,
+      "is_possible": false
+    },
+    {
+      "id": "int:008",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0005"
+      ],
+      "volume": null,
+      "settings": {
+        "treat_coincident_as_interference": false,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "truncated",
+      "error": "detection stopped after 7 pairs (--truncate-after 7)",
+      "group_key": "cmp:0001|cmp:0005",
+      "is_fastener": false,
+      "is_possible": false
+    }
+  ],
+  "captures": [],
+  "drawings": [],
+  "gaps": [
+    {
+      "kind": "tool_error",
+      "entity_kind": "interference",
+      "entity_id": "int:008",
+      "reason": "interference detection was truncated before this pair was evaluated",
+      "error": "detection stopped after 7 pairs (--truncate-after 7)"
+    }
+  ]
+}

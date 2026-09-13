@@ -1,0 +1,22 @@
+{
+  "exceptions": [
+    {
+      "id": "EX-001",
+      "check": "interference.static",
+      "component_persist_refs": [
+        "Y21wOjAwMDI=",
+        "Y21wOjAwMDM="
+      ],
+      "persist_ref_scopes": [
+        "doc:1",
+        "doc:1"
+      ],
+      "configuration": "Default",
+      "geometry_fingerprint": "ffe22c4c21e04030399c88bb10dff1e78ba1619b462bacd7c480a9c4c5cdcc3d",
+      "accepted_by": "c.sorkness",
+      "accepted_at": "2026-08-03T09:15:00Z",
+      "note": "shaft/housing press fit is intended; assembled with an arbor press per WI-14",
+      "status": "active"
+    }
+  ]
+}

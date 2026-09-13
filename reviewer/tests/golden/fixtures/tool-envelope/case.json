@@ -1,0 +1,18 @@
+{
+  "callable": "swreview.checks.golden_fastener:envelope_case",
+  "kwargs": {
+    "fastener_id": "fst:1",
+    "hole_id": "hole:1",
+    "clamped": [
+      {
+        "component_id": "cmp:0002",
+        "thickness_mm": 3.0
+      }
+    ],
+    "obstruction_face_ids": [
+      "face:obstruction"
+    ],
+    "radius_mm": 6.0,
+    "length_mm": 50.0
+  }
+}

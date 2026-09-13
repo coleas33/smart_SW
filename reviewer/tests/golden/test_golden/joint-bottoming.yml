@@ -1,0 +1,201 @@
+result:
+- calculation:
+    assumptions:
+    - protrusion = screw length - clamped stack - washers
+    - margin = usable thread depth - protrusion
+    - the screw is drawn fully home and square to the joint face
+    - lengths rounded to 1e-6 of the unit they are reported in
+    excluded_effects:
+    - thread form, class of fit, and the tolerance on the tapped depth
+    - preload, thread shear area and stripping strength
+    - chamfer, countersink and counterbore depth at the joint face
+    - gasket compression and joint settling
+    function: swreview.checks.fastener.check_fastener_joint
+    function_version: '1'
+    inputs:
+      clamped_0_cmp:0002:
+        unit: mm
+        value: 1.5
+      clamped_0_cmp:0002_mm:
+        unit: mm
+        value: 1.5
+      fastener_id: fst:1
+      fastener_length:
+        unit: mm
+        value: 20.0
+      fastener_length_mm:
+        unit: mm
+        value: 20.0
+      hole_id: hole:1
+      usable_thread_depth:
+        unit: mm
+        value: 12.0
+      usable_thread_depth_mm:
+        unit: mm
+        value: 12.0
+    model: fastener.bottoming
+    result:
+      bottoms: true
+      margin_mm: -6.5
+      protrusion_mm: 18.5
+    units_out: mm
+  check: fastener.bottoming
+  coverage_limits: []
+  inputs:
+  - unit: mm
+    value: 20.0
+  - unit: mm
+    value: 12.0
+  - unit: mm
+    value: 1.5
+  observed: 'fst:1 protrudes 18.5 mm into hole:1, which has 12.0 mm of usable thread:
+    margin -6.5 mm'
+  recommended_action: Shorten fst:1, deepen the tapped thread in hole:1, or add a
+    washer, so the screw clamps the stack before it bottoms.
+  requirement: 'the screw must clamp the stack before its tip reaches the bottom of
+    the usable thread: usable thread depth - protrusion >= 0'
+  severity: high
+  status: demonstrated
+- calculation:
+    assumptions:
+    - engagement = min(protrusion, usable thread depth)
+    - 'engagement rule for material class aluminum: Common guidance for aluminum alloys;
+      consider 2.0 x d for high-load joints'
+    - lengths rounded to 1e-6 of the unit they are reported in
+    excluded_effects:
+    - thread form, class of fit, and the tolerance on the tapped depth
+    - preload, thread shear area and stripping strength
+    - chamfer, countersink and counterbore depth at the joint face
+    - gasket compression and joint settling
+    function: swreview.checks.fastener.check_fastener_joint
+    function_version: '1'
+    inputs:
+      clamped_0_cmp:0002:
+        unit: mm
+        value: 1.5
+      clamped_0_cmp:0002_mm:
+        unit: mm
+        value: 1.5
+      engagement_rule_source: Common guidance for aluminum alloys; consider 2.0 x
+        d for high-load joints
+      fastener_id: fst:1
+      fastener_length:
+        unit: mm
+        value: 20.0
+      fastener_length_mm:
+        unit: mm
+        value: 20.0
+      hole_id: hole:1
+      hole_material: 6061-T6
+      material_class: aluminum
+      nominal_diameter_mm:
+        unit: mm
+        value: 6.0
+      usable_thread_depth:
+        unit: mm
+        value: 12.0
+      usable_thread_depth_mm:
+        unit: mm
+        value: 12.0
+    model: fastener.engagement
+    result:
+      engagement_mm: 12.0
+      meets_rule: true
+      protrusion_mm: 18.5
+      ratio: 2.0
+      required_ratio: 1.5
+    units_out: mm
+  check: fastener.engagement
+  coverage_limits: []
+  inputs:
+  - unit: mm
+    value: 20.0
+  - unit: mm
+    value: 12.0
+  - unit: mm
+    value: 1.5
+  observed: 'fst:1 engages 12.0 mm of thread in hole:1: 2.0 x d against the 1.5 x
+    d rule for aluminum'
+  recommended_action: ''
+  requirement: usable thread engagement must be at least 1.5 x the nominal thread
+    diameter for material class aluminum (Common guidance for aluminum alloys; consider
+    2.0 x d for high-load joints)
+  severity: info
+  status: checked_within_scope
+- calculation:
+    assumptions:
+    - designations are compared on series, nominal diameter and pitch
+    - a pitch given on only one side is not treated as a mismatch
+    - lengths rounded to 1e-6 of the unit they are reported in
+    excluded_effects:
+    - thread form, class of fit, and the tolerance on the tapped depth
+    - preload, thread shear area and stripping strength
+    - chamfer, countersink and counterbore depth at the joint face
+    - gasket compression and joint settling
+    function: swreview.checks.fastener.check_fastener_joint
+    function_version: '1'
+    inputs:
+      clamped_0_cmp:0002:
+        unit: mm
+        value: 1.5
+      clamped_0_cmp:0002_mm:
+        unit: mm
+        value: 1.5
+      fastener_id: fst:1
+      fastener_length:
+        unit: mm
+        value: 20.0
+      fastener_length_mm:
+        unit: mm
+        value: 20.0
+      fastener_thread_as_read: M6x1.0
+      hole_id: hole:1
+      hole_thread_as_read: M6x1.0
+      usable_thread_depth:
+        unit: mm
+        value: 12.0
+      usable_thread_depth_mm:
+        unit: mm
+        value: 12.0
+    model: fastener.thread_match
+    result:
+      fastener_thread: M6X1
+      hole_thread: M6X1
+      matches: true
+      pitch_compared: true
+    units_out: mm
+  check: fastener.thread_match
+  coverage_limits: []
+  inputs:
+  - unit: mm
+    value: 20.0
+  - unit: mm
+    value: 12.0
+  - unit: mm
+    value: 1.5
+  observed: fastener fst:1 is 'M6x1.0'; hole hole:1 is 'M6x1.0'
+  recommended_action: ''
+  requirement: the fastener thread and the tapped hole thread must be the same series,
+    nominal diameter and pitch
+  severity: info
+  status: checked_within_scope
+- calculation: null
+  check: fastener.head_clearance
+  coverage_limits:
+  - 'fastener.head_clearance not evaluated: the tool envelope around the head of fst:1
+    is unknown'
+  inputs:
+  - unit: mm
+    value: 20.0
+  - unit: mm
+    value: 12.0
+  - unit: mm
+    value: 1.5
+  observed: the tool envelope around the head of fst:1 is unknown; the check did not
+    run
+  recommended_action: Export the body meshes near fst:1 and re-run the check with
+    an envelope raycast.
+  requirement: the driving tool envelope around the fastener head must be clear of
+    other bodies
+  severity: medium
+  status: unresolved

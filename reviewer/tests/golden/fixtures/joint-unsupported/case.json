@@ -1,0 +1,13 @@
+{
+  "callable": "swreview.checks.golden_fastener:joint_case",
+  "kwargs": {
+    "fastener_id": "fst:1",
+    "hole_id": "hole:1",
+    "clamped": [
+      {
+        "component_id": "cmp:0002",
+        "thickness_mm": 1.5
+      }
+    ]
+  }
+}
