@@ -25,10 +25,10 @@ Conventions used throughout:
 |------|--------|-------|
 | `Quantity` | `value: float`, `unit: "mm" \| "in" \| "m"` | Stored in source unit; converted on read via the unit module; conversion output keeps `source` and `converted`. |
 | `Angle` | `value: float`, `unit: "deg" \| "rad"` | Separate type; no arithmetic with `Quantity`. |
-| `Tolerance` | `kind: "symmetric" \| "bilateral" \| "limits" \| "basic" \| "none"`, `upper: Quantity \| null`, `lower: Quantity \| null`, `source: SourceRef` | `kind == "none"` means no tolerance found; checks treat it as unknown. |
+| `Tolerance` | `kind: "symmetric" \| "bilateral" \| "limits" \| "basic" \| "none"`, `upper: Quantity \| Angle \| null`, `lower: Quantity \| Angle \| null`, `source: SourceRef` | `kind == "none"` means no tolerance found; checks treat it as unknown. Angle tolerances belong to angular dimensions only. |
 | `Dimension` | `nominal: Quantity \| Angle`, `tolerance: Tolerance`, `source: SourceRef`, `text_as_read: str` | `text_as_read` is the raw drawing text. |
 | `SourceRef` | `document_id`, `sheet: str \| null`, `view: str \| null`, `annotation: str \| null`, `persist_ref: bytes \| null`, `page: int \| null`, `bbox: [x0,y0,x1,y1] \| null` | Where a value came from. At least one locator must be set. |
-| `Transform` | `matrix: 4x4 float` (row-major, meters) | Always in SolidWorks internal units (meters). |
+| `Transform` | bare 4x4 float array (row-major, meters) | Always in SolidWorks internal units (meters). |
 | `Vec3` | `x, y, z: float` | Meters. |
 
 ## 2. Intermediate Representation (IR)
@@ -201,7 +201,7 @@ Conventions used throughout:
 | `requirement` | str | Governing requirement with its source. |
 | `inputs` | list[Dimension \| Quantity \| str] | Source dimensions with units and tolerances. |
 | `calculation` | `Calculation \| null` | Required for numeric checks. |
-| `tool_result_ids` | list[str] | Step indices that produced evidence. |
+| `tool_result_ids` | list[int] | `InvestigationStep.index` values that produced evidence. |
 | `coverage_limits` | list[str] | What the check did not consider. |
 | `recommended_action` | str | |
 | `group` | `{key, member_component_ids} \| null` | For grouped repeated findings (FR-011). |

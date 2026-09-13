@@ -1,0 +1,516 @@
+"""Typed intermediate representation of one reviewed SOLIDWORKS design.
+
+Every type here mirrors `specs/001-agentic-design-review/contracts/ir.schema.json`;
+`swreview.ir.schema.export_schema()` regenerates that contract from these models and
+`tests/unit/test_schema_sync.py` keeps the two in step.
+
+Two rules drive the shapes (data-model.md, constitution Principle I):
+
+- a value that could not be obtained is ``None`` and the reason is listed in
+  ``EvidencePackage.gaps``; nothing is ever defaulted to a favourable number;
+- every entity carries ``persist_ref`` plus ``persist_ref_scope``, the ``document_id``
+  whose ``IModelDocExtension`` produced the reference.
+"""
+
+from __future__ import annotations
+
+import base64
+import binascii
+import json
+import re
+from collections.abc import Mapping
+from datetime import datetime
+from typing import Annotated, Any, Literal
+from uuid import UUID
+
+from annotated_types import Len
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    model_validator,
+)
+
+SCHEMA_VERSION = "1.0.0"
+SUPPORTED_SCHEMA_MAJOR = 1
+SCHEMA_VERSION_PATTERN = r"^1\.[0-9]+\.[0-9]+$"
+
+_SEMVER = re.compile(r"^([0-9]+)\.([0-9]+)\.([0-9]+)$")
+
+
+class UnsupportedSchemaVersionError(ValueError):
+    """An evidence package declares a schema major version this build cannot read.
+
+    Distinct from `pydantic.ValidationError` so a caller can tell "written by a newer
+    extractor" apart from "malformed package" (FR-016, research R5).
+    """
+
+
+def require_supported_schema_version(value: object) -> None:
+    """Raise `UnsupportedSchemaVersionError` when `value` names an unsupported major.
+
+    Called before pydantic validation, not from a field validator: pydantic wraps every
+    `ValueError` raised inside a validator into a `ValidationError`, which would erase
+    the distinction this error exists to make. A value that is not a semver string is
+    left to pydantic's pattern constraint to report.
+    """
+    if not isinstance(value, str):
+        return
+    match = _SEMVER.match(value)
+    if match is None:
+        return
+    major = int(match.group(1))
+    if major != SUPPORTED_SCHEMA_MAJOR:
+        raise UnsupportedSchemaVersionError(
+            f"evidence package schema_version {value!r} has major {major}; "
+            f"this build reads major {SUPPORTED_SCHEMA_MAJOR}"
+        )
+
+
+def _check_base64(value: str) -> str:
+    try:
+        base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("persist_ref must be base64-encoded bytes") from exc
+    return value
+
+
+PersistRef = Annotated[
+    str,
+    StringConstraints(min_length=1),
+    AfterValidator(_check_base64),
+    Field(
+        json_schema_extra={"contentEncoding": "base64"},
+        description="IModelDocExtension.GetPersistReference3 bytes, base64",
+    ),
+]
+
+Transform = Annotated[list[Annotated[list[float], Len(4, 4)]], Len(4, 4)]
+"""Row-major 4x4, translation in meters (SOLIDWORKS internal units)."""
+
+BBox2D = Annotated[list[float], Len(4, 4)]
+"""[x0, y0, x1, y1] in PDF points."""
+
+LengthUnit = Literal["mm", "in", "m"]
+AngleUnit = Literal["deg", "rad"]
+VolumeUnit = Literal["mm3", "in3", "m3"]
+
+
+class IRModel(BaseModel):
+    """Strict base: no coercion, no unknown fields (research R5)."""
+
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+
+# --- 1. Shared value types -------------------------------------------------------
+
+
+class Quantity(IRModel):
+    value: float
+    unit: LengthUnit
+
+
+class Volume(IRModel):
+    value: float
+    unit: VolumeUnit
+
+
+class Angle(IRModel):
+    value: float
+    unit: AngleUnit
+
+
+class Vec3(IRModel):
+    x: float
+    y: float
+    z: float
+
+
+class Axis(IRModel):
+    origin: Vec3
+    direction: Vec3
+
+
+class SourceRef(IRModel):
+    """Where a value came from. At least one locator must be set."""
+
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        json_schema_extra={
+            "anyOf": [
+                {"required": ["sheet"]},
+                {"required": ["annotation"]},
+                {"required": ["persist_ref"]},
+                {"required": ["page"]},
+            ]
+        },
+    )
+
+    document_id: str
+    sheet: str | None = None
+    view: str | None = None
+    annotation: str | None = None
+    persist_ref: PersistRef | None = None
+    page: int | None = None
+    bbox: BBox2D | None = None
+
+    @model_validator(mode="after")
+    def _require_a_locator(self) -> SourceRef:
+        if self.sheet is None and self.annotation is None:
+            if self.persist_ref is None and self.page is None:
+                raise ValueError(
+                    "SourceRef needs at least one locator: sheet, annotation, persist_ref or page"
+                )
+        return self
+
+
+class Tolerance(IRModel):
+    kind: Literal["symmetric", "bilateral", "limits", "basic", "none"]
+    upper: Quantity | Angle | None
+    lower: Quantity | Angle | None
+    source: SourceRef
+
+
+class Dimension(IRModel):
+    nominal: Quantity | Angle
+    tolerance: Tolerance
+    source: SourceRef
+    text_as_read: str
+
+
+# --- 2. Intermediate representation ----------------------------------------------
+
+
+class ManifestEntry(IRModel):
+    document_id: str
+    vault_path: str
+    vault_version: int | None
+    revision: str | None
+    configuration: str
+    local_modified: bool | None
+    export_method: Literal["native", "pdf", "step", "manual"]
+
+
+class Discrepancy(IRModel):
+    document_id: str
+    kind: Literal["version_mismatch", "local_modification", "missing_document", "config_mismatch"]
+    expected: str | int | None
+    actual: str | int | None
+    note: str
+
+
+class Manifest(IRModel):
+    entries: list[ManifestEntry]
+    discrepancies: list[Discrepancy]
+
+
+class Design(IRModel):
+    design_id: str
+    name: str
+    root_assembly_document_id: str
+    active_configuration: str
+    drawing_document_ids: list[str]
+
+
+class MassProperties(IRModel):
+    mass_kg: float
+    volume_m3: float
+    center_of_mass: Vec3
+    configuration: str
+
+
+class Document(IRModel):
+    document_id: str
+    kind: Literal["part", "assembly", "drawing"]
+    file_name: str
+    path: str
+    configurations: list[str]
+    active_configuration: str
+    custom_properties: dict[str, str]
+    config_properties: dict[str, dict[str, str]]
+    material: str | None
+    mass: MassProperties | None
+
+
+class ComponentInstance(IRModel):
+    id: Annotated[str, StringConstraints(pattern=r"^cmp:[0-9]{4,}$")]
+    persist_ref: PersistRef
+    persist_ref_scope: str = Field(
+        description="document_id whose IModelDocExtension produced persist_ref; "
+        "resolve against that document"
+    )
+    name: str
+    document_id: str
+    parent_id: str | None
+    referenced_configuration: str
+    transform: Transform
+    suppression: Literal["resolved", "lightweight", "suppressed", "unloaded"]
+    is_fixed: bool
+    pattern_id: str | None
+    is_toolbox: bool
+    full_path: str = Field(
+        description="IComponent2.Name2 full instance path, unique in the assembly"
+    )
+
+
+class MateEntity(IRModel):
+    component_id: str
+    persist_ref: PersistRef | None
+    entity_kind: str
+
+
+class Mate(IRModel):
+    id: str
+    persist_ref: PersistRef
+    persist_ref_scope: str = Field(
+        description="document_id whose IModelDocExtension produced persist_ref; "
+        "resolve against that document"
+    )
+    type: str
+    entities: Annotated[list[MateEntity], Len(1)]
+    alignment: Literal["aligned", "anti_aligned", "closest"]
+    suppressed: bool
+    distance: Quantity | None
+    angle: Angle | None
+
+
+class Hole(IRModel):
+    id: str
+    persist_ref: PersistRef
+    persist_ref_scope: str = Field(
+        description="document_id whose IModelDocExtension produced persist_ref; "
+        "resolve against that document"
+    )
+    component_id: str
+    feature_name: str
+    hole_type: Literal["tapped", "clearance", "counterbore", "countersink", "simple", "unknown"]
+    standard: str | None
+    size: str | None
+    thread_designation: str | None
+    thread_depth: Quantity | None = Field(
+        description="Usable thread depth. null = unknown; never derived from hole_depth."
+    )
+    hole_depth: Quantity | None
+    end_condition: Literal["blind", "through", "unknown"]
+    diameter: Quantity | None
+    axis: Axis
+    face_ids: list[str]
+
+
+class CosmeticThread(IRModel):
+    id: str
+    persist_ref: PersistRef
+    persist_ref_scope: str = Field(
+        description="document_id whose IModelDocExtension produced persist_ref; "
+        "resolve against that document"
+    )
+    component_id: str
+    face_id: str
+    designation: str
+    depth: Quantity | None
+    is_external: bool
+
+
+class Fastener(IRModel):
+    id: str
+    persist_ref: PersistRef
+    persist_ref_scope: str = Field(
+        description="document_id whose IModelDocExtension produced persist_ref; "
+        "resolve against that document"
+    )
+    component_id: str
+    kind: Literal["screw", "bolt", "nut", "washer", "pin", "other"]
+    identity_source: Literal["toolbox", "custom_property", "name_parse", "manual"]
+    thread_designation: str | None
+    length: Quantity | None
+    head_type: str | None
+    head_diameter: Quantity | None
+    head_height: Quantity | None
+    drive: str | None
+    axis: Axis
+    material: str | None
+
+
+class CylinderFace(IRModel):
+    axis_origin: Vec3
+    axis_dir: Vec3
+    radius_m: float = Field(gt=0)
+
+
+class PlaneFace(IRModel):
+    origin: Vec3
+    normal: Vec3
+
+
+class BBox3D(IRModel):
+    min: Vec3
+    max: Vec3
+
+
+class FaceGeometry(IRModel):
+    id: str
+    persist_ref: PersistRef
+    persist_ref_scope: str = Field(
+        description="document_id whose IModelDocExtension produced persist_ref; "
+        "resolve against that document"
+    )
+    component_id: str
+    body_id: str
+    kind: Literal["cylinder", "plane", "cone", "torus", "other"]
+    cylinder: CylinderFace | None
+    plane: PlaneFace | None
+    bbox: BBox3D
+    area_m2: float | None
+
+
+class BodyRef(IRModel):
+    id: str
+    persist_ref: PersistRef
+    persist_ref_scope: str = Field(
+        description="document_id whose IModelDocExtension produced persist_ref; "
+        "resolve against that document"
+    )
+    component_id: str
+    mesh_file: Annotated[str, StringConstraints(pattern=r"\.(glb|stl)$")]
+    triangle_count: int = Field(ge=0)
+    is_solid: bool
+
+
+class InterferenceSettings(IRModel):
+    treat_coincident_as_interference: bool
+    treat_subassemblies_as_components: bool
+    include_multibody: bool
+    ignore_hidden: bool
+    fastener_folder_treatment: Literal["include", "exclude", "only"]
+
+
+class Interference(IRModel):
+    id: str
+    configuration: str
+    component_ids: Annotated[list[str], Len(2, 2)]
+    volume: Volume | None = Field(
+        description="Unit as verified by the extractor on the workstation; "
+        "IInterference.Volume units are undocumented"
+    )
+    settings: InterferenceSettings
+    status: Literal["computed", "truncated", "failed"]
+    error: str | None
+    group_key: str
+    is_fastener: bool = Field(description="IInterference.IsFastener")
+    is_possible: bool = Field(
+        description="IInterference.IsPossibleInterference (coincident/touching)"
+    )
+
+
+class Capture(IRModel):
+    id: str
+    persist_ref: PersistRef | None
+    component_ids: list[str]
+    file: Annotated[str, StringConstraints(pattern=r"\.png$")]
+    view: str
+    note: str
+
+
+class Note(IRModel):
+    text: str
+    source: SourceRef
+    kind: Literal["general_tolerance", "material", "finish", "other"]
+
+
+class SheetView(IRModel):
+    name: str
+    bbox: BBox2D
+
+
+class DrawingSheet(IRModel):
+    document_id: str
+    sheet_name: str
+    page: int = Field(ge=1)
+    scale: str | None
+    units: Literal["mm", "in", "unknown"]
+    general_notes: list[Note]
+    dimensions: list[Dimension]
+    views: list[SheetView]
+    parse_status: Literal["text", "no_text", "failed"]
+    parser: str
+
+
+class Gap(IRModel):
+    kind: Literal["not_extracted", "unsupported", "tool_error", "no_text"]
+    entity_kind: str
+    entity_id: str | None
+    reason: str
+    error: str | None
+
+
+class ExtractorInfo(IRModel):
+    name: str
+    version: str
+    sw_version: str | None = Field(
+        description="e.g. '2024 SP3'; null for exported-file-only packages"
+    )
+    machine: str
+
+
+class EvidencePackage(IRModel):
+    """Intermediate representation of one SOLIDWORKS design.
+
+    Use `model_validate_json` (or `swreview.ir.loader.load_package`) to read a package:
+    `package_id` and `created_at` are strict UUID/datetime fields, so JSON strings are
+    only accepted in JSON mode.
+    """
+
+    schema_version: str = Field(
+        pattern=SCHEMA_VERSION_PATTERN,
+        description="Major 1. Consumers reject any other major.",
+    )
+    # Relaxed on purpose: the schema-version gate below needs a custom __init__, which
+    # makes pydantic validate this model in python mode even when the input came from
+    # JSON. Strict UUID/datetime fields would then reject the ISO strings in a package
+    # file. Both are still parsed and rejected when malformed.
+    package_id: UUID = Field(strict=False)
+    created_at: datetime = Field(strict=False)
+    extractor: ExtractorInfo
+    manifest: Manifest
+    design: Design
+    documents: list[Document]
+    components: list[ComponentInstance]
+    mates: list[Mate] = Field(default_factory=list)
+    holes: list[Hole] = Field(default_factory=list)
+    threads: list[CosmeticThread] = Field(default_factory=list)
+    fasteners: list[Fastener] = Field(default_factory=list)
+    faces: list[FaceGeometry] = Field(default_factory=list)
+    bodies: list[BodyRef] = Field(default_factory=list)
+    interferences: list[Interference] = Field(default_factory=list)
+    captures: list[Capture] = Field(default_factory=list)
+    drawings: list[DrawingSheet] = Field(default_factory=list)
+    gaps: list[Gap]
+
+    # The three entry points below gate the schema major before pydantic runs, so an
+    # unreadable major surfaces as UnsupportedSchemaVersionError instead of being
+    # wrapped into a ValidationError by pydantic-core.
+
+    def __init__(self, **data: Any) -> None:
+        require_supported_schema_version(data.get("schema_version"))
+        super().__init__(**data)
+
+    @classmethod
+    def model_validate(cls, obj: Any, **kwargs: Any) -> EvidencePackage:
+        if isinstance(obj, Mapping):
+            require_supported_schema_version(obj.get("schema_version"))
+        return super().model_validate(obj, **kwargs)
+
+    @classmethod
+    def model_validate_json(
+        cls, json_data: str | bytes | bytearray, **kwargs: Any
+    ) -> EvidencePackage:
+        try:
+            peeked = json.loads(json_data)
+        except ValueError:
+            peeked = None
+        if isinstance(peeked, Mapping):
+            require_supported_schema_version(peeked.get("schema_version"))
+        return super().model_validate_json(json_data, **kwargs)
