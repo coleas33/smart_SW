@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smart-sw.local/contracts/settings.schema.json",
+  "title": "SwReviewUserSettings",
+  "description": "%APPDATA%\\SwReview\\settings.json. The API key is stored DPAPI-protected (CurrentUser) and never in the clear.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "provider", "model", "effort", "terminal_cli", "run_root"],
+  "properties": {
+    "version": { "const": 1 },
+    "provider": { "enum": ["openai", "gemini"] },
+    "model": { "type": "string", "minLength": 1 },
+    "effort": { "enum": ["low", "medium", "high", "xhigh"] },
+    "api_key_protected": { "type": "string", "contentEncoding": "base64", "description": "DPAPI ciphertext; absent when no key is stored" },
+    "base_url": { "type": ["string", "null"] },
+    "gemini_enterprise": {
+      "anyOf": [
+        { "type": "object", "additionalProperties": false, "required": ["project", "location"], "properties": { "project": { "type": "string" }, "location": { "type": "string" } } },
+        { "type": "null" }
+      ]
+    },
+    "terminal_cli": { "enum": ["codex", "gemini"] },
+    "python": { "type": ["string", "null"], "description": "Interpreter or uv path override; null = locate automatically" },
+    "run_root": { "type": "string" }
+  }
+}

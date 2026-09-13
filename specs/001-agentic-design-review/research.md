@@ -34,6 +34,14 @@ ADR-001: loses threads, fasteners, mates, configurations).
 
 ## R2. Agent loop: Anthropic Python SDK tool runner with curated tools
 
+> **Amended 2026-09-13.** The product must run on OpenAI and Google Gemini only; Claude is
+> not permitted in deployed paths. Feature `002-task-pane-assistant` replaces the Anthropic
+> tool runner with a provider layer (OpenAI Responses API by default, Gemini
+> `generate_content`) behind one `AgentProvider` protocol, and removes the `anthropic`
+> dependency. The curated-tool, step-recording and session rules below are unchanged; only
+> the loop's SDK changes. See `specs/002-task-pane-assistant/research.md`.
+
+
 **Decision**: The reviewer is a Python program that drives Claude through the Anthropic SDK's
 beta tool runner (`client.beta.messages.tool_runner` with `@beta_tool` functions), model
 `claude-opus-5`, adaptive thinking (default), `output_config.effort` set per run (default
