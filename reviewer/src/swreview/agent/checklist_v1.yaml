@@ -1,0 +1,53 @@
+# Mandatory review checklist, version 1.
+# Every item must end the review with at least one finding whose `check` starts with the
+# item's `check_prefix`, or a coverage entry whose `check` equals the item id.
+version: 1
+items:
+  - id: provenance
+    title: Provenance and manifest discrepancies
+    check_prefix: provenance.
+    description: >
+      Confirm every reviewed document matches the manifest (vault version, revision,
+      configuration, local modification). Surface every discrepancy at the top of the
+      report before any other finding.
+  - id: drawing.manufacturing_inputs
+    title: Drawing manufacturing inputs
+    check_prefix: drawing.
+    description: >
+      For each part drawing: material, general tolerance note, surface finish where
+      functional, thread callouts with depth, critical fits with explicit tolerances.
+      Missing text layers or unreadable sheets are unresolved, not passed.
+  - id: interfaces.fit
+    title: Fits and clearances at mating interfaces
+    check_prefix: fit.
+    description: >
+      Shaft/bore and pin/hole interfaces from mates and hole data; evaluate with check_fit
+      using drawing limits. Missing limits stay unresolved.
+  - id: interfaces.stack
+    title: Axial stacks and gaps
+    check_prefix: stack.
+    description: >
+      Stacks that set a functional gap or preload; evaluate with check_axial_stack.
+  - id: fasteners
+    title: Fastener joints
+    check_prefix: fastener.
+    description: >
+      For each screw or bolt: bottoming, usable thread engagement, thread match, head and
+      washer clearance. Unknown usable thread depth stays unresolved with an evidence
+      request.
+  - id: holes.alignment
+    title: Hole alignment across mating parts
+    check_prefix: hole.
+    description: >
+      Coaxiality of hole pairs across mated parts using check_hole_alignment.
+  - id: interference
+    title: Static interference
+    check_prefix: interference.
+    description: >
+      Review grouped interferences and exceptions; truncated or failed pairs are
+      unresolved. State the positions checked for mechanisms.
+  - id: coverage.closeout
+    title: Coverage close-out
+    check_prefix: coverage.
+    description: >
+      Every gap in the package and every open evidence request is reflected in coverage.

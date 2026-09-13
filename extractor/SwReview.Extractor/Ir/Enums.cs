@@ -1,0 +1,187 @@
+namespace SwReview.Extractor.Ir;
+
+// Every enum below mirrors an `enum` list in contracts/ir.schema.json.
+// Member names are PascalCase; SnakeCaseLowerNamingPolicy in PackageSerializer converts
+// them to the exact strings the schema allows (AntiAligned -> "anti_aligned", Mm3 -> "mm3").
+// Adding a member here without adding it to the schema breaks IrSerializerTests.
+
+/// <summary>Quantity.unit: "mm" | "in" | "m".</summary>
+public enum LengthUnit
+{
+    Mm,
+    In,
+    M,
+}
+
+/// <summary>Angle.unit: "deg" | "rad".</summary>
+public enum AngleUnit
+{
+    Deg,
+    Rad,
+}
+
+/// <summary>Volume.unit: "mm3" | "in3" | "m3".</summary>
+public enum VolumeUnit
+{
+    Mm3,
+    In3,
+    M3,
+}
+
+/// <summary>Tolerance.kind. "None" means no tolerance was found; checks treat it as unknown.</summary>
+public enum ToleranceKind
+{
+    Symmetric,
+    Bilateral,
+    Limits,
+    Basic,
+    None,
+}
+
+/// <summary>ManifestEntry.export_method.</summary>
+public enum ExportMethod
+{
+    Native,
+    Pdf,
+    Step,
+    Manual,
+}
+
+/// <summary>Discrepancy.kind.</summary>
+public enum DiscrepancyKind
+{
+    VersionMismatch,
+    LocalModification,
+    MissingDocument,
+    ConfigMismatch,
+}
+
+/// <summary>Document.kind.</summary>
+public enum DocumentKind
+{
+    Part,
+    Assembly,
+    Drawing,
+}
+
+/// <summary>
+/// ComponentInstance.suppression. Mapped from swComponentSuppressionState_e by the dumper
+/// (research R12): 0 suppressed, 1 and 4 lightweight, 2 and 3 resolved, 5 unloaded + Gap.
+/// </summary>
+public enum SuppressionState
+{
+    Resolved,
+    Lightweight,
+    Suppressed,
+    Unloaded,
+}
+
+/// <summary>Mate.alignment.</summary>
+public enum MateAlignment
+{
+    Aligned,
+    AntiAligned,
+    Closest,
+}
+
+/// <summary>Hole.hole_type.</summary>
+public enum HoleType
+{
+    Tapped,
+    Clearance,
+    Counterbore,
+    Countersink,
+    Simple,
+    Unknown,
+}
+
+/// <summary>Hole.end_condition.</summary>
+public enum EndCondition
+{
+    Blind,
+    Through,
+    Unknown,
+}
+
+/// <summary>Fastener.kind.</summary>
+public enum FastenerKind
+{
+    Screw,
+    Bolt,
+    Nut,
+    Washer,
+    Pin,
+    Other,
+}
+
+/// <summary>
+/// Fastener.identity_source, in descending confidence. NameParse results are reported as
+/// "suspected", never "demonstrated" (data-model.md section 2).
+/// </summary>
+public enum IdentitySource
+{
+    Toolbox,
+    CustomProperty,
+    NameParse,
+    Manual,
+}
+
+/// <summary>FaceGeometry.kind.</summary>
+public enum FaceKind
+{
+    Cylinder,
+    Plane,
+    Cone,
+    Torus,
+    Other,
+}
+
+/// <summary>Interference.status.</summary>
+public enum InterferenceStatus
+{
+    Computed,
+    Truncated,
+    Failed,
+}
+
+/// <summary>Interference.settings.fastener_folder_treatment.</summary>
+public enum FastenerFolderTreatment
+{
+    Include,
+    Exclude,
+    Only,
+}
+
+/// <summary>Note.kind.</summary>
+public enum NoteKind
+{
+    GeneralTolerance,
+    Material,
+    Finish,
+    Other,
+}
+
+/// <summary>DrawingSheet.units: "mm" | "in" | "unknown".</summary>
+public enum SheetUnits
+{
+    Mm,
+    In,
+    Unknown,
+}
+
+/// <summary>DrawingSheet.parse_status.</summary>
+public enum ParseStatus
+{
+    Text,
+    NoText,
+    Failed,
+}
+
+/// <summary>Gap.kind. Every gap becomes an unresolved coverage item in the review.</summary>
+public enum GapKind
+{
+    NotExtracted,
+    Unsupported,
+    ToolError,
+    NoText,
+}

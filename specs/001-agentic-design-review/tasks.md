@@ -36,12 +36,12 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 
 **Purpose**: Project skeletons for both languages, tooling, and the benchmark layout.
 
-- [ ] T001 Create the monorepo directories `extractor/`, `reviewer/`, `benchmarks/{packages,native,answer_keys,sets}/` per plan.md Project Structure, each with a one-line `README.md`
-- [ ] T002 Initialize the Python project: `reviewer/pyproject.toml` (uv, src layout, package `swreview`, Python `>=3.11`, console script `swreview = swreview.cli:app`, dependencies `anthropic`, `pydantic>=2`, `pint`, `trimesh`, `pymupdf`, `pdfplumber`, `typer`, `numpy`; optional extra `raycast = ["embreex"]`; dev group `pytest`, `pytest-regressions`, `ruff`, `jsonschema`) and empty `reviewer/src/swreview/__init__.py`
+- [X] T001 Create the monorepo directories `extractor/`, `reviewer/`, `benchmarks/{packages,native,answer_keys,sets}/` per plan.md Project Structure, each with a one-line `README.md`
+- [X] T002 Initialize the Python project: `reviewer/pyproject.toml` (uv, src layout, package `swreview`, Python `>=3.11`, console script `swreview = swreview.cli:app`, dependencies `anthropic`, `pydantic>=2`, `pint`, `trimesh`, `pymupdf`, `pdfplumber`, `typer`, `numpy`; optional extra `raycast = ["embreex"]`; dev group `pytest`, `pytest-regressions`, `ruff`, `jsonschema`) and empty `reviewer/src/swreview/__init__.py`
 - [ ] T003 [P] Configure tooling in `reviewer/pyproject.toml`: ruff (line length 100), pytest (`testpaths = ["tests"]`, markers `integration`, `raycast`), and `reviewer/tests/conftest.py` skipping `integration` tests when `benchmarks/packages/bracket-assy/native/package.json` is absent
-- [ ] T004 [P] Create `extractor/SwReview.sln` with projects `SwReview.Extractor` (class library, net48), `SwReview.AddIn` (class library, net48, COM-visible), `SwReview.Extractor.Console` (console, net48, `[STAThread] Main`), `SwReview.Extractor.Tests` (xUnit, net48); reference `SolidWorks.Interop.sldworks`, `swconst`, `swpublished` 2024 with `EmbedInteropTypes=false`; add `System.Text.Json` package
-- [ ] T005 [P] Add `benchmarks/README.md` describing package layout (`package.json`, `manifest.json`, `bom.csv`, `drawings/*.pdf`, `geometry/*.step`, `exceptions.json`) and the rule that `benchmarks/answer_keys/` is never passed to the reviewer
-- [ ] T006 [P] Update root `.gitignore`: ignore `reviewer/runs/`, `extractor/**/bin/`, `extractor/**/obj/`, `*.user`; keep `benchmarks/` tracked except `benchmarks/native/**/*.SLD*` (binary CAD files, tracked separately)
+- [X] T004 [P] Create `extractor/SwReview.sln` with projects `SwReview.Extractor` (class library, net48), `SwReview.AddIn` (class library, net48, COM-visible), `SwReview.Extractor.Console` (console, net48, `[STAThread] Main`), `SwReview.Extractor.Tests` (xUnit, net48); reference `SolidWorks.Interop.sldworks`, `swconst`, `swpublished` 2024 with `EmbedInteropTypes=false`; add `System.Text.Json` package
+- [X] T005 [P] Add `benchmarks/README.md` describing package layout (`package.json`, `manifest.json`, `bom.csv`, `drawings/*.pdf`, `geometry/*.step`, `exceptions.json`) and the rule that `benchmarks/answer_keys/` is never passed to the reviewer
+- [X] T006 [P] Update root `.gitignore`: ignore `reviewer/runs/`, `extractor/**/bin/`, `extractor/**/obj/`, `*.user`; keep `benchmarks/` tracked except `benchmarks/native/**/*.SLD*` (binary CAD files, tracked separately)
 
 ---
 
@@ -64,9 +64,9 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [ ] T017 Write unit tests for the session model in `reviewer/tests/unit/test_session.py`: `ReviewSession` round-trips to JSON matching `contracts/review-session.schema.json` (validate with `jsonschema`); `Coverage` has all five buckets; `Timing.net_saved_minutes` is `None` when baseline is `None`; `EvidenceRequest` id pattern
 - [ ] T018 Implement `reviewer/src/swreview/report/session.py`: `ReviewSession`, `InvestigationStep`, `EvidenceRequest`, `Coverage`, `CoverageItem`, `Timing`, `load_session`, `save_session`
 - [ ] T019 Create `reviewer/tests/conftest.py` fixtures: `make_package(**overrides)` building a minimal valid `EvidencePackage`, `tmp_package_dir`, `fake_manifest`; and `reviewer/tests/golden/test_golden.py` parametrized over `reviewer/tests/golden/fixtures/*/` comparing check output with `data_regression`
-- [ ] T020 [P] Create C# IR DTOs in `extractor/SwReview.Extractor/Ir/*.cs` mirroring `contracts/ir.schema.json` (snake_case JSON names, nullable value types, `PersistRef` as base64 string) and `PackageSerializer.cs`
-- [ ] T021 [P] Write `extractor/SwReview.Extractor.Tests/IrSerializerTests.cs`: serialize a sample package, validate against `contracts/ir.schema.json` (JsonSchema.Net or NJsonSchema), round-trip equality, `thread_depth` null preserved
-- [ ] T022 [P] Write `extractor/SwReview.Extractor.Tests/GuardTests.cs` then implement `extractor/SwReview.Extractor/Guard/ReadOnlyGuard.cs` (allowlist of permitted interop members; `Assert(memberName)` throws `MutatingCallError` for `EditRebuild3`, `Save3`, `Delete2`, `Feature*` creation) and `CircuitBreaker.cs` (trips after 3 consecutive COM failures)
+- [X] T020 [P] Create C# IR DTOs in `extractor/SwReview.Extractor/Ir/*.cs` mirroring `contracts/ir.schema.json` (snake_case JSON names, nullable value types, `PersistRef` as base64 string) and `PackageSerializer.cs`
+- [X] T021 [P] Write `extractor/SwReview.Extractor.Tests/IrSerializerTests.cs`: serialize a sample package, validate against `contracts/ir.schema.json` (JsonSchema.Net or NJsonSchema), round-trip equality, `thread_depth` null preserved
+- [X] T022 [P] Write `extractor/SwReview.Extractor.Tests/GuardTests.cs` then implement `extractor/SwReview.Extractor/Guard/ReadOnlyGuard.cs` (allowlist of permitted interop members; `Assert(memberName)` throws `MutatingCallError` for `EditRebuild3`, `Save3`, `Delete2`, `Feature*` creation) and `CircuitBreaker.cs` (trips after 3 consecutive COM failures)
 
 **Checkpoint**: Foundation ready. `uv run pytest` passes with schema sync green; `dotnet test` passes.
 

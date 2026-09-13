@@ -1,0 +1,20 @@
+{
+  "package_id": "cover-blind-tap",
+  "known_defects": [
+    {
+      "id": "D-1",
+      "check": "fastener.bottoming",
+      "component_ids": ["cmp:0003", "cmp:0004", "cmp:0005", "cmp:0006"],
+      "description": "M6 x 20 screws into holes drilled 14 deep with a 1.5 mm clamped stack: bottoming risk. Expected pilot outcome: unresolved with an evidence request for usable thread depth (not cleared, not demonstrated)."
+    },
+    {
+      "id": "D-2",
+      "check": "drawing.manufacturing_inputs",
+      "component_ids": ["cmp:0001"],
+      "description": "Housing drawing specifies drill depth only for the tapped holes; usable thread depth missing."
+    }
+  ],
+  "correct_conditions": [
+    { "check": "fit.size_only", "component_ids": ["cmp:0001", "cmp:0002"], "description": "Cover-to-housing locating spigot Ø40 H7/g6 is a correct clearance fit." }
+  ]
+}

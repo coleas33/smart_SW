@@ -1,0 +1,21 @@
+{
+  "design": {
+    "design_id": "cover-blind-tap",
+    "name": "Cover on housing, blind tapped holes",
+    "root_assembly_document_id": "ASM-1001",
+    "active_configuration": "Default",
+    "drawing_document_ids": ["DRW-2001", "DRW-2002"]
+  },
+  "entries": [
+    { "document_id": "ASM-1001", "vault_path": "Projects/Pilot/cover-blind-tap/cover-assy.SLDASM", "vault_version": 7, "revision": "B", "configuration": "Default", "local_modified": false, "export_method": "manual" },
+    { "document_id": "PRT-1001", "vault_path": "Projects/Pilot/cover-blind-tap/housing.SLDPRT", "vault_version": 12, "revision": "C", "configuration": "Default", "local_modified": false, "export_method": "manual" },
+    { "document_id": "PRT-1002", "vault_path": "Projects/Pilot/cover-blind-tap/cover.SLDPRT", "vault_version": 5, "revision": "B", "configuration": "Default", "local_modified": false, "export_method": "manual" },
+    { "document_id": "PRT-1003", "vault_path": "Toolbox/socket head cap screw_am.SLDPRT", "vault_version": null, "revision": null, "configuration": "M6 x 20", "local_modified": null, "export_method": "manual" },
+    { "document_id": "DRW-2001", "vault_path": "Projects/Pilot/cover-blind-tap/housing.SLDDRW", "vault_version": 12, "revision": "C", "configuration": "Default", "local_modified": false, "export_method": "pdf" },
+    { "document_id": "DRW-2002", "vault_path": "Projects/Pilot/cover-blind-tap/cover.SLDDRW", "vault_version": 5, "revision": "B", "configuration": "Default", "local_modified": false, "export_method": "pdf" }
+  ],
+  "drawings": [
+    { "document_id": "DRW-2001", "file": "drawings/housing.pdf" },
+    { "document_id": "DRW-2002", "file": "drawings/cover.pdf" }
+  ]
+}
