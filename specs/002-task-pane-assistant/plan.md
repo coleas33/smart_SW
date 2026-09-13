@@ -24,7 +24,12 @@ server), `pydantic` (schema generation via `TypeAdapter`), `starlette`+`uvicorn`
 `aiohttp` for the loopback server with SSE (decide in Phase 1: `starlette` with `sse-starlette`
 is the default choice), `httpx` (already transitively present; test client), `respx` (dev).
 Removed: `anthropic`. C#: `Microsoft.Web.WebView2` (NuGet, WebView2Loader.dll shipped next
-to the add-in), Win32 ConPTY P/Invoke (`CreatePseudoConsole`, `ResizePseudoConsole`,
+to the add-in; the add-in creates one `CoreWebView2Environment` for the process with an
+explicit user data folder `%LOCALAPPDATA%\SwReview\WebView2\<add-in instance>`, shared by
+both tabs, because the default folder is derived from `SLDWORKS.exe`, is shared with
+SOLIDWORKS' own WebView2 usage and every other add-in in the process, and sits under a
+Program Files directory that is not writable; environment creation failure degrades to the
+documented runtime-missing fallback rather than an unhandled exception), Win32 ConPTY P/Invoke (`CreatePseudoConsole`, `ResizePseudoConsole`,
 `ClosePseudoConsole`), `System.Security.Cryptography.ProtectedData` (DPAPI), `System.Text.Json`.
 Vendored, MIT: xterm.js and its fit addon (pinned versions, no CDN).
 
@@ -34,9 +39,10 @@ Vendored, MIT: xterm.js and its fit addon (pinned versions, no CDN).
 generated CLI profiles under the run folder.
 
 **Testing**: `pytest` (adapters with `respx`/stubs, fake provider, HTTP and SSE with an
-in-process client, MCP with in-memory streams, schema strictifier), xUnit (message contract,
-ConPTY against `cmd.exe`, dispatcher marshalling with fakes, DPAPI round trip), quickstart
-Scenario 7 on the workstation.
+in-process client, MCP with in-memory streams, schema strictifier, the chat backend's process
+contract driven as a real subprocess), xUnit (message contract, ConPTY against `cmd.exe` and a
+`.cmd` shim, dispatcher marshalling with fakes, DPAPI round trip, WebView2 runtime-missing
+fallback), quickstart Scenarios 1 through 4 on the workstation.
 
 **Target Platform**: Windows 11 workstation with SOLIDWORKS 2024, WebView2 runtime, Codex CLI
 and/or Gemini CLI on PATH (Node 22 for Gemini).
@@ -46,8 +52,11 @@ tool service host), `extractor/SwReview.Extractor` (dispatcher reuse), `reviewer
 layer, chat backend, MCP server).
 
 **Performance Goals**: first finding card within 3 minutes on a 200-component assembly;
-text delta to screen under 2 seconds; extraction under 1 minute; terminal keystroke echo
-under 50 ms.
+text delta to screen under 2 seconds; extraction under 1 minute (SC-001 and SC-002, timed and
+written into the metric table in `benchmarks/native/bracket-assy/notes.md` by T044).
+Terminal keystroke echo under 50 ms is a design target, not a success criterion: it is judged
+qualitatively in Scenario 3 and bounded by the `terminal.output` coalescing rule whose
+message count T052 asserts.
 
 **Constraints**: OpenAI and Gemini only, no Anthropic dependency; every SOLIDWORKS call on
 the application thread; read-only guard and circuit breaker unchanged; keys never on disk
@@ -69,10 +78,11 @@ windows at most per workstation.
 | IV. Semantic fidelity and traceability | Persistent references drive navigation | Show in SOLIDWORKS resolves `persist_ref` with its scope through the in-process dispatcher and reports the state code on failure | PASS |
 | V. Engineered enough | No speculative abstraction | One provider protocol with two adapters and one fake; one event schema shared by pane and CLI; no plugin system; SSE not WebSocket | PASS |
 | VI. Inspectable findings, coverage tracked | Coverage and dispositions persist | Dispositions and evidence answers write through the existing session module; general chat writes a chat log | PASS |
-| Technical constraints | STA COM, no exec tool, licenses | In-process dispatcher on the application thread; CLI profiles deny writes; SwpilotCLI reimplemented, not copied; xterm.js and MiniTerm are MIT | PASS |
+| Technical constraints | STA COM, no exec tool, licenses | In-process dispatcher on the application thread; our own tool surface stays curated (no exec tool of ours; the MCP toolset for general chat is the read-only subset); CLI profiles deny writes through a read-only sandbox; SwpilotCLI reimplemented, not copied; xterm.js and MiniTerm are MIT | **PASS with a documented exception**: the generated Codex profile enables that CLI's own read-only shell, which is generic command execution. See Complexity Tracking. |
 | Development workflow | Spec Kit cycle | This document; tasks.md follows | PASS |
 
-Post-design re-check: no violations. Complexity Tracking is empty.
+Post-design re-check: one documented exception (Codex's read-only shell), recorded in
+Complexity Tracking below. No other violations.
 
 ## Project Structure
 
@@ -177,9 +187,14 @@ Key design points tasks must honor:
 4. **In-process tool service.** The add-in hosts the dispatcher; every SOLIDWORKS call runs
    through `BeginInvoke` on the Task Pane control, then through `SwGate` as today. The
    console `serve` command is unchanged and remains the headless path.
-5. **Profiles regenerated every launch.** `CliProfileWriter` writes the Codex profile and the
-   Gemini settings and policy files under the run folder and passes them explicitly
-   (`--profile`, `--config`, or environment), never relying on the engineer's global files.
+5. **Profiles regenerated every launch.** `CliProfileWriter` writes a complete Codex config
+   home and the Gemini settings and policy files under the run folder and points the CLI at
+   them through its config-home environment variable (`CODEX_HOME` for Codex; the equivalent
+   for Gemini is still to be verified), never relying on the engineer's global files.
+   `--profile swreview` on its own cannot work, because Codex resolves profiles out of its
+   own config home and fails outright when the named profile is absent; the engineer's Codex
+   sign-in is preserved by copying `auth.json` into the generated home.
+   `contracts/cli-profiles.md` is normative for the exact keys and arguments.
 6. **Secrets never leave the process boundary in the clear.** Keys travel to the backend as
    environment variables of the child process; redaction applies to every log line and error
    text; the run folder never contains a key.
@@ -200,16 +215,20 @@ Key design points tasks must honor:
 
 | Risk | Mitigation |
 |------|------------|
-| OpenAI strict schema rejects a generated tool schema | Strictifier tests plus one recorded-exchange test per tool group; fall back to non-strict with server-side validation only if a specific tool cannot be expressed |
-| Gemini renames or truncates tool names | Server name `swreview`, names kept under 60 characters, a startup listing test |
-| ConPTY under the SOLIDWORKS message pump misbehaves | ConPTY tests against `cmd.exe` in xUnit; early workstation check in Scenario 7; SetParent never used |
-| Codex profile ignored because the run folder is untrusted | Pass the profile explicitly with `--profile` from the user config and `-c` overrides; do not rely on project config |
+| OpenAI strict schema rejects a generated tool schema | T006 asserts the strict-mode rules locally for every registered tool, including that no object is left with `additionalProperties: true` or with zero properties; T018a makes one real, key-gated call per tool group early in Phase 2. A recorded `respx` exchange replays a body we authored ourselves and can never show that the API accepts a schema, so it is not the evidence for this risk. Fall back to non-strict with server-side validation only if a specific tool cannot be expressed |
+| Gemini renames or truncates tool names | Server name `swreview`, names kept under 60 characters, and the startup listing check: T061a tests the parser against fixtures, T062 implements it as a gate that refuses to start the terminal on a mismatch |
+| ConPTY under the SOLIDWORKS message pump misbehaves | ConPTY tests against `cmd.exe` in xUnit, including a `.cmd` shim (the Gemini CLI ships as `gemini.cmd` and `CreateProcess`, which ConPTY requires, cannot execute one directly) and an output-coalescing bound; early workstation check in quickstart Scenario 3; SetParent never used |
+| Codex profile ignored, or the named profile is absent from the engineer's config | Own the whole config home: `CODEX_HOME=<run_dir>/.swreview-cli/codex-home` with the generated `config.toml` and a copied `auth.json`, plus `-c` overrides for the five scalar restriction keys; never rely on the user or project config (contracts/cli-profiles.md) |
 | Backend process orphaned on SOLIDWORKS crash | Job object with kill-on-close for the backend and the CLI processes |
 | Two SOLIDWORKS windows collide on ports or pipes | Port 0 and a GUID-suffixed pipe name per add-in instance |
-| Keys leak through exception messages from SDKs | Redaction filter applied at the logging sink and before any error reaches the page |
+| Keys leak through exception messages from SDKs | Redaction filter applied at the logging sink and before any error reaches the page; `audit-secrets` carries provider-shaped detectors so it is not vacuous when run from a shell that holds no key |
+| Model- or document-authored text injected into the Review page, which holds the backend token and the whole host message surface | Untrusted strings inserted as text only, a strict CSP on both pages, navigation blocked outside the virtual host, and a test that feeds hostile strings through a finding title, a recommended action and a tool summary (T042a) |
+| A settings save or a backend restart destroys a live chat | `settings.save` is refused while a turn is running, and any backend shutdown finalizes every live chat with an ended time before exiting (chat-api.md) |
 
 ## Complexity Tracking
 
 > **Fill ONLY if Constitution Check has violations that must be justified**
 
-None.
+| Violation | Why needed | Simpler alternative rejected because |
+|-----------|------------|--------------------------------------|
+| `[features] shell_tool = true` in the generated Codex profile, against the constitution's Technical Constraints ("Generic code execution tools ... MUST NOT be exposed to the agent. Expose a curated set of inspection operations") | FR-021 and US3 acceptance scenario 3 are written around a shell that the sandbox confines; Codex's agent loop is built around its shell tool, and research R4 records that `apply_patch` has no off switch and is blocked by the sandbox rather than by configuration. Disabling the shell is unverified and risks a Terminal tab that cannot work at all. | The simpler alternative - MCP resources (`swreview://package/summary`, `swreview://report`) plus a narrow read-only run-folder file tool - does not reach `captures/`, `chat-log.jsonl`, `events.jsonl` or `session.json`, and would mean reimplementing file reading the CLI already has. The exception is bounded: read-only sandbox, `approval_policy = "never"`, `web_search = "disabled"`, unelevated Windows sandbox, run folder as working directory, and it grants the model no privilege the engineer lacks on their own workstation. The Codex/Gemini asymmetry is deliberate: the Gemini policy denies `run_shell_command` outright because that loop does not need it. |
