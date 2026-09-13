@@ -14,7 +14,7 @@ public sealed class SmokeTests
     [Fact]
     public void AddInAssemblyIsReferencedAndLoadable()
     {
-        Assembly addIn = typeof(SwReview.AddIn.DumpIrPanel).Assembly;
+        Assembly addIn = typeof(SwReview.AddIn.TaskPaneControl).Assembly;
 
         Assert.Equal("SwReview.AddIn", addIn.GetName().Name);
     }

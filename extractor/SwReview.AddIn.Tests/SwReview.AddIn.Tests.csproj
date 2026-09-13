@@ -22,11 +22,34 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <!-- Same validator and version SwReview.Extractor.Tests uses for contracts/ir.schema.json. -->
+    <PackageReference Include="JsonSchema.Net" Version="9.4.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SwReview.AddIn\SwReview.AddIn.csproj" />
     <ProjectReference Include="..\SwReview.Extractor\SwReview.Extractor.csproj" />
+  </ItemGroup>
+
+  <!--
+    The settings contract is the single source of truth
+    (specs/002-task-pane-assistant/contracts/settings.schema.json). It is copied, not
+    duplicated, so a schema change breaks UserSettingsTests immediately.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\specs\002-task-pane-assistant\contracts\settings.schema.json" Link="settings.schema.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!--
+      Same reason, for the two contracts ReviewPageContractTests (T042) reads as data: the
+      page-to-host message tables, and the chat event `type` enum the page also handles.
+    -->
+    <Content Include="..\..\specs\002-task-pane-assistant\contracts\pane-host-messages.md" Link="pane-host-messages.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\specs\002-task-pane-assistant\contracts\chat-events.schema.json" Link="chat-events.schema.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

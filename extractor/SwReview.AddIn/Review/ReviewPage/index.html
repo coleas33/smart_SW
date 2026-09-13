@@ -1,8 +1,116 @@
 <!DOCTYPE html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
 <title>SwReview</title>
-<!-- Placeholder. The Review chat page is built in T032/T041; this file exists so the
-     <Content Include="Review\ReviewPage\**"> glob resolves and the virtual host mapping
-     has a document to serve. -->
-<body></body>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<!--
+  The Review tab. Served from the virtual host https://swreview.invalid, so the CSP above is
+  what the page actually runs under: no inline script, no inline style, no remote anything,
+  and connections only to the loopback backend. Every handler is attached in app.js with
+  addEventListener - there is no event-handler attribute anywhere in this file - and app.js
+  builds every node with textContent rather than by assigning markup, because assistant text,
+  finding titles and drawing text are authored by a model or by a customer document
+  (FR-029, contracts/pane-host-messages.md).
+
+  The chat transcript is built by render.js, which is loaded first so app.js can render
+  through it; render.js holds every card the transcript shows and touches nothing else, which
+  is what lets the injection test (T042a) render a hostile finding inside this page.
+-->
+<header class="bar">
+  <span id="document-name" class="document">No document open</span>
+  <span id="backend-state" class="badge">Backend starting</span>
+  <button type="button" id="toggle-settings" class="link">Settings</button>
+</header>
+
+<p id="banner" class="banner" hidden></p>
+
+<section id="settings" class="panel" aria-labelledby="settings-heading" hidden>
+  <h2 id="settings-heading">Settings</h2>
+
+  <div class="field">
+    <label for="provider">Provider</label>
+    <select id="provider"></select>
+  </div>
+
+  <div class="field">
+    <label for="model">Model</label>
+    <span class="row">
+      <select id="model"></select>
+      <button type="button" id="refresh-models">Refresh</button>
+    </span>
+    <span id="model-note" class="note"></span>
+  </div>
+
+  <div class="field">
+    <label for="effort">Reasoning effort</label>
+    <select id="effort">
+      <option value="low">low</option>
+      <option value="medium">medium</option>
+      <option value="high">high</option>
+      <option value="xhigh">xhigh</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="api-key">API key</label>
+    <input type="password" id="api-key" autocomplete="off" spellcheck="false">
+    <span id="key-source" class="note"></span>
+    <label class="check"><input type="checkbox" id="clear-key"> Remove the stored key</label>
+  </div>
+
+  <!-- OPENAI_BASE_URL is the only endpoint override the backend reads, so this row is
+       hidden for any other provider rather than accepting one the host would refuse. -->
+  <div class="field" id="base-url-field">
+    <label for="base-url">Base URL (enterprise gateway, optional)</label>
+    <input type="text" id="base-url" autocomplete="off" spellcheck="false">
+  </div>
+
+  <fieldset id="enterprise" class="field">
+    <legend>Gemini Enterprise (optional)</legend>
+    <label for="gcp-project">Project</label>
+    <input type="text" id="gcp-project" autocomplete="off" spellcheck="false">
+    <label for="gcp-location">Location</label>
+    <input type="text" id="gcp-location" autocomplete="off" spellcheck="false">
+  </fieldset>
+
+  <div class="actions">
+    <button type="button" id="save-settings">Save</button>
+    <span id="save-state" class="note" role="status"></span>
+  </div>
+</section>
+
+<section id="session" class="session">
+  <div class="row">
+    <button type="button" id="start-review" disabled>Review</button>
+    <button type="button" id="stop-turn" disabled>Stop</button>
+    <button type="button" id="open-report" disabled>Open report</button>
+    <button type="button" id="open-folder" disabled>Open run folder</button>
+    <button type="button" id="open-log">View log</button>
+  </div>
+  <span id="run-dir" class="note"></span>
+  <span id="stream-state" class="note" role="status"></span>
+</section>
+
+<main id="transcript" class="transcript" aria-live="polite"></main>
+
+<section id="coverage-panel" class="panel" hidden></section>
+
+<!--
+  A form so Enter sends the follow-up. It never submits: the handler cancels it, and the CSP's
+  `form-action 'none'` is the backstop if a handler is ever lost.
+-->
+<form id="followup" class="followup">
+  <label for="followup-text" class="visually-hidden">Follow-up question</label>
+  <input type="text" id="followup-text" autocomplete="off"
+         placeholder="Ask a follow-up about any finding" disabled>
+  <button type="submit" id="followup-send" disabled>Send</button>
+</form>
+
+<script src="render.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -11,7 +11,11 @@ One command per row of the contract, and three rules that hold for all of them:
 - diagnostics go to stderr. stdout carries the result and only the result.
 
 This module holds no logic of its own: every command is a thin shell around the library
-(`ingest`, `agent.runner`, `report`, `tools`, `benchmark`). Two hooks make it testable
+(`ingest`, `agent.runner`, `report`, `tools`, `benchmark`). The one exception is
+`audit-secrets`, whose whole subject is this process's environment and the filesystem
+under it - there is no library layer beneath it for a command to be a shell around, and
+inventing one for a single caller would be the abstraction the constitution forbids. Two
+hooks make it testable
 without a network: `provider_factory`, which turns the resolved `ProviderSettings` into
 the one adapter a run talks to, and `_review_fn`, the per-package review the benchmark
 runner calls.
@@ -32,7 +36,8 @@ from __future__ import annotations
 import inspect
 import json
 import os
-from collections.abc import Callable, Iterator
+import re
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
@@ -59,6 +64,7 @@ from swreview.benchmark.runner import run_benchmark
 from swreview.benchmark.scorecard import render_scorecard_md, score_run
 from swreview.benchmark.sets import BenchmarkSet, load_set
 from swreview.benchmark.timing import record_timing
+from swreview.chat import DEFAULT_ALLOW_ORIGIN, DEFAULT_RUN_ROOT
 from swreview.checks.golden_interference import interference_case
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.ingest.package_builder import build_package
@@ -89,9 +95,14 @@ exceptions_app = typer.Typer(
     no_args_is_help=True,
     help="Retained exceptions: accept a finding, list what is active.",
 )
+chat_app = typer.Typer(
+    no_args_is_help=True,
+    help="The loopback chat backend the SOLIDWORKS Task Pane talks to.",
+)
 app.add_typer(check_app, name="check")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(exceptions_app, name="exceptions")
+app.add_typer(chat_app, name="chat")
 
 FAKE_REVIEW_SCRIPT: tuple[ScriptedTurn, ...] = (
     ScriptedTurn(
@@ -1018,6 +1029,223 @@ def benchmark_time(
         f"net saved: {timing.net_saved_minutes}",
     ]
     _emit(payload, lines, json_output)
+
+
+# --- chat serve ------------------------------------------------------------------
+
+
+@chat_app.command("serve")
+def chat_serve(
+    port: Annotated[
+        int, typer.Option("--port", help="TCP port; 0 lets the OS pick a free one.")
+    ] = 0,
+    allow_origin: Annotated[
+        str, typer.Option("--allow-origin", help="The page origin allowed to call it.")
+    ] = DEFAULT_ALLOW_ORIGIN,
+    run_root: Annotated[
+        Path | None,
+        typer.Option("--run-root", help="Run folders live here; a run_dir must be inside it."),
+    ] = None,
+    fail_bridge: Annotated[
+        int,
+        typer.Option("--fail-bridge", help="Force the first N bridge calls to fail; test hook."),
+    ] = 0,
+    dev: Annotated[
+        bool, typer.Option("--dev", help="Development build: offer the scripted provider.")
+    ] = False,
+) -> None:
+    """Serve the Task Pane chat backend on 127.0.0.1 and print `{port, token}` once.
+
+    The first line on stdout is the handshake and nothing else is ever printed there; the
+    add-in reads it to reach the backend (`contracts/chat-api.md`). Everything this command
+    does lives in `swreview.chat.__main__`, which `python -m swreview.chat` runs with the
+    same arguments - one implementation, two ways in.
+
+    The import is deliberately inside the function: `starlette`, `uvicorn` and the chat
+    backend are not loaded by `swreview review` or by any check command.
+    """
+    from swreview.chat.__main__ import serve
+
+    serve(
+        port=port,
+        allow_origin=allow_origin,
+        run_root=run_root if run_root is not None else DEFAULT_RUN_ROOT,
+        fail_bridge=fail_bridge,
+        development=dev,
+    )
+
+
+# --- audit-secrets ----------------------------------------------------------------
+
+
+KEY_ENV_VARS: tuple[str, ...] = ("OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY")
+"""Every variable a provider key can be configured in - all of them, deliberately.
+
+`ProviderSettings.from_env` resolves `GOOGLE_API_KEY` ahead of `GEMINI_API_KEY` because a
+run needs exactly one key; an audit wants the opposite, so this list is not built from
+that precedence. A key sitting in the variable the last run did not pick is still a key
+that must not be in a file.
+"""
+
+KEY_SHAPES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("shape:openai-key", re.compile(r"sk-[A-Za-z0-9_-]{20,}")),
+    ("shape:google-key", re.compile(r"AIza[A-Za-z0-9_-]{35}")),
+)
+"""What a provider key looks like, for the run this command was made for.
+
+On the workstation the key is DPAPI-protected under `%APPDATA%` and is decrypted into the
+backend child's environment block only, so an audit started from a separate shell has no
+key to search for and an environment-only scan would report "none" no matter what is in
+the files. These two patterns are what carry the check there: `sk-` plus at least twenty
+key characters covers both OpenAI key formats, and `AIza` plus thirty-five is the shape
+Google issues. They are a safety net over the verbatim search, not a replacement for it -
+a key from a settings file this shell cannot see has no verbatim value to match.
+"""
+
+
+def _secret_env_names(bridge_secret_env: str | None) -> list[str]:
+    """The variables this audit reads a secret from: the key ones, plus the bridge one.
+
+    The bridge secret is named by its variable rather than passed as a value because a
+    secret on a command line is visible in the process list.
+    """
+    names = [*KEY_ENV_VARS]
+    if bridge_secret_env is not None and bridge_secret_env not in names:
+        names.append(bridge_secret_env)
+    return names
+
+
+def _configured_secrets(bridge_secret_env: str | None) -> list[tuple[str, str]]:
+    """`(source, value)` for every secret this shell actually holds.
+
+    A variable that is set but blank is not a secret - that is the common Windows case,
+    and treating `""` as a value would both match every line of every file and make a
+    vacuous run look armed.
+    """
+    found = []
+    for name in _secret_env_names(bridge_secret_env):
+        value = os.environ.get(name, "").strip()
+        if value:
+            found.append((f"env:{name}", value))
+    return found
+
+
+def _files_under(paths: Sequence[Path]) -> list[Path]:
+    """Every file under each argument, de-duplicated and in a stable order.
+
+    A file given directly is itself, so a single log can be audited without its folder.
+
+    Raises:
+        FileNotFoundError: naming the argument that is neither a file nor a directory.
+    """
+    files: list[Path] = []
+    for path in paths:
+        resolved = path.resolve()
+        if resolved.is_file():
+            files.append(resolved)
+            continue
+        if not resolved.is_dir():
+            raise FileNotFoundError(f"{path} is not a file or a directory")
+        files.extend(sorted(child for child in resolved.rglob("*") if child.is_file()))
+    return list(dict.fromkeys(files))
+
+
+def _scan_file(
+    path: Path,
+    secrets: Sequence[tuple[str, str]],
+    shapes: Sequence[tuple[str, re.Pattern[str]]],
+) -> list[dict[str, Any]]:
+    """Every hit in one file, as `{file, line, source}`; the value itself is never kept.
+
+    Read a line at a time and decoded leniently: a run folder holds screenshots and a log
+    folder holds whatever a crash wrote, and one byte that is not UTF-8 is no reason to
+    stop looking at the rest of the file. A secret never spans a newline, so a line is a
+    safe unit and keeps the whole of a long `events.jsonl` out of memory.
+
+    Raises:
+        OSError: if the file cannot be opened or read; the caller reports it as coverage
+            the audit does not have rather than skipping it.
+    """
+    hits: list[dict[str, Any]] = []
+    with path.open(encoding="utf-8", errors="replace") as handle:
+        for number, line in enumerate(handle, start=1):
+            for source, value in secrets:
+                if value in line:
+                    hits.append({"file": str(path), "line": number, "source": source})
+            for source, pattern in shapes:
+                if pattern.search(line):
+                    hits.append({"file": str(path), "line": number, "source": source})
+    return hits
+
+
+@app.command("audit-secrets")
+def audit_secrets(
+    paths: Annotated[
+        list[Path], typer.Argument(help="Directories (or single files) to scan, recursively.")
+    ],
+    bridge_secret_env: Annotated[
+        str | None,
+        typer.Option("--bridge-secret-env", help="Variable name holding the bridge secret."),
+    ] = None,
+    detectors: Annotated[
+        bool,
+        typer.Option("--detectors/--no-detectors", help="Also flag provider-shaped keys."),
+    ] = True,
+    json_output: JsonFlag = False,
+) -> None:
+    """Report any configured secret that reached a file under `paths` (FR-015).
+
+    Exit 1 and name the file and line for every hit, exit 0 when there is none, and exit 1
+    without scanning anything when the command has *nothing to detect with* - no key in
+    the environment, no bridge secret, and `--no-detectors`. That last case is the one
+    worth being loud about: a green "none" from a run that never had a value to search for
+    says only that it did not look, and the quickstart reads it as proof that the key
+    stayed out of the run folder.
+
+    A file that cannot be read is reported and exits 1 for the same reason: it is coverage
+    the audit does not have, and reporting "none" over it is the false green the whole
+    command exists to prevent.
+
+    Neither the secret nor the line it was found on is ever printed. The output names the
+    variable or the pattern that matched, which is what an engineer needs to go and fix it,
+    and nothing that copies the leak into a terminal history or a CI log.
+    """
+    with _errors_as_exit_1():
+        secrets = _configured_secrets(bridge_secret_env)
+        shapes = KEY_SHAPES if detectors else ()
+        if not secrets and not shapes:
+            searched = ", ".join(_secret_env_names(bridge_secret_env))
+            raise ValueError(
+                f"nothing to detect with: none of {searched} is set and --no-detectors was "
+                "given, so this scan could only report what it did not look for"
+            )
+        files = _files_under(paths)
+        leaks: list[dict[str, Any]] = []
+        unreadable: list[str] = []
+        for file in files:
+            try:
+                leaks.extend(_scan_file(file, secrets, shapes))
+            except OSError:
+                unreadable.append(str(file))
+
+    sources = [source for source, _ in secrets] + [source for source, _ in shapes]
+    payload = {
+        "paths": [str(path.resolve()) for path in paths],
+        "sources": sources,
+        "files_scanned": len(files),
+        "leaks": leaks,
+        "unreadable": unreadable,
+    }
+    lines = [f"{leak['file']}:{leak['line']}: {leak['source']}" for leak in leaks]
+    lines += [f"could not read {path}" for path in unreadable]
+    if not lines:
+        lines = [
+            f"none: no configured secret appears in {len(files)} files "
+            f"(sources: {', '.join(sources)})"
+        ]
+    _emit(payload, lines, json_output)
+    if leaks or unreadable:
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":  # pragma: no cover
