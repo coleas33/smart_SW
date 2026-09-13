@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smart-sw.local/contracts/scorecard.schema.json",
+  "title": "Scorecard",
+  "description": "Result of running the reviewer over a benchmark set and scoring against withheld answer keys. Field rules: data-model.md section 3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "benchmark_set", "scored_at", "per_package", "aggregate", "distribution"],
+  "properties": {
+    "run_id": { "type": "string" },
+    "benchmark_set": { "type": "string" },
+    "scored_at": { "type": "string", "format": "date-time" },
+    "per_package": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/PackageScore" } },
+    "aggregate": { "$ref": "#/$defs/Aggregate" },
+    "distribution": { "type": "array", "items": { "type": ["number", "null"] }, "description": "net_saved_minutes per package, same order as per_package" }
+  },
+  "$defs": {
+    "PackageScore": {
+      "type": "object", "additionalProperties": false,
+      "required": ["package_id", "held_out", "session_id", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "baseline_minutes", "assisted_minutes", "unattended_runtime_minutes", "net_saved_minutes", "matched_defect_ids", "missed_defect_ids", "false_alarm_finding_ids"],
+      "properties": {
+        "package_id": { "type": "string" }, "held_out": { "type": "boolean" }, "session_id": { "type": "string" },
+        "valid_findings": { "type": "integer", "minimum": 0 },
+        "missed_known_defects": { "type": "integer", "minimum": 0 },
+        "false_alarms": { "type": "integer", "minimum": 0 },
+        "unresolved_count": { "type": "integer", "minimum": 0 },
+        "baseline_minutes": { "type": ["number", "null"] },
+        "assisted_minutes": { "type": ["number", "null"] },
+        "unattended_runtime_minutes": { "type": "number", "minimum": 0 },
+        "net_saved_minutes": { "type": ["number", "null"] },
+        "matched_defect_ids": { "type": "array", "items": { "type": "string" } },
+        "missed_defect_ids": { "type": "array", "items": { "type": "string" } },
+        "false_alarm_finding_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "Aggregate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["packages", "held_out_packages", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "recall", "false_alarm_rate", "median_net_saved_minutes", "packages_with_timing"],
+      "properties": {
+        "packages": { "type": "integer", "minimum": 1 }, "held_out_packages": { "type": "integer", "minimum": 0 },
+        "valid_findings": { "type": "integer", "minimum": 0 }, "missed_known_defects": { "type": "integer", "minimum": 0 },
+        "false_alarms": { "type": "integer", "minimum": 0 }, "unresolved_count": { "type": "integer", "minimum": 0 },
+        "recall": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "matched / (matched + missed) over held-out packages; null if no known defects" },
+        "false_alarm_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "false_alarms / (valid_findings + false_alarms); null if no findings" },
+        "median_net_saved_minutes": { "type": ["number", "null"] },
+        "packages_with_timing": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

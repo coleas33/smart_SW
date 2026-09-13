@@ -1,0 +1,24 @@
+# Normalize line endings in the repo; check out as-is on each platform.
+* text=auto
+
+# Scripts and configs that must stay LF
+*.sh text eol=lf
+*.ps1 text
+*.yml text
+*.yaml text
+*.json text
+*.md text
+
+# Binary assets
+*.png binary
+*.glb binary
+*.stl binary
+*.pdf binary
+*.SLDPRT binary
+*.SLDASM binary
+*.SLDDRW binary
+*.sldprt binary
+*.sldasm binary
+*.slddrw binary
+*.step binary
+*.stp binary

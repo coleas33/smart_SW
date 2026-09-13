@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+
+# Type checking
+.mypy_cache/
+
+# Testing
+.pytest_cache/
+.hypothesis/
+htmlcov/
+.coverage
+coverage.xml
+
+# IDE
+.cursor/
+.vscode/
+.idea/
+
+# AI tools
+# Track spec-kit skills and workflows; ignore per-machine Claude state.
+.claude/*
+!.claude/workflows/
+!.claude/skills/
+.claude/settings.local.json
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Environment
+.env
+.env.*
+!.env.template
+
+# Golden test fixtures — committed after Phase 4 completion for Rust port
+# data/benchmarks/golden/  # now tracked
+*.zip
+settings.json
+settings.local.json
+.cursorignore
+# Output — GIFs are committed for reference
+# output/
+
+# Browser-automation / screenshot scratch — produced by Playwright MCP
+# and ad-hoc Claude Code sessions when poking at the deployed web app.
+# Always at repo root, never under linkage-sim-rs/, so a top-level
+# pattern is sufficient.
+.playwright-mcp/
+.superpowers/
+/linkage-*.png
+
+# Spec Kit: .specify/.gitignore already excludes feature.json and local extension config
+
+# Review runs and build output (see specs/001-agentic-design-review/plan.md)
+reviewer/runs/
+extractor/**/bin/
+extractor/**/obj/
+*.user
