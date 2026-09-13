@@ -103,7 +103,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T040 [US1] Write `reviewer/src/swreview/agent/prompts/system_v1.md` (commitments in contracts/agent-tools.md "System prompt commitments") and `reviewer/src/swreview/agent/checklist_v1.yaml` (mandatory review checklist: provenance, drawing completeness of manufacturing inputs, interfaces, fasteners, interference, tolerances, coverage close-out)
 - [X] T041 [US1] Implement `reviewer/src/swreview/agent/runner.py`: `client.beta.messages.tool_runner(model="claude-opus-5", max_tokens=64000, output_config={"effort": effort}, tools=..., messages=...)` with streaming, message mirroring, `pause_turn` restart cap, `max_steps`, and session finalization (open requests and unchecked checklist items become `unresolved` coverage)
 - [X] T042 [US1] Implement `reviewer/src/swreview/report/markdown.py` (discrepancies, findings grouped by severity, evidence requests, coverage, navigation links) and `reviewer/src/swreview/report/dispositions.py`
-- [ ] T043 [US1] Implement `reviewer/src/swreview/cli.py` commands `validate`, `ingest`, `review`, `report`, `disposition` per contracts/cli.md with exit codes 0/1/2 and `--json`
+- [X] T043 [US1] Implement `reviewer/src/swreview/cli.py` commands `validate`, `ingest`, `review`, `report`, `disposition` per contracts/cli.md with exit codes 0/1/2 and `--json`
 - [ ] T044 [US1] Assemble `benchmarks/packages/cover-blind-tap/` (manifest, BOM, drawing PDFs with one flattened page, seeded drill-depth-only hole) and run quickstart Scenario 1; record the day-one result and time in `benchmarks/packages/cover-blind-tap/notes.md`
 
 **Checkpoint**: US1 delivers an evidence-linked review on exported files with no SOLIDWORKS process.
@@ -189,7 +189,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 
 - [X] T079 [P] [US4] Implement `reviewer/src/swreview/checks/fit.py` (`check_fit(bore: Dimension, shaft: Dimension) -> CheckResult`)
 - [X] T080 [P] [US4] Implement `reviewer/src/swreview/checks/stack.py` (`check_axial_stack(dims, signs, target) -> CheckResult`, worst-case model)
-- [ ] T081 [US4] Add tools `check_fit` and `check_axial_stack` to `reviewer/src/swreview/tools/checks.py` (resolve `SourceRef`s to `Dimension`s in the package; refuse raw numbers) and CLI `check fit|stack`
+- [X] T081 [US4] Add tools `check_fit` and `check_axial_stack` to `reviewer/src/swreview/tools/checks.py` (resolve `SourceRef`s to `Dimension`s in the package; refuse raw numbers) and CLI `check fit|stack`
 - [X] T082 [US4] Create golden fixtures `reviewer/tests/golden/fixtures/{shaft-bore,plate-stack,mixed-units,angle-not-length}/` with expected findings; `angle-not-length` must produce an error result, never a number
 
 **Checkpoint**: Fit and stack checks reproduce hand calculations and never default a tolerance.
@@ -236,8 +236,8 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 ### Implementation for User Story 6
 
 - [X] T095 [P] [US6] Implement `reviewer/src/swreview/benchmark/sets.py` (`pilot.json` schema: package dirs, held-out flags) and `answer_key.py` (loaded only by the scorer)
-- [ ] T096 [US6] Implement `reviewer/src/swreview/benchmark/runner.py` (runs `review` per package into a run directory; records unattended runtime) and `scorecard.py` (matching, aggregates, `scorecard.json` and `scorecard.md`)
-- [ ] T097 [US6] Add CLI commands `benchmark run|score|time` to `reviewer/src/swreview/cli.py`
+- [X] T096 [US6] Implement `reviewer/src/swreview/benchmark/runner.py` (runs `review` per package into a run directory; records unattended runtime) and `scorecard.py` (matching, aggregates, `scorecard.json` and `scorecard.md`)
+- [X] T097 [US6] Add CLI commands `benchmark run|score|time` to `reviewer/src/swreview/cli.py`
 - [ ] T098 [US6] Assemble `benchmarks/sets/pilot.json` with 5 to 10 packages (including a shaft/bearing fit, a bolted plate stack, a sheet-metal or welded assembly, at least two held out) and their answer keys in `benchmarks/answer_keys/`; record human baseline times with `swreview benchmark time`
 - [ ] T099 [US6] Run `swreview benchmark run` and `score` on the pilot set; commit `runs/benchmark-<date>/scorecard.md` to `benchmarks/results/` and summarize the continue/narrow/revise/stop evidence in `benchmarks/results/checkpoint-2026-10-03.md`
 
