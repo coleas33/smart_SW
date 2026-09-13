@@ -32,20 +32,15 @@ def record_timing(
     """
     session_path = _session_path(run_dir, package_id)
     session = load_session(session_path)
-    current = session.timing
 
-    updated = Timing(
-        baseline_minutes=current.baseline_minutes if baseline is None else baseline,
-        assisted_supervision_minutes=(
-            current.assisted_supervision_minutes if supervision is None else supervision
-        ),
-        assisted_verification_minutes=(
-            current.assisted_verification_minutes if verification is None else verification
-        ),
-        false_alarm_handling_minutes=(
-            current.false_alarm_handling_minutes if false_alarms is None else false_alarms
-        ),
-        unattended_runtime_minutes=current.unattended_runtime_minutes,
+    changes = {
+        "baseline_minutes": baseline,
+        "assisted_supervision_minutes": supervision,
+        "assisted_verification_minutes": verification,
+        "false_alarm_handling_minutes": false_alarms,
+    }
+    updated = session.timing.replace(
+        **{name: value for name, value in changes.items() if value is not None}
     )
     session.timing = updated
     save_session(session, session_path)

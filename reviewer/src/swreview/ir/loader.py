@@ -32,16 +32,29 @@ class LoadedPackage:
         return self.base_dir / Path(relative_path)
 
 
-def _checked_dir(directory: Path | str) -> Path:
-    resolved = Path(directory).resolve()
+def reject_answer_key_path(path: Path | str, reason: str) -> Path:
+    """`path` resolved, unless it lies under `benchmarks/answer_keys/`.
+
+    The one place the answer-key rule is expressed. Every layer that handles a path on
+    the reviewer's behalf - the package loader here, `swreview.benchmark.sets` and
+    `swreview.benchmark.runner` - calls this with the `reason` its own caller needs to
+    read, so the three layers cannot drift apart on what counts as an answer key.
+    Resolution happens first, so a symlink or junction is caught too.
+    """
+    resolved = Path(path).resolve()
     parts = resolved.parts
     for index in range(len(parts) - 1):
         if (parts[index].lower(), parts[index + 1].lower()) == ANSWER_KEY_SEGMENTS:
             raise AnswerKeyAccessError(
-                f"{resolved} is inside benchmarks/answer_keys; answer keys are withheld "
-                "from the reviewer"
+                f"{resolved} is inside benchmarks/answer_keys; {reason}"
             )
     return resolved
+
+
+def _checked_dir(directory: Path | str) -> Path:
+    return reject_answer_key_path(
+        directory, "answer keys are withheld from the reviewer"
+    )
 
 
 def load_package(directory: Path | str) -> LoadedPackage:

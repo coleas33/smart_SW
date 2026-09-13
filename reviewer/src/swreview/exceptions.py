@@ -319,10 +319,7 @@ class ExceptionStore:
         unverifiable exception must not keep silencing a check (FR-013).
         """
         changed: list[ReviewException] = []
-        by_binding = {
-            (component.persist_ref, component.persist_ref_scope): component.id
-            for component in package.components
-        }
+        by_binding = _binding_index(package)
         for exception in self.exceptions:
             if exception.status != "active":
                 continue
@@ -399,11 +396,16 @@ def _bindings_of(
     )
 
 
-def _component_ids_of(package: EvidencePackage, exception: ReviewException) -> list[str]:
-    by_binding = {
+def _binding_index(package: EvidencePackage) -> dict[tuple[str, str], str]:
+    """`(persist_ref, scope)` to component id: how an exception's binding is looked up."""
+    return {
         (component.persist_ref, component.persist_ref_scope): component.id
         for component in package.components
     }
+
+
+def _component_ids_of(package: EvidencePackage, exception: ReviewException) -> list[str]:
+    by_binding = _binding_index(package)
     ids = [by_binding.get(binding) for binding in exception.bindings]
     if any(component_id is None for component_id in ids):
         raise LookupError(

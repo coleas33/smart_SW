@@ -244,6 +244,25 @@ def test_a_failed_capture_records_the_hosts_gap(make_package: MakePackage) -> No
     assert context.ir.gaps[-1].entity_kind == "capture"
 
 
+def test_a_malformed_host_gap_is_recorded_rather_than_dropped(make_package: MakePackage) -> None:
+    malformed = {"kind": "no_such_kind", "reason": "select failed"}
+    bridge = FakeBridge(
+        raises=BridgeError("could not select", {"capture": None, "path": None, "gap": malformed})
+    )
+    context = bridged(make_package, bridge)
+    before = len(context.ir.gaps)
+    with use_context(context):
+        result = bridge_tools.bridge_capture("YWJj", "iso")
+
+    assert "recorded as a gap" in result["error"]
+    assert len(context.ir.gaps) == before + 1
+    recorded = context.ir.gaps[-1]
+    assert recorded.kind == "tool_error"
+    assert recorded.entity_kind == "bridge_gap"
+    assert "no_such_kind" in recorded.reason
+    assert recorded.error
+
+
 # --- bridge_measure ----------------------------------------------------------------
 
 

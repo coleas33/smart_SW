@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 
 from swreview.findings import ReviewModel
-from swreview.ir.loader import ANSWER_KEY_SEGMENTS, AnswerKeyAccessError
+from swreview.ir.loader import reject_answer_key_path
 
 
 class BenchmarkPackageRef(ReviewModel):
@@ -30,19 +30,6 @@ class BenchmarkPackageRef(ReviewModel):
 class BenchmarkSet(ReviewModel):
     name: str
     packages: list[BenchmarkPackageRef]
-
-
-def _reject_answer_key_path(path: Path) -> Path:
-    """Raise `AnswerKeyAccessError` if `path` resolves under `benchmarks/answer_keys/`."""
-    resolved = path.resolve()
-    parts = resolved.parts
-    for index in range(len(parts) - 1):
-        if (parts[index].lower(), parts[index + 1].lower()) == ANSWER_KEY_SEGMENTS:
-            raise AnswerKeyAccessError(
-                f"{resolved} is inside benchmarks/answer_keys; a benchmark set may not "
-                "reference an answer key as a package"
-            )
-    return resolved
 
 
 def load_set(path: Path | str) -> BenchmarkSet:
@@ -62,7 +49,9 @@ def load_set(path: Path | str) -> BenchmarkSet:
     for entry in payload["packages"]:
         raw_path = Path(entry["path"])
         candidate = raw_path if raw_path.is_absolute() else repo_root / raw_path
-        resolved = _reject_answer_key_path(candidate)
+        resolved = reject_answer_key_path(
+            candidate, "a benchmark set may not reference an answer key as a package"
+        )
         packages.append(
             BenchmarkPackageRef(
                 package_id=entry["package_id"],

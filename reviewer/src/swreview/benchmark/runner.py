@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from swreview.benchmark.sets import BenchmarkSet, load_set
-from swreview.ir.loader import ANSWER_KEY_SEGMENTS, AnswerKeyAccessError
+from swreview.ir.loader import reject_answer_key_path
 from swreview.report.session import load_session, save_session
 
 ReviewFn = Callable[..., Any]
@@ -33,14 +33,9 @@ def _default_review_fn(package_dir: Path, session_out_dir: Path, *, model: str, 
 
 
 def _reject_answer_key_path(path: Path) -> None:
-    resolved = Path(path).resolve()
-    parts = resolved.parts
-    for index in range(len(parts) - 1):
-        if (parts[index].lower(), parts[index + 1].lower()) == ANSWER_KEY_SEGMENTS:
-            raise AnswerKeyAccessError(
-                f"{resolved} is inside benchmarks/answer_keys; the benchmark runner never "
-                "passes an answer-key path to the reviewer"
-            )
+    reject_answer_key_path(
+        path, "the benchmark runner never passes an answer-key path to the reviewer"
+    )
 
 
 def _record_unattended_runtime(session_out_dir: Path, elapsed_minutes: float) -> None:
@@ -53,14 +48,7 @@ def _record_unattended_runtime(session_out_dir: Path, elapsed_minutes: float) ->
     if not session_path.is_file():
         return
     session = load_session(session_path)
-    current = session.timing
-    session.timing = current.__class__(
-        baseline_minutes=current.baseline_minutes,
-        assisted_supervision_minutes=current.assisted_supervision_minutes,
-        assisted_verification_minutes=current.assisted_verification_minutes,
-        false_alarm_handling_minutes=current.false_alarm_handling_minutes,
-        unattended_runtime_minutes=elapsed_minutes,
-    )
+    session.timing = session.timing.replace(unattended_runtime_minutes=elapsed_minutes)
     save_session(session, session_path)
 
 

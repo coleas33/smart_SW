@@ -37,7 +37,6 @@ from swreview.report.session import (
     CoverageItem,
     CoverageScope,
     ReviewSession,
-    Timing,
     save_session,
 )
 from swreview.tools.context import DEFAULT_MODEL, ToolContext, build_context
@@ -143,12 +142,8 @@ def finalize_session(context: ToolContext, started: datetime) -> ReviewSession:
         )
     ended = datetime.now(UTC)
     review.ended_at = ended
-    review.timing = Timing(
-        baseline_minutes=review.timing.baseline_minutes,
-        assisted_supervision_minutes=review.timing.assisted_supervision_minutes,
-        assisted_verification_minutes=review.timing.assisted_verification_minutes,
-        false_alarm_handling_minutes=review.timing.false_alarm_handling_minutes,
-        unattended_runtime_minutes=(ended - started).total_seconds() / 60.0,
+    review.timing = review.timing.replace(
+        unattended_runtime_minutes=(ended - started).total_seconds() / 60.0
     )
     return review
 

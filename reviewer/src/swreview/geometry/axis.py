@@ -16,7 +16,14 @@ import numpy as np
 
 from swreview.ir.models import Axis, FaceGeometry, Quantity, Vec3
 
-__all__ = ["ANGLE_TOL_RAD", "DISTANCE_TOL_M", "AxisRelation", "axis_distance", "face_gap"]
+__all__ = [
+    "ANGLE_TOL_RAD",
+    "DISTANCE_TOL_M",
+    "AxisRelation",
+    "axis_distance",
+    "face_gap",
+    "unit_vector",
+]
 
 AxisRelationKind = Literal["parallel", "skew", "intersecting", "coincident"]
 
@@ -37,7 +44,13 @@ class AxisRelation:
     relation: AxisRelationKind
 
 
-def _unit(vector: Vec3, what: str) -> np.ndarray:
+def unit_vector(vector: Vec3, what: str) -> np.ndarray:
+    """`vector` normalised, or `ValueError` naming `what` when it has no direction.
+
+    The one normalisation in the reviewer: an axis, a face normal and a fastener axis are
+    all directions the extractor emitted, and a zero-length one is a missing input, not a
+    direction to approximate (constitution Principle I).
+    """
     array = np.array([vector.x, vector.y, vector.z], dtype=float)
     norm = float(np.linalg.norm(array))
     if norm == 0.0:
@@ -83,9 +96,9 @@ def axis_distance(a: Axis, b: Axis) -> AxisRelation:
     """
     return _line_relation(
         _point(a.origin),
-        _unit(a.direction, "axis a"),
+        unit_vector(a.direction, "axis a"),
         _point(b.origin),
-        _unit(b.direction, "axis b"),
+        unit_vector(b.direction, "axis b"),
     )
 
 
@@ -96,8 +109,8 @@ def _as_mm(metres: float) -> Quantity:
 def _plane_gap(a: FaceGeometry, b: FaceGeometry) -> Quantity | Literal["unsupported"]:
     if a.plane is None or b.plane is None:
         return "unsupported"
-    normal_a = _unit(a.plane.normal, f"face {a.id}")
-    normal_b = _unit(b.plane.normal, f"face {b.id}")
+    normal_a = unit_vector(a.plane.normal, f"face {a.id}")
+    normal_b = unit_vector(b.plane.normal, f"face {b.id}")
     if math.acos(min(1.0, abs(float(np.dot(normal_a, normal_b))))) > ANGLE_TOL_RAD:
         return "unsupported"
     between = _point(b.plane.origin) - _point(a.plane.origin)
@@ -109,9 +122,9 @@ def _cylinder_gap(a: FaceGeometry, b: FaceGeometry) -> Quantity | Literal["unsup
         return "unsupported"
     relation = _line_relation(
         _point(a.cylinder.axis_origin),
-        _unit(a.cylinder.axis_dir, f"face {a.id}"),
+        unit_vector(a.cylinder.axis_dir, f"face {a.id}"),
         _point(b.cylinder.axis_origin),
-        _unit(b.cylinder.axis_dir, f"face {b.id}"),
+        unit_vector(b.cylinder.axis_dir, f"face {b.id}"),
     )
     if relation.relation != "coincident":
         return "unsupported"

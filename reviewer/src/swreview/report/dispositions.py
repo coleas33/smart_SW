@@ -24,7 +24,12 @@ _DECISIONS: frozenset[str] = frozenset({"accepted", "rejected", "deferred"})
 _ALLOWED_FROM_DEFERRED: frozenset[str] = frozenset({"accepted", "rejected"})
 
 
-def _find_finding(session: ReviewSession, finding_id: str) -> Finding:
+def find_finding(session: ReviewSession, finding_id: str) -> Finding:
+    """The finding `finding_id` names, or `KeyError`.
+
+    Public because the CLI looks a finding up for `exceptions accept` as well; one
+    implementation means both paths refuse an unknown id the same way.
+    """
     for finding in session.findings:
         if finding.id == finding_id:
             return finding
@@ -67,7 +72,7 @@ def apply_disposition(
     run_dir = Path(run_dir)
     session = load_session(run_dir / SESSION_FILE_NAME)
 
-    finding = _find_finding(session, finding_id)
+    finding = find_finding(session, finding_id)
     _validate_transition(finding, decision)
 
     finding.disposition = Disposition(
@@ -83,4 +88,4 @@ def apply_disposition(
     return session
 
 
-__all__ = ["apply_disposition"]
+__all__ = ["apply_disposition", "find_finding"]

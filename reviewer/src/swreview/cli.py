@@ -46,7 +46,7 @@ from swreview.ingest.package_builder import build_package
 from swreview.ir.loader import AnswerKeyAccessError, load_package
 from swreview.ir.models import UnsupportedSchemaVersionError
 from swreview.ir.summary import summarize
-from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition
+from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition, find_finding
 from swreview.report.markdown import render_report
 from swreview.report.session import load_session, save_session
 from swreview.tools import checks_fastener, checks_fit
@@ -634,7 +634,7 @@ def exceptions_accept(
     with _errors_as_exit_1():
         session_file = Path(run_dir).resolve() / SESSION_FILE_NAME
         session = load_session(session_file)
-        finding = _find_finding(session, finding_id)
+        finding = find_finding(session, finding_id)
         store, evidence = _store_for(package)
         exception = store.accept(finding, evidence, by=accepted_by, note=note)
         store.save()
@@ -659,13 +659,6 @@ def exceptions_accept(
         f"wrote {store.path}",
     ]
     _emit(payload, lines, json_output)
-
-
-def _find_finding(session: Any, finding_id: str) -> Any:
-    for finding in session.findings:
-        if finding.id == finding_id:
-            return finding
-    raise KeyError(f"no finding {finding_id!r} in this session")
 
 
 @exceptions_app.command("list")

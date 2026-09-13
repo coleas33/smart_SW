@@ -42,7 +42,7 @@ from pydantic import ValidationError
 from swreview.checks import fastener as joint_check
 from swreview.checks import hole_alignment as alignment_check
 from swreview.checks.result import round_length
-from swreview.geometry.axis import axis_distance
+from swreview.geometry.axis import axis_distance, unit_vector
 from swreview.ir.models import Axis, ComponentInstance, Fastener, Quantity, SourceRef
 from swreview.tools.context import (
     ToolContext,
@@ -118,11 +118,11 @@ def _stated_thickness(context: ToolContext, component: ComponentInstance) -> flo
 
 def _bbox_extent_mm(context: ToolContext, component_id: str, axis: Axis) -> float | None:
     """The extent of the component's extracted face boxes along `axis`, in millimetres."""
-    direction = np.array([axis.direction.x, axis.direction.y, axis.direction.z], dtype=float)
-    norm = float(np.linalg.norm(direction))
-    if norm == 0.0:
+    try:
+        direction = unit_vector(axis.direction, f"the fastener axis over {component_id}")
+    except ValueError:
+        # No direction to project along, so the extent along it is unknown, not zero.
         return None
-    direction /= norm
 
     projections: list[float] = []
     for face in context.ir.faces:
