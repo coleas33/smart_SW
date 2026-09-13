@@ -24,6 +24,8 @@ nothing here reformats a value. The rules that keep this side honest:
 
 from __future__ import annotations
 
+import json
+
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -81,13 +83,27 @@ def _unique_capture_id(context: ToolContext, proposed: str | None) -> str:
 
 
 def _record_gap(context: ToolContext, raw: Any) -> str | None:
-    """Append a `Gap` the host attached to a failure; returns its reason, or `None`."""
-    if not isinstance(raw, dict):
+    """Append a `Gap` the host attached to a failure; returns its reason, or `None`.
+
+    `None` means the host attached nothing. A gap the host did send but that does not
+    parse is still recorded, as a `tool_error` gap carrying the raw payload and the
+    validation error, so that a failure the host reported can never vanish from coverage.
+    """
+    if raw is None:
         return None
     try:
+        if not isinstance(raw, dict):
+            raise TypeError(f"gap payload is {type(raw).__name__}, not an object")
         gap = Gap.model_validate(raw)
-    except ValidationError:
-        return None
+    except (ValidationError, TypeError) as exc:
+        gap = Gap(
+            kind="tool_error",
+            entity_kind="bridge_gap",
+            entity_id=None,
+            reason="the bridge host attached a gap that could not be parsed; raw payload: "
+            + json.dumps(raw, default=str)[:500],
+            error=str(exc)[:500],
+        )
     context.ir.gaps.append(gap)
     return gap.reason
 

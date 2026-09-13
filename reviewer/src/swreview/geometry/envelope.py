@@ -19,6 +19,7 @@ from functools import lru_cache
 import numpy as np
 import trimesh
 
+from swreview.geometry.axis import unit_vector
 from swreview.ir.models import Axis
 
 __all__ = [
@@ -74,12 +75,7 @@ def _perpendicular_basis(direction: np.ndarray) -> tuple[np.ndarray, np.ndarray]
 
 def _ray_origins(axis: Axis, radius_m: float) -> tuple[np.ndarray, np.ndarray]:
     """Origins on the head-plane envelope circle (plus its centre) and the travel direction."""
-    direction = np.array([axis.direction.x, axis.direction.y, axis.direction.z], dtype=float)
-    norm = float(np.linalg.norm(direction))
-    if norm == 0.0:
-        raise ValueError("fastener_axis has a zero-length direction vector")
-    direction /= norm
-
+    direction = unit_vector(axis.direction, "fastener_axis")
     centre = np.array([axis.origin.x, axis.origin.y, axis.origin.z], dtype=float)
     u, v = _perpendicular_basis(direction)
     angles = np.linspace(0.0, 2.0 * np.pi, RING_RAY_COUNT, endpoint=False)

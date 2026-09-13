@@ -93,6 +93,21 @@ class Timing(ReviewModel):
     unattended_runtime_minutes: float = Field(ge=0)
     net_saved_minutes: float | None = None
 
+    def replace(self, **changes: float | None) -> Timing:
+        """A copy with `changes` applied and `net_saved_minutes` derived again.
+
+        `model_copy` would carry the old `net_saved_minutes` through untouched, so every
+        update goes back through the constructor and the validator below. The three
+        callers that move a timing forward - the agent loop, the benchmark runner and
+        `swreview.benchmark.timing` - all come through here, so none of them can leave a
+        stale net saving behind (FR-026). An unknown field name raises.
+        """
+        fields = self.model_dump(exclude={"net_saved_minutes"})
+        unknown = sorted(set(changes) - set(fields))
+        if unknown:
+            raise ValueError(f"Timing has no field(s) {unknown}")
+        return Timing(**{**fields, **changes})
+
     @model_validator(mode="after")
     def _derive_net_saved_minutes(self) -> Timing:
         if self.baseline_minutes is None:
