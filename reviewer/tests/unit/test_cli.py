@@ -16,6 +16,7 @@ to `swreview.agent.runner.run_review`, and the fake below is the same shape as t
 from __future__ import annotations
 
 import json
+import shutil
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +27,7 @@ from anthropic.lib.tools import ToolError
 from typer.testing import CliRunner
 
 from swreview import cli
+from swreview.checks.golden_interference import interference_case
 from swreview.ir.loader import save_package
 from swreview.ir.models import EvidencePackage
 from tests.unit.test_tools_checks_fastener import joint_package
@@ -873,6 +875,152 @@ def test_check_alignment_with_an_unknown_hole_exits_1(joint_package_dir: Path) -
 
     assert result.exit_code == 1
     assert "hole:nope" in result.stderr
+
+
+# --- check interference ----------------------------------------------------------
+
+
+INTERFERENCE_FIXTURE = (
+    Path(__file__).resolve().parents[1] / "golden" / "fixtures" / "bracket-assy-interference"
+)
+"""The golden interference package: three conditions, one grouped over six pairs, one
+excepted, one truncated. Every test below runs on a copy, so nothing can write beside it."""
+
+
+@pytest.fixture
+def interference_package_dir(tmp_path: Path) -> Path:
+    directory = tmp_path / "bracket-assy-interference"
+    shutil.copytree(INTERFERENCE_FIXTURE, directory)
+    return directory
+
+
+def test_check_interference_json_is_the_library_case(interference_package_dir: Path) -> None:
+    body = payload(
+        invoke("check", "interference", "--package", str(interference_package_dir), "--json")
+    )
+
+    assert body == interference_case(interference_package_dir)
+
+
+def test_check_interference_json_grades_every_condition(interference_package_dir: Path) -> None:
+    body = payload(
+        invoke("check", "interference", "--package", str(interference_package_dir), "--json")
+    )
+
+    assert [(group["group_key"], group["result"]["status"]) for group in body["groups"]] == [
+        ("cmp:0001|pat:screws", "demonstrated"),
+        ("cmp:0002|cmp:0003", "checked_within_scope"),
+        ("cmp:0001|cmp:0005", "unresolved"),
+    ]
+    assert body["groups"][0]["member_interference_ids"] == [
+        "int:001",
+        "int:002",
+        "int:003",
+        "int:004",
+        "int:005",
+        "int:006",
+    ]
+    assert body["exceptions"] == [
+        {"id": "EX-001", "check": "interference.static", "status": "active"}
+    ]
+    assert [item["scope"]["pairs"] for item in body["unresolved_coverage"]] == [
+        [["cmp:0001", "cmp:0005"]]
+    ]
+
+
+def test_check_interference_human_output_names_each_group_and_its_status(
+    interference_package_dir: Path,
+) -> None:
+    result = invoke("check", "interference", "--package", str(interference_package_dir))
+
+    assert result.exit_code == 0
+    assert "3 interference condition(s)" in result.stdout
+    assert "cmp:0001|pat:screws (Default): detection computed, 6 pair(s)" in result.stdout
+    assert "interference.static: demonstrated (high)" in result.stdout
+    assert "interference.static: checked_within_scope (info)" in result.stdout
+    assert "interference.static: unresolved (medium)" in result.stdout
+
+
+def test_check_interference_human_output_lists_exceptions_and_unresolved_coverage(
+    interference_package_dir: Path,
+) -> None:
+    result = invoke("check", "interference", "--package", str(interference_package_dir))
+
+    assert result.exit_code == 0
+    assert "1 exception(s) after refresh" in result.stdout
+    assert "EX-001 active interference.static" in result.stdout
+    assert "unresolved coverage: 1 item(s)" in result.stdout
+    assert "interference detection truncated for cmp:0001+cmp:0005" in result.stdout
+    assert "detection stopped after 7 pairs (--truncate-after 7)" in result.stdout
+
+
+def test_check_interference_leaves_the_exceptions_file_byte_for_byte(
+    interference_package_dir: Path,
+) -> None:
+    exceptions_file = interference_package_dir / "exceptions.json"
+    before = exceptions_file.read_bytes()
+
+    result = invoke("check", "interference", "--package", str(interference_package_dir))
+
+    assert result.exit_code == 0
+    assert exceptions_file.read_bytes() == before
+
+
+def test_check_interference_reports_a_moved_exception_without_writing_it(
+    interference_package_dir: Path,
+) -> None:
+    """`refresh` flips a stale exception in memory; the command must not persist that."""
+    exceptions_file = interference_package_dir / "exceptions.json"
+    stored = json.loads(exceptions_file.read_text(encoding="utf-8"))
+    stored["exceptions"][0]["configuration"] = "Alternate"
+    exceptions_file.write_text(json.dumps(stored, indent=2), encoding="utf-8")
+    before = exceptions_file.read_bytes()
+
+    body = payload(
+        invoke("check", "interference", "--package", str(interference_package_dir), "--json")
+    )
+
+    assert body["exceptions"] == [
+        {"id": "EX-001", "check": "interference.static", "status": "needs_review"}
+    ]
+    assert body["groups"][1]["result"]["status"] == "demonstrated"
+    assert exceptions_file.read_bytes() == before
+
+
+def test_check_interference_on_a_package_with_no_exceptions_file(
+    interference_package_dir: Path,
+) -> None:
+    """A fresh dump carries no `exceptions.json`; an absent file silences nothing."""
+    (interference_package_dir / "exceptions.json").unlink()
+
+    result = invoke("check", "interference", "--package", str(interference_package_dir))
+    body = payload(
+        invoke("check", "interference", "--package", str(interference_package_dir), "--json")
+    )
+
+    assert result.exit_code == 0
+    assert "0 exception(s) after refresh" in result.stdout
+    assert body["exceptions"] == []
+    assert body["groups"][1]["result"]["status"] == "demonstrated"
+
+
+def test_check_interference_on_a_missing_package_exits_1(tmp_path: Path) -> None:
+    result = invoke("check", "interference", "--package", str(tmp_path / "nowhere"))
+
+    assert result.exit_code == 1
+    assert result.stderr.startswith("error: ")
+
+
+def test_check_interference_with_a_corrupt_exceptions_file_exits_1(
+    interference_package_dir: Path,
+) -> None:
+    (interference_package_dir / "exceptions.json").write_text("{ not json", encoding="utf-8")
+
+    result = invoke("check", "interference", "--package", str(interference_package_dir))
+
+    assert result.exit_code == 1
+    assert result.stderr.startswith("error: ")
+    assert result.stdout == ""
 
 
 # --- exceptions accept | list ----------------------------------------------------

@@ -41,6 +41,7 @@ from swreview.benchmark.runner import run_benchmark
 from swreview.benchmark.scorecard import render_scorecard_md, score_run
 from swreview.benchmark.sets import BenchmarkSet, load_set
 from swreview.benchmark.timing import record_timing
+from swreview.checks.golden_interference import interference_case
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.ingest.package_builder import build_package
 from swreview.ir.loader import AnswerKeyAccessError, load_package
@@ -596,6 +597,42 @@ def check_alignment_command(
     with use_context(context):
         result = checks_fastener.check_hole_alignment(hole_a, hole_b, tolerance_ref)
     _emit_check(result, json_output)
+
+
+# --- check interference ----------------------------------------------------------
+
+
+@check_app.command("interference")
+def check_interference_command(
+    package: PackageOption,
+    json_output: JsonFlag = False,
+) -> None:
+    """Every grouped interference condition in a package, with its retained exceptions.
+
+    Read-only, unlike `exceptions list`: `interference_case` refreshes the store in memory
+    so a stale exception is reported as `needs_review` and silences nothing, but neither it
+    nor this command writes `exceptions.json` back. Grading a package must not edit it.
+    """
+    with _errors_as_exit_1():
+        case = interference_case(package)
+
+    lines = [f"{len(case['groups'])} interference condition(s)"]
+    for group in case["groups"]:
+        lines.append("")
+        lines.append(
+            f"{group['group_key']} ({group['configuration']}): "
+            f"detection {group['detection_status']}, "
+            f"{len(group['member_interference_ids'])} pair(s)"
+        )
+        lines += _finding_lines(group["result"])
+    lines.append("")
+    lines.append(f"{len(case['exceptions'])} exception(s) after refresh")
+    lines += [f"  {item['id']} {item['status']} {item['check']}" for item in case["exceptions"]]
+    lines.append(f"unresolved coverage: {len(case['unresolved_coverage'])} item(s)")
+    for item in case["unresolved_coverage"]:
+        error = item["error"]
+        lines.append(f"  {item['reason']}" + ("" if error is None else f" ({error})"))
+    _emit(case, lines, json_output)
 
 
 # --- exceptions accept | list ----------------------------------------------------

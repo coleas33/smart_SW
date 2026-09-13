@@ -115,6 +115,99 @@ public class PackageWriterTests : IDisposable
     }
 
     [Fact]
+    public void Build_FeatureTypesNoDumperRead_BecomeOneUnsupportedGapPerDocument()
+    {
+        var sources = new FakeSources();
+        sources.SeeFeatureTypes(
+            ("HoleWzd", true),
+            ("CosmeticThread", true),
+            ("AdvHoleWzd", false),
+            ("AdvHoleWzd", false),
+            ("CutExtrude", false));
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Gap gap = Assert.Single(package.Gaps, g => g.EntityKind == "feature");
+        Assert.Equal(GapKind.Unsupported, gap.Kind);
+        Assert.Equal(package.Components[1].DocumentId, gap.EntityId);
+        Assert.Contains("housing.SLDPRT", gap.Reason, StringComparison.Ordinal);
+        Assert.Contains("AdvHoleWzd x2", gap.Reason, StringComparison.Ordinal);
+        Assert.Contains("CutExtrude x1", gap.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("CosmeticThread", gap.Reason, StringComparison.Ordinal);
+        Assert.Null(gap.Error);
+    }
+
+    [Fact]
+    public void Build_FeatureCensusGap_ReadsAsOneLineInValidateOutput()
+    {
+        var sources = new FakeSources();
+        sources.SeeFeatureTypes(("FtrFolder", false));
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        string reason = Assert.Single(package.Gaps, g => g.EntityKind == "feature").Reason;
+        Assert.DoesNotContain('\n', reason);
+        Assert.DoesNotContain('\r', reason);
+    }
+
+    [Fact]
+    public void Build_EveryFeatureTypeWasRead_EmitsNoCensusGap()
+    {
+        var sources = new FakeSources();
+        sources.SeeFeatureTypes(("HoleWzd", true));
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.DoesNotContain(package.Gaps, g => g.EntityKind == "feature");
+    }
+
+    [Fact]
+    public void Build_NoDumperCensusedAnything_EmitsNoCensusGap()
+    {
+        Assert.DoesNotContain(NewWriter().Build(Options()).Gaps, g => g.EntityKind == "feature");
+    }
+
+    [Fact]
+    public void Build_FeatureWithNoTypeName_IsCountedUnderAReadablePlaceholder()
+    {
+        // GetTypeName2 can come back blank; the feature was still walked past and still
+        // not read, so it stays visible in the gap instead of vanishing (Principle I).
+        var sources = new FakeSources();
+        sources.SeeFeatureTypes((string.Empty, false), ("CutExtrude", false));
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        string reason = Assert.Single(package.Gaps, g => g.EntityKind == "feature").Reason;
+        Assert.Contains("(no type name) x1", reason, StringComparison.Ordinal);
+        Assert.Contains("CutExtrude x1", reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_RootFeatureTypesTheTraversalWalkedPast_BecomeAGapForTheRootDocument()
+    {
+        // ComponentTreeDumper censuses the root assembly's own feature tree during
+        // Traverse, before any phase runs; the fake mirrors that.
+        var sources = new FakeSources();
+        sources.SeeRootFeatureTypes(("LocalLPattern", true), ("MateGroup", false));
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Gap gap = Assert.Single(package.Gaps, g => g.EntityKind == "feature");
+        Assert.Equal(package.Components[0].DocumentId, gap.EntityId);
+        Assert.Contains("MateGroup x1", gap.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("LocalLPattern", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_ACensusGapStillValidatesAgainstTheContract()
+    {
+        var sources = new FakeSources();
+        sources.SeeFeatureTypes(("AdvHoleWzd", false));
+
+        IrContract.AssertValid(PackageSerializer.Serialize(NewWriter(sources).Build(Options())));
+    }
+
+    [Fact]
     public void Build_ComponentWithNoPersistRef_BecomesAGapNotAnUnnavigableInstance()
     {
         var sources = new FakeSources();
@@ -342,6 +435,10 @@ public class PackageWriterTests : IDisposable
         private const string HousingPath = @"C:\vault\bracket-assy\housing.SLDPRT";
         private const string ScrewPath = @"C:\vault\toolbox\hex-cap-screw.SLDPRT";
 
+        private readonly List<TypeNameSighting> _holePass = new List<TypeNameSighting>();
+
+        private readonly List<TypeNameSighting> _traversalPass = new List<TypeNameSighting>();
+
         public List<ComponentNode> Nodes { get; } = new List<ComponentNode>
         {
             NewNode("bracket-assy-1", null, AssemblyPath, DocumentKind.Assembly),
@@ -363,6 +460,31 @@ public class PackageWriterTests : IDisposable
 
         public DumpOptions? SeenOptions { get; private set; }
 
+        /// <summary>
+        /// The feature type names the hole phase will report having walked over the housing
+        /// part, the way <see cref="HoleDumper"/> reports one census pass per component.
+        /// </summary>
+        public void SeeFeatureTypes(params (string TypeName, bool Consumed)[] sightings)
+        {
+            foreach ((string TypeName, bool Consumed) sighting in sightings)
+            {
+                _holePass.Add(new TypeNameSighting(sighting.TypeName, sighting.Consumed));
+            }
+        }
+
+        /// <summary>
+        /// The feature type names the traversal will report having walked over the root
+        /// assembly, the way <see cref="ComponentTreeDumper"/> censuses the root's own
+        /// feature tree from inside Traverse.
+        /// </summary>
+        public void SeeRootFeatureTypes(params (string TypeName, bool Consumed)[] sightings)
+        {
+            foreach ((string TypeName, bool Consumed) sighting in sightings)
+            {
+                _traversalPass.Add(new TypeNameSighting(sighting.TypeName, sighting.Consumed));
+            }
+        }
+
         public ComponentTreeResult Traverse(GapCollector gaps, DumpOptions options)
         {
             SeenOptions = options;
@@ -380,6 +502,15 @@ public class PackageWriterTests : IDisposable
             };
 
             tree.Nodes.AddRange(Nodes);
+
+            // Guarded exactly as ComponentTreeDumper.ReadPatternMembership guards it: an
+            // unsaved document has no path to census under, and Build must reach its own
+            // refusal rather than dying inside the census.
+            if (!string.IsNullOrWhiteSpace(RootDocumentPath))
+            {
+                gaps.TypeNames.AddPass(RootDocumentPath, _traversalPass);
+            }
+
             return tree;
         }
 
@@ -458,6 +589,11 @@ public class PackageWriterTests : IDisposable
             if (HoleGap != null)
             {
                 scope.Gaps.Add(GapKind.NotExtracted, "hole", null, HoleGap, null);
+            }
+
+            if (_holePass.Count > 0)
+            {
+                scope.Gaps.TypeNames.AddPass(HousingPath, _holePass);
             }
 
             var result = new HoleDumpResult();

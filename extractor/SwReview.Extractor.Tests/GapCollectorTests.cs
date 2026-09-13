@@ -219,4 +219,24 @@ public class GapCollectorTests
 
         Assert.Throws<ArgumentNullException>(() => gaps.TryStep("hole", null, "reason", (Action)null!));
     }
+
+    /// <summary>
+    /// The collector is the one object all three GetTypeName2 read sites already hold, so
+    /// it carries the census and every dumper censuses into the same one.
+    /// </summary>
+    [Fact]
+    public void TypeNames_IsOneCensusEveryHolderOfTheCollectorSharesAndStartsEmpty()
+    {
+        var gaps = new GapCollector();
+
+        Assert.Empty(gaps.TypeNames.Unconsumed());
+
+        gaps.TypeNames.AddPass(
+            @"C:\vault\housing.SLDPRT", new[] { new TypeNameSighting("CutExtrude", false) });
+
+        Assert.Equal("CutExtrude x1", Assert.Single(gaps.TypeNames.Unconsumed()).Describe());
+
+        // A censused type name is not itself a gap; PackageWriter turns the census into one.
+        Assert.Empty(gaps.Gaps);
+    }
 }

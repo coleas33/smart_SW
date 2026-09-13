@@ -45,6 +45,7 @@ public sealed class MateDumper : IMateSource
         }
 
         var mates = new List<IrMate>();
+        var sightings = new List<TypeNameSighting>();
         SwGate gate = _session.Gate;
 
         var feature = gate.Call("FirstFeature", () => _session.Document.FirstFeature()) as IFeature;
@@ -52,13 +53,21 @@ public sealed class MateDumper : IMateSource
         {
             IFeature current = feature;
             string typeName = gate.Call("GetTypeName2", () => current.GetTypeName2()) ?? string.Empty;
-            if (typeName == MateGroupFeatureType)
+            bool consumed = typeName == MateGroupFeatureType;
+            sightings.Add(new TypeNameSighting(typeName, consumed));
+
+            if (consumed)
             {
                 ReadMateGroup(current, scope, mates);
             }
 
             feature = gate.Call("GetNextFeature", () => current.GetNextFeature()) as IFeature;
         }
+
+        // This walk is over the root assembly's own feature tree, so that is the document
+        // the names belong to. MateGroup is the only name it claims; the component-pattern
+        // walk over the same tree claims the pattern names, and the census unions the two.
+        scope.Gaps.TypeNames.AddPass(scope.Tree.RootDocumentPath, sightings);
 
         return mates;
     }

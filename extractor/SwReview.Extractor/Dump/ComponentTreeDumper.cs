@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using SolidWorks.Interop.sldworks;
@@ -29,18 +29,39 @@ namespace SwReview.Extractor.Dump;
 /// </summary>
 public sealed class ComponentTreeDumper : IComponentTreeSource
 {
-    /// <summary>Feature type names (<c>GetTypeName2</c>) of assembly component patterns.</summary>
+    /// <summary>
+    /// Feature type names (<c>GetTypeName2</c>) of assembly component patterns.
+    ///
+    /// This is a membership test and nothing else, so an extra name is inert - no feature
+    /// returns a name that does not exist - while a missing name fails silently. Names are
+    /// therefore added on evidence and never removed on the strength of a doc page this
+    /// machine cannot reach. The exact set, and the provenance of every name in it, is
+    /// pinned by PatternFeatureTypesTests.
+    /// </summary>
     private static readonly HashSet<string> PatternFeatureTypes = new HashSet<string>(StringComparer.Ordinal)
     {
         "LocalLPattern",
         "LocalCirPattern",
         "LocalSketchPattern",
         "LocalCurvePattern",
+        "LocalChainPattern",
         "DerivedLPattern",
         "DerivedCirPattern",
         "ChainPatternFeat",
         "MirrorComponent",
-        "TablePattern",
+        "MirrorCompFeat",
+
+        // "TablePattern" is commented out rather than deleted. swFmTablePattern = 106 sits
+        // in the PART pattern block of swFeatureNameID_e (CurvePattern 103, SketchPattern
+        // 104, FillPattern 105, TablePattern 106, DimPattern 107), whereas the component
+        // patterns are the Local* family 108-112 plus the Derived* pair and MirrorComponent
+        // 116; SOLIDWORKS 2024 has no table-driven COMPONENT pattern. The module boundary
+        // does not settle it on its own - moTablePattern_c is in sldasmu.dll, but so are
+        // part classes like moLPattern_c - so this stays a claim the type-name census can
+        // refute: if TablePattern ever appears unconsumed in an assembly's census, restore
+        // the line. Left in the set it can only misfire, walking a part feature's
+        // sub-features for components and raising a spurious "listed no component
+        // instances" gap.
     };
 
     private readonly ISwSession _session;
@@ -89,7 +110,7 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             return tree;
         }
 
-        Dictionary<string, string> patternByComponent = ReadPatternMembership(gaps);
+        Dictionary<string, string> patternByComponent = ReadPatternMembership(gaps, rootPath);
 
         // The root component of an assembly is the assembly itself and carries no
         // persistent reference of its own, so it is recorded from the document.
@@ -331,9 +352,10 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
     /// feature's tree children ARE its instances, so the feature tree is walked once and
     /// the answer cached; there is no per-component question to ask in 2024.
     /// </summary>
-    private Dictionary<string, string> ReadPatternMembership(GapCollector gaps)
+    private Dictionary<string, string> ReadPatternMembership(GapCollector gaps, string rootDocumentPath)
     {
         var byComponent = new Dictionary<string, string>(StringComparer.Ordinal);
+        var sightings = new List<TypeNameSighting>();
         SwGate gate = _session.Gate;
 
         var feature = gate.Call("FirstFeature", () => _session.Document.FirstFeature()) as IFeature;
@@ -343,13 +365,33 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             gaps.TryStep("component_pattern", null, "read component pattern membership", () =>
             {
                 string typeName = gate.Call("GetTypeName2", () => current.GetTypeName2()) ?? string.Empty;
-                if (PatternFeatureTypes.Contains(typeName))
+                bool consumed = PatternFeatureTypes.Contains(typeName);
+                sightings.Add(new TypeNameSighting(typeName, consumed));
+
+                if (consumed)
                 {
                     RecordPatternInstances(current, byComponent, gaps);
                 }
             });
 
             feature = gate.Call("GetNextFeature", () => current.GetNextFeature()) as IFeature;
+        }
+
+        // The ten pattern names above are the only ones this walk claims; every other
+        // type name in the root assembly's tree is censused as unread, and the mate walk
+        // over the same tree marks MateGroup read.
+        //
+        // A never-saved document reports an empty path and so has no key to census under.
+        // The census is right to refuse a blank key, and this is the one call site that
+        // runs before PackageWriter.Build has proved the root path non-blank, so the check
+        // belongs here: without it an unsaved assembly dies on an internal parameter-name
+        // error instead of Build's "save it first" sentence a few statements later. There
+        // is no test over the real dumper - ISwSession hands out raw IModelDoc2 and no
+        // fake of it exists - so the shape is pinned through PackageWriterTests' fake
+        // traversal, which censuses the same way.
+        if (!string.IsNullOrWhiteSpace(rootDocumentPath))
+        {
+            gaps.TypeNames.AddPass(rootDocumentPath, sightings);
         }
 
         return byComponent;

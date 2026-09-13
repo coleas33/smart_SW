@@ -16,6 +16,7 @@ output to stdout; human output goes to stdout otherwise, diagnostics to stderr.
 | `swreview exceptions accept <run_dir> <finding_id>` | `--note` | Creates an `Exception` bound to the finding's geometry fingerprint and configuration. |
 | `swreview exceptions list <package_dir>` | | Shows active and needs-review exceptions. |
 | `swreview check fit\|stack\|fastener\|alignment` | `--package <dir>` plus check-specific ids | Runs one deterministic check without the agent; prints the finding. |
+| `swreview check interference` | `--package <dir>`, `--json` | Grades a dumped package's interference results without the agent: grouped conditions with status, exception statuses after refresh, unresolved coverage. Read-only; never writes `exceptions.json`. |
 | `swreview benchmark run` | `--set <set.json>`, `--out <dir>`, `--model`, `--effort` | Reviews every package in the set with answer keys unreadable. |
 | `swreview benchmark score <run_dir>` | `--answer-keys <dir>` | Produces `scorecard.json` and `scorecard.md`. |
 | `swreview benchmark time <run_dir> <package_id>` | `--baseline M`, `--supervision M`, `--verification M`, `--false-alarms M` | Records timing for net-savings computation. |
@@ -23,8 +24,12 @@ output to stdout; human output goes to stdout otherwise, diagnostics to stderr.
 ## `SwReview.Extractor.Console.exe` (C#, `extractor/`)
 
 Out-of-process host around the same extraction library the add-in uses. Requires SOLIDWORKS
-2024 installed; attaches to a running instance or starts one. Exit code 0 success, 1 error;
-always writes `extract.log` next to the output.
+2024 installed. **Attach-only by default**: every command attaches to the running instance
+and never starts one, because a started session holds a licence and has none of the
+engineer's open documents, so it would describe a different model. When the attach fails the
+host says which fact differs between SOLIDWORKS and itself (not running / different Windows
+session / different integrity level) rather than listing guesses. Exit code 0 success,
+1 error; always writes `extract.log` next to the output.
 
 | Command | Arguments | Effect |
 |---------|-----------|--------|
@@ -33,6 +38,7 @@ always writes `extract.log` next to the output.
 | `capture` | `--ref <persist_ref>`, `--view iso\|front\|top\|right\|fit`, `--out <dir>` | Zooms to the entity and saves a PNG; appends a `Capture`. |
 | `resolve` | `--ref <persist_ref>` | Prints the entity name and type the reference resolves to (round-trip test). |
 | `serve` | `--pipe <name>` | Runs the bridge for the Python `--bridge` tools: one JSON request per line on a named pipe, one COM STA worker thread. |
+| *(all of the above)* | `--allow-start` | Permits starting a SOLIDWORKS session when none is running. Off by default; for unattended scripts only. |
 
 Add-in: the same library is loaded in-process by `SwReview.AddIn` and exposes Task Pane
 buttons **Dump IR**, **Interference**, and **Capture selection** that call the same entry

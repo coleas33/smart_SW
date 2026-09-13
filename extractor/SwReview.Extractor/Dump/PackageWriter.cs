@@ -185,6 +185,7 @@ public sealed class PackageWriter
         }
 
         AddComponentInstances(package, scope);
+        AddSkippedFeatureTypes(scope);
 
         // Native drawing extraction is not part of this build; drawing sheets come from the
         // Python PDF ingest (US1). Recording it keeps the absence visible.
@@ -275,6 +276,27 @@ public sealed class PackageWriter
                 PatternId = node.PatternId,
                 IsToolbox = node.IsToolbox,
             });
+        }
+    }
+
+    /// <summary>
+    /// One gap per document listing the <c>GetTypeName2</c> names the dumpers walked past
+    /// without reading. Without it an unrecognised feature type is discarded silently and
+    /// the only symptom is "holes: 0" with no error (Principle I). One gap per document,
+    /// not one per feature: on a real part a gap for every CutExtrude is noise an engineer
+    /// learns to skip, which is how the signal gets lost.
+    /// </summary>
+    private static void AddSkippedFeatureTypes(DumpScope scope)
+    {
+        foreach (DocumentTypeNames document in scope.Gaps.TypeNames.Unconsumed())
+        {
+            scope.Gaps.Add(
+                GapKind.Unsupported,
+                "feature",
+                scope.DocumentId(document.DocumentPath),
+                $"Skipped feature types in {Path.GetFileName(document.DocumentPath)}: {document.Describe()}. "
+                + "SOLIDWORKS reported these GetTypeName2 names in the feature tree and no dumper reads them.",
+                null);
         }
     }
 

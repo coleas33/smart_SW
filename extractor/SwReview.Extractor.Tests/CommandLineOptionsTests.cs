@@ -18,15 +18,21 @@ namespace SwReview.Extractor.Tests;
 /// </summary>
 public class CommandLineOptionsTests
 {
-    private static readonly string[] DumpOptions = { "doc", "config", "out", "meshes", "faces" };
+    // The PRODUCTION option lists, not copies of them. A test-local copy proves nothing
+    // about what the shipped command accepts - it would pass with the real list untouched -
+    // and duplicating the lists here was a second place to forget an option (Principle V).
+    private static readonly string[] DumpOptions = Program.KnownOptions(Program.DumpOptionNames);
+
+    private static readonly string[] ResolveOptions =
+        Program.KnownOptions(Program.ResolveOptionNames);
 
     private static readonly string[] InterferenceOptions =
-    {
-        "config", "pairs", "coincident-as-interference", "subassemblies-as-components",
-        "include-multibody", "ignore-hidden", "fasteners", "out", "truncate-after",
-    };
+        Program.KnownOptions(Program.InterferenceOptionNames);
 
-    private static readonly string[] CaptureOptions = { "ref", "doc", "view", "out", "note" };
+    private static readonly string[] CaptureOptions =
+        Program.KnownOptions(Program.CaptureOptionNames);
+
+    private static readonly string[] ServeOptions = Program.KnownOptions(Program.ServeOptionNames);
 
     // ---- switches ----------------------------------------------------------------
 
@@ -243,6 +249,65 @@ public class CommandLineOptionsTests
         CommandLine parsed = CommandLine.Parse(new[] { "capture", "--view", "behind" }, 1, CaptureOptions);
 
         Assert.Throws<UsageError>(() => parsed.CaptureView());
+    }
+
+    // ---- --allow-start -----------------------------------------------------------
+
+    [Fact]
+    public void AllowStart_AbsentIsFalse()
+    {
+        // Attach-only is the default: without this flag the host must never reach
+        // Activator.CreateInstance, because a second seat consumes a licence and describes
+        // an empty session rather than the assembly on screen.
+        Assert.False(
+            CommandLine.Parse(new[] { "dump", "--out", @"C:\out" }, 1, DumpOptions)
+                .Flag("allow-start"));
+    }
+
+    [Fact]
+    public void AllowStart_BareSwitch_IsTrue()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--allow-start", "--out", @"C:\out" }, 1, DumpOptions);
+
+        Assert.True(parsed.Flag("allow-start"));
+        Assert.Equal(@"C:\out", parsed.Value("out"));
+    }
+
+    [Theory]
+    [InlineData("dump")]
+    [InlineData("resolve")]
+    [InlineData("interference")]
+    [InlineData("capture")]
+    [InlineData("serve")]
+    public void AllowStart_IsAcceptedByEveryCommandThatAttaches(string command)
+    {
+        // Program.cs calls SwAttach.Connect from all five commands, so all five must accept
+        // the flag; an option missing from one command's list is a usage error at run time.
+        // This drives the shipped lists, so deleting Program.KnownOptions fails it.
+        string[] known = KnownOptionsFor(command);
+
+        Assert.Contains("allow-start", known);
+        Assert.True(CommandLine.Parse(new[] { command, "--allow-start" }, 1, known).Flag("allow-start"));
+    }
+
+    private static string[] KnownOptionsFor(string command)
+    {
+        switch (command)
+        {
+            case "dump":
+                return DumpOptions;
+            case "resolve":
+                return ResolveOptions;
+            case "interference":
+                return InterferenceOptions;
+            case "capture":
+                return CaptureOptions;
+            case "serve":
+                return ServeOptions;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(command), command, "No such command.");
+        }
     }
 
     // ---- the multi-value change must not disturb the single-valued options --------

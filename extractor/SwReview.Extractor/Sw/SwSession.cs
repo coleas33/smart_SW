@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SwReview.Extractor.Ir;
@@ -128,9 +129,24 @@ public sealed class SwSession : ISwSession
     /// The one file-opening call in the extractor. Read-only and silent; the document is
     /// left open afterwards so persistent references stay resolvable for a later
     /// <c>resolve</c> or <c>capture</c>.
+    ///
+    /// The existence check lives HERE, after <c>GetOpenDocumentByName</c> has already said
+    /// no, and nowhere earlier. Mapped drives and EPDM vault views are per logon session, so
+    /// a path SOLIDWORKS resolves need not resolve for this process; checking before the
+    /// lookup would reject a document SOLIDWORKS has open, with a wrong cause, in exactly
+    /// the mismatched-session case the attach diagnosis is there to catch.
     /// </summary>
     private static IModelDoc2 OpenReadOnly(ISldWorks swApp, string documentPath, SwGate gate)
     {
+        if (!File.Exists(documentPath))
+        {
+            throw new InvalidOperationException(
+                $"'{documentPath}' is not open in SOLIDWORKS and not found on disk from this "
+                + "process. A mapped drive or an EPDM vault view belongs to one logon session, "
+                + "so check that this process sees the same drives as SOLIDWORKS, or pass the "
+                + "UNC path.");
+        }
+
         int documentType = documentPath.EndsWith(".sldasm", StringComparison.OrdinalIgnoreCase)
             ? (int)swDocumentTypes_e.swDocASSEMBLY
             : documentPath.EndsWith(".slddrw", StringComparison.OrdinalIgnoreCase)
@@ -149,7 +165,8 @@ public sealed class SwSession : ISwSession
         if (document == null)
         {
             throw new InvalidOperationException(
-                $"SOLIDWORKS could not open '{documentPath}' read-only (error {errors}, warning {warnings}).");
+                $"SOLIDWORKS could not open '{documentPath}' read-only "
+                + $"({FileLoadErrors.Describe(errors, warnings)}).");
         }
 
         return document;
