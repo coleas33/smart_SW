@@ -64,17 +64,16 @@ instead of restarting the backend and killing the session.
 
 1. Open the Terminal tab **before** running a review, choose Codex, Start.
 2. Ask: "List the components of the open assembly and capture the first screw."
-3. Refusal probe: ask it to create a file in the run folder, then to run a shell command that
-   reads outside the sandbox.
-4. Repeat 1 to 3 with Gemini.
+3. Refusal probe: ask it to create a file in the run folder, then to run a shell command.
+4. Gemini: deferred (decision 2026-09-13); repeat 1 to 3 with Gemini only after T055a.
 
 Expected: a terminal run folder `<run_root>/<timestamp>-terminal` is created and is the CLI's
 working directory; the CLI starts with exactly the `swreview` allowlist listed (a missing or
 extra tool stops the session rather than warning); the Codex sign-in still works from the
 generated `CODEX_HOME`; the answer comes through our tools (the chat log count on the tab
 increments, `<run>/chat-log.jsonl` records the calls, including any call that failed, with
-`status: "error"`); both probe attempts are refused, and the refusal text is pasted into the
-notes file; resizing the pane reflows the terminal and typing feels immediate; Stop ends the
+`status: "error"`); both probe attempts are refused because no shell or write tool is offered, and the
+refusal text is pasted into the notes file; resizing the pane reflows the terminal and typing feels immediate; Stop ends the
 process with no orphan.
 
 Record in the notes metric table: seconds from opening the Terminal tab to an answer that

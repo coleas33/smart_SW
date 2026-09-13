@@ -56,7 +56,7 @@ web_search = "disabled"
 model_instructions_file = "<run_dir>/.swreview-cli/codex-home/codex-instructions.md"
 
 [features]
-shell_tool = true            # read-only shell inside the sandbox; see plan.md Complexity Tracking
+shell_tool = false           # decision 2026-09-13: general chat gets MCP tools only, no shell
 
 [windows]
 sandbox = "unelevated"       # native Windows sandbox; overrides any WSL routing in user config
@@ -86,7 +86,7 @@ codex --profile swreview
   -c 'sandbox_mode="read-only"'
   -c 'approval_policy="never"'
   -c 'web_search="disabled"'
-  -c 'features.shell_tool=true'
+  -c 'features.shell_tool=false'
   -c 'windows.sandbox="unelevated"'
   -C <run_dir>
 ```
@@ -100,6 +100,11 @@ read-only sandbox refuses its writes (accepted risk).
 general-chat persona, the read-only rule, the tool list, and the run folder layout.
 
 ## Gemini
+
+> **Deferred (decision 2026-09-13).** The Gemini terminal is not part of v1 implementation:
+> Codex ships first and the Gemini profile is verified later on the workstation (spike
+> T055a). Gemini remains a review-mode API provider. The section below is kept as the
+> design to verify.
 
 Written to `<settings-home>/settings.json` and `<settings-home>/policies/00-swreview.toml`
 where `<settings-home>` is `<run_dir>/.swreview-cli/gemini`; launched with
