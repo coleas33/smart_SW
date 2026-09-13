@@ -8,7 +8,7 @@
   "required": ["version", "provider", "model", "effort", "terminal_cli", "run_root"],
   "properties": {
     "version": { "const": 1 },
-    "provider": { "enum": ["openai", "gemini"] },
+    "provider": { "enum": ["openai", "gemini", "fake"], "description": "fake is the scripted development provider: development builds only. A release build MUST refuse to load settings naming it and fall back to openai with a visible error (FR-027)." },
     "model": { "type": "string", "minLength": 1 },
     "effort": { "enum": ["low", "medium", "high", "xhigh"] },
     "api_key_protected": { "type": "string", "contentEncoding": "base64", "description": "DPAPI ciphertext; absent when no key is stored" },

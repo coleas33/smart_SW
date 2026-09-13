@@ -45,6 +45,18 @@ schemas come from `pydantic.TypeAdapter(fn).json_schema()` merged with a Google-
 docstring parser for parameter descriptions, so the tool modules keep their current shape.
 `RecordedTool.call` returns `(payload, is_error)` and each adapter encodes it.
 
+**Correction found while reviewing the plan**: two tool parameters are free-form maps -
+`mark_coverage(scope: dict[str, Any])` and `bridge_interference(settings: dict[str, Any])`.
+Generated with the repo's pydantic they yield `{"type": "object", "additionalProperties":
+true}` with no `properties`. `strictify()` as specified would turn each into an object that
+admits no keys at all, and `CoverageScope.model_validate({})` succeeds because every field
+defaults to empty, so every coverage item the model recorded would come back with an empty
+scope and no error anywhere - silent loss of exactly the information constitution VI requires
+the report to carry. Strict mode has no representation for an arbitrary-key object, so the
+fix is upstream of the strictifier: both parameters get explicit models (`CoverageScope`,
+a new `InterferenceSettings`) before the port, and T006 asserts that no generated tool schema
+contains an object with `additionalProperties: true` or an object with zero properties.
+
 **OpenAI** (Responses API, `openai` SDK): tools are flat `{type: "function", name,
 description, parameters, strict: true}`; strict requires `additionalProperties: false` on
 every object, every property in `required`, optional as `["T", "null"]`. Loop keeps the
@@ -77,8 +89,8 @@ and OpenAI reference examples on `gpt-5.6` and `gpt-5.5`.
 
 ## R4. Restricting the CLIs for general chat
 
-**Codex** (`~/.codex/config.toml`, profile selected with `--profile`): `sandbox_mode =
-"read-only"`, `approval_policy = "never"`, `web_search = "disabled"`,
+**Codex** (`$CODEX_HOME/config.toml`, default `~/.codex/config.toml`, profile selected with
+`--profile`): `sandbox_mode = "read-only"`, `approval_policy = "never"`, `web_search = "disabled"`,
 `[features] shell_tool = true` (read-only shell allowed for reading the run folder),
 `[mcp_servers.swreview] command/args`, `enabled_tools` allowlist, `startup_timeout_sec`,
 `tool_timeout_sec`. `apply_patch` has no documented off switch; the read-only sandbox
@@ -88,12 +100,28 @@ Windows sandbox is native (`[windows] sandbox = "elevated" | "unelevated"`); the
 machine's config currently routes Codex through WSL, which the generated profile must
 override for the pane.
 
+**Verified on the workstation (Codex CLI 0.115.0), after the plan review**: `--profile` names
+a profile inside the config home and there is no flag that points Codex at an arbitrary
+config file, so a TOML file written into the run folder is never read; `codex exec --profile
+swreview` on a machine whose config has no such profile fails with `config profile 'swreview'
+not found`, and `-c key=value` cannot express a `[mcp_servers.*]` table. `CODEX_HOME` pointed
+at a generated home does resolve the profile and start - but it also relocates `auth.json`, so
+the same run fails `401 Unauthorized` unless the engineer's credential is copied into that
+home. The generated-config-home approach with auth passthrough is therefore what
+`contracts/cli-profiles.md` specifies.
+
 **Gemini** (`~/.gemini/settings.json` and `~/.gemini/policies/*.toml`): `mcpServers.swreview`
 with `command`, `args`, `cwd`, `env`, `timeout` (default 600000 ms), `includeTools`; tools
 are named `mcp_{server}_{tool}` truncated at 63 characters, so the server name must not
 contain underscores. Policy engine: a deny-all rule at low priority plus an allow rule for
 `mcpName = "swreview"` at high priority; run in `--approval-mode plan`. The semantics of
-`tools.core: []` are unverified, so the policy rule is the enforced half.
+`tools.core: []` are unverified, so the policy rule is the enforced half. **No
+settings-directory override was established by this research**: `GEMINI_CLI_HOME` in
+`contracts/cli-profiles.md` is an unverified placeholder, and neither `mcp.allowed`,
+`security.disableYoloMode`, `general.defaultApprovalMode`, `context.fileName`, the per-server
+`trust` key nor a `toolName = "*"` wildcard deny rule came from a verified source. The Gemini
+CLI is not installed on the development machine, so all of it must be confirmed by the spike
+task before the byte-for-byte profile test asserts any of it.
 
 **Claude Code** is documented for completeness only (`--disallowedTools`,
 `--append-system-prompt`, `-p --output-format stream-json`) and is not used.
@@ -116,12 +144,35 @@ on the pane control, serialized through the existing queue. The console `serve` 
 stays for headless use. Rationale: the add-in already owns the `ISldWorks` pointer on the
 application thread; a second STA worker would cross apartments on every call.
 
+Two bounds the marshalling needs, because the application thread is the same thread that runs
+modal dialogs and rebuilds: (a) the wait on the marshalled call is bounded, and on expiry the
+request answers `{"status": "error", "error": "the SOLIDWORKS thread did not answer within
+Ns - a dialog may be open"}` while the queued delegate is prevented from writing a stale
+response later; the bound is generous (a live interference run legitimately takes seconds) and
+longer than any client-side timeout, so the two sides cannot disagree about whether a call is
+still running. (b) `Control.BeginInvoke` throws when the handle is not created or has been
+destroyed during unload, so `IsHandleCreated` / `IsDisposed` are checked first and answer a
+clean `error` rather than letting the throw land on the pipe reader thread.
+
+The pipe is created with an explicit `PipeSecurity` granting `ReadWrite` to the current user's
+SID only: .NET Framework 4.8 has no `PipeOptions.CurrentUserOnly`, and a default security
+descriptor leaves a named pipe readable by any local process.
+
 ## R7. Chat transport
 
 **Decision**: The add-in starts the Python backend (`swreview chat serve --port 0`) and reads
 `{port, token}` from its first stdout line. The page calls loopback HTTP with the token in a
 header; events stream over server-sent events. Rationale: single user, one direction of
 streaming, trivially testable with an in-process HTTP client; WebSocket adds nothing here.
+
+Three consequences the contract now spells out. uvicorn's default logging configuration sends
+the **access** log to stdout, which would corrupt the handshake line and can block the child
+once the parent stops draining the pipe, so both handlers are configured onto stderr. The
+page and the backend are different origins (virtual host vs `http://127.0.0.1:<port>`), so the
+server answers unauthenticated `OPTIONS` preflights and echoes the exact page origin; it never
+uses `*`, because the loopback port is reachable from any browser on the workstation.
+`EventSource` cannot set `Authorization` or `Last-Event-ID`, so the page reads the stream with
+`fetch` plus a `ReadableStream` reader and the token never appears in a URL.
 
 ## R8. Secrets
 
@@ -158,5 +209,13 @@ exposed to general chat (FR-025).
 3. ConPTY inside a Task Pane hosted by SOLIDWORKS (message pump owned by SOLIDWORKS): verify
    input latency and resize behavior early.
 4. OpenAI strict schema for tools whose parameters include `SourceRef` objects with nullable
-   fields; the strictifier must produce a schema the API accepts (test with a recorded
-   exchange).
+   fields; the strictifier must produce a schema the API accepts. A recorded `respx` exchange
+   cannot show this - it replays a body we wrote ourselves. The evidence is T006 (the strict
+   rules asserted locally for every tool) plus T018a, one real key-gated call per tool group,
+   run early in Phase 2 rather than at Polish time.
+5. The Gemini settings-directory override, and every Gemini settings key not listed in R4
+   above, are unverified; the spike task (T055a) confirms them on the installed CLI and
+   records the version, before T056 asserts any of them byte-for-byte. Until then the terminal
+   fails closed.
+6. Free-form `dict[str, Any]` tool parameters cannot be expressed in OpenAI strict mode at
+   all (see the correction in R3); they are replaced with explicit models before the port.

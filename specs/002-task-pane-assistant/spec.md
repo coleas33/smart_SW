@@ -16,7 +16,7 @@ An engineer with an assembly open in SOLIDWORKS opens the SwReview Task Pane, ch
 
 **Why this priority**: It is the product. Everything in feature 001 exists to feed this screen, and it is the only path that gives an engineer findings without leaving SOLIDWORKS.
 
-**Independent Test**: With the `cover-blind-tap` inputs open as a real assembly (or the bracket fixture from feature 001), press Review with a fake provider selected. Confirm the pane shows streamed text, tool cards, at least one finding card, an evidence request that the engineer answers in chat, a disposition that appears in the re-rendered report, and that Show in SOLIDWORKS selects the named component.
+**Independent Test**: With the bracket fixture from feature 001 open (`benchmarks/native/bracket-assy/`, prepared by feature 001 task T061; `cover-blind-tap` is a package fixture with no SOLIDWORKS model and cannot be opened as an assembly), press Review with a fake provider selected in a development build. Confirm the pane shows streamed text, tool cards, at least one finding card, an evidence request that the engineer answers in chat, a disposition that appears in the re-rendered report, and that Show in SOLIDWORKS selects the named component.
 
 **Acceptance Scenarios**:
 
@@ -84,7 +84,7 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 ### Edge Cases
 
 - Provider returns a tool call for a tool that does not exist or with arguments that fail validation: the error is returned to the model as a tool error, recorded as failed coverage, and shown in the chat; the session continues.
-- Provider rate limit or network failure mid-session: the pane shows the error class, keeps the partial session on disk with an ended time, and offers Retry, which starts a new session that references the previous one.
+- Provider rate limit or network failure mid-session: the pane shows the error class, keeps the partial session on disk with an ended time (the runner finalizes on the failure path, not only on the success path), and offers Retry, which starts a new session in a new run folder carrying `retry_of` = the failed session's id (FR-028).
 - The engineer closes the document while a review runs: the review continues on the extracted package; any live action fails with a clear "document no longer open" error and becomes failed coverage.
 - Two Task Pane instances (two SOLIDWORKS windows): each add-in instance owns its own tool service and backend on distinct ports and pipes.
 - API key present in environment variables and in settings: settings win, and the pane says which source it used.
@@ -95,6 +95,10 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 - Gemini's tool naming limits: tool names are kept under the length limit and the server name has no underscores so every tool is reachable.
 - A finding references a component whose persistent reference no longer resolves after a rebuild: Show in SOLIDWORKS reports the resolution state code and offers the component's full path instead.
 - Very long sessions: the transcript view keeps the last 500 events in memory and the full stream on disk.
+- Model- or document-authored text containing markup (a finding title with `<img src=x onerror=...>`, a drawing note read as `</script>`): both pages insert every untrusted string as text, never as markup, and the strict Content-Security-Policy and navigation blocking in `contracts/pane-host-messages.md` make an injected element inert. The pane holds the backend token and can invoke `settings.save` and the shell openers, so this is a first-class boundary, not a cosmetic concern.
+- A turn that ends on the provider's output ceiling (reasoning plus text exceeding `max_output_tokens`): the turn ends with reason `truncated`, the partial answer stays visible, and the unfinished work is recorded as unresolved coverage rather than reported as a completed check.
+- The engineer saves Settings while a turn is running: the save is refused with a clear message rather than restarting the backend and killing the live session; it is offered again when the turn ends.
+- The Terminal tab is opened before any review: the host creates a terminal run folder under the run root so the CLI, its generated profile, and `chat-log.jsonl` have a home.
 
 ## Requirements *(mandatory)*
 
@@ -139,7 +143,10 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 
 - **FR-024**: Neither mode MAY modify, rebuild, or save any SOLIDWORKS document.
 - **FR-025**: The general chat MUST NOT be able to create findings or dispositions; those come only from the review session's tools and the engineer's actions.
-- **FR-026**: No Claude or Anthropic path MAY exist in product code, configuration, or documentation for this feature.
+- **FR-026**: No Claude or Anthropic path MAY exist in product code, configuration, or documentation for this feature. In particular no module-level default model id naming a Claude model MAY remain in the Python package; defaults come from the provider settings module.
+- **FR-027**: The scripted `fake` provider MUST be selectable and persistable as a provider in a development build so the pane is demonstrable without keys, and a release build MUST refuse to load a settings file that names it, falling back to the default provider with a visible error, so a shipped configuration can never produce fabricated findings.
+- **FR-028**: When a session fails, the pane MUST offer Retry, and the session Retry starts MUST record the failed session's id so the two are linked in the run artifacts.
+- **FR-029**: Both WebView2 pages MUST insert model- and document-authored text as text rather than markup, MUST run under a restrictive Content-Security-Policy, and MUST refuse navigation outside the add-in's virtual host.
 
 ### Key Entities
 
@@ -159,12 +166,17 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 - **SC-001**: From pressing Review on a 200-component assembly to the first finding card is under 3 minutes on the pilot workstation, with extraction itself under 1 minute.
 - **SC-002**: Streamed text appears in the pane within 2 seconds of the provider producing it, measured with the fake provider.
 - **SC-003**: 100% of tool calls made in either mode are recorded in the run folder (session steps for review, chat log for general chat); an audit finds none missing.
-- **SC-004**: Zero mutating SOLIDWORKS calls occur across a full review session and a 30-minute general chat session, verified by the guard log.
+- **SC-004**: Zero mutating SOLIDWORKS calls occur across a full review session and a 30-minute general chat session, verified against artifacts that exist: no `MutatingCallError` refusal appears in the tool-service request log under `%LOCALAPPDATA%\SwReview\logs`, every interop member that log records for those requests is in the reader set, and every tool call appears in `session.json` steps or `chat-log.jsonl`.
 - **SC-005**: Switching provider between OpenAI and Gemini produces session files that validate against the same contract and differ only in provider, model, and effort mapping fields.
 - **SC-006**: API keys never appear in any file under the run folder or the log folder across the test suite and the manual scenarios; an automated scan confirms it.
 - **SC-007**: Show in SOLIDWORKS selects the correct entity for 100% of findings on the bracket fixture whose persistent references resolve, and reports the resolution state for those that do not.
 - **SC-008**: An engineer can start general chat, ask one question, and receive an answer that used one of our tools in under 2 minutes from opening the tab.
 - **SC-009**: The existing feature 001 test suite passes unchanged in behavior after the provider port, with the Anthropic dependency removed.
+
+SC-001, SC-002, SC-007 and SC-008 are wall-clock or per-finding measurements: each is timed
+during the quickstart scenario named beside it and written into the metric table in
+`benchmarks/native/bracket-assy/notes.md` by tasks T044, T051 and T063. A criterion with no
+recorded number is not met.
 
 ## Assumptions
 
@@ -176,4 +188,8 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 - The terminal embedding reimplements the public ConPTY and xterm.js mechanism; no code is copied from SwpilotCLI, whose license forbids redistribution.
 - Session resume for the CLIs (Codex `resume`, Gemini `--resume`) is available to the engineer inside the terminal but not surfaced in the pane in v1.
 - Gemini via the enterprise platform (Vertex) is supported through the same SDK flag but is not tested in v1.
-- The chat transport is loopback HTTP with server-sent events; a WebSocket is not needed for a single-user pane.
+- The chat transport is loopback HTTP with server-sent events; a WebSocket is not needed for a single-user pane. The pages read the event stream with `fetch` plus a stream reader, because `EventSource` cannot send the `Authorization` header and the token may never appear in a URL.
+- The bracket fixture (`benchmarks/native/bracket-assy/`) is prepared on the workstation by feature 001 task T061 and is not committed to the repository; the workstation scenarios depend on that task being done first.
+- The Gemini CLI settings-home override is not yet verified on the workstation; `contracts/cli-profiles.md` marks the Gemini launch mechanism as unverified until the spike task confirms it, and the terminal fails closed rather than starting an unrestricted CLI.
+- The general-chat CLI can read its own generated profile, so it can read the bridge secret in that profile's environment block. This is accepted because that secret is scoped to `ping`, `capture` and `measure` at the dispatcher, all of which the CLI already reaches through the MCP toolset; a leak grants nothing beyond the published read-only subset.
+- Codex's read-only shell remains enabled for reading the run folder; the exception to the constitution's curated-toolset rule is recorded in the plan's Complexity Tracking table.
