@@ -1,0 +1,15 @@
+{
+  "callable": "swreview.checks.golden:fit_case",
+  "kwargs": {
+    "bore_ref": {
+      "document_id": "doc:3",
+      "sheet": "Sheet1",
+      "annotation": "DIM-CHAMFER"
+    },
+    "shaft_ref": {
+      "document_id": "doc:3",
+      "sheet": "Sheet1",
+      "annotation": "DIM-SHAFT"
+    }
+  }
+}

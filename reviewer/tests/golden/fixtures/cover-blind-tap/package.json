@@ -1,0 +1,1167 @@
+{
+  "schema_version": "1.0.0",
+  "package_id": "2c9a1f10-4b6d-4f2e-9a55-7d1f8c3b0a01",
+  "created_at": "2026-09-12T09:30:00Z",
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "pilot-export"
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "ASM-1001",
+        "vault_path": "Projects/Pilot/cover-blind-tap/cover-assy.SLDASM",
+        "vault_version": 7,
+        "revision": "B",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "manual"
+      },
+      {
+        "document_id": "PRT-1001",
+        "vault_path": "Projects/Pilot/cover-blind-tap/housing.SLDPRT",
+        "vault_version": 12,
+        "revision": "C",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "manual"
+      },
+      {
+        "document_id": "PRT-1002",
+        "vault_path": "Projects/Pilot/cover-blind-tap/cover.SLDPRT",
+        "vault_version": 5,
+        "revision": "B",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "manual"
+      },
+      {
+        "document_id": "PRT-1003",
+        "vault_path": "Toolbox/socket head cap screw_am.SLDPRT",
+        "vault_version": null,
+        "revision": null,
+        "configuration": "M6 x 20",
+        "local_modified": null,
+        "export_method": "manual"
+      },
+      {
+        "document_id": "DRW-2001",
+        "vault_path": "Projects/Pilot/cover-blind-tap/housing.SLDDRW",
+        "vault_version": 12,
+        "revision": "C",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "pdf"
+      },
+      {
+        "document_id": "DRW-2002",
+        "vault_path": "Projects/Pilot/cover-blind-tap/cover.SLDDRW",
+        "vault_version": 5,
+        "revision": "B",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "pdf"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "cover-blind-tap",
+    "name": "Cover on housing, blind tapped holes",
+    "root_assembly_document_id": "ASM-1001",
+    "active_configuration": "Default",
+    "drawing_document_ids": [
+      "DRW-2001",
+      "DRW-2002"
+    ]
+  },
+  "documents": [
+    {
+      "document_id": "ASM-1001",
+      "kind": "assembly",
+      "file_name": "cover-assy.SLDASM",
+      "path": "native/cover-assy.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Project": "pilot",
+        "Revision": "B"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "PRT-1001",
+      "kind": "part",
+      "file_name": "housing.SLDPRT",
+      "path": "native/housing.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Revision": "C"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    },
+    {
+      "document_id": "PRT-1002",
+      "kind": "part",
+      "file_name": "cover.SLDPRT",
+      "path": "native/cover.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Revision": "B"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null
+    },
+    {
+      "document_id": "PRT-1003",
+      "kind": "part",
+      "file_name": "socket head cap screw_am.SLDPRT",
+      "path": "native/socket head cap screw_am.SLDPRT",
+      "configurations": [
+        "M6 x 20"
+      ],
+      "active_configuration": "M6 x 20",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": null
+    },
+    {
+      "document_id": "DRW-2001",
+      "kind": "drawing",
+      "file_name": "housing.SLDDRW",
+      "path": "drawings/housing.pdf",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "DRW-2002",
+      "kind": "drawing",
+      "file_name": "cover.SLDDRW",
+      "path": "drawings/cover.pdf",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "ASM-1001",
+      "name": "housing-1",
+      "document_id": "PRT-1001",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "housing-1@cover-assy"
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "ASM-1001",
+      "name": "cover-1",
+      "document_id": "PRT-1002",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "cover-1@cover-assy"
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "ASM-1001",
+      "name": "screw-1",
+      "document_id": "PRT-1003",
+      "parent_id": null,
+      "referenced_configuration": "M6 x 20",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": "pat:screws",
+      "is_toolbox": true,
+      "full_path": "screw-1@cover-assy"
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "ASM-1001",
+      "name": "screw-2",
+      "document_id": "PRT-1003",
+      "parent_id": null,
+      "referenced_configuration": "M6 x 20",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": "pat:screws",
+      "is_toolbox": true,
+      "full_path": "screw-2@cover-assy"
+    },
+    {
+      "id": "cmp:0005",
+      "persist_ref": "Y21wOjAwMDU=",
+      "persist_ref_scope": "ASM-1001",
+      "name": "screw-3",
+      "document_id": "PRT-1003",
+      "parent_id": null,
+      "referenced_configuration": "M6 x 20",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": "pat:screws",
+      "is_toolbox": true,
+      "full_path": "screw-3@cover-assy"
+    },
+    {
+      "id": "cmp:0006",
+      "persist_ref": "Y21wOjAwMDY=",
+      "persist_ref_scope": "ASM-1001",
+      "name": "screw-4",
+      "document_id": "PRT-1003",
+      "parent_id": null,
+      "referenced_configuration": "M6 x 20",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": "pat:screws",
+      "is_toolbox": true,
+      "full_path": "screw-4@cover-assy"
+    }
+  ],
+  "mates": [],
+  "holes": [
+    {
+      "id": "hole:1",
+      "persist_ref": "aG9sZTox",
+      "persist_ref_scope": "PRT-1001",
+      "component_id": "cmp:0001",
+      "feature_name": "M6 Tapped Hole1",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M6",
+      "thread_designation": "M6x1.0",
+      "thread_depth": null,
+      "hole_depth": {
+        "value": 0.014,
+        "unit": "m"
+      },
+      "end_condition": "blind",
+      "diameter": {
+        "value": 0.005,
+        "unit": "m"
+      },
+      "axis": {
+        "origin": {
+          "x": -0.02,
+          "y": -0.02,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "face_ids": [
+        "face:1"
+      ]
+    },
+    {
+      "id": "hole:2",
+      "persist_ref": "aG9sZToy",
+      "persist_ref_scope": "PRT-1001",
+      "component_id": "cmp:0001",
+      "feature_name": "M6 Tapped Hole2",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M6",
+      "thread_designation": "M6x1.0",
+      "thread_depth": null,
+      "hole_depth": {
+        "value": 0.014,
+        "unit": "m"
+      },
+      "end_condition": "blind",
+      "diameter": {
+        "value": 0.005,
+        "unit": "m"
+      },
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": -0.02,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "face_ids": [
+        "face:2"
+      ]
+    },
+    {
+      "id": "hole:3",
+      "persist_ref": "aG9sZToz",
+      "persist_ref_scope": "PRT-1001",
+      "component_id": "cmp:0001",
+      "feature_name": "M6 Tapped Hole3",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M6",
+      "thread_designation": "M6x1.0",
+      "thread_depth": null,
+      "hole_depth": {
+        "value": 0.014,
+        "unit": "m"
+      },
+      "end_condition": "blind",
+      "diameter": {
+        "value": 0.005,
+        "unit": "m"
+      },
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": 0.02,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "face_ids": [
+        "face:3"
+      ]
+    },
+    {
+      "id": "hole:4",
+      "persist_ref": "aG9sZTo0",
+      "persist_ref_scope": "PRT-1001",
+      "component_id": "cmp:0001",
+      "feature_name": "M6 Tapped Hole4",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M6",
+      "thread_designation": "M6x1.0",
+      "thread_depth": null,
+      "hole_depth": {
+        "value": 0.014,
+        "unit": "m"
+      },
+      "end_condition": "blind",
+      "diameter": {
+        "value": 0.005,
+        "unit": "m"
+      },
+      "axis": {
+        "origin": {
+          "x": -0.02,
+          "y": 0.02,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "face_ids": [
+        "face:4"
+      ]
+    },
+    {
+      "id": "hole:5",
+      "persist_ref": "aG9sZTo1",
+      "persist_ref_scope": "PRT-1002",
+      "component_id": "cmp:0002",
+      "feature_name": "CBORE for M6 Socket Head Cap Screw1",
+      "hole_type": "counterbore",
+      "standard": "ISO",
+      "size": "M6",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": {
+        "value": 0.008,
+        "unit": "m"
+      },
+      "end_condition": "through",
+      "diameter": {
+        "value": 0.0066,
+        "unit": "m"
+      },
+      "axis": {
+        "origin": {
+          "x": -0.02,
+          "y": -0.02,
+          "z": 0.008
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "face_ids": [
+        "face:5"
+      ]
+    },
+    {
+      "id": "hole:6",
+      "persist_ref": "aG9sZTo2",
+      "persist_ref_scope": "PRT-1002",
+      "component_id": "cmp:0002",
+      "feature_name": "CBORE for M6 Socket Head Cap Screw2",
+      "hole_type": "counterbore",
+      "standard": "ISO",
+      "size": "M6",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": {
+        "value": 0.008,
+        "unit": "m"
+      },
+      "end_condition": "through",
+      "diameter": {
+        "value": 0.0066,
+        "unit": "m"
+      },
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": -0.02,
+          "z": 0.008
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "face_ids": [
+        "face:6"
+      ]
+    },
+    {
+      "id": "hole:7",
+      "persist_ref": "aG9sZTo3",
+      "persist_ref_scope": "PRT-1002",
+      "component_id": "cmp:0002",
+      "feature_name": "CBORE for M6 Socket Head Cap Screw3",
+      "hole_type": "counterbore",
+      "standard": "ISO",
+      "size": "M6",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": {
+        "value": 0.008,
+        "unit": "m"
+      },
+      "end_condition": "through",
+      "diameter": {
+        "value": 0.0066,
+        "unit": "m"
+      },
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": 0.02,
+          "z": 0.008
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "face_ids": [
+        "face:7"
+      ]
+    },
+    {
+      "id": "hole:8",
+      "persist_ref": "aG9sZTo4",
+      "persist_ref_scope": "PRT-1002",
+      "component_id": "cmp:0002",
+      "feature_name": "CBORE for M6 Socket Head Cap Screw4",
+      "hole_type": "counterbore",
+      "standard": "ISO",
+      "size": "M6",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": {
+        "value": 0.008,
+        "unit": "m"
+      },
+      "end_condition": "through",
+      "diameter": {
+        "value": 0.0066,
+        "unit": "m"
+      },
+      "axis": {
+        "origin": {
+          "x": -0.02,
+          "y": 0.02,
+          "z": 0.008
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "face_ids": [
+        "face:8"
+      ]
+    }
+  ],
+  "threads": [],
+  "fasteners": [
+    {
+      "id": "fst:1",
+      "persist_ref": "ZnN0OjE=",
+      "persist_ref_scope": "ASM-1001",
+      "component_id": "cmp:0003",
+      "kind": "screw",
+      "identity_source": "toolbox",
+      "thread_designation": "M6x1.0",
+      "length": {
+        "value": 0.02,
+        "unit": "m"
+      },
+      "head_type": "socket head cap",
+      "head_diameter": {
+        "value": 0.01,
+        "unit": "m"
+      },
+      "head_height": {
+        "value": 0.006,
+        "unit": "m"
+      },
+      "drive": "hex",
+      "axis": {
+        "origin": {
+          "x": -0.02,
+          "y": -0.02,
+          "z": 0.008
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "material": "Alloy Steel"
+    },
+    {
+      "id": "fst:2",
+      "persist_ref": "ZnN0OjI=",
+      "persist_ref_scope": "ASM-1001",
+      "component_id": "cmp:0004",
+      "kind": "screw",
+      "identity_source": "toolbox",
+      "thread_designation": "M6x1.0",
+      "length": {
+        "value": 0.02,
+        "unit": "m"
+      },
+      "head_type": "socket head cap",
+      "head_diameter": {
+        "value": 0.01,
+        "unit": "m"
+      },
+      "head_height": {
+        "value": 0.006,
+        "unit": "m"
+      },
+      "drive": "hex",
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": -0.02,
+          "z": 0.008
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "material": "Alloy Steel"
+    },
+    {
+      "id": "fst:3",
+      "persist_ref": "ZnN0OjM=",
+      "persist_ref_scope": "ASM-1001",
+      "component_id": "cmp:0005",
+      "kind": "screw",
+      "identity_source": "toolbox",
+      "thread_designation": "M6x1.0",
+      "length": {
+        "value": 0.02,
+        "unit": "m"
+      },
+      "head_type": "socket head cap",
+      "head_diameter": {
+        "value": 0.01,
+        "unit": "m"
+      },
+      "head_height": {
+        "value": 0.006,
+        "unit": "m"
+      },
+      "drive": "hex",
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": 0.02,
+          "z": 0.008
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "material": "Alloy Steel"
+    },
+    {
+      "id": "fst:4",
+      "persist_ref": "ZnN0OjQ=",
+      "persist_ref_scope": "ASM-1001",
+      "component_id": "cmp:0006",
+      "kind": "screw",
+      "identity_source": "toolbox",
+      "thread_designation": "M6x1.0",
+      "length": {
+        "value": 0.02,
+        "unit": "m"
+      },
+      "head_type": "socket head cap",
+      "head_diameter": {
+        "value": 0.01,
+        "unit": "m"
+      },
+      "head_height": {
+        "value": 0.006,
+        "unit": "m"
+      },
+      "drive": "hex",
+      "axis": {
+        "origin": {
+          "x": -0.02,
+          "y": 0.02,
+          "z": 0.008
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": -1.0
+        }
+      },
+      "material": "Alloy Steel"
+    }
+  ],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [
+    {
+      "document_id": "DRW-2001",
+      "sheet_name": "Sheet1",
+      "page": 1,
+      "scale": "1:1",
+      "units": "mm",
+      "general_notes": [
+        {
+          "text": "UNLESS OTHERWISE SPECIFIED: LINEAR .X +/- 0.5, .XX +/- 0.25",
+          "source": {
+            "document_id": "DRW-2001",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": null
+          },
+          "kind": "general_tolerance"
+        },
+        {
+          "text": "MATERIAL: 6061-T6",
+          "source": {
+            "document_id": "DRW-2001",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": null
+          },
+          "kind": "material"
+        }
+      ],
+      "dimensions": [
+        {
+          "nominal": {
+            "value": 14.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "none",
+            "upper": null,
+            "lower": null,
+            "source": {
+              "document_id": "DRW-2001",
+              "sheet": "Sheet1",
+              "view": "SECTION A-A",
+              "annotation": null,
+              "persist_ref": null,
+              "page": 1,
+              "bbox": [
+                120.0,
+                400.0,
+                260.0,
+                412.0
+              ]
+            }
+          },
+          "source": {
+            "document_id": "DRW-2001",
+            "sheet": "Sheet1",
+            "view": "SECTION A-A",
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              120.0,
+              400.0,
+              260.0,
+              412.0
+            ]
+          },
+          "text_as_read": "4X M6x1.0 - 6H  DRILL 5.0 ↧ 14"
+        },
+        {
+          "nominal": {
+            "value": 40.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "symmetric",
+            "upper": {
+              "value": 0.1,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": 0.1,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "DRW-2001",
+              "sheet": "Sheet1",
+              "view": "SECTION A-A",
+              "annotation": null,
+              "persist_ref": null,
+              "page": 1,
+              "bbox": [
+                120.0,
+                400.0,
+                260.0,
+                412.0
+              ]
+            }
+          },
+          "source": {
+            "document_id": "DRW-2001",
+            "sheet": "Sheet1",
+            "view": "SECTION A-A",
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              120.0,
+              400.0,
+              260.0,
+              412.0
+            ]
+          },
+          "text_as_read": "40.0 ±0.1"
+        }
+      ],
+      "views": [
+        {
+          "name": "SECTION A-A",
+          "bbox": [
+            80.0,
+            320.0,
+            400.0,
+            520.0
+          ]
+        }
+      ],
+      "parse_status": "text",
+      "parser": "pymupdf"
+    },
+    {
+      "document_id": "DRW-2002",
+      "sheet_name": "Sheet1",
+      "page": 1,
+      "scale": "1:1",
+      "units": "mm",
+      "general_notes": [
+        {
+          "text": "UNLESS OTHERWISE SPECIFIED: LINEAR .X +/- 0.5",
+          "source": {
+            "document_id": "DRW-2002",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": null
+          },
+          "kind": "general_tolerance"
+        }
+      ],
+      "dimensions": [
+        {
+          "nominal": {
+            "value": 8.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "symmetric",
+            "upper": {
+              "value": 0.1,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": 0.1,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "DRW-2002",
+              "sheet": "Sheet1",
+              "view": "TOP",
+              "annotation": null,
+              "persist_ref": null,
+              "page": 1,
+              "bbox": [
+                140.0,
+                380.0,
+                240.0,
+                392.0
+              ]
+            }
+          },
+          "source": {
+            "document_id": "DRW-2002",
+            "sheet": "Sheet1",
+            "view": "TOP",
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              140.0,
+              380.0,
+              240.0,
+              392.0
+            ]
+          },
+          "text_as_read": "8.0 ±0.1"
+        },
+        {
+          "nominal": {
+            "value": 11.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "none",
+            "upper": null,
+            "lower": null,
+            "source": {
+              "document_id": "DRW-2002",
+              "sheet": "Sheet1",
+              "view": "TOP",
+              "annotation": null,
+              "persist_ref": null,
+              "page": 1,
+              "bbox": [
+                140.0,
+                380.0,
+                240.0,
+                392.0
+              ]
+            }
+          },
+          "source": {
+            "document_id": "DRW-2002",
+            "sheet": "Sheet1",
+            "view": "TOP",
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              140.0,
+              380.0,
+              240.0,
+              392.0
+            ]
+          },
+          "text_as_read": "4X Ø11 ↧ 6.5"
+        }
+      ],
+      "views": [
+        {
+          "name": "TOP",
+          "bbox": [
+            100.0,
+            300.0,
+            420.0,
+            500.0
+          ]
+        }
+      ],
+      "parse_status": "text",
+      "parser": "pymupdf"
+    },
+    {
+      "document_id": "DRW-2002",
+      "sheet_name": "Sheet2",
+      "page": 2,
+      "scale": null,
+      "units": "unknown",
+      "general_notes": [],
+      "dimensions": [],
+      "views": [],
+      "parse_status": "no_text",
+      "parser": "pymupdf"
+    }
+  ],
+  "gaps": [
+    {
+      "kind": "not_extracted",
+      "entity_kind": "hole",
+      "entity_id": "hole:1",
+      "reason": "usable thread depth not reported; the drawing states drill depth only",
+      "error": null
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "hole",
+      "entity_id": "hole:2",
+      "reason": "usable thread depth not reported; the drawing states drill depth only",
+      "error": null
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "hole",
+      "entity_id": "hole:3",
+      "reason": "usable thread depth not reported; the drawing states drill depth only",
+      "error": null
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "hole",
+      "entity_id": "hole:4",
+      "reason": "usable thread depth not reported; the drawing states drill depth only",
+      "error": null
+    },
+    {
+      "kind": "no_text",
+      "entity_kind": "drawing_sheet",
+      "entity_id": "Sheet2",
+      "reason": "cover.pdf page 2 is a flattened image with no text layer",
+      "error": null
+    }
+  ]
+}

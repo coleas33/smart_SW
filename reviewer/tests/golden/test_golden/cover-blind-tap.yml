@@ -1,0 +1,502 @@
+result:
+  checklist:
+  - bucket: open
+    check_prefix: provenance.
+    description: Confirm every reviewed document matches the manifest (vault version,
+      revision, configuration, local modification). Surface every discrepancy at the
+      top of the report before any other finding.
+    id: provenance
+    title: Provenance and manifest discrepancies
+  - bucket: finding
+    check_prefix: drawing.
+    description: 'For each part drawing: material, general tolerance note, surface
+      finish where functional, thread callouts with depth, critical fits with explicit
+      tolerances. Missing text layers or unreadable sheets are unresolved, not passed.'
+    id: drawing.manufacturing_inputs
+    title: Drawing manufacturing inputs
+  - bucket: open
+    check_prefix: fit.
+    description: Shaft/bore and pin/hole interfaces from mates and hole data; evaluate
+      with check_fit using drawing limits. Missing limits stay unresolved.
+    id: interfaces.fit
+    title: Fits and clearances at mating interfaces
+  - bucket: open
+    check_prefix: stack.
+    description: Stacks that set a functional gap or preload; evaluate with check_axial_stack.
+    id: interfaces.stack
+    title: Axial stacks and gaps
+  - bucket: open
+    check_prefix: fastener.
+    description: 'For each screw or bolt: bottoming, usable thread engagement, thread
+      match, head and washer clearance. Unknown usable thread depth stays unresolved
+      with an evidence request.'
+    id: fasteners
+    title: Fastener joints
+  - bucket: open
+    check_prefix: hole.
+    description: Coaxiality of hole pairs across mated parts using check_hole_alignment.
+    id: holes.alignment
+    title: Hole alignment across mating parts
+  - bucket: open
+    check_prefix: interference.
+    description: Review grouped interferences and exceptions; truncated or failed
+      pairs are unresolved. State the positions checked for mechanisms.
+    id: interference
+    title: Static interference
+  - bucket: open
+    check_prefix: coverage.
+    description: Every gap in the package and every open evidence request is reflected
+      in coverage.
+    id: coverage.closeout
+    title: Coverage close-out
+  drawing_finding:
+    finding:
+      calculation: null
+      capture_ids: []
+      check: drawing.manufacturing_inputs
+      component_ids: []
+      configuration: Default
+      coverage_limits:
+      - 'DRW-2001 sheet Sheet1: the drawing does not state the required value'
+      disposition: null
+      drawing_locations:
+      - annotation: null
+        bbox: null
+        document_id: DRW-2001
+        page: null
+        persist_ref: null
+        sheet: Sheet1
+        view: SECTION A-A
+      exception_id: null
+      group: null
+      id: F-001
+      inputs: []
+      observed: The tapped hole callout states a drill depth of 14 only; the usable
+        thread depth is not specified on the sheet
+      provenance:
+      - configuration: Default
+        document_id: DRW-2001
+        export_method: pdf
+        local_modified: false
+        revision: C
+        vault_path: Projects/Pilot/cover-blind-tap/housing.SLDDRW
+        vault_version: 12
+      recommended_action: Add the usable thread depth to the callout, or state it
+        as a separate note, and re-run the fastener engagement check
+      requirement: A tapped hole callout states the usable thread depth so thread
+        engagement can be evaluated (ASME Y14.5 hole callout practice)
+      severity: low
+      status: unresolved
+      title: The tapped hole callout states a drill depth of 14 only; the usable thread
+        dept…
+      tool_result_ids: []
+    status: recorded
+  drawing_sheet:
+    available_sheets:
+    - Sheet1
+    - Sheet2
+    dimensions: []
+    document_id: DRW-2002
+    general_notes: []
+    page: 2
+    parse_status: no_text
+    parser: pymupdf
+    reason: cover.pdf page 2 is a flattened image with no text layer
+    scale: null
+    sheet_name: Sheet2
+    units: unknown
+    views: []
+  fasteners:
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: -0.02
+        y: -0.02
+        z: 0.008
+    component_id: cmp:0003
+    drive: hex
+    head_diameter:
+      unit: m
+      value: 0.01
+    head_height:
+      unit: m
+      value: 0.006
+    head_type: socket head cap
+    id: fst:1
+    identity_source: toolbox
+    kind: screw
+    length:
+      unit: m
+      value: 0.02
+    material: Alloy Steel
+    persist_ref: ZnN0OjE=
+    persist_ref_scope: ASM-1001
+    thread_designation: M6x1.0
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: 0.02
+        y: -0.02
+        z: 0.008
+    component_id: cmp:0004
+    drive: hex
+    head_diameter:
+      unit: m
+      value: 0.01
+    head_height:
+      unit: m
+      value: 0.006
+    head_type: socket head cap
+    id: fst:2
+    identity_source: toolbox
+    kind: screw
+    length:
+      unit: m
+      value: 0.02
+    material: Alloy Steel
+    persist_ref: ZnN0OjI=
+    persist_ref_scope: ASM-1001
+    thread_designation: M6x1.0
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: 0.02
+        y: 0.02
+        z: 0.008
+    component_id: cmp:0005
+    drive: hex
+    head_diameter:
+      unit: m
+      value: 0.01
+    head_height:
+      unit: m
+      value: 0.006
+    head_type: socket head cap
+    id: fst:3
+    identity_source: toolbox
+    kind: screw
+    length:
+      unit: m
+      value: 0.02
+    material: Alloy Steel
+    persist_ref: ZnN0OjM=
+    persist_ref_scope: ASM-1001
+    thread_designation: M6x1.0
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: -0.02
+        y: 0.02
+        z: 0.008
+    component_id: cmp:0006
+    drive: hex
+    head_diameter:
+      unit: m
+      value: 0.01
+    head_height:
+      unit: m
+      value: 0.006
+    head_type: socket head cap
+    id: fst:4
+    identity_source: toolbox
+    kind: screw
+    length:
+      unit: m
+      value: 0.02
+    material: Alloy Steel
+    persist_ref: ZnN0OjQ=
+    persist_ref_scope: ASM-1001
+    thread_designation: M6x1.0
+  gaps:
+  - entity_id: hole:1
+    entity_kind: hole
+    error: null
+    kind: not_extracted
+    reason: usable thread depth not reported; the drawing states drill depth only
+  - entity_id: hole:2
+    entity_kind: hole
+    error: null
+    kind: not_extracted
+    reason: usable thread depth not reported; the drawing states drill depth only
+  - entity_id: hole:3
+    entity_kind: hole
+    error: null
+    kind: not_extracted
+    reason: usable thread depth not reported; the drawing states drill depth only
+  - entity_id: hole:4
+    entity_kind: hole
+    error: null
+    kind: not_extracted
+    reason: usable thread depth not reported; the drawing states drill depth only
+  - entity_id: Sheet2
+    entity_kind: drawing_sheet
+    error: null
+    kind: no_text
+    reason: cover.pdf page 2 is a flattened image with no text layer
+  holes:
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: -0.02
+        y: -0.02
+        z: 0.0
+    component_id: cmp:0001
+    diameter:
+      unit: m
+      value: 0.005
+    end_condition: blind
+    face_ids:
+    - face:1
+    feature_name: M6 Tapped Hole1
+    hole_depth:
+      unit: m
+      value: 0.014
+    hole_type: tapped
+    id: hole:1
+    persist_ref: aG9sZTox
+    persist_ref_scope: PRT-1001
+    size: M6
+    standard: ISO
+    thread_depth: null
+    thread_depth_note: unknown
+    thread_designation: M6x1.0
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: 0.02
+        y: -0.02
+        z: 0.0
+    component_id: cmp:0001
+    diameter:
+      unit: m
+      value: 0.005
+    end_condition: blind
+    face_ids:
+    - face:2
+    feature_name: M6 Tapped Hole2
+    hole_depth:
+      unit: m
+      value: 0.014
+    hole_type: tapped
+    id: hole:2
+    persist_ref: aG9sZToy
+    persist_ref_scope: PRT-1001
+    size: M6
+    standard: ISO
+    thread_depth: null
+    thread_depth_note: unknown
+    thread_designation: M6x1.0
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: 0.02
+        y: 0.02
+        z: 0.0
+    component_id: cmp:0001
+    diameter:
+      unit: m
+      value: 0.005
+    end_condition: blind
+    face_ids:
+    - face:3
+    feature_name: M6 Tapped Hole3
+    hole_depth:
+      unit: m
+      value: 0.014
+    hole_type: tapped
+    id: hole:3
+    persist_ref: aG9sZToz
+    persist_ref_scope: PRT-1001
+    size: M6
+    standard: ISO
+    thread_depth: null
+    thread_depth_note: unknown
+    thread_designation: M6x1.0
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: -0.02
+        y: 0.02
+        z: 0.0
+    component_id: cmp:0001
+    diameter:
+      unit: m
+      value: 0.005
+    end_condition: blind
+    face_ids:
+    - face:4
+    feature_name: M6 Tapped Hole4
+    hole_depth:
+      unit: m
+      value: 0.014
+    hole_type: tapped
+    id: hole:4
+    persist_ref: aG9sZTo0
+    persist_ref_scope: PRT-1001
+    size: M6
+    standard: ISO
+    thread_depth: null
+    thread_depth_note: unknown
+    thread_designation: M6x1.0
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: -0.02
+        y: -0.02
+        z: 0.008
+    component_id: cmp:0002
+    diameter:
+      unit: m
+      value: 0.0066
+    end_condition: through
+    face_ids:
+    - face:5
+    feature_name: CBORE for M6 Socket Head Cap Screw1
+    hole_depth:
+      unit: m
+      value: 0.008
+    hole_type: counterbore
+    id: hole:5
+    persist_ref: aG9sZTo1
+    persist_ref_scope: PRT-1002
+    size: M6
+    standard: ISO
+    thread_depth: null
+    thread_depth_note: not a threaded hole
+    thread_designation: null
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: 0.02
+        y: -0.02
+        z: 0.008
+    component_id: cmp:0002
+    diameter:
+      unit: m
+      value: 0.0066
+    end_condition: through
+    face_ids:
+    - face:6
+    feature_name: CBORE for M6 Socket Head Cap Screw2
+    hole_depth:
+      unit: m
+      value: 0.008
+    hole_type: counterbore
+    id: hole:6
+    persist_ref: aG9sZTo2
+    persist_ref_scope: PRT-1002
+    size: M6
+    standard: ISO
+    thread_depth: null
+    thread_depth_note: not a threaded hole
+    thread_designation: null
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: 0.02
+        y: 0.02
+        z: 0.008
+    component_id: cmp:0002
+    diameter:
+      unit: m
+      value: 0.0066
+    end_condition: through
+    face_ids:
+    - face:7
+    feature_name: CBORE for M6 Socket Head Cap Screw3
+    hole_depth:
+      unit: m
+      value: 0.008
+    hole_type: counterbore
+    id: hole:7
+    persist_ref: aG9sZTo3
+    persist_ref_scope: PRT-1002
+    size: M6
+    standard: ISO
+    thread_depth: null
+    thread_depth_note: not a threaded hole
+    thread_designation: null
+  - axis:
+      direction:
+        x: 0.0
+        y: 0.0
+        z: -1.0
+      origin:
+        x: -0.02
+        y: 0.02
+        z: 0.008
+    component_id: cmp:0002
+    diameter:
+      unit: m
+      value: 0.0066
+    end_condition: through
+    face_ids:
+    - face:8
+    feature_name: CBORE for M6 Socket Head Cap Screw4
+    hole_depth:
+      unit: m
+      value: 0.008
+    hole_type: counterbore
+    id: hole:8
+    persist_ref: aG9sZTo4
+    persist_ref_scope: PRT-1002
+    size: M6
+    standard: ISO
+    thread_depth: null
+    thread_depth_note: not a threaded hole
+    thread_designation: null
+  package_summary:
+    capture_count: 0
+    component_count: 6
+    configuration: Default
+    design_id: cover-blind-tap
+    design_name: Cover on housing, blind tapped holes
+    document_count: 6
+    drawing_document_ids:
+    - DRW-2001
+    - DRW-2002
+    drawing_sheet_count: 3
+    extractor:
+      name: SwReview.Extractor
+      sw_version: null
+      version: 0.1.0
+    fastener_count: 4
+    gap_count: 5
+    hole_count: 8
+    interference_count: 0
+    manifest_discrepancies: []
+    mate_count: 0
+    root_assembly_document_id: ASM-1001
