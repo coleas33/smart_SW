@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <RootNamespace>SwReview.AddIn</RootNamespace>
@@ -6,6 +6,8 @@
     <Description>In-process SOLIDWORKS add-in host for the SwReview extractor.</Description>
     <!-- regasm needs a COM-visible assembly; see SwReviewAddIn.cs for the registration steps. -->
     <EnableComHosting>false</EnableComHosting>
+    <!-- The Task Pane is a WinForms UserControl (T060). -->
+    <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
 
   <ItemGroup>

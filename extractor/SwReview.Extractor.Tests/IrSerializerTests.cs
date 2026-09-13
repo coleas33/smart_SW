@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -15,7 +15,6 @@ namespace SwReview.Extractor.Tests;
 /// </summary>
 public class IrSerializerTests
 {
-    private const string SchemaFileName = "ir.schema.json";
 
     [Fact]
     public void SamplePackage_SerializesToJsonThatValidatesAgainstTheContract()
@@ -161,54 +160,13 @@ public class IrSerializerTests
         Assert.ThrowsAny<Exception>(() => PackageSerializer.Deserialize(json));
     }
 
-    // Loaded once: JsonSchema.Net registers the schema by its $id in a process-wide
-    // registry, and registering the same $id twice throws.
-    private static readonly Lazy<JsonSchema> ContractSchema = new Lazy<JsonSchema>(ReadContractSchema);
+    // One loader for the whole test assembly (IrContract): JsonSchema.Net registers the
+    // schema by its $id in a process-wide registry and the same $id cannot be registered
+    // twice.
+    private static JsonSchema LoadContractSchema() => IrContract.Load();
 
-    private static JsonSchema LoadContractSchema() => ContractSchema.Value;
-
-    private static JsonSchema ReadContractSchema()
-    {
-        string path = Path.Combine(AppContext.BaseDirectory, SchemaFileName);
-        Assert.True(
-            File.Exists(path),
-            $"{SchemaFileName} was not copied next to the test assembly; check the Content item in the csproj.");
-        return JsonSchema.FromFile(path);
-    }
-
-    private static string DescribeFailures(EvaluationResults results, string json)
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine("The serialized package does not satisfy contracts/ir.schema.json:");
-        AppendFailures(results, builder);
-        builder.AppendLine("--- package.json ---");
-        builder.AppendLine(json);
-        return builder.ToString();
-    }
-
-    private static void AppendFailures(EvaluationResults results, StringBuilder builder)
-    {
-        if (results.IsValid)
-        {
-            return;
-        }
-
-        if (results.Errors != null)
-        {
-            foreach (KeyValuePair<string, string> error in results.Errors)
-            {
-                builder.AppendLine($"  {results.InstanceLocation} [{error.Key}] {error.Value}");
-            }
-        }
-
-        if (results.Details != null)
-        {
-            foreach (EvaluationResults detail in results.Details)
-            {
-                AppendFailures(detail, builder);
-            }
-        }
-    }
+    private static string DescribeFailures(EvaluationResults results, string json) =>
+        IrContract.DescribeFailures(results, json);
 
     /// <summary>
     /// A minimal but realistic package: a cover bolted to a housing, one blind tapped hole
