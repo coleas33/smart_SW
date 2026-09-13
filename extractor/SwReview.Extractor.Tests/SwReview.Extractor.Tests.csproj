@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <RootNamespace>SwReview.Extractor.Tests</RootNamespace>
@@ -24,6 +24,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SwReview.Extractor\SwReview.Extractor.csproj" />
+    <!-- The console host's argument parsing is pure logic and is unit tested (T059). -->
+    <ProjectReference Include="..\SwReview.Extractor.Console\SwReview.Extractor.Console.csproj" />
   </ItemGroup>
 
   <!--
