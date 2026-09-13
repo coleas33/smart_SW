@@ -12,11 +12,9 @@ turns a group of detection results into one finding, and the two rules US3 hangs
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Iterator
 
 import pytest
-from anthropic.lib.tools import ToolError
 
 from swreview.exceptions import ExceptionStore
 from swreview.ir.models import (
@@ -184,7 +182,7 @@ def test_check_interference_group_is_registered_and_records_a_step(
 ) -> None:
     tool = recorded(context, "check_interference_group")
 
-    payload = json.loads(tool.call({"group_key": "boss/screws"}))
+    payload = tool.call({"group_key": "boss/screws"}).payload
 
     assert payload["finding"]["status"] == "demonstrated"
     assert [step.tool for step in context.session.steps] == ["check_interference_group"]
@@ -195,8 +193,7 @@ def test_an_unknown_group_through_the_registry_is_failed_coverage(
 ) -> None:
     tool = recorded(context, "check_interference_group")
 
-    with pytest.raises(ToolError):
-        tool.call({"group_key": "nope"})
+    assert tool.call({"group_key": "nope"}).is_error is True
 
     assert [item.check for item in context.session.coverage.failed] == [
         "tool.check_interference_group"

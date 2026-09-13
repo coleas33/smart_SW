@@ -16,15 +16,14 @@ The result shapes the fake replays are the ones in
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Iterator
 from typing import Any
 
 import pytest
-from anthropic.lib.tools import ToolError
+from pydantic import TypeAdapter
 
 from swreview.bridge.client import BridgeError, BridgeOpenError
-from swreview.ir.models import EvidencePackage
+from swreview.ir.models import EvidencePackage, InterferenceSettings
 from swreview.tools import bridge as bridge_tools
 from swreview.tools import session as session_tools
 from swreview.tools.context import ToolContext, context_for, use_context
@@ -59,6 +58,16 @@ INTERFERENCE = {
     "is_fastener": False,
     "is_possible": False,
 }
+
+SETTINGS = InterferenceSettings(
+    treat_coincident_as_interference=False,
+    treat_subassemblies_as_components=True,
+    include_multibody=False,
+    ignore_hidden=True,
+    fastener_folder_treatment="include",
+)
+"""The five detection settings, stated in full: `settings` is an `InterferenceSettings`,
+so there is no shorthand for "whatever the host defaults to"."""
 
 VOLUME_UNIT_GAP = {
     "kind": "unsupported",
@@ -169,8 +178,9 @@ def test_fail_tool_accepts_a_bridge_tool_name_when_the_bridge_is_wired(
         tool.name: tool for tool in ToolRegistry().build(context, fail_tool=["bridge_capture"])
     }
 
-    with pytest.raises(ToolError):
-        tools["bridge_capture"].call({"persist_ref": "YWJj", "view": "iso"})
+    result = tools["bridge_capture"].call({"persist_ref": "YWJj", "view": "iso"})
+
+    assert result.is_error is True
 
 
 # --- bridge_capture ----------------------------------------------------------------
@@ -279,28 +289,51 @@ def test_bridge_measure_returns_the_measurement_in_the_hosts_units(
 # --- bridge_interference -----------------------------------------------------------
 
 
+def test_bridge_interference_declares_the_settings_it_accepts() -> None:
+    """`settings` is an `InterferenceSettings`, so the five flags are in the schema.
+
+    A `dict[str, Any]` generates an object with no properties, which strict mode turns
+    into an object that admits no keys; the run would then go to SOLIDWORKS with settings
+    the model could not state.
+    """
+    schema = TypeAdapter(bridge_tools.bridge_interference).json_schema()
+    settings = schema["properties"]["settings"]
+    definition = schema["$defs"][settings["$ref"].rsplit("/", 1)[-1]]
+
+    assert definition["additionalProperties"] is False
+    assert set(definition["properties"]) == set(InterferenceSettings.model_fields)
+    assert set(definition["required"]) == set(InterferenceSettings.model_fields)
+
+
 def test_bridge_interference_returns_stores_and_records_the_gaps(
     context: ToolContext, bridge: FakeBridge
 ) -> None:
-    result = bridge_tools.bridge_interference(["cmp:0001", "cmp:0002"], "Default", {})
+    result = bridge_tools.bridge_interference(["cmp:0001", "cmp:0002"], "Default", SETTINGS)
 
     assert [item["id"] for item in result["interferences"]] == ["int:live-1"]
     assert [item.id for item in context.ir.interferences] == ["int:live-1"]
     assert bridge.calls[0][1]["configuration"] == "Default"
+    assert bridge.calls[0][1]["settings"] == {
+        "treat_coincident_as_interference": False,
+        "treat_subassemblies_as_components": True,
+        "include_multibody": False,
+        "ignore_hidden": True,
+        "fastener_folder_treatment": "include",
+    }
     assert result["gaps"] == [VOLUME_UNIT_GAP["reason"]]
     assert context.ir.gaps[-1].entity_kind == "interference_volume_unit"
 
 
 def test_bridge_interference_does_not_add_a_result_twice(context: ToolContext) -> None:
-    bridge_tools.bridge_interference(["cmp:0001"], "Default", {})
-    second = bridge_tools.bridge_interference(["cmp:0001"], "Default", {})
+    bridge_tools.bridge_interference(["cmp:0001"], "Default", SETTINGS)
+    second = bridge_tools.bridge_interference(["cmp:0001"], "Default", SETTINGS)
 
     assert second["added_to_package"] == 0
     assert len(context.ir.interferences) == 1
 
 
 def test_bridge_interference_rejects_an_unknown_component(context: ToolContext) -> None:
-    result = bridge_tools.bridge_interference(["cmp:9999"], "Default", {})
+    result = bridge_tools.bridge_interference(["cmp:9999"], "Default", SETTINGS)
 
     assert "cmp:9999" in result["error"]
 
@@ -308,7 +341,7 @@ def test_bridge_interference_rejects_an_unknown_component(context: ToolContext) 
 def test_bridge_interference_refuses_a_malformed_result(make_package: MakePackage) -> None:
     bridge = FakeBridge({"interference": {"interferences": [{"id": "int:1"}], "gaps": []}})
     with use_context(bridged(make_package, bridge)):
-        result = bridge_tools.bridge_interference(["cmp:0001"], "Default", {})
+        result = bridge_tools.bridge_interference(["cmp:0001"], "Default", SETTINGS)
 
     assert "error" in result
     assert "interference" in result["error"]
@@ -332,10 +365,10 @@ def test_an_open_circuit_is_an_error_result_and_failed_coverage(
     context = bridged(make_package, bridge)
     with use_context(context):
         tool = tools_of(context)["bridge_measure"]
-        with pytest.raises(ToolError) as caught:
-            tool.call({"persist_ref_a": "YWJj", "persist_ref_b": "ZGVm"})
+        result = tool.call({"persist_ref_a": "YWJj", "persist_ref_b": "ZGVm"})
 
-    assert "circuit is open" in json.loads(caught.value.content)["error"]
+    assert result.is_error is True
+    assert "circuit is open" in result.payload["error"]
     assert [item.check for item in context.session.coverage.failed] == ["tool.bridge_measure"]
 
 
@@ -350,8 +383,7 @@ def test_every_further_call_after_the_circuit_opens_is_failed_coverage(
             ("bridge_capture", {"persist_ref": "YWJj", "view": "iso"}),
             ("bridge_measure", {"persist_ref_a": "YWJj", "persist_ref_b": "ZGVm"}),
         ):
-            with pytest.raises(ToolError):
-                tools[name].call(arguments)
+            assert tools[name].call(arguments).is_error is True
 
     assert [item.check for item in context.session.coverage.failed] == [
         "tool.bridge_capture",

@@ -13,12 +13,10 @@ the three rules of contracts/agent-tools.md that make that safe:
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Iterator
 from typing import Any
 
 import pytest
-from anthropic.lib.tools import ToolError
 
 from swreview.ir.models import (
     Angle,
@@ -201,9 +199,9 @@ def test_check_fit_returns_a_finding_and_appends_it_to_the_session(
 def test_check_fit_is_registered_and_records_a_step(context: ToolContext) -> None:
     tool = recorded(context, "check_fit")
 
-    payload = json.loads(
-        tool.call({"bore_dimension_ref": ref("DIM-BORE"), "shaft_dimension_ref": ref("DIM-SHAFT")})
-    )
+    payload = tool.call(
+        {"bore_dimension_ref": ref("DIM-BORE"), "shaft_dimension_ref": ref("DIM-SHAFT")}
+    ).payload
 
     assert payload["finding"]["check"] == "fit.size_only"
     step = context.session.steps[0]
@@ -232,12 +230,12 @@ def test_an_unknown_reference_through_the_registry_is_failed_coverage(
 ) -> None:
     tool = recorded(context, "check_fit")
 
-    with pytest.raises(ToolError) as caught:
-        tool.call(
-            {"bore_dimension_ref": ref("DIM-NOWHERE"), "shaft_dimension_ref": ref("DIM-SHAFT")}
-        )
+    result = tool.call(
+        {"bore_dimension_ref": ref("DIM-NOWHERE"), "shaft_dimension_ref": ref("DIM-SHAFT")}
+    )
 
-    assert "no drawing dimension at" in json.loads(caught.value.content)["error"]
+    assert result.is_error is True
+    assert "no drawing dimension at" in result.payload["error"]
     assert [item.check for item in context.session.coverage.failed] == ["tool.check_fit"]
     assert context.session.steps[0].status == "error"
 
@@ -299,15 +297,13 @@ def test_check_axial_stack_without_a_target_reports_the_band(context: ToolContex
 def test_check_axial_stack_is_registered_and_records_a_step(context: ToolContext) -> None:
     tool = recorded(context, "check_axial_stack")
 
-    payload = json.loads(
-        tool.call(
-            {
-                "dimension_refs": [ref("DIM-A"), ref("DIM-B")],
-                "signs": [1, -1],
-                "target_gap": ref("DIM-GAP"),
-            }
-        )
-    )
+    payload = tool.call(
+        {
+            "dimension_refs": [ref("DIM-A"), ref("DIM-B")],
+            "signs": [1, -1],
+            "target_gap": ref("DIM-GAP"),
+        }
+    ).payload
 
     assert payload["finding"]["check"] == "stack.worst_case"
     assert [step.tool for step in context.session.steps] == ["check_axial_stack"]
@@ -342,7 +338,25 @@ def test_an_unknown_target_gap_is_an_error_result(context: ToolContext) -> None:
 
 
 def tool_schema(context: ToolContext, name: str) -> dict[str, Any]:
-    return recorded(context, name).to_dict()["input_schema"]
+    """The tool's canonical schema - the one form every provider adapter derives from."""
+    return recorded(context, name).schema
+
+
+def source_refs(node: Any) -> Iterator[dict[str, Any]]:
+    """Every `SourceRef` in a tool schema.
+
+    The canonical schema inlines every `$def`, so a reference parameter is the `SourceRef`
+    object itself rather than a `$ref` into `$defs` - once per parameter, and once inside
+    `items` for a list of them.
+    """
+    if isinstance(node, list):
+        for item in node:
+            yield from source_refs(item)
+    elif isinstance(node, dict):
+        if node.get("title") == "SourceRef":
+            yield node
+        for value in node.values():
+            yield from source_refs(value)
 
 
 def test_the_check_tools_accept_only_references_and_signs(context: ToolContext) -> None:
@@ -357,29 +371,33 @@ def test_the_check_tools_accept_only_references_and_signs(context: ToolContext) 
     # Every reference is a SourceRef: locators only, no size, diameter or tolerance.
     locators = set(SourceRef.model_fields)
     for schema in (fit_schema, stack_schema):
-        assert set(schema["$defs"]["SourceRef"]["properties"]) == locators
+        references = list(source_refs(schema))
+        assert references, "the check takes no reference at all"
+        for reference in references:
+            assert set(reference["properties"]) == locators
     assert not locators & {"value", "nominal", "diameter", "tolerance"}
 
 
 def test_a_raw_number_instead_of_a_reference_is_refused(context: ToolContext) -> None:
     tool = recorded(context, "check_fit")
 
-    with pytest.raises(ToolError) as caught:
-        tool.call({"bore_dimension_ref": 40.0, "shaft_dimension_ref": 39.98})
+    result = tool.call({"bore_dimension_ref": 40.0, "shaft_dimension_ref": 39.98})
 
-    assert "error" in json.loads(caught.value.content)
+    assert result.is_error is True
+    assert "error" in result.payload
     assert context.session.findings == []
 
 
 def test_a_number_smuggled_into_a_reference_is_refused(context: ToolContext) -> None:
     tool = recorded(context, "check_fit")
 
-    with pytest.raises(ToolError):
-        tool.call(
-            {
-                "bore_dimension_ref": {**ref("DIM-BORE"), "diameter_mm": 40.0},
-                "shaft_dimension_ref": ref("DIM-SHAFT"),
-            }
-        )
+    result = tool.call(
+        {
+            "bore_dimension_ref": {**ref("DIM-BORE"), "diameter_mm": 40.0},
+            "shaft_dimension_ref": ref("DIM-SHAFT"),
+        }
+    )
+
+    assert result.is_error is True
 
     assert context.session.findings == []

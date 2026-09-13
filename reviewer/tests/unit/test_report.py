@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from swreview.agent.providers import EffortMapping
 from swreview.findings import Calculation, Disposition, FindingGroup, build_finding
 from swreview.ir.models import Dimension, Discrepancy, Manifest, Quantity, SourceRef, Tolerance
 from swreview.report.dispositions import apply_disposition
@@ -23,6 +24,7 @@ from swreview.report.session import (
     CoverageScope,
     EvidenceRequest,
     InvestigationStep,
+    ProviderInfo,
     ReviewSession,
     Timing,
     load_session,
@@ -442,3 +444,52 @@ def test_apply_disposition_unknown_finding_id_raises_key_error(tmp_path: Path) -
             note="n/a",
             by="engineer@example.com",
         )
+
+
+# --- feature 002: the optional provider fields (T016) --------------------------------
+
+
+def _provider_info() -> ProviderInfo:
+    return ProviderInfo(
+        provider="openai",
+        model="gpt-test",
+        effort_mapping=EffortMapping(
+            requested="xhigh", provider_param="reasoning.effort", provider_value="high"
+        ),
+        key_source="env",
+    )
+
+
+def test_provider_info_and_retry_of_render_in_the_header() -> None:
+    session = build_session(
+        provider_info=_provider_info(),
+        retry_of="6f1d1d6a-6c8a-4f29-9f3f-0b0f6f5b9e11",
+    )
+
+    report = render_report(session, PACKAGE)
+
+    assert "- Provider: openai (effort xhigh sent as reasoning.effort=high; key from env)" in report
+    assert "- Retry of session: 6f1d1d6a-6c8a-4f29-9f3f-0b0f6f5b9e11" in report
+
+
+def test_a_session_without_provider_info_renders_no_provider_lines() -> None:
+    report = render_report(build_session(), PACKAGE)
+
+    assert "- Provider:" not in report
+    assert "- Retry of session:" not in report
+    assert "- Model: " in report
+
+
+def test_an_integer_effort_value_renders() -> None:
+    session = build_session(
+        provider_info=ProviderInfo(
+            provider="gemini",
+            model="gemini-test",
+            effort_mapping=EffortMapping(
+                requested="low", provider_param="thinking_budget", provider_value=1024
+            ),
+            key_source="settings",
+        )
+    )
+
+    assert "thinking_budget=1024" in render_report(session, PACKAGE)

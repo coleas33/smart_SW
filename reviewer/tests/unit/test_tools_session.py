@@ -11,8 +11,10 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 
 import pytest
+from pydantic import TypeAdapter, ValidationError
 
 from swreview.ir.models import Capture, EvidencePackage, SourceRef
+from swreview.report.session import CoverageScope
 from swreview.tools import session
 from swreview.tools.context import ToolContext, context_for, use_context
 from tests.support.packages import persist_ref
@@ -72,11 +74,27 @@ def test_request_evidence_rejects_ids_that_are_not_in_the_package(
 # --- mark_coverage ---------------------------------------------------------------
 
 
+def test_mark_coverage_declares_the_scope_it_accepts() -> None:
+    """`scope` is a `CoverageScope`, so its keys are in the schema the model is given.
+
+    A `dict[str, Any]` generates `{"type": "object", "additionalProperties": true}` with
+    no properties. Strict mode cannot express that, and `CoverageScope.model_validate({})`
+    succeeds, so a scope the model got wrong would be recorded as an empty scope with no
+    error anywhere.
+    """
+    schema = TypeAdapter(session.mark_coverage).json_schema()
+    scope = schema["properties"]["scope"]
+    definition = schema["$defs"][scope["$ref"].rsplit("/", 1)[-1]]
+
+    assert definition["additionalProperties"] is False
+    assert set(definition["properties"]) == set(CoverageScope.model_fields)
+
+
 def test_mark_coverage_writes_the_requested_bucket(context: ToolContext) -> None:
     result = session.mark_coverage(
         check="interference",
         bucket="out_of_scope",
-        scope={"component_ids": ["cmp:0001"], "configuration": "Default"},
+        scope=CoverageScope(component_ids=["cmp:0001"], configuration="Default"),
         reason="no interference results were extracted for this package",
     )
     assert result["status"] == "recorded"
@@ -91,7 +109,7 @@ def test_mark_coverage_refuses_the_failed_bucket(context: ToolContext) -> None:
     result = session.mark_coverage(
         check="fasteners",
         bucket="failed",  # type: ignore[arg-type]
-        scope={},
+        scope=CoverageScope(),
         reason="the tool blew up",
     )
     assert "bucket 'failed' is written by the tool layer" in result["error"]
@@ -102,19 +120,26 @@ def test_mark_coverage_refuses_an_unknown_bucket(context: ToolContext) -> None:
     result = session.mark_coverage(
         check="fasteners",
         bucket="passed",  # type: ignore[arg-type]
-        scope={},
+        scope=CoverageScope(),
         reason="looks fine",
     )
     assert result["error"].startswith("bucket 'passed' is not one of")
 
 
 def test_mark_coverage_refuses_a_scope_it_cannot_read(context: ToolContext) -> None:
-    unknown_field = session.mark_coverage(
-        check="fasteners", bucket="checked", scope={"widgets": []}, reason="r"
-    )
-    assert unknown_field["error"].startswith("scope is not a valid coverage scope")
+    """A key `CoverageScope` does not have is refused by the parameter type itself.
+
+    `scope` is a `CoverageScope`, not a free-form map, so a field the model invented
+    never reaches the tool: it fails argument validation in the registry, which records
+    `failed` coverage. What the tool still owns is the ids inside a well-formed scope.
+    """
+    with pytest.raises(ValidationError):
+        CoverageScope(widgets=[])  # type: ignore[call-arg]
     unknown_ids = session.mark_coverage(
-        check="fasteners", bucket="checked", scope={"component_ids": ["cmp:9999"]}, reason="r"
+        check="fasteners",
+        bucket="checked",
+        scope=CoverageScope(component_ids=["cmp:9999"]),
+        reason="r",
     )
     assert unknown_ids == {"error": "scope names ids not in this package: ['cmp:9999']"}
     assert context.session.coverage.checked == []
@@ -235,7 +260,7 @@ def test_get_review_checklist_reflects_findings_and_coverage(context: ToolContex
     session.mark_coverage(
         check="interference",
         bucket="skipped",
-        scope={},
+        scope=CoverageScope(),
         reason="no interference results in this package",
     )
     buckets = {item["id"]: item["bucket"] for item in session.get_review_checklist()}
@@ -246,7 +271,7 @@ def test_get_review_checklist_reflects_findings_and_coverage(context: ToolContex
 
 def test_get_review_checklist_ignores_a_failed_coverage_item(context: ToolContext) -> None:
     """`failed` is the tool layer's bucket; it never closes a checklist item out."""
-    from swreview.report.session import CoverageItem, CoverageScope
+    from swreview.report.session import CoverageItem
 
     context.session.coverage.failed.append(
         CoverageItem(

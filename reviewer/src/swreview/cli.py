@@ -12,8 +12,15 @@ One command per row of the contract, and three rules that hold for all of them:
 
 This module holds no logic of its own: every command is a thin shell around the library
 (`ingest`, `agent.runner`, `report`, `tools`, `benchmark`). Two hooks make it testable
-without a network: `REVIEW_CLIENT`, the Anthropic client handed to `run_review`, and
-`_review_fn`, the per-package review the benchmark runner calls.
+without a network: `provider_factory`, which turns the resolved `ProviderSettings` into
+the one adapter a run talks to, and `_review_fn`, the per-package review the benchmark
+runner calls.
+
+`provider_factory` is also the only place in the product that constructs a provider SDK
+client, and it is the reason `--provider`/`--model`/`--effort` mean the same thing to
+`review` and to `benchmark run`: both resolve their flags through
+`ProviderSettings.from_env`, so the model default is the per-provider one from
+`agent/settings.py` and the key comes from the same place with the same precedence.
 
 Sub-apps (`check`, `benchmark`, `exceptions`) are the extension points: one command per
 deterministic check under `check_app`, and the two retained-exception commands under
@@ -25,7 +32,7 @@ from __future__ import annotations
 import inspect
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
@@ -35,8 +42,19 @@ import typer
 from pydantic import ValidationError
 from pydantic_core import to_jsonable_python
 
+from swreview.agent import providers
 from swreview.agent.checklist import load_checklist
+from swreview.agent.providers import AgentProvider, EffortLevel, ProviderName
+from swreview.agent.providers.fake import ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import DEFAULT_MAX_STEPS, SESSION_FILE_NAME, run_review
+from swreview.agent.settings import (
+    DEFAULT_EFFORT,
+    DEFAULT_PROVIDER,
+    ProviderSettings,
+    configure_logging_redaction,
+    output_ceiling,
+    redact,
+)
 from swreview.benchmark.runner import run_benchmark
 from swreview.benchmark.scorecard import render_scorecard_md, score_run
 from swreview.benchmark.sets import BenchmarkSet, load_set
@@ -51,7 +69,7 @@ from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition, fi
 from swreview.report.markdown import render_report
 from swreview.report.session import load_session, save_session
 from swreview.tools import checks_fastener, checks_fit
-from swreview.tools.context import DEFAULT_MODEL, ToolContext, build_context, use_context
+from swreview.tools.context import ToolContext, build_context, use_context
 from swreview.tools.query import ToolResult
 
 app = typer.Typer(
@@ -75,13 +93,23 @@ app.add_typer(check_app, name="check")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(exceptions_app, name="exceptions")
 
-REVIEW_CLIENT: Any | None = None
-"""The Anthropic client `review` and `benchmark run` hand to `run_review`.
+FAKE_REVIEW_SCRIPT: tuple[ScriptedTurn, ...] = (
+    ScriptedTurn(
+        text=(
+            "Dry run: --provider fake sends nothing to a model. It reads the package "
+            "census and stops, so every checklist item is left unresolved."
+        ),
+        tool_calls=(ScriptedToolCall("get_package_summary"),),
+    ),
+)
+"""What `--provider fake` reviews with: one turn, one read-only tool call, no key.
 
-`None` means "let the runner build one from the environment", which is what a real run
-does. Tests set it to a scripted fake, which is the whole reason the agent loop is
-reachable from the command line without a network call or an API key.
+It exists so the whole command path - load, bind tools, run a turn, write `session.json`
+and `events.jsonl` - is exercisable on a workstation with no credentials. The text says
+so in the session, because a dry run that reads like a finished review is worse than no
+run at all.
 """
+
 
 SAVED_SET_FILE = "benchmark-set.json"
 """`benchmark run` writes the set it ran into the run directory, so `benchmark score`
@@ -112,6 +140,10 @@ class Effort(StrEnum):
     xhigh = "xhigh"
 
 
+DEFAULT_EFFORT_CHOICE = Effort(DEFAULT_EFFORT)
+"""`--effort`'s default as a Typer choice; `agent/settings.py` still decides what it is."""
+
+
 class Decision(StrEnum):
     """An engineer's disposition of a finding (data-model.md section 5)."""
 
@@ -123,9 +155,80 @@ class Decision(StrEnum):
 # --- the option types every command shares ---------------------------------------
 
 JsonFlag = Annotated[bool, typer.Option("--json", help="Print machine-readable JSON on stdout.")]
-ModelOption = Annotated[str, typer.Option("--model", help="Model id.")]
+ProviderOption = Annotated[
+    ProviderName, typer.Option("--provider", help="Which provider runs the review.")
+]
+ModelOption = Annotated[
+    str | None, typer.Option("--model", help="Model id; default: the provider's own.")
+]
 EffortOption = Annotated[Effort, typer.Option("--effort", help="Reasoning effort.")]
 PackageOption = Annotated[Path, typer.Option("--package", help="Directory holding package.json.")]
+
+
+# --- the provider one run talks to -----------------------------------------------
+
+
+def provider_factory(settings: ProviderSettings) -> AgentProvider:
+    """Build the adapter a review talks to. The single injection point for the tests.
+
+    The adapter class comes from `providers.get`, which imports the module (and so the
+    SDK) lazily, so a `fake` run loads neither `openai` nor `google.genai`. Only the
+    construction differs per provider, and it differs because the SDKs do: OpenAI's
+    adapter builds its own client from the key and base URL, Gemini's takes a client the
+    caller configured (`client_kwargs()` covers the enterprise case too) plus the
+    redactor that keeps the key out of any message it reports, and the scripted provider
+    takes a script instead of a key.
+
+    Tests replace this function wholesale rather than patching a client onto it, so no
+    test needs to know how any SDK client is constructed.
+    """
+    adapter = providers.get(settings.provider)
+    if settings.provider is ProviderName.GEMINI:
+        from google import genai
+
+        return adapter(
+            client=genai.Client(**settings.client_kwargs()),
+            model=settings.model,
+            redact=lambda text: redact(text, settings.secrets),
+            max_output_tokens=output_ceiling(settings.provider, settings.model),
+        )
+    if settings.provider is ProviderName.FAKE:
+        return adapter(script=FAKE_REVIEW_SCRIPT, model=settings.model)
+    return adapter(model=settings.model, **settings.client_kwargs())
+
+
+def _provider_settings(
+    provider: ProviderName, model: str | None, effort: Effort
+) -> ProviderSettings:
+    """What `--provider`, `--model` and `--effort` resolve to for one run.
+
+    `--model` is deliberately optional: the default belongs to the provider and lives in
+    `agent/settings.py`, so no command line and no session can end up naming a model this
+    product does not run (FR-026).
+    """
+    effort_level: EffortLevel = effort.value  # type: ignore[assignment]
+    return ProviderSettings.from_env(provider=provider, model=model, effort=effort_level)
+
+
+@contextmanager
+def _redacting(settings: ProviderSettings) -> Iterator[Callable[[str], str]]:
+    """Keep this run's key out of every log line, and hand back the redactor for the rest.
+
+    Two halves of FR-015, because a key leaks by two routes and neither covers the other.
+    `configure_logging_redaction` masks every log record in the process - the SDKs log
+    through their own loggers, which a filter on the root logger never sees - and the
+    yielded callable is what the runner applies to provider error text before writing it
+    into the run folder, where no log handler is involved at all.
+
+    The install is taken off when the command ends: a redactor still masking the key of a
+    finished run is dead weight, and `remove()` is written to be safe if something else
+    installed on top of it.
+    """
+    redactor = configure_logging_redaction(settings.secrets)
+    try:
+        yield lambda text: redact(text, settings.secrets)
+    finally:
+        redactor.remove()
 
 
 # --- output and error handling ---------------------------------------------------
@@ -287,8 +390,9 @@ def _checklist_kwargs(checklist: Path | None) -> dict[str, Any]:
 def review(
     package_dir: Annotated[Path, typer.Argument(help="Directory holding package.json.")],
     out: Annotated[Path, typer.Option("--out", help="Directory session.json and report.md go in.")],
-    model: ModelOption = DEFAULT_MODEL,
-    effort: EffortOption = Effort.high,
+    provider: ProviderOption = DEFAULT_PROVIDER,
+    model: ModelOption = None,
+    effort: EffortOption = DEFAULT_EFFORT_CHOICE,
     bridge: Annotated[
         bool, typer.Option("--bridge", help="Use the live SOLIDWORKS bridge (US3).")
     ] = False,
@@ -306,20 +410,24 @@ def review(
 ) -> None:
     """Run the agent loop over a package; write session.json and report.md."""
     with _errors_as_exit_1():
-        session = run_review(
-            package_dir,
-            out,
-            model=model,
-            effort=effort.value,
-            max_steps=max_steps,
-            fail_tool=tuple(fail_tool or ()),
-            bridge=bridge,
-            client=REVIEW_CLIENT,
-            **_checklist_kwargs(checklist),
-        )
-        package = load_package(package_dir).package
-        report_file = Path(out).resolve() / REPORT_FILE_NAME
-        report_file.write_text(render_report(session, package), encoding="utf-8")
+        settings = _provider_settings(provider, model, effort)
+        with _redacting(settings) as redactor:
+            session = run_review(
+                package_dir,
+                out,
+                provider=provider_factory(settings),
+                model=settings.model,
+                effort=settings.effort,
+                key_source=settings.key_source,
+                max_steps=max_steps,
+                fail_tool=tuple(fail_tool or ()),
+                bridge=bridge,
+                redact=redactor,
+                **_checklist_kwargs(checklist),
+            )
+            package = load_package(package_dir).package
+            report_file = Path(out).resolve() / REPORT_FILE_NAME
+            report_file.write_text(render_report(session, package), encoding="utf-8")
 
     coverage = session.coverage
     payload = {
@@ -327,6 +435,7 @@ def review(
         "out_dir": str(Path(out).resolve()),
         "session_file": str(Path(out).resolve() / SESSION_FILE_NAME),
         "report_file": str(report_file),
+        "provider": settings.provider.value,
         "model": session.model,
         "findings": len(session.findings),
         "evidence_requests": len(session.evidence_requests),
@@ -337,7 +446,7 @@ def review(
         },
     }
     lines = [
-        f"reviewed {package.design.design_id} with {session.model}",
+        f"reviewed {package.design.design_id} with {settings.provider.value} {session.model}",
         f"{len(session.findings)} findings, {len(session.evidence_requests)} evidence requests, "
         f"{len(session.steps)} tool calls",
         f"session: {payload['session_file']}",
@@ -749,11 +858,29 @@ def exceptions_list(
 # --- benchmark -------------------------------------------------------------------
 
 
-def _review_fn(package_dir: Path, session_out_dir: Path, *, model: str, effort: str) -> Any:
-    """One package of a benchmark set, reviewed through the same client hook as `review`."""
-    return run_review(
-        package_dir, session_out_dir, model=model, effort=effort, client=REVIEW_CLIENT
-    )
+def _review_fn(
+    package_dir: Path, session_out_dir: Path, *, provider: str, model: str, effort: str
+) -> Any:
+    """One package of a benchmark set, reviewed through the same hooks as `review`.
+
+    A fresh adapter per package on purpose: adapters carry per-turn state (step indices,
+    a client), and a set of twenty packages sharing one would interleave their traces.
+
+    The redaction is per package too, rather than left to `benchmark_run`: a library
+    caller that reaches this through `benchmark.runner`'s default `review_fn` gets the
+    same guarantee as one that came through the command line (FR-015).
+    """
+    settings = ProviderSettings.from_env(provider=provider, model=model, effort=effort)
+    with _redacting(settings) as redactor:
+        return run_review(
+            package_dir,
+            session_out_dir,
+            provider=provider_factory(settings),
+            model=settings.model,
+            effort=settings.effort,
+            key_source=settings.key_source,
+            redact=redactor,
+        )
 
 
 @benchmark_app.command("run")
@@ -762,16 +889,24 @@ def benchmark_run(
     out: Annotated[
         Path, typer.Option("--out", help="Run directory; one subdirectory per package.")
     ],
-    model: ModelOption = DEFAULT_MODEL,
-    effort: EffortOption = Effort.high,
+    provider: ProviderOption = DEFAULT_PROVIDER,
+    model: ModelOption = None,
+    effort: EffortOption = DEFAULT_EFFORT_CHOICE,
     json_output: JsonFlag = False,
 ) -> None:
     """Review every package in the set, with answer keys unreadable."""
     with _errors_as_exit_1():
         benchmark_set = load_set(set_file)
-        package_dirs = run_benchmark(
-            set_file, out, model=model, effort=effort.value, review_fn=_review_fn
-        )
+        settings = _provider_settings(provider, model, effort)
+        with _redacting(settings):
+            package_dirs = run_benchmark(
+                set_file,
+                out,
+                provider=settings.provider.value,
+                model=settings.model,
+                effort=settings.effort,
+                review_fn=_review_fn,
+            )
         saved_set = Path(out).resolve() / SAVED_SET_FILE
         saved_set.write_text(benchmark_set.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
@@ -780,6 +915,8 @@ def benchmark_run(
         "benchmark_set": benchmark_set.name,
         "out_dir": str(Path(out).resolve()),
         "saved_set_file": str(saved_set),
+        "provider": settings.provider.value,
+        "model": settings.model,
         "packages": [
             {"package_id": ref.package_id, "out_dir": str(directory)}
             for ref, directory in zip(benchmark_set.packages, package_dirs, strict=True)

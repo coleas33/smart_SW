@@ -1,12 +1,18 @@
 [project]
 name = "swreview"
-version = "0.1.0"
+version = "0.2.0"
 description = "SOLIDWORKS agentic design review pilot: IR models, deterministic checks, curated agent tools, report"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary" }
 dependencies = [
-    "anthropic>=0.80",
+    "openai>=2.0",
+    "google-genai>=1.0",
+    "mcp>=1.0",
+    "starlette>=0.40",
+    "sse-starlette>=2.1",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
     "pydantic>=2.7",
     "pint>=0.24",
     "trimesh>=4.4",
@@ -29,6 +35,7 @@ dev = [
     "pytest-regressions>=2.5",
     "ruff>=0.5",
     "jsonschema>=4.22",
+    "respx>=0.21",
 ]
 
 [build-system]
@@ -50,6 +57,7 @@ select = ["E", "F", "I", "B", "UP"]
 testpaths = ["tests"]
 markers = [
     "integration: needs a saved native evidence package; skipped when absent",
+    "live: calls a real provider API; skipped without the provider's key in the environment",
     "raycast: needs the optional embreex wheel",
 ]
 addopts = "-q"

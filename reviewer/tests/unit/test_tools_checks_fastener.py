@@ -16,12 +16,10 @@ resolving ids into the entities those checks need without inventing anything:
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Iterator
 from typing import Any
 
 import pytest
-from anthropic.lib.tools import ToolError
 
 from swreview.ir.models import (
     Axis,
@@ -414,15 +412,13 @@ def test_unknown_ids_are_error_results(context: ToolContext) -> None:
 def test_check_fastener_joint_is_registered_and_records_a_step(context: ToolContext) -> None:
     tool = recorded(context, "check_fastener_joint")
 
-    payload = json.loads(
-        tool.call(
-            {
-                "fastener_id": "fst:screw",
-                "hole_id": "hole:tapped",
-                "clamped_component_ids": ["cmp:0003"],
-            }
-        )
-    )
+    payload = tool.call(
+        {
+            "fastener_id": "fst:screw",
+            "hole_id": "hole:tapped",
+            "clamped_component_ids": ["cmp:0003"],
+        }
+    ).payload
 
     assert len(payload["findings"]) == 4
     assert [step.tool for step in context.session.steps] == ["check_fastener_joint"]
@@ -431,10 +427,11 @@ def test_check_fastener_joint_is_registered_and_records_a_step(context: ToolCont
 def test_an_unknown_id_through_the_registry_is_failed_coverage(context: ToolContext) -> None:
     tool = recorded(context, "check_fastener_joint")
 
-    with pytest.raises(ToolError):
-        tool.call(
-            {"fastener_id": "fst:nope", "hole_id": "hole:tapped", "clamped_component_ids": []}
-        )
+    result = tool.call(
+        {"fastener_id": "fst:nope", "hole_id": "hole:tapped", "clamped_component_ids": []}
+    )
+
+    assert result.is_error is True
 
     assert [item.check for item in context.session.coverage.failed] == [
         "tool.check_fastener_joint"
@@ -489,9 +486,9 @@ def test_hole_alignment_rejects_an_unknown_tolerance_reference(context: ToolCont
 def test_check_hole_alignment_is_registered_and_records_a_step(context: ToolContext) -> None:
     tool = recorded(context, "check_hole_alignment")
 
-    payload = json.loads(
-        tool.call({"hole_id_a": "hole:tapped", "hole_id_b": "hole:far", "tolerance": None})
-    )
+    payload = tool.call(
+        {"hole_id_a": "hole:tapped", "hole_id_b": "hole:far", "tolerance": None}
+    ).payload
 
     assert payload["finding"]["check"] == "hole.coaxiality"
     assert [step.tool for step in context.session.steps] == ["check_hole_alignment"]

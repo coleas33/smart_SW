@@ -12,14 +12,12 @@ only tools that read geometry, so these tests pin what makes that safe:
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
 import trimesh
-from anthropic.lib.tools import ToolError
 
 from swreview.ir.models import (
     Axis,
@@ -244,7 +242,7 @@ def test_a_degenerate_axis_is_an_error_result_not_a_crash(context: ToolContext) 
 def test_measure_axis_distance_is_registered_and_records_a_step(context: ToolContext) -> None:
     tool = recorded(context, "measure_axis_distance")
 
-    payload = json.loads(tool.call({"hole_id_a": "hole:a", "hole_id_b": "hole:b"}))
+    payload = tool.call({"hole_id_a": "hole:a", "hole_id_b": "hole:b"}).payload
 
     assert payload["distance"]["value"] == 2.0
     assert [step.tool for step in context.session.steps] == ["measure_axis_distance"]
@@ -394,9 +392,9 @@ def test_check_tool_envelope_through_the_registry_records_a_step(
 ) -> None:
     tool = recorded(context, "check_tool_envelope")
 
-    payload = json.loads(
-        tool.call({"fastener_id": "fst:m6", "tool": "hex_key", "length": mm(40.0)})
-    )
+    payload = tool.call(
+        {"fastener_id": "fst:m6", "tool": "hex_key", "length": mm(40.0)}
+    ).payload
 
     assert payload["tool"] == "hex_key"
     assert [step.tool for step in context.session.steps] == ["check_tool_envelope"]
@@ -405,7 +403,6 @@ def test_check_tool_envelope_through_the_registry_records_a_step(
 def test_an_unknown_id_through_the_registry_is_failed_coverage(context: ToolContext) -> None:
     tool = recorded(context, "bounding_box")
 
-    with pytest.raises(ToolError):
-        tool.call({"component_id": "cmp:9999"})
+    assert tool.call({"component_id": "cmp:9999"}).is_error is True
 
     assert [item.check for item in context.session.coverage.failed] == ["tool.bounding_box"]

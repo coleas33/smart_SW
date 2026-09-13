@@ -31,7 +31,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from swreview.bridge.client import BRIDGE_VIEWS, BridgeError
-from swreview.ir.models import Capture, Gap, Interference
+from swreview.ir.models import Capture, Gap, Interference, InterferenceSettings
 from swreview.tools.context import (
     ToolContext,
     current_context,
@@ -224,7 +224,7 @@ def bridge_measure(persist_ref_a: str, persist_ref_b: str) -> ToolResult:
 
 
 def bridge_interference(
-    component_ids: list[str], configuration: str, settings: dict[str, Any]
+    component_ids: list[str], configuration: str, settings: InterferenceSettings
 ) -> ToolResult:
     """Run interference detection live and add the results to the package.
 
@@ -240,9 +240,11 @@ def bridge_interference(
     Args:
         component_ids: Components to test, or an empty list for the whole assembly.
         configuration: Configuration to compute in.
-        settings: Detection settings: treat_coincident_as_interference,
-            treat_subassemblies_as_components, include_multibody, ignore_hidden,
-            fastener_folder_treatment.
+        settings: Detection settings, all five stated: treat_coincident_as_interference,
+            treat_subassemblies_as_components, include_multibody, ignore_hidden (all
+            booleans) and fastener_folder_treatment (include, exclude or only). They are
+            the settings the results are then read under, so none of them is assumed
+            here.
     """
     context = current_context()
     if context.bridge is None:
@@ -257,7 +259,7 @@ def bridge_interference(
 
     try:
         result = context.bridge.interference(
-            list(component_ids), configuration, dict(settings)
+            list(component_ids), configuration, settings.model_dump()
         )
     except BridgeError as exc:
         return _bridge_failure(context, exc, "running interference detection")

@@ -7,6 +7,7 @@ so it has to round-trip and it has to validate against the committed contract - 
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -16,6 +17,7 @@ from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 from referencing import Registry, Resource
 
+from swreview.agent.providers import EffortMapping
 from swreview.findings import build_finding
 from swreview.ir.models import SourceRef
 from swreview.report.session import (
@@ -25,6 +27,7 @@ from swreview.report.session import (
     EvidenceRequest,
     EvidenceRequestIdAllocator,
     InvestigationStep,
+    ProviderInfo,
     ReviewSession,
     Timing,
     load_session,
@@ -217,3 +220,70 @@ def test_investigation_step_records_an_error() -> None:
 
     assert step.status == "error"
     assert step.error == "faces are not parallel"
+
+
+# --- feature 002: the optional provider fields (T016) --------------------------------
+
+
+def test_provider_info_and_retry_of_round_trip_and_validate(tmp_path: Path) -> None:
+    previous = "6f1d1d6a-6c8a-4f29-9f3f-0b0f6f5b9e11"
+    session = build_session(
+        provider_info=ProviderInfo(
+            provider="openai",
+            model="gpt-test",
+            effort_mapping=EffortMapping(
+                requested="high", provider_param="reasoning.effort", provider_value="high"
+            ),
+            key_source="env",
+        ),
+        retry_of=previous,
+    )
+
+    path = save_session(session, tmp_path / "session.json")
+    written = json.loads(path.read_text(encoding="utf-8"))
+    session_validator().validate(written)
+
+    reloaded = load_session(path)
+    assert reloaded.provider_info is not None
+    assert reloaded.provider_info.provider == "openai"
+    assert reloaded.provider_info.effort_mapping.provider_value == "high"
+    assert reloaded.provider_info.key_source == "env"
+    assert str(reloaded.retry_of) == previous
+
+
+def test_an_integer_effort_value_is_recorded_and_validates(tmp_path: Path) -> None:
+    session = build_session(
+        provider_info=ProviderInfo(
+            provider="gemini",
+            model="gemini-test",
+            effort_mapping=EffortMapping(
+                requested="low", provider_param="thinking_budget", provider_value=1024
+            ),
+            key_source="settings",
+        )
+    )
+
+    path = save_session(session, tmp_path / "session.json")
+    session_validator().validate(json.loads(path.read_text(encoding="utf-8")))
+    assert load_session(path).provider_info.effort_mapping.provider_value == 1024  # type: ignore[union-attr]
+
+
+def test_a_session_without_the_provider_fields_still_validates(tmp_path: Path) -> None:
+    session = build_session()
+
+    assert session.provider_info is None
+    assert session.retry_of is None
+    path = save_session(session, tmp_path / "session.json")
+    session_validator().validate(json.loads(path.read_text(encoding="utf-8")))
+
+
+def test_provider_info_rejects_an_unknown_key_source() -> None:
+    with pytest.raises(ValidationError):
+        ProviderInfo(
+            provider="openai",
+            model="gpt-test",
+            effort_mapping=EffortMapping(
+                requested="high", provider_param="reasoning.effort", provider_value="high"
+            ),
+            key_source="hard-coded",  # type: ignore[arg-type]
+        )

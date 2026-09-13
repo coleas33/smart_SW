@@ -1,32 +1,41 @@
 """Unit tests for the `swreview` command line (T043, T081 CLI half, T097).
 
 Every command of contracts/cli.md is exercised on files this test makes: a written
-evidence package, a manifest and BOM, a fake-client review, a synthetic benchmark run.
-The three rules the contract states for all of them are asserted per command:
+evidence package, a manifest and BOM, a scripted-provider review, a synthetic benchmark
+run. The three rules the contract states for all of them are asserted per command:
 
 - exit 0 on success, 1 on a validation or runtime error, 2 on a usage error;
 - `--json` prints machine-readable output on stdout and nothing else;
 - diagnostics go to stderr, so a `--json` consumer never has to parse around them.
 
-No network: `swreview.cli.REVIEW_CLIENT` is the injection point the review commands hand
-to `swreview.agent.runner.run_review`, and the fake below is the same shape as the one in
-`test_agent_runner.py` - the SDK contract the runner depends on and nothing more.
+No network: `swreview.cli.provider_factory` is the injection point the review commands
+build their adapter through (T023, replacing feature 001's `REVIEW_CLIENT`), and the
+fixture below swaps it for one that returns a scripted `FakeProvider`. The settings the
+CLI resolved reach the test on the provider it built, which is how `--provider`,
+`--model` and `--effort` are asserted without sending anything anywhere.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import shutil
-from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
-from anthropic.lib.tools import ToolError
 from typer.testing import CliRunner
 
 from swreview import cli
+from swreview.agent.providers import ProviderName
+from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.agent.settings import (
+    ENTERPRISE_ENV,
+    MASK,
+    GeminiEnterprise,
+    ProviderSettings,
+)
 from swreview.checks.golden_interference import interference_case
 from swreview.ir.loader import save_package
 from swreview.ir.models import EvidencePackage
@@ -41,72 +50,64 @@ MakePackage = Callable[..., EvidencePackage]
 runner = CliRunner()
 
 
-# --- the fake Anthropic client ---------------------------------------------------
+# --- the environment these tests run in ------------------------------------------
+
+PROVIDER_ENV: tuple[str, ...] = (
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "GOOGLE_API_KEY",
+    "GEMINI_API_KEY",
+    *ENTERPRISE_ENV,
+    "GOOGLE_CLOUD_PROJECT",
+    "GOOGLE_CLOUD_LOCATION",
+)
+"""Every variable `ProviderSettings.from_env` reads, including the ones it reads only for
+the provider that was not asked for."""
 
 
-ToolCall = tuple[str, dict[str, Any]]
+@pytest.fixture(autouse=True)
+def empty_provider_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve every command against an empty provider environment, not the developer's.
+
+    The commands call `ProviderSettings.from_env` with no `env=`, so without this the
+    settings object under assertion is whatever the workstation exports: a seat with
+    `GOOGLE_GENAI_USE_VERTEXAI=true` and no `GOOGLE_CLOUD_LOCATION` - a Gemini Enterprise
+    engineer, which is this product's audience - turns the two default-model tests red,
+    and `OPENAI_API_KEY`, `OPENAI_BASE_URL` and the Google key variables change
+    `key_source`, `base_url` and `enterprise` silently. A test that wants one of these set
+    sets it itself, which is what makes the env-derived assertions below mean anything.
+    """
+    for name in PROVIDER_ENV:
+        monkeypatch.delenv(name, raising=False)
 
 
-@dataclass(frozen=True)
-class Turn:
-    """One assistant turn: why it stopped, and what it asked the tools to do."""
-
-    stop_reason: str
-    calls: tuple[ToolCall, ...] = ()
+# --- the scripted provider -------------------------------------------------------
 
 
-class FakeMessage:
-    role = "assistant"
+class RecordingProvider(FakeProvider):
+    """A scripted provider that keeps what the CLI resolved and what the runner bound.
 
-    def __init__(self, stop_reason: str) -> None:
-        self.stop_reason = stop_reason
+    `settings` is the `ProviderSettings` the command built from `--provider`, `--model`
+    and `--effort`; `tool_names` is what `start_review` handed the turn, which is how the
+    `--bridge` tests see the three bridge tools appear and disappear.
 
+    It reports the chosen provider's name rather than `fake`, because it stands in for
+    whichever adapter the factory would have built: that is what makes `provider_info` in
+    `session.json` an assertion about `--provider` reaching the session.
+    """
 
-@dataclass
-class FakeToolRunner:
-    tools: dict[str, Any]
-    script: list[Turn]
-    pending: list[ToolCall] = field(default_factory=list)
+    def __init__(self, *, settings: ProviderSettings, script: Sequence[ScriptedTurn]) -> None:
+        super().__init__(script=script, model=settings.model)
+        self.name = settings.provider
+        self.settings = settings
+        self.tool_names: tuple[str, ...] = ()
 
-    def __iter__(self) -> Iterator[FakeMessage]:
-        for turn in self.script:
-            self.pending = list(turn.calls)
-            yield FakeMessage(turn.stop_reason)
-
-    def generate_tool_call_response(self) -> None:
-        for name, arguments in self.pending:
-            try:
-                self.tools[name].call(arguments)
-            except ToolError:
-                pass
-        self.pending = []
+    def run(self, **kwargs: Any) -> Any:
+        self.tool_names = tuple(tool.name for tool in kwargs["tools"])
+        return super().run(**kwargs)
 
 
-class FakeMessages:
-    def __init__(self, script: Sequence[Turn]) -> None:
-        self.script = list(script)
-        self.kwargs: dict[str, Any] = {}
-
-    def tool_runner(self, **kwargs: Any) -> FakeToolRunner:
-        self.kwargs = kwargs
-        return FakeToolRunner(
-            tools={tool.name: tool for tool in kwargs["tools"]}, script=self.script
-        )
-
-
-class FakeBeta:
-    def __init__(self, script: Sequence[Turn]) -> None:
-        self.messages = FakeMessages(script)
-
-
-class FakeClient:
-    """`client.beta.messages.tool_runner(...)`, and nothing else."""
-
-    def __init__(self, script: Sequence[Turn]) -> None:
-        self.beta = FakeBeta(script)
-
-
-DRAWING_FINDING: ToolCall = (
+DRAWING_FINDING = ScriptedToolCall(
     "record_drawing_finding",
     {
         "document_id": "doc:2",
@@ -119,20 +120,32 @@ DRAWING_FINDING: ToolCall = (
     },
 )
 
-SCRIPT: tuple[Turn, ...] = (
-    Turn("tool_use", (("get_package_summary", {}), DRAWING_FINDING)),
-    Turn("end_turn"),
+SCRIPT: tuple[ScriptedTurn, ...] = (
+    ScriptedTurn(
+        text="One drawing finding recorded.",
+        tool_calls=(ScriptedToolCall("get_package_summary"), DRAWING_FINDING),
+    ),
 )
 
 
 @pytest.fixture
-def fake_client(monkeypatch: pytest.MonkeyPatch) -> Callable[..., FakeClient]:
-    """Install a scripted fake client as the one `swreview.cli` hands to `run_review`."""
+def fake_provider(monkeypatch: pytest.MonkeyPatch) -> Callable[..., list[RecordingProvider]]:
+    """Swap `cli.provider_factory` for one that scripts every adapter the CLI asks for.
 
-    def install(script: Sequence[Turn] = SCRIPT) -> FakeClient:
-        client = FakeClient(script)
-        monkeypatch.setattr(cli, "REVIEW_CLIENT", client)
-        return client
+    The returned list fills in as reviews run - one entry per adapter built - so a test
+    reads back the settings the command resolved without the CLI exposing them.
+    """
+
+    def install(script: Sequence[ScriptedTurn] = SCRIPT) -> list[RecordingProvider]:
+        built: list[RecordingProvider] = []
+
+        def factory(settings: ProviderSettings) -> RecordingProvider:
+            provider = RecordingProvider(settings=settings, script=script)
+            built.append(provider)
+            return provider
+
+        monkeypatch.setattr(cli, "provider_factory", factory)
+        return built
 
     return install
 
@@ -212,11 +225,11 @@ def joint_package_dir(tmp_path: Path, make_package: MakePackage) -> Path:
     return directory
 
 
-JOINT_SCRIPT: tuple[Turn, ...] = (
-    Turn(
-        "tool_use",
-        (
-            (
+JOINT_SCRIPT: tuple[ScriptedTurn, ...] = (
+    ScriptedTurn(
+        text="One joint checked.",
+        tool_calls=(
+            ScriptedToolCall(
                 "check_fastener_joint",
                 {
                     "fastener_id": "fst:1",
@@ -226,16 +239,15 @@ JOINT_SCRIPT: tuple[Turn, ...] = (
             ),
         ),
     ),
-    Turn("end_turn"),
 )
 
 
 @pytest.fixture
 def joint_run_dir(
-    tmp_path: Path, tmp_package_dir: Path, fake_client: Callable[..., FakeClient]
+    tmp_path: Path, tmp_package_dir: Path, fake_provider: Callable[..., list[RecordingProvider]]
 ) -> Path:
     """A finished review whose findings name components, so they can be excepted."""
-    fake_client(JOINT_SCRIPT)
+    fake_provider(JOINT_SCRIPT)
     out = tmp_path / "joint-run"
     result = invoke("review", str(tmp_package_dir), "--out", str(out))
     assert result.exit_code == 0, result.stdout
@@ -243,9 +255,11 @@ def joint_run_dir(
 
 
 @pytest.fixture
-def run_dir(tmp_path: Path, tmp_package_dir: Path, fake_client: Callable[..., FakeClient]) -> Path:
+def run_dir(
+    tmp_path: Path, tmp_package_dir: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> Path:
     """A finished review: `session.json` with one finding, and `report.md`."""
-    fake_client()
+    fake_provider()
     out = tmp_path / "run"
     result = invoke("review", str(tmp_package_dir), "--out", str(out))
     assert result.exit_code == 0, result.stdout
@@ -358,16 +372,15 @@ def test_ingest_with_a_missing_bom_exits_1(tmp_path: Path) -> None:
 
 
 def test_review_writes_a_session_and_a_report(
-    tmp_package_dir: Path, tmp_path: Path, fake_client: Callable[..., FakeClient]
+    tmp_package_dir: Path, tmp_path: Path, fake_provider: Callable[..., list[RecordingProvider]]
 ) -> None:
-    fake_client()
+    fake_provider()
     out = tmp_path / "run"
 
     body = payload(invoke("review", str(tmp_package_dir), "--out", str(out), "--json"))
 
     session = json.loads((out / "session.json").read_text(encoding="utf-8"))
     assert session["design_id"] == "dsn:1"
-    assert session["model"] == "claude-opus-5"
     assert [finding["id"] for finding in session["findings"]] == ["F-001"]
     report = (out / "report.md").read_text(encoding="utf-8")
     assert "F-001" in report
@@ -376,34 +389,292 @@ def test_review_writes_a_session_and_a_report(
     assert body["report_file"].endswith("report.md")
 
 
-def test_review_passes_the_model_and_effort_through(
-    tmp_package_dir: Path, tmp_path: Path, fake_client: Callable[..., FakeClient]
+def test_review_without_a_provider_runs_openai_on_its_default_model(
+    tmp_package_dir: Path, tmp_path: Path, fake_provider: Callable[..., list[RecordingProvider]]
 ) -> None:
-    client = fake_client()
+    """FR-026: no flag means OpenAI and the model `agent/settings.py` names for it - the
+    retired vendor's id is not written into `session.json` by any path."""
+    built = fake_provider()
+    out = tmp_path / "run"
+
+    body = payload(invoke("review", str(tmp_package_dir), "--out", str(out), "--json"))
+
+    assert built[0].settings.provider is ProviderName.OPENAI
+    assert built[0].settings.model == "gpt-5.6"
+    session = json.loads((out / "session.json").read_text(encoding="utf-8"))
+    assert session["model"] == "gpt-5.6"
+    assert session["provider_info"]["provider"] == "openai"
+    assert body["model"] == "gpt-5.6"
+
+
+def test_review_without_a_model_takes_the_chosen_providers_default(
+    tmp_package_dir: Path, tmp_path: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    built = fake_provider()
+    out = tmp_path / "run"
+
+    result = invoke("review", str(tmp_package_dir), "--out", str(out), "--provider", "gemini")
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert built[0].settings.model == "gemini-3.5-flash"
+    session = json.loads((out / "session.json").read_text(encoding="utf-8"))
+    assert session["model"] == "gemini-3.5-flash"
+    assert session["provider_info"]["provider"] == "gemini"
+
+
+def test_review_with_the_fake_provider_needs_no_key_and_writes_a_session(
+    tmp_package_dir: Path, tmp_path: Path
+) -> None:
+    """The real `cli.provider_factory`, not the fixture: `--provider fake` is the dry run
+    a workstation with no credentials can take, and it still writes both output files."""
+    out = tmp_path / "run"
+
+    result = invoke("review", str(tmp_package_dir), "--out", str(out), "--provider", "fake")
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    session = json.loads((out / "session.json").read_text(encoding="utf-8"))
+    assert session["model"] == "fake-scripted"
+    assert session["provider_info"] == {
+        "provider": "fake",
+        "model": "fake-scripted",
+        "effort_mapping": {
+            "requested": "high",
+            "provider_param": "fake.effort",
+            "provider_value": "high",
+        },
+        "key_source": "none",
+    }
+    assert (out / "events.jsonl").is_file()
+
+
+def test_review_on_openai_without_a_key_exits_1(
+    tmp_package_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real factory again: a missing key is one line on stderr, not a traceback."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    result = invoke("review", str(tmp_package_dir), "--out", str(tmp_path / "run"))
+
+    assert result.exit_code == 1
+    assert "api_key" in result.stderr
+    assert result.stdout == ""
+
+
+# --- what the environment contributes, set deliberately --------------------------
+
+
+def test_review_takes_the_openai_key_from_the_environment_and_records_its_source(
+    tmp_package_dir: Path,
+    tmp_path: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FR-015: the key the run used is resolved here, recorded as `env`, and never written.
+
+    The provider environment is empty for every test in this module, so this is the only
+    place `key_source == "env"` can come from - and the session must say so without saying
+    what the key was.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-from-the-environment")
+    built = fake_provider()
+    out = tmp_path / "run"
+
+    result = invoke("review", str(tmp_package_dir), "--out", str(out))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    settings = built[0].settings
+    assert settings.key_source == "env"
+    assert settings.api_key is not None
+    assert settings.api_key.get_secret_value() == "sk-from-the-environment"
+    session_text = (out / "session.json").read_text(encoding="utf-8")
+    assert json.loads(session_text)["provider_info"]["key_source"] == "env"
+    assert "sk-from-the-environment" not in session_text
+
+
+def test_review_takes_the_openai_base_url_from_the_environment(
+    tmp_package_dir: Path,
+    tmp_path: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`OPENAI_BASE_URL` is how a seat behind a gateway reaches OpenAI at all."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-gateway")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://gateway.internal/v1")
+    built = fake_provider()
+
+    result = invoke("review", str(tmp_package_dir), "--out", str(tmp_path / "run"))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert built[0].settings.base_url == "https://gateway.internal/v1"
+
+
+def test_review_on_gemini_resolves_enterprise_from_the_environment(
+    tmp_package_dir: Path,
+    tmp_path: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The switch plus a project plus a location routes the run at Gemini Enterprise."""
+    monkeypatch.setenv("GOOGLE_API_KEY", "g-from-the-environment")
+    monkeypatch.setenv("GOOGLE_GENAI_USE_ENTERPRISE", "true")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "acme-cad")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+    built = fake_provider()
+
+    result = invoke(
+        "review", str(tmp_package_dir), "--out", str(tmp_path / "run"), "--provider", "gemini"
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    settings = built[0].settings
+    assert settings.enterprise == GeminiEnterprise(project="acme-cad", location="us-central1")
+    assert settings.key_source == "env"
+
+
+def test_a_provider_error_that_echoes_the_key_is_redacted_in_the_event_stream(
+    tmp_package_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FR-015: the run folder cannot receive the key, whatever raised.
+
+    Each adapter redacts the errors it wraps, but a failure outside the classes it maps -
+    an SDK-internal error, a transport error, a client constructed with a bad argument -
+    reaches the runner unwrapped, and the runner writes `str(exc)` into `events.jsonl`.
+    So the masking has to be the runner's too, not each adapter's alone.
+    """
+    key = "sk-echoed-back-in-the-error"
+    monkeypatch.setenv("OPENAI_API_KEY", key)
+
+    class LeakingProvider(FakeProvider):
+        """An adapter whose failure quotes the request it failed on, key included."""
+
+        def run(self, **kwargs: Any) -> Any:
+            raise RuntimeError(f"401 Unauthorized: api_key={key} was rejected")
+
+    monkeypatch.setattr(
+        cli,
+        "provider_factory",
+        lambda settings: LeakingProvider(script=SCRIPT, model=settings.model),
+    )
+    out = tmp_path / "run"
+
+    result = invoke("review", str(tmp_package_dir), "--out", str(out))
+
+    assert isinstance(result.exception, RuntimeError)
+    events = (out / "events.jsonl").read_text(encoding="utf-8")
+    assert key not in events
+    assert MASK in events
+    error = next(
+        json.loads(line) for line in events.splitlines() if json.loads(line)["type"] == "error"
+    )
+    assert error["body"]["message"] == f"401 Unauthorized: api_key={MASK} was rejected"
+
+
+def test_the_key_is_masked_out_of_log_records_while_the_review_runs(
+    tmp_package_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """FR-015 again, for the other half: an SDK that logs the request it is about to make.
+
+    `openai`, `google_genai` and `httpx` log through their own loggers, which a filter on
+    the root logger never sees, so the run installs a record factory instead. It is taken
+    off again when the command ends - a redactor still masking a key the next command does
+    not use is dead weight - which is what the second assertion pins down.
+    """
+    key = "sk-written-to-a-log-line"
+    monkeypatch.setenv("OPENAI_API_KEY", key)
+    sdk_logger = logging.getLogger("openai")
+
+    class LoggingProvider(FakeProvider):
+        def run(self, **kwargs: Any) -> Any:
+            sdk_logger.error("POST /v1/responses with api_key=%s", key)
+            return super().run(**kwargs)
+
+    monkeypatch.setattr(
+        cli,
+        "provider_factory",
+        lambda settings: LoggingProvider(script=SCRIPT, model=settings.model),
+    )
+
+    with caplog.at_level(logging.ERROR, logger="openai"):
+        result = invoke("review", str(tmp_package_dir), "--out", str(tmp_path / "run"))
+        assert result.exit_code == 0, result.stdout + result.stderr
+        during = caplog.text
+        sdk_logger.error("POST /v1/responses with api_key=%s", key)
+        after = caplog.text[len(during) :]
+
+    assert key not in during
+    assert f"api_key={MASK}" in during
+    assert key in after
+
+
+def test_review_with_a_half_configured_enterprise_environment_exits_1(
+    tmp_package_dir: Path,
+    tmp_path: Path,
+    fake_provider: Callable[..., list[RecordingProvider]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """And names the switch that is actually set, not the one it would have preferred."""
+    monkeypatch.setenv("GOOGLE_API_KEY", "g-key")
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    fake_provider()
+
+    result = invoke(
+        "review", str(tmp_package_dir), "--out", str(tmp_path / "run"), "--provider", "gemini"
+    )
+
+    assert result.exit_code == 1
+    assert "GOOGLE_GENAI_USE_VERTEXAI" in result.stderr
+    assert result.stdout == ""
+
+
+def test_review_passes_the_provider_model_and_effort_through(
+    tmp_package_dir: Path, tmp_path: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    built = fake_provider()
+    out = tmp_path / "run"
 
     result = invoke(
         "review",
         str(tmp_package_dir),
         "--out",
-        str(tmp_path / "run"),
+        str(out),
+        "--provider",
+        "fake",
         "--model",
-        "claude-sonnet-4-5",
+        "gpt-5.5",
         "--effort",
         "medium",
         "--max-steps",
         "5",
     )
 
-    assert result.exit_code == 0
-    kwargs = client.beta.messages.kwargs
-    assert kwargs["model"] == "claude-sonnet-4-5"
-    assert kwargs["output_config"] == {"effort": "medium"}
+    assert result.exit_code == 0, result.stdout + result.stderr
+    settings = built[0].settings
+    assert settings.provider is ProviderName.FAKE
+    assert settings.model == "gpt-5.5"
+    assert settings.effort == "medium"
+    session = json.loads((out / "session.json").read_text(encoding="utf-8"))
+    assert session["model"] == "gpt-5.5"
+    assert session["provider_info"]["effort_mapping"]["requested"] == "medium"
+
+
+def test_review_with_an_unknown_provider_is_a_usage_error(
+    tmp_package_dir: Path, tmp_path: Path
+) -> None:
+    """`anthropic` is not a spelling the CLI accepts any more (FR-026)."""
+    result = invoke(
+        "review", str(tmp_package_dir), "--out", str(tmp_path / "run"), "--provider", "anthropic"
+    )
+
+    assert result.exit_code == 2
 
 
 def test_review_fail_tool_keeps_the_run_alive_and_records_the_failure(
-    tmp_package_dir: Path, tmp_path: Path, fake_client: Callable[..., FakeClient]
+    tmp_package_dir: Path, tmp_path: Path, fake_provider: Callable[..., list[RecordingProvider]]
 ) -> None:
-    fake_client()
+    fake_provider()
     out = tmp_path / "run"
 
     result = invoke(
@@ -422,9 +693,9 @@ def test_review_fail_tool_keeps_the_run_alive_and_records_the_failure(
 
 
 def test_review_with_an_unknown_fail_tool_exits_1(
-    tmp_package_dir: Path, tmp_path: Path, fake_client: Callable[..., FakeClient]
+    tmp_package_dir: Path, tmp_path: Path, fake_provider: Callable[..., list[RecordingProvider]]
 ) -> None:
-    fake_client()
+    fake_provider()
 
     result = invoke(
         "review",
@@ -450,27 +721,27 @@ def test_review_with_an_unknown_effort_is_a_usage_error(
 
 
 def test_review_with_the_bridge_adds_the_bridge_tools(
-    tmp_package_dir: Path, tmp_path: Path, fake_client: Callable[..., FakeClient]
+    tmp_package_dir: Path, tmp_path: Path, fake_provider: Callable[..., list[RecordingProvider]]
 ) -> None:
     """`--bridge` wires a client and the three bridge tools; nothing opens the pipe."""
-    client = fake_client()
+    built = fake_provider()
 
     result = invoke("review", str(tmp_package_dir), "--out", str(tmp_path / "run"), "--bridge")
 
     assert result.exit_code == 0, result.stdout + result.stderr
-    names = {tool.name for tool in client.beta.messages.kwargs["tools"]}
+    names = set(built[0].tool_names)
     assert {"bridge_capture", "bridge_measure", "bridge_interference"} <= names
 
 
 def test_review_without_the_bridge_has_no_bridge_tools(
-    tmp_package_dir: Path, tmp_path: Path, fake_client: Callable[..., FakeClient]
+    tmp_package_dir: Path, tmp_path: Path, fake_provider: Callable[..., list[RecordingProvider]]
 ) -> None:
-    client = fake_client()
+    built = fake_provider()
 
     result = invoke("review", str(tmp_package_dir), "--out", str(tmp_path / "run"))
 
     assert result.exit_code == 0
-    names = {tool.name for tool in client.beta.messages.kwargs["tools"]}
+    names = set(built[0].tool_names)
     assert not names & {"bridge_capture", "bridge_measure", "bridge_interference"}
 
 
@@ -1200,9 +1471,9 @@ def answer_keys(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def benchmark_run_dir(
-    tmp_path: Path, benchmark_set: Path, fake_client: Callable[..., FakeClient]
+    tmp_path: Path, benchmark_set: Path, fake_provider: Callable[..., list[RecordingProvider]]
 ) -> Path:
-    fake_client()
+    fake_provider()
     out = tmp_path / "runs" / "benchmark-2026-09-12"
     result = invoke("benchmark", "run", "--set", str(benchmark_set), "--out", str(out))
     assert result.exit_code == 0, result.stdout + result.stderr
@@ -1213,6 +1484,57 @@ def test_benchmark_run_reviews_every_package_in_the_set(benchmark_run_dir: Path)
     assert (benchmark_run_dir / "cover" / "session.json").is_file()
     session = json.loads((benchmark_run_dir / "cover" / "session.json").read_text("utf-8"))
     assert session["timing"]["unattended_runtime_minutes"] >= 0
+
+
+def test_benchmark_run_passes_the_provider_and_model_to_every_package(
+    tmp_path: Path, benchmark_set: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    """FR-016: the benchmark runner takes the same `--provider`/`--model` as `review`."""
+    built = fake_provider()
+
+    result = invoke(
+        "benchmark",
+        "run",
+        "--set",
+        str(benchmark_set),
+        "--out",
+        str(tmp_path / "runs" / "provider"),
+        "--provider",
+        "fake",
+        "--model",
+        "gemini-3.5-flash",
+        "--effort",
+        "low",
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert [provider.settings.provider for provider in built] == [ProviderName.FAKE]
+    assert [provider.settings.model for provider in built] == ["gemini-3.5-flash"]
+    assert [provider.settings.effort for provider in built] == ["low"]
+    session = json.loads(
+        (tmp_path / "runs" / "provider" / "cover" / "session.json").read_text("utf-8")
+    )
+    assert session["model"] == "gemini-3.5-flash"
+
+
+def test_benchmark_run_without_a_model_takes_the_providers_default(
+    tmp_path: Path, benchmark_set: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    built = fake_provider()
+
+    result = invoke(
+        "benchmark",
+        "run",
+        "--set",
+        str(benchmark_set),
+        "--out",
+        str(tmp_path / "runs" / "default-model"),
+        "--provider",
+        "gemini",
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert [provider.settings.model for provider in built] == ["gemini-3.5-flash"]
 
 
 def test_benchmark_run_on_a_missing_set_exits_1(tmp_path: Path) -> None:

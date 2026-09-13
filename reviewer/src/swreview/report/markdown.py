@@ -74,14 +74,35 @@ def _fmt_dt(value: datetime | None) -> str:
 
 
 def _render_title(session: ReviewSession) -> list[str]:
-    return [
+    lines = [
         f"# Design Review Report: {session.design_id}",
         "",
         f"- Session: {session.session_id}",
         f"- Model: {session.model}",
-        f"- Started: {_fmt_dt(session.started_at)}",
-        f"- Ended: {_fmt_dt(session.ended_at)}",
     ]
+    lines.extend(_render_provider_info(session))
+    lines.append(f"- Started: {_fmt_dt(session.started_at)}")
+    lines.append(f"- Ended: {_fmt_dt(session.ended_at)}")
+    return lines
+
+
+def _render_provider_info(session: ReviewSession) -> list[str]:
+    """The provider, its effort control, and the failed session this one retries.
+
+    Both fields are optional in the contract, so a session written before the provider
+    port renders exactly as it did: the lines appear only when there is something to say.
+    """
+    lines: list[str] = []
+    info = session.provider_info
+    if info is not None:
+        mapping = info.effort_mapping
+        lines.append(
+            f"- Provider: {info.provider} (effort {mapping.requested} sent as "
+            f"{mapping.provider_param}={mapping.provider_value}; key from {info.key_source})"
+        )
+    if session.retry_of is not None:
+        lines.append(f"- Retry of session: {session.retry_of}")
+    return lines
 
 
 # --- manifest discrepancies ------------------------------------------------------------

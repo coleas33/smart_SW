@@ -32,4 +32,52 @@
     </Reference>
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      WebView2 hosts both Task Pane pages (plan.md: "Microsoft.Web.WebView2 (NuGet,
+      WebView2Loader.dll shipped next to the add-in)"). Pinned: an add-in loaded into
+      SOLIDWORKS cannot float its native loader.
+    -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4191.47" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The chat and terminal pages are plain vendored HTML/JS with no build step
+      (plan.md, Structure Decision). They are copied under the add-in's `web` folder,
+      which is the folder SetVirtualHostNameToFolderMapping("swreview.invalid", ...)
+      maps, so the page origin is https://swreview.invalid (contracts/pane-host-messages.md).
+      Source layout is preserved below `web` so `vendor/` subfolders land intact.
+    -->
+    <Content Include="Review\ReviewPage\**\*">
+      <Link>web\Review\ReviewPage\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Terminal\TerminalPage\**\*">
+      <Link>web\Terminal\TerminalPage\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!--
+    The NuGet package copies the native loader to runtimes\win-x64\native\WebView2Loader.dll
+    and Microsoft.Web.WebView2.Core.dll probes that folder relative to its own location. The
+    add-in is regasm-registered and loaded into SLDWORKS.exe, and plan.md requires the loader
+    "shipped next to the add-in", so put a flat copy in the output folder too - both probe
+    locations are then satisfied whatever SOLIDWORKS does to assembly resolution. The Error
+    turns a package layout change into a build failure instead of a runtime failure inside
+    SOLIDWORKS, where a missing loader surfaces only as the fallback panel (T042b).
+  -->
+  <Target Name="CopyWebView2LoaderBesideAddIn" AfterTargets="Build">
+    <ItemGroup>
+      <WebView2LoaderNative Include="@(ContentWithTargetPath)"
+                            Condition="'%(ContentWithTargetPath.TargetPath)' == 'runtimes\win-x64\native\WebView2Loader.dll'" />
+    </ItemGroup>
+    <Error Condition="'@(WebView2LoaderNative)' == ''"
+           Text="Microsoft.Web.WebView2 did not supply an x64 WebView2Loader.dll; check the pinned package version." />
+    <Copy SourceFiles="@(WebView2LoaderNative)"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>
