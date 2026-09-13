@@ -6,6 +6,8 @@ using System.Text.Json;
 using Json.Schema;
 using SwReview.Extractor.Ir;
 using Xunit;
+// SwReview.Extractor.Interference is a namespace (T069), so the IR type is named explicitly.
+using IrInterference = SwReview.Extractor.Ir.Interference;
 
 namespace SwReview.Extractor.Tests;
 
@@ -112,7 +114,7 @@ public class IrSerializerTests
         Assert.Equal("M6x1.0", fastener.ThreadDesignation);
         Assert.Equal(20.0, fastener.Length!.Value);
 
-        Interference interference = Assert.Single(restored.Interferences);
+        IrInterference interference = Assert.Single(restored.Interferences);
         Assert.True(interference.IsFastener);
         Assert.True(interference.IsPossible);
         Assert.Equal(InterferenceStatus.Computed, interference.Status);
@@ -173,7 +175,11 @@ public class IrSerializerTests
     /// whose usable thread depth could not be read, one Toolbox screw, and the fastener
     /// interference SOLIDWORKS reports for the screw in its tapped hole.
     /// </summary>
-    private static EvidencePackage BuildSamplePackage()
+    /// <summary>
+    /// A package with one of everything. Internal so other tests can start from a package
+    /// that already satisfies the contract and check only what they produced (T071).
+    /// </summary>
+    internal static EvidencePackage BuildSamplePackage()
     {
         string housingRef = Convert.ToBase64String(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 });
         string coverRef = Convert.ToBase64String(new byte[] { 0x11, 0x12, 0x13, 0x14, 0x15 });
@@ -362,7 +368,7 @@ public class IrSerializerTests
             },
             Interferences =
             {
-                new Interference
+                new IrInterference
                 {
                     Id = "int:0001",
                     Configuration = "Default",

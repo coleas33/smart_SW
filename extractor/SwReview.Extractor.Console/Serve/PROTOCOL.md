@@ -1,0 +1,173 @@
+# Bridge protocol (`swreview-extract serve`)
+
+Protocol version **1.0**. This file is the contract the Python client in
+`reviewer/src/swreview/bridge/client.py` (T073) is written against. It describes what
+`SwReview.Extractor.Console.Serve` speaks; the agent-facing tool names and arguments are in
+`specs/001-agentic-design-review/contracts/agent-tools.md`.
+
+## Transport
+
+- A **named pipe**: `\\.\pipe\<name>`, where `<name>` comes from `serve --pipe <name>`.
+- **One JSON object per line**, UTF-8, no BOM, `\n` as the line terminator. A response is a
+  single line, never pretty-printed.
+- Requests are answered **in arrival order, one at a time**. A single STA worker thread owns
+  the `SldWorks` pointer (research R3), so a capture can never change the selection
+  underneath a measure.
+- One client at a time. The server keeps serving after a client disconnects, so the reviewer
+  can be restarted without restarting SOLIDWORKS.
+- Blank lines are ignored.
+
+## Request
+
+```json
+{"id": "<string>", "command": "ping|capture|measure|interference", "params": {}}
+```
+
+| Field | Type | Rules |
+|-------|------|-------|
+| `id` | string | Required, non-empty. Echoed on the response so a client can match them up. |
+| `command` | string | Required. One of the four below. |
+| `params` | object | Command arguments. May be omitted for `ping`. |
+
+Unknown **top-level** fields are rejected (the same `additionalProperties: false` stance as
+the IR schema). Unknown fields inside `params` are ignored.
+
+Every request passes the read-only guard by command name before anything runs, and every
+SOLIDWORKS call underneath goes through `SwGate`, which asks the guard again. A command
+named after a mutating API (`Save3`, `FeatureCut4`, …) is refused with `status: "error"`.
+
+## Response
+
+```json
+{"id": "<string>", "status": "ok|error|circuit_open", "result": {} , "error": null, "elapsed_ms": 0}
+```
+
+| Field | Type | Rules |
+|-------|------|-------|
+| `id` | string | The request's `id`. Empty when the line could not be parsed at all. |
+| `status` | string | `ok`, `error`, or `circuit_open`. |
+| `result` | object or null | The command's answer. Null on `circuit_open`; on `error` it is null except where noted (`capture` returns its `Gap`). |
+| `error` | string or null | A sentence an engineer can read. Null when `status` is `ok`. |
+| `elapsed_ms` | integer | Wall-clock milliseconds the worker spent on the command. |
+
+`circuit_open` means SOLIDWORKS failed three times in a row and the circuit breaker
+(research R4) has stopped further calls. The client must **not** retry, and must record
+failed coverage rather than a passing check.
+
+Enum values and property names inside `result` are exactly the ones `package.json` uses:
+an `Interference` that travels over the bridge is byte-identical to one written by `dump`.
+
+## `ping`
+
+```json
+{"id": "1", "command": "ping"}
+```
+
+```json
+{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.0","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17},"error":null,"elapsed_ms":1}
+```
+
+`document` and `component_count` are how a client checks that the component ids in its
+`package.json` mean the same thing here: they only do while this is the assembly that was
+dumped, in the same configuration.
+
+## `capture` — `bridge_capture(persist_ref, view)`
+
+```json
+{"id": "2", "command": "capture", "params": {"persist_ref": "<base64>", "view": "iso", "scope_document": null, "note": ""}}
+```
+
+| Param | Type | Rules |
+|-------|------|-------|
+| `persist_ref` | string | Required. Base64 persistent reference of the entity to frame. |
+| `view` | string | `iso`, `front`, `top`, `right`, `fit`. Default `fit`. |
+| `scope_document` | string or null | Full path of the document whose extension produced the reference. Null means the attached document. |
+| `note` | string | Free text recorded on the `Capture` row. |
+
+```json
+{"id":"2","status":"ok","result":{"capture":{"id":"cap:0001","persist_ref":"<base64>","component_ids":["cmp:0007"],"file":"captures/cap-0001.png","view":"iso","note":""},"path":"C:\\work\\pkg\\captures\\cap-0001.png","gap":null},"error":null,"elapsed_ms":812}
+```
+
+- `capture` is the IR `Capture` row to append to `package.json`'s `captures`.
+- `file` is package-relative and forward-slashed; `path` is absolute, so the client can copy
+  the PNG into its own package directory.
+- The directory is chosen by the host (`serve --out <dir>`, else a temp directory under
+  `%TEMP%\swreview-bridge\<pipe>`). A client never names a path: a filesystem path in a
+  request would be a write the agent controls (research R4).
+
+On failure the response is `status: "error"`, and `result` still carries the `Gap` so the
+client can record unresolved coverage rather than silently losing the request:
+
+```json
+{"id":"2","status":"error","result":{"capture":null,"path":null,"gap":{"kind":"not_extracted","entity_kind":"capture","entity_id":null,"reason":"select the entity to capture (iso view)","error":"The reference did not resolve: deleted: the entity no longer exists."}},"error":"select the entity to capture (iso view) - The reference did not resolve: deleted: the entity no longer exists.","elapsed_ms":40}
+```
+
+## `measure` — `bridge_measure(persist_ref_a, persist_ref_b)`
+
+```json
+{"id": "3", "command": "measure", "params": {"persist_ref_a": "<base64>", "persist_ref_b": "<base64>", "scope_document_a": null, "scope_document_b": null}}
+```
+
+| Param | Type | Rules |
+|-------|------|-------|
+| `persist_ref_a`, `persist_ref_b` | string | Required. The two entities to measure between. |
+| `scope_document_a`, `scope_document_b` | string or null | The document each reference is scoped to. Null means the attached document. |
+
+```json
+{"id":"3","status":"ok","result":{"distance":{"value":0.0123,"unit":"m"},"delta_x":{"value":0.0123,"unit":"m"},"delta_y":{"value":0.0,"unit":"m"},"delta_z":{"value":0.0,"unit":"m"}},"error":null,"elapsed_ms":220}
+```
+
+Lengths are **meters** — `IMeasure` answers in system units and nothing here rounds or
+reformats them. A pairing the Measure tool has no answer for is an error with a sentence,
+never a number:
+
+```json
+{"id":"3","status":"error","result":null,"error":"SOLIDWORKS could not measure between these two entities. The Measure tool has no answer for this pairing; pick faces, edges or vertices.","elapsed_ms":95}
+```
+
+## `interference` — `bridge_interference(component_ids, configuration, settings)`
+
+```json
+{"id": "4", "command": "interference", "params": {"component_ids": ["cmp:0001", "cmp:0011"], "configuration": "Default", "settings": {"treat_coincident_as_interference": false, "treat_subassemblies_as_components": true, "include_multibody": false, "ignore_hidden": true, "fastener_folder_treatment": "include"}, "truncate_after": null}}
+```
+
+| Param | Type | Rules |
+|-------|------|-------|
+| `component_ids` | array of string | Empty or absent: the whole assembly. Exactly two: that pair. More than two: every unordered pair among them. One id alone is an error. An id this document does not have is refused by name, never dropped. |
+| `configuration` | string or null | Echoed into every row. Null means the attached document's active configuration. |
+| `settings` | object or null | Any subset of the five fields below; the rest keep their defaults. |
+| `truncate_after` | integer or null | Test hook: stop computing after this many rows and mark the rest `truncated`. |
+
+`settings` mirrors `Interference.settings` in the IR:
+
+| Field | Type | Default | Maps to |
+|-------|------|---------|---------|
+| `treat_coincident_as_interference` | boolean | `false` | `IInterferenceDetectionMgr.TreatCoincidenceAsInterference` |
+| `treat_subassemblies_as_components` | boolean | `false` | `TreatSubAssembliesAsComponents` |
+| `include_multibody` | boolean | `false` | `IncludeMultibodyPartInterferences` |
+| `ignore_hidden` | boolean | `false` | `IgnoreHiddenBodies` |
+| `fastener_folder_treatment` | `include` \| `exclude` \| `only` | `include` | Not a manager property: `CreateFastenersFolder` is always on, and results are filtered by `IInterference.IsFastener`. |
+
+```json
+{"id":"4","status":"ok","result":{"interferences":[{"id":"int:0001","configuration":"Default","component_ids":["cmp:0001","cmp:0011"],"volume":{"value":3.2e-9,"unit":"m3"},"settings":{"treat_coincident_as_interference":false,"treat_subassemblies_as_components":true,"include_multibody":false,"ignore_hidden":true,"fastener_folder_treatment":"include"},"is_fastener":true,"is_possible":false,"status":"computed","error":null,"group_key":"cmp:0001|pat:screws"}],"gaps":[{"kind":"unsupported","entity_kind":"interference_volume_unit","entity_id":null,"reason":"IInterference.Volume unit assumed m3; verify on workstation","error":null}]},"error":null,"elapsed_ms":3100}
+```
+
+- `status: "ok"` at the envelope level means the run happened. **Each row carries its own
+  `status`**: `computed`, `truncated`, or `failed`. A `truncated` or `failed` row is
+  unresolved coverage, never a pass.
+- `gaps` are IR `Gap` objects to append to `package.json`'s `gaps`. Until the workstation
+  check in T069 confirms the unit of `IInterference.Volume`, every run that recorded a
+  volume carries the `interference_volume_unit` gap shown above, and the volumes are
+  labelled `m3` on that assumption.
+- `group_key` is each member's pattern id where it has one and its component id otherwise,
+  sorted ordinally and joined with `|`. Rows that share a key collapse into one finding
+  (FR-011).
+
+## Errors that are not command failures
+
+| Situation | Response |
+|-----------|----------|
+| Line is not JSON, or has no `id`/`command` | `{"id":"","status":"error","error":"<what was wrong>","result":null,"elapsed_ms":0}` |
+| Unknown `command` | `status: "error"`, listing the four commands. |
+| Missing or wrong-typed `params` field | `status: "error"` naming the field. |
+| Three consecutive SOLIDWORKS failures | `status: "circuit_open"` on this and every later request until the server is restarted. |
