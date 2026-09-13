@@ -47,7 +47,11 @@ from swreview.tools.registry import build_tools
 SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_v1.md"
 SESSION_FILE_NAME = "session.json"
 
-MAX_TOKENS = 64000
+# Non-streaming ceiling: the SDK refuses non-streaming requests whose max_tokens implies a
+# turn longer than ten minutes ("Streaming is required for operations that may take
+# longer than 10 minutes"). The tool runner is iterated turn by turn without streaming,
+# so stay at the documented non-streaming default. Raise only together with stream=True.
+MAX_TOKENS = 16000
 MAX_PAUSE_RESTARTS = 5
 """How many times a turn may come back `pause_turn` before the run gives up."""
 

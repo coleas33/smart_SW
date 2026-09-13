@@ -23,4 +23,11 @@ Day-one benchmark package for User Story 1 (exported files only).
 
 ## Results
 
-_Record the first agent run here (session id, findings, open requests, coverage)._
+- 2026-09-12: package built with `swreview ingest` from the manifest, BOM and generated
+  PDFs. `swreview validate` reports 6 documents, 6 components, 2 gaps (placeholder persist
+  refs for BOM-derived instances; DRW-2002 page 2 has no text layer), 0 discrepancies.
+  Parsed dimensions include the seeded `4X M6x1.0 - 6H ↧ 14` callout (drill depth only).
+- The agent review (`swreview review`) has not been run: no Anthropic credentials were
+  available on this machine. Run it with `ANTHROPIC_API_KEY` set (or after `ant auth login`)
+  and record the session id, findings, open evidence requests and coverage here, plus the
+  baseline and assisted times.

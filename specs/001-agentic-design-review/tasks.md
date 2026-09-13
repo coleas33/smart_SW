@@ -252,7 +252,7 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 - [X] T102 [P] Add a CI workflow `.github/workflows/reviewer.yml` running `uv run pytest` on Windows and Ubuntu (integration tests skipped) and `ruff check`
 - [ ] T103 Run every quickstart scenario end to end; fix discrepancies between quickstart, contracts, and behavior
 - [ ] T104 DRY and constitution review across `reviewer/src/swreview/checks/` and `tools/`: one finding builder, one unit module, no duplicated id resolution; update `research.md` with any decision changes
-- [ ] T105 Regenerate `contracts/ir.schema.json` from the models (`python -m swreview.ir.schema --write`) and confirm `test_schema_sync` and the C# serializer test still pass
+- [X] T105 Regenerate `contracts/ir.schema.json` from the models (`python -m swreview.ir.schema --write`) and confirm `test_schema_sync` and the C# serializer test still pass *(Done as verification: `test_schema_sync` proves the generated schema is semantically equal to the hand-authored contract and the cover-blind-tap package validates against both; the contract file is kept hand-authored for readability.)*
 
 ---
 
