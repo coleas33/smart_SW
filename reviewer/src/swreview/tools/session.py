@@ -16,7 +16,7 @@ the model must not be able to talk its way around:
 
 from __future__ import annotations
 
-from typing import Any, Literal, get_args
+from typing import Literal, get_args
 
 from pydantic import ValidationError
 
@@ -70,14 +70,14 @@ def request_evidence(what: str, why: str, entity_ids: list[str]) -> ToolResult:
         answer=None,
         answered_at=None,
     )
-    context.session.evidence_requests.append(request)
+    context.record_evidence_request(request)
     return {"status": "open", "evidence_request": as_json(request)}
 
 
 def mark_coverage(
     check: str,
     bucket: ModelCoverageBucket,
-    scope: dict[str, Any],
+    scope: CoverageScope,
     reason: str,
 ) -> ToolResult:
     """Record what a check covered, or why it could not be run.
@@ -89,8 +89,8 @@ def mark_coverage(
     Args:
         check: Check identifier, or a checklist item id such as `fasteners`.
         bucket: One of checked, skipped, unresolved, out_of_scope.
-        scope: What it covered: `component_ids`, `pairs`, `configuration`, `positions`,
-            `document_ids`.
+        scope: What it covered: component_ids, pairs (two ids each), configuration,
+            positions, document_ids. State the ones the check actually covered.
         reason: Why this bucket, in one sentence.
     """
     context = current_context()
@@ -101,19 +101,15 @@ def mark_coverage(
                 f"choose one of {list(MODEL_COVERAGE_BUCKETS)}"
             )
         return not_one_of("bucket", str(bucket), MODEL_COVERAGE_BUCKETS)
-    try:
-        coverage_scope = CoverageScope.model_validate(scope)
-    except ValidationError as exc:
-        return error_result(f"scope is not a valid coverage scope: {exc.errors(include_url=False)}")
     unknown = [
         entity_id
-        for entity_id in [*coverage_scope.component_ids, *coverage_scope.document_ids]
+        for entity_id in [*scope.component_ids, *scope.document_ids]
         if context.entity_kind(entity_id) is None
     ]
     if unknown:
         return error_result(f"scope names ids not in this package: {unknown}")
-    item = CoverageItem(check=check, scope=coverage_scope, reason=reason, error=None)
-    getattr(context.session.coverage, bucket).append(item)
+    item = CoverageItem(check=check, scope=scope, reason=reason, error=None)
+    context.record_coverage(bucket, item)
     return {"status": "recorded", "bucket": bucket, "coverage_item": as_json(item)}
 
 
@@ -180,7 +176,7 @@ def record_drawing_finding(
         )
     except ValueError as exc:
         return error_result(str(exc))
-    context.session.findings.append(finding)
+    context.record_finding(finding)
     return {"status": "recorded", "finding": as_json(finding)}
 
 

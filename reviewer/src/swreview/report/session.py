@@ -18,8 +18,27 @@ from uuid import UUID
 from annotated_types import Len
 from pydantic import Field, StringConstraints, model_validator
 
+from swreview.agent.providers import EffortMapping
 from swreview.findings import Finding, ReviewModel
 from swreview.ids import SequentialIdAllocator
+
+KeySource = Literal["settings", "env", "none"]
+"""Where the API key for this run came from, or `none` when the run needed no key."""
+
+
+class ProviderInfo(ReviewModel):
+    """Which provider ran this review and how its effort control was set (feature 002).
+
+    Optional in `contracts/review-session.schema.json`: a session written before the
+    provider port has none, and `ReviewSession.model` remains the single field every
+    consumer can rely on. `EffortMapping` is reused from `agent.providers` rather than
+    restated, so the value recorded here and the value the adapter sent are one shape.
+    """
+
+    provider: str
+    model: str
+    effort_mapping: EffortMapping
+    key_source: KeySource
 
 
 class InvestigationStep(ReviewModel):
@@ -80,6 +99,16 @@ class Coverage(ReviewModel):
     out_of_scope: list[CoverageItem] = Field(default_factory=list)
 
 
+CoverageBucket = Literal["checked", "skipped", "unresolved", "failed", "out_of_scope"]
+"""One of `Coverage`'s five buckets, as an argument type.
+
+Named here, beside the model whose fields it mirrors, so a caller that has to say which
+bucket an item went into - `ToolContext.record_coverage`, and the `coverage` event body -
+does not restate the list. `tools/session.py` narrows it further for `mark_coverage`,
+which may not write `failed`.
+"""
+
+
 class Timing(ReviewModel):
     """Minutes per design. `net_saved_minutes` is always derived, never supplied.
 
@@ -128,6 +157,8 @@ class ReviewSession(ReviewModel):
     started_at: datetime = Field(strict=False)
     ended_at: datetime | None = Field(default=None, strict=False)
     model: str
+    provider_info: ProviderInfo | None = None
+    retry_of: UUID | None = Field(default=None, strict=False)
     steps: list[InvestigationStep] = Field(default_factory=list)
     evidence_requests: list[EvidenceRequest] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)

@@ -13,6 +13,8 @@
     "started_at": { "type": "string", "format": "date-time" },
     "ended_at": { "type": ["string", "null"], "format": "date-time" },
     "model": { "type": "string" },
+    "provider_info": { "anyOf": [{ "$ref": "#/$defs/ProviderInfo" }, { "type": "null" }] },
+    "retry_of": { "type": ["string", "null"], "format": "uuid" },
     "steps": { "type": "array", "items": { "$ref": "#/$defs/InvestigationStep" } },
     "evidence_requests": { "type": "array", "items": { "$ref": "#/$defs/EvidenceRequest" } },
     "findings": { "type": "array", "items": { "$ref": "#/$defs/Finding" } },
@@ -25,6 +27,27 @@
     "Dimension": { "$ref": "ir.schema.json#/$defs/Dimension" },
     "SourceRef": { "$ref": "ir.schema.json#/$defs/SourceRef" },
     "ManifestEntry": { "$ref": "ir.schema.json#/$defs/ManifestEntry" },
+    "EffortMapping": {
+      "description": "What the requested effort became for this provider and model. Added in feature 002; provider_value is an integer where the control is a token budget.",
+      "type": "object", "additionalProperties": false,
+      "required": ["requested", "provider_param", "provider_value"],
+      "properties": {
+        "requested": { "enum": ["low", "medium", "high", "xhigh"] },
+        "provider_param": { "type": "string" },
+        "provider_value": { "type": ["string", "integer"] }
+      }
+    },
+    "ProviderInfo": {
+      "description": "Which provider ran this review and how its effort control was set. Added in feature 002; absent on sessions written before it.",
+      "type": "object", "additionalProperties": false,
+      "required": ["provider", "model", "effort_mapping", "key_source"],
+      "properties": {
+        "provider": { "enum": ["openai", "gemini", "fake"] },
+        "model": { "type": "string" },
+        "effort_mapping": { "$ref": "#/$defs/EffortMapping" },
+        "key_source": { "enum": ["settings", "env", "none"] }
+      }
+    },
     "InvestigationStep": {
       "type": "object", "additionalProperties": false,
       "required": ["index", "tool", "arguments", "result_summary", "status", "error", "elapsed_s"],

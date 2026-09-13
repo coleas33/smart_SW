@@ -106,24 +106,30 @@ def test_run_benchmark_never_passes_an_answer_key_path(tmp_path: Path) -> None:
         "custom",
         [{"package_id": "pkg-1", "path": "benchmarks/packages/pkg-1", "held_out": False}],
     )
-    calls: list[tuple[Path, Path, str, str]] = []
+    calls: list[tuple[Path, Path, str, str, str]] = []
 
     def fake_review_fn(
-        package_path: Path, session_out_dir: Path, *, model: str, effort: str
+        package_path: Path, session_out_dir: Path, *, provider: str, model: str, effort: str
     ) -> None:
-        calls.append((package_path, session_out_dir, model, effort))
+        calls.append((package_path, session_out_dir, provider, model, effort))
 
     out_dir = tmp_path / "out"
     run_benchmark(
-        set_path, out_dir, model="claude-opus-5", effort="high", review_fn=fake_review_fn
+        set_path,
+        out_dir,
+        provider="openai",
+        model="gpt-5.6",
+        effort="high",
+        review_fn=fake_review_fn,
     )
 
     assert len(calls) == 1
-    package_path, session_out_dir, model, effort = calls[0]
+    package_path, session_out_dir, provider, model, effort = calls[0]
     assert "answer_keys" not in {part.lower() for part in package_path.parts}
     assert package_path == package_dir.resolve()
     assert session_out_dir == out_dir / "pkg-1"
-    assert model == "claude-opus-5"
+    assert provider == "openai"
+    assert model == "gpt-5.6"
     assert effort == "high"
 
 
@@ -151,6 +157,7 @@ def test_run_benchmark_refuses_an_answer_key_path_even_if_the_set_object_smuggle
         run_benchmark(
             tmp_path / "unused-set.json",
             tmp_path / "out",
+            provider="fake",
             model="m",
             effort="low",
             review_fn=lambda *args, **kwargs: calls.append((args, kwargs)),

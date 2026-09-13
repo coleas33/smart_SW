@@ -54,12 +54,17 @@ def test_run_benchmark_on_the_real_pilot_set_never_passes_an_answer_key_path(
     calls: list[Path] = []
 
     def fake_review_fn(
-        package_dir: Path, session_out_dir: Path, *, model: str, effort: str
+        package_dir: Path, session_out_dir: Path, *, provider: str, model: str, effort: str
     ) -> None:
         calls.append(package_dir)
 
     run_benchmark(
-        PILOT_SET, tmp_path / "out", model="claude-opus-5", effort="high", review_fn=fake_review_fn
+        PILOT_SET,
+        tmp_path / "out",
+        provider="openai",
+        model="gpt-5.6",
+        effort="high",
+        review_fn=fake_review_fn,
     )
 
     assert calls

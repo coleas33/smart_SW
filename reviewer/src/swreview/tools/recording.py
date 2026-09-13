@@ -94,7 +94,7 @@ def record_result(
         )
     except ValueError as exc:
         return error_result(str(exc))
-    context.session.findings.append(finding)
+    context.record_finding(finding)
     return {"status": "recorded", "finding": as_json(finding)}
 
 
@@ -116,7 +116,8 @@ def record_results(
             findings.append(result_to_finding(context, result, component_ids, drawing_locations))
         except ValueError as exc:
             return error_result(str(exc))
-    context.session.findings.extend(findings)
+    for finding in findings:
+        context.record_finding(finding)
     return {"status": "recorded", "findings": [as_json(finding) for finding in findings]}
 
 
@@ -143,5 +144,5 @@ def out_of_scope(
         reason=result.observed,
         error=None,
     )
-    context.session.coverage.out_of_scope.append(item)
+    context.record_coverage("out_of_scope", item)
     return {"status": "out_of_scope", "coverage_item": as_json(item)}

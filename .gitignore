@@ -66,3 +66,19 @@ reviewer/runs/
 extractor/**/bin/
 extractor/**/obj/
 *.user
+
+# Task Pane assistant (see specs/002-task-pane-assistant/plan.md)
+# Built page bundle: MSBuild copies Review/ReviewPage and Terminal/TerminalPage here from
+# the tracked sources, so the copy is build output even though it is not under bin/.
+extractor/SwReview.AddIn/web/
+# Generated per-launch CLI restriction profiles (contracts/cli-profiles.md). They name
+# absolute run folders and are rewritten on every terminal launch.
+**/.swreview-cli/
+# Per-user provider settings live DPAPI-protected in %APPDATA%\SwReview\, never in the
+# repo. `settings.json` / `settings.local.json` above already match at any depth; this
+# note exists so nobody un-ignores them without reading contracts/settings.schema.json.
+# Session artifacts. reviewer/runs/ above covers review runs; these two catch the general
+# chat log and event stream when a run folder is rooted elsewhere (benchmarks, a custom
+# run root). Both contain model output and customer document text.
+benchmarks/**/chat-log.jsonl
+**/events.jsonl

@@ -7,9 +7,12 @@ never opens an answer key, and it refuses - a second time, on top of
 `benchmarks/answer_keys/` (constitution Principle VI, FR-025): defense in depth, not
 trust in a single check.
 
-This is a skeleton: the real per-package review call lives in
-`swreview.agent.runner.run_review`, imported lazily (it may not exist yet while that
-module is under development elsewhere) and only used as the default `review_fn`.
+The provider is chosen once, for the whole set, and forwarded to every package as a
+name (`openai`, `gemini`, `fake`) rather than as a built adapter: this module knows
+nothing about provider SDKs, and a set of many packages must not share one adapter's
+per-turn state. `swreview.cli` builds the adapter per package through its
+`provider_factory` hook, which is also what the default `review_fn` below defers to
+rather than duplicating the wiring.
 """
 
 from __future__ import annotations
@@ -26,10 +29,21 @@ from swreview.report.session import load_session, save_session
 ReviewFn = Callable[..., Any]
 
 
-def _default_review_fn(package_dir: Path, session_out_dir: Path, *, model: str, effort: str) -> Any:
-    from swreview.agent.runner import run_review
+def _default_review_fn(
+    package_dir: Path, session_out_dir: Path, *, provider: str, model: str, effort: str
+) -> Any:
+    """One package, reviewed on a freshly built adapter.
 
-    return run_review(package_dir, session_out_dir, model=model, effort=effort)
+    Imported lazily, and from `swreview.cli` deliberately: that module owns the
+    `provider_factory` hook every other review goes through and the key redaction that
+    goes with it, and a second copy of the "settings in, adapter out" wiring is the thing
+    most likely to drift from it - so this defers to `cli._review_fn` rather than
+    restating it. Every CLI run injects its own `review_fn`, so this path is for a caller
+    that wanted the default.
+    """
+    from swreview.cli import _review_fn
+
+    return _review_fn(package_dir, session_out_dir, provider=provider, model=model, effort=effort)
 
 
 def _reject_answer_key_path(path: Path) -> None:
@@ -55,16 +69,21 @@ def _record_unattended_runtime(session_out_dir: Path, elapsed_minutes: float) ->
 def run_benchmark(
     set_path: Path | str,
     out_dir: Path | str,
+    provider: str,
     model: str,
     effort: str,
     review_fn: ReviewFn | None = None,
 ) -> list[Path]:
     """Review every package of the benchmark set at `set_path` into `out_dir`.
 
-    Calls `review_fn(package_dir, out_dir/package_id, model=model, effort=effort)` per
-    package (default: `swreview.agent.runner.run_review`), then records unattended
+    Calls `review_fn(package_dir, out_dir/package_id, provider=provider, model=model,
+    effort=effort)` per package (default: `_default_review_fn`), then records unattended
     runtime for that package. Returns the list of per-package output directories, in
     benchmark-set order.
+
+    `provider` and `model` are passed through unresolved - the review function decides
+    what a name means (FR-016), so scoring a set on OpenAI and on Gemini differs by one
+    argument and nothing else.
     """
     benchmark_set: BenchmarkSet = load_set(set_path)
     active_review_fn = review_fn if review_fn is not None else _default_review_fn
@@ -78,7 +97,7 @@ def run_benchmark(
         package_out_dir.mkdir(parents=True, exist_ok=True)
 
         started = time.perf_counter()
-        active_review_fn(ref.path, package_out_dir, model=model, effort=effort)
+        active_review_fn(ref.path, package_out_dir, provider=provider, model=model, effort=effort)
         elapsed_minutes = (time.perf_counter() - started) / 60.0
 
         _record_unattended_runtime(package_out_dir, elapsed_minutes)
