@@ -80,29 +80,29 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 
 ### Tests for User Story 1
 
-- [ ] T023 [P] [US1] Unit tests for manifest ingest in `reviewer/tests/unit/test_ingest_manifest.py`: parse `manifest.json`; detect `version_mismatch`, `local_modification`, `missing_document`, `config_mismatch` against a package's documents; discrepancies sorted to the top
-- [ ] T024 [P] [US1] Unit tests for BOM ingest in `reviewer/tests/unit/test_ingest_bom.py`: CSV with item, part number, description, quantity, configuration; quantity mismatch with component count becomes a `Gap`
-- [ ] T025 [P] [US1] Unit tests for the dimension grammar in `reviewer/tests/unit/test_dimension_grammar.py`: `Ø10.00 ±0.02`, `10.02/10.00`, `10 +0.05/-0.00`, `M6x1.0 - 6H ↧ 12`, `45° ±0°30'` (Angle, not Length), `.3937 ±.0005` with sheet units `in`, `2X Ø6.6 THRU`; unknown text yields `tolerance.kind == "none"` and preserves `text_as_read`
-- [ ] T026 [P] [US1] Unit tests for the PDF drawing parser in `reviewer/tests/unit/test_pdf_parser.py` using tiny PDFs generated with PyMuPDF in the test: spans clustered into dimensions with bbox and page; general notes detected; a page with no text layer yields `parse_status == "no_text"` and a `Gap`; sheet units read from the title block or defaulted to `unknown`
-- [ ] T027 [P] [US1] Unit tests for package query tools in `reviewer/tests/unit/test_tools_query.py`: every tool in contracts/agent-tools.md "Package query tools" against `make_package`; `list_holes` returns `"unknown"` text alongside `None` thread depth; unknown ids return an error result, never raise
-- [ ] T028 [P] [US1] Unit tests for session tools in `reviewer/tests/unit/test_tools_session.py`: `request_evidence` creates an open request; `mark_coverage` rejects bucket `failed`; `record_drawing_finding` rejects `demonstrated`/`checked_within_scope`; `get_review_checklist` reflects buckets
-- [ ] T029 [P] [US1] Unit tests for the report renderer and dispositions in `reviewer/tests/unit/test_report.py`: every finding field appears in Markdown; discrepancies render first; coverage renders all five buckets; `disposition` writes to `session.json` and re-render shows it; navigation link contains `persist_ref` and document id
-- [ ] T030 [US1] Unit tests for the agent runner in `reviewer/tests/unit/test_agent_runner.py` with a fake Anthropic client: each tool call becomes an `InvestigationStep`; a tool raising becomes `is_error` plus a `failed` coverage item; `--max-steps` stops the loop with coverage noted; `--fail-tool` hook; final session validates against the schema
-- [ ] T031 [US1] Create golden fixture `reviewer/tests/golden/fixtures/cover-blind-tap/package.json` (cover, housing with blind tapped hole, `thread_depth: null`, `hole_depth` set, screws, one drawing sheet with `no_text`) and expected output for the query tools and `record_drawing_finding`
+- [X] T023 [P] [US1] Unit tests for manifest ingest in `reviewer/tests/unit/test_ingest_manifest.py`: parse `manifest.json`; detect `version_mismatch`, `local_modification`, `missing_document`, `config_mismatch` against a package's documents; discrepancies sorted to the top
+- [X] T024 [P] [US1] Unit tests for BOM ingest in `reviewer/tests/unit/test_ingest_bom.py`: CSV with item, part number, description, quantity, configuration; quantity mismatch with component count becomes a `Gap`
+- [X] T025 [P] [US1] Unit tests for the dimension grammar in `reviewer/tests/unit/test_dimension_grammar.py`: `Ø10.00 ±0.02`, `10.02/10.00`, `10 +0.05/-0.00`, `M6x1.0 - 6H ↧ 12`, `45° ±0°30'` (Angle, not Length), `.3937 ±.0005` with sheet units `in`, `2X Ø6.6 THRU`; unknown text yields `tolerance.kind == "none"` and preserves `text_as_read`
+- [X] T026 [P] [US1] Unit tests for the PDF drawing parser in `reviewer/tests/unit/test_pdf_parser.py` using tiny PDFs generated with PyMuPDF in the test: spans clustered into dimensions with bbox and page; general notes detected; a page with no text layer yields `parse_status == "no_text"` and a `Gap`; sheet units read from the title block or defaulted to `unknown`
+- [X] T027 [P] [US1] Unit tests for package query tools in `reviewer/tests/unit/test_tools_query.py`: every tool in contracts/agent-tools.md "Package query tools" against `make_package`; `list_holes` returns `"unknown"` text alongside `None` thread depth; unknown ids return an error result, never raise
+- [X] T028 [P] [US1] Unit tests for session tools in `reviewer/tests/unit/test_tools_session.py`: `request_evidence` creates an open request; `mark_coverage` rejects bucket `failed`; `record_drawing_finding` rejects `demonstrated`/`checked_within_scope`; `get_review_checklist` reflects buckets
+- [X] T029 [P] [US1] Unit tests for the report renderer and dispositions in `reviewer/tests/unit/test_report.py`: every finding field appears in Markdown; discrepancies render first; coverage renders all five buckets; `disposition` writes to `session.json` and re-render shows it; navigation link contains `persist_ref` and document id
+- [X] T030 [US1] Unit tests for the agent runner in `reviewer/tests/unit/test_agent_runner.py` with a fake Anthropic client: each tool call becomes an `InvestigationStep`; a tool raising becomes `is_error` plus a `failed` coverage item; `--max-steps` stops the loop with coverage noted; `--fail-tool` hook; final session validates against the schema
+- [X] T031 [US1] Create golden fixture `reviewer/tests/golden/fixtures/cover-blind-tap/package.json` (cover, housing with blind tapped hole, `thread_depth: null`, `hole_depth` set, screws, one drawing sheet with `no_text`) and expected output for the query tools and `record_drawing_finding`
 
 ### Implementation for User Story 1
 
-- [ ] T032 [P] [US1] Implement `reviewer/src/swreview/ingest/manifest.py` (`read_manifest`, `find_discrepancies`)
-- [ ] T033 [P] [US1] Implement `reviewer/src/swreview/ingest/bom.py`
-- [ ] T034 [US1] Implement `reviewer/src/swreview/ingest/dimension_grammar.py` (regex grammar returning `Dimension` with `Quantity` or `Angle`, tolerance kinds `symmetric|bilateral|limits|basic|none`, thread callouts)
-- [ ] T035 [US1] Implement `reviewer/src/swreview/ingest/pdf_drawing.py` (PyMuPDF spans, proximity clustering, `pdfplumber` for tables, `DrawingSheet` output, `Gap` on `no_text`/failure)
-- [ ] T036 [US1] Implement `reviewer/src/swreview/ingest/package_builder.py`: build or augment `package.json` from manifest, BOM, PDFs; native entities win over exported ones for the same `document_id`; `extractor.sw_version` null for exported-only packages
-- [ ] T037 [US1] Implement `reviewer/src/swreview/tools/query.py` (all package query tools as `@beta_tool` functions over a `ToolContext`)
-- [ ] T038 [US1] Implement `reviewer/src/swreview/tools/session.py` (`request_evidence`, `mark_coverage`, `record_drawing_finding`, `get_review_checklist`, `request_capture` returning existing captures or `unresolved`)
-- [ ] T039 [US1] Implement `reviewer/src/swreview/tools/registry.py`: builds the tool list with `strict: true`, validates ids and paths before dispatch, records `InvestigationStep` with elapsed time, converts exceptions to `is_error` results and `failed` coverage
-- [ ] T040 [US1] Write `reviewer/src/swreview/agent/prompts/system_v1.md` (commitments in contracts/agent-tools.md "System prompt commitments") and `reviewer/src/swreview/agent/checklist_v1.yaml` (mandatory review checklist: provenance, drawing completeness of manufacturing inputs, interfaces, fasteners, interference, tolerances, coverage close-out)
-- [ ] T041 [US1] Implement `reviewer/src/swreview/agent/runner.py`: `client.beta.messages.tool_runner(model="claude-opus-5", max_tokens=64000, output_config={"effort": effort}, tools=..., messages=...)` with streaming, message mirroring, `pause_turn` restart cap, `max_steps`, and session finalization (open requests and unchecked checklist items become `unresolved` coverage)
-- [ ] T042 [US1] Implement `reviewer/src/swreview/report/markdown.py` (discrepancies, findings grouped by severity, evidence requests, coverage, navigation links) and `reviewer/src/swreview/report/dispositions.py`
+- [X] T032 [P] [US1] Implement `reviewer/src/swreview/ingest/manifest.py` (`read_manifest`, `find_discrepancies`)
+- [X] T033 [P] [US1] Implement `reviewer/src/swreview/ingest/bom.py`
+- [X] T034 [US1] Implement `reviewer/src/swreview/ingest/dimension_grammar.py` (regex grammar returning `Dimension` with `Quantity` or `Angle`, tolerance kinds `symmetric|bilateral|limits|basic|none`, thread callouts)
+- [X] T035 [US1] Implement `reviewer/src/swreview/ingest/pdf_drawing.py` (PyMuPDF spans, proximity clustering, `pdfplumber` for tables, `DrawingSheet` output, `Gap` on `no_text`/failure)
+- [X] T036 [US1] Implement `reviewer/src/swreview/ingest/package_builder.py`: build or augment `package.json` from manifest, BOM, PDFs; native entities win over exported ones for the same `document_id`; `extractor.sw_version` null for exported-only packages
+- [X] T037 [US1] Implement `reviewer/src/swreview/tools/query.py` (all package query tools as `@beta_tool` functions over a `ToolContext`)
+- [X] T038 [US1] Implement `reviewer/src/swreview/tools/session.py` (`request_evidence`, `mark_coverage`, `record_drawing_finding`, `get_review_checklist`, `request_capture` returning existing captures or `unresolved`)
+- [X] T039 [US1] Implement `reviewer/src/swreview/tools/registry.py`: builds the tool list with `strict: true`, validates ids and paths before dispatch, records `InvestigationStep` with elapsed time, converts exceptions to `is_error` results and `failed` coverage
+- [X] T040 [US1] Write `reviewer/src/swreview/agent/prompts/system_v1.md` (commitments in contracts/agent-tools.md "System prompt commitments") and `reviewer/src/swreview/agent/checklist_v1.yaml` (mandatory review checklist: provenance, drawing completeness of manufacturing inputs, interfaces, fasteners, interference, tolerances, coverage close-out)
+- [X] T041 [US1] Implement `reviewer/src/swreview/agent/runner.py`: `client.beta.messages.tool_runner(model="claude-opus-5", max_tokens=64000, output_config={"effort": effort}, tools=..., messages=...)` with streaming, message mirroring, `pause_turn` restart cap, `max_steps`, and session finalization (open requests and unchecked checklist items become `unresolved` coverage)
+- [X] T042 [US1] Implement `reviewer/src/swreview/report/markdown.py` (discrepancies, findings grouped by severity, evidence requests, coverage, navigation links) and `reviewer/src/swreview/report/dispositions.py`
 - [ ] T043 [US1] Implement `reviewer/src/swreview/cli.py` commands `validate`, `ingest`, `review`, `report`, `disposition` per contracts/cli.md with exit codes 0/1/2 and `--json`
 - [ ] T044 [US1] Assemble `benchmarks/packages/cover-blind-tap/` (manifest, BOM, drawing PDFs with one flattened page, seeded drill-depth-only hole) and run quickstart Scenario 1; record the day-one result and time in `benchmarks/packages/cover-blind-tap/notes.md`
 
@@ -182,15 +182,15 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 
 ### Tests for User Story 4
 
-- [ ] T077 [P] [US4] Unit tests in `reviewer/tests/unit/test_checks_fit.py`: limits, symmetric and bilateral tolerances give correct min/max clearance and interference; `tolerance.kind == "none"` on either side yields `unresolved` naming the missing side; mixed units (inch bore, mm shaft) report `source` and `converted`; an `Angle` input raises before calculation; result includes `model == "fit.size_only"` and `excluded_effects`
-- [ ] T078 [P] [US4] Unit tests in `reviewer/tests/unit/test_checks_stack.py`: worst-case stack with signs; a single untoleranced dimension yields `unresolved`; a general-note tolerance supplied through `Tolerance.source` is used and cited; target gap comparison; zero-length stack rejected
+- [X] T077 [P] [US4] Unit tests in `reviewer/tests/unit/test_checks_fit.py`: limits, symmetric and bilateral tolerances give correct min/max clearance and interference; `tolerance.kind == "none"` on either side yields `unresolved` naming the missing side; mixed units (inch bore, mm shaft) report `source` and `converted`; an `Angle` input raises before calculation; result includes `model == "fit.size_only"` and `excluded_effects`
+- [X] T078 [P] [US4] Unit tests in `reviewer/tests/unit/test_checks_stack.py`: worst-case stack with signs; a single untoleranced dimension yields `unresolved`; a general-note tolerance supplied through `Tolerance.source` is used and cited; target gap comparison; zero-length stack rejected
 
 ### Implementation for User Story 4
 
-- [ ] T079 [P] [US4] Implement `reviewer/src/swreview/checks/fit.py` (`check_fit(bore: Dimension, shaft: Dimension) -> CheckResult`)
-- [ ] T080 [P] [US4] Implement `reviewer/src/swreview/checks/stack.py` (`check_axial_stack(dims, signs, target) -> CheckResult`, worst-case model)
+- [X] T079 [P] [US4] Implement `reviewer/src/swreview/checks/fit.py` (`check_fit(bore: Dimension, shaft: Dimension) -> CheckResult`)
+- [X] T080 [P] [US4] Implement `reviewer/src/swreview/checks/stack.py` (`check_axial_stack(dims, signs, target) -> CheckResult`, worst-case model)
 - [ ] T081 [US4] Add tools `check_fit` and `check_axial_stack` to `reviewer/src/swreview/tools/checks.py` (resolve `SourceRef`s to `Dimension`s in the package; refuse raw numbers) and CLI `check fit|stack`
-- [ ] T082 [US4] Create golden fixtures `reviewer/tests/golden/fixtures/{shaft-bore,plate-stack,mixed-units,angle-not-length}/` with expected findings; `angle-not-length` must produce an error result, never a number
+- [X] T082 [US4] Create golden fixtures `reviewer/tests/golden/fixtures/{shaft-bore,plate-stack,mixed-units,angle-not-length}/` with expected findings; `angle-not-length` must produce an error result, never a number
 
 **Checkpoint**: Fit and stack checks reproduce hand calculations and never default a tolerance.
 
@@ -229,13 +229,13 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 
 ### Tests for User Story 6
 
-- [ ] T092 [P] [US6] Tests in `reviewer/tests/unit/test_answer_key_isolation.py` and `reviewer/tests/integration/test_answer_key_isolation.py`: the loader refuses `benchmarks/answer_keys/`; the benchmark runner never passes an answer-key path to the reviewer; a symlinked package pointing into `answer_keys` is refused
-- [ ] T093 [P] [US6] Tests in `reviewer/tests/unit/test_scorecard.py`: matching findings to known defects by check and component ids; recall and false-alarm rate with null handling; median net saved minutes; distribution order matches `per_package`; output validates against `contracts/scorecard.schema.json`
-- [ ] T094 [P] [US6] Tests in `reviewer/tests/unit/test_timing.py`: `net_saved_minutes = baseline - (supervision + verification + false_alarm_handling)`; unattended runtime excluded; `None` baseline gives `None`
+- [X] T092 [P] [US6] Tests in `reviewer/tests/unit/test_answer_key_isolation.py` and `reviewer/tests/integration/test_answer_key_isolation.py`: the loader refuses `benchmarks/answer_keys/`; the benchmark runner never passes an answer-key path to the reviewer; a symlinked package pointing into `answer_keys` is refused
+- [X] T093 [P] [US6] Tests in `reviewer/tests/unit/test_scorecard.py`: matching findings to known defects by check and component ids; recall and false-alarm rate with null handling; median net saved minutes; distribution order matches `per_package`; output validates against `contracts/scorecard.schema.json`
+- [X] T094 [P] [US6] Tests in `reviewer/tests/unit/test_timing.py`: `net_saved_minutes = baseline - (supervision + verification + false_alarm_handling)`; unattended runtime excluded; `None` baseline gives `None`
 
 ### Implementation for User Story 6
 
-- [ ] T095 [P] [US6] Implement `reviewer/src/swreview/benchmark/sets.py` (`pilot.json` schema: package dirs, held-out flags) and `answer_key.py` (loaded only by the scorer)
+- [X] T095 [P] [US6] Implement `reviewer/src/swreview/benchmark/sets.py` (`pilot.json` schema: package dirs, held-out flags) and `answer_key.py` (loaded only by the scorer)
 - [ ] T096 [US6] Implement `reviewer/src/swreview/benchmark/runner.py` (runs `review` per package into a run directory; records unattended runtime) and `scorecard.py` (matching, aggregates, `scorecard.json` and `scorecard.md`)
 - [ ] T097 [US6] Add CLI commands `benchmark run|score|time` to `reviewer/src/swreview/cli.py`
 - [ ] T098 [US6] Assemble `benchmarks/sets/pilot.json` with 5 to 10 packages (including a shaft/bearing fit, a bolted plate stack, a sheet-metal or welded assembly, at least two held out) and their answer keys in `benchmarks/answer_keys/`; record human baseline times with `swreview benchmark time`
@@ -247,9 +247,9 @@ increment. US1 is the MVP and needs no SOLIDWORKS seat.
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
-- [ ] T100 [P] Write the root `README.md`: purpose, layout, how to build the extractor and run the reviewer, link to `specs/001-agentic-design-review/quickstart.md`
-- [ ] T101 [P] Add `NOTICE.md` attributing MIT-derived patterns (`solidworks-skills` connection manager and circuit breaker ideas) and stating that SwpilotCLI is referenced only
-- [ ] T102 [P] Add a CI workflow `.github/workflows/reviewer.yml` running `uv run pytest` on Windows and Ubuntu (integration tests skipped) and `ruff check`
+- [X] T100 [P] Write the root `README.md`: purpose, layout, how to build the extractor and run the reviewer, link to `specs/001-agentic-design-review/quickstart.md`
+- [X] T101 [P] Add `NOTICE.md` attributing MIT-derived patterns (`solidworks-skills` connection manager and circuit breaker ideas) and stating that SwpilotCLI is referenced only
+- [X] T102 [P] Add a CI workflow `.github/workflows/reviewer.yml` running `uv run pytest` on Windows and Ubuntu (integration tests skipped) and `ruff check`
 - [ ] T103 Run every quickstart scenario end to end; fix discrepancies between quickstart, contracts, and behavior
 - [ ] T104 DRY and constitution review across `reviewer/src/swreview/checks/` and `tools/`: one finding builder, one unit module, no duplicated id resolution; update `research.md` with any decision changes
 - [ ] T105 Regenerate `contracts/ir.schema.json` from the models (`python -m swreview.ir.schema --write`) and confirm `test_schema_sync` and the C# serializer test still pass

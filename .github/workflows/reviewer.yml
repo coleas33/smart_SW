@@ -1,0 +1,36 @@
+name: reviewer
+
+on:
+  push:
+    paths:
+      - "reviewer/**"
+      - "specs/001-agentic-design-review/contracts/**"
+      - ".github/workflows/reviewer.yml"
+  pull_request:
+    paths:
+      - "reviewer/**"
+      - "specs/001-agentic-design-review/contracts/**"
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: reviewer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Sync
+        run: uv sync --all-extras
+      - name: Lint
+        run: uv run ruff check src tests
+      - name: Test
+        # Integration tests skip automatically when no native package is present.
+        run: uv run pytest

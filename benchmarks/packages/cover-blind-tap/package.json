@@ -1,0 +1,901 @@
+{
+  "schema_version": "1.0.0",
+  "package_id": "a332a012-e982-4596-a585-dc0f57f34d1b",
+  "created_at": "2026-09-13T01:43:49.575125Z",
+  "extractor": {
+    "name": "swreview-ingest",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "DESKTOP-QHMQ2MD"
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "ASM-1001",
+        "vault_path": "Projects/Pilot/cover-blind-tap/cover-assy.SLDASM",
+        "vault_version": 7,
+        "revision": "B",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "manual"
+      },
+      {
+        "document_id": "PRT-1001",
+        "vault_path": "Projects/Pilot/cover-blind-tap/housing.SLDPRT",
+        "vault_version": 12,
+        "revision": "C",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "manual"
+      },
+      {
+        "document_id": "PRT-1002",
+        "vault_path": "Projects/Pilot/cover-blind-tap/cover.SLDPRT",
+        "vault_version": 5,
+        "revision": "B",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "manual"
+      },
+      {
+        "document_id": "PRT-1003",
+        "vault_path": "Toolbox/socket head cap screw_am.SLDPRT",
+        "vault_version": null,
+        "revision": null,
+        "configuration": "M6 x 20",
+        "local_modified": null,
+        "export_method": "manual"
+      },
+      {
+        "document_id": "DRW-2001",
+        "vault_path": "Projects/Pilot/cover-blind-tap/housing.SLDDRW",
+        "vault_version": 12,
+        "revision": "C",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "pdf"
+      },
+      {
+        "document_id": "DRW-2002",
+        "vault_path": "Projects/Pilot/cover-blind-tap/cover.SLDDRW",
+        "vault_version": 5,
+        "revision": "B",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "pdf"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "cover-blind-tap",
+    "name": "Cover on housing, blind tapped holes",
+    "root_assembly_document_id": "ASM-1001",
+    "active_configuration": "Default",
+    "drawing_document_ids": [
+      "DRW-2001",
+      "DRW-2002"
+    ]
+  },
+  "documents": [
+    {
+      "document_id": "ASM-1001",
+      "kind": "assembly",
+      "file_name": "cover-assy.SLDASM",
+      "path": "Projects/Pilot/cover-blind-tap/cover-assy.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "PRT-1001",
+      "kind": "part",
+      "file_name": "housing.SLDPRT",
+      "path": "Projects/Pilot/cover-blind-tap/housing.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "BOM:Description": "Housing 6061-T6",
+        "BOM:Part Number": "PRT-1001"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "PRT-1002",
+      "kind": "part",
+      "file_name": "cover.SLDPRT",
+      "path": "Projects/Pilot/cover-blind-tap/cover.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "BOM:Description": "Cover 6061-T6",
+        "BOM:Part Number": "PRT-1002"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "PRT-1003",
+      "kind": "part",
+      "file_name": "socket head cap screw_am.SLDPRT",
+      "path": "Toolbox/socket head cap screw_am.SLDPRT",
+      "configurations": [
+        "M6 x 20"
+      ],
+      "active_configuration": "M6 x 20",
+      "custom_properties": {
+        "BOM:Description": "Socket head cap screw M6 x 20 ISO 4762",
+        "BOM:Part Number": "PRT-1003"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "DRW-2001",
+      "kind": "drawing",
+      "file_name": "housing.SLDDRW",
+      "path": "Projects/Pilot/cover-blind-tap/housing.SLDDRW",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "DRW-2002",
+      "kind": "drawing",
+      "file_name": "cover.SLDDRW",
+      "path": "Projects/Pilot/cover-blind-tap/cover.SLDDRW",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "ZXhwb3J0ZWQ6UFJULTEwMDE6MQ==",
+      "persist_ref_scope": "ASM-1001",
+      "name": "housing-1",
+      "document_id": "PRT-1001",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "housing-1"
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "ZXhwb3J0ZWQ6UFJULTEwMDI6MQ==",
+      "persist_ref_scope": "ASM-1001",
+      "name": "cover-1",
+      "document_id": "PRT-1002",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "cover-1"
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "ZXhwb3J0ZWQ6UFJULTEwMDM6MQ==",
+      "persist_ref_scope": "ASM-1001",
+      "name": "socket head cap screw_am-1",
+      "document_id": "PRT-1003",
+      "parent_id": null,
+      "referenced_configuration": "M6 x 20",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "socket head cap screw_am-1"
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "ZXhwb3J0ZWQ6UFJULTEwMDM6Mg==",
+      "persist_ref_scope": "ASM-1001",
+      "name": "socket head cap screw_am-2",
+      "document_id": "PRT-1003",
+      "parent_id": null,
+      "referenced_configuration": "M6 x 20",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "socket head cap screw_am-2"
+    },
+    {
+      "id": "cmp:0005",
+      "persist_ref": "ZXhwb3J0ZWQ6UFJULTEwMDM6Mw==",
+      "persist_ref_scope": "ASM-1001",
+      "name": "socket head cap screw_am-3",
+      "document_id": "PRT-1003",
+      "parent_id": null,
+      "referenced_configuration": "M6 x 20",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "socket head cap screw_am-3"
+    },
+    {
+      "id": "cmp:0006",
+      "persist_ref": "ZXhwb3J0ZWQ6UFJULTEwMDM6NA==",
+      "persist_ref_scope": "ASM-1001",
+      "name": "socket head cap screw_am-4",
+      "document_id": "PRT-1003",
+      "parent_id": null,
+      "referenced_configuration": "M6 x 20",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "socket head cap screw_am-4"
+    }
+  ],
+  "mates": [],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [
+    {
+      "document_id": "DRW-2001",
+      "sheet_name": "Sheet1",
+      "page": 1,
+      "scale": "1:1",
+      "units": "mm",
+      "general_notes": [
+        {
+          "text": "NOTES:",
+          "source": {
+            "document_id": "DRW-2001",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              60.0,
+              690.2890014648438,
+              89.48400115966797,
+              702.25
+            ]
+          },
+          "kind": "other"
+        },
+        {
+          "text": "UNLESS OTHERWISE SPECIFIED TOLERANCES ±0.1",
+          "source": {
+            "document_id": "DRW-2001",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              60.0,
+              706.2890014648438,
+              259.8360290527344,
+              718.25
+            ]
+          },
+          "kind": "general_tolerance"
+        },
+        {
+          "text": "MATERIAL: 6061-T6",
+          "source": {
+            "document_id": "DRW-2001",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              60.0,
+              722.2890014648438,
+              137.89498901367188,
+              734.25
+            ]
+          },
+          "kind": "material"
+        },
+        {
+          "text": "FINISH: CLEAR ANODIZE",
+          "source": {
+            "document_id": "DRW-2001",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              60.0,
+              738.2890014648438,
+              157.15501403808594,
+              750.25
+            ]
+          },
+          "kind": "finish"
+        }
+      ],
+      "dimensions": [
+        {
+          "nominal": {
+            "value": 14.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "none",
+            "upper": null,
+            "lower": null,
+            "source": {
+              "document_id": "DRW-2001",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": null,
+              "persist_ref": null,
+              "page": 1,
+              "bbox": [
+                120.0,
+                289.2099914550781,
+                208.7799835205078,
+                302.5
+              ]
+            }
+          },
+          "source": {
+            "document_id": "DRW-2001",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              120.0,
+              289.2099914550781,
+              208.7799835205078,
+              302.5
+            ]
+          },
+          "text_as_read": "4X M6x1.0 - 6H ↧ 14"
+        },
+        {
+          "nominal": {
+            "value": 40.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "none",
+            "upper": null,
+            "lower": null,
+            "source": {
+              "document_id": "DRW-2001",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": null,
+              "persist_ref": null,
+              "page": 1,
+              "bbox": [
+                120.0,
+                349.2099914550781,
+                153.51998901367188,
+                362.5
+              ]
+            }
+          },
+          "source": {
+            "document_id": "DRW-2001",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              120.0,
+              349.2099914550781,
+              153.51998901367188,
+              362.5
+            ]
+          },
+          "text_as_read": "Ø40 H7"
+        },
+        {
+          "nominal": {
+            "value": 60.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "symmetric",
+            "upper": {
+              "value": 0.05,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": -0.05,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "DRW-2001",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": null,
+              "persist_ref": null,
+              "page": 1,
+              "bbox": [
+                330.0,
+                409.2099914550781,
+                368.6800842285156,
+                422.5
+              ]
+            }
+          },
+          "source": {
+            "document_id": "DRW-2001",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              330.0,
+              409.2099914550781,
+              368.6800842285156,
+              422.5
+            ]
+          },
+          "text_as_read": "60 ±0.05"
+        }
+      ],
+      "views": [],
+      "parse_status": "text",
+      "parser": "pymupdf/1.28.2"
+    },
+    {
+      "document_id": "DRW-2002",
+      "sheet_name": "Sheet1",
+      "page": 1,
+      "scale": "1:1",
+      "units": "mm",
+      "general_notes": [
+        {
+          "text": "NOTES:",
+          "source": {
+            "document_id": "DRW-2002",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              60.0,
+              690.2890014648438,
+              89.48400115966797,
+              702.25
+            ]
+          },
+          "kind": "other"
+        },
+        {
+          "text": "UNLESS OTHERWISE SPECIFIED TOLERANCES ±0.1",
+          "source": {
+            "document_id": "DRW-2002",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              60.0,
+              706.2890014648438,
+              259.8360290527344,
+              718.25
+            ]
+          },
+          "kind": "general_tolerance"
+        },
+        {
+          "text": "MATERIAL: 6061-T6",
+          "source": {
+            "document_id": "DRW-2002",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              60.0,
+              722.2890014648438,
+              137.89498901367188,
+              734.25
+            ]
+          },
+          "kind": "material"
+        }
+      ],
+      "dimensions": [
+        {
+          "nominal": {
+            "value": 40.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "none",
+            "upper": null,
+            "lower": null,
+            "source": {
+              "document_id": "DRW-2002",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": null,
+              "persist_ref": null,
+              "page": 1,
+              "bbox": [
+                120.0,
+                289.2099914550781,
+                152.30999755859375,
+                302.5
+              ]
+            }
+          },
+          "source": {
+            "document_id": "DRW-2002",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              120.0,
+              289.2099914550781,
+              152.30999755859375,
+              302.5
+            ]
+          },
+          "text_as_read": "Ø40 g6"
+        },
+        {
+          "nominal": {
+            "value": 8.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "symmetric",
+            "upper": {
+              "value": 0.1,
+              "unit": "mm"
+            },
+            "lower": {
+              "value": -0.1,
+              "unit": "mm"
+            },
+            "source": {
+              "document_id": "DRW-2002",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": null,
+              "persist_ref": null,
+              "page": 1,
+              "bbox": [
+                120.0,
+                349.2099914550781,
+                155.4499969482422,
+                362.5
+              ]
+            }
+          },
+          "source": {
+            "document_id": "DRW-2002",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              120.0,
+              349.2099914550781,
+              155.4499969482422,
+              362.5
+            ]
+          },
+          "text_as_read": "8.0 ±0.1"
+        },
+        {
+          "nominal": {
+            "value": 11.0,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "none",
+            "upper": null,
+            "lower": null,
+            "source": {
+              "document_id": "DRW-2002",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": null,
+              "persist_ref": null,
+              "page": 1,
+              "bbox": [
+                120.0,
+                409.2099914550781,
+                186.21998596191406,
+                422.5
+              ]
+            }
+          },
+          "source": {
+            "document_id": "DRW-2002",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              120.0,
+              409.2099914550781,
+              186.21998596191406,
+              422.5
+            ]
+          },
+          "text_as_read": "4X ⌴ Ø11 ↧ 6.5"
+        },
+        {
+          "nominal": {
+            "value": 6.5,
+            "unit": "mm"
+          },
+          "tolerance": {
+            "kind": "none",
+            "upper": null,
+            "lower": null,
+            "source": {
+              "document_id": "DRW-2002",
+              "sheet": "Sheet1",
+              "view": null,
+              "annotation": null,
+              "persist_ref": null,
+              "page": 1,
+              "bbox": [
+                120.0,
+                409.2099914550781,
+                186.21998596191406,
+                422.5
+              ]
+            }
+          },
+          "source": {
+            "document_id": "DRW-2002",
+            "sheet": "Sheet1",
+            "view": null,
+            "annotation": null,
+            "persist_ref": null,
+            "page": 1,
+            "bbox": [
+              120.0,
+              409.2099914550781,
+              186.21998596191406,
+              422.5
+            ]
+          },
+          "text_as_read": "4X ⌴ Ø11 ↧ 6.5"
+        }
+      ],
+      "views": [],
+      "parse_status": "text",
+      "parser": "pymupdf/1.28.2"
+    },
+    {
+      "document_id": "DRW-2002",
+      "sheet_name": "Sheet2",
+      "page": 2,
+      "scale": null,
+      "units": "unknown",
+      "general_notes": [],
+      "dimensions": [],
+      "views": [],
+      "parse_status": "no_text",
+      "parser": "pymupdf/1.28.2"
+    }
+  ],
+  "gaps": [
+    {
+      "kind": "not_extracted",
+      "entity_kind": "persist_ref",
+      "entity_id": null,
+      "reason": "component instances built from the BOM carry placeholder persist_refs (base64 of 'exported:<document_id>:<n>'), an identity transform, resolved suppression and is_toolbox=False; the exported files state none of these, so no finding may navigate to a SOLIDWORKS entity or rely on component position until a native extraction replaces them",
+      "error": null
+    },
+    {
+      "kind": "no_text",
+      "entity_kind": "drawing_sheet",
+      "entity_id": "DRW-2002:2",
+      "reason": "page 2 of DRW-2002 has no text layer; it was exported flattened and nothing on it could be read",
+      "error": null
+    }
+  ]
+}

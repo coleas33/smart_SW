@@ -1,0 +1,3 @@
+result:
+  error: 'TypeError: bore nominal is an angle (45.0 deg, ''45 +/-0.5 deg''); this
+    check needs a length'

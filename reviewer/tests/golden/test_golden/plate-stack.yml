@@ -1,0 +1,216 @@
+result:
+  calculation:
+    assumptions:
+    - 'worst case: every dimension is at the limit that moves the result furthest
+      from nominal, all at the same time'
+    - all dimensions act along one axis and add directly, as signed
+    - lengths rounded to 1e-6 of the unit they are reported in
+    - dimension 1 '12' takes its tolerance from doc:3 sheet Sheet1 annotation NOTE-1,
+      not from the dimension itself
+    excluded_effects:
+    - geometric position and orientation tolerance (perpendicularity, flatness datums)
+    - form error of the mating faces
+    - temperature
+    - deformation under load, clamping or fastener preload
+    - 'statistical distribution: this is worst case, not an RSS stack'
+    function: swreview.checks.stack.check_axial_stack
+    function_version: '1'
+    inputs:
+      dim_0_max_mm:
+        unit: mm
+        value: 30.2
+      dim_0_max_source:
+        unit: mm
+        value: 30.2
+      dim_0_min_mm:
+        unit: mm
+        value: 29.8
+      dim_0_min_source:
+        unit: mm
+        value: 29.8
+      dim_0_sign: '+1'
+      dim_0_text_as_read: 30 +/-0.2
+      dim_0_tolerance_kind: symmetric
+      dim_0_tolerance_source: doc:3 sheet Sheet1 annotation DIM-DEPTH
+      dim_1_max_mm:
+        unit: mm
+        value: 12.1
+      dim_1_max_source:
+        unit: mm
+        value: 12.1
+      dim_1_min_mm:
+        unit: mm
+        value: 11.9
+      dim_1_min_source:
+        unit: mm
+        value: 11.9
+      dim_1_sign: '-1'
+      dim_1_text_as_read: '12'
+      dim_1_tolerance_kind: symmetric
+      dim_1_tolerance_source: doc:3 sheet Sheet1 annotation NOTE-1
+      dim_2_max_mm:
+        unit: mm
+        value: 12.05
+      dim_2_max_source:
+        unit: mm
+        value: 12.05
+      dim_2_min_mm:
+        unit: mm
+        value: 11.85
+      dim_2_min_source:
+        unit: mm
+        value: 11.85
+      dim_2_sign: '-1'
+      dim_2_text_as_read: 12 +0.05/-0.15
+      dim_2_tolerance_kind: bilateral
+      dim_2_tolerance_source: doc:3 sheet Sheet1 annotation DIM-PLATE-B
+      target_max_mm:
+        unit: mm
+        value: 6.5
+      target_max_source:
+        unit: mm
+        value: 6.5
+      target_min_mm:
+        unit: mm
+        value: 5.8
+      target_min_source:
+        unit: mm
+        value: 5.8
+      target_text_as_read: gap 6.50/5.80
+      target_tolerance_kind: limits
+      target_tolerance_source: doc:3 sheet Sheet1 annotation DIM-GAP
+    model: stack.worst_case
+    result:
+      max_mm: 6.45
+      min_mm: 5.65
+      nominal_mm: 6.0
+      target_max_mm: 6.5
+      target_min_mm: 5.8
+      tolerance_minus_mm: 0.35
+      tolerance_plus_mm: 0.45
+      violates_target: true
+    units_out: mm
+  check: stack.worst_case
+  coverage_limits:
+  - 'stack.worst_case summed sizes along one axis; geometric position and orientation
+    tolerance (perpendicularity, flatness datums), form error of the mating faces,
+    temperature, deformation under load, clamping or fastener preload, statistical
+    distribution: this is worst case, not an RSS stack were not evaluated'
+  inputs:
+  - nominal:
+      unit: mm
+      value: 30.0
+    source:
+      annotation: DIM-DEPTH
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: null
+      sheet: Sheet1
+      view: null
+    text_as_read: 30 +/-0.2
+    tolerance:
+      kind: symmetric
+      lower: null
+      source:
+        annotation: DIM-DEPTH
+        bbox: null
+        document_id: doc:3
+        page: null
+        persist_ref: null
+        sheet: Sheet1
+        view: null
+      upper:
+        unit: mm
+        value: 0.2
+  - nominal:
+      unit: mm
+      value: 12.0
+    source:
+      annotation: DIM-PLATE-A
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: null
+      sheet: Sheet1
+      view: null
+    text_as_read: '12'
+    tolerance:
+      kind: symmetric
+      lower: null
+      source:
+        annotation: NOTE-1
+        bbox: null
+        document_id: doc:3
+        page: null
+        persist_ref: null
+        sheet: Sheet1
+        view: null
+      upper:
+        unit: mm
+        value: 0.1
+  - nominal:
+      unit: mm
+      value: 12.0
+    source:
+      annotation: DIM-PLATE-B
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: null
+      sheet: Sheet1
+      view: null
+    text_as_read: 12 +0.05/-0.15
+    tolerance:
+      kind: bilateral
+      lower:
+        unit: mm
+        value: -0.15
+      source:
+        annotation: DIM-PLATE-B
+        bbox: null
+        document_id: doc:3
+        page: null
+        persist_ref: null
+        sheet: Sheet1
+        view: null
+      upper:
+        unit: mm
+        value: 0.05
+  - nominal:
+      unit: mm
+      value: 6.15
+    source:
+      annotation: DIM-GAP
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: null
+      sheet: Sheet1
+      view: null
+    text_as_read: gap 6.50/5.80
+    tolerance:
+      kind: limits
+      lower:
+        unit: mm
+        value: 5.8
+      source:
+        annotation: DIM-GAP
+        bbox: null
+        document_id: doc:3
+        page: null
+        persist_ref: null
+        sheet: Sheet1
+        view: null
+      upper:
+        unit: mm
+        value: 6.5
+  observed: 'Worst-case stack of 3 dimensions: 6.0 mm nominal, 5.65 mm to 6.45 mm,
+    outside the target gap 5.8 mm to 6.5 mm'
+  recommended_action: 'The stack reaches 5.65 mm to 6.45 mm against a target of 5.8
+    mm to 6.5 mm: tighten the contributing tolerances, change a nominal, or widen
+    the target.'
+  requirement: 'Target gap ''gap 6.50/5.80'' (doc:3 sheet Sheet1 annotation DIM-GAP):
+    5.8 mm to 6.5 mm'
+  severity: high
+  status: demonstrated

@@ -1,0 +1,122 @@
+result:
+  calculation:
+    assumptions:
+    - 'diametral clearance: bore and shaft are coaxial cylinders of the stated sizes'
+    - 'worst case: each part is at the limit of its own tolerance band, independently
+      of the other'
+    - lengths rounded to 1e-6 of the unit they are reported in
+    excluded_effects:
+    - geometric position tolerance (coaxiality, runout)
+    - form error (roundness, straightness, cylindricity)
+    - coatings and platings
+    - temperature
+    - deformation under load or press
+    function: swreview.checks.fit.check_fit
+    function_version: '1'
+    inputs:
+      bore_max_mm:
+        unit: mm
+        value: 38.1254
+      bore_max_source:
+        unit: in
+        value: 1.501
+      bore_min_mm:
+        unit: mm
+        value: 38.1
+      bore_min_source:
+        unit: in
+        value: 1.5
+      bore_text_as_read: 1.5010/1.5000 in
+      bore_tolerance_kind: limits
+      bore_tolerance_source: doc:3 sheet Sheet1 annotation DIM-BORE
+      shaft_max_mm:
+        unit: mm
+        value: 38.01
+      shaft_max_source:
+        unit: mm
+        value: 38.01
+      shaft_min_mm:
+        unit: mm
+        value: 37.99
+      shaft_min_source:
+        unit: mm
+        value: 37.99
+      shaft_text_as_read: 38 +/-0.01
+      shaft_tolerance_kind: symmetric
+      shaft_tolerance_source: doc:3 sheet Sheet2 annotation DIM-SHAFT
+    model: fit.size_only
+    result:
+      fit_class: clearance
+      max_clearance_mm: 0.1354
+      min_clearance_mm: 0.09
+    units_out: mm
+  check: fit.size_only
+  coverage_limits:
+  - fit.size_only considered size only; geometric position tolerance (coaxiality,
+    runout), form error (roundness, straightness, cylindricity), coatings and platings,
+    temperature, deformation under load or press were not evaluated
+  inputs:
+  - nominal:
+      unit: in
+      value: 1.5
+    source:
+      annotation: DIM-BORE
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: null
+      sheet: Sheet1
+      view: null
+    text_as_read: 1.5010/1.5000 in
+    tolerance:
+      kind: limits
+      lower:
+        unit: in
+        value: 1.5
+      source:
+        annotation: DIM-BORE
+        bbox: null
+        document_id: doc:3
+        page: null
+        persist_ref: null
+        sheet: Sheet1
+        view: null
+      upper:
+        unit: in
+        value: 1.501
+  - nominal:
+      unit: mm
+      value: 38.0
+    source:
+      annotation: DIM-SHAFT
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: null
+      sheet: Sheet2
+      view: null
+    text_as_read: 38 +/-0.01
+    tolerance:
+      kind: symmetric
+      lower: null
+      source:
+        annotation: DIM-SHAFT
+        bbox: null
+        document_id: doc:3
+        page: null
+        persist_ref: null
+        sheet: Sheet2
+        view: null
+      upper:
+        unit: mm
+        value: 0.01
+  observed: 'Clearance fit on size: 0.09 mm to 0.1354 mm diametral clearance between
+    bore ''1.5010/1.5000 in'' (38.1/38.1254 mm) and shaft ''38 +/-0.01'' (37.99/38.01
+    mm)'
+  recommended_action: None from the size data; confirm position, form and coating
+    separately if the joint is tight.
+  requirement: 'Fit as drawn: bore ''1.5010/1.5000 in'' (doc:3 sheet Sheet1 annotation
+    DIM-BORE) over shaft ''38 +/-0.01'' (doc:3 sheet Sheet2 annotation DIM-SHAFT);
+    no machine-readable fit class requirement in this phase'
+  severity: info
+  status: checked_within_scope

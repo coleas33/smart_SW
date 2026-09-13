@@ -1,0 +1,4 @@
+{
+  "callable": "swreview.tools.golden:snapshot",
+  "kwargs": {}
+}
