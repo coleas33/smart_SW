@@ -194,7 +194,9 @@ def test_accepting_binds_the_exception_to_the_component_persist_refs(tmp_path: P
     package = two_component_package()
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
 
-    accepted = store.accept(GROUP, package, by="cole", note="intended press fit", at=ACCEPTED_AT)
+    accepted = store.accept(
+        GROUP, package, by="engineer", note="intended press fit", at=ACCEPTED_AT
+    )
 
     assert accepted.id == "EX-001"
     assert accepted.check == "interference.static"
@@ -205,7 +207,7 @@ def test_accepting_binds_the_exception_to_the_component_persist_refs(tmp_path: P
     assert accepted.persist_ref_scopes == ["doc:1", "doc:1"]
     assert accepted.configuration == "Default"
     assert accepted.status == "active"
-    assert accepted.accepted_by == "cole"
+    assert accepted.accepted_by == "engineer"
     assert accepted.accepted_at == ACCEPTED_AT
     assert accepted.geometry_fingerprint == fingerprint(package, ["cmp:0001", "cmp:0002"])
 
@@ -214,8 +216,8 @@ def test_accepting_twice_allocates_a_second_id(tmp_path: Path) -> None:
     package = two_component_package()
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
 
-    store.accept(GROUP, package, by="cole", note="one", at=ACCEPTED_AT)
-    second = store.accept(Group(["cmp:0001"]), package, by="cole", note="two", at=ACCEPTED_AT)
+    store.accept(GROUP, package, by="engineer", note="one", at=ACCEPTED_AT)
+    second = store.accept(Group(["cmp:0001"]), package, by="engineer", note="two", at=ACCEPTED_AT)
 
     assert second.id == "EX-002"
     assert len(store.exceptions) == 2
@@ -227,7 +229,7 @@ def test_accepting_twice_allocates_a_second_id(tmp_path: Path) -> None:
 def test_exceptions_json_round_trips(tmp_path: Path) -> None:
     package = two_component_package()
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    store.accept(GROUP, package, by="cole", note="intended press fit", at=ACCEPTED_AT)
+    store.accept(GROUP, package, by="engineer", note="intended press fit", at=ACCEPTED_AT)
     store.save()
 
     reloaded = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME).load()
@@ -237,7 +239,7 @@ def test_exceptions_json_round_trips(tmp_path: Path) -> None:
 
 def test_a_directory_is_read_as_its_exceptions_file(tmp_path: Path) -> None:
     store = ExceptionStore(tmp_path)
-    store.accept(GROUP, two_component_package(), by="cole", note="n", at=ACCEPTED_AT)
+    store.accept(GROUP, two_component_package(), by="engineer", note="n", at=ACCEPTED_AT)
     store.save()
 
     assert (tmp_path / EXCEPTIONS_FILE_NAME).is_file()
@@ -251,7 +253,7 @@ def test_loading_an_absent_file_gives_an_empty_store(tmp_path: Path) -> None:
 def test_an_exception_can_be_rebuilt_from_its_json(tmp_path: Path) -> None:
     package = two_component_package()
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    accepted = store.accept(GROUP, package, by="cole", note="n", at=ACCEPTED_AT)
+    accepted = store.accept(GROUP, package, by="engineer", note="n", at=ACCEPTED_AT)
 
     assert ReviewException(**accepted.model_dump()) == accepted
 
@@ -262,7 +264,7 @@ def test_an_exception_can_be_rebuilt_from_its_json(tmp_path: Path) -> None:
 def test_matching_is_independent_of_the_order_of_the_component_ids(tmp_path: Path) -> None:
     package = two_component_package()
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    accepted = store.accept(GROUP, package, by="cole", note="n", at=ACCEPTED_AT)
+    accepted = store.accept(GROUP, package, by="engineer", note="n", at=ACCEPTED_AT)
 
     matched = store.match(package, ["cmp:0002", "cmp:0001"], "Default")
 
@@ -272,7 +274,7 @@ def test_matching_is_independent_of_the_order_of_the_component_ids(tmp_path: Pat
 def test_a_different_component_set_does_not_match(tmp_path: Path) -> None:
     package = two_component_package()
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    store.accept(GROUP, package, by="cole", note="n", at=ACCEPTED_AT)
+    store.accept(GROUP, package, by="engineer", note="n", at=ACCEPTED_AT)
 
     assert store.match(package, ["cmp:0001"], "Default") is None
 
@@ -280,7 +282,7 @@ def test_a_different_component_set_does_not_match(tmp_path: Path) -> None:
 def test_a_different_configuration_does_not_match(tmp_path: Path) -> None:
     package = two_component_package()
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    store.accept(GROUP, package, by="cole", note="n", at=ACCEPTED_AT)
+    store.accept(GROUP, package, by="engineer", note="n", at=ACCEPTED_AT)
 
     assert store.match(package, ["cmp:0001", "cmp:0002"], "Cold") is None
 
@@ -288,7 +290,7 @@ def test_a_different_configuration_does_not_match(tmp_path: Path) -> None:
 def test_a_needs_review_exception_still_matches(tmp_path: Path) -> None:
     package = two_component_package()
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    accepted = store.accept(GROUP, package, by="cole", note="n", at=ACCEPTED_AT)
+    accepted = store.accept(GROUP, package, by="engineer", note="n", at=ACCEPTED_AT)
     accepted.status = "needs_review"
 
     assert store.match(package, ["cmp:0001", "cmp:0002"], "Default") is accepted
@@ -297,7 +299,7 @@ def test_a_needs_review_exception_still_matches(tmp_path: Path) -> None:
 def test_a_retired_exception_never_matches(tmp_path: Path) -> None:
     package = two_component_package()
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    accepted = store.accept(GROUP, package, by="cole", note="n", at=ACCEPTED_AT)
+    accepted = store.accept(GROUP, package, by="engineer", note="n", at=ACCEPTED_AT)
     store.retire(accepted.id)
 
     assert store.match(package, ["cmp:0001", "cmp:0002"], "Default") is None
@@ -308,7 +310,7 @@ def test_a_retired_exception_never_matches(tmp_path: Path) -> None:
 
 def test_refresh_leaves_an_unchanged_exception_active(tmp_path: Path) -> None:
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    accepted = store.accept(GROUP, two_component_package(), by="cole", note="n", at=ACCEPTED_AT)
+    accepted = store.accept(GROUP, two_component_package(), by="engineer", note="n", at=ACCEPTED_AT)
 
     assert store.refresh(two_component_package()) == []
     assert accepted.status == "active"
@@ -316,7 +318,7 @@ def test_refresh_leaves_an_unchanged_exception_active(tmp_path: Path) -> None:
 
 def test_refresh_flags_a_changed_radius_for_re_review(tmp_path: Path) -> None:
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    accepted = store.accept(GROUP, two_component_package(), by="cole", note="n", at=ACCEPTED_AT)
+    accepted = store.accept(GROUP, two_component_package(), by="engineer", note="n", at=ACCEPTED_AT)
 
     changed = store.refresh(two_component_package(radius_m=0.006))
 
@@ -326,7 +328,7 @@ def test_refresh_flags_a_changed_radius_for_re_review(tmp_path: Path) -> None:
 
 def test_refresh_flags_a_changed_configuration_for_re_review(tmp_path: Path) -> None:
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    accepted = store.accept(GROUP, two_component_package(), by="cole", note="n", at=ACCEPTED_AT)
+    accepted = store.accept(GROUP, two_component_package(), by="engineer", note="n", at=ACCEPTED_AT)
 
     store.refresh(two_component_package(configuration="Cold"))
 
@@ -335,7 +337,7 @@ def test_refresh_flags_a_changed_configuration_for_re_review(tmp_path: Path) -> 
 
 def test_refresh_flags_an_exception_whose_component_is_gone(tmp_path: Path) -> None:
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    accepted = store.accept(GROUP, two_component_package(), by="cole", note="n", at=ACCEPTED_AT)
+    accepted = store.accept(GROUP, two_component_package(), by="engineer", note="n", at=ACCEPTED_AT)
 
     store.refresh(build_package(components=[component("cmp:0001")], faces=[]))
 
@@ -344,7 +346,7 @@ def test_refresh_flags_an_exception_whose_component_is_gone(tmp_path: Path) -> N
 
 def test_refresh_leaves_a_retired_exception_retired(tmp_path: Path) -> None:
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    accepted = store.accept(GROUP, two_component_package(), by="cole", note="n", at=ACCEPTED_AT)
+    accepted = store.accept(GROUP, two_component_package(), by="engineer", note="n", at=ACCEPTED_AT)
     store.retire(accepted.id)
 
     store.refresh(two_component_package(radius_m=0.006))
@@ -354,7 +356,7 @@ def test_refresh_leaves_a_retired_exception_retired(tmp_path: Path) -> None:
 
 def test_reaccept_returns_a_flagged_exception_to_active(tmp_path: Path) -> None:
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    accepted = store.accept(GROUP, two_component_package(), by="cole", note="n", at=ACCEPTED_AT)
+    accepted = store.accept(GROUP, two_component_package(), by="engineer", note="n", at=ACCEPTED_AT)
     changed_package = two_component_package(radius_m=0.006)
     store.refresh(changed_package)
 
@@ -369,7 +371,7 @@ def test_reaccept_returns_a_flagged_exception_to_active(tmp_path: Path) -> None:
 
 def test_reaccept_without_a_package_keeps_the_old_fingerprint(tmp_path: Path) -> None:
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
-    accepted = store.accept(GROUP, two_component_package(), by="cole", note="n", at=ACCEPTED_AT)
+    accepted = store.accept(GROUP, two_component_package(), by="engineer", note="n", at=ACCEPTED_AT)
     original = accepted.geometry_fingerprint
     accepted.status = "needs_review"
 

@@ -41,7 +41,10 @@ ENV_KEY = "corp-gateway-2f7c1a9e-not-provider-shaped"
 half of the command rather than the pattern half."""
 
 OPENAI_SHAPED = "sk-proj-0aB1cD2eF3gH4iJ5kL6mN7oP8qR9sT0uV1wX2yZ3aB4cD5eF"
-GOOGLE_SHAPED = "AIza-EXAMPLE-not-a-real-key-01234"
+# Built from fragments so the source never holds a contiguous provider-shaped token
+# (GitHub secret scanning would otherwise alert on a format-valid fake); the joined value
+# is still AIza + 35 key characters, which is what the detector needs.
+GOOGLE_SHAPED = "AIza" + "SyNOTAREALKEY" + "0123456789abcdefghijkl"
 BRIDGE_SECRET = "bridge-8c41d0e6b2f74a1d9e3c5a7b0f2d4e68"
 BRIDGE_ENV_VAR = "SWREVIEW_BRIDGE_SECRET"
 

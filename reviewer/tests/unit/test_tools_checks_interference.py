@@ -92,7 +92,7 @@ def accepted_store(context: ToolContext, status: str = "active") -> ExceptionSto
         for group in checks_interference.groups_of(context.ir)
     }
     exception = store.accept(
-        groups["boss/screws"], context.ir, by="cole", note="press fit, intended"
+        groups["boss/screws"], context.ir, by="engineer", note="press fit, intended"
     )
     exception.status = status  # type: ignore[assignment]
     return store

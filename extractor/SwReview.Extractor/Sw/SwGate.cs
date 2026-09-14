@@ -27,7 +27,7 @@ public interface ISwGateObserver
 /// <summary>
 /// The single door every SOLIDWORKS interop call goes through. Two jobs, both required by
 /// the constitution: the member name is checked against <see cref="ReadOnlyGuard"/> before
-/// the call runs (the assistant inspects customer models, it never edits them), and the
+/// the call runs (the assistant inspects reviewed models, it never edits them), and the
 /// call is wrapped in a <see cref="CircuitBreaker"/> so a dead session stops the dump
 /// instead of producing hundreds of identical failures.
 ///

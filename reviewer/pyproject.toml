@@ -4,7 +4,7 @@ version = "0.2.0"
 description = "SOLIDWORKS agentic design review pilot: IR models, deterministic checks, curated agent tools, report"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Proprietary" }
+license = { text = "AGPL-3.0-or-later" }
 dependencies = [
     "openai>=2.0",
     "google-genai>=1.0",

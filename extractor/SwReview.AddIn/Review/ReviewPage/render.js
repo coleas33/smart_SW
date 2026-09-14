@@ -8,11 +8,11 @@
   functions rather than through a second, untested copy of them.
 
   The one rule that matters more than any other in this file: every string that came from the
-  model or from a customer document - a text delta, a tool's `result_summary`, a finding's
+  model or from a reviewed document - a text delta, a tool's `result_summary`, a finding's
   `title` and `recommended_action`, drawing text read off a sheet, an evidence question, an
   error message - reaches the screen through `document.createTextNode` and through nothing
   else (FR-029). There is no `innerHTML` here and there is no place where markup is assembled
-  from a string. A finding title is written by a language model reading a customer's assembly;
+  from a string. A finding title is written by a language model reading a reviewed assembly;
   treating it as markup would make the Task Pane the most convenient injection point in the
   workstation.
 

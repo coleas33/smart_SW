@@ -36,11 +36,10 @@ The highest-value pilot is an assistant that investigates drawings and assembly 
 | Main quality problem | Assembly fit-up and tolerance issues |
 | Existing work | Attempts at automated drawings and a macro standards checker |
 | Development owner | A mechanical engineer; specialist API support is an option |
-| Budget | Flexible; development time and demonstrated value govern scope |
 | Pilot target | A useful result within four weeks of work |
 | Productivity target | At least 60 minutes of net engineering effort saved per design |
 
-For planning, “one design” means an assembly or subassembly and its drawing package. Confirm that definition before measuring results. The location and consistency of manufacturing tolerances remain open questions. Establish which sources govern each interface before interpreting fit results. Apply the pilot across general mechanical work; off-road robotics is one source of examples.
+For planning, “one design” means an assembly or subassembly and its drawing package. Confirm that definition before measuring results. The location and consistency of manufacturing tolerances remain open questions. Establish which sources govern each interface before interpreting fit results.
 
 ## Recommended approach and early agentic review
 
@@ -244,7 +243,7 @@ Count package preparation, recurring setup, supervision, verification, false-ala
 
 Target at least **60 minutes of net savings per design without degrading review quality**. Track valid findings, severity, known defects missed, false alarms, and unresolved coverage. Report the distribution across designs, not only the most successful example.
 
-Four weeks to demonstrate value differs from recovering development cost. Assuming 160 development hours and one hour saved per design, labor-hour payback is roughly 160 designs before maintenance. Dollar payback also depends on development and reviewer rates. Avoided scrap and rework may improve ROI when supported by actual results.
+Four weeks to demonstrate value differs from recovering development cost. Record development hours separately so payback can be computed from measured savings rather than assumed ones. Avoided scrap and rework may improve ROI when supported by actual results.
 
 At the checkpoint, record the decision and its basis: continue if the time savings and review quality justify it; narrow scope if only some checks are useful; revise if retrieval or false alarms dominate effort; or stop if the assistant adds work without enough benefit. A small successful pilot supports further testing, not universal reliability.
 

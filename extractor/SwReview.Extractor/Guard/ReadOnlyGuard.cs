@@ -22,7 +22,7 @@ public class MutatingCallError : Exception
 
 /// <summary>
 /// The read-only gate in front of every SOLIDWORKS call the bridge and the console host
-/// make (research R4). The review assistant inspects customer models; it never edits them.
+/// make (research R4). The review assistant inspects reviewed models; it never edits them.
 ///
 /// The list is a denylist of members known to mutate a document, not an allowlist of
 /// readers: the extraction surface is hundreds of getters and grows every phase, and a

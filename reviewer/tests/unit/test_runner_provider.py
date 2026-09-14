@@ -919,7 +919,7 @@ def test_an_exceptions_file_beside_the_package_is_loaded(
                         "persist_ref_scopes": ["doc:1"],
                         "configuration": "Default",
                         "geometry_fingerprint": "0" * 64,
-                        "accepted_by": "cole",
+                        "accepted_by": "engineer",
                         "accepted_at": "2026-09-01T00:00:00Z",
                         "note": "press fit, intended",
                         "status": "active",

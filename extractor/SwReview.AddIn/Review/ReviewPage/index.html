@@ -13,7 +13,7 @@
   and connections only to the loopback backend. Every handler is attached in app.js with
   addEventListener - there is no event-handler attribute anywhere in this file - and app.js
   builds every node with textContent rather than by assigning markup, because assistant text,
-  finding titles and drawing text are authored by a model or by a customer document
+  finding titles and drawing text are authored by a model or by a reviewed document
   (FR-029, contracts/pane-host-messages.md).
 
   The chat transcript is built by render.js, which is loaded first so app.js can render

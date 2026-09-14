@@ -7,7 +7,7 @@ namespace SwReview.Extractor.Tests;
 
 /// <summary>
 /// T022. The guard is the only thing standing between an agent-driven bridge and a
-/// modified customer model (research R4, constitution Technical Constraints).
+/// modified reviewed model (research R4, constitution Technical Constraints).
 /// </summary>
 public class ReadOnlyGuardTests
 {

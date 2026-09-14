@@ -22,3 +22,6 @@
 *.slddrw binary
 *.step binary
 *.stp binary
+
+# Vendored npm artifacts are pinned by SHA-256; never normalise their line endings.
+extractor/SwReview.AddIn/Terminal/TerminalPage/vendor/* -text
