@@ -33,7 +33,7 @@ An engineer with an assembly open in SOLIDWORKS opens the SwReview Task Pane, ch
 
 The engineer opens the Settings section of the Review tab, chooses OpenAI (the default) or Gemini, picks a model from the provider's list, enters an API key, and saves. The key is stored for that Windows user only and never appears in logs, session files, or reports. The same provider choice is available to the command line and the benchmark runner so a review run on the workstation and a benchmark run on another machine use the same loop.
 
-**Why this priority**: Without a working provider the review cannot run, and the organization's rule that only OpenAI and Gemini may be used has to be enforced by construction, not by convention.
+**Why this priority**: Without a working provider the review cannot run, and this build targets OpenAI and Gemini only, and that has to be enforced by construction, not by convention.
 
 **Independent Test**: Save OpenAI settings with a key, run a review against a recorded OpenAI exchange, then switch to Gemini with a recorded Gemini exchange, and confirm both produce the same session structure. Confirm the key is absent from every file the run writes and from the pane's log.
 
@@ -183,7 +183,7 @@ recorded number is not met.
 ## Assumptions
 
 - The workstation runs Windows 11 with the WebView2 runtime installed (it is present on the development machine) and SOLIDWORKS 2024 SP5.
-- The organization provides OpenAI and Gemini API keys for review mode, and Codex CLI and Gemini CLI signed in with organization accounts for general chat; the pane never performs a sign-in flow itself.
+- The operator supplies OpenAI and Gemini API keys for review mode, and Codex CLI (and later Gemini CLI) signed in with their own accounts for general chat; the pane never performs a sign-in flow itself.
 - Model lists are read from each provider at settings time; the defaults ship with the current OpenAI general model and Gemini's current flash model, and are overridable.
 - Codex's `apply_patch` cannot be disabled by configuration; its writes are blocked by the read-only sandbox, which is accepted for v1.
 - Gemini's core-tool allowlist semantics are uncertain; the policy engine's deny-all rule with an allow for our server is the enforced restriction, and the allowlist is belt and braces.

@@ -26,7 +26,7 @@ the Actions tab keeps working.
 
 Assistant text deltas, tool `result_summary`, finding `title` and `recommended_action`,
 drawing `text_as_read`, evidence text and error `message` are authored by the model or by
-customer documents. Both pages MUST insert every such string with `textContent` /
+reviewed documents. Both pages MUST insert every such string with `textContent` /
 `createTextNode`, never `innerHTML`, and never through an inline event handler. If Markdown
 is ever rendered, the renderer is vendored with HTML disabled and escaping on. Both pages
 ship a strict CSP meta tag:

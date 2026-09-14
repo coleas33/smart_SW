@@ -349,7 +349,7 @@ def test_the_detection_settings_are_recorded_with_the_calculation() -> None:
 def accepted_store(package: EvidencePackage, tmp_path: Path, status: str) -> ExceptionStore:
     store = ExceptionStore(tmp_path / "exceptions.json")
     group = group_interferences(package)[0]
-    accepted = store.accept(group, package, by="cole", note="press fit, intended")
+    accepted = store.accept(group, package, by="engineer", note="press fit, intended")
     if status != "active":
         accepted.status = status  # type: ignore[assignment]
     return store

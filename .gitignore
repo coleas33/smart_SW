@@ -44,22 +44,10 @@ Desktop.ini
 .env.*
 !.env.template
 
-# Golden test fixtures — committed after Phase 4 completion for Rust port
-# data/benchmarks/golden/  # now tracked
 *.zip
 settings.json
 settings.local.json
 .cursorignore
-# Output — GIFs are committed for reference
-# output/
-
-# Browser-automation / screenshot scratch — produced by Playwright MCP
-# and ad-hoc Claude Code sessions when poking at the deployed web app.
-# Always at repo root, never under linkage-sim-rs/, so a top-level
-# pattern is sufficient.
-.playwright-mcp/
-.superpowers/
-/linkage-*.png
 
 # Spec Kit: .specify/.gitignore already excludes feature.json and local extension config
 
@@ -81,6 +69,6 @@ extractor/SwReview.AddIn/web/
 # note exists so nobody un-ignores them without reading contracts/settings.schema.json.
 # Session artifacts. reviewer/runs/ above covers review runs; these two catch the general
 # chat log and event stream when a run folder is rooted elsewhere (benchmarks, a custom
-# run root). Both contain model output and customer document text.
+# run root). Both contain model output and reviewed document text.
 benchmarks/**/chat-log.jsonl
 **/events.jsonl

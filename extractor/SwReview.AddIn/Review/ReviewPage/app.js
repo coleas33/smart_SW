@@ -6,7 +6,7 @@
   1. Markup is never assigned, and no handler is inline. Every string that reaches the DOM goes
      through `textContent` or `createTextNode` - here and in `render.js`, which builds every
      card - because assistant deltas, tool summaries, finding titles, drawing text and provider
-     error messages are authored by a model or by a customer document (FR-029). The page's CSP
+     error messages are authored by a model or by a reviewed document (FR-029). The page's CSP
      (`script-src 'self'`) blocks inline script anyway; the rule here is what stops markup being
      *interpreted* rather than merely blocked.
   2. The key is write-only. The host never sends one and this page never asks: the key box is

@@ -68,3 +68,8 @@ This repository was initialized with GitHub Spec Kit. The workflow skills are
 `/speckit-constitution`, `/speckit-specify`, `/speckit-plan`, `/speckit-tasks`,
 `/speckit-implement`, `/speckit-converge`, plus `/speckit-clarify`, `/speckit-analyze`,
 and `/speckit-checklist`.
+
+## License
+
+AGPL-3.0-or-later; see `LICENSE`. Third-party notices are in `NOTICE.md`. The reviewer
+depends on PyMuPDF (AGPL-3.0-or-later), which is why this project carries the same license.

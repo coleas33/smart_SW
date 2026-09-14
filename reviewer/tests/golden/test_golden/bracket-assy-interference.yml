@@ -150,7 +150,7 @@ result:
       - int:007 cmp:0002+cmp:0003 Default computed 2.4e-08 m3
       observed: 'Static interference between cmp:0002 and cmp:0003 in configuration
         Default: largest overlap volume 2.4e-08 m3 (24.0 mm3). This condition is excepted
-        by EX-001, accepted by c.sorkness on 2026-08-03 09:15:00+00:00 for this geometry
+        by EX-001, accepted by engineer on 2026-08-03 09:15:00+00:00 for this geometry
         and configuration: shaft/housing press fit is intended; assembled with an
         arbor press per WI-14'
       recommended_action: None while the geometry is unchanged. Re-review EX-001 if

@@ -36,8 +36,8 @@ cannot register an MCP server table. The generated home **is** the config home:
   `<run_dir>/.swreview-cli/codex-home/codex-instructions.md`;
 - launch with `CODEX_HOME=<run_dir>/.swreview-cli/codex-home` in the child environment.
 
-`CODEX_HOME` also relocates `auth.json`, and the engineer signs in with an organization
-account that the pane never re-authenticates (spec Assumptions). The writer therefore copies
+`CODEX_HOME` also relocates `auth.json`, and the engineer signs in with their own
+account, which the pane never re-authenticates (spec Assumptions). The writer therefore copies
 `%USERPROFILE%\.codex\auth.json` into the generated home at every launch (and refuses to
 start with an explanatory message when it is absent) so the existing sign-in survives.
 Verified on Codex CLI 0.115.0: with `CODEX_HOME` pointed at a scratch home containing

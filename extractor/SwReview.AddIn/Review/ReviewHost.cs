@@ -125,7 +125,7 @@ public sealed class ReviewHostOptions
 /// `chat_id`; the folder comes from this host's own session record, and every resolved path is
 /// canonicalized and checked to be inside `run_root` (or the log folder) before it reaches the
 /// shell. The page is the least trusted thing in the process - it renders text the model and
-/// customer documents wrote - so a path it supplied would be a way to open anything on the
+/// reviewed documents wrote - so a path it supplied would be a way to open anything on the
 /// workstation.
 ///
 /// <b>A reference that no longer resolves is an answer, not an error.</b> `entity.show` always
@@ -853,7 +853,7 @@ public sealed class ReviewHost : IDisposable
     /// The page supplies a chat id and nothing else. Any path it sent is ignored: a page that
     /// could name the path to open could open anything on the workstation with one crafted
     /// message, and the page is the least trusted thing in the process - it renders text the
-    /// model and customer documents wrote.
+    /// model and reviewed documents wrote.
     /// </summary>
     private bool TryRunDirectory(string? id, JsonElement payload, out string runDirectory)
     {

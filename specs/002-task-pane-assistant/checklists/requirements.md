@@ -33,6 +33,6 @@
 
 - Validation iteration 1 (2026-09-13): all items pass.
 - Provider names (OpenAI, Gemini), CLI names (Codex, Gemini CLI), and WebView2 appear in
-  the spec because they are organizational constraints and environment facts, not
+  the spec because they are deployment constraints and environment facts, not
   implementation choices.
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`

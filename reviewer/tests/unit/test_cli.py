@@ -789,7 +789,7 @@ def test_disposition_records_the_decision_and_rerenders(run_dir: Path) -> None:
             "--note",
             "reviewed, ok",
             "--by",
-            "cole",
+            "engineer",
             "--json",
         )
     )
@@ -798,7 +798,7 @@ def test_disposition_records_the_decision_and_rerenders(run_dir: Path) -> None:
     disposition = session["findings"][0]["disposition"]
     assert disposition["decision"] == "accepted"
     assert disposition["note"] == "reviewed, ok"
-    assert disposition["by"] == "cole"
+    assert disposition["by"] == "engineer"
     assert "accepted" in (run_dir / "report.md").read_text(encoding="utf-8")
     assert body["decision"] == "accepted"
 
@@ -1308,7 +1308,7 @@ def accept(run_dir: Path, package_dir: Path, finding_id: str = "F-001", *extra: 
         "--note",
         "press fit, intended",
         "--by",
-        "cole",
+        "engineer",
         *extra,
     )
 
@@ -1322,7 +1322,7 @@ def test_exceptions_accept_writes_an_exception_bound_to_the_finding(
     assert body["exception"]["check"] == "fastener.bottoming"
     assert body["exception"]["configuration"] == "Default"
     assert body["exception"]["note"] == "press fit, intended"
-    assert body["exception"]["accepted_by"] == "cole"
+    assert body["exception"]["accepted_by"] == "engineer"
     assert body["exception"]["geometry_fingerprint"]
 
     stored = json.loads((tmp_package_dir / "exceptions.json").read_text(encoding="utf-8"))

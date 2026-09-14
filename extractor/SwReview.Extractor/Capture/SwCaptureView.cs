@@ -16,7 +16,7 @@ namespace SwReview.Extractor.Capture;
 /// <c>SaveBMP</c> is used rather than <c>SaveAs3</c> on purpose. Both can produce an image,
 /// but <c>SaveAs3</c> is on the read-only guard's denylist - it is the API that writes
 /// model files - so routing a screenshot through it would mean punching a hole in the one
-/// guard that keeps the assistant from editing customer data. <c>SaveBMP</c> cannot write a
+/// guard that keeps the assistant from editing model data. <c>SaveBMP</c> cannot write a
 /// model at all, so the BMP is written and converted to PNG in this process instead
 /// (<c>Capture.file</c> must end in <c>.png</c>).
 ///
