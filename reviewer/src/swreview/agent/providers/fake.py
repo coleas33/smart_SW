@@ -36,8 +36,8 @@ from swreview.agent.providers import (
     ToolSet,
     TurnEndReason,
     TurnResult,
+    call_tool,
     register,
-    summarize_result,
 )
 
 EFFORT_PARAM = "fake.effort"
@@ -168,27 +168,20 @@ class FakeProvider:
         tools: ToolSet,
         on_event: EventCallback,
     ) -> ToolCallResult:
-        """Run one call and emit its two events. A missing tool is a result, not a raise."""
+        """Run one call and emit its two events, through the port's own shaper.
+
+        The counter is this turn's; everything after it is identical for every adapter and
+        lives in `providers.call_tool`.
+        """
         step_index = self._step_index
         self._step_index += 1
-        on_event(
-            "tool.started",
-            {"step_index": step_index, "tool": request.name, "arguments": request.arguments},
+        return call_tool(
+            request=request,
+            tools=tools,
+            on_event=on_event,
+            step_index=step_index,
+            clock=self._clock,
         )
-        started = self._clock()
-        result = tools.call(request.name, request.arguments, request.call_id)
-        error = str(result.payload.get("error")) if result.is_error else None
-        on_event(
-            "tool.finished",
-            {
-                "step_index": step_index,
-                "status": "error" if result.is_error else "ok",
-                "result_summary": summarize_result(result.payload),
-                "elapsed_s": max(self._clock() - started, 0.0),
-                "error": error,
-            },
-        )
-        return result
 
 
 register(ProviderName.FAKE, FakeProvider)

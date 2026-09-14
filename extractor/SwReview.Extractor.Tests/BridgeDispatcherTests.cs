@@ -2,8 +2,8 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Capture;
-using SwReview.Extractor.Console.Serve;
 using SwReview.Extractor.Dump;
 using SwReview.Extractor.Guard;
 using SwReview.Extractor.Interference;
@@ -441,7 +441,9 @@ public class BridgeDispatcherTests : IDisposable
             Configuration = "Default",
         };
 
-        return new SwBridgeDispatcher(services);
+        // The command handling, with the secret question answered "yes" - the scopes have
+        // their own tests in BridgeSecretPolicyTests.
+        return new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
     }
 
     /// <summary>

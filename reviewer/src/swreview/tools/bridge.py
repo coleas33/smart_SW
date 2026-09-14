@@ -19,7 +19,12 @@ nothing here reformats a value. The rules that keep this side honest:
   error result, which the registry turns into `failed` coverage. A bridge that stopped
   working shows up in the report as checks that did not run, never as checks that passed.
   Where the host attached a `Gap` to the failure, that gap is recorded before the error is
-  returned, so the request survives as something extraction could not provide.
+  returned, so the request survives as something extraction could not provide;
+- the two refusals the in-process tool service makes - `unauthorized` for a secret that
+  does not carry this command, and `document no longer open` once the engineer closes the
+  model - arrive as the named `BridgeError` subclasses and are answered the same way, with
+  a sentence saying which of the two it was. The secret itself is the client's business:
+  nothing here reads or forwards it.
 """
 
 from __future__ import annotations
@@ -30,7 +35,12 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from swreview.bridge.client import BRIDGE_VIEWS, BridgeError
+from swreview.bridge.client import (
+    BRIDGE_VIEWS,
+    BridgeDocumentClosedError,
+    BridgeError,
+    BridgeUnauthorizedError,
+)
 from swreview.ir.models import Capture, Gap, Interference, InterferenceSettings
 from swreview.tools.context import (
     ToolContext,
@@ -48,6 +58,20 @@ __all__ = [
 ]
 
 CAPTURE_ID_PREFIX = "cap"
+
+REFUSALS: dict[type[BridgeError], str] = {
+    BridgeUnauthorizedError: (
+        "the tool service refused the secret this run carries for that command, so "
+        "nothing ran in SOLIDWORKS"
+    ),
+    BridgeDocumentClosedError: (
+        "the document is no longer open in SOLIDWORKS; the review continues on the "
+        "extracted package and this call is failed coverage"
+    ),
+}
+"""What each named refusal means, added to the error result so the report says which of
+the two happened rather than only that the bridge said no. Keyed by the exact type: a
+`BridgeError` that is neither gets no note."""
 
 
 def _relative_inside_package(context: ToolContext, file: str) -> str | None:
@@ -114,6 +138,9 @@ def _bridge_failure(context: ToolContext, exc: BridgeError, what: str) -> ToolRe
     message = f"{type(exc).__name__}: {exc}"
     if reason is not None:
         message = f"{message} (recorded as a gap: {reason})"
+    note = REFUSALS.get(type(exc))
+    if note is not None:
+        message = f"{message}; {note}"
     return error_result(f"{what}: {message}")
 
 

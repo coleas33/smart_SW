@@ -3,23 +3,47 @@
 ## `swreview` (Python, `reviewer/`)
 
 Installed as a console script by `uv sync`. Exit code 0 on success, 1 on a validation or
-runtime error, 2 on usage error. All commands accept `--json` to print machine-readable
-output to stdout; human output goes to stdout otherwise, diagnostics to stderr.
+runtime error, 2 on usage error. Every command that prints a result accepts `--json` to
+print machine-readable output to stdout; human output goes to stdout otherwise,
+diagnostics to stderr. Two commands own their stdout instead and take no `--json`:
+`chat serve` prints one handshake line and nothing else, and `mcp` uses stdout as the MCP
+transport.
+
+The commands that run a model - `review` and `benchmark run` - share three options:
+
+| Option | Values | Default |
+|--------|--------|---------|
+| `--provider` | `openai`, `gemini` (`fake` is the scripted provider the tests use) | `openai` |
+| `--model` | any model id the provider serves | that provider's own default, from `reviewer/src/swreview/agent/settings.py` |
+| `--effort` | `low`, `medium`, `high`, `xhigh` | `high` |
+
+`--model` is deliberately optional and no command line carries a hard-coded model id: the
+default belongs to the provider and lives in one module, so a run started without `--model`
+cannot write the id of a model this product no longer serves into `session.json` (FR-026).
+The API key is never an argument. Values saved in the pane's `settings.json` win over the
+process environment (`OPENAI_API_KEY`; for Gemini `GOOGLE_API_KEY` ahead of
+`GEMINI_API_KEY`), so a workstation that exports a personal key cannot quietly override the
+key the engineer entered in the pane; a command line started outside the pane has only the
+environment. Which of the two it came from is recorded on the session as `key_source`. The key itself never reaches a session file, a report, a run folder or a log
+line (FR-015); `audit-secrets` is the check that says so.
 
 | Command | Arguments | Effect |
 |---------|-----------|--------|
 | `swreview validate <package_dir>` | | Loads `package.json` against the IR schema and prints gaps and discrepancies. Fails on major version mismatch. |
 | `swreview ingest <package_dir>` | `--pdf <file>...`, `--bom <csv>`, `--manifest <json>`, `--step <file>...` | Builds or augments `package.json` from exported files (drawing parse, BOM, manifest). Native data, when present, wins over exported data for the same entity. |
-| `swreview review <package_dir>` | `--out <dir>`, `--model <id>` (default `claude-opus-5`), `--effort low\|medium\|high\|xhigh`, `--bridge`, `--checklist <file>`, `--fail-tool <name>` (test hook), `--max-steps N` | Runs the agent loop; writes `session.json` and `report.md`. |
+| `swreview review <package_dir>` | `--out <dir>`, `--provider`, `--model`, `--effort` (see the table above), `--bridge`, `--checklist <file>`, `--fail-tool <name>` (test hook), `--max-steps N` | Runs the agent loop; writes `session.json` and `report.md`. |
 | `swreview report <session.json>` | `--out <file.md>` | Re-renders the Markdown report. |
 | `swreview disposition <run_dir> <finding_id>` | `--decision accepted\|rejected\|deferred`, `--note`, `--by` | Records a disposition and re-renders. |
 | `swreview exceptions accept <run_dir> <finding_id>` | `--note` | Creates an `Exception` bound to the finding's geometry fingerprint and configuration. |
 | `swreview exceptions list <package_dir>` | | Shows active and needs-review exceptions. |
 | `swreview check fit\|stack\|fastener\|alignment` | `--package <dir>` plus check-specific ids | Runs one deterministic check without the agent; prints the finding. |
 | `swreview check interference` | `--package <dir>`, `--json` | Grades a dumped package's interference results without the agent: grouped conditions with status, exception statuses after refresh, unresolved coverage. Read-only; never writes `exceptions.json`. |
-| `swreview benchmark run` | `--set <set.json>`, `--out <dir>`, `--model`, `--effort` | Reviews every package in the set with answer keys unreadable. |
+| `swreview benchmark run` | `--set <set.json>`, `--out <dir>`, `--provider`, `--model`, `--effort` | Reviews every package in the set with answer keys unreadable. |
 | `swreview benchmark score <run_dir>` | `--answer-keys <dir>` | Produces `scorecard.json` and `scorecard.md`. |
 | `swreview benchmark time <run_dir> <package_id>` | `--baseline M`, `--supervision M`, `--verification M`, `--false-alarms M` | Records timing for net-savings computation. |
+| `swreview chat serve` | `--port N` (0 lets the OS pick), `--allow-origin <origin>`, `--run-root <dir>`, `--dev`, `--fail-bridge N` (test hook) | Serves the Task Pane chat backend on 127.0.0.1 and prints `{"port": N, "token": "..."}` as the first and only line on stdout. `python -m swreview.chat` is the same implementation with the same arguments. Wire shapes in `specs/002-task-pane-assistant/contracts/chat-api.md`. |
+| `swreview mcp` | `--run-dir <dir>`, `--bridge-pipe <name>`, `--bridge-secret-env <var>` | Serves the read-only general-chat toolset on stdio for an external CLI (`specs/002-task-pane-assistant/contracts/mcp-toolset.md`). This is the only spelling: there is no `-m swreview.mcp`. stdout is the transport, so the command prints nothing of its own; a failure to start is one line on stderr and exit 1. The bridge secret is named by its environment variable, never passed as a value, because a command line is readable by every process on the workstation. |
+| `swreview audit-secrets <path>...` | `--bridge-secret-env <var>`, `--detectors\|--no-detectors` (default on), `--json` | Reports any configured secret that reached a file under `path` (FR-015): exit 1 naming the file, the line and the source for every hit, exit 0 when there is none. A file it cannot read is a hit too - unread coverage reported as "none" is the false green the command exists to prevent - and so is having nothing to detect with (no key in the environment, no bridge secret, `--no-detectors`). Detectors flag provider-shaped keys (`sk-...`, `AIza...`), which is what carries the check on the workstation, where the key is DPAPI-protected and reaches only the backend child's environment. Neither the secret nor the line it sat on is ever printed. |
 
 ## `SwReview.Extractor.Console.exe` (C#, `extractor/`)
 

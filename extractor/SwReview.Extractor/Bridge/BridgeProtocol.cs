@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using SwReview.Extractor.Ir;
 
-namespace SwReview.Extractor.Console.Serve;
+namespace SwReview.Extractor.Bridge;
 
 /// <summary>
 /// The four commands the bridge answers (contracts/cli.md, contracts/agent-tools.md).
@@ -16,7 +16,7 @@ public static class BridgeCommands
     public const string Measure = "measure";
     public const string Interference = "interference";
 
-    /// <summary>For the "unknown command" message and for PROTOCOL.md.</summary>
+    /// <summary>For the "unknown command" message and for SwReview.Extractor.Console/Serve/PROTOCOL.md.</summary>
     public static readonly string[] All = { Ping, Capture, Measure, Interference };
 }
 
@@ -54,6 +54,21 @@ public sealed class BridgeRequest
     /// </summary>
     [JsonPropertyName("params")]
     public JsonElement Params { get; set; }
+
+    /// <summary>
+    /// T045. The per-launch secret, and which scope of commands it authorizes.
+    ///
+    /// Optional on the wire, because the two hosts differ: the console host issues no
+    /// secret and its <see cref="ISecretPolicy"/> ignores this field, while the add-in's
+    /// in-process host requires one on every line. That is why the protocol version stays
+    /// 1.0 - a client that omits the field still works against the console host, and
+    /// simply gets <c>unauthorized</c> from the in-process one.
+    ///
+    /// Never written back on a response and never logged: see
+    /// <see cref="BridgeResponse"/>, which has no such field.
+    /// </summary>
+    [JsonPropertyName("secret")]
+    public string? Secret { get; set; }
 }
 
 /// <summary>One response line: <c>{"id", "status", "result", "error", "elapsed_ms"}</c>.</summary>

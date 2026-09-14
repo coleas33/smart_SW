@@ -65,6 +65,8 @@ __all__ = [
     "TurnResult",
     "UnknownProviderError",
     "available",
+    "call_tool",
+    "error_body",
     "get",
     "register",
     "summarize_result",
@@ -167,6 +169,21 @@ EventCallback = Callable[[EventType, Mapping[str, Any]], None]
 """How an adapter emits: the runner's sink stamps `seq` and `at` and writes the event."""
 
 
+def error_body(*, error_class: str, message: str, retryable: bool) -> dict[str, Any]:
+    """The one shape a failure is reported in.
+
+    These three fields are the `error` event body of `chat-events.schema.json` *and* the
+    HTTP error body of `chat-api.md`, and five places produce one: each provider adapter,
+    the runner when a turn raises, and the chat server's `ChatError` and close-out path.
+    They are the same shape for the page on the other end, so they are built here rather
+    than written out five times (constitution V).
+
+    `message` arrives already redacted: masking is the caller's job because only the
+    caller knows which secret was in reach (FR-015).
+    """
+    return {"error_class": error_class, "message": message, "retryable": retryable}
+
+
 class TurnResult(ProviderModel):
     """What one `AgentProvider.run` produced.
 
@@ -264,6 +281,47 @@ def summarize_result(payload: Mapping[str, Any]) -> str:
     if len(text) <= SUMMARY_LENGTH:
         return text
     return text[: SUMMARY_LENGTH - 1] + "…"
+
+
+def call_tool(
+    *,
+    request: ToolCallRequest,
+    tools: ToolSet,
+    on_event: EventCallback,
+    step_index: int,
+    clock: Callable[[], float],
+) -> ToolCallResult:
+    """Run one tool call and emit the `tool.started`/`tool.finished` pair around it.
+
+    Every adapter does exactly this and nothing provider-specific happens in between, so
+    the two bodies of `chat-events.schema.json` are built here once instead of in each
+    adapter: a field the contract grows is added in one place, and a new adapter gets the
+    trace right by calling this rather than by copying the last one (constitution V).
+
+    `tools.call` never raises - a tool that failed and a tool that does not exist both come
+    back as a result with `is_error` set - so there is no failure path to write here; the
+    `error` the trace carries is the one in the payload.
+
+    `step_index` is the adapter's own per-turn counter and `clock` its own time source,
+    because a test that pins `elapsed_s` has to be able to hand one over.
+    """
+    on_event(
+        "tool.started",
+        {"step_index": step_index, "tool": request.name, "arguments": request.arguments},
+    )
+    started = clock()
+    result = tools.call(request.name, request.arguments, request.call_id)
+    on_event(
+        "tool.finished",
+        {
+            "step_index": step_index,
+            "status": "error" if result.is_error else "ok",
+            "result_summary": summarize_result(result.payload),
+            "elapsed_s": max(clock() - started, 0.0),
+            "error": str(result.payload.get("error")) if result.is_error else None,
+        },
+    )
+    return result
 
 
 class UnknownProviderError(ValueError):

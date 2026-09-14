@@ -1075,6 +1075,47 @@ def chat_serve(
     )
 
 
+# --- mcp ---------------------------------------------------------------------------
+
+
+@app.command("mcp")
+def mcp_server(
+    run_dir: Annotated[
+        Path,
+        typer.Option("--run-dir", help="The run folder whose package the tools read."),
+    ],
+    bridge_pipe: Annotated[
+        str | None,
+        typer.Option("--bridge-pipe", help="Tool service pipe; without one, no bridge tools."),
+    ] = None,
+    bridge_secret_env: Annotated[
+        str | None,
+        typer.Option(
+            "--bridge-secret-env",
+            help="Environment variable holding the general-chat bridge secret.",
+        ),
+    ] = None,
+) -> None:
+    """Serve the read-only general-chat toolset on stdio (`contracts/mcp-toolset.md`).
+
+    This is the command the generated CLI profiles start, and the only spelling of it:
+    there is no `swreview.mcp.__main__`, so `-m swreview.mcp` is not a thing
+    (`contracts/cli-profiles.md`).
+
+    The bridge secret is named, never given: a value on a command line is visible to every
+    process on the workstation, so the add-in puts it in the child's environment block and
+    passes the variable's name here.
+
+    stdout is the MCP transport, so this command prints nothing of its own; a failure to
+    start is one line on stderr and exit 1.
+    """
+    from swreview.mcp import server as mcp
+
+    with _errors_as_exit_1():
+        secret = mcp.resolve_bridge_secret(bridge_secret_env)
+        mcp.serve(run_dir, bridge_pipe=bridge_pipe, bridge_secret=secret)
+
+
 # --- audit-secrets ----------------------------------------------------------------
 
 

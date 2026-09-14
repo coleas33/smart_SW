@@ -47,6 +47,7 @@ from swreview.agent.providers import (
     EffortLevel,
     EventType,
     TurnResult,
+    error_body,
 )
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
@@ -507,18 +508,18 @@ class ReviewRun:
         except Exception as exc:
             self.sink.emit(
                 "error",
-                {
-                    "error_class": type(exc).__name__,
+                error_body(
+                    error_class=type(exc).__name__,
                     # Whatever raised - an adapter's own mapped error, an SDK class it
                     # does not map, a transport failure - the run folder must not receive
                     # the key the request carried (FR-015). The adapters redact what they
                     # wrap; this is the one place that covers what none of them did.
-                    "message": self.redact(str(exc)),
+                    message=self.redact(str(exc)),
                     # The runner cannot tell a dropped connection from a bug, and the
                     # engineer, not this module, decides whether to spend another run
                     # (FR-028). An adapter that does know emits its own `error` first.
-                    "retryable": True,
-                },
+                    retryable=True,
+                ),
             )
             self.sink.emit("turn.ended", {"reason": "error"})
             self.finalize()
@@ -566,7 +567,8 @@ def start_review(
     fail_tool: Iterable[str] = (),
     bridge: bool = False,
     pipe_name: str = DEFAULT_PIPE_NAME,
-    bridge_factory: Callable[[str], Any] | None = None,
+    bridge_secret: str | None = None,
+    bridge_factory: Callable[[str, str | None], Any] | None = None,
     callbacks: Iterable[EventListener] = (),
     redact: Callable[[str], str] = no_redaction,
 ) -> ReviewRun:
@@ -596,8 +598,13 @@ def start_review(
         bridge: Open the live SOLIDWORKS bridge and add the three bridge tools (US3).
             Needs `SwReview.Extractor.Console.exe serve` running on this workstation.
         pipe_name: Named pipe the bridge listens on.
-        bridge_factory: Builds the bridge client from the pipe name; defaults to
-            `swreview.bridge.client.BridgeClient` and is injectable for tests.
+        bridge_secret: The per-launch secret the in-process tool service requires on every
+            request (contracts/README.md). `None` for the console host, which asks for
+            none; the pane passes the review-session secret from `POST /sessions`.
+        bridge_factory: Builds the bridge client from the pipe name and the secret - the
+            session's whole `bridge` config - and defaults to
+            `swreview.bridge.client.BridgeClient`, which takes them in that order. It is
+            injectable for tests and for the `--fail-bridge` hook.
         callbacks: Live listeners on the event stream, called after each event is
             written. The pane's SSE fan-out is one; a test collecting events is another.
         redact: Masks the run's API key out of provider error text before it is written
@@ -612,7 +619,7 @@ def start_review(
     bridge_client = None
     if bridge:
         factory = bridge_factory if bridge_factory is not None else BridgeClient
-        bridge_client = factory(pipe_name)
+        bridge_client = factory(pipe_name, bridge_secret)
     out = Path(out_dir)
     try:
         # Before the context, which needs `emit`: what a tool writes is on the stream from
@@ -679,8 +686,8 @@ def run_review(
         effort: What the engineer asked for; the adapter maps it or fails fast.
         options: The rest of `start_review`'s keyword arguments - `key_source`,
             `retry_of`, `max_steps`, `fail_tool`, `bridge`, `pipe_name`,
-            `bridge_factory`, `callbacks`, `redact` - documented there rather than
-            restated here.
+            `bridge_secret`, `bridge_factory`, `callbacks`, `redact` - documented there
+            rather than restated here.
     """
     run = start_review(
         package_dir, out_dir, provider=provider, model=model, effort=effort, **options

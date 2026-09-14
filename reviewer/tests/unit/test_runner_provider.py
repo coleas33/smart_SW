@@ -826,8 +826,9 @@ def test_run_review_plays_one_turn_and_returns_the_session(
 class FakeBridge:
     """The two things the runner does with a bridge: hand it over, and close it."""
 
-    def __init__(self, pipe_name: str) -> None:
+    def __init__(self, pipe_name: str, secret: str | None = None) -> None:
         self.pipe_name = pipe_name
+        self.secret = secret
         self.closed = False
 
     def close(self) -> None:
@@ -839,8 +840,8 @@ def test_bridge_true_wires_a_client_into_the_context_and_the_tools(
 ) -> None:
     built: list[FakeBridge] = []
 
-    def factory(pipe_name: str) -> FakeBridge:
-        built.append(FakeBridge(pipe_name))
+    def factory(pipe_name: str, secret: str | None) -> FakeBridge:
+        built.append(FakeBridge(pipe_name, secret))
         return built[-1]
 
     run = review([turn("done")], bridge=True, bridge_factory=factory)
@@ -852,6 +853,27 @@ def test_bridge_true_wires_a_client_into_the_context_and_the_tools(
 
     run.close()
     assert built[0].closed
+
+
+def test_the_sessions_bridge_secret_reaches_the_client(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The pane sends `{pipe, secret}`; both halves have to arrive at the client (T049)."""
+    built: list[FakeBridge] = []
+
+    run = review(
+        [turn("done")],
+        bridge=True,
+        pipe_name="swreview-abc",
+        bridge_secret="s3cret",
+        bridge_factory=lambda pipe_name, secret: built.append(FakeBridge(pipe_name, secret))
+        or built[-1],
+    )
+
+    assert [(client.pipe_name, client.secret) for client in built] == [
+        ("swreview-abc", "s3cret")
+    ]
+    run.close()
 
 
 def test_without_the_bridge_there_is_none_and_no_bridge_tools(
@@ -876,7 +898,8 @@ def test_run_review_closes_the_bridge_when_the_review_ends(
         provider=provider,
         effort=EFFORT,
         bridge=True,
-        bridge_factory=lambda pipe_name: built.append(FakeBridge(pipe_name)) or built[-1],
+        bridge_factory=lambda pipe_name, secret: built.append(FakeBridge(pipe_name, secret))
+        or built[-1],
     )
 
     assert built[0].closed

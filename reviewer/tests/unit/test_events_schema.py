@@ -38,8 +38,9 @@ from jsonschema import ValidationError as SchemaValidationError
 from referencing.exceptions import Unresolvable
 
 from swreview.agent import runner
-from swreview.agent.providers import AgentEvent, EventType
+from swreview.agent.providers import AgentEvent, EventType, error_body
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.chat.server import ChatError
 from swreview.chat.sessions import record_disposition
 from swreview.findings import build_finding
 from swreview.ir.models import SourceRef
@@ -264,6 +265,29 @@ def test_tool_finished_validates_on_both_the_ok_and_the_error_branch(
     assert UNKNOWN_COMPONENT in failed["error"]
     assert all(event["body"]["error"] is None for event in finished if event is not finished[2])
     assert [event["body"]["step_index"] for event in finished] == [0, 1, 2, 3, 4]
+
+
+def error_body_fields() -> set[str]:
+    """The three fields the contract's `error` event body requires."""
+    for branch in EVENTS_SCHEMA["allOf"]:
+        if branch["if"]["properties"]["type"].get("const") == "error":
+            return set(branch["then"]["properties"]["body"]["required"])
+    raise AssertionError("the contract has no `error` branch any more")
+
+
+def test_every_producer_of_an_error_shapes_it_the_same_way() -> None:
+    """One shape, one builder (T068, constitution V).
+
+    `{error_class, message, retryable}` is both the contract's `error` event body and the
+    HTTP error body of `chat-api.md`, and it was written out as a dict literal at five
+    sites: each provider adapter, the runner's turn failure, the chat server's `ChatError`
+    and its close-out path. `error_body` is where the shape lives now, so a field the
+    contract grows is added in one place rather than five.
+    """
+    required = error_body_fields()
+
+    assert set(error_body(error_class="X", message="m", retryable=True)) == required
+    assert set(ChatError("refused").body()) == required
 
 
 def test_the_error_event_of_a_failed_turn_names_the_exception(

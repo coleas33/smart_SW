@@ -82,6 +82,21 @@ public sealed class TaskPaneOptions
     /// </summary>
     public string WebFolder { get; set; } = DefaultWebFolder();
 
+    /// <summary>
+    /// The run folder of the chat session the pane is showing, or null when there is none.
+    ///
+    /// The Terminal tab asks before it creates one of its own (contracts/pane-host-messages.md):
+    /// a terminal started after a review belongs in that review's folder, so the CLI's generated
+    /// profile, its working directory and the evidence it is being asked about are one place.
+    /// It is a callback rather than a value because the answer changes every time a review
+    /// starts, and the pane is built once.
+    /// </summary>
+    public Func<string?> CurrentSessionRunDirectory { get; set; } = () => null;
+
+    /// <summary>The clock the terminal run folder is named from. Injected for the tests, like
+    /// <c>ReviewHostOptions.Now</c>.</summary>
+    public Func<DateTime> Now { get; set; } = () => DateTime.Now;
+
     private static string DefaultWebFolder() =>
         Path.Combine(Path.GetDirectoryName(typeof(TaskPaneOptions).Assembly.Location) ?? ".", "web");
 }
@@ -121,6 +136,9 @@ public sealed class TaskPaneControl : UserControl
     /// <summary>The Review page inside the mapped folder.</summary>
     public const string ReviewPageUrl = PageOrigin + "/Review/ReviewPage/index.html";
 
+    /// <summary>The Terminal page inside the same mapped folder (T060).</summary>
+    public const string TerminalPageUrl = PageOrigin + "/Terminal/TerminalPage/index.html";
+
     /// <summary>Where the Evergreen runtime comes from, shown when it is missing.</summary>
     public const string RuntimeDownloadUrl = "https://developer.microsoft.com/en-us/microsoft-edge/webview2/";
 
@@ -132,6 +150,7 @@ public sealed class TaskPaneControl : UserControl
 
     private Task<CoreWebView2Environment>? _environment;
     private WebView2? _reviewView;
+    private WebView2? _terminalView;
     private bool _initializing;
 
     public TaskPaneControl(TaskPaneOptions options)
@@ -141,10 +160,8 @@ public sealed class TaskPaneControl : UserControl
         _reviewTab = new TabPage("Review") { Padding = new Padding(0), UseVisualStyleBackColor = true };
         _reviewTab.Controls.Add(Note("Starting the review page..."));
 
-        _terminalTab = new TabPage("Terminal") { Padding = new Padding(6), UseVisualStyleBackColor = true };
-        _terminalTab.Controls.Add(Note(
-            "The CLI terminal arrives with the terminal tab. Until then, run the CLI in a "
-            + "console window."));
+        _terminalTab = new TabPage("Terminal") { Padding = new Padding(0), UseVisualStyleBackColor = true };
+        _terminalTab.Controls.Add(Note("Starting the terminal page..."));
 
         _actions = new ActionsPanel { Dock = DockStyle.Fill };
         var actionsTab = new TabPage("Actions") { Padding = new Padding(6), UseVisualStyleBackColor = true };
@@ -158,7 +175,8 @@ public sealed class TaskPaneControl : UserControl
         MinimumSize = new Size(260, 320);
         Controls.Add(_tabs);
 
-        ReviewChannel = new PageChannel(this);
+        ReviewChannel = new PageChannel(this, () => _reviewView);
+        TerminalChannel = new PageChannel(this, () => _terminalView);
     }
 
     /// <summary>The three buttons: Dump IR, Interference, Capture selection.</summary>
@@ -168,13 +186,32 @@ public sealed class TaskPaneControl : UserControl
     public IPageChannel ReviewChannel { get; }
 
     /// <summary>
+    /// Posts host messages to the Terminal page, from any thread. This is the channel
+    /// <c>TerminalSession</c> is given: its read loop is a background thread and
+    /// `PostWebMessageAsJson` has UI-thread affinity, so every `terminal.output` is marshalled
+    /// here (contracts/pane-host-messages.md).
+    /// </summary>
+    public IPageChannel TerminalChannel { get; }
+
+    /// <summary>
     /// One `{type, id, payload}` document from the Review page, raised on the UI thread. The
     /// add-in hands it to <see cref="ReviewHost"/> off this thread and one at a time.
     /// </summary>
     public event EventHandler<string>? PageMessageReceived;
 
+    /// <summary>
+    /// One `{type, id, payload}` document from the Terminal page, raised on the UI thread. Kept
+    /// apart from <see cref="PageMessageReceived"/> rather than tagged with a source, because the
+    /// two pages have separate vocabularies and separate handlers: a `terminal.input` that
+    /// reached the review host would be answered `error` and a keystroke would go missing.
+    /// </summary>
+    public event EventHandler<string>? TerminalPageMessageReceived;
+
     /// <summary>Whether the Review page is loaded (false on a workstation with no runtime).</summary>
     public bool ReviewPageReady => _reviewView != null && _reviewView.CoreWebView2 != null;
+
+    /// <summary>Whether the Terminal page is loaded.</summary>
+    public bool TerminalPageReady => _terminalView != null && _terminalView.CoreWebView2 != null;
 
     /// <summary>
     /// The process's one WebView2 environment. Created on the first call and shared by every
@@ -221,7 +258,14 @@ public sealed class TaskPaneControl : UserControl
                 return;
             }
 
-            await AttachReviewPageAsync(environment).ConfigureAwait(true);
+            _reviewView = await AttachPageAsync(
+                environment, _reviewTab, ReviewPageUrl, OnReviewMessageReceived).ConfigureAwait(true);
+
+            // The Terminal page after the Review page and in the same try: both share the one
+            // environment, and a terminal that could not be loaded must end as the same fallback
+            // panel rather than as an exception on the application thread.
+            _terminalView = await AttachPageAsync(
+                environment, _terminalTab, TerminalPageUrl, OnTerminalMessageReceived).ConfigureAwait(true);
         }
         catch (Exception failure)
         {
@@ -229,12 +273,20 @@ public sealed class TaskPaneControl : UserControl
         }
     }
 
-    private async Task AttachReviewPageAsync(CoreWebView2Environment environment)
+    /// <summary>
+    /// Loads one page into one tab. Both tabs go through here so neither can be given a weaker
+    /// set of guards than the other: they share a browser process and a page origin, so a
+    /// terminal that followed an off-origin link would be doing it on the Review page's origin.
+    /// </summary>
+    private async Task<WebView2> AttachPageAsync(
+        CoreWebView2Environment environment,
+        TabPage tab,
+        string url,
+        EventHandler<CoreWebView2WebMessageReceivedEventArgs> onMessage)
     {
         var view = new WebView2 { Dock = DockStyle.Fill };
-        _reviewTab.Controls.Clear();
-        _reviewTab.Controls.Add(view);
-        _reviewView = view;
+        tab.Controls.Clear();
+        tab.Controls.Add(view);
 
         await view.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
 
@@ -247,9 +299,32 @@ public sealed class TaskPaneControl : UserControl
 
         core.NavigationStarting += OnNavigationStarting;
         core.NewWindowRequested += OnNewWindowRequested;
-        core.WebMessageReceived += OnWebMessageReceived;
+        core.WebMessageReceived += onMessage;
 
-        core.Navigate(ReviewPageUrl);
+        core.Navigate(url);
+        return view;
+    }
+
+    /// <summary>
+    /// Where the Terminal tab runs (contracts/pane-host-messages.md): the current chat session's
+    /// run folder when there is one, and otherwise a fresh
+    /// `&lt;run_root&gt;/&lt;yyyyMMdd-HHmmss&gt;-terminal` created through the same
+    /// <see cref="RunFolders"/> helper <see cref="ReviewHost"/> names its own folders with.
+    ///
+    /// The tab is reachable with no review and no document open, so the folder is created rather
+    /// than assumed; and a session folder that has gone missing underneath the pane - tidied up,
+    /// or on a share that went away - falls back to a fresh one rather than handing a CLI a
+    /// working directory that is not there.
+    /// </summary>
+    public string TerminalRunFolder()
+    {
+        string? session = _options.CurrentSessionRunDirectory();
+        if (!string.IsNullOrWhiteSpace(session) && Directory.Exists(session))
+        {
+            return session!;
+        }
+
+        return RunFolders.CreateForTerminal(_options.RunRoot, _options.Now());
     }
 
     /// <summary>
@@ -274,7 +349,13 @@ public sealed class TaskPaneControl : UserControl
         e.Handled = true;
     }
 
-    private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
+    private void OnReviewMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e) =>
+        Raise(e, PageMessageReceived);
+
+    private void OnTerminalMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e) =>
+        Raise(e, TerminalPageMessageReceived);
+
+    private void Raise(CoreWebView2WebMessageReceivedEventArgs e, EventHandler<string>? handler)
     {
         if (!IsOwnPage(e.Source))
         {
@@ -292,7 +373,7 @@ public sealed class TaskPaneControl : UserControl
             return;
         }
 
-        PageMessageReceived?.Invoke(this, json);
+        handler?.Invoke(this, json);
     }
 
     /// <summary>`https://swreview.invalid/...`, or the blank page WebView2 starts on.</summary>
@@ -311,6 +392,7 @@ public sealed class TaskPaneControl : UserControl
     private void ShowFallback(Exception failure)
     {
         _reviewView = null;
+        _terminalView = null;
         Fill(_reviewTab, BuildFallback(failure));
         Fill(_terminalTab, BuildFallback(failure));
     }
@@ -359,20 +441,28 @@ public sealed class TaskPaneControl : UserControl
 
     // ---- posting to the page -----------------------------------------------------------------
 
-    /// <summary>The real <see cref="IPageChannel"/>: marshals onto the pane, then posts.</summary>
+    /// <summary>
+    /// The real <see cref="IPageChannel"/>: marshals onto the pane, then posts.
+    ///
+    /// The page is named by a callback rather than held, because the view a tab is showing is
+    /// replaced when the pane reloads it and set to null when the runtime turns out to be
+    /// missing; a channel that had captured the view would post into a disposed one.
+    /// </summary>
     private sealed class PageChannel : IPageChannel
     {
         private readonly TaskPaneControl _pane;
+        private readonly Func<WebView2?> _view;
 
-        public PageChannel(TaskPaneControl pane)
+        public PageChannel(TaskPaneControl pane, Func<WebView2?> view)
         {
             _pane = pane;
+            _view = view;
         }
 
-        public void PostMessage(string json) => _pane.PostToPage(json);
+        public void PostMessage(string json) => _pane.PostToPage(_view, json);
     }
 
-    private void PostToPage(string json)
+    private void PostToPage(Func<WebView2?> view, string json)
     {
         if (json == null || IsDisposed || !IsHandleCreated)
         {
@@ -383,11 +473,11 @@ public sealed class TaskPaneControl : UserControl
         {
             if (InvokeRequired)
             {
-                BeginInvoke(new Action<string>(PostOnUiThread), json);
+                BeginInvoke(new Action<Func<WebView2?>, string>(PostOnUiThread), view, json);
                 return;
             }
 
-            PostOnUiThread(json);
+            PostOnUiThread(view, json);
         }
         catch (Exception)
         {
@@ -395,9 +485,9 @@ public sealed class TaskPaneControl : UserControl
         }
     }
 
-    private void PostOnUiThread(string json)
+    private void PostOnUiThread(Func<WebView2?> selector, string json)
     {
-        WebView2? view = _reviewView;
+        WebView2? view = selector();
         if (view == null || view.IsDisposed || view.CoreWebView2 == null)
         {
             return;
@@ -417,9 +507,12 @@ public sealed class TaskPaneControl : UserControl
     {
         if (disposing)
         {
-            WebView2? view = _reviewView;
+            WebView2? review = _reviewView;
+            WebView2? terminal = _terminalView;
             _reviewView = null;
-            view?.Dispose();
+            _terminalView = null;
+            review?.Dispose();
+            terminal?.Dispose();
         }
 
         base.Dispose(disposing);

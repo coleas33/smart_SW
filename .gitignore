@@ -16,6 +16,8 @@ venv/
 
 # Testing
 .pytest_cache/
+# pytest --basetemp; the CI job scans it with `swreview audit-secrets`
+.pytest-tmp/
 .hypothesis/
 htmlcov/
 .coverage

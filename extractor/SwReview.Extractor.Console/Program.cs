@@ -4,6 +4,7 @@ using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using SolidWorks.Interop.sldworks;
+using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Capture;
 using SwReview.Extractor.Console.Serve;
 using SwReview.Extractor.Dump;
@@ -600,7 +601,10 @@ public static class Program
             Configuration = session.Configuration.Name,
         };
 
-        return new SwBridgeDispatcher(services);
+        // The console host issues no secret: its boundary is the named pipe an engineer
+        // started at this workstation. The add-in's in-process host is the one that scopes
+        // commands by secret (T045).
+        return new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
     }
 
     /// <summary>A pipe name is user input and ends up in a path; strip anything a path cannot hold.</summary>

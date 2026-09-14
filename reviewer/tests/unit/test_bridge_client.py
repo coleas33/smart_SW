@@ -13,6 +13,11 @@ replays the lines it should read. What these tests pin is research R3 and R4:
 - three consecutive failures open the circuit, and the host's own `circuit_open` opens it
   at once: the client stops calling SOLIDWORKS rather than retrying into a session that is
   already unhappy.
+
+T049 adds the in-process tool service's per-launch `secret` (contracts/README.md): it is on
+every request line when one is configured and on none when it is not, it never appears in
+the text of a failure, and the host's two refusals - `unauthorized` and `document no longer
+open` - are named failures the tool layer turns into failed coverage rather than a crash.
 """
 
 from __future__ import annotations
@@ -27,8 +32,10 @@ from swreview.bridge.client import (
     CIRCUIT_LIMIT,
     COMMANDS,
     BridgeClient,
+    BridgeDocumentClosedError,
     BridgeError,
     BridgeOpenError,
+    BridgeUnauthorizedError,
 )
 
 
@@ -304,3 +311,166 @@ def test_the_default_transport_is_the_named_pipe_and_is_built_lazily() -> None:
     assert isinstance(bridge.transport, NamedPipeTransport)
     assert bridge.transport.path == r"\\.\pipe\swreview"
     assert bridge.transport.timeout_s == 60.0
+
+
+# --- the per-launch secret (T049) -------------------------------------------------
+
+
+def test_the_secret_is_on_every_request_line_when_one_is_configured() -> None:
+    bridge, transport = client(
+        ok("1", {"pong": True}),
+        ok("2", {"capture": {}, "path": "p.png", "gap": None}),
+        secret="s3cret",
+    )
+
+    bridge.ping()
+    bridge.capture("YWJj", "iso")
+
+    assert [request["secret"] for request in transport.requests] == ["s3cret", "s3cret"]
+
+
+def test_no_secret_field_is_sent_when_none_is_configured() -> None:
+    """The console host of feature 001 needs no secret; the field is absent, not empty.
+
+    An empty string would be a wrong secret to the in-process host, and a field the host
+    never asked for is noise on a wire whose top-level shape is closed.
+    """
+    bridge, transport = client(ok("1", {"pong": True}))
+
+    bridge.ping()
+
+    assert "secret" not in transport.requests[0]
+    assert bridge.secret is None
+
+
+def test_the_secret_is_never_in_the_text_of_a_failure() -> None:
+    """The host must not log the secret; neither may the client's own error text."""
+    bridge, _ = client(failed("1", "unauthorized"), secret="s3cret")
+
+    with pytest.raises(BridgeError) as caught:
+        bridge.ping()
+
+    assert "s3cret" not in str(caught.value)
+    assert "s3cret" not in str(bridge.last_error)
+
+
+# --- unauthorized -----------------------------------------------------------------
+
+
+def test_unauthorized_is_a_named_failure_not_a_crash() -> None:
+    bridge, _ = client(failed("1", "unauthorized"), secret="s3cret")
+
+    with pytest.raises(BridgeUnauthorizedError) as caught:
+        bridge.interference(["cmp:0001"], "Default", {})
+
+    assert isinstance(caught.value, BridgeError)
+    assert "unauthorized" in str(caught.value)
+
+
+def test_unauthorized_is_recognised_with_the_hosts_own_sentence_after_it() -> None:
+    bridge, _ = client(
+        failed("1", "unauthorized: this secret does not carry 'interference'"), secret="s"
+    )
+
+    with pytest.raises(BridgeUnauthorizedError):
+        bridge.interference(["cmp:0001"], "Default", {})
+
+
+def test_unauthorized_stops_the_client_calling_at_once() -> None:
+    """A secret the host refused never becomes accepted, and every attempt is logged
+    there; two more round trips to reach `CIRCUIT_LIMIT` would buy nothing."""
+    bridge, transport = client(failed("1", "unauthorized"), secret="wrong")
+
+    with pytest.raises(BridgeUnauthorizedError):
+        bridge.ping()
+
+    assert bridge.circuit_open
+    with pytest.raises(BridgeOpenError):
+        bridge.ping()
+    assert len(transport.requests) == 1
+
+
+# --- the document is gone ---------------------------------------------------------
+
+
+def test_the_document_no_longer_open_error_is_a_named_failure() -> None:
+    bridge, _ = client(
+        failed("1", "document no longer open: the model was closed"), secret="s"
+    )
+
+    with pytest.raises(BridgeDocumentClosedError) as caught:
+        bridge.capture("YWJj", "iso")
+
+    assert isinstance(caught.value, BridgeError)
+    assert "no longer open" in str(caught.value)
+
+
+def test_a_closed_document_carries_any_gap_the_host_attached() -> None:
+    gap = {
+        "kind": "not_extracted",
+        "entity_kind": "capture",
+        "entity_id": None,
+        "reason": "select the entity to capture (iso view)",
+        "error": "document no longer open",
+    }
+    bridge, _ = client(
+        failed(
+            "1",
+            "document no longer open",
+            result={"capture": None, "path": None, "gap": gap},
+        ),
+        secret="s",
+    )
+
+    with pytest.raises(BridgeDocumentClosedError) as caught:
+        bridge.capture("YWJj", "iso")
+
+    assert caught.value.result["gap"] == gap
+
+
+def test_a_closed_document_does_not_open_the_circuit() -> None:
+    """The review continues on the extracted package, and every further live call must
+    keep getting the same clear sentence rather than a breaker message about it."""
+    bridge, transport = client(
+        *[failed(str(index + 1), "document no longer open") for index in range(4)],
+        secret="s",
+    )
+
+    for _ in range(4):
+        with pytest.raises(BridgeDocumentClosedError):
+            bridge.ping()
+
+    assert not bridge.circuit_open
+    assert len(transport.requests) == 4
+
+
+def test_a_closed_document_neither_counts_nor_clears_a_solidworks_failure() -> None:
+    """It is a definite answer from a healthy host, so it leaves the breaker's count
+    exactly where it was: the third COM failure still opens the circuit."""
+    bridge, _ = client(
+        failed("1", "COM failure"),
+        failed("2", "COM failure"),
+        failed("3", "document no longer open"),
+        failed("4", "COM failure"),
+        secret="s",
+    )
+
+    for _ in range(2):
+        with pytest.raises(BridgeError):
+            bridge.ping()
+    with pytest.raises(BridgeDocumentClosedError):
+        bridge.ping()
+    assert not bridge.circuit_open
+
+    with pytest.raises(BridgeError):
+        bridge.ping()
+    assert bridge.circuit_open
+
+
+def test_the_secret_is_carried_next_to_the_pipe_name() -> None:
+    """What `start_review` hands the factory is the session's `bridge` config, both parts."""
+    bridge = BridgeClient("swreview-abc", "s3cret")
+
+    assert bridge.pipe_name == "swreview-abc"
+    assert bridge.secret == "s3cret"
+    assert bridge.transport.path == r"\\.\pipe\swreview-abc"
