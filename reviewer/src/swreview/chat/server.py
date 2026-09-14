@@ -70,7 +70,13 @@ from starlette.routing import Route
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from swreview import __version__
-from swreview.agent.providers import AgentEvent, AgentProvider, ProviderName, ToolCallResult
+from swreview.agent.providers import (
+    AgentEvent,
+    AgentProvider,
+    ProviderName,
+    ToolCallResult,
+    error_body,
+)
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import (
     EVENTS_FILE_NAME,
@@ -158,11 +164,9 @@ class ChatError(Exception):
     retryable = False
 
     def body(self) -> dict[str, Any]:
-        return {
-            "error_class": self.error_class,
-            "message": str(self),
-            "retryable": self.retryable,
-        }
+        return error_body(
+            error_class=self.error_class, message=str(self), retryable=self.retryable
+        )
 
 
 class InvalidRunDir(ChatError):
@@ -461,12 +465,16 @@ class _ForcedFailureTransport:
         self.inner.close()
 
 
-def forced_failure_bridge_factory(failures: int) -> Callable[[str], BridgeClient]:
+def forced_failure_bridge_factory(
+    failures: int,
+) -> Callable[[str, str | None], BridgeClient]:
     """A `bridge_factory` for `start_review` that forces the first `failures` calls to fail."""
 
-    def build(pipe_name: str) -> BridgeClient:
+    def build(pipe_name: str, secret: str | None) -> BridgeClient:
         return BridgeClient(
-            pipe_name, transport=_ForcedFailureTransport(failures, NamedPipeTransport(pipe_name))
+            pipe_name,
+            secret,
+            transport=_ForcedFailureTransport(failures, NamedPipeTransport(pipe_name)),
         )
 
     return build
@@ -619,7 +627,7 @@ class ChatServer:
         run_root: Path,
         provider_factory: Callable[[ProviderSettings], AgentProvider],
         list_models: Callable[[ProviderName], list[dict[str, str]]],
-        bridge_factory: Callable[[str], Any] | None = None,
+        bridge_factory: Callable[[str, str | None], Any] | None = None,
         development: bool = False,
         secrets: Sequence[str] | None = None,
     ) -> None:
@@ -787,13 +795,20 @@ class ChatServer:
         return JSONResponse(finding.model_dump(mode="json"))
 
     async def stop(self, request: Request) -> Response:
-        """End the turn at the next tool boundary, then end the session (FR-030)."""
+        """End the turn at the next tool boundary, then end the session (FR-030).
+
+        Stop is idempotent, for the same reason `shutdown` skips a session that already
+        has an `ended_at`: a second `session.ended` says nothing new, and rewriting
+        `ended_at` moves a time that was already the truth. A pane that presses Stop just
+        as the turn finishes on its own must not turn one ended session into two terminal
+        events - it gets 202 and the state it already had.
+        """
         chat = self._chat(request)
         if chat.state is ChatState.FAILED:
             raise SessionFailed(f"chat {chat.chat_id} failed; start a new session to retry")
         if chat.state is ChatState.RUNNING:
             chat.stop_requested.set()
-        else:
+        elif not _already_ended(chat):
             await run_in_threadpool(self._end_now, chat)
         return JSONResponse(chat.public(), status_code=202)
 
@@ -935,6 +950,7 @@ class ChatServer:
                 retry_of=self._review_retry_of(chat),
                 bridge=bool(bridge),
                 pipe_name=str(bridge.get("pipe") or DEFAULT_PIPE_NAME),
+                bridge_secret=str(bridge.get("secret") or "") or None,
                 bridge_factory=self.bridge_factory,
                 callbacks=[chat.publish],
                 redact=self.redact,
@@ -986,9 +1002,7 @@ class ChatServer:
         try:
             action()
         except TurnStopped:
-            chat.emit("turn.ended", {"reason": "stopped"})
-            self._finalize_run(chat)
-            self._settle(chat, ChatState.ENDED)
+            self._end_stopped(chat)
         except Exception as exc:
             logger.warning("chat %s failed: %s", chat.chat_id, self.redact(str(exc)))
             self._close_out(chat, exc)
@@ -1026,17 +1040,16 @@ class ChatServer:
         to lose the chat as well, the shutdown pass tries once more, and the chat is about
         to be `failed` either way.
         """
-        run = chat.run
-        if run is None or run.session.ended_at is not None:
+        if chat.run is None or _already_ended(chat):
             return
         try:
             chat.emit(
                 "error",
-                {
-                    "error_class": type(exc).__name__,
-                    "message": self.redact(str(exc)),
-                    "retryable": True,
-                },
+                error_body(
+                    error_class=type(exc).__name__,
+                    message=self.redact(str(exc)),
+                    retryable=True,
+                ),
             )
             chat.emit("turn.ended", {"reason": "error"})
             self._finalize_run(chat)
@@ -1064,11 +1077,22 @@ class ChatServer:
             # session file is already written and `report` answers 404 until it is there.
             logger.warning("rendering %s failed: %s", chat.report_path, self.redact(str(exc)))
 
-    def _end_now(self, chat: ChatSession) -> None:
-        """Stop a chat that has no turn running: the two closing events, then `ended`."""
+    def _end_stopped(self, chat: ChatSession) -> None:
+        """How a stopped chat closes, wherever the stop was noticed.
+
+        A turn that raised `TurnStopped` at a tool boundary and a chat that was not
+        running when Stop arrived end the same way, so they end in the same three lines.
+        """
         chat.emit("turn.ended", {"reason": "stopped"})
         self._finalize_run(chat)
         self._settle(chat, ChatState.ENDED)
+
+    def _end_now(self, chat: ChatSession) -> None:
+        """Stop a chat that has no turn running: close it, then re-render the report.
+
+        `_play` renders in its own `finally`, so only this path has to ask for it.
+        """
+        self._end_stopped(chat)
         self._render_report(chat)
 
     # --- shutdown --------------------------------------------------------------------
@@ -1097,13 +1121,24 @@ class ChatServer:
         self._workers.clear()
 
     def _finalize_on_exit(self, chat: ChatSession) -> None:
-        if chat.run is None or chat.run.session.ended_at is not None:
+        if chat.run is None or _already_ended(chat):
             return
         if chat.state is ChatState.RUNNING:
             chat.emit("turn.ended", {"reason": "error"})
         self._finalize_run(chat)
         self._settle(chat, ChatState.ENDED)
         chat.run.close()
+
+
+def _already_ended(chat: ChatSession) -> bool:
+    """Has this chat's session already been closed out?
+
+    The one question `stop` and `shutdown` both ask before finalizing, so that the answer
+    is written once: a session with an `ended_at` is finished, and finalizing it again
+    only appends a duplicate `turn.ended`/`session.ended` pair.
+    """
+    run = chat.run
+    return run is not None and run.session.ended_at is not None
 
 
 def _sse(event: AgentEvent) -> ServerSentEvent:
@@ -1125,7 +1160,7 @@ def create_app(
     run_root: Path | str = DEFAULT_RUN_ROOT,
     provider_factory: Callable[[ProviderSettings], AgentProvider] | None = None,
     list_models: Callable[[ProviderName], list[dict[str, str]]] | None = None,
-    bridge_factory: Callable[[str], Any] | None = None,
+    bridge_factory: Callable[[str, str | None], Any] | None = None,
     development: bool = False,
     secrets: Sequence[str] | None = None,
 ) -> Starlette:
@@ -1139,8 +1174,8 @@ def create_app(
             so no unit test needs a key or a network; `build_provider` otherwise.
         list_models: Backs `GET /models`; `list_provider_models` otherwise.
         bridge_factory: Builds the live SOLIDWORKS bridge client for a session that asked
-            for one. `None` uses the real named pipe; `--fail-bridge` passes a forced-
-            failure one.
+            for one, from the `{pipe, secret}` that session posted. `None` uses the real
+            named pipe; `--fail-bridge` passes a forced-failure one.
         development: List the scripted provider in `GET /health` (FR-027).
         secrets: What error text is masked of; the process environment otherwise.
     """

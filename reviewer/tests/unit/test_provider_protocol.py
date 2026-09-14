@@ -19,6 +19,7 @@ the schema says". Three things make that test easy to get wrong:
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, get_args
 
 import pytest
@@ -38,6 +39,7 @@ from swreview.agent.providers import (
     TurnEndReason,
     TurnResult,
     UnknownProviderError,
+    call_tool,
 )
 from swreview.findings import build_finding
 from swreview.report.session import CoverageItem, CoverageScope, EvidenceRequest, Timing
@@ -353,3 +355,72 @@ def test_registry_raises_for_an_unknown_provider() -> None:
 def test_every_provider_name_has_an_adapter_module() -> None:
     """`get` imports the adapter lazily; every name must have somewhere to import from."""
     assert set(providers.ADAPTER_MODULES) == set(ProviderName)
+
+
+# --- one producer for the tool event pair (T068) -----------------------------------------
+
+
+class _OneCallToolSet:
+    """The smallest `ToolSet` `call_tool` needs: it answers one call and remembers it."""
+
+    def __init__(self, result: ToolCallResult) -> None:
+        self.result = result
+        self.asked: list[tuple[str, dict[str, Any], str]] = []
+
+    def call(self, name: str, arguments: Any, call_id: str) -> ToolCallResult:
+        self.asked.append((name, dict(arguments), call_id))
+        return self.result
+
+
+@pytest.mark.parametrize(
+    ("payload", "is_error", "status", "error"),
+    [
+        ({"components": []}, False, "ok", None),
+        ({"error": "no such component"}, True, "error", "no such component"),
+    ],
+)
+def test_call_tool_emits_the_contract_pair_around_one_call(
+    payload: dict[str, Any], is_error: bool, status: str, error: str | None
+) -> None:
+    """The `tool.started`/`tool.finished` pair, shaped once for every adapter."""
+    validator = contract_validator("chat-events.schema.json")
+    seen: list[tuple[str, dict[str, Any]]] = []
+    ticks = iter([1.0, 1.25])
+    tools = _OneCallToolSet(ToolCallResult(call_id="c1", payload=payload, is_error=is_error))
+
+    result = call_tool(
+        request=ToolCallRequest(call_id="c1", name="list_components", arguments={"x": 1}),
+        tools=tools,
+        on_event=lambda event_type, body: seen.append((event_type, dict(body))),
+        step_index=3,
+        clock=lambda: next(ticks),
+    )
+
+    assert result.payload == payload
+    assert tools.asked == [("list_components", {"x": 1}, "c1")]
+    assert [event_type for event_type, _ in seen] == ["tool.started", "tool.finished"]
+    assert seen[0][1] == {"step_index": 3, "tool": "list_components", "arguments": {"x": 1}}
+    assert seen[1][1]["step_index"] == 3
+    assert seen[1][1]["status"] == status
+    assert seen[1][1]["error"] == error
+    assert seen[1][1]["elapsed_s"] == pytest.approx(0.25)
+    for event_type, body in seen:
+        validator.validate(
+            {"seq": 1, "at": "2026-09-13T12:00:00Z", "type": event_type, "body": body}
+        )
+
+
+def test_no_adapter_shapes_the_tool_event_pair_itself() -> None:
+    """T068: one producer for these two bodies, not one copy per adapter.
+
+    All three adapters had the same fifteen lines - counter, `tool.started`, the call, the
+    clock arithmetic, `tool.finished` - so a field added to the contract had to be added
+    three times, and a fourth adapter would have started by copying them.
+    """
+    offenders = sorted(
+        path.name
+        for path in Path(providers.__file__).parent.glob("*.py")
+        if path.name != "__init__.py" and '"tool.started"' in path.read_text(encoding="utf-8")
+    )
+
+    assert offenders == []

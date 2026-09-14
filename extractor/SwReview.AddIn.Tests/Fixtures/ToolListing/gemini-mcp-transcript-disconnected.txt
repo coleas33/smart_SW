@@ -1,0 +1,7 @@
+MCP Servers Status:
+
+🔌 swreview (DISCONNECTED)
+  Command: C:\Users\engineer\.local\bin\uv.exe run --project C:\SwReview\reviewer swreview mcp --run-dir C:\SwReview\runs\20260913-141500-terminal --bridge-pipe swreview-bridge-7c1d4f0a --bridge-secret-env SWREVIEW_BRIDGE_SECRET
+  Error: Connection refused
+
+Discovery State: COMPLETED

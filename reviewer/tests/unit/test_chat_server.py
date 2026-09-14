@@ -496,6 +496,61 @@ def test_the_session_view_carries_no_token_and_no_bridge(
     assert "bridge" not in response.json()
 
 
+def test_the_bridge_pipe_and_secret_reach_the_run(
+    run_root: Path, provider_control: ProviderControl, models: Models, run_dir: Path
+) -> None:
+    """`POST /sessions` carries `{pipe, secret}`; both reach the bridge client the review
+    runs with, and neither is read from anywhere but the request (T049)."""
+    built: list[tuple[str, str | None]] = []
+
+    class RecordingBridge:
+        def close(self) -> None:
+            return None
+
+    def factory(pipe_name: str, secret: str | None) -> RecordingBridge:
+        built.append((pipe_name, secret))
+        return RecordingBridge()
+
+    app = create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=provider_control.factory,
+        list_models=models,
+        bridge_factory=factory,
+    )
+    with TestClient(
+        app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}
+    ) as bridged:
+        started = start_session(
+            bridged, run_dir, bridge={"pipe": "swreview-abc", "secret": "the-bridge-secret"}
+        )
+        settle(bridged, started["chat_id"])
+
+    assert built == [("swreview-abc", "the-bridge-secret")]
+
+
+def test_a_session_without_a_bridge_builds_no_bridge_client(
+    run_root: Path, provider_control: ProviderControl, models: Models, run_dir: Path
+) -> None:
+    built: list[tuple[str, str | None]] = []
+    app = create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=provider_control.factory,
+        list_models=models,
+        bridge_factory=lambda pipe_name, secret: built.append((pipe_name, secret)),
+    )
+    with TestClient(
+        app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}
+    ) as plain:
+        started = start_session(plain, run_dir)
+        settle(plain, started["chat_id"])
+
+    assert built == []
+
+
 def test_an_unknown_chat_is_a_404(client: TestClient) -> None:
     response = client.get(f"/sessions/{uuid4()}")
 
@@ -1138,6 +1193,29 @@ def test_stopping_a_chat_that_is_not_running_still_ends_it(
     assert response.status_code == 202
     assert state_of(client, chat_id) == ChatState.ENDED.value
     assert load_session(run_dir / "session.json").ended_at is not None
+
+
+def test_stopping_an_already_ended_chat_does_not_end_the_session_twice(
+    client: TestClient, run_dir: Path
+) -> None:
+    """Stop is idempotent: an ended session is not re-closed (quickstart T067).
+
+    `shutdown` already refuses to finalize a session that has an `ended_at` because a
+    second `session.ended` says nothing new; pressing Stop on a turn that finished on its
+    own has to obey the same rule, or `events.jsonl` carries two terminal events and
+    `session.json` carries an `ended_at` that moved after the session ended.
+    """
+    chat_id = start_session(client, run_dir)["chat_id"]
+    assert settle(client, chat_id) == ChatState.ENDED.value
+    before_events = events_of(run_dir)
+    before_ended_at = load_session(run_dir / "session.json").ended_at
+
+    response = client.post(f"/sessions/{chat_id}/stop")
+
+    assert response.status_code == 202
+    assert state_of(client, chat_id) == ChatState.ENDED.value
+    assert events_of(run_dir) == before_events
+    assert load_session(run_dir / "session.json").ended_at == before_ended_at
 
 
 # --- shutdown ------------------------------------------------------------------------

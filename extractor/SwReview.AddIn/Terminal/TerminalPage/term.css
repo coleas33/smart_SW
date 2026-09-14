@@ -1,0 +1,193 @@
+/*
+  The Terminal page's styling. External rather than inline for the same reason the Review page's
+  is: the CSP is `style-src 'self'` (contracts/pane-host-messages.md), so a <style> block or a
+  style= attribute would be blocked silently and the pane would render unstyled inside
+  SOLIDWORKS with the explanation in a DevTools console nobody there can open.
+
+  Same palette and same assumptions as app.css: a docked Task Pane at roughly 300-420 px, one
+  column, nothing assuming width.
+*/
+
+:root {
+  --ink: #1b1b1b;
+  --muted: #5d6672;
+  --line: #d4d9e0;
+  --surface: #ffffff;
+  --panel: #f5f7fa;
+  --bad: #a12a2a;
+
+  /* The terminal's own two colours, used by the stand-in rules at the bottom of this file. */
+  --term-bg: #12151a;
+  --term-fg: #e6e6e6;
+  --term-font: Consolas, "Cascadia Mono", "Lucida Console", monospace;
+  --term-size: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/*
+  A column: bar, banner, install view, screen, footer. The screen is the only flexible row,
+  because the fit addon sizes the terminal from the box it is given and a screen that grew with
+  its content would feed a size back that grew again.
+*/
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.footer {
+  border-bottom: 0;
+  border-top: 1px solid var(--line);
+}
+
+#cli {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.path {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.badge {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.banner {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: #fdf1f1;
+  color: var(--bad);
+}
+
+.install {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.install h2 {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.install p {
+  margin: 0 0 6px;
+  color: var(--muted);
+}
+
+/* Commands the engineer copies: never reflowed, and scrolled rather than clipped. */
+.install pre {
+  margin: 0;
+  padding: 6px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-family: var(--term-font);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.screen {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 2px 0 2px 4px;
+  background: var(--term-bg);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+  ---- stand-ins for the styles xterm.js injects -------------------------------------------------
+
+  xterm.js styles its rows by creating <style> elements at runtime and setting their textContent
+  (the DOM renderer's `_dimensionsStyleElement` and `_injectCss`). A dynamically inserted style
+  block is inline style as far as CSP is concerned, so `style-src 'self'` blocks all of them, and
+  the page's CSP is fixed by contract.
+
+  These rules are the ones that matter, written statically so the terminal is legible rather than
+  a black rectangle: the cell-box rule the dimensions element carries, and the font and the two
+  colours the theme element carries. What is not recovered is per-colour ANSI output - the
+  `.xterm-fg-N`/`.xterm-bg-N` classes are generated per theme and cannot be written out here - so
+  a CLI's coloured text renders in the foreground colour.
+
+  This is a known limitation to settle before Scenario 3 (T063), not a design: the alternatives
+  are relaxing `style-src` for this page, which the contract does not allow today, or a WebGL or
+  canvas renderer addon, which is not vendored.
+*/
+.xterm .xterm-rows {
+  color: var(--term-fg);
+  font-family: var(--term-font);
+  font-size: var(--term-size);
+  font-kerning: none;
+  white-space: pre;
+}
+
+.xterm .xterm-rows span {
+  display: inline-block;
+  height: 100%;
+  vertical-align: top;
+}
+
+.xterm .xterm-rows .xterm-bold {
+  font-weight: bold;
+}
+
+.xterm .xterm-rows .xterm-italic {
+  font-style: italic;
+}
+
+.xterm .xterm-rows .xterm-cursor.xterm-cursor-block {
+  background-color: var(--term-fg);
+  color: var(--term-bg);
+}

@@ -1,6 +1,6 @@
 using System;
 using System.Text.Json;
-using SwReview.Extractor.Console.Serve;
+using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Ir;
 using Xunit;
 
@@ -52,6 +52,36 @@ public class BridgeProtocolTests
         // The same additionalProperties: false stance the IR schema takes; drift fails loud.
         Assert.Throws<BridgeProtocolError>(() =>
             BridgeCodec.ReadRequest("{\"id\":\"1\",\"command\":\"ping\",\"extra\":true}"));
+    }
+
+    [Fact]
+    public void ReadRequest_SecretIsOptionalAndAbsentMeansNull()
+    {
+        // The console host does not issue secrets, so a line without one still parses; the
+        // policy, not the codec, decides whether that is allowed (T045).
+        BridgeRequest request = BridgeCodec.ReadRequest("{\"id\":\"1\",\"command\":\"ping\"}");
+
+        Assert.Null(request.Secret);
+    }
+
+    [Fact]
+    public void ReadRequest_ReadsTheSecret()
+    {
+        BridgeRequest request = BridgeCodec.ReadRequest(
+            "{\"id\":\"1\",\"command\":\"ping\",\"secret\":\"per-launch\"}");
+
+        Assert.Equal("per-launch", request.Secret);
+    }
+
+    [Fact]
+    public void WriteResponse_NeverCarriesASecret()
+    {
+        // A response is written to a log and to a page; the secret must not ride along.
+        string line = BridgeCodec.WriteResponse(
+            BridgeResponse.Failed("1", SwBridgeDispatcher.UnauthorizedError));
+
+        Assert.DoesNotContain("secret", line, StringComparison.Ordinal);
+        Assert.Contains("\"error\":\"unauthorized\"", line, StringComparison.Ordinal);
     }
 
     [Fact]

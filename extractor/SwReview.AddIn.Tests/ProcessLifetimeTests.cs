@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading;
 using SwReview.AddIn.Native;
 using SwReview.AddIn.Review;
+using SwReview.AddIn.Terminal;
 using SwReview.AddIn.ToolService;
 using Xunit;
 
@@ -26,12 +27,10 @@ namespace SwReview.AddIn.Tests;
 /// marker file: while the process is suspended the stub has provably executed no instruction,
 /// so the marker cannot exist yet, and it appears only after <see cref="ChildProcess.Resume"/>.
 ///
-/// Scope: the backend half is proved here against a real child process. The pipe-name half is
-/// proved against <see cref="PipeNames"/>, the generator the in-process tool service (T047)
-/// will name its pipe with, so the rule exists before the server that has to keep it. The
-/// ConPTY CLI child cannot be started before T047/US3 build it, so its ordering case is
-/// present and skipped, naming exactly what has to make it green - deferring it silently is
-/// what would let that child be assigned to the job after it has already run.
+/// Scope: both children are proved here against real processes - the backend, and (since T053)
+/// the ConPTY child, which takes a different branch of <see cref="ChildProcess.StartSuspended"/>
+/// and so is worth its own case. The pipe-name half is proved against <see cref="PipeNames"/>,
+/// the generator the in-process tool service (T047) names its pipe with.
 /// </summary>
 public sealed class ProcessLifetimeTests
 {
@@ -218,15 +217,105 @@ public sealed class ProcessLifetimeTests
         Assert.DoesNotContain(" ", name, StringComparison.Ordinal);
     }
 
-    [Fact(Skip = "T047/US3: no ConPTY child exists to start yet. Make this green by starting "
-        + "the CLI child through ChildProcess.StartSuspended (or CreateProcess with "
-        + "CREATE_SUSPENDED and the pseudoconsole attribute) into the host's JobObject, "
-        + "asserting job.Contains(pid) and that the marker file is still absent before "
-        + "Resume() - the same proof AChildIsInsideTheJobBeforeItsFirstThreadRuns makes for "
-        + "the backend.")]
+    /// <summary>
+    /// The same proof as <see cref="AChildIsInsideTheJobBeforeItsFirstThreadRuns"/>, for the
+    /// child T053 added: the one attached to a pseudo-console.
+    ///
+    /// It is worth making twice because the two children are created down different branches of
+    /// <see cref="ChildProcess.StartSuspended"/> - a pseudo-console child takes the
+    /// `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` attribute, no pipes, no handle list and neither
+    /// console creation flag - and the job assignment sits after that branch for both. A change
+    /// that moved the assignment into the non-pty side would leave the CLI, which is the child
+    /// holding a console and the tool-service secret's neighbourhood, outside the job.
+    ///
+    /// The marker file is the proof that "suspended" means what it says: while the initial
+    /// thread is suspended the child has provably executed no instruction, so `marker.txt`
+    /// cannot exist yet, and it appears only after <see cref="ChildProcess.Resume"/>.
+    /// </summary>
+    [Fact]
     public void AConPtyChildIsInsideTheJobBeforeItsFirstThreadRuns()
     {
-        throw new NotImplementedException("T047/US3");
+        string folder = Path.Combine(
+            Path.GetTempPath(), "SwReview.ConPty.Job", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        string marker = Path.Combine(folder, "marker.txt");
+
+        try
+        {
+            using (var conpty = ConPty.Create(80, 25))
+            using (var job = new JobObject())
+            {
+                // No space anywhere in the argument, so `cmd.exe` re-parses exactly what it was
+                // given: `echo>marker.txt` writes a line into the run folder and exits.
+                var info = new ChildProcessStartInfo(Cmd, new[] { "/c", "echo>marker.txt" })
+                {
+                    WorkingDirectory = folder,
+                    PseudoConsole = conpty.Handle,
+                };
+
+                using (ChildProcess child = ChildProcess.StartSuspended(info, job))
+                {
+                    Assert.True(child.ProcessId > 0);
+                    Assert.True(job.Contains(child.ProcessId));
+
+                    // `ClosePseudoConsole` flushes what the child drew before it returns, so
+                    // something has to be reading the console or the dispose below can block.
+                    // In the real session that is TerminalSession's read loop.
+                    Thread drain = Drain(conpty);
+
+                    Thread.Sleep(1500);
+                    Assert.False(File.Exists(marker));
+                    Assert.False(child.HasExited);
+
+                    child.Resume();
+
+                    Assert.True(StubBackend.Waits(() => File.Exists(marker)));
+                    Assert.True(child.WaitForExit(20000));
+                    drain.Join(2000);
+                }
+            }
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    private static string Cmd => Path.Combine(Environment.SystemDirectory, "cmd.exe");
+
+    private static Thread Drain(ConPty conpty)
+    {
+        var thread = new Thread(() =>
+        {
+            var buffer = new byte[4096];
+            try
+            {
+                while (conpty.Output.Read(buffer, 0, buffer.Length) > 0)
+                {
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "conpty-job-test-drain",
+        };
+        thread.Start();
+        return thread;
     }
 
     private static ChildProcessStartInfo StartInfo(StubBackend stub)

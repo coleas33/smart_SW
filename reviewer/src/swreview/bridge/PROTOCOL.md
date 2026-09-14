@@ -19,7 +19,11 @@ One JSON object per line, UTF-8, `\n`-terminated, over `\\.\pipe\<name>`:
 
 `id` is a string (a monotonic counter rendered as decimal), `params` is the command's
 argument object, and `command` is one of `ping`, `capture`, `measure`, `interference` -
-the whole vocabulary. `COMMANDS` in `client.py` is that allowlist and it is checked before
+the whole vocabulary. A client built with a `secret` adds one more top-level field,
+`"secret": "<per-launch>"`, on every line; a client built without one **omits the field
+entirely** rather than sending `""`, because an empty string is a wrong secret to the
+in-process host and the console host asks for none. The secret is never written into an
+error message, `last_error`, or a log line on this side either. `COMMANDS` in `client.py` is that allowlist and it is checked before
 anything is written to the pipe, so no tool can ask SOLIDWORKS for a member, a macro or a
 file (research R4, constitution Technical Constraints). The host applies its own read-only
 guard on top.
@@ -36,6 +40,29 @@ Where the host attaches a `Gap` to a failed `capture`, the client carries it on 
 exception (`BridgeError.result`) and `swreview.tools.bridge` appends it to the package's
 `gaps`: the request is visible as something extraction could not provide rather than being
 lost with the error message.
+
+## The two refusals the in-process host makes
+
+`BridgeError` has two named subclasses, so the tool layer can say which refusal happened
+instead of only that the bridge said no. Both are `BridgeError`, so a caller that catches
+the base type cannot crash on either, and both become `failed` coverage the same way.
+
+| Host answer | Raised | Effect on the breaker |
+|-------------|--------|-----------------------|
+| `error` whose text starts with `unauthorized` | `BridgeUnauthorizedError` | Opens the circuit at once |
+| `error` whose text contains `no longer open` | `BridgeDocumentClosedError` | None: the count is left exactly where it was |
+
+A refused secret never becomes accepted and every attempt is logged on the host side, so
+two more round trips to reach `CIRCUIT_LIMIT` would buy nothing: the circuit opens on the
+first `unauthorized`.
+
+A closed document is a definite answer from a healthy host rather than a SOLIDWORKS
+failure, so it neither trips the breaker on its own nor clears failures that came before
+it. That is what keeps spec.md's promise that the review "continues on the extracted
+package; any live action fails with a clear 'document no longer open' error and becomes
+failed coverage" - a breaker message in its place would hide why the bridge went quiet.
+The match is on `no longer open` as a case-insensitive substring, so the contract's
+sentence and a fuller one around it are both recognised.
 
 ## Circuit breaker
 

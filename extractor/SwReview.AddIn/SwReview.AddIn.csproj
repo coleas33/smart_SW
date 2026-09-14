@@ -67,6 +67,19 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      The general-chat persona (T057). Embedded rather than copied beside the add-in:
+      CliProfileWriter writes it into the generated Codex home on every terminal start, and
+      Codex *replaces* its system prompt with that file, so a persona that had gone missing
+      from the output folder would be a CLI running with its stock instructions and no
+      read-only rule at all. An embedded resource cannot go missing from a loaded assembly.
+    -->
+    <EmbeddedResource Include="Terminal\Profiles\codex-instructions.md">
+      <LogicalName>SwReview.AddIn.Terminal.Profiles.codex-instructions.md</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <!--
     The NuGet package copies the native loader to runtimes\win-x64\native\WebView2Loader.dll
     and Microsoft.Web.WebView2.Core.dll probes that folder relative to its own location. The

@@ -1,18 +1,31 @@
 # Curated Agent Tools
 
-The reviewer exposes exactly these tools to Claude. There is no general code execution,
+The reviewer exposes exactly these tools to the model. There is no general code execution,
 no file system access, and no SolidWorks command outside this list (FR-006, Constitution
-Technical Constraints). Every tool is a Python function decorated with the Anthropic SDK's
-`@beta_tool`, declared with `strict: true` (schema-valid arguments guaranteed), and
-registered in `swreview.tools`. Each call is appended to the session's `steps` list with its
-arguments, result summary, status, and elapsed time (FR-004).
+Technical Constraints). Every tool is a plain Python function registered in
+`swreview.tools`; nothing decorates it and no tool module writes a schema by hand.
+
+The schemas are generated and are **provider-neutral** (FR-026):
+`swreview.agent.providers.schema.canonical_schema(fn)` builds one canonical JSON Schema from
+the signature (`pydantic.TypeAdapter`) and the Google-style `Args:` block of the docstring,
+with every `$def` inlined; `strictify()` derives the OpenAI strict form from it (every
+property required, `additionalProperties: false`, so arguments are schema-valid on arrival)
+and `gemini_adapt()` the Gemini `FunctionDeclaration` form. A parameter the docstring does
+not describe is a `ValueError`, not a schema with a blank description: the description is
+what the model reads to decide whether the tool applies at all. The tables below
+are the golden: `tests/unit/test_provider_schema.py` reads them and asserts that the
+registered tools and their parameters are exactly these.
+
+Each call is appended to the session's `steps` list with its arguments, result summary,
+status, and elapsed time (FR-004).
 
 Every tool is **read-only** with respect to the evidence package and SolidWorks documents.
 The only writes are to the current session file (findings, evidence requests, coverage).
 
-All tool errors are returned to the model as `tool_result` with `is_error: true` and a
-plain explanation, and recorded as a `failed` coverage item. Tools never raise past the
-runner.
+All tool errors are returned to the model as a tool result whose payload is
+`{"error": "<plain explanation>"}`, carried on the provider-neutral `ToolCallResult` with
+`is_error` set and rendered by each adapter in its own SDK's shape, and recorded as a
+`failed` coverage item. Tools never raise past the runner.
 
 ## Package query tools (pure, no SolidWorks)
 
@@ -60,9 +73,18 @@ typed by the model.
 | Tool | Arguments | Effect |
 |------|-----------|--------|
 | `request_evidence` | `what: str`, `why: str`, `entity_ids: list[str]` | Adds an open `EvidenceRequest`; returns its id. |
-| `mark_coverage` | `check: str`, `bucket: "checked" \| "skipped" \| "unresolved" \| "out_of_scope"`, `scope: object`, `reason: str` | Adds a `CoverageItem`. The `failed` bucket is written only by the tool layer itself. |
+| `mark_coverage` | `check: str`, `bucket: "checked" \| "skipped" \| "unresolved" \| "out_of_scope"`, `scope: CoverageScope`, `reason: str` | Adds a `CoverageItem`. The `failed` bucket is written only by the tool layer itself. |
 | `request_capture` | `entity_id: str`, `view: str` | Returns an existing `Capture` or, when the live SolidWorks bridge is enabled, requests one through the bridge and returns its file. Otherwise `unresolved`. |
 | `get_review_checklist` | none | The mandatory checklist items and their current bucket. |
+
+`CoverageScope` is an explicit model, not a free-form map: `component_ids: list[str]`,
+`pairs: list[[str, str]]`, `configuration: str | null`, `positions: list[str]`,
+`document_ids: list[str]`, each defaulting to empty. It is spelled out because a
+`dict[str, Any]` parameter generates `{"type": "object", "additionalProperties": true}`
+with no `properties`, and an object that is closed and has no properties - which is what
+OpenAI strict mode makes of it - accepts nothing and reports nothing, so every scope the
+model sent would be silently recorded as empty. `tests/unit/test_provider_schema.py`
+asserts that no tool schema contains such an object.
 
 ## Live SolidWorks bridge tools (optional, workstation only)
 
@@ -73,7 +95,14 @@ C# console host out of process, one coarse operation per call, on a single STA t
 |------|-----------|---------|
 | `bridge_capture` | `persist_ref: str`, `view: str` | PNG path, appended to `captures` |
 | `bridge_measure` | `persist_ref_a: str`, `persist_ref_b: str` | SolidWorks Measure result with units |
-| `bridge_interference` | `component_ids: list[str]`, `configuration: str`, `settings: object` | `Interference` list with status |
+| `bridge_interference` | `component_ids: list[str]`, `configuration: str`, `settings: InterferenceSettings` | `Interference` list with status |
+
+`InterferenceSettings` is the IR's own model and all five fields are required of the model:
+`treat_coincident_as_interference`, `treat_subassemblies_as_components`,
+`include_multibody`, `ignore_hidden` (booleans) and `fastener_folder_treatment`
+(`include`, `exclude` or `only`). They are the settings the results are then read under, so
+none of them is assumed here - and, like `CoverageScope`, they are named fields rather than
+a free-form map so that a strict schema can express them at all.
 
 ## System prompt commitments (summary)
 

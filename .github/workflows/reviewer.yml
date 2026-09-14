@@ -19,6 +19,13 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python: ["3.11", "3.12"]
     runs-on: ${{ matrix.os }}
+    env:
+      # Not a credential: a dummy value so the audit step below has something verbatim to
+      # search the test output for. An audit run with no secret configured can only report
+      # what it did not look for, which is the false green `audit-secrets` exists to
+      # prevent. The test step deselects `live` for the same reason `tests/conftest.py`
+      # skips it when no key is set - a dummy key must never reach a real provider.
+      OPENAI_API_KEY: sk-ci-dummy-not-a-real-key-0000000000
     defaults:
       run:
         working-directory: reviewer
@@ -33,4 +40,13 @@ jobs:
         run: uv run ruff check src tests
       - name: Test
         # Integration tests skip automatically when no native package is present.
-        run: uv run pytest
+        # Everything the tests write goes under one directory so the audit can scan it.
+        # `--basetemp` does not create parent directories, so this sits directly under the
+        # working directory; pytest empties it at the start of the run.
+        run: uv run pytest -m "not live" --basetemp=.pytest-tmp
+      - name: Audit secrets
+        # FR-015: no file a test wrote may contain the key the tests ran with. Detectors are
+        # off deliberately - `tests/unit/test_cli_audit_secrets.py` plants provider-shaped
+        # strings in its own temporary directories on purpose, so they would fire on every
+        # run. The verbatim search for the key in the job environment is the assertion here.
+        run: uv run swreview audit-secrets .pytest-tmp --no-detectors

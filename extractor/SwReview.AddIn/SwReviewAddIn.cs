@@ -17,6 +17,8 @@ using SwReview.Extractor.Sw;
 using SwReview.AddIn.Native;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
+using SwReview.AddIn.Terminal;
+using SwReview.AddIn.ToolService;
 
 namespace SwReview.AddIn;
 
@@ -79,6 +81,8 @@ public class SwReviewAddIn : ISwAddin
     private BackendSupervisor? _supervisor;
     private BackendClient? _backend;
     private ReviewHost? _reviewHost;
+    private TerminalHost? _terminalHost;
+    private ToolServiceGate? _toolService;
 
     /// <summary>
     /// Page messages, one at a time, off the application thread.
@@ -98,6 +102,17 @@ public class SwReviewAddIn : ISwAddin
 
     /// <summary>The callback cookie SOLIDWORKS issued for this add-in instance.</summary>
     public int AddInCookie => _addInCookie;
+
+    /// <summary>
+    /// The tool service, as much of it as anything outside this class may see: the pipe name
+    /// and the <b>general-chat</b> secret, for the terminal's generated CLI profile (T057), and
+    /// the attached document, for its persona text. Null until the pane has started.
+    ///
+    /// Deliberately not the review secret, which authorizes <c>interference</c> as well: the
+    /// CLI can read its own generated profile, so the profile must never be given a secret
+    /// wider than the MCP allowlist it ships with (contracts/README.md).
+    /// </summary>
+    public IToolServiceAccess? ToolService => _toolService;
 
     /// <summary>
     /// Called by SOLIDWORKS when the add-in loads. Everything the extractor does runs on
@@ -158,6 +173,17 @@ public class SwReviewAddIn : ISwAddin
 
         StopPageMessagePump();
 
+        // Before the review host, because the tool service is what still holds SOLIDWORKS
+        // pointers: the pipe stops listening and the scope is let go while the add-in is still
+        // attached. Requests already in flight get the documented `error` (T047).
+        _toolService?.Dispose();
+        _toolService = null;
+
+        // Before the review host and after the tool service: the terminal's CLI holds a
+        // console and the generated profile, and it is stopped rather than left to the job.
+        _terminalHost?.Dispose();
+        _terminalHost = null;
+
         _reviewHost?.Dispose();
         _reviewHost = null;
 
@@ -216,7 +242,13 @@ public class SwReviewAddIn : ISwAddin
         // panel shows it and the fallback panel exists precisely when nothing else started.
         SettingsLoadResult loaded = UserSettings.Load(UserSettings.DefaultPath);
         _pane = new TaskPaneControl(new TaskPaneOptions(
-            new WebViewEnvironmentFactory(), loaded.Settings.RunRoot));
+            new WebViewEnvironmentFactory(), loaded.Settings.RunRoot)
+        {
+            // The Terminal tab's run-folder rule (pane-host-messages.md): a terminal started
+            // after a review belongs in that review's folder, so the CLI's generated profile,
+            // its working directory and the evidence it is being asked about are one place.
+            CurrentSessionRunDirectory = () => _reviewHost?.LatestSession?.RunDirectory,
+        });
 
         _panel = _pane.Actions;
         _panel.DumpRequested += OnDumpRequested;
@@ -256,12 +288,10 @@ public class SwReviewAddIn : ISwAddin
 
         // The ids on a finding card belong to the run's own package.json, which `review.start`
         // has just written; the resolver is handed lookups over whichever run the pane is
-        // currently showing. T048 replaces the session below with the tool service's scope,
-        // which walks the component tree once for every command rather than per Show; the two
-        // lookups stay as they are.
+        // currently showing. The two lookups are independent of the tool service.
         var packages = new RunPackageIndex(() => _reviewHost?.LatestSession?.RunDirectory);
 
-        _reviewHost = new ReviewHost(new ReviewHostOptions(
+        var reviewOptions = new ReviewHostOptions(
             _pane.ReviewChannel, _backend, UserSettings.DefaultPath)
         {
             CurrentDocument = CurrentDocument,
@@ -269,15 +299,30 @@ public class SwReviewAddIn : ISwAddin
             EntityResolver = new SwEntityResolver(
                 _swApp,
                 _applicationThread,
-                // Attached per Show rather than held: the engineer closes and reopens documents
-                // between findings, and a session over a document that is gone selects nothing.
-                () => SwSession.Attach(_swApp, documentPath: null, configurationName: null),
+                // T048: the tool service's own scope once it is listening, so a Show resolves
+                // against the same session the bridge's capture and measure commands run
+                // against instead of walking the component tree again per Show. Before it is
+                // listening - the Task Pane exists before the first document - the resolver
+                // attaches for itself, per Show rather than held: the engineer closes and
+                // reopens documents between findings, and a session over a document that is
+                // gone selects nothing.
+                () => _toolService?.Session
+                    ?? SwSession.Attach(_swApp, documentPath: null, configurationName: null),
                 packages.DocumentPath,
                 packages.ComponentFullPath),
-        });
+        };
+
+        _reviewHost = new ReviewHost(reviewOptions);
+        _toolService = CreateToolServiceGate(reviewOptions);
 
         StartPageMessagePump();
         _pane.PageMessageReceived += OnPageMessage;
+
+        // The Terminal tab's half of the pane (T060). It subscribes to the Terminal page and
+        // drains it on a thread of its own - locating a CLI and probing its tool listing both
+        // block for seconds, and this is the SOLIDWORKS UI thread.
+        _terminalHost = TerminalHost.Attach(
+            _pane, _toolService, () => _reviewHost?.Settings ?? UserSettings.Defaults(), _job);
 
         // The pane follows the engineer: the Review button and the document name track
         // whatever is active, so a review is never started against the document that was open
@@ -288,9 +333,41 @@ public class SwReviewAddIn : ISwAddin
             _events.ActiveDocChangeNotify += OnActiveDocumentChanged;
         }
 
+        // SOLIDWORKS usually loads with nothing open, in which case this is a no-op and the
+        // document-changed event below starts the tool service instead. It is asked here too
+        // because the add-in can be enabled from Tools > Add-ins with an assembly already open,
+        // where no ActiveDocChangeNotify is ever raised.
+        _toolService.EnsureStarted();
+
         UserSettings settings = _reviewHost.Settings;
         ResolvedApiKey key = settings.ResolveApiKey();
         ThreadPool.QueueUserWorkItem(_ => StartBackend(settings, key));
+    }
+
+    /// <summary>
+    /// T048. The tool service's lifetime, as three delegates: when it may start, how, and what
+    /// happens to the two secrets it mints.
+    ///
+    /// The review secret goes into <see cref="ReviewHostOptions.Bridge"/>, which is the
+    /// `bridge` field of the next `POST /sessions` - so a review started before the first
+    /// document simply has no bridge, and the Python side falls back to its own attach. The
+    /// general-chat secret stays on the gate and is read by the terminal through
+    /// <see cref="ToolService"/>; it never reaches the backend.
+    ///
+    /// Nothing here runs on the application thread: <see cref="ToolServiceHost.Start"/>
+    /// marshals its attach onto that thread and waits, and <see cref="ToolServiceGate"/>
+    /// schedules the start off whichever thread asked for it.
+    /// </summary>
+    private ToolServiceGate CreateToolServiceGate(ReviewHostOptions reviewOptions)
+    {
+        TaskPaneControl pane = _pane!;
+        ISldWorks app = _swApp!;
+
+        return new ToolServiceGate(
+            () => CurrentDocument() != null,
+            () => ToolServiceHost.Start(new ToolServiceOptions(app, new ControlAppThreadInvoker(pane))),
+            service => reviewOptions.Bridge = service.ReviewBridge,
+            Report);
     }
 
     private void StartBackend(UserSettings settings, ResolvedApiKey key)
@@ -362,6 +439,11 @@ public class SwReviewAddIn : ISwAddin
         try
         {
             _reviewHost?.DocumentChanged();
+
+            // The first document is what the tool service has been waiting for (T048). Once it
+            // is running this is a no-op: one add-in instance, one tool service, one scope
+            // (data-model.md).
+            _toolService?.EnsureStarted();
         }
         catch (Exception failure)
         {

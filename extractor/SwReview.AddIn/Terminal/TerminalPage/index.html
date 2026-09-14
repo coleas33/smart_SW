@@ -1,8 +1,59 @@
 <!DOCTYPE html>
+<html lang="en">
+<head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
 <title>SwReview Terminal</title>
-<!-- Placeholder. The terminal page is built in T060; this file exists so the
-     <Content Include="Terminal\TerminalPage\**"> glob resolves and the virtual host
-     mapping has a document to serve. -->
-<body></body>
+<link rel="stylesheet" href="vendor/xterm.css">
+<link rel="stylesheet" href="term.css">
+</head>
+<body>
+<!--
+  The Terminal tab (T060). Served from the virtual host https://swreview.invalid, so the CSP
+  above - byte-for-byte the Review page's, which is byte-for-byte
+  contracts/pane-host-messages.md's - is what the page actually runs under: no inline script, no
+  inline style, no remote anything. xterm.js and its fit addon are vendored beside this file and
+  loaded with plain `src` attributes (plan.md: "pinned versions, no CDN").
+
+  Every handler is attached in term.js with addEventListener - there is no event-handler
+  attribute anywhere in this file - and term.js builds every node with textContent rather than by
+  assigning markup. The bytes the CLI draws never touch the DOM as markup at all: they go to
+  xterm.js, which is a VT parser. The rule matters for everything around the screen - the CLI
+  list, an install message, an error banner - because a CLI's failure text is written by whatever
+  the CLI decided to print.
+
+  The screen is the only element that needs a size: the fit addon measures its box, so it is laid
+  out by term.css as the one flexible row and everything else is fixed height.
+-->
+<header class="bar">
+  <label for="cli" class="visually-hidden">CLI</label>
+  <select id="cli"></select>
+  <button type="button" id="start" disabled>Start</button>
+  <button type="button" id="stop" disabled>Stop</button>
+</header>
+
+<p id="banner" class="banner" hidden></p>
+
+<!--
+  The install-steps view (FR-023, spec scenario 4). Shown instead of an empty terminal when the
+  chosen CLI is missing, too old, unsupported or - for Gemini in this version - deferred. The
+  steps are a <pre> because they are commands the engineer copies.
+-->
+<section id="install" class="install" aria-labelledby="install-title" hidden>
+  <h2 id="install-title">The CLI is not ready</h2>
+  <p id="install-message"></p>
+  <pre id="install-steps"></pre>
+</section>
+
+<main id="screen" class="screen"></main>
+
+<footer class="bar footer">
+  <span id="cwd" class="path"></span>
+  <span id="chatlog" class="badge" role="status">No tool calls yet</span>
+</footer>
+
+<script src="vendor/xterm.js"></script>
+<script src="vendor/addon-fit.js"></script>
+<script src="term.js"></script>
+</body>
+</html>

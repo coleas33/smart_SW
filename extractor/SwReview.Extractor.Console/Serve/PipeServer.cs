@@ -5,6 +5,7 @@ using System.IO.Pipes;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using SwReview.Extractor.Bridge;
 
 namespace SwReview.Extractor.Console.Serve;
 

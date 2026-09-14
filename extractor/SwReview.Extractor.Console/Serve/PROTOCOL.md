@@ -1,9 +1,18 @@
 # Bridge protocol (`swreview-extract serve`)
 
 Protocol version **1.0**. This file is the contract the Python client in
-`reviewer/src/swreview/bridge/client.py` (T073) is written against. It describes what
-`SwReview.Extractor.Console.Serve` speaks; the agent-facing tool names and arguments are in
+`reviewer/src/swreview/bridge/client.py` (T073) is written against; the agent-facing tool
+names and arguments are in
 `specs/001-agentic-design-review/contracts/agent-tools.md`.
+
+**Two hosts speak it** (T045). The command handling — `SwBridgeDispatcher`,
+`BridgeProtocol`, `BridgeServices` and the command result types — lives in
+`extractor/SwReview.Extractor/Bridge/`, so both share one implementation:
+
+| Host | Transport | Secret |
+|------|-----------|--------|
+| `swreview-extract serve --pipe <name>` | `PipeServer` (this folder): a named pipe and one STA worker thread | None. `NoSecretPolicy` ignores the `secret` field. |
+| The SOLIDWORKS add-in's in-process tool service | a named pipe read on a background thread, marshalled onto the application thread | Required on every line. `ScopedSecretPolicy` with two per-launch secrets. |
 
 ## Transport
 
@@ -20,7 +29,7 @@ Protocol version **1.0**. This file is the contract the Python client in
 ## Request
 
 ```json
-{"id": "<string>", "command": "ping|capture|measure|interference", "params": {}}
+{"id": "<string>", "command": "ping|capture|measure|interference", "params": {}, "secret": null}
 ```
 
 | Field | Type | Rules |
@@ -28,6 +37,7 @@ Protocol version **1.0**. This file is the contract the Python client in
 | `id` | string | Required, non-empty. Echoed on the response so a client can match them up. |
 | `command` | string | Required. One of the four below. |
 | `params` | object | Command arguments. May be omitted for `ping`. |
+| `secret` | string or null | Optional on the wire. Ignored by the console host; **required** by the in-process host, where it also selects the command scope (below). |
 
 Unknown **top-level** fields are rejected (the same `additionalProperties: false` stance as
 the IR schema). Unknown fields inside `params` are ignored.
@@ -35,6 +45,37 @@ the IR schema). Unknown fields inside `params` are ignored.
 Every request passes the read-only guard by command name before anything runs, and every
 SOLIDWORKS call underneath goes through `SwGate`, which asks the guard again. A command
 named after a mutating API (`Save3`, `FeatureCut4`, …) is refused with `status: "error"`.
+
+### `secret` and the two scopes
+
+The protocol version stays **1.0** because the field is additive: a client that omits it
+still works against the console host, and one that sends it is accepted by both.
+
+The in-process host issues **two** secrets per launch and the secret on the line decides
+what that line may ask for:
+
+| Secret | Held by | Authorizes |
+|--------|---------|------------|
+| review | the add-in's own review session | `ping`, `capture`, `measure`, `interference` |
+| general-chat | the CLI, through its generated restriction profile | `ping`, `capture`, `measure` |
+
+`interference` with the general-chat secret is answered:
+
+```json
+{"id":"4","status":"error","result":null,"error":"unauthorized","elapsed_ms":0}
+```
+
+That is the **same** answer a wrong secret, a missing secret, and a command outside the
+vocabulary get, so a caller learns nothing from the difference. The check runs before the
+command is looked up and before the read-only guard, so a refused request never reaches
+SOLIDWORKS. The refusal is logged by the host with the command name and never with the
+secret, and no response ever carries a `secret` field.
+
+Why the scope is enforced here and not only by the MCP allowlist: the CLI can read the
+profile that lists its own tools, so leaving `interference` out of that list withholds
+nothing on its own. A single shared secret would authenticate without bounding what it
+authorizes. The dispatcher is where the read-only subset promised by FR-022 becomes a
+boundary (`specs/002-task-pane-assistant/contracts/README.md`).
 
 ## Response
 
@@ -168,6 +209,7 @@ never a number:
 | Situation | Response |
 |-----------|----------|
 | Line is not JSON, or has no `id`/`command` | `{"id":"","status":"error","error":"<what was wrong>","result":null,"elapsed_ms":0}` |
-| Unknown `command` | `status: "error"`, listing the four commands. |
+| Unknown `command` | `status: "error"`, listing the four commands — but `error: "unauthorized"` on a host that requires a secret, which refuses an out-of-vocabulary command before looking it up. |
+| Wrong, missing, or out-of-scope `secret` | `status: "error"`, `error: "unauthorized"`, `result: null`. Only on a host that requires a secret. |
 | Missing or wrong-typed `params` field | `status: "error"` naming the field. |
 | Three consecutive SOLIDWORKS failures | `status: "circuit_open"` on this and every later request until the server is restarted. |

@@ -37,6 +37,35 @@ public sealed class ChildProcessStartInfo
     public IDictionary<string, string> Environment { get; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The `HPCON` of a pseudo-console to give the child instead of pipes (`SwReview.AddIn.
+    /// Terminal.ConPty.Handle`). Zero - the default - starts the child the ordinary way.
+    ///
+    /// A pseudo-console child differs in four ways, all of them forced by
+    /// `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`, and all of them handled by
+    /// <see cref="ChildProcess.StartSuspended"/> rather than left to the caller: its standard
+    /// handles have to be *refused* rather than supplied, so that the console driver hands it
+    /// the console's own (see the comment on that branch - this is the part that silently
+    /// produces an empty terminal when it is left out), and no pipes are made, so
+    /// <see cref="ChildProcess.StandardOutput"/> and <see cref="ChildProcess.StandardError"/>
+    /// are empty; nothing is inherited, because the console is passed as an attribute rather
+    /// than as a handle; `CREATE_NO_WINDOW` is pointless, because the console it would suppress
+    /// is the pseudo-console; and `CREATE_NEW_PROCESS_GROUP` is actively wrong, because it
+    /// starts the child with Ctrl+C disabled and Ctrl+C is a key the engineer will press.
+    /// </summary>
+    public IntPtr PseudoConsole { get; set; }
+
+    /// <summary>
+    /// Whether the child's standard input is a pipe this process writes to
+    /// (<see cref="ChildProcess.StandardInput"/>) instead of `NUL`.
+    ///
+    /// Off by default, and deliberately: every other child the pane starts is spoken to through
+    /// a console or a pipe server, and a child holding an open stdin pipe it never reads is a
+    /// child that cannot be ended by closing it. The one caller that needs it is the Codex
+    /// app-server listing probe (T062), which is a JSON-RPC conversation on stdio and has no
+    /// other way in. Ignored for a pseudo-console child, whose input is the console's.
+    /// </summary>
+    public bool RedirectStandardInput { get; set; }
 }
 
 /// <summary>
@@ -82,9 +111,11 @@ public sealed class ChildProcess : IDisposable
     private const uint WaitTimeout = 0x00000102;
     private const uint Infinite = 0xFFFFFFFF;
     private static readonly IntPtr ProcThreadAttributeHandleList = (IntPtr)0x00020002;
+    private static readonly IntPtr ProcThreadAttributePseudoConsole = (IntPtr)0x00020016;
     private static readonly IntPtr InvalidHandleValue = new IntPtr(-1);
 
     private readonly bool _ownConsole;
+    private readonly bool _pseudoConsole;
 
     private IntPtr _process;
     private IntPtr _thread;
@@ -97,14 +128,18 @@ public sealed class ChildProcess : IDisposable
         int processId,
         StreamReader standardOutput,
         StreamReader standardError,
-        bool ownConsole)
+        StreamWriter? standardInput,
+        bool ownConsole,
+        bool pseudoConsole)
     {
         _process = process;
         _thread = thread;
         ProcessId = processId;
         StandardOutput = standardOutput;
         StandardError = standardError;
+        StandardInput = standardInput;
         _ownConsole = ownConsole;
+        _pseudoConsole = pseudoConsole;
     }
 
     public int ProcessId { get; }
@@ -112,9 +147,21 @@ public sealed class ChildProcess : IDisposable
     /// <summary>The raw process handle, for <see cref="JobObject.Assign"/>.</summary>
     public IntPtr Handle => _process;
 
+    /// <summary>The child's stdout. Empty for a pseudo-console child, whose output is the
+    /// console's (<see cref="ChildProcessStartInfo.PseudoConsole"/>).</summary>
     public StreamReader StandardOutput { get; }
 
+    /// <summary>The child's stderr. Empty for a pseudo-console child: a console has one
+    /// screen, and stderr is drawn on it.</summary>
     public StreamReader StandardError { get; }
+
+    /// <summary>
+    /// The child's stdin, when <see cref="ChildProcessStartInfo.RedirectStandardInput"/> asked
+    /// for one; null otherwise, because the child was given `NUL` and there is nothing to write
+    /// to. Auto-flushing: a JSON-RPC request that sat in a buffer would be a request the child
+    /// never answers. Closing it is end of file for the child.
+    /// </summary>
+    public StreamWriter? StandardInput { get; }
 
     public bool HasExited => _process != IntPtr.Zero && WaitForSingleObject(_process, 0) == WaitObject0;
 
@@ -165,10 +212,16 @@ public sealed class ChildProcess : IDisposable
             bInheritHandle = true,
         };
 
+        // A pseudo-console child is given a console instead of pipes, so none of the pipe,
+        // NUL, handle-list or std-handle machinery below applies to it.
+        bool pty = info.PseudoConsole != IntPtr.Zero;
+
         IntPtr outRead = IntPtr.Zero;
         IntPtr outWrite = IntPtr.Zero;
         IntPtr errRead = IntPtr.Zero;
         IntPtr errWrite = IntPtr.Zero;
+        IntPtr inRead = IntPtr.Zero;
+        IntPtr inWrite = IntPtr.Zero;
         IntPtr nul = IntPtr.Zero;
         IntPtr attributeList = IntPtr.Zero;
         IntPtr handleArray = IntPtr.Zero;
@@ -176,25 +229,65 @@ public sealed class ChildProcess : IDisposable
 
         try
         {
-            CreatePipePair(ref security, out outRead, out outWrite);
-            CreatePipePair(ref security, out errRead, out errWrite);
-
-            nul = CreateFile(
-                "NUL", GenericRead, FileShareReadWrite, ref security, OpenExisting, 0, IntPtr.Zero);
-            if (nul == InvalidHandleValue)
-            {
-                nul = IntPtr.Zero;
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "opening NUL for the child's stdin failed");
-            }
-
-            attributeList = BuildHandleListAttribute(new[] { nul, outWrite, errWrite }, out handleArray);
-
             var startup = default(STARTUPINFOEX);
             startup.StartupInfo.cb = Marshal.SizeOf(typeof(STARTUPINFOEX));
-            startup.StartupInfo.dwFlags = StartfUseStdHandles;
-            startup.StartupInfo.hStdInput = nul;
-            startup.StartupInfo.hStdOutput = outWrite;
-            startup.StartupInfo.hStdError = errWrite;
+
+            if (pty)
+            {
+                attributeList = BuildPseudoConsoleAttribute(info.PseudoConsole);
+
+                // `STARTF_USESTDHANDLES` with three null handles, which reads like a
+                // contradiction and is the whole thing working.
+                //
+                // Without it, `CreateProcess` gives the child *this* process's standard
+                // handles, and it keeps them even though the pseudo-console attribute
+                // attaches it to a different console. The child then draws its screen
+                // wherever our stdout happens to point - measured: a `cmd.exe /c echo hello`
+                // under a pseudo-console printed "hello" on the test runner's console and the
+                // pseudo-console received only the console's own initialization bytes. In
+                // SLDWORKS.exe, which has no standard handles at all, the same child writes
+                // to nothing and the terminal stays empty for ever, and an interactive CLI
+                // reading a standard input that is not its console exits at once.
+                //
+                // Saying "use these handles" and giving none stops the inheritance, and the
+                // console driver then hands the child the pseudo-console's own handles, which
+                // is what was wanted. `INVALID_HANDLE_VALUE` behaves identically; null is the
+                // spelling that says "there is no handle here".
+                startup.StartupInfo.dwFlags = StartfUseStdHandles;
+                startup.StartupInfo.hStdInput = IntPtr.Zero;
+                startup.StartupInfo.hStdOutput = IntPtr.Zero;
+                startup.StartupInfo.hStdError = IntPtr.Zero;
+            }
+            else
+            {
+                CreatePipePair(ref security, out outRead, out outWrite);
+                CreatePipePair(ref security, out errRead, out errWrite);
+
+                if (info.RedirectStandardInput)
+                {
+                    CreateInputPipePair(ref security, out inRead, out inWrite);
+                }
+                else
+                {
+                    nul = CreateFile(
+                        "NUL", GenericRead, FileShareReadWrite, ref security, OpenExisting, 0, IntPtr.Zero);
+                    if (nul == InvalidHandleValue)
+                    {
+                        nul = IntPtr.Zero;
+                        throw new Win32Exception(Marshal.GetLastWin32Error(), "opening NUL for the child's stdin failed");
+                    }
+                }
+
+                IntPtr childInput = info.RedirectStandardInput ? inRead : nul;
+                attributeList = BuildHandleListAttribute(
+                    new[] { childInput, outWrite, errWrite }, out handleArray);
+
+                startup.StartupInfo.dwFlags = StartfUseStdHandles;
+                startup.StartupInfo.hStdInput = childInput;
+                startup.StartupInfo.hStdOutput = outWrite;
+                startup.StartupInfo.hStdError = errWrite;
+            }
+
             startup.lpAttributeList = attributeList;
 
             string commandLine = BuildCommandLine(info.Executable, info.Arguments);
@@ -213,12 +306,21 @@ public sealed class ChildProcess : IDisposable
             // whose id is its pid, which is what GenerateConsoleCtrlEvent is given, so the
             // signal reaches the child and its descendants and nothing else on that console -
             // this process included.
-            bool ownConsole = !HasConsole();
+            //
+            // A pseudo-console child takes neither flag: it already has a console (the
+            // pseudo-console, which has no window), and a new process group would start it
+            // with Ctrl+C disabled - a terminal in which Ctrl+C does nothing is broken, and
+            // that child is stopped by its exit command and its job, never by a signal.
+            bool ownConsole = !pty && !HasConsole();
             uint creationFlags = CreateSuspended | CreateUnicodeEnvironment
-                | ExtendedStartupInfoPresent | CreateNewProcessGroup;
-            if (ownConsole)
+                | ExtendedStartupInfoPresent;
+            if (!pty)
             {
-                creationFlags |= CreateNoWindow;
+                creationFlags |= CreateNewProcessGroup;
+                if (ownConsole)
+                {
+                    creationFlags |= CreateNoWindow;
+                }
             }
 
             var created = default(PROCESS_INFORMATION);
@@ -227,7 +329,7 @@ public sealed class ChildProcess : IDisposable
                 new StringBuilder(commandLine),
                 IntPtr.Zero,
                 IntPtr.Zero,
-                bInheritHandles: true,
+                bInheritHandles: !pty,
                 dwCreationFlags: creationFlags,
                 lpEnvironment: environmentBlock,
                 lpCurrentDirectory: string.IsNullOrEmpty(info.WorkingDirectory) ? null : info.WorkingDirectory,
@@ -236,27 +338,55 @@ public sealed class ChildProcess : IDisposable
 
             if (!ok)
             {
+                int error = Marshal.GetLastWin32Error();
                 throw new Win32Exception(
-                    Marshal.GetLastWin32Error(), $"CreateProcess failed for '{info.Executable}'");
+                    error,
+                    $"CreateProcess failed for '{info.Executable}': "
+                    + new Win32Exception(error).Message);
             }
 
-            // The child owns the write ends now; keeping them open in the parent would mean the
-            // reader below never sees end-of-file when the child exits.
-            CloseHandle(outWrite);
-            outWrite = IntPtr.Zero;
-            CloseHandle(errWrite);
-            errWrite = IntPtr.Zero;
-            CloseHandle(nul);
-            nul = IntPtr.Zero;
+            StreamReader standardOutput = StreamReader.Null;
+            StreamReader standardError = StreamReader.Null;
+            StreamWriter? standardInput = null;
+            if (!pty)
+            {
+                // The child owns the write ends now; keeping them open in the parent would mean
+                // the reader below never sees end-of-file when the child exits.
+                CloseHandle(outWrite);
+                outWrite = IntPtr.Zero;
+                CloseHandle(errWrite);
+                errWrite = IntPtr.Zero;
+                if (nul != IntPtr.Zero)
+                {
+                    CloseHandle(nul);
+                    nul = IntPtr.Zero;
+                }
 
-            var standardOutput = new StreamReader(
-                new FileStream(new SafeFileHandle(outRead, ownsHandle: true), FileAccess.Read, 1, false),
-                new UTF8Encoding(false));
-            var standardError = new StreamReader(
-                new FileStream(new SafeFileHandle(errRead, ownsHandle: true), FileAccess.Read, 1, false),
-                new UTF8Encoding(false));
-            outRead = IntPtr.Zero;
-            errRead = IntPtr.Zero;
+                if (inRead != IntPtr.Zero)
+                {
+                    // The child's end, for the same reason as the write ends above: held open
+                    // here, the child would never see end of file when we close ours.
+                    CloseHandle(inRead);
+                    inRead = IntPtr.Zero;
+
+                    standardInput = new StreamWriter(
+                        new FileStream(new SafeFileHandle(inWrite, ownsHandle: true), FileAccess.Write, 1, false),
+                        new UTF8Encoding(false))
+                    {
+                        AutoFlush = true,
+                    };
+                    inWrite = IntPtr.Zero;
+                }
+
+                standardOutput = new StreamReader(
+                    new FileStream(new SafeFileHandle(outRead, ownsHandle: true), FileAccess.Read, 1, false),
+                    new UTF8Encoding(false));
+                standardError = new StreamReader(
+                    new FileStream(new SafeFileHandle(errRead, ownsHandle: true), FileAccess.Read, 1, false),
+                    new UTF8Encoding(false));
+                outRead = IntPtr.Zero;
+                errRead = IntPtr.Zero;
+            }
 
             var child = new ChildProcess(
                 created.hProcess,
@@ -264,7 +394,9 @@ public sealed class ChildProcess : IDisposable
                 created.dwProcessId,
                 standardOutput,
                 standardError,
-                ownConsole);
+                standardInput,
+                ownConsole,
+                pty);
             try
             {
                 // The host's job first, the child's own job second: the second assignment is
@@ -289,6 +421,8 @@ public sealed class ChildProcess : IDisposable
             CloseIfSet(outWrite);
             CloseIfSet(errRead);
             CloseIfSet(errWrite);
+            CloseIfSet(inRead);
+            CloseIfSet(inWrite);
             CloseIfSet(nul);
             throw;
         }
@@ -366,6 +500,15 @@ public sealed class ChildProcess : IDisposable
             return false;
         }
 
+        if (_pseudoConsole)
+        {
+            // The child's console is the pseudo-console, not ours, and attaching to it would
+            // put this process on a console belonging to a conhost we do not own. A terminal
+            // child is asked to stop by writing its exit command into that console and ended
+            // by its job (Terminal/TerminalSession.cs).
+            return false;
+        }
+
         if (!_ownConsole)
         {
             // The child is on our console already.
@@ -433,6 +576,15 @@ public sealed class ChildProcess : IDisposable
         catch (Win32Exception)
         {
             // Cleanup must not throw out of a `using` that is already unwinding.
+        }
+
+        try
+        {
+            StandardInput?.Dispose();
+        }
+        catch (IOException)
+        {
+            // The child has gone and taken the read end of the pipe with it.
         }
 
         StandardOutput.Dispose();
@@ -540,6 +692,29 @@ public sealed class ChildProcess : IDisposable
         }
     }
 
+    /// <summary>
+    /// A pipe for the child's standard input: the mirror of <see cref="CreatePipePair"/>.
+    ///
+    /// The ends swap roles, and the swap is not cosmetic. For stdout and stderr the child owns
+    /// the write end, so the read end has its inherit flag cleared; for stdin the child owns the
+    /// *read* end, so it is the write end that must not be inheritable. Handing the handle-list
+    /// attribute a non-inheritable handle fails `CreateProcess` with ERROR_INVALID_PARAMETER,
+    /// which says nothing about which handle or why.
+    /// </summary>
+    private static void CreateInputPipePair(
+        ref SECURITY_ATTRIBUTES security, out IntPtr read, out IntPtr write)
+    {
+        if (!CreatePipe(out read, out write, ref security, 0))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "CreatePipe failed");
+        }
+
+        if (!SetHandleInformation(write, HandleFlagInherit, 0))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "SetHandleInformation failed");
+        }
+    }
+
     private static IntPtr BuildHandleListAttribute(IntPtr[] handles, out IntPtr handleArray)
     {
         IntPtr size = IntPtr.Zero;
@@ -570,6 +745,42 @@ public sealed class ChildProcess : IDisposable
             Marshal.FreeHGlobal(handleArray);
             handleArray = IntPtr.Zero;
             throw new Win32Exception(error, "UpdateProcThreadAttribute(handle list) failed");
+        }
+
+        return list;
+    }
+
+    /// <summary>
+    /// An attribute list carrying `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`.
+    ///
+    /// Unlike the handle list, the value *is* the `HPCON` rather than a pointer to a buffer of
+    /// them, so there is nothing to allocate and nothing to free but the list itself.
+    /// </summary>
+    private static IntPtr BuildPseudoConsoleAttribute(IntPtr console)
+    {
+        IntPtr size = IntPtr.Zero;
+        InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+        IntPtr list = Marshal.AllocHGlobal(size);
+        if (!InitializeProcThreadAttributeList(list, 1, 0, ref size))
+        {
+            int error = Marshal.GetLastWin32Error();
+            Marshal.FreeHGlobal(list);
+            throw new Win32Exception(error, "InitializeProcThreadAttributeList failed");
+        }
+
+        if (!UpdateProcThreadAttribute(
+                list,
+                0,
+                ProcThreadAttributePseudoConsole,
+                console,
+                (IntPtr)IntPtr.Size,
+                IntPtr.Zero,
+                IntPtr.Zero))
+        {
+            int error = Marshal.GetLastWin32Error();
+            DeleteProcThreadAttributeList(list);
+            Marshal.FreeHGlobal(list);
+            throw new Win32Exception(error, "UpdateProcThreadAttribute(pseudoconsole) failed");
         }
 
         return list;

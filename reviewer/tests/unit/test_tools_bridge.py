@@ -22,7 +22,12 @@ from typing import Any
 import pytest
 from pydantic import TypeAdapter
 
-from swreview.bridge.client import BridgeError, BridgeOpenError
+from swreview.bridge.client import (
+    BridgeDocumentClosedError,
+    BridgeError,
+    BridgeOpenError,
+    BridgeUnauthorizedError,
+)
 from swreview.ir.models import EvidencePackage, InterferenceSettings
 from swreview.tools import bridge as bridge_tools
 from swreview.tools import session as session_tools
@@ -428,3 +433,96 @@ def test_request_capture_reports_a_bridge_failure(make_package: MakePackage) -> 
         result = session_tools.request_capture("cmp:0001", "iso")
 
     assert "the pipe has been ended" in result["error"]
+
+
+# --- the tool service's two refusals (T049) ----------------------------------------
+
+
+def test_an_unauthorized_refusal_is_an_error_result_and_failed_coverage(
+    make_package: MakePackage,
+) -> None:
+    """The general-chat secret does not carry `interference`; the host says so, and the
+    review records a check that did not run rather than raising out of the tool."""
+    bridge = FakeBridge(
+        raises=BridgeUnauthorizedError("the bridge returned status 'error': unauthorized")
+    )
+    context = bridged(make_package, bridge)
+    with use_context(context):
+        tool = tools_of(context)["bridge_interference"]
+        result = tool.call(
+            {
+                "component_ids": ["cmp:0001"],
+                "configuration": "Default",
+                "settings": SETTINGS.model_dump(),
+            }
+        )
+
+    assert result.is_error is True
+    assert "unauthorized" in result.payload["error"]
+    assert "refused the secret" in result.payload["error"]
+    assert [item.check for item in context.session.coverage.failed] == [
+        "tool.bridge_interference"
+    ]
+
+
+def test_a_closed_document_is_an_error_result_and_failed_coverage(
+    make_package: MakePackage,
+) -> None:
+    bridge = FakeBridge(
+        raises=BridgeDocumentClosedError(
+            "the bridge returned status 'error': document no longer open"
+        )
+    )
+    context = bridged(make_package, bridge)
+    with use_context(context):
+        tool = tools_of(context)["bridge_capture"]
+        result = tool.call({"persist_ref": "YWJj", "view": "iso"})
+
+    assert result.is_error is True
+    assert "no longer open" in result.payload["error"]
+    assert "extracted package" in result.payload["error"]
+    assert [item.check for item in context.session.coverage.failed] == ["tool.bridge_capture"]
+
+
+def test_a_closed_document_still_records_a_gap_the_host_attached(
+    make_package: MakePackage,
+) -> None:
+    gap = {
+        "kind": "not_extracted",
+        "entity_kind": "capture",
+        "entity_id": None,
+        "reason": "select the entity to capture (iso view)",
+        "error": "document no longer open",
+    }
+    bridge = FakeBridge(
+        raises=BridgeDocumentClosedError(
+            "document no longer open", {"capture": None, "path": None, "gap": gap}
+        )
+    )
+    context = bridged(make_package, bridge)
+    with use_context(context):
+        result = bridge_tools.bridge_capture("YWJj", "iso")
+
+    assert "recorded as a gap" in result["error"]
+    assert context.ir.gaps[-1].entity_kind == "capture"
+
+
+def test_every_live_call_after_the_document_closes_keeps_the_same_sentence(
+    make_package: MakePackage,
+) -> None:
+    """No breaker message in between: the reason the review went offline stays readable."""
+    bridge = FakeBridge(raises=BridgeDocumentClosedError("document no longer open"))
+    context = bridged(make_package, bridge)
+    with use_context(context):
+        tools = tools_of(context)
+        errors = [
+            tools["bridge_capture"].call({"persist_ref": "YWJj", "view": "iso"}),
+            tools["bridge_measure"].call({"persist_ref_a": "YWJj", "persist_ref_b": "ZGVm"}),
+        ]
+
+    assert all(result.is_error for result in errors)
+    assert all("no longer open" in result.payload["error"] for result in errors)
+    assert [item.check for item in context.session.coverage.failed] == [
+        "tool.bridge_capture",
+        "tool.bridge_measure",
+    ]

@@ -1,0 +1,409 @@
+{
+  "data": [
+    {
+      "name": "swreview",
+      "tools": {
+        "bridge_capture": {
+          "name": "bridge_capture",
+          "description": "bridge_capture.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "bridge_captureArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "bridge_captureOutput"
+          }
+        },
+        "check_tool_envelope": {
+          "name": "check_tool_envelope",
+          "description": "check_tool_envelope.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "check_tool_envelopeArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "check_tool_envelopeOutput"
+          }
+        },
+        "measure_face_gap": {
+          "name": "measure_face_gap",
+          "description": "measure_face_gap.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "measure_face_gapArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "measure_face_gapOutput"
+          }
+        },
+        "request_capture": {
+          "name": "request_capture",
+          "description": "request_capture.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "request_captureArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "request_captureOutput"
+          }
+        },
+        "list_holes": {
+          "name": "list_holes",
+          "description": "list_holes.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "list_holesArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "list_holesOutput"
+          }
+        },
+        "list_interferences": {
+          "name": "list_interferences",
+          "description": "list_interferences.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "list_interferencesArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "list_interferencesOutput"
+          }
+        },
+        "get_package_summary": {
+          "name": "get_package_summary",
+          "description": "get_package_summary.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "get_package_summaryArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "get_package_summaryOutput"
+          }
+        },
+        "list_fasteners": {
+          "name": "list_fasteners",
+          "description": "list_fasteners.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "list_fastenersArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "list_fastenersOutput"
+          }
+        },
+        "get_component": {
+          "name": "get_component",
+          "description": "get_component.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "get_componentArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "get_componentOutput"
+          }
+        },
+        "bridge_measure": {
+          "name": "bridge_measure",
+          "description": "bridge_measure.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "bridge_measureArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "bridge_measureOutput"
+          }
+        },
+        "bounding_box": {
+          "name": "bounding_box",
+          "description": "bounding_box.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "bounding_boxArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "bounding_boxOutput"
+          }
+        },
+        "get_drawing_sheet": {
+          "name": "get_drawing_sheet",
+          "description": "get_drawing_sheet.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "get_drawing_sheetArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "get_drawing_sheetOutput"
+          }
+        },
+        "find_dimensions": {
+          "name": "find_dimensions",
+          "description": "find_dimensions.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "find_dimensionsArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "find_dimensionsOutput"
+          }
+        },
+        "list_gaps": {
+          "name": "list_gaps",
+          "description": "list_gaps.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "list_gapsArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "list_gapsOutput"
+          }
+        },
+        "get_exceptions": {
+          "name": "get_exceptions",
+          "description": "get_exceptions.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "get_exceptionsArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "get_exceptionsOutput"
+          }
+        },
+        "find_components": {
+          "name": "find_components",
+          "description": "find_components.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "find_componentsArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "find_componentsOutput"
+          }
+        },
+        "list_components": {
+          "name": "list_components",
+          "description": "list_components.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "list_componentsArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "list_componentsOutput"
+          }
+        },
+        "measure_axis_distance": {
+          "name": "measure_axis_distance",
+          "description": "measure_axis_distance.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "measure_axis_distanceArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "measure_axis_distanceOutput"
+          }
+        }
+      },
+      "resources": [],
+      "resourceTemplates": [],
+      "authStatus": "unsupported"
+    }
+  ],
+  "nextCursor": null
+}

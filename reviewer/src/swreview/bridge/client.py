@@ -13,7 +13,16 @@ module adds around the wire format is the three guarantees the tool layer depend
 - **one failure type.** A non-`ok` status, an unreadable line, a response for another
   request, a dead pipe and a timeout are all `BridgeError`, which carries the host's
   `result` when it sent one (a failed `capture` carries a `Gap`). Callers have one thing
-  to catch, and the tool layer turns it into an error result and `failed` coverage.
+  to catch, and the tool layer turns it into an error result and `failed` coverage. Two
+  refusals the in-process host makes are named subclasses so the tool layer can say which
+  one happened - `BridgeUnauthorizedError` and `BridgeDocumentClosedError` - but they are
+  still `BridgeError`, so a caller that only catches the base type cannot crash on them.
+- **a per-launch secret.** The in-process tool service of feature 002 requires
+  `"secret"` on every request line and answers `unauthorized` without it
+  (`specs/002-task-pane-assistant/contracts/README.md`). The client sends the secret it
+  was built with and omits the field entirely when it has none, so the same client still
+  talks to the console host of feature 001. The secret is never written into an error
+  message or a log line.
 - **a circuit breaker.** `status: "circuit_open"` from the host, or `CIRCUIT_LIMIT`
   consecutive failures, stops the client calling: every further call raises
   `BridgeOpenError` instead. A SOLIDWORKS session that has begun failing COM calls does
@@ -37,10 +46,14 @@ __all__ = [
     "COMMANDS",
     "DEFAULT_PIPE_NAME",
     "DEFAULT_TIMEOUT_S",
+    "DOCUMENT_CLOSED_MARKER",
     "PROTOCOL_VERSION",
+    "UNAUTHORIZED_MARKER",
     "BridgeClient",
+    "BridgeDocumentClosedError",
     "BridgeError",
     "BridgeOpenError",
+    "BridgeUnauthorizedError",
     "NamedPipeTransport",
     "Transport",
     "pipe_path",
@@ -63,6 +76,18 @@ session tools accept, so a view outside it is reported, never silently substitut
 CIRCUIT_LIMIT = 3
 """Consecutive failures after which the client stops calling (research R4)."""
 
+UNAUTHORIZED_MARKER = "unauthorized"
+"""How the host refuses a wrong, missing or out-of-scope secret (contracts/README.md).
+
+Matched at the start of the host's `error` text rather than against the whole of it, so
+the host may name the command it refused without becoming unrecognisable here."""
+
+DOCUMENT_CLOSED_MARKER = "no longer open"
+"""How the host says the document this review was dumped from has been closed.
+
+Matched as a substring of the host's `error` text, case-insensitively, so both the
+contract's "document no longer open" and a fuller sentence around it are recognised."""
+
 _ENCODING = "utf-8"
 
 
@@ -81,6 +106,26 @@ class BridgeError(RuntimeError):
 
 class BridgeOpenError(BridgeError):
     """The circuit is open: the client has stopped calling and this one did not go out."""
+
+
+class BridgeUnauthorizedError(BridgeError):
+    """The host refused the secret, or refused this command with this secret.
+
+    A definite answer, not a SOLIDWORKS failure: nothing ran. It opens the circuit at once
+    because a secret the host refused never becomes accepted, and every attempt is logged
+    on the host side.
+    """
+
+
+class BridgeDocumentClosedError(BridgeError):
+    """The document this package was dumped from is no longer open in SOLIDWORKS.
+
+    Also a definite answer from a healthy host, so it does **not** count toward the
+    circuit breaker: the review carries on against the extracted package, and every
+    further live call keeps getting this sentence rather than a breaker message that hides
+    why the bridge went quiet (spec.md, "the engineer closes the document while a review
+    runs").
+    """
 
 
 def pipe_path(pipe_name: str) -> str:
@@ -154,10 +199,17 @@ class BridgeClient:
     def __init__(
         self,
         pipe_name: str = DEFAULT_PIPE_NAME,
+        secret: str | None = None,
         timeout_s: float = DEFAULT_TIMEOUT_S,
         transport: Transport | None = None,
     ) -> None:
+        """`pipe_name` and `secret` are the session's whole `bridge` config, in that order.
+
+        `secret` is `None` for the console host of feature 001, which asks for none; the
+        field is then absent from the request line rather than sent empty.
+        """
         self.pipe_name = pipe_name
+        self.secret = secret or None
         self.timeout_s = timeout_s
         self.transport: Transport = (
             transport
@@ -200,14 +252,25 @@ class BridgeClient:
 
         request_id = str(self._next_id)
         self._next_id += 1
-        line = json.dumps(
-            {"id": request_id, "command": command, "params": dict(params or {})},
-            separators=(",", ":"),
-        )
+        request: dict[str, Any] = {
+            "id": request_id,
+            "command": command,
+            "params": dict(params or {}),
+        }
+        if self.secret is not None:
+            request["secret"] = self.secret
+        line = json.dumps(request, separators=(",", ":"))
         try:
             response = self._exchange(request_id, line)
         except BridgeError as exc:
-            self._fail(str(exc), opened=isinstance(exc, BridgeOpenError))
+            # The message is `str(exc)`, which is built from the host's own error text and
+            # never from the request line: the secret stays out of `last_error` and out of
+            # everything that is written from it.
+            self._fail(
+                str(exc),
+                opened=isinstance(exc, BridgeOpenError | BridgeUnauthorizedError),
+                counted=not isinstance(exc, BridgeDocumentClosedError),
+            )
             raise
         self._consecutive_failures = 0
         return response
@@ -250,20 +313,34 @@ class BridgeClient:
                 payload.get("result"),
             )
         if status != "ok":
-            raise BridgeError(
-                f"the bridge returned status {status!r}: "
-                f"{payload.get('error') or 'no error text'}",
-                payload.get("result"),
-            )
+            text = str(payload.get("error") or "")
+            message = f"the bridge returned status {status!r}: {text or 'no error text'}"
+            result = payload.get("result")
+            if text.strip().lower().startswith(UNAUTHORIZED_MARKER):
+                raise BridgeUnauthorizedError(
+                    f"{message}; the tool service refused the secret this run carries for "
+                    f"{self.pipe_name!r}, so nothing ran in SOLIDWORKS",
+                    result,
+                )
+            if DOCUMENT_CLOSED_MARKER in text.lower():
+                raise BridgeDocumentClosedError(message, result)
+            raise BridgeError(message, result)
         return payload.get("result")
 
-    def _fail(self, message: str, opened: bool = False) -> None:
-        """Count a failure. The host's own `circuit_open` opens ours at once: it will not
-        answer anything else until it is restarted, so counting to three would be three
-        pointless round trips."""
-        self._consecutive_failures = (
-            CIRCUIT_LIMIT if opened else self._consecutive_failures + 1
-        )
+    def _fail(self, message: str, opened: bool = False, counted: bool = True) -> None:
+        """Record a failure, and decide what it does to the breaker.
+
+        `opened` opens the circuit at once - the host's own `circuit_open`, which will not
+        answer anything else until it is restarted, and a refused secret, which will not
+        start being accepted; counting either to three would be pointless round trips.
+        `counted=False` leaves the count exactly where it was: a closed document is a
+        definite answer from a healthy host, not a SOLIDWORKS failure, so it neither trips
+        the breaker on its own nor clears failures that came before it.
+        """
+        if opened:
+            self._consecutive_failures = CIRCUIT_LIMIT
+        elif counted:
+            self._consecutive_failures += 1
         self._last_error = message
 
     # --- the four operations -----------------------------------------------------

@@ -12,7 +12,7 @@ using SwReview.Extractor.Measure;
 using IrCapture = SwReview.Extractor.Ir.Capture;
 using IrInterference = SwReview.Extractor.Ir.Interference;
 
-namespace SwReview.Extractor.Console.Serve;
+namespace SwReview.Extractor.Bridge;
 
 /// <summary>Turns one request into one response. The pipe knows nothing about commands.</summary>
 public interface IBridgeDispatcher
@@ -26,7 +26,7 @@ public sealed class PingResult
     [JsonPropertyName("pong")]
     public bool Pong { get; set; } = true;
 
-    /// <summary>The protocol this server speaks; see Serve/PROTOCOL.md.</summary>
+    /// <summary>The protocol this server speaks; see SwReview.Extractor.Console/Serve/PROTOCOL.md.</summary>
     [JsonPropertyName("protocol")]
     public string Protocol { get; set; } = SwBridgeDispatcher.ProtocolVersion;
 
@@ -137,7 +137,12 @@ public sealed class BridgeServices
 /// <summary>
 /// T072. The bridge's command handling.
 ///
-/// Three things happen to every request, whatever the command:
+/// Four things happen to every request, whatever the command:
+///   * the <see cref="ISecretPolicy"/> is asked whether the request's <c>secret</c>
+///     authorizes its command, before anything else runs (T045). The console host passes
+///     <see cref="NoSecretPolicy"/> and this is a no-op; the add-in's in-process host
+///     passes a <see cref="ScopedSecretPolicy"/>, which is where <c>interference</c> is
+///     actually withheld from general chat.
 ///   * <see cref="ReadOnlyGuard"/> is asked about the command name, so a request that names
 ///     a mutating API - <c>Save3</c>, <c>FeatureCut4</c> - is refused before anything runs.
 ///     Everything the handlers then call goes through <c>SwGate</c>, which asks again.
@@ -148,15 +153,31 @@ public sealed class BridgeServices
 /// </summary>
 public sealed class SwBridgeDispatcher : IBridgeDispatcher
 {
-    /// <summary>Bumped when a request or response shape changes; see Serve/PROTOCOL.md.</summary>
+    /// <summary>Bumped when a request or response shape changes; see SwReview.Extractor.Console/Serve/PROTOCOL.md.</summary>
     public const string ProtocolVersion = "1.0";
 
+    /// <summary>
+    /// The whole of what a refused request is told (T045). One word, the same for a wrong
+    /// secret, a missing one, and a valid one asking for a command outside its scope.
+    /// </summary>
+    public const string UnauthorizedError = "unauthorized";
+
     private readonly BridgeServices _services;
+    private readonly ISecretPolicy _secrets;
     private readonly CaptureService _captures;
 
-    public SwBridgeDispatcher(BridgeServices services, Ids.IdAllocator? captureIds = null)
+    /// <param name="services">Everything SOLIDWORKS, as interfaces.</param>
+    /// <param name="secrets">
+    /// How the <c>secret</c> on a request line is judged. Required rather than defaulted,
+    /// so neither host can end up permissive by omission: the console host passes
+    /// <see cref="NoSecretPolicy.Instance"/> and says so at its call site.
+    /// </param>
+    /// <param name="captureIds">Test hook: the allocator capture ids come from.</param>
+    public SwBridgeDispatcher(
+        BridgeServices services, ISecretPolicy secrets, Ids.IdAllocator? captureIds = null)
     {
         _services = services ?? throw new ArgumentNullException(nameof(services));
+        _secrets = secrets ?? throw new ArgumentNullException(nameof(secrets));
         _captures = new CaptureService(services.CaptureView, captureIds);
     }
 
@@ -172,10 +193,20 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
         try
         {
-            // The guard sees the command name itself, so "command": "Save3" cannot reach a
-            // handler even if one were ever added for it.
-            ReadOnlyGuard.Assert(request.Command);
-            response = Run(request);
+            if (!_secrets.IsAuthorized(request.Secret, request.Command))
+            {
+                // Authenticate and authorize before the command is even looked up, so a
+                // refused caller cannot learn what this bridge answers, and nothing it
+                // named ever touches SOLIDWORKS. The secret itself is not echoed.
+                response = BridgeResponse.Failed(request.Id, UnauthorizedError);
+            }
+            else
+            {
+                // The guard sees the command name itself, so "command": "Save3" cannot reach
+                // a handler even if one were ever added for it.
+                ReadOnlyGuard.Assert(request.Command);
+                response = Run(request);
+            }
         }
         catch (CircuitOpenError error)
         {

@@ -24,7 +24,7 @@ the settings file.
 | POST | `/sessions/{chat_id}/messages` | `{text}` | 202; appends a user turn and runs, including on a session whose previous turn already ended (`ended → running`, see data-model section 3). 409 if a turn is running. |
 | POST | `/sessions/{chat_id}/evidence/{request_id}` | `{answer}` | 202; marks answered, resumes. 404 unknown request; 409 already answered. |
 | POST | `/sessions/{chat_id}/findings/{finding_id}/disposition` | `{decision, note, by}` | 200 with the `Finding`; 409 on an illegal transition. Re-renders `report.md`. |
-| POST | `/sessions/{chat_id}/stop` | | 202; ends the turn at the next tool boundary, emits `turn.ended {reason: "stopped"}`, then writes `session.ended`. |
+| POST | `/sessions/{chat_id}/stop` | | 202; ends the turn at the next tool boundary, emits `turn.ended {reason: "stopped"}`, then writes `session.ended`. Idempotent: on a session that already has an `ended_at` it is 202 with the current state and no second terminal event pair. |
 | GET | `/sessions/{chat_id}/report` | | `text/markdown` of `report.md` |
 | OPTIONS | any path | | 204 preflight, **answered without a token** (see Origin and CORS) |
 

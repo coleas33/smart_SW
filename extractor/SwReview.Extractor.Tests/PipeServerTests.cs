@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Console.Serve;
 using Xunit;
 
