@@ -8,7 +8,9 @@ distinguishable from a corrupt file.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -99,14 +101,19 @@ def test_refuses_a_junction_that_points_into_answer_keys(tmp_path: Path) -> None
     real = tmp_path / "benchmarks" / "answer_keys" / "cover-blind-tap"
     write_package(real)
     link = tmp_path / "sneaky-package"
-    completed = subprocess.run(
-        ["cmd", "/c", "mklink", "/J", str(link), str(real)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        pytest.skip(f"cannot create a junction here: {completed.stderr.strip()}")
+    if sys.platform == "win32":
+        # A directory junction needs no privilege on Windows, unlike a symlink.
+        completed = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(real)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            pytest.skip(f"cannot create a junction here: {completed.stderr.strip()}")
+    else:
+        # The same rule must hold for a POSIX symlink: the loader resolves the path first.
+        os.symlink(real, link, target_is_directory=True)
 
     with pytest.raises(AnswerKeyAccessError):
         load_package(link)

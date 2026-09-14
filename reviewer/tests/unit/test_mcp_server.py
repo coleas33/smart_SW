@@ -24,6 +24,7 @@ Four rules get the most attention, because each is a promise made somewhere else
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -636,6 +637,9 @@ def test_swreview_mcp_never_takes_the_secret_itself(monkeypatch: pytest.MonkeyPa
 
     from swreview import cli
 
-    output = CliRunner().invoke(cli.app, ["mcp", "--help"]).output
+    # Plain, wide, colourless help: on CI typer's rich renderer wraps the option column at
+    # 80 cells and interleaves ANSI codes, which split the very token this test looks for.
+    runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "200"})
+    output = re.sub(r"\[[0-9;]*m", "", runner.invoke(cli.app, ["mcp", "--help"]).output)
     assert "--bridge-secret-env" in output
     assert "--bridge-secret " not in output

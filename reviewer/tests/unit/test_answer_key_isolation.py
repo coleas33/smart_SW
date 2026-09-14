@@ -11,7 +11,9 @@ through the set it loads and, defensively, on its own.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -74,14 +76,19 @@ def test_load_set_refuses_a_junction_that_points_into_answer_keys(tmp_path: Path
     real.mkdir(parents=True)
     link = tmp_path / "benchmarks" / "packages" / "sneaky-package"
     link.parent.mkdir(parents=True)
-    completed = subprocess.run(
-        ["cmd", "/c", "mklink", "/J", str(link), str(real)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        pytest.skip(f"cannot create a junction here: {completed.stderr.strip()}")
+    if sys.platform == "win32":
+        # A directory junction needs no privilege on Windows, unlike a symlink.
+        completed = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(link), str(real)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if completed.returncode != 0:
+            pytest.skip(f"cannot create a junction here: {completed.stderr.strip()}")
+    else:
+        # The same rule must hold for a POSIX symlink: the loader resolves the path first.
+        os.symlink(real, link, target_is_directory=True)
     set_path = write_set(
         tmp_path,
         "sneaky",
