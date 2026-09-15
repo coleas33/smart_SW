@@ -1,0 +1,55 @@
+# DRAFT of reviewer/src/swreview/checks/rms_types.yaml. T001 moves this file there (git mv);
+# after that the shipped file is the single normative copy and this path no longer exists.
+#
+# Provenance: type-name sets from LifeDay/Solidworks-Resilient-Modeling-Skill (commit
+# df49e6d, rms_check.py), reused with the author's permission (NOTICE.md). Type names are
+# GetTypeName2 strings. Calibrated by the source checker on SOLIDWORKS 2026 SP1.1; enum
+# values below re-verified on the 2024 SP5 interop on 2026-09-15; runtime behavior is
+# re-verified on the workstation with `swreview-extract probe rms` before any rule is
+# trusted on a real part (research.md R5).
+version: 1
+calibrated_version: "2026 SP1.1"
+groups: ["1-Ref", "2-Construction", "3-Core", "4-Detail", "5-Modify", "6-Quarantine"]
+folder_type: FtrFolder
+end_tag_suffix: "___EndTag___"
+# Class sets are disjoint: every type name has at most one class. A rule that needs a union
+# names the classes (rules.md "Class vocabulary").
+classes:
+  sketch: [ProfileFeature, 3DProfileFeature]
+  solid: [Extrusion, Revolution, Sweep, Loft, Boss, Thicken, BaseFlange, Boundary, ImportedFeature]
+  cut: [Cut, CutRevolve, SweepCut, LoftCut]
+  hole: [HoleWzd, SimpleHole, Hole]
+  fillet: [Fillet]
+  chamfer: [Chamfer]
+  shell: [Shell]
+  draft: [Draft]
+  pattern: [LPattern, CirPattern, MirrorPattern, MirrorSolid, CurvePattern, TablePattern, FillPattern, DerivedLPattern]
+  reference: [RefPlane, RefAxis, CoordSys, RefPoint, OriginProfileFeature]
+  construction: [SurfaceExtrude, SurfaceRevolve, SurfaceSweep, SurfaceLoft, SurfaceKnit, SurfaceTrim, SurfaceExtend, SurfacePlanar, SurfaceOffset, SurfaceRuled, SurfaceRadiate, SurfaceFill, CompositeCurve, "Reference Curve", ProjectionCurve, HelixCurve, SplitLine, SurfaceCut]
+# Material of unknown kind. The source keeps ICE in both its cut and hole sets because its
+# own recipe builds holes as cuts; on a real part an ICE boss would then read as a hole. Here
+# ICE counts as material for the group-content rule and is unresolved for holes_last.
+ambiguous: [ICE]
+tolerated_loose: [OriginProfileFeature, MateGroup, HistoryFolder, SensorFolder, DetailCabinet, CommentFolder, FavoriteFolder, SolidBodyFolder, SurfaceBodyFolder, DocsFolder, MaterialFolder, EnvFolder, LightFolder, EqnFolder, RefPlane, OriginPoint, CoordSys, CommentsFolder, SelectionSetFolder, InkMarkupFolder]
+default_names_excluded: ["Front Plane", "Top Plane", "Right Plane", "Origin"]
+# swConstrainedStatus_e (2024 SP5 and 2026 SP1.1 agree): 1 swUnknownConstraint,
+# 2 swUnderConstrained, 3 swFullyConstrained, 4 swOverConstrained, 5 swNoSolution,
+# 6 swInvalidSolution, 7 swAutosolveOff. Used for ISketch.GetConstrainedStatus and
+# IComponent2.GetConstrainedStatus. Autosolve off means the sketch was never solved, so it is
+# unknown, not an error. A raw value absent from this table maps to "unknown"; a null raw
+# value is "unavailable".
+constrained_status:
+  1: unknown
+  2: under_defined
+  3: fully_defined
+  4: over_defined
+  5: solver_error
+  6: solver_error
+  7: unknown
+assembly:
+  # swSelectType_e names as MateDumper writes them (Enum.GetName); the dumper's fallback for
+  # a value without a name is "unknown(<n>)". Kinds in neither list are unresolved for the
+  # mate. swSelORIGINS does not exist on 2024; an Origin mate's kind is added after the probe.
+  reference_entity_kinds: [swSelDATUMPLANES, swSelDATUMAXES, swSelDATUMPOINTS, swSelCOORDSYS]
+  geometry_entity_kinds: [swSelFACES, swSelEDGES, swSelVERTICES]
+  mate_chain_depth_limit: 3
