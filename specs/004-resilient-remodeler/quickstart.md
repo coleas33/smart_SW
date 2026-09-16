@@ -24,7 +24,7 @@ rather than trusted.
 Nothing in Scenarios 1 to 3 writes a `.SLDPRT`. Scenario 5 is the first moment any write code
 touches a document, and it touches only the copy the run made.
 
-## Scenario 1 (Phase 1, the dry-run planner): plan a part with no SOLIDWORKS
+## Scenario 1 (US2, Phase 1): the dry-run plan, with no SOLIDWORKS
 
 The planner is built and run before any C# write code exists, so the answer to "how much of a
 real part can stage 1 actually reorganize" arrives before the expensive half of the feature is
@@ -32,7 +32,7 @@ built (plan Phase 0).
 
 ```powershell
 cd reviewer
-uv run swreview remodel plan --package tests/golden/fixtures/rms-part --document <doc id> --json
+uv run swreview remodel plan tests/golden/fixtures/rms-part/package.json --json
 ```
 
 Expected: a `RemodelPlan` with `plan_schema: "1.0"`, no LLM section filled (`descriptions`,
@@ -69,7 +69,7 @@ non-contiguous, and the rebuild-list size. A part where 3 of 200 features move i
 needs rebuilding, and the report says that in its first line rather than calling the run a
 success.
 
-## Scenario 2 (Phase 5, the executor over the fake bridge): a scripted failure at change N
+## Scenario 2 (US1, US4, Phase 5): the executor over the fake bridge, with a scripted failure at change N
 
 ```powershell
 uv run pytest tests/unit/test_remodel_apply.py tests/unit/test_remodel_apply_log.py -q
@@ -96,12 +96,13 @@ exercised with no SOLIDWORKS and no COM. Each row below is a case the suite must
 Also asserted here, with no seat: the catastrophic fallback (delete the copy, re-copy the
 source, replay `changes.jsonl` up to the last `applied` line) reproduces the same tree, because
 every change is persist-ref addressed; one `derive_undo` test per change kind (`rename`,
-`reorder`, `folder.create`, `folder.dissolve`, `folder.rename`, `describe`, `equation.add`); a
+`reorder`, `folder.create`, `folder.rename`, `describe`, `equation.add`, `equation.edit`, `save`,
+plus `folder.dissolve` asserted as **not a v1 operation**); a
 `describe` whose recorded `before` is `null` is refused up front, because null means the
 previous text was unreadable and `""` would be a fabricated restore; and the units regression,
-that a 120 mm dimension never produces `"w" = 0.12`.
+that a 120 mm value never produces `"w" = 0.12`.
 
-## Scenario 3 (Phase 6, the geometry gate): the case table
+## Scenario 3 (US1, Phase 6): the geometry gate case table
 
 ```powershell
 uv run pytest tests/unit/test_remodel_geometry.py -q
@@ -131,9 +132,9 @@ readings rather than run against SOLIDWORKS.
 | tier-2 error `swBodyOperationNoIntersect` (VERIFIED, 1067) | any | read with the residual volume, never alone | per volume | stated with the volume that decided it |
 | tier-2 error `swBodyOperationNonApiBody` (VERIFIED, 1) | any | did not run | `unresolved` | the input was not an API body |
 | mass-properties status not OK (`swMassPropertiesStatus_e`, VERIFIED) | not readable | not run | `unresolved` | measurement failed; this is not "geometry changed" |
-| prototype solid body count 2 | bodies cannot be paired | not run | `unresolved` | the scope gate should have refused this part earlier |
+| baseline reading solid body count 2 | bodies cannot be paired | not run | `unresolved` | the scope gate should have refused this part earlier |
 | principal moments permuted | equal after sorting ascending | empty | `pass` | sorting is part of the comparison, not a fix-up |
-| zero-volume prototype | guarded | not run | `unresolved` | no divide by zero |
+| zero-volume baseline reading | guarded | not run | `unresolved` | no divide by zero |
 | mass differs, volume identical | volume equal | empty | `pass` with `material_changed` | material, not geometry (`IPartDoc.GetMaterialPropertyName2`, VERIFIED present) |
 | tier 1 passes, tier 2 fails | pass | fail | `fail` | the mirrored-part diagnosis, spelled out |
 | tier 1 fails, tier 2 passes | fail | pass | `unresolved` | the tolerances are wrong; never silently resolved either way |
@@ -164,7 +165,7 @@ constants cite by name. A probe whose answer is not recorded counts as not run.
 | Probe | Question | Observation to record | If the answer is bad |
 |---|---|---|---|
 | PROBE-1 | Does `ISldWorks.CommandInProgress = true` suppress the "Cannot reorder" message box? | whether an illegal `ReorderFeature` returned `false` silently or raised a dialog, and how long the call took | stage 1 cannot run unattended; stop and re-plan before any executor code is written |
-| PROBE-2 | Equation units: does `"w" = 120` in a millimetre part produce 120 mm, and what unit does `IEquationMgr.get_Value(i)` return? | the text written, the resulting `IDimension.SystemValue` in metres, and the value the manager reported | the units sequence in the plan is inverted; globals do not ship until it is right |
+| PROBE-2 | Equation units: does `"w" = 120` in a millimetre part produce 120 mm, and what unit does `IEquationMgr.get_Value(i)` return? | the text written and the value the manager reported, read back through `get_Equation(i)` and `get_Value(i)` only; v1 reads no `IDimension` member, since the IR carries no dimensions and `IDimension.set_Name` is off the allowlist | the units sequence in the plan is inverted; globals do not ship until it is right |
 | PROBE-3 | Does `IModelDocExtension.ReorderFeature(f, anchor, swMoveAfter=3)` (VERIFIED signature, VERIFIED enum value 3) move a feature on 2024, and return `false` rather than corrupting the tree when asked to move past a dependency? | the return value in the legal and the illegal case, and the tree order after each | the reorganize-in-place premise fails; Phase 0's numbers decide what replaces it |
 | PROBE-4 | Do folders require contiguous members on 2024? | what `IFeatureManager.InsertFeatureTreeFolder2(swFeatureTreeFolder_Containing=2)` (both VERIFIED) did with a contiguous run, and what it did with a non-contiguous selection | the contiguity precondition is wrong in one direction or the other; re-plan `folders.py` before executor work |
 | PROBE-8 | Attained relative error on volume, surface area, centre of mass and principal moments at `swMassPropertyAccuracyLevel_Higher` (VERIFIED, 2), against a box and a cylinder of exactly known analytic volume | measured value, analytic value and relative error for each quantity on each solid | the `IDENTITY` profile's 1e-9 bounds are not attainable and must be raised to the measured floor before the gate ships |
@@ -176,11 +177,13 @@ are recorded the same way; each has a documented fallback, so a bad answer costs
 optimisation, not the feature. PROBE-18 and PROBE-19 concern the tier-2 boolean and are
 recorded for the stage-2 re-spec, not gated on here.
 
-## Scenario 5 (Phase 9, workstation): stage 1 end to end from the pane
+## Scenario 5 (US1, US3, US4, US5, Phase 9, workstation): stage 1 end to end from the pane
 
 1. Copy a real part into a scratch folder by hand and open **the copy** in SOLIDWORKS 2024.
-   This is the prototype for the run; the run makes its own second copy in the run folder.
-2. Record the prototype's size, last-write time and SHA-256 with `Get-FileHash` before anything
+   That hand copy is **the source** for the run; the run makes its own second copy in the run
+   folder and never writes to the source. It must stay open in SOLIDWORKS, because the scope
+   probe reads the signals off the open document and never opens the source itself.
+2. Record the source's size, last-write time and SHA-256 with `Get-FileHash` before anything
    else, in the notes file. This is the independent check on the run's own attestation, and it
    is the point of the scenario.
 3. Open the task pane, go to the **Model check** tab (tab 4), press Model check, and record the
@@ -188,9 +191,11 @@ recorded for the stage-2 re-spec, not gated on here.
 4. Go to the **Remodel** tab (tab 5) and press Plan. Expected: the tab reports the run folder
    `<run_root>/<yyyyMMdd-HHmmss>-<doc>-remodel`, and `plan.json` exists beside
    `source-attestation.json`, `package-before.json` and `rms-before.json`. A part that is
-   dirty, read-only, not a part, carrying external references, failing the scope gate, or
-   already carrying rebuild errors is refused here, before anything is copied, with every
-   reason named. A part on an EPDM vault path is not refused for vault reasons: it is copied
+   dirty, read-only, not a part, carrying external references, or failing the scope gate is
+   refused here **before anything is copied**, with every reason named, from the read-only scope
+   probe. A part that already carries rebuild errors is the one refusal that comes after the copy
+   exists, because reading it needs a rollback and a rebuild; confirm that in that case the run
+   folder holds no `copy/` directory, because the handler deletes the copy before it reports. A part on an EPDM vault path is not refused for vault reasons: it is copied
    out into the run folder, and the vault path and revision are recorded in `plan.json`.
 5. Read the plan summary in the pane before pressing Run: how many features move, how many are
    pinned and by which edge, which groups are non-contiguous, and the rebuild list with one
@@ -201,16 +206,24 @@ recorded for the stage-2 re-spec, not gated on here.
 7. When it finishes, read the report region: the change list, the before and after `RmsGrade`
    with the per-rule delta, and the geometry comparison with its verdict and its coverage
    statement. Fillets the planner sent to `3-Core` by default appear in the report as "reviewed
-   as structural; move to Quarantine if cosmetic"; that list is read, not skipped.
-8. **The source attestation check.** Re-run `Get-FileHash` on the prototype and compare all
+   as structural; move to Quarantine if cosmetic"; that list is read, not skipped. Then the
+   judgement section: every accepted description, global and classification with the provider and
+   the model that produced it, every rejected proposal with the rule that refused it, the sentence
+   that the added globals drive nothing yet, the Resilient Modeling Strategy credit, and the
+   closing sentence that this copy is a proposal the engineer accepts or discards and not an
+   engineering acceptance result. Confirm `geometry.json` carries two readings of the **copy**,
+   `copy_at_open` and `copy_at_end`, and that no reading names the source.
+8. **The source attestation check.** Re-run `Get-FileHash` on the source and compare all
    three values with step 2 and with `source-attestation.json`. They must be identical. Then
    open `remodel.log` and confirm that every mutating call recorded a target path equal to the
-   copy's path under the run folder, that the gated member set contains only allowlisted
-   interface-qualified keys, and that the refused set is empty. The claim "no write reached
+   copy's path under the run folder and matched that change's `target_path` in `changes.jsonl`,
+   that the `remodel.probe_scope` request recorded an **empty** gated set, that the gated member
+   set of every other request contains only allowlisted interface-qualified keys, and that the
+   refused set is empty. The claim "no write reached
    your file" is made from this log, not from intent.
 9. Press **Open copy**: the copy opens from the run folder. Confirm the title bar shows the run
-   folder's path and not the prototype's, and that the prototype's own window, if it is still
-   open, is untouched and unmodified.
+   folder's path and not the source's, and that the source's own window is untouched and
+   unmodified.
 10. Select a change in the list and confirm Show selects that feature in the copy, through the
     same `FeatureSelection` strategy the Model check tab uses.
 11. Press **Discard**. Expected: the copy is closed without saving and `copy/` is deleted, while
