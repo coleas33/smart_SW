@@ -116,6 +116,29 @@ def test_record_result_forwards_tool_result_ids_to_the_session(
     assert recorded["finding"]["tool_result_ids"] == [STEP_ID]  # type: ignore[index]
 
 
+def test_record_result_carries_an_exception_id_alongside_the_step_ids(
+    make_package: MakePackage,
+) -> None:
+    """The two optional arguments are passed by keyword, so an added parameter cannot
+    silently slide one into the other's place."""
+    context = context_for(make_package())
+    session = context.session
+    assert session is not None
+
+    recorded = record_result(
+        context,
+        tree_result(),
+        component_ids=[COMPONENT],
+        exception_id="EX-001",
+        tool_result_ids=[STEP_ID],
+    )
+
+    assert recorded["status"] == "recorded"
+    assert session.findings[0].exception_id == "EX-001"
+    assert session.findings[0].tool_result_ids == [STEP_ID]
+    assert recorded["finding"]["exception_id"] == "EX-001"  # type: ignore[index]
+
+
 def test_record_result_without_a_step_id_is_an_error_and_writes_nothing(
     make_package: MakePackage,
 ) -> None:

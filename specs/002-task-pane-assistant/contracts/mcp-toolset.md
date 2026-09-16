@@ -9,7 +9,7 @@ Exposed (read-only subset of feature 001 `contracts/agent-tools.md`):
 
 | Group | Tools |
 |-------|-------|
-| Package query | `get_package_summary`, `list_components`, `get_component`, `find_components`, `list_mates`, `list_holes`, `list_fasteners`, `list_interferences`, `get_drawing_sheet`, `find_dimensions`, `list_gaps`, `get_exceptions` |
+| Package query | `get_package_summary`, `list_components`, `get_component`, `find_components`, `list_mates`, `list_holes`, `list_fasteners`, `list_interferences`, `get_drawing_sheet`, `find_dimensions`, `list_gaps`, `get_exceptions`, `list_features`, `get_feature` |
 | Measurement | `measure_axis_distance`, `measure_face_gap`, `check_tool_envelope`, `bounding_box` |
 | Captures | `request_capture` (returns an existing capture or, with the bridge, a new one) |
 | Live bridge | `bridge_capture`, `bridge_measure` (only when a bridge pipe is configured) |

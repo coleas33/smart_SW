@@ -4,6 +4,6 @@ MCP Servers Status:
   Command: C:\Users\engineer\.local\bin\uv.exe run --project C:\SwReview\reviewer swreview mcp --run-dir C:\SwReview\runs\20260913-141500-terminal --bridge-pipe swreview-bridge-7c1d4f0a --bridge-secret-env SWREVIEW_BRIDGE_SECRET
   Working Directory: C:\SwReview\runs\20260913-141500-terminal
   Timeout: 120000ms
-  Tools: mcp_swreview_get_package_summary, mcp_swreview_list_components, mcp_swreview_get_component, mcp_swreview_find_components, mcp_swreview_list_mates, mcp_swreview_list_holes, mcp_swreview_list_fasteners, mcp_swreview_list_interferences, mcp_swreview_get_drawing_sheet, mcp_swreview_find_dimensions, mcp_swreview_list_gaps, mcp_swreview_get_exceptions, mcp_swreview_measure_axis_distance, mcp_swreview_measure_face_gap, mcp_swreview_check_tool_envelope, mcp_swreview_bounding_box, mcp_swreview_request_capture, mcp_swreview_bridge_capture, mcp_swreview_bridge_measure
+  Tools: mcp_swreview_get_package_summary, mcp_swreview_list_components, mcp_swreview_get_component, mcp_swreview_find_components, mcp_swreview_list_mates, mcp_swreview_list_holes, mcp_swreview_list_fasteners, mcp_swreview_list_interferences, mcp_swreview_get_drawing_sheet, mcp_swreview_find_dimensions, mcp_swreview_list_gaps, mcp_swreview_get_exceptions, mcp_swreview_list_features, mcp_swreview_get_feature, mcp_swreview_measure_axis_distance, mcp_swreview_measure_face_gap, mcp_swreview_check_tool_envelope, mcp_swreview_bounding_box, mcp_swreview_request_capture, mcp_swreview_bridge_capture, mcp_swreview_bridge_measure
 
 Discovery State: COMPLETED

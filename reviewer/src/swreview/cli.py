@@ -41,7 +41,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, get_args
 
 import typer
 from pydantic import ValidationError
@@ -51,7 +51,12 @@ from swreview.agent import providers
 from swreview.agent.checklist import load_checklist
 from swreview.agent.providers import AgentProvider, EffortLevel, ProviderName
 from swreview.agent.providers.fake import ScriptedToolCall, ScriptedTurn
-from swreview.agent.runner import DEFAULT_MAX_STEPS, SESSION_FILE_NAME, run_review
+from swreview.agent.runner import (
+    DEFAULT_MAX_STEPS,
+    SESSION_FILE_NAME,
+    load_exceptions,
+    run_review,
+)
 from swreview.agent.settings import (
     DEFAULT_EFFORT,
     DEFAULT_PROVIDER,
@@ -73,8 +78,8 @@ from swreview.ir.models import UnsupportedSchemaVersionError
 from swreview.ir.summary import summarize
 from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition, find_finding
 from swreview.report.markdown import render_report
-from swreview.report.session import load_session, save_session
-from swreview.tools import checks_fastener, checks_fit
+from swreview.report.session import CoverageBucket, ReviewSession, load_session, save_session
+from swreview.tools import checks_fastener, checks_fit, rms_checks
 from swreview.tools.context import ToolContext, build_context, use_context
 from swreview.tools.query import ToolResult
 
@@ -567,9 +572,20 @@ def _parse_signed_ref(option: str, text: str) -> tuple[dict[str, str], int]:
     return _parse_ref(option, ref_text), int(sign_text)
 
 
-def _context_for(package_dir: Path) -> ToolContext:
-    """A tool context over the package in `package_dir`, with a session nothing saves."""
-    return build_context(load_package(package_dir))
+def _context_for(package_dir: Path, *, exceptions: bool = False) -> ToolContext:
+    """A tool context over the package in `package_dir`, with a session nothing saves.
+
+    `exceptions` loads `exceptions.json` from beside the package and refreshes it in
+    memory, so a waiver whose evidence has moved reads `needs_review` and silences
+    nothing. Nothing is written back: grading a package must never edit it. The checks
+    that consult no exception at all leave it off rather than reading a file they would
+    then ignore.
+    """
+    loaded = load_package(package_dir)
+    store = load_exceptions(loaded) if exceptions else None
+    if store is not None:
+        store.refresh(loaded.package)
+    return build_context(loaded, exceptions=store)
 
 
 def _finding_lines(finding: dict[str, Any]) -> list[str]:
@@ -753,6 +769,122 @@ def check_interference_command(
         error = item["error"]
         lines.append(f"  {item['reason']}" + ("" if error is None else f" ({error})"))
     _emit(case, lines, json_output)
+
+
+# --- check rms -------------------------------------------------------------------
+
+
+class RmsScope(StrEnum):
+    """Which family of Resilient Modeling rules `check rms` runs (contracts/cli.md)."""
+
+    part = "part"
+    assembly = "assembly"
+    equations = "equations"
+    all = "all"
+
+
+RMS_SCOPE_NOT_BUILT = (
+    "not yet available in this build: the {scope}-scope rules are in the catalogue but "
+    "no check runs them yet, so nothing was evaluated for them and nothing about them "
+    "is claimed"
+)
+"""What a scope this build cannot run reports. It is reported rather than skipped: a
+command that answered `--scope assembly` with silence would read like a clean assembly."""
+
+RMS_SCOPE_RUNS: dict[RmsScope, tuple[RmsScope, ...]] = {
+    RmsScope.part: (RmsScope.part,),
+    RmsScope.assembly: (RmsScope.assembly,),
+    RmsScope.equations: (RmsScope.equations,),
+    RmsScope.all: (RmsScope.part, RmsScope.assembly, RmsScope.equations),
+}
+
+
+@check_app.command("rms")
+def check_rms_command(
+    package: PackageOption,
+    document: Annotated[
+        list[str] | None,
+        typer.Option("--document", help="Part document id to grade; repeatable."),
+    ] = None,
+    scope: Annotated[
+        RmsScope, typer.Option("--scope", help="part, assembly, equations, or all.")
+    ] = RmsScope.all,
+    json_output: JsonFlag = False,
+) -> None:
+    """Grade a package against the Resilient Modeling rules, without the agent.
+
+    The same tools the model runs, over the same session: the findings and the aggregated
+    coverage printed here are what a review would record. `exceptions.json` beside the
+    package is read and refreshed in memory, so a waiver whose feature tree has moved
+    reads `needs_review` and silences nothing; nothing is written back.
+
+    Violations are output, not an exit code: this exits 1 only when the package cannot be
+    read or an argument names something the package does not carry.
+    """
+    document_ids = list(document) if document else None
+    with _errors_as_exit_1():
+        context = _context_for(package, exceptions=True)
+
+    documents = rms_checks.part_documents(context, document_ids)
+    if isinstance(documents, dict):
+        typer.echo(f"error: {documents['error']}", err=True)
+        raise typer.Exit(1)
+
+    runs = RMS_SCOPE_RUNS[scope]
+    findings: list[Any] = []
+    if RmsScope.part in runs:
+        with _errors_as_exit_1(), use_context(context):
+            result = rms_checks.run_part_checks(context, documents)
+        if "error" in result:
+            typer.echo(f"error: {result['error']}", err=True)
+            raise typer.Exit(1)
+        findings = list(result["findings"])
+    else:
+        documents = []
+
+    unavailable = [
+        {"scope": item.value, "reason": RMS_SCOPE_NOT_BUILT.format(scope=item.value)}
+        for item in runs
+        if item is not RmsScope.part
+    ]
+    coverage = _coverage_rows(context.require_session())
+
+    payload = {
+        "package": str(Path(package).resolve()),
+        "scope": scope.value,
+        "documents": documents,
+        "findings": findings,
+        "coverage": coverage,
+        "unavailable_scopes": unavailable,
+    }
+    lines = [
+        f"{len(documents)} part document(s)"
+        + (f": {', '.join(documents)}" if documents else "")
+    ]
+    for finding in findings:
+        lines.append("")
+        lines += _finding_lines(finding)
+    lines.append("")
+    lines.append(f"coverage: {_counts_line(_coverage_counts(coverage))}")
+    lines += [f"scope {item['scope']}: {item['reason']}" for item in unavailable]
+    _emit(payload, lines, json_output)
+
+
+def _coverage_rows(session: ReviewSession) -> list[dict[str, Any]]:
+    """Every coverage item of `session` as one flat row, bucket included."""
+    return [
+        {"bucket": bucket, **to_jsonable_python(item)}
+        for bucket in get_args(CoverageBucket)
+        for item in getattr(session.coverage, bucket)
+    ]
+
+
+def _coverage_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    """How many items landed in each bucket, in the buckets' own order."""
+    counts = {bucket: 0 for bucket in get_args(CoverageBucket)}
+    for row in rows:
+        counts[row["bucket"]] += 1
+    return counts
 
 
 # --- exceptions accept | list ----------------------------------------------------

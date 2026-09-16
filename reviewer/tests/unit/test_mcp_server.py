@@ -44,6 +44,8 @@ from swreview.ir.loader import PACKAGE_FILE_NAME, save_package
 from swreview.ir.models import EvidencePackage
 from swreview.mcp.chat_log import CHAT_LOG_FILE_NAME
 from swreview.mcp.server import (
+    MCP_BRIDGE_TOOL_FUNCTIONS,
+    MCP_TOOL_FUNCTIONS,
     PACKAGE_SUMMARY_URI,
     REPORT_URI,
     create_server,
@@ -51,7 +53,8 @@ from swreview.mcp.server import (
 )
 from swreview.report.dispositions import REPORT_FILE_NAME
 from swreview.tools import bridge as bridge_module
-from swreview.tools import measure, query, session
+from swreview.tools import measure, query, rms_query, session
+from tests.support.contracts import CONTRACTS_DIR_002
 
 TIMEOUT_S = 10.0
 """No exchange over a memory stream takes a second; this only stops a hang from hanging CI."""
@@ -72,6 +75,8 @@ QUERY_TOOLS: tuple[str, ...] = (
     "find_dimensions",
     "list_gaps",
     "get_exceptions",
+    "list_features",
+    "get_feature",
 )
 MEASUREMENT_TOOLS: tuple[str, ...] = (
     "measure_axis_distance",
@@ -111,9 +116,26 @@ CHAT_LOG_FIELDS: tuple[str, ...] = (
 )
 """One `chat-log.jsonl` line, exactly as data-model section 6 spells it."""
 
-TOOL_MODULES = (query, measure, session, bridge_module)
+TOOL_MODULES = (query, rms_query, measure, session, bridge_module)
 """Where the tool functions actually live, so the expected schemas are derived from the
 tool functions themselves rather than from the server module under test."""
+
+CLI_PROFILES = CONTRACTS_DIR_002 / "cli-profiles.md"
+"""Feature 002's profile contract, whose Codex `enabled_tools` array is the allowlist the
+add-in writes into the generated `config.toml` (`CliProfileWriter.EnabledTools`)."""
+
+
+def contract_enabled_tools() -> list[str]:
+    """The `enabled_tools` array of the Codex profile, in the contract's order.
+
+    One line of TOML inside a fenced block, so it is read by prefix rather than by parsing
+    the whole document: the C# side compares the generated config with this same fence
+    byte for byte, and this is the Python end of that comparison.
+    """
+    for line in CLI_PROFILES.read_text(encoding="utf-8").splitlines():
+        if line.startswith("enabled_tools = ["):
+            return re.findall(r'"([a-z0-9_]+)"', line)
+    raise AssertionError(f"{CLI_PROFILES} has no `enabled_tools` line")
 
 
 def tool_function(name: str) -> Callable[..., Any]:
@@ -241,6 +263,22 @@ def empty_run_dir(tmp_path: Path) -> Path:
 
 def test_tool_list_is_the_contract_exactly(run_dir: Path) -> None:
     assert tool_names(create_server(run_dir)) == list(OFFLINE_TOOLS)
+
+
+def test_the_offered_tools_are_exactly_the_profile_allowlist() -> None:
+    """The two halves of the same allowlist, which no task may update on one side only.
+
+    The server decides what general chat is offered; `enabled_tools` in the generated CLI
+    profile decides what the CLI may call. A tool added here and not there is a tool the
+    engineer can see and not use; added there and not here, a name the CLI is told to
+    expect and never gets. Bridge tools included: the profile lists them unconditionally
+    and the server offers them once a bridge pipe is configured (FR-019).
+    """
+    offered = [
+        function.__name__ for function in MCP_TOOL_FUNCTIONS + MCP_BRIDGE_TOOL_FUNCTIONS
+    ]
+
+    assert offered == contract_enabled_tools()
 
 
 def test_withheld_tools_are_absent(run_dir: Path) -> None:

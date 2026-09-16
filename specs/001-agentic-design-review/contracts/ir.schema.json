@@ -206,6 +206,7 @@
           "type": "string"
         },
         "transform": {
+          "description": "Row-major 4x4 relative to the root assembly, translation in meters",
           "items": {
             "items": {
               "type": "number"
@@ -683,6 +684,7 @@
         },
         "index": {
           "description": "Position in the equation manager",
+          "minimum": 0,
           "title": "Index",
           "type": "integer"
         },
@@ -1052,11 +1054,13 @@
         },
         "index": {
           "description": "Flat order within the document's tree, folders inline",
+          "minimum": 0,
           "title": "Index",
           "type": "integer"
         },
         "depth": {
           "description": "0 top level, 1 inside a folder, from sub-features only",
+          "minimum": 0,
           "title": "Depth",
           "type": "integer"
         },
@@ -2039,6 +2043,7 @@
         "whats_wrong_count": {
           "anyOf": [
             {
+              "minimum": 0,
               "type": "integer"
             },
             {
@@ -2075,6 +2080,7 @@
         "elapsed_ms": {
           "anyOf": [
             {
+              "minimum": 0,
               "type": "integer"
             },
             {
@@ -2133,21 +2139,25 @@
         },
         "baseline_whats_wrong_count": {
           "description": "Read before the first suppression; the command refuses when non-zero, so this is 0 in every written run and is recorded for audit",
+          "minimum": 0,
           "title": "Baseline Whats Wrong Count",
           "type": "integer"
         },
         "limit": {
           "description": "--limit in effect",
+          "minimum": 1,
           "title": "Limit",
           "type": "integer"
         },
         "timeout_seconds": {
           "description": "--timeout-seconds in effect",
+          "minimum": 1,
           "title": "Timeout Seconds",
           "type": "integer"
         },
         "features_present": {
           "description": "Planned features; equals len(rows)",
+          "minimum": 0,
           "title": "Features Present",
           "type": "integer"
         },

@@ -260,7 +260,37 @@ public class IrSerializerTests
     [Fact]
     public void Serialize_WritesEnumsAsTheSchemaStrings()
     {
-        string json = PackageSerializer.Serialize(BuildSamplePackage());
+        EvidencePackage package = BuildSamplePackage();
+
+        // One row per SuppressTestOutcome. The Python rule dispatches on these six strings -
+        // ok passes, rebuild_errors fails, not_applied and aborted are unresolved - so a
+        // misspelt one would silently drop a tested feature out of the outcome table.
+        package.RmsSuppressTest!.Rows.Clear();
+        foreach (SuppressTestOutcome outcome in
+            (SuppressTestOutcome[])Enum.GetValues(typeof(SuppressTestOutcome)))
+        {
+            package.RmsSuppressTest.Rows.Add(new SuppressTestRow
+            {
+                FeatureId = "feat:0004",
+                PersistRef = Convert.ToBase64String(new byte[] { 0x41, 0x42, 0x43 }),
+                PersistRefScope = "doc:housing",
+                Name = outcome.ToString(),
+                Outcome = outcome,
+                WhatsWrongCount = null,
+            });
+        }
+
+        package.RmsSuppressTest.FeaturesPresent = package.RmsSuppressTest.Rows.Count;
+
+        string json = PackageSerializer.Serialize(package);
+
+        foreach (string wire in new[]
+        {
+            "ok", "rebuild_errors", "already_suppressed", "not_applied", "truncated", "aborted",
+        })
+        {
+            Assert.Contains($"\"outcome\": \"{wire}\"", json, StringComparison.Ordinal);
+        }
 
         Assert.Contains("\"suppression\": \"resolved\"", json, StringComparison.Ordinal);
         Assert.Contains("\"identity_source\": \"custom_property\"", json, StringComparison.Ordinal);
@@ -268,6 +298,15 @@ public class IrSerializerTests
         Assert.Contains("\"unit\": \"mm3\"", json, StringComparison.Ordinal);
         Assert.Contains("\"export_method\": \"native\"", json, StringComparison.Ordinal);
         Assert.Contains("\"kind\": \"not_extracted\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SuppressTestRow_DefaultsToAbortedSoAnUnwrittenRowIsNeverASkip()
+    {
+        // A row the run never reached is unresolved, not skipped: truncated means "planned
+        // and deliberately not attempted", which the rule treats as a skip, and defaulting to
+        // it would turn a crashed run into a clean review (data-model section 2).
+        Assert.Equal(SuppressTestOutcome.Aborted, new SuppressTestRow().Outcome);
     }
 
     [Fact]

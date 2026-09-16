@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using SwReview.Extractor.Dump;
@@ -149,6 +150,29 @@ public class FeatureTreeIndexerTests
 
         Assert.Empty(rows);
         Assert.Equal(0, ids.Count);
+    }
+
+    [Fact]
+    public void ANullFeatureInTheWalk_IsRefusedRatherThanSkipped()
+    {
+        // A walk with a hole in it has lost a feature. Skipping it quietly would shift every
+        // later index and re-group everything after it in Python; the caller - the dumper, or
+        // a test - is told instead, and turns it into a gap.
+        ArgumentException error = Assert.Throws<ArgumentException>(() => FeatureTreeIndexer.Index(
+            new[] { Node("Sketch1", "ProfileFeature"), null!, Node("Fillet1", "Fillet") },
+            new IdAllocator("feat")));
+
+        Assert.Contains("walk", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ANullSubFeature_IsRefusedTheSameWay()
+    {
+        var folder = new FeatureTreeNode { Name = "3-Core", TypeName = "FtrFolder", Handle = new object() };
+        folder.SubFeatures.Add(null!);
+
+        Assert.Throws<ArgumentException>(() =>
+            FeatureTreeIndexer.Index(new[] { folder }, new IdAllocator("feat")));
     }
 
     private static IReadOnlyList<FeatureTreeRow> Index(params FeatureTreeNode[] features) =>

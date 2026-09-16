@@ -31,6 +31,7 @@ from swreview.ir.models import (
     SuppressTestRun,
     UnsupportedSchemaVersionError,
 )
+from tests.support.features import AssemblySpec, InstanceSpec, MateSpec, PartSpec, rms_package
 from tests.support.packages import IDENTITY_TRANSFORM, build_package, persist_ref
 
 GOLDEN_FIXTURES = Path(__file__).resolve().parents[1] / "golden" / "fixtures"
@@ -197,6 +198,13 @@ def test_feature_nullable_fields_must_be_stated(field: str) -> None:
         Feature(**fields)
 
 
+@pytest.mark.parametrize("field", ["index", "depth"])
+def test_feature_counters_are_not_negative(field: str) -> None:
+    """`index` is a position in the tree and `depth` a nesting level; neither can be < 0."""
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        build_feature(**{field: -1})
+
+
 def test_feature_description_distinguishes_blank_from_unreadable() -> None:
     assert build_feature(description="").description == ""
     assert build_feature(description=None).description is None
@@ -283,6 +291,18 @@ def test_equation_carries_the_text_and_the_left_hand_side() -> None:
     assert equation.value == 25.0
 
 
+def test_equation_index_is_not_negative() -> None:
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        Equation(
+            document_id="doc:2",
+            index=-1,
+            text='"x" = 1',
+            lhs="x",
+            is_global=True,
+            value=1.0,
+        )
+
+
 def test_equation_is_global_may_be_unknown() -> None:
     equation = Equation(
         document_id="doc:2",
@@ -348,6 +368,12 @@ def test_suppress_test_row_messages_truncated_is_not_negative() -> None:
         build_row(messages_truncated=-1)
 
 
+@pytest.mark.parametrize("field", ["whats_wrong_count", "elapsed_ms"])
+def test_suppress_test_row_counts_are_not_negative(field: str) -> None:
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        build_row(**{field: -1})
+
+
 def test_suppress_test_run_records_the_audit_fields() -> None:
     run = build_run()
 
@@ -381,6 +407,31 @@ def test_suppress_test_run_rows_may_record_a_truncated_tail() -> None:
     assert [row.outcome for row in run.rows] == ["ok", "truncated"]
 
 
+@pytest.mark.parametrize("field", ["features_present", "baseline_whats_wrong_count"])
+def test_suppress_test_run_counts_are_not_negative(field: str) -> None:
+    with pytest.raises(ValidationError, match="greater than or equal to 0"):
+        build_run(**{field: -1})
+
+
+@pytest.mark.parametrize("field", ["limit", "timeout_seconds"])
+def test_suppress_test_run_budgets_are_at_least_one(field: str) -> None:
+    """A run of zero features or zero seconds is not a run; the command refuses it."""
+    with pytest.raises(ValidationError, match="greater than or equal to 1"):
+        build_run(**{field: 0})
+
+
+def test_suppress_test_run_rows_must_account_for_every_planned_feature() -> None:
+    """`features_present` equals `len(rows)`: an untested feature is a `truncated` row,
+    never a missing one, so a reader can never be shown a short table as a full one."""
+    with pytest.raises(ValidationError, match="features_present"):
+        build_run(features_present=2, rows=[build_row()])
+
+
+def test_suppress_test_run_cannot_verify_a_restore_it_did_not_make() -> None:
+    with pytest.raises(ValidationError, match="restore_verified"):
+        build_run(restore_verified=True, unrestored_feature_ids=["feat:0001"])
+
+
 def test_suppress_test_run_round_trips_through_json() -> None:
     run = build_run()
 
@@ -397,6 +448,16 @@ def test_component_constrained_status_raw_defaults_to_none() -> None:
 
     assert component.constrained_status_raw is None
     assert "constrained_status_raw" in component.model_dump()
+
+
+def test_component_transform_documents_the_frame_and_the_unit() -> None:
+    """The contract must say what frame and unit a transform is in; a regenerated
+    schema that drops the description leaves the extractor guessing."""
+    description = ComponentInstance.model_fields["transform"].description
+
+    assert description == (
+        "Row-major 4x4 relative to the root assembly, translation in meters"
+    )
 
 
 def test_component_constrained_status_raw_is_the_verbatim_int() -> None:
@@ -424,6 +485,32 @@ def test_the_new_gap_entity_kinds_validate(entity_kind: str) -> None:
     )
 
     assert gap.entity_kind == entity_kind
+
+
+def test_the_fixture_builder_emits_only_documented_gap_entity_kinds() -> None:
+    """Anchor `NEW_GAP_ENTITY_KINDS` to something that actually writes a gap.
+
+    `Gap.entity_kind` is a free string, so the parametrized test above would pass for any
+    tuple at all. The fixture builder is the one producer of these kinds in the test
+    suite; a kind it emits and data-model.md section 1 does not document fails here.
+    """
+    package = rms_package(
+        parts=[
+            PartSpec(
+                document_id="doc:2",
+                name="housing",
+                instances=[InstanceSpec("housing-1", suppression="suppressed")],
+            )
+        ],
+        assembly=AssemblySpec(
+            mates=[MateSpec(entities=[("housing-1", "FACE")], suppression_gap=True)]
+        ),
+    )
+
+    emitted = {gap.entity_kind for gap in package.gaps}
+
+    assert emitted
+    assert emitted <= set(NEW_GAP_ENTITY_KINDS)
 
 
 # --- EvidencePackage --------------------------------------------------------------

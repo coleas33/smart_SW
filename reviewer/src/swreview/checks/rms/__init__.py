@@ -15,8 +15,8 @@ from __future__ import annotations
 from swreview.checks.rms import assembly, equations, part  # noqa: F401  (binds on import)
 from swreview.checks.rms.registry import (
     RULES,
-    CoverageBucket,
     RmsRule,
+    RuleCoverageBucket,
     RuleFn,
     RuleScope,
     RuleSeverity,
@@ -27,8 +27,8 @@ from swreview.checks.rms.registry import (
 
 __all__ = [
     "RULES",
-    "CoverageBucket",
     "RmsRule",
+    "RuleCoverageBucket",
     "RuleFn",
     "RuleScope",
     "RuleSeverity",

@@ -37,6 +37,7 @@ public static class SwDump
             new PropertyDumper(session, swApp),
             new ManifestBuilder(),
             new MateDumper(session, refs),
+            new FeatureDumper(session.Gate, new SwFeatureReader(session.Gate, refs)),
             new HoleDumper(session, refs),
             new FastenerDumper(session, refs),
             new FaceDumper(session, refs, openDocument),

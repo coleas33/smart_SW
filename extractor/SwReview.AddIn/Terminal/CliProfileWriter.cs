@@ -261,6 +261,8 @@ public sealed class CliProfileWriter
         "find_dimensions",
         "list_gaps",
         "get_exceptions",
+        "list_features",
+        "get_feature",
         "measure_axis_distance",
         "measure_face_gap",
         "check_tool_envelope",

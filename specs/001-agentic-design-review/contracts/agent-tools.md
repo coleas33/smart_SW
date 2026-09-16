@@ -43,6 +43,8 @@ All tool errors are returned to the model as a tool result whose payload is
 | `find_dimensions` | `document_id: str \| null`, `text_regex: str \| null`, `near_view: str \| null` | matching `Dimension` list with source refs | |
 | `list_gaps` | none | `Gap` list | What extraction could not provide. |
 | `get_exceptions` | `check: str \| null` | active and needs-review exceptions matching this package | |
+| `list_features` | `document_id: str`, `folder: str \| null` (group name or folder feature id), `include_suppressed: bool = true` | ordered `{id, name, type_name, class, group, folder_id, depth, suppressed, description}` | `class` and `group` are derived from `checks/rms_types.yaml`; `unknown` is a non-answer, not a class. |
+| `get_feature` | `feature_id: str` | the full `Feature` plus derived `class`, `group`, `is_folder`, `is_end_tag`, and `child_ids`/`parent_ids`/`consumer_ids` resolved to names | A null id list stays null: `GetChildren` failed, which is not "no dependents". |
 
 ## Measurement tools (deterministic Python; may load meshes)
 
@@ -66,6 +68,7 @@ typed by the model.
 | `check_fastener_joint` | `fastener_id: str`, `hole_id: str`, `clamped_component_ids: list[str]` | `fastener.bottoming`, `fastener.engagement`, `fastener.thread_match`, `fastener.head_clearance` findings; `unresolved` when `thread_depth` is null |
 | `check_hole_alignment` | `hole_id_a: str`, `hole_id_b: str`, `tolerance: SourceRef \| null` | `hole.coaxiality` finding |
 | `check_interference_group` | `group_key: str` | grouped `interference.static` finding, honoring exceptions |
+| `check_rms_part` | `document_id: str \| null` | Resilient Modeling part-scope findings and aggregated coverage for one part document, or for every part document (null) including the ones whose tree was not read |
 | `record_drawing_finding` | `document_id`, `sheet`, `observed`, `requirement`, `source_refs: list[SourceRef]`, `status: "suspected" \| "unresolved"`, `recommended_action` | A non-numeric drawing finding. `status` may not be `demonstrated` or `checked_within_scope` from this tool. |
 
 ## Session tools

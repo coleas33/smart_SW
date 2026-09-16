@@ -25,6 +25,8 @@ from typing import Any
 
 import pytest
 
+from swreview.checks.interference import CHECK as INTERFERENCE_CHECK
+from swreview.checks.rms import RULES
 from swreview.exceptions import (
     EXCEPTIONS_FILE_NAME,
     RMS_CHECK_PREFIX,
@@ -65,8 +67,16 @@ GEOMETRY_DIGEST_ONE = "c1c6df68be2efc552ea93b6d6aac95f8d36730f5b46453d1c70c96143
 BOTH = ["cmp:0001", "cmp:0002"]
 
 RMS_CHECK = "rms.sketches.not_over_defined"
-OTHER_RMS_CHECK = "rms.refs.no_external_references"
-INTERFERENCE_CHECK = "interference.static"
+OTHER_RMS_CHECK = "rms.refs.direction"
+
+
+def test_both_rms_checks_under_test_are_registered_rules() -> None:
+    """`contracts/rules.md` opens with "rule ids are stable and appear verbatim in findings
+    (`check`), coverage, exceptions, waiver files, and the checklist", so an exception
+    accepted for a made-up `rms.*` id proves nothing about the two rules a reader thinks
+    these tests cover. `exceptions.py` branches on the `rms.` prefix alone, so nothing
+    else in this module would notice a renamed or deleted rule."""
+    assert {RMS_CHECK, OTHER_RMS_CHECK} <= set(RULES)
 
 
 # --- the tree under test ---------------------------------------------------------
@@ -260,6 +270,23 @@ CHANGED_TREES: dict[str, EvidencePackage] = {
 }
 
 
+UNHASHED_CHANGES: dict[str, EvidencePackage] = {
+    "error_code": rms_package(features=_with(base_features(), 1, error_code=1)),
+    "error_code_unknown": rms_package(features=_with(base_features(), 1, error_code=None)),
+    "parent_ids": rms_package(features=_with(base_features(), 2, parent_ids=["feat:0001"])),
+    "parent_ids_unknown": rms_package(features=_with(base_features(), 2, parent_ids=None)),
+    "persist_ref": rms_package(
+        features=_with(base_features(), 1, persist_ref=persist_ref("rebuilt"))
+    ),
+}
+"""Changes no RMS rule can see, so none of them may re-open an exception.
+
+`error_code` is a rebuild state the rules never read; `parent_ids` is the same dependency
+edge as `child_ids` seen from the other end, and `child_ids` is hashed; a `persist_ref` is
+identity, and SOLIDWORKS reissues one for a feature nothing about the model changed.
+"""
+
+
 class Group:
     """The smallest thing `accept` needs: a check, the components, a configuration."""
 
@@ -356,6 +383,50 @@ def test_every_field_a_rule_reads_changes_the_feature_tree_fingerprint(change: s
     before = fingerprint(rms_package(), BOTH, "feature_tree")
 
     assert fingerprint(CHANGED_TREES[change], BOTH, "feature_tree") != before
+
+
+@pytest.mark.parametrize("change", sorted(UNHASHED_CHANGES))
+def test_a_field_no_rule_reads_leaves_the_feature_tree_fingerprint_alone(
+    change: str,
+) -> None:
+    """The other half of the contract: a digest that moved for everything would re-open
+    every exception on every rebuild, which is the same as having no exceptions."""
+    assert fingerprint(UNHASHED_CHANGES[change], BOTH, "feature_tree") == fingerprint(
+        rms_package(), BOTH, "feature_tree"
+    )
+
+
+def test_the_feature_tree_fingerprint_is_independent_of_row_order() -> None:
+    """`package.features` is one flat list for the whole design and nothing promises the
+    order SOLIDWORKS reported it in; `index` is what says where a row sits."""
+    shuffled = base_features()
+    shuffled.reverse()
+
+    assert fingerprint(rms_package(features=shuffled), BOTH, "feature_tree") == fingerprint(
+        rms_package(), BOTH, "feature_tree"
+    )
+
+
+def test_a_feature_without_a_sketch_differs_from_a_sketch_that_was_unreadable() -> None:
+    """Two different facts: this feature has no sketch, versus it has one whose status and
+    consumers could not be read. The second is unresolved evidence a rule must re-check."""
+    unreadable = rms_package(
+        features=_with(
+            base_features(), 0, sketch=SketchInfo(raw_status=None, consumer_ids=None)
+        )
+    )
+
+    assert fingerprint(unreadable, BOTH, "feature_tree") != fingerprint(
+        CHANGED_TREES["sketch_lost"], BOTH, "feature_tree"
+    )
+
+
+def test_a_feature_without_a_fillet_differs_from_a_fillet_with_no_radius() -> None:
+    no_fillet = rms_package(features=_with(base_features(), 2, fillet=None))
+
+    assert fingerprint(no_fillet, BOTH, "feature_tree") != fingerprint(
+        CHANGED_TREES["fillet_radius_unknown"], BOTH, "feature_tree"
+    )
 
 
 def test_the_description_text_itself_is_not_hashed() -> None:

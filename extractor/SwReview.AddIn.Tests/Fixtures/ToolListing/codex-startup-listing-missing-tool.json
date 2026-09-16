@@ -398,6 +398,50 @@
             "type": "object",
             "title": "measure_axis_distanceOutput"
           }
+        },
+        "list_features": {
+          "name": "list_features",
+          "description": "list_features.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "list_featuresArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "list_featuresOutput"
+          }
+        },
+        "get_feature": {
+          "name": "get_feature",
+          "description": "get_feature.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "get_featureArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "get_featureOutput"
+          }
         }
       },
       "resources": [],

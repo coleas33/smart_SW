@@ -44,6 +44,16 @@ result:
     id: interference
     title: Static interference
   - bucket: open
+    check_prefix: rms.
+    description: Part feature trees follow the six-group discipline with one-directional
+      references, fully defined sketches and described features; the root assembly
+      mates to reference geometry with a fixed or fully constrained first component
+      and shallow chains; parts carry global variables. Run check_rms_part, check_rms_assembly
+      and check_rms_equations. Drawing and judgement-only rules are recorded as out
+      of scope with the reason.
+    id: modeling.resilience
+    title: Resilient Modeling Strategy
+  - bucket: open
     check_prefix: coverage.
     description: Every gap in the package and every open evidence request is reflected
       in coverage.

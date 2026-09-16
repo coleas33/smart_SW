@@ -25,6 +25,7 @@ from pydantic import ValidationError
 
 import swreview.checks
 from swreview.ir.models import SCHEMA_VERSION, EvidencePackage, Feature, Gap, Quantity
+from tests.support.contracts import contract_validator
 from tests.support.features import (
     END_TAG_SUFFIX,
     FOLDER_TYPE,
@@ -45,6 +46,9 @@ from tests.support.features import (
     suppress_run,
 )
 
+IR_CONTRACT = contract_validator("ir.schema.json")
+"""The committed `ir.schema.json`; every built package is validated against it."""
+
 TYPE_TABLE = yaml.safe_load(
     (Path(swreview.checks.__file__).with_name("rms_types.yaml")).read_text(encoding="utf-8")
 )
@@ -64,8 +68,15 @@ def core_specs() -> list:
 
 
 def assert_round_trips(package: EvidencePackage) -> None:
+    """The package survives both dump modes *and* the committed JSON Schema.
+
+    Pydantic and the contract are kept in step by `test_schema_sync.py`, but only the
+    models run when a fixture is built: validating here is what stops a fixture the
+    extractor's own contract would reject from reaching a golden baseline.
+    """
     assert EvidencePackage.model_validate(package.model_dump()) == package
     assert EvidencePackage.model_validate(package.model_dump(mode="json")) == package
+    IR_CONTRACT.validate(package.model_dump(mode="json"))
 
 
 # --- the shared vocabulary comes from the shipped table ---------------------------

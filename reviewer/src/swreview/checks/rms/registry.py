@@ -24,12 +24,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, get_args
+
+from swreview.report.session import CoverageBucket
 
 __all__ = [
     "RULES",
-    "CoverageBucket",
     "RmsRule",
+    "RuleCoverageBucket",
     "RuleFn",
     "RuleScope",
     "RuleSeverity",
@@ -48,10 +50,16 @@ RuleSeverity = Literal["fail", "warn"]
 (data-model section 2): `fail` to `demonstrated`, `warn` to `suspected`. Only `fail` rules
 are waivable (`contracts/rules.md`, "Waivable rules")."""
 
-CoverageBucket = Literal["unresolved", "out_of_scope"]
+RuleCoverageBucket = Literal["unresolved", "out_of_scope"]
 """The two `swreview.report.session.CoverageBucket` values a coverage-only rule can land
 in: `unresolved` when the data is simply not extracted yet, `out_of_scope` when this
-version has decided not to decide."""
+version has decided not to decide. Named apart from the session's wider alias so that a
+reader of `RmsRule.coverage` cannot mistake it for the full set of report buckets."""
+
+assert set(get_args(RuleCoverageBucket)) <= set(get_args(CoverageBucket)), (
+    "a coverage-only rule is emitted as a CoverageItem in its bucket, so every "
+    "RuleCoverageBucket must be a swreview.report.session.CoverageBucket"
+)
 
 RuleFn = Callable[..., Any]
 """An evaluator. The argument list differs by scope - part rules read a document's
@@ -71,7 +79,7 @@ class RmsRule:
     scope: RuleScope
     statement: str
     severity: RuleSeverity | None = None
-    coverage: tuple[CoverageBucket, str] | None = None
+    coverage: tuple[RuleCoverageBucket, str] | None = None
     fn: RuleFn | None = None
 
     def __post_init__(self) -> None:

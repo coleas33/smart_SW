@@ -348,6 +348,67 @@ public class PackageWriterTests : IDisposable
     }
 
     [Fact]
+    public void Build_CarriesTheFeatureRowsThroughToThePackage()
+    {
+        // T024. The RMS rules read features[]; a phase whose rows never reach the package
+        // would leave every part rule unresolved with nothing saying why.
+        EvidencePackage package = NewWriter().Build(Options());
+
+        Ir.Feature feature = Assert.Single(package.Features);
+        Assert.Equal("feat:0001", feature.Id);
+        Assert.Equal(package.Components[1].DocumentId, feature.DocumentId);
+    }
+
+    [Fact]
+    public void Build_FeaturesNone_SkipsTheFeaturePhase()
+    {
+        var sources = new FakeSources();
+        DumpOptions options = Options();
+        options.Features = FeatureScope.None;
+
+        EvidencePackage package = NewWriter(sources).Build(options);
+
+        Assert.Empty(package.Features);
+        Assert.False(sources.FeaturesWereDumped);
+    }
+
+    [Fact]
+    public void Build_FeaturesNone_RecordsThatNoTreeWasRead()
+    {
+        // Without this gap the package is indistinguishable from one whose parts have empty
+        // trees, and every part rule would report a vacuous pass over a tree nobody opened
+        // (constitution Principle I: missing coverage stays visible).
+        DumpOptions options = Options();
+        options.Features = FeatureScope.None;
+
+        EvidencePackage package = NewWriter().Build(options);
+
+        Gap gap = Assert.Single(package.Gaps, g => g.EntityKind == "feature_tree_unavailable");
+        Assert.Equal(GapKind.NotExtracted, gap.Kind);
+        Assert.Null(gap.EntityId);
+        Assert.Contains("--features none", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_FeaturesTree_RecordsNoFeatureTreeUnavailableGapOfItsOwn()
+    {
+        EvidencePackage package = NewWriter().Build(Options());
+
+        Assert.DoesNotContain(package.Gaps, g => g.EntityKind == "feature_tree_unavailable");
+    }
+
+    [Fact]
+    public void Build_FeaturesDefaultsToTheTreePhaseRunning()
+    {
+        var sources = new FakeSources();
+
+        NewWriter(sources).Build(Options());
+
+        Assert.Equal(FeatureScope.Tree, sources.SeenOptions!.Features);
+        Assert.True(sources.FeaturesWereDumped);
+    }
+
+    [Fact]
     public void Build_PassesTheOptionsThroughToTheSources()
     {
         var sources = new FakeSources();
@@ -465,7 +526,10 @@ public class PackageWriterTests : IDisposable
         var sources = new FakeSources();
 
         Assert.Throws<ArgumentNullException>(() => new PackageWriter(
-            null!, sources, sources, sources, sources, sources, sources, sources, "2024 SP5"));
+            null!, sources, sources, sources, sources, sources, sources, sources, sources, "2024 SP5"));
+
+        Assert.Throws<ArgumentNullException>(() => new PackageWriter(
+            sources, sources, sources, sources, null!, sources, sources, sources, sources, "2024 SP5"));
     }
 
     private DumpOptions Options() => new DumpOptions
@@ -476,7 +540,7 @@ public class PackageWriterTests : IDisposable
     private static PackageWriter NewWriter(FakeSources? sources = null)
     {
         FakeSources s = sources ?? new FakeSources();
-        return new PackageWriter(s, s, s, s, s, s, s, s, "2024 SP5", "TEST-WORKSTATION");
+        return new PackageWriter(s, s, s, s, s, s, s, s, s, "2024 SP5", "TEST-WORKSTATION");
     }
 
     /// <summary>
@@ -484,7 +548,7 @@ public class PackageWriterTests : IDisposable
     /// test exercises PackageWriter and nothing else.
     /// </summary>
     private sealed class FakeSources
-        : IComponentTreeSource, IDocumentSource, IManifestSource, IMateSource,
+        : IComponentTreeSource, IDocumentSource, IManifestSource, IMateSource, IFeatureSource,
           IHoleSource, IFastenerSource, IFaceSource, IMeshSource
     {
         private const string AssemblyPath = @"C:\vault\bracket-assy\bracket-assy.SLDASM";
@@ -514,6 +578,8 @@ public class PackageWriterTests : IDisposable
         public bool MateSuppressed { get; set; }
 
         public bool MeshesWereDumped { get; private set; }
+
+        public bool FeaturesWereDumped { get; private set; }
 
         public string? MeshDirectory { get; private set; }
 
@@ -640,6 +706,33 @@ public class PackageWriterTests : IDisposable
                             EntityKind = "face",
                         },
                     },
+                },
+            };
+        }
+
+        IReadOnlyList<Ir.Feature> IFeatureSource.Dump(DumpScope scope)
+        {
+            FeaturesWereDumped = true;
+
+            return new List<Ir.Feature>
+            {
+                new Ir.Feature
+                {
+                    Id = scope.FeatureIds.Next(),
+                    PersistRef = "RmVhdA==",
+                    PersistRefScope = scope.DocumentId(HousingPath),
+                    DocumentId = scope.DocumentId(HousingPath),
+                    Configuration = "Default",
+                    Name = "Boss-Extrude1",
+                    TypeName = "Extrusion",
+                    Description = string.Empty,
+                    Index = 0,
+                    Depth = 0,
+                    FolderId = null,
+                    Suppressed = false,
+                    ErrorCode = 0,
+                    ChildIds = new List<string>(),
+                    ParentIds = new List<string>(),
                 },
             };
         }

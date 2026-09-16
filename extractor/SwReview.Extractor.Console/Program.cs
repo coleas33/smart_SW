@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -8,6 +9,7 @@ using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Capture;
 using SwReview.Extractor.Console.Serve;
 using SwReview.Extractor.Dump;
+using SwReview.Extractor.Ids;
 using SwReview.Extractor.Interference;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.PersistRefs;
@@ -15,6 +17,7 @@ using SwReview.Extractor.Sw;
 using static System.Console;
 using IrCapture = SwReview.Extractor.Ir.Capture;
 using IrInterference = SwReview.Extractor.Ir.Interference;
+using IrMate = SwReview.Extractor.Ir.Mate;
 
 // The five option lists and KnownOptions are the shipped definition of what each
 // command accepts; the tests assert against THEM rather than against copies, which
@@ -37,7 +40,8 @@ public static class Program
     private const int ExitSuccess = 0;
     private const int ExitError = 1;
 
-    internal static readonly string[] DumpOptionNames = { "doc", "config", "out", "meshes", "faces" };
+    internal static readonly string[] DumpOptionNames =
+        { "doc", "config", "out", "meshes", "faces", "features" };
 
     internal static readonly string[] ResolveOptionNames = { "ref", "doc", "out" };
 
@@ -50,6 +54,51 @@ public static class Program
     internal static readonly string[] CaptureOptionNames = { "ref", "doc", "view", "out", "note" };
 
     internal static readonly string[] ServeOptionNames = { "pipe", "doc", "config", "out" };
+
+    /// <summary>
+    /// <c>probe rms</c> reads one open document and prints; it writes nothing, so it has no
+    /// <c>--out</c> and none of the dump options (contracts/cli.md).
+    /// </summary>
+    internal static readonly string[] ProbeOptionNames = { "doc" };
+
+    /// <summary>The only subject <c>probe</c> accepts today.</summary>
+    private const string RmsProbe = "rms";
+
+    /// <summary>
+    /// The interop members <c>probe rms</c> reads per feature, by the name each is gated
+    /// under - the same names <c>FeatureDumper</c> uses, so the probe's observed member set
+    /// is the dump's. <c>SwFeatureReader</c> leaves its single-call members ungated on
+    /// purpose (the caller names them so the fake path records the production names), which
+    /// on this path makes the probe the caller: ungated they would reach no
+    /// <c>ReadOnlyGuard.Assert</c>, no circuit breaker and no SC-004 observer, and
+    /// contracts/cli.md says this command uses the read-only guard.
+    /// </summary>
+    internal static readonly string[] ProbeInteropMembers =
+    {
+        ProbeMember.Children,
+        ProbeMember.Parents,
+        ProbeMember.Suppressed,
+        ProbeMember.ErrorCode,
+        ProbeMember.Description,
+        ProbeMember.Sketch,
+        ProbeMember.SketchStatus,
+        ProbeMember.Definition,
+        ProbeMember.Radius,
+    };
+
+    /// <summary>Named once so the call sites below and the list above cannot drift apart.</summary>
+    private static class ProbeMember
+    {
+        public const string Children = "GetChildren";
+        public const string Parents = "GetParents";
+        public const string Suppressed = "IsSuppressed2";
+        public const string ErrorCode = "GetErrorCode2";
+        public const string Description = "Description";
+        public const string Sketch = "GetSpecificFeature2";
+        public const string SketchStatus = "GetConstrainedStatus";
+        public const string Definition = "GetDefinition";
+        public const string Radius = "DefaultRadius";
+    }
 
     /// <summary>
     /// Every command attaches, so every command accepts <c>--allow-start</c>. It is added
@@ -125,6 +174,9 @@ public static class Program
             case "serve":
                 return RunServe(args);
 
+            case "probe":
+                return RunProbe(args);
+
             default:
                 Error.WriteLine($"swreview-extract: unknown command '{command}'.");
                 Error.WriteLine(string.Empty);
@@ -154,6 +206,7 @@ public static class Program
                 Configuration = parsed.Value("config"),
                 Meshes = parsed.MeshFormat(),
                 Faces = parsed.FaceScope(),
+                Features = parsed.FeatureScope(),
             };
         }
         catch (UsageError error)
@@ -174,7 +227,8 @@ public static class Program
             {
                 log.Write($"dump --out \"{options.OutputDirectory}\" "
                     + $"--meshes {options.Meshes.ToString().ToLowerInvariant()} "
-                    + $"--faces {options.Faces.ToString().ToLowerInvariant()}");
+                    + $"--faces {options.Faces.ToString().ToLowerInvariant()} "
+                    + $"--features {options.Features.ToString().ToLowerInvariant()}");
 
                 ISldWorks swApp = Connect(allowStart, log);
 
@@ -186,6 +240,7 @@ public static class Program
 
                 log.Write($"Wrote {result.PackageFilePath}");
                 log.Write($"{result.Package.Components.Count} components, "
+                    + $"{result.Package.Features.Count} features, "
                     + $"{result.Package.Holes.Count} holes, "
                     + $"{result.Package.Fasteners.Count} fasteners, "
                     + $"{result.Package.Faces.Count} faces, "
@@ -607,6 +662,288 @@ public static class Program
         return new SwBridgeDispatcher(services, NoSecretPolicy.Instance);
     }
 
+    /// <summary>
+    /// T031. <c>probe rms --doc &lt;part&gt;</c>: prints the raw answers SOLIDWORKS 2024 gives
+    /// for one document, so the questions research R5 left open - which traversal shape
+    /// folders come back in, whether <c>GetChildren</c> and <c>GetParents</c> answer, whether
+    /// <c>Description</c> reads, which type names the tables do not know, and whether a mate's
+    /// feature reports its suppression - are settled by one run rather than by guesswork.
+    ///
+    /// Read-only: every call goes through the session's gate, and the probe writes no file.
+    /// </summary>
+    private static int RunProbe(string[] args)
+    {
+        CommandLine parsed;
+        bool allowStart;
+
+        try
+        {
+            if (args.Length < 2 || args[1].StartsWith("--", StringComparison.Ordinal))
+            {
+                throw new UsageError($"probe needs a subject: probe {RmsProbe} --doc <part>.");
+            }
+
+            if (!string.Equals(args[1], RmsProbe, StringComparison.Ordinal))
+            {
+                throw new UsageError($"Unknown probe '{args[1]}'; the only probe is {RmsProbe}.");
+            }
+
+            parsed = CommandLine.Parse(args, 2, KnownOptions(ProbeOptionNames));
+            allowStart = parsed.Flag("allow-start");
+        }
+        catch (UsageError error)
+        {
+            Error.WriteLine($"swreview-extract probe: {error.Message}");
+            return ExitError;
+        }
+
+        return ExecuteProbeRms(parsed.Value("doc"), allowStart);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static int ExecuteProbeRms(string? documentPath, bool allowStart)
+    {
+        using (var log = new ExtractLog(null))
+        {
+            try
+            {
+                ISldWorks swApp = Connect(allowStart, log);
+
+                SwSession session = SwSession.Attach(swApp, documentPath, null);
+                var refs = new PersistRefService(session.Gate);
+                DocumentKind kind = SwSession.KindOf(session.Document, session.Gate);
+
+                Out.WriteLine($"document: {session.DocumentPath}");
+                Out.WriteLine($"kind: {PackageSerializer.EnumToJsonName(kind)}");
+                Out.WriteLine("configuration: " + session.Gate.Call(
+                    "Configuration.Name", () => session.Configuration.Name));
+                Out.WriteLine("whats_wrong_count: " + Describe(() => session.Gate.Call(
+                        "GetWhatsWrongCount",
+                        () => session.Document.Extension.GetWhatsWrongCount())
+                    .ToString(CultureInfo.InvariantCulture)));
+
+                ProbeFeatures(session, refs);
+                ProbeEquations(session);
+
+                if (kind == DocumentKind.Assembly)
+                {
+                    ProbeAssembly(session, refs);
+                }
+
+                return ExitSuccess;
+            }
+            catch (Exception error)
+            {
+                log.WriteError("probe rms failed.", error);
+                return ExitError;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The walk exactly as <see cref="FeatureDumper"/> sees it - same reader, same indexer -
+    /// plus the raw per-feature answers the dump turns into nulls and gaps. Sub-feature counts
+    /// beside depth are what show which traversal shape this release produces.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbeFeatures(SwSession session, PersistRefService refs)
+    {
+        var reader = new SwFeatureReader(session.Gate, refs);
+        IReadOnlyList<FeatureTreeNode> walk = reader.Walk(session.Document);
+        IReadOnlyList<FeatureTreeRow> rows = FeatureTreeIndexer.Index(walk, new IdAllocator("feat"));
+        string configuration = Describe(() => reader.ActiveConfiguration(session.Document));
+
+        Out.WriteLine($"features: {rows.Count} (walked in '{configuration}')");
+        Out.WriteLine("  index depth folder      subs  type_name / name");
+
+        foreach (FeatureTreeRow row in rows)
+        {
+            object? handle = row.Node.Handle;
+            Out.WriteLine(
+                $"  {row.Index,5} {row.Depth,5} {row.FolderId ?? "-",-11} {row.Node.SubFeatures.Count,5}"
+                + $"  {row.Node.TypeName} / {row.Node.Name}");
+
+            if (handle == null)
+            {
+                Out.WriteLine("        (no live feature)");
+                continue;
+            }
+
+            SwGate gate = session.Gate;
+            Out.WriteLine(
+                "        children="
+                + Gated(gate, ProbeMember.Children, () => Count(reader.Children(handle)))
+                + " parents="
+                + Gated(gate, ProbeMember.Parents, () => Count(reader.Parents(handle)))
+                + " suppressed="
+                + Gated(
+                    gate,
+                    ProbeMember.Suppressed,
+                    () => reader.Suppressed(handle, configuration).ToString())
+                + " error_code="
+                + Gated(
+                    gate,
+                    ProbeMember.ErrorCode,
+                    () => reader.ErrorCode(handle).ToString(CultureInfo.InvariantCulture)));
+
+            Out.WriteLine(
+                "        description="
+                + Gated(gate, ProbeMember.Description, () => Quote(reader.Description(handle)))
+                + " sketch_status=" + Describe(() => SketchStatus(gate, reader, handle))
+                + " definition=" + Describe(() => DescribeDefinition(gate, reader, handle)));
+        }
+    }
+
+    /// <summary>
+    /// The equation manager as the rules will read it: <c>GlobalVariable(i)</c> is the only
+    /// honest source of "is this a global", and the probe prints it beside the text so a
+    /// calibration run can see whether parsing the text would have agreed.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbeEquations(SwSession session)
+    {
+        var manager = session.Gate.Call(
+            "GetEquationMgr", () => session.Document.GetEquationMgr()) as IEquationMgr;
+
+        if (manager == null)
+        {
+            Out.WriteLine("equations: (GetEquationMgr returned nothing)");
+            return;
+        }
+
+        int count = session.Gate.Call("GetCount", () => manager.GetCount());
+        Out.WriteLine($"equations: {count}");
+
+        for (int i = 0; i < count; i++)
+        {
+            int index = i;
+            Out.WriteLine(
+                $"  [{index}] global="
+                + Describe(() => session.Gate.Call(
+                    "GlobalVariable", () => manager.GlobalVariable[index]).ToString())
+                + " value=" + Describe(() => session.Gate.Call(
+                        "EquationMgr.Value", () => manager.Value[index])
+                    .ToString(CultureInfo.InvariantCulture))
+                + " text=" + Describe(() => Quote(session.Gate.Call(
+                    "EquationMgr.Equation", () => manager.Equation[index]))));
+        }
+    }
+
+    /// <summary>
+    /// The two assembly answers research R5 could not settle from the signatures: what
+    /// <c>GetConstrainedStatus</c> reports per component, and whether a mate's feature reports
+    /// its suppression. Both run through the shipped dumpers, so what the probe prints is what
+    /// a dump would record, with the same component ids.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbeAssembly(SwSession session, PersistRefService refs)
+    {
+        var gaps = new GapCollector();
+        var options = new DumpOptions { Meshes = MeshFormat.None, Features = FeatureScope.None };
+        ComponentTreeResult tree = new ComponentTreeDumper(session, refs).Traverse(gaps, options);
+        DumpScope scope = PackageWriter.ScopeFor(gaps, options, tree);
+
+        Out.WriteLine($"components: {scope.Components.Count}");
+        foreach (ScopedComponent component in scope.Components)
+        {
+            ComponentNode node = component.Node;
+            Out.WriteLine(
+                $"  {component.Id} {node.Key}"
+                + " constrained_status_raw="
+                + (node.ConstrainedStatusRaw?.ToString(CultureInfo.InvariantCulture) ?? "null")
+                + $" is_fixed={node.IsFixed}"
+                + $" suppression={PackageSerializer.EnumToJsonName(node.Suppression)}");
+        }
+
+        IReadOnlyList<IrMate> mates = new MateDumper(session, refs).Dump(scope);
+        Out.WriteLine($"mates: {mates.Count}");
+        foreach (IrMate mate in mates)
+        {
+            var kinds = new List<string>();
+            foreach (MateEntityRef entity in mate.Entities)
+            {
+                kinds.Add($"{entity.EntityKind}@{entity.ComponentId}");
+            }
+
+            Out.WriteLine($"  {mate.Id} {mate.Type} suppressed={mate.Suppressed} "
+                + $"entities=[{string.Join(", ", kinds)}]");
+        }
+
+        Out.WriteLine($"gaps: {gaps.Count}");
+        foreach (Gap gap in gaps.Gaps)
+        {
+            Out.WriteLine($"  {gap.EntityKind} {gap.EntityId ?? "-"}: {gap.Reason}");
+        }
+    }
+
+    /// <summary>
+    /// One probe reading. A member that throws is printed as the exception type rather than
+    /// ending the run: which members fail on this release is half of what the probe is for.
+    /// </summary>
+    private static string Describe(Func<string> read)
+    {
+        try
+        {
+            return read();
+        }
+        catch (Exception error)
+        {
+            return $"!{error.GetType().Name}: {error.Message}";
+        }
+    }
+
+    /// <summary>
+    /// One probe reading, named to the gate first. The guard, the circuit breaker and the
+    /// SC-004 observer all key on that name, so a read the probe does not name is a read
+    /// the contract's "uses the read-only guard" does not cover.
+    /// </summary>
+    private static string Gated(SwGate gate, string interopMember, Func<string> read) =>
+        Describe(() => gate.Call(interopMember, read));
+
+    private static string Count(IReadOnlyList<object> items) =>
+        items.Count.ToString(CultureInfo.InvariantCulture);
+
+    private static string Quote(string? text) =>
+        text == null ? "null" : text.Length == 0 ? "(blank)" : "\"" + text + "\"";
+
+    private static string SketchStatus(SwGate gate, SwFeatureReader reader, object feature)
+    {
+        object? sketch = gate.Call(ProbeMember.Sketch, () => reader.Sketch(feature));
+        return sketch == null
+            ? "(not a sketch)"
+            : gate.Call(ProbeMember.SketchStatus, () => reader.SketchConstrainedStatus(sketch))
+                .ToString(CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Two of the three steps here are interop and are named to the gate; classifying the
+    /// definition object is a cast, which is why <c>FeatureDumper</c> does not gate it either.
+    /// </summary>
+    private static string DescribeDefinition(SwGate gate, SwFeatureReader reader, object feature)
+    {
+        object? definition = gate.Call(ProbeMember.Definition, () => reader.Definition(feature));
+        if (definition == null)
+        {
+            return "(none)";
+        }
+
+        string described = reader.DescribeDefinition(definition);
+        switch (reader.ClassifyFillet(definition))
+        {
+            case FilletDefinitionKind.Simple:
+                return described + " radius="
+                    + gate.Call(
+                            ProbeMember.Radius,
+                            () => reader.SimpleFilletDefaultRadius(definition))
+                        .ToString("G6", CultureInfo.InvariantCulture)
+                    + " m";
+            case FilletDefinitionKind.Variable:
+                return described + " radius=(a variable fillet has none)";
+            default:
+                return described;
+        }
+    }
+
     /// <summary>A pipe name is user input and ends up in a path; strip anything a path cannot hold.</summary>
     private static string SafeName(string pipeName)
     {
@@ -673,6 +1010,7 @@ public static class Program
         writer.WriteLine("Commands:");
         writer.WriteLine("  dump          --doc <path> --config <name> --out <dir>");
         writer.WriteLine("                --meshes glb|stl|none --faces needed|all");
+        writer.WriteLine("                --features tree|none");
         writer.WriteLine("                Write package.json and meshes/ for the active or named document.");
         writer.WriteLine("  interference  --config <name> --pairs all|<id,id>... --out <dir>");
         writer.WriteLine("                --coincident-as-interference --subassemblies-as-components");
@@ -684,6 +1022,11 @@ public static class Program
         writer.WriteLine("                Zoom to the entity, save a PNG, append a Capture.");
         writer.WriteLine("  resolve       --ref <persist_ref> [--doc <path>] [--out <dir>]");
         writer.WriteLine("                Print what a persistent reference resolves to (round-trip test).");
+        writer.WriteLine("  probe rms     [--doc <path>]");
+        writer.WriteLine("                Print the raw feature walk, sketch statuses, descriptions,");
+        writer.WriteLine("                equations and fillet data for one document, and for an");
+        writer.WriteLine("                assembly its component constrained status and mate");
+        writer.WriteLine("                suppression. Writes nothing.");
         writer.WriteLine("  serve         --pipe <name> [--doc <path>] [--config <name>] [--out <dir>]");
         writer.WriteLine("                Run the read-only bridge: one JSON request per line.");
         writer.WriteLine("                Wire format: Serve/PROTOCOL.md.");

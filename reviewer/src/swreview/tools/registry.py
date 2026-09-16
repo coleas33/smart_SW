@@ -58,6 +58,8 @@ from swreview.tools import (
     checks_interference,
     measure,
     query,
+    rms_checks,
+    rms_query,
     session,
 )
 from swreview.tools.context import ToolContext, use_context
@@ -81,6 +83,8 @@ def query_tools() -> tuple[Callable[..., Any], ...]:
         query.find_dimensions,
         query.list_gaps,
         query.get_exceptions,
+        rms_query.list_features,
+        rms_query.get_feature,
     )
 
 
@@ -102,6 +106,7 @@ def check_tools() -> tuple[Callable[..., Any], ...]:
         checks_fastener.check_fastener_joint,
         checks_fastener.check_hole_alignment,
         checks_interference.check_interference_group,
+        rms_checks.check_rms_part,
     )
 
 

@@ -21,11 +21,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
 from swreview.checks.rms import RULES, RmsRule, by_scope, coverage_only, evaluable
-from swreview.checks.rms.registry import bind
+from swreview.checks.rms.registry import RuleCoverageBucket, bind
+from swreview.report.session import CoverageBucket
 from tests.support.contracts import REPO_ROOT
 
 CONTRACT = REPO_ROOT / "specs" / "003-resilient-modeling" / "contracts" / "rules.md"
@@ -224,6 +226,16 @@ class TestCoverageOnlyRules:
         assert buckets.count("out_of_scope") == 6
 
 
+class TestCoverageBuckets:
+    """The registry names a subset of the session's buckets, and says so at import."""
+
+    def test_the_rule_buckets_are_session_buckets(self) -> None:
+        assert set(get_args(RuleCoverageBucket)) <= set(get_args(CoverageBucket))
+
+    def test_the_rule_buckets_are_the_two_a_coverage_only_rule_can_land_in(self) -> None:
+        assert set(get_args(RuleCoverageBucket)) == {"unresolved", "out_of_scope"}
+
+
 class TestPartitions:
     def test_evaluable_and_coverage_only_partition_the_registry(self) -> None:
         ids = [rule.id for rule in evaluable()] + [rule.id for rule in coverage_only()]
@@ -270,21 +282,22 @@ class TestBind:
         with pytest.raises(ValueError, match="rms.core.shell_last"):
             bind("rms.core.shell_last")(lambda: None)
 
-    def test_binding_returns_the_function_unchanged(self) -> None:
+    def test_binding_returns_the_function_unchanged(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`RULES` is process-wide state, so the stand-in rule is installed through
+        `monkeypatch`: a failure inside the test still leaves the catalogue as it was."""
         rule = RmsRule(
             id="rms.test.only",
             scope="part",
             severity="fail",
             statement="A rule that exists only in this test.",
         )
-        RULES[rule.id] = rule
-        try:
+        monkeypatch.setitem(RULES, rule.id, rule)
 
-            @bind(rule.id)
-            def evaluator() -> str:
-                return "evaluated"
+        @bind(rule.id)
+        def evaluator() -> str:
+            return "evaluated"
 
-            assert evaluator() == "evaluated"
-            assert rule.fn is evaluator
-        finally:
-            del RULES[rule.id]
+        assert evaluator() == "evaluated"
+        assert rule.fn is evaluator

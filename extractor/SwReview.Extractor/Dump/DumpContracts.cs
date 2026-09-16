@@ -13,6 +13,16 @@ public enum MeshFormat
     None,
 }
 
+/// <summary>What <c>--features</c> asked for.</summary>
+public enum FeatureScope
+{
+    /// <summary>Walk every resolved part document's feature tree into <c>features[]</c>.</summary>
+    Tree,
+
+    /// <summary>Walk none of them; the RMS rules then have nothing to read.</summary>
+    None,
+}
+
 /// <summary>What <c>--faces</c> asked for.</summary>
 public enum FaceScope
 {
@@ -35,6 +45,8 @@ public sealed class DumpOptions
     public MeshFormat Meshes { get; set; } = MeshFormat.Glb;
 
     public FaceScope Faces { get; set; } = FaceScope.Needed;
+
+    public FeatureScope Features { get; set; } = FeatureScope.Tree;
 }
 
 /// <summary>
@@ -212,6 +224,13 @@ public sealed class DumpScope
 
     public IdAllocator MateIds { get; } = new IdAllocator("mat");
 
+    /// <summary>
+    /// Feature ids run across the package, not per document: one allocator for every
+    /// document's tree, so <c>feat:0007</c> means one feature in one package (data-model
+    /// section 1).
+    /// </summary>
+    public IdAllocator FeatureIds { get; } = new IdAllocator("feat");
+
     /// <summary>Registers a traversed component under its allocated id.</summary>
     public ScopedComponent AddComponent(string id, string documentId, ComponentNode node)
     {
@@ -278,6 +297,12 @@ public interface IManifestSource
 public interface IMateSource
 {
     IReadOnlyList<Mate> Dump(DumpScope scope);
+}
+
+/// <summary>Feature trees of every resolved part document (T024).</summary>
+public interface IFeatureSource
+{
+    IReadOnlyList<Feature> Dump(DumpScope scope);
 }
 
 /// <summary>Hole Wizard features and cosmetic threads (T052).</summary>

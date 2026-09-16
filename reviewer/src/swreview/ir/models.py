@@ -246,7 +246,9 @@ class ComponentInstance(IRModel):
     document_id: str
     parent_id: str | None
     referenced_configuration: str
-    transform: Transform
+    transform: Transform = Field(
+        description="Row-major 4x4 relative to the root assembly, translation in meters"
+    )
     suppression: Literal["resolved", "lightweight", "suppressed", "unloaded"]
     is_fixed: bool
     pattern_id: str | None
@@ -308,8 +310,12 @@ class Feature(IRModel):
     description: str | None = Field(
         description="IFeature.Description; null when unreadable (gap), '' when blank"
     )
-    index: int = Field(description="Flat order within the document's tree, folders inline")
-    depth: int = Field(description="0 top level, 1 inside a folder, from sub-features only")
+    index: int = Field(
+        ge=0, description="Flat order within the document's tree, folders inline"
+    )
+    depth: int = Field(
+        ge=0, description="0 top level, 1 inside a folder, from sub-features only"
+    )
     folder_id: str | None = Field(description="id of the nearest enclosing feature")
     suppressed: bool | None = Field(description="In `configuration`; null when unreadable")
     error_code: int | None = Field(description="GetErrorCode2; null when unreadable")
@@ -331,7 +337,7 @@ class Equation(IRModel):
     """One row of a document's equation manager (schema 1.1.0)."""
 
     document_id: str
-    index: int = Field(description="Position in the equation manager")
+    index: int = Field(ge=0, description="Position in the equation manager")
     text: str = Field(description="Full equation text as read")
     lhs: str = Field(description="Left of the first '=', quotes stripped; evidence only")
     is_global: bool | None = Field(
@@ -502,11 +508,11 @@ class SuppressTestRow(IRModel):
     outcome: Literal[
         "ok", "rebuild_errors", "already_suppressed", "not_applied", "truncated", "aborted"
     ]
-    whats_wrong_count: int | None
+    whats_wrong_count: int | None = Field(ge=0)
     messages: Annotated[list[str], Len(0, 20)]
     messages_truncated: int = Field(ge=0, description="Messages dropped beyond the 20 kept")
     error: str | None
-    elapsed_ms: int | None
+    elapsed_ms: int | None = Field(ge=0)
 
 
 class SuppressTestRun(IRModel):
@@ -526,12 +532,13 @@ class SuppressTestRun(IRModel):
     run_at: datetime = Field(strict=False)
     acknowledged: bool = Field(description="Always true; the command refuses otherwise")
     baseline_whats_wrong_count: int = Field(
+        ge=0,
         description="Read before the first suppression; the command refuses when non-zero, "
-        "so this is 0 in every written run and is recorded for audit"
+        "so this is 0 in every written run and is recorded for audit",
     )
-    limit: int = Field(description="--limit in effect")
-    timeout_seconds: int = Field(description="--timeout-seconds in effect")
-    features_present: int = Field(description="Planned features; equals len(rows)")
+    limit: int = Field(ge=1, description="--limit in effect")
+    timeout_seconds: int = Field(ge=1, description="--timeout-seconds in effect")
+    features_present: int = Field(ge=0, description="Planned features; equals len(rows)")
     restore_verified: bool = Field(
         description="The post-run tree matched the pre-run snapshot"
     )
@@ -539,6 +546,26 @@ class SuppressTestRun(IRModel):
     rows: list[SuppressTestRow] = Field(
         description="One per planned feature, in plan order; untested ones are truncated"
     )
+
+    @model_validator(mode="after")
+    def _rows_account_for_every_planned_feature(self) -> SuppressTestRun:
+        """The two invariants a reader of a run relies on (data-model.md section 1).
+
+        A feature the run never reached is a `truncated` row, not a missing one, so a
+        short table can never be read as a complete one; and a restore that left features
+        suppressed was not verified, whatever the flag says.
+        """
+        if len(self.rows) != self.features_present:
+            raise ValueError(
+                f"features_present is {self.features_present} but there are "
+                f"{len(self.rows)} rows; every planned feature carries a row"
+            )
+        if self.restore_verified and self.unrestored_feature_ids:
+            raise ValueError(
+                "restore_verified is true but "
+                f"{len(self.unrestored_feature_ids)} feature(s) are listed as unrestored"
+            )
+        return self
 
 
 class Capture(IRModel):

@@ -14,6 +14,7 @@ described), and an absent constrained status is `unavailable`, never a defined s
 from __future__ import annotations
 
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -22,6 +23,7 @@ import yaml
 from swreview.checks.rms_types import (
     DEFAULT_TYPES_PATH,
     FEATURE_CLASSES,
+    REQUIRED_KEYS,
     RmsTypeTable,
     class_of,
     load_table,
@@ -82,6 +84,25 @@ def test_load_table_reads_the_shipped_file_by_default(
     assert table.end_tag_suffix == document["end_tag_suffix"] == "___EndTag___"
     assert list(table.groups) == document["groups"]
     assert len(table.groups) == 6
+
+
+def test_the_required_keys_are_exactly_the_shipped_files_keys(
+    document: dict[str, Any],
+) -> None:
+    assert set(document) == set(REQUIRED_KEYS)
+
+
+@pytest.mark.parametrize("field", ["classes", "constrained_status_map"])
+def test_the_cached_tables_mappings_cannot_be_mutated(
+    table: RmsTypeTable, field: str
+) -> None:
+    """`load_table` is cached, so every rule in a review shares one object: a rule that
+    edited one of its mappings would silently change what every later rule classifies."""
+    mapping = getattr(table, field)
+
+    assert isinstance(mapping, MappingProxyType)
+    with pytest.raises(TypeError):
+        mapping["nope"] = frozenset()  # type: ignore[index]
 
 
 def test_load_table_is_cached_by_resolved_path(tmp_path: Path) -> None:
@@ -419,6 +440,29 @@ def test_a_table_whose_constrained_status_keys_are_not_ints_is_refused(
     document["constrained_status"]["two"] = "under_defined"
 
     with pytest.raises(ValueError, match="two"):
+        load_table(_write(tmp_path, document))
+
+
+def test_a_table_whose_ambiguous_set_overlaps_a_class_is_refused(
+    tmp_path: Path, document: dict[str, Any]
+) -> None:
+    """`classify` answers with the first class that matches, so an `ambiguous` name that
+    is also a class member would never come back `ambiguous`: the file would be saying
+    one thing and the loader doing another."""
+    document = dict(document, ambiguous=[*document["ambiguous"], "Extrusion"])
+
+    with pytest.raises(ValueError, match="Extrusion"):
+        load_table(_write(tmp_path, document))
+
+
+@pytest.mark.parametrize("key", REQUIRED_KEYS)
+def test_a_table_missing_a_required_key_is_refused(
+    tmp_path: Path, document: dict[str, Any], key: str
+) -> None:
+    """A missing key names the file and the key, rather than surfacing a bare KeyError."""
+    document = {name: value for name, value in document.items() if name != key}
+
+    with pytest.raises(ValueError, match=key):
         load_table(_write(tmp_path, document))
 
 

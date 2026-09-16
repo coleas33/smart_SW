@@ -255,6 +255,25 @@ def test_get_review_checklist_starts_every_item_open(context: ToolContext) -> No
     assert {item["bucket"] for item in items} == {"open"}
 
 
+def test_the_checklist_carries_the_resilient_modeling_item_with_the_rms_prefix(
+    context: ToolContext,
+) -> None:
+    """`modeling.resilience` is closed out by the `rms.*` findings the check tools write.
+
+    The prefix is the whole coupling between the checklist and the RMS rule catalogue
+    (`specs/003-resilient-modeling/contracts/tools.md`), so it is asserted against the
+    registered rule ids rather than retyped.
+    """
+    from swreview.checks.rms import RULES
+
+    item = next(
+        entry for entry in context.checklist.items if entry.id == "modeling.resilience"
+    )
+    assert item.check_prefix == "rms."
+    assert all(rule_id.startswith(item.check_prefix) for rule_id in RULES)
+    assert "check_rms_part" in item.description
+
+
 def test_get_review_checklist_reflects_findings_and_coverage(context: ToolContext) -> None:
     record_thread_depth_finding()
     session.mark_coverage(

@@ -2,6 +2,7 @@ using System;
 using SwReview.Extractor.Capture;
 using SwReview.Extractor.Console;
 using SwReview.Extractor.Dump;
+using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ir;
 using Xunit;
 
@@ -33,6 +34,8 @@ public class CommandLineOptionsTests
         Program.KnownOptions(Program.CaptureOptionNames);
 
     private static readonly string[] ServeOptions = Program.KnownOptions(Program.ServeOptionNames);
+
+    private static readonly string[] ProbeOptions = Program.KnownOptions(Program.ProbeOptionNames);
 
     // ---- switches ----------------------------------------------------------------
 
@@ -121,6 +124,109 @@ public class CommandLineOptionsTests
             new[] { "interference", "--truncate-after", "--out", @"C:\out" }, 1, InterferenceOptions);
 
         Assert.Throws<UsageError>(() => parsed.Int("truncate-after"));
+    }
+
+    // ---- --features --------------------------------------------------------------
+
+    [Theory]
+    [InlineData("tree", FeatureScope.Tree)]
+    [InlineData("none", FeatureScope.None)]
+    [InlineData("TREE", FeatureScope.Tree)]
+    public void FeatureScope_ReadsEveryContractValue(string value, FeatureScope expected)
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--features", value, "--out", @"C:\out" }, 1, DumpOptions);
+
+        Assert.Equal(expected, parsed.FeatureScope());
+    }
+
+    [Fact]
+    public void FeatureScope_DefaultsToTree()
+    {
+        // The RMS family reads features[]; a dump that quietly stopped writing them would
+        // leave every part rule unresolved with nothing on the command line to explain it.
+        Assert.Equal(
+            FeatureScope.Tree,
+            CommandLine.Parse(new[] { "dump", "--out", @"C:\out" }, 1, DumpOptions).FeatureScope());
+    }
+
+    [Fact]
+    public void FeatureScope_UnknownValue_Throws()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--features", "some" }, 1, DumpOptions);
+
+        Assert.Throws<UsageError>(() => parsed.FeatureScope());
+    }
+
+    [Fact]
+    public void FeatureScope_IsOnlyAnOptionOfDump()
+    {
+        // A typo that lands --features on another command is a usage error, not a silent
+        // no-op that dumps the trees anyway.
+        Assert.Throws<UsageError>(() =>
+            CommandLine.Parse(new[] { "capture", "--features", "none" }, 1, CaptureOptions));
+    }
+
+    // ---- probe rms ---------------------------------------------------------------
+
+    [Fact]
+    public void Probe_ReadsTheDocumentOption()
+    {
+        // "probe rms --doc <part>": the probe's subject is args[1], so its options start at
+        // index 2 and everything before that is not an option at all.
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "probe", "rms", "--doc", @"C:\vault\housing.SLDPRT" }, 2, ProbeOptions);
+
+        Assert.Equal(@"C:\vault\housing.SLDPRT", parsed.Value("doc"));
+    }
+
+    [Fact]
+    public void Probe_DocIsOptionalAndMeansTheActiveDocument()
+    {
+        Assert.Null(CommandLine.Parse(new[] { "probe", "rms" }, 2, ProbeOptions).Value("doc"));
+    }
+
+    [Theory]
+    [InlineData("out")]
+    [InlineData("meshes")]
+    [InlineData("config")]
+    public void Probe_TakesNoOptionThatImpliesAWriteOrADump(string option)
+    {
+        // The probe prints and writes nothing (contracts/cli.md). An option it does not have
+        // is a usage error rather than a silent no-op that looks like it was honoured.
+        Assert.Throws<UsageError>(() =>
+            CommandLine.Parse(new[] { "probe", "rms", "--" + option, "x" }, 2, ProbeOptions));
+    }
+
+    [Fact]
+    public void Probe_NamesEveryInteropMemberItReadsPerFeatureToTheGuard()
+    {
+        // contracts/cli.md row 19: "Read-only; uses the read-only guard." SwFeatureReader
+        // leaves its single-call members ungated on purpose - FeatureDumper names them, so
+        // the fake path records the production names - which means the probe has to name
+        // them itself. Ungated they reach no ReadOnlyGuard.Assert, no circuit breaker and no
+        // SC-004 observer, and the probe would be running the RMS read surface outside the
+        // guard the contract names. These are the production names, not copies.
+        Assert.Equal(
+            new[]
+            {
+                "GetChildren",
+                "GetParents",
+                "IsSuppressed2",
+                "GetErrorCode2",
+                "Description",
+                "GetSpecificFeature2",
+                "GetConstrainedStatus",
+                "GetDefinition",
+                "DefaultRadius",
+            },
+            Program.ProbeInteropMembers);
+
+        foreach (string member in Program.ProbeInteropMembers)
+        {
+            ReadOnlyGuard.Assert(member);
+        }
     }
 
     // ---- --fasteners -------------------------------------------------------------
@@ -280,10 +386,11 @@ public class CommandLineOptionsTests
     [InlineData("interference")]
     [InlineData("capture")]
     [InlineData("serve")]
+    [InlineData("probe")]
     public void AllowStart_IsAcceptedByEveryCommandThatAttaches(string command)
     {
-        // Program.cs calls SwAttach.Connect from all five commands, so all five must accept
-        // the flag; an option missing from one command's list is a usage error at run time.
+        // Program.cs calls SwAttach.Connect from every command, so every one must accept the
+        // flag; an option missing from one command's list is a usage error at run time.
         // This drives the shipped lists, so deleting Program.KnownOptions fails it.
         string[] known = KnownOptionsFor(command);
 
@@ -305,6 +412,8 @@ public class CommandLineOptionsTests
                 return CaptureOptions;
             case "serve":
                 return ServeOptions;
+            case "probe":
+                return ProbeOptions;
             default:
                 throw new ArgumentOutOfRangeException(nameof(command), command, "No such command.");
         }

@@ -52,6 +52,7 @@ public sealed class PackageWriter
     private readonly IDocumentSource _documents;
     private readonly IManifestSource _manifest;
     private readonly IMateSource _mates;
+    private readonly IFeatureSource _features;
     private readonly IHoleSource _holes;
     private readonly IFastenerSource _fasteners;
     private readonly IFaceSource _faces;
@@ -64,6 +65,7 @@ public sealed class PackageWriter
         IDocumentSource documents,
         IManifestSource manifest,
         IMateSource mates,
+        IFeatureSource features,
         IHoleSource holes,
         IFastenerSource fasteners,
         IFaceSource faces,
@@ -75,6 +77,7 @@ public sealed class PackageWriter
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
         _manifest = manifest ?? throw new ArgumentNullException(nameof(manifest));
         _mates = mates ?? throw new ArgumentNullException(nameof(mates));
+        _features = features ?? throw new ArgumentNullException(nameof(features));
         _holes = holes ?? throw new ArgumentNullException(nameof(holes));
         _fasteners = fasteners ?? throw new ArgumentNullException(nameof(fasteners));
         _faces = faces ?? throw new ArgumentNullException(nameof(faces));
@@ -122,8 +125,7 @@ public sealed class PackageWriter
                 + "Save it first: the package's document ids and its manifest are derived from the path.");
         }
 
-        var scope = new DumpScope(gaps, options, tree);
-        AllocateComponentIds(scope);
+        DumpScope scope = ScopeFor(gaps, options, tree);
 
         var package = new EvidencePackage
         {
@@ -153,6 +155,24 @@ public sealed class PackageWriter
         {
             aborted |= !RunPhase(gaps, "mate", "read the assembly mates", () =>
                 package.Mates.AddRange(_mates.Dump(scope)));
+        }
+
+        if (options.Features == FeatureScope.None)
+        {
+            // The trees were skipped on purpose. Recording it keeps the absence visible: a
+            // package with no features[] and nothing saying why reads as parts whose trees
+            // are empty, and the RMS rules would grade a tree nobody opened (Principle I).
+            gaps.Add(
+                GapKind.NotExtracted,
+                "feature_tree_unavailable",
+                null,
+                "The part feature trees were not read: the dump was run with --features none.",
+                null);
+        }
+        else if (!aborted)
+        {
+            aborted |= !RunPhase(gaps, "feature", "read the part feature trees", () =>
+                package.Features.AddRange(_features.Dump(scope)));
         }
 
         if (!aborted)
@@ -198,6 +218,19 @@ public sealed class PackageWriter
 
         package.Gaps.AddRange(gaps.Gaps);
         return package;
+    }
+
+    /// <summary>
+    /// The scope the phases share, with every traversed component given its id. Public
+    /// because <c>probe rms</c> runs two phases outside a dump and must give them the SAME
+    /// ids the package would have: a probe that numbered components differently would read
+    /// as a contradiction of the package it was run to explain.
+    /// </summary>
+    public static DumpScope ScopeFor(GapCollector gaps, DumpOptions options, ComponentTreeResult tree)
+    {
+        var scope = new DumpScope(gaps, options, tree);
+        AllocateComponentIds(scope);
+        return scope;
     }
 
     /// <summary>

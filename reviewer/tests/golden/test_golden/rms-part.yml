@@ -1,0 +1,983 @@
+result:
+  coverage:
+  - bucket: checked
+    check: rms.folders.present
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.folders.ordered
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.grouping.all_features_in_a_group
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.groups.no_solids_in_ref_or_construction
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.core.shell_last
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.detail.holes_last
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.modify.transform_before_replicate
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.quarantine.chamfers_before_fillets
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.quarantine.largest_fillet_first
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.quarantine.only_fillets_and_chamfers
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.refs.direction
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.refs.quarantine_has_no_children
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.detail.no_internal_references
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.intent.every_feature_described
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.sketches.fully_defined
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.sketches.not_over_defined
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.sketches.one_sketch_per_feature
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: skipped
+    check: rms.core.shell_last
+    error: null
+    reason: '1 document(s): doc:4: no shell in Core'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: skipped
+    check: rms.modify.transform_before_replicate
+    error: null
+    reason: '1 document(s): doc:4: no Modify group'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: skipped
+    check: rms.quarantine.largest_fillet_first
+    error: null
+    reason: '1 document(s): doc:4: fewer than two readable fillet radii in Quarantine'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.detail.individually_suppressible
+    error: null
+    reason: '3 document(s): doc:2: no suppress-test run; doc:3: no suppress-test run;
+      doc:4: no suppress-test run'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.groups.no_solids_in_ref_or_construction
+    error: null
+    reason: '1 document(s): doc:4: feat:0054 Widget1: class of NoSuchType is unknown'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.detail.holes_last
+    error: null
+    reason: '1 document(s): doc:4: feat:0060 Ice1: class of ICE is ambiguous'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.quarantine.only_fillets_and_chamfers
+    error: null
+    reason: '1 document(s): doc:4: feat:0063 Widget2: class of NoSuchType is unknown'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.refs.direction
+    error: null
+    reason: '1 document(s): doc:4: feat:0057 Boss-Extrude1: children unavailable'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.types.unknown
+    error: null
+    reason: 'feature type names not in the calibrated table: NoSuchType x2'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.no_sibling_in_context_refs
+    error: null
+    reason: external references not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.positions_driven_by_globals
+    error: null
+    reason: assembly equations not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.mates_described
+    error: null
+    reason: mate descriptions not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.subassemblies
+    error: null
+    reason: subassembly mates not extracted; assembly rules evaluated for the root
+      document only
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: modeling.resilience
+    error: null
+    reason: 30 checked, 3 skipped, 7 unresolved rule result(s) over 3 document(s);
+      17 finding(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.drawing.model_items_preferred
+    error: null
+    reason: drawing-owned vs model dimensions not extracted; advisory by decision
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.structural_vs_cosmetic_fillets
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.core_shaping_cuts
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.description_quality
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.sketch_plane_choice
+    error: null
+    reason: judgement-only; sketch planes not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.avoid_multibody
+    error: null
+    reason: judgement-only; body intent not decidable
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  documents:
+  - doc:2
+  - doc:3
+  - doc:4
+  exceptions:
+  - check: rms.quarantine.only_fillets_and_chamfers
+    id: EX-001
+    status: active
+  findings:
+  - calculation: null
+    capture_ids: []
+    check: rms.folders.ordered
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-001
+    inputs:
+    - feat:0028 3-Core [FtrFolder] persist_ref=ZG9jOjMvMy1Db3Jl scope=doc:3
+    - feat:0034 4-Detail [FtrFolder] persist_ref=ZG9jOjMvNC1EZXRhaWw= scope=doc:3
+    - feat:0042 3-Core [FtrFolder] persist_ref=ZG9jOjMvMy1Db3JlIzI= scope=doc:3
+    observed: 'duplicated group folder(s): 3-Core; group folders in tree order: 1-Ref,
+      2-Construction, 3-Core, 4-Detail, 3-Core, 5-Modify, 6-Quarantine; the method''s
+      order is 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine'
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Reorder the group folders into the method's order and merge
+      any duplicate.
+    requirement: Group folders appear once each, in the order Reference, Construction,
+      Core, Detail, Modify, Quarantine.
+    severity: medium
+    status: demonstrated
+    title: 'duplicated group folder(s): 3-Core; group folders in tree order: 1-Ref,
+      2-Const…'
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.grouping.all_features_in_a_group
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-002
+    inputs:
+    - feat:0021 Axis1 [RefAxis] persist_ref=ZG9jOjMvQXhpczE= scope=doc:3
+    observed: '1 content feature(s) sit outside every group: Axis1'
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Move each feature into the group folder its role belongs to.
+    requirement: Every content feature lives inside a group.
+    severity: medium
+    status: demonstrated
+    title: '1 content feature(s) sit outside every group: Axis1'
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.groups.no_solids_in_ref_or_construction
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-003
+    inputs:
+    - feat:0027 Boss-Extrude1 [Extrusion] persist_ref=ZG9jOjMvQm9zcy1FeHRydWRlMQ==
+      scope=doc:3
+    observed: 'material feature(s) in a reference or construction group: Boss-Extrude1
+      [Extrusion] in 2-Construction'
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Move the material features into Core or Detail.
+    requirement: Reference and Construction contain no material (solids, cuts, holes;
+      ambiguous counts as material).
+    severity: medium
+    status: demonstrated
+    title: 'material feature(s) in a reference or construction group: Boss-Extrude1
+      [Extrus…'
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.core.shell_last
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-004
+    inputs:
+    - feat:0032 Shell1 [Shell] persist_ref=ZG9jOjMvU2hlbGwx scope=doc:3
+    - feat:0033 Boss-Extrude4 [Extrusion] persist_ref=ZG9jOjMvQm9zcy1FeHRydWRlNA==
+      scope=doc:3
+    - feat:0043 Boss-Extrude5 [Extrusion] persist_ref=ZG9jOjMvQm9zcy1FeHRydWRlNQ==
+      scope=doc:3
+    observed: 'Shell1 is not the last feature in Core; 2 feature(s) follow it: Boss-Extrude4,
+      Boss-Extrude5'
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Move the shell to the end of Core.
+    requirement: The shell is the last feature in Core.
+    severity: medium
+    status: demonstrated
+    title: 'Shell1 is not the last feature in Core; 2 feature(s) follow it: Boss-Extrude4,…'
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.detail.holes_last
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-005
+    inputs:
+    - feat:0039 Hole1 [HoleWzd] persist_ref=ZG9jOjMvSG9sZTE= scope=doc:3
+    - feat:0040 Cut-Extrude5 [Cut] persist_ref=ZG9jOjMvQ3V0LUV4dHJ1ZGU1 scope=doc:3
+    - feat:0041 Cut-Extrude4 [Cut] persist_ref=ZG9jOjMvQ3V0LUV4dHJ1ZGU0 scope=doc:3
+    observed: Cut-Extrude5, Cut-Extrude4 follow the first hole Hole1 in Detail
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Move the holes to the end of Detail.
+    requirement: Holes are the trailing block of Detail (sketches ignored).
+    severity: low
+    status: suspected
+    title: Cut-Extrude5, Cut-Extrude4 follow the first hole Hole1 in Detail
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.modify.transform_before_replicate
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-006
+    inputs:
+    - feat:0045 LPattern1 [LPattern] persist_ref=ZG9jOjMvTFBhdHRlcm4x scope=doc:3
+    - feat:0046 Draft1 [Draft] persist_ref=ZG9jOjMvRHJhZnQx scope=doc:3
+    observed: the pattern LPattern1 precedes the draft Draft1 in Modify
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Move the drafts ahead of the patterns in Modify.
+    requirement: Drafts precede patterns in Modify.
+    severity: low
+    status: suspected
+    title: the pattern LPattern1 precedes the draft Draft1 in Modify
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.quarantine.chamfers_before_fillets
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-007
+    inputs:
+    - feat:0048 Fillet1 [Fillet] persist_ref=ZG9jOjMvRmlsbGV0MQ== scope=doc:3
+    - feat:0049 Chamfer1 [Chamfer] persist_ref=ZG9jOjMvQ2hhbWZlcjE= scope=doc:3
+    observed: the fillet Fillet1 precedes the chamfer Chamfer1 in Quarantine
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Move the chamfers ahead of the fillets in Quarantine.
+    requirement: Chamfers precede fillets in Quarantine.
+    severity: medium
+    status: demonstrated
+    title: the fillet Fillet1 precedes the chamfer Chamfer1 in Quarantine
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.quarantine.largest_fillet_first
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-008
+    inputs:
+    - feat:0048 Fillet1 [Fillet] persist_ref=ZG9jOjMvRmlsbGV0MQ== scope=doc:3
+    - feat:0050 Fillet2 [Fillet] persist_ref=ZG9jOjMvRmlsbGV0Mg== scope=doc:3
+    observed: Fillet2 0.005 m follows the smaller Fillet1 0.002 m
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Order the Quarantine fillets largest radius first.
+    requirement: Fillet radii in Quarantine are non-increasing.
+    severity: medium
+    status: demonstrated
+    title: Fillet2 0.005 m follows the smaller Fillet1 0.002 m
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.quarantine.only_fillets_and_chamfers
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits:
+    - 'exception:EX-001: legacy bracket; the Quarantine draft is scheduled for removal
+      at the next revision'
+    disposition: null
+    drawing_locations: []
+    exception_id: EX-001
+    group: null
+    id: F-009
+    inputs:
+    - feat:0052 Draft2 [Draft] persist_ref=ZG9jOjMvRHJhZnQy scope=doc:3
+    observed: 'Quarantine holds 1 feature(s) that are neither fillet nor chamfer:
+      Draft2 [Draft]. Excepted by EX-001, accepted by engineer on 2026-09-15 09:15:00+00:00
+      for this feature tree and configuration: legacy bracket; the Quarantine draft
+      is scheduled for removal at the next revision'
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: None while the feature tree is unchanged. Re-review EX-001
+      if these features change.
+    requirement: Quarantine holds only fillets and chamfers.
+    severity: info
+    status: checked_within_scope
+    title: 'Quarantine holds 1 feature(s) that are neither fillet nor chamfer: Draft2
+      [Draf…'
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.refs.direction
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-010
+    inputs:
+    - feat:0041 Cut-Extrude4 [Cut] persist_ref=ZG9jOjMvQ3V0LUV4dHJ1ZGU0 scope=doc:3
+    - feat:0043 Boss-Extrude5 [Extrusion] persist_ref=ZG9jOjMvQm9zcy1FeHRydWRlNQ==
+      scope=doc:3
+    observed: Boss-Extrude5 in 3-Core depends on Cut-Extrude4 in 4-Detail
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Reorder the features so that every dependency points at an
+      earlier group.
+    requirement: No feature depends on a feature in a later group (a dependent lives
+      in the same or a later group than what it depends on).
+    severity: high
+    status: demonstrated
+    title: Boss-Extrude5 in 3-Core depends on Cut-Extrude4 in 4-Detail
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.refs.quarantine_has_no_children
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-011
+    inputs:
+    - feat:0048 Fillet1 [Fillet] persist_ref=ZG9jOjMvRmlsbGV0MQ== scope=doc:3
+    - feat:0051 Fillet3 [Fillet] persist_ref=ZG9jOjMvRmlsbGV0Mw== scope=doc:3
+    observed: Fillet1 in Quarantine is depended on by Fillet3
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Remove the dependency, or move the feature out of Quarantine.
+    requirement: Nothing depends on a Quarantine feature.
+    severity: high
+    status: demonstrated
+    title: Fillet1 in Quarantine is depended on by Fillet3
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.detail.no_internal_references
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-012
+    inputs:
+    - feat:0036 Cut-Extrude2 [Cut] persist_ref=ZG9jOjMvQ3V0LUV4dHJ1ZGUy scope=doc:3
+    - feat:0037 Cut-Extrude3 [Cut] persist_ref=ZG9jOjMvQ3V0LUV4dHJ1ZGUz scope=doc:3
+    observed: Cut-Extrude3 depends on Cut-Extrude2, both in Detail
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Break the reference between the Detail features, or put a
+      coupled pair in one subfolder.
+    requirement: Detail features do not depend on other Detail features, except (a)
+      a sketch consumed by exactly one feature, and (b) a pair of features sharing
+      the same derived subfolder inside Detail (the coupled-pair exception).
+    severity: medium
+    status: demonstrated
+    title: Cut-Extrude3 depends on Cut-Extrude2, both in Detail
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.intent.every_feature_described
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-013
+    inputs:
+    - feat:0046 Draft1 [Draft] persist_ref=ZG9jOjMvRHJhZnQx scope=doc:3
+    observed: '1 content feature(s) carry no description: Draft1'
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Describe what each feature is for, not what it is.
+    requirement: Every content feature carries a description.
+    severity: medium
+    status: demonstrated
+    title: '1 content feature(s) carry no description: Draft1'
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.sketches.fully_defined
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-014
+    inputs:
+    - feat:0025 Sketch2 [ProfileFeature] persist_ref=ZG9jOjMvU2tldGNoMg== scope=doc:3
+    - feat:0026 Surface-Extrude1 [SurfaceExtrude] persist_ref=ZG9jOjMvU3VyZmFjZS1FeHRydWRlMQ==
+      scope=doc:3
+    observed: Sketch2 constrained status is under_defined
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Fully define the sketch.
+    requirement: Every sketch is fully defined. Only under_defined fails.
+    severity: medium
+    status: demonstrated
+    title: Sketch2 constrained status is under_defined
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.sketches.not_over_defined
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-015
+    inputs:
+    - feat:0038 Sketch5 [ProfileFeature] persist_ref=ZG9jOjMvU2tldGNoNQ== scope=doc:3
+    - feat:0040 Cut-Extrude5 [Cut] persist_ref=ZG9jOjMvQ3V0LUV4dHJ1ZGU1 scope=doc:3
+    observed: Sketch5 constrained status is over_defined
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Remove the conflicting relations or dimensions.
+    requirement: No sketch is over defined or in solver error. Only over_defined and
+      solver_error fail.
+    severity: high
+    status: demonstrated
+    title: Sketch5 constrained status is over_defined
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.sketches.one_sketch_per_feature
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-016
+    inputs:
+    - feat:0029 Sketch3 [ProfileFeature] persist_ref=ZG9jOjMvU2tldGNoMw== scope=doc:3
+    - feat:0030 Boss-Extrude2 [Extrusion] persist_ref=ZG9jOjMvQm9zcy1FeHRydWRlMg==
+      scope=doc:3
+    - feat:0031 Boss-Extrude3 [Extrusion] persist_ref=ZG9jOjMvQm9zcy1FeHRydWRlMw==
+      scope=doc:3
+    observed: 'Sketch3 is consumed by 2 features: Boss-Extrude2, Boss-Extrude3'
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Give each feature its own sketch.
+    requirement: No sketch is consumed by more than one feature.
+    severity: medium
+    status: demonstrated
+    title: 'Sketch3 is consumed by 2 features: Boss-Extrude2, Boss-Extrude3'
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.folders.present
+    component_ids:
+    - cmp:0004
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-017
+    inputs: []
+    observed: 'missing group folder(s): 2-Construction, 5-Modify'
+    provenance:
+    - configuration: Default
+      document_id: doc:4
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/widget.SLDPRT
+      vault_version: 1
+    recommended_action: Add the missing group folders and move the features that belong
+      in them.
+    requirement: Every one of the six groups exists as a folder.
+    severity: low
+    status: suspected
+    title: 'missing group folder(s): 2-Construction, 5-Modify'
+    tool_result_ids:
+    - 0

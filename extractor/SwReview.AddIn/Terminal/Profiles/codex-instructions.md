@@ -55,6 +55,12 @@ Package queries - the evidence package the extractor dumped:
 - `list_gaps` - recorded gaps between faces.
 - `get_exceptions` - what the extractor could not read, and why. Check this before concluding
   that something is absent: a missing result and an unreadable one are different answers.
+- `list_features` - one document's feature tree in order, with each feature's Resilient
+  Modeling group and class. `class: unknown` means the type name is in no class set, not that
+  the feature is unclassified geometry.
+- `get_feature` - one feature in full: its description, its sketch, its suppression state, and
+  what it depends on and what depends on it, by name. A null dependency list means the call
+  that would have read it failed, which is not the same as having none.
 
 Measurements over the package geometry:
 

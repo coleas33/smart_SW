@@ -138,6 +138,10 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             IsFixed = true,
             PatternId = null,
             IsToolbox = false,
+
+            // The root IS the assembly; GetConstrainedStatus is about how an instance is
+            // mated inside its parent, so there is nothing to read and null says so.
+            ConstrainedStatusRaw = null,
             PersistRef = _refs.TryGet(_session.Document, root)?.Base64,
             PersistRefScopePath = tree.RootDocumentPath,
             Handle = root,

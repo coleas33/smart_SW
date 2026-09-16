@@ -19,9 +19,11 @@ Two answers are deliberately not classifications (constitution Principle I):
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal, get_args
 
 import yaml
@@ -31,6 +33,7 @@ from swreview.ir.models import Feature
 __all__ = [
     "DEFAULT_TYPES_PATH",
     "FEATURE_CLASSES",
+    "REQUIRED_KEYS",
     "AssemblyTable",
     "Classification",
     "ConstrainedStatus",
@@ -77,6 +80,32 @@ answer to a null, so a table that named it would be claiming a reading it does n
 
 _TABLE_CONSTRAINED_STATUSES = frozenset(get_args(ConstrainedStatus)) - {"unavailable"}
 
+REQUIRED_KEYS: tuple[str, ...] = (
+    "version",
+    "calibrated_version",
+    "groups",
+    "folder_type",
+    "end_tag_suffix",
+    "classes",
+    "ambiguous",
+    "tolerated_loose",
+    "default_names_excluded",
+    "constrained_status",
+    "assembly",
+)
+"""Every top-level key the loader reads. A file missing one is refused by name rather
+than surfacing a bare `KeyError` from wherever it happened to be read."""
+
+
+def _require(document: dict[str, object], key: str, path: Path) -> None:
+    """Refuse a table missing `key`, naming the file and the key.
+
+    Called once for every `REQUIRED_KEYS` entry before anything is read, so the parsers
+    below index the document directly and no key is checked in two places.
+    """
+    if key not in document:
+        raise ValueError(f"{path}: the RMS type table has no {key!r} key")
+
 
 @dataclass(frozen=True)
 class AssemblyTable:
@@ -94,18 +123,23 @@ class AssemblyTable:
 
 @dataclass(frozen=True)
 class RmsTypeTable:
-    """The whole table. `classes` keeps the file's order and its sets are disjoint."""
+    """The whole table. `classes` keeps the file's order and its sets are disjoint.
+
+    `classes` and `constrained_status_map` are read-only views: `load_table` is cached,
+    so every rule in one review shares this object and a rule that edited a mapping would
+    change what every later rule classifies.
+    """
 
     version: int
     calibrated_version: str
     groups: tuple[str, ...]
     folder_type: str
     end_tag_suffix: str
-    classes: dict[FeatureClass, frozenset[str]]
+    classes: Mapping[FeatureClass, frozenset[str]]
     ambiguous: frozenset[str]
     tolerated_loose: frozenset[str]
     default_names_excluded: frozenset[str]
-    constrained_status_map: dict[int, ConstrainedStatus]
+    constrained_status_map: Mapping[int, ConstrainedStatus]
     assembly: AssemblyTable
 
     def classify(self, type_name: str) -> Classification:
@@ -165,7 +199,7 @@ class RmsTypeTable:
 
 def _parse_classes(
     document: dict[str, object], path: Path
-) -> dict[FeatureClass, frozenset[str]]:
+) -> Mapping[FeatureClass, frozenset[str]]:
     raw = document["classes"]
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: classes must be a mapping")
@@ -192,12 +226,12 @@ def _parse_classes(
                 )
             owner[type_name] = name
         classes[name] = members
-    return classes
+    return MappingProxyType(classes)
 
 
 def _parse_constrained_status(
     document: dict[str, object], path: Path
-) -> dict[int, ConstrainedStatus]:
+) -> Mapping[int, ConstrainedStatus]:
     raw = document["constrained_status"]
     if not isinstance(raw, dict):
         raise ValueError(f"{path}: constrained_status must be a mapping")
@@ -217,12 +251,15 @@ def _parse_constrained_status(
         mapping[key] = value
     if not mapping:
         raise ValueError(f"{path}: constrained_status names no value")
-    return mapping
+    return MappingProxyType(mapping)
 
 
 def _parse(document: object, path: Path) -> RmsTypeTable:
     if not isinstance(document, dict):
         raise ValueError(f"{path}: the RMS type table must be a mapping")
+
+    for key in REQUIRED_KEYS:
+        _require(document, key, path)
 
     assembly = document["assembly"]
     reference_kinds = tuple(assembly["reference_entity_kinds"])
@@ -243,14 +280,24 @@ def _parse(document: object, path: Path) -> RmsTypeTable:
     if not folder_type or not end_tag_suffix:
         raise ValueError(f"{path}: folder_type and end_tag_suffix must not be empty")
 
+    classes = _parse_classes(document, path)
+    ambiguous = frozenset(document["ambiguous"])
+    for name, members in classes.items():
+        overlap = sorted(members & ambiguous)
+        if overlap:
+            raise ValueError(
+                f"{path}: {overlap[0]!r} is in both class {name!r} and the ambiguous "
+                f"set; the class sets must be disjoint"
+            )
+
     return RmsTypeTable(
         version=int(document["version"]),
         calibrated_version=str(document["calibrated_version"]),
         groups=tuple(document["groups"]),
         folder_type=folder_type,
         end_tag_suffix=end_tag_suffix,
-        classes=_parse_classes(document, path),
-        ambiguous=frozenset(document["ambiguous"]),
+        classes=classes,
+        ambiguous=ambiguous,
         tolerated_loose=frozenset(document["tolerated_loose"]),
         default_names_excluded=frozenset(document["default_names_excluded"]),
         constrained_status_map=_parse_constrained_status(document, path),

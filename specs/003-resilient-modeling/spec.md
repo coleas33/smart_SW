@@ -194,7 +194,7 @@ An engineer can accept a failing RMS finding as an exception with a reason, thro
 - **SC-003**: Zero suppressions or rebuilds occur during a review or a dump, verified by the dumper and suppress-test unit tests asserting the recorded interop member names and by the add-in tool-service gate log for review-time calls; the suppressibility command never calls a save member, logs every member it did call, and leaves the file on disk unchanged.
 - **SC-004**: Every unknown type name encountered is reported once per review with its count; no rule that needs a class passes or fails a feature whose class is unknown.
 - **SC-005**: An engineer can accept a failing rule on a part, or import a waiver file, and see it reflected in the next review without any other change.
-- **SC-006**: Feature 001 and 002 golden baselines remain byte-identical; the IR bump adds optional arrays and fields only.
+- **SC-006**: Feature 001 and 002 golden baselines remain byte-identical, except that `cover-blind-tap.yml` snapshots the review checklist and therefore gains exactly the new `modeling.resilience` checklist block and nothing else; the IR bump adds optional arrays and fields only.
 
 ## Assumptions
 

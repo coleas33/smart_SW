@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from swreview.checks.interference import CHECK as INTERFERENCE_CHECK
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException, fingerprint
 from swreview.ir.models import (
     BBox3D,
@@ -120,7 +121,7 @@ class Group:
     """The smallest thing `accept` needs: a check, the components, a configuration."""
 
     def __init__(self, component_ids: list[str], configuration: str = "Default") -> None:
-        self.check = "interference.static"
+        self.check = INTERFERENCE_CHECK
         self.component_ids = component_ids
         self.configuration = configuration
 
@@ -199,7 +200,7 @@ def test_accepting_binds_the_exception_to_the_component_persist_refs(tmp_path: P
     )
 
     assert accepted.id == "EX-001"
-    assert accepted.check == "interference.static"
+    assert accepted.check == INTERFERENCE_CHECK
     assert accepted.component_persist_refs == [
         persist_ref("cmp:0001"),
         persist_ref("cmp:0002"),
@@ -266,7 +267,7 @@ def test_matching_is_independent_of_the_order_of_the_component_ids(tmp_path: Pat
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
     accepted = store.accept(GROUP, package, by="engineer", note="n", at=ACCEPTED_AT)
 
-    matched = store.match(package, ["cmp:0002", "cmp:0001"], "Default", "interference.static")
+    matched = store.match(package, ["cmp:0002", "cmp:0001"], "Default", INTERFERENCE_CHECK)
 
     assert matched is accepted
 
@@ -276,7 +277,7 @@ def test_a_different_component_set_does_not_match(tmp_path: Path) -> None:
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
     store.accept(GROUP, package, by="engineer", note="n", at=ACCEPTED_AT)
 
-    assert store.match(package, ["cmp:0001"], "Default", "interference.static") is None
+    assert store.match(package, ["cmp:0001"], "Default", INTERFERENCE_CHECK) is None
 
 
 def test_a_different_configuration_does_not_match(tmp_path: Path) -> None:
@@ -284,7 +285,7 @@ def test_a_different_configuration_does_not_match(tmp_path: Path) -> None:
     store = ExceptionStore(tmp_path / EXCEPTIONS_FILE_NAME)
     store.accept(GROUP, package, by="engineer", note="n", at=ACCEPTED_AT)
 
-    assert store.match(package, ["cmp:0001", "cmp:0002"], "Cold", "interference.static") is None
+    assert store.match(package, ["cmp:0001", "cmp:0002"], "Cold", INTERFERENCE_CHECK) is None
 
 
 def test_a_needs_review_exception_still_matches(tmp_path: Path) -> None:
@@ -293,7 +294,7 @@ def test_a_needs_review_exception_still_matches(tmp_path: Path) -> None:
     accepted = store.accept(GROUP, package, by="engineer", note="n", at=ACCEPTED_AT)
     accepted.status = "needs_review"
 
-    matched = store.match(package, ["cmp:0001", "cmp:0002"], "Default", "interference.static")
+    matched = store.match(package, ["cmp:0001", "cmp:0002"], "Default", INTERFERENCE_CHECK)
 
     assert matched is accepted
 
@@ -304,7 +305,7 @@ def test_a_retired_exception_never_matches(tmp_path: Path) -> None:
     accepted = store.accept(GROUP, package, by="engineer", note="n", at=ACCEPTED_AT)
     store.retire(accepted.id)
 
-    assert store.match(package, ["cmp:0001", "cmp:0002"], "Default", "interference.static") is None
+    assert store.match(package, ["cmp:0001", "cmp:0002"], "Default", INTERFERENCE_CHECK) is None
 
 
 # --- refresh, re-accept, retire -------------------------------------------------
