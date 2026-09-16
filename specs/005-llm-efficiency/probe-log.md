@@ -85,6 +85,61 @@ byte-to-token estimate that rests on them (R24 T1, still pending below).
 
 ---
 
+## The measured lever 2 arm (T056), and what still disagrees with it
+
+**Not a probe** either: no key, no seat. Recorded here for the same reason as the section
+above - the split landed and the measured saving is not the figure the spec package quotes.
+**Owner decision needed**; nothing in the spec package has been edited to match.
+
+Regenerated from `reviewer/` by the same helper, after the 35 docstrings were split:
+
+```powershell
+uv run python -m tests.unit.test_tool_payload --write
+```
+
+| Toolset | Encoding | Lever 2 | Bytes | Delta | Delta % |
+|---|---|---|---:|---:|---:|
+| review | openai | off | 34,065 | - | - |
+| review | openai | **on** | **21,432** | **12,633** | **37.1** |
+| review | gemini | off | 34,217 | - | - |
+| review | gemini | **on** | **21,584** | **12,633** | **36.9** |
+| review+bridge | openai | **on** | **23,944** | 13,768 | 36.5 |
+| review+bridge | gemini | **on** | **23,914** | 13,768 | 36.5 |
+
+The MCP toolset has **one** arm: `mcp/server.py:_as_tool` sends the rejoined description
+whatever the review's flag says (FR-039b), so 14,866 / 14,084 do not move.
+
+**The deviation, and it is in the lever's favour.** The package quotes **23,834 bytes / 30
+percent**; the split that keeps the rejoin byte-equal (FR-039) leaves **21,432 / 37.1
+percent** on OpenAI. The pin in `reviewer/tests/unit/test_tool_payload.py` is the measured
+figure, per T001's rule that the numbers are regenerated and never transcribed.
+
+| File and line | Quotes | Measured |
+|---|---|---|
+| `spec.md:260` (FR-039a) | 23,834 bytes, 30 percent | 21,432, 37.1 percent |
+| `contracts/levers.md:106, 152, 184` | 23,834, 30 percent | 21,432, 37.1 percent |
+| `quickstart.md:218` | 23,834, 30 percent | 21,432, 37.1 percent |
+| `research.md:471, 527` | 23,834, 30 percent | 21,432, 37.1 percent |
+| `tasks.md:171, 172, 174` | 23,834, 30 percent | 21,432, 37.1 percent |
+
+**Nine named lever 2 exceptions**, recorded here for the ledger row FR-033 asks for. Each is
+an `Args:` entry, the one piece of a docstring the split cannot move: an entry has no
+paragraph boundary to break at, and it is the *schema* rather than the description, so
+shortening one changes what the **off** arm sends and breaks SC-007 and the same-commit A/B.
+They are named rather than reworded, which is the exception T053 provides for, and
+`tests/unit/test_tool_notes_prompt.py::CAP_EXCEPTIONS` is the closed list a build enforces:
+
+`bridge_interference.settings` (299 characters), `list_features.folder` (181),
+`mark_coverage.scope` (136), `check_fit.bore_dimension_ref` (132),
+`list_features.include_suppressed` (131), `check_rms_part.document_id` (115),
+`check_hole_alignment.tolerance` (114), `record_drawing_finding.source_refs` (106),
+`check_axial_stack.dimension_refs` (94).
+
+All 35 first paragraphs are **under** the 160-character cap with no rewording at all: the
+longest is 84 characters (`check_fastener_joint`, `check_rms_assembly`).
+
+---
+
 ## L1 - OpenAI sub-count containment
 
 > OpenAI sub-count containment (`cached <= input`, `reasoning <= output`,

@@ -12,7 +12,7 @@ namespace SwReview.Extractor.Ir;
 public sealed class EvidencePackage
 {
     /// <summary>The schema version this package was written against.</summary>
-    public const string CurrentSchemaVersion = "1.2.0";
+    public const string CurrentSchemaVersion = "1.3.0";
 
     /// <summary>Semver; consumers reject any major other than 1 (FR-016).</summary>
     [JsonPropertyName("schema_version")]
@@ -23,6 +23,30 @@ public sealed class EvidencePackage
 
     [JsonPropertyName("created_at")]
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>
+    /// What this package claims to be: the <see cref="Dump.ReuseKey"/> digest over the design
+    /// and the dump options it was written from (schema 1.3.0, feature 005 lever 9). Null in a
+    /// package written by a build that computes none.
+    ///
+    /// Declared here, ahead of the bulk of the package, because the reuse lookup finds it with
+    /// a bounded head read of the first few KiB: a full package is tens of megabytes and the
+    /// read happens on the SOLIDWORKS application thread.
+    /// </summary>
+    [JsonPropertyName("reuse_key")]
+    public string? ReuseKey { get; set; }
+
+    /// <summary>
+    /// The run folder this package was copied from, or null when it was freshly dumped
+    /// (schema 1.3.0). Reuse is stated, never silent: this member, the pane's status line and
+    /// the report header all say it.
+    /// </summary>
+    [JsonPropertyName("reused_from")]
+    public string? ReusedFrom { get; set; }
+
+    /// <summary>When the reuse decision was made - not when the original was dumped.</summary>
+    [JsonPropertyName("reused_at")]
+    public DateTimeOffset? ReusedAt { get; set; }
 
     [JsonPropertyName("extractor")]
     public ExtractorInfo Extractor { get; set; } = new ExtractorInfo();

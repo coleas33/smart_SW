@@ -49,9 +49,11 @@ def build_extractor(**overrides: object) -> ExtractorInfo:
 # --- the version bump -------------------------------------------------------------
 
 
-def test_schema_version_is_one_two_zero() -> None:
-    assert SCHEMA_VERSION == "1.2.0"
-    assert build_package().schema_version == "1.2.0"
+def test_the_profile_bump_is_carried_by_the_current_schema_version() -> None:
+    """1.2.0 is where `extractor.profile` arrived; 1.3.0 (T089) added the reuse fields
+    beside it and left this member exactly as it was."""
+    assert SCHEMA_VERSION == "1.3.0"
+    assert build_package().schema_version == SCHEMA_VERSION
 
 
 def test_the_schema_major_gate_is_unchanged() -> None:

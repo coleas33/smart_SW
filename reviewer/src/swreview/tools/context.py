@@ -33,7 +33,11 @@ from uuid import uuid4
 
 from swreview.agent.checklist import Checklist, load_checklist
 from swreview.agent.providers import EventCallback, EventType
-from swreview.agent.settings import DEFAULT_PROVIDER, default_model
+from swreview.agent.settings import (
+    DEFAULT_PROVIDER,
+    ExtractionSettings,
+    default_model,
+)
 from swreview.exceptions import ExceptionStore
 from swreview.findings import Finding, FindingIdAllocator
 from swreview.ir.loader import LoadedPackage
@@ -69,6 +73,51 @@ def not_one_of(field_name: str, value: str, allowed: tuple[str, ...]) -> dict[st
     return error_result(f"{field_name} {value!r} is not one of {list(allowed)}")
 
 
+RMS_NOT_GRADABLE = (
+    "RMS tools were not offered for this review: the package carries no feature rows "
+    "(extractor profile {profile!r}, features[] empty), so no part rule and no equation "
+    "rule could be graded. The four assembly rules read the mates and the component "
+    "instances rather than the tree and would grade; they are withheld with them because "
+    "a report that closed out modeling resilience on the assembly rules alone would read "
+    "as a graded model rather than as an extract that never happened. Extract the model "
+    "again with its feature tree to grade them"
+)
+
+
+def rms_not_gradable(package: EvidencePackage) -> str | None:
+    """Why this package cannot be graded for Resilient Modeling, or `None` when it can.
+
+    The condition is the one `POST /checks/rms` already refuses with `EmptyFeatureTree`
+    (`_refuse_empty_feature_tree`, `checks/rms/run.py`): a package with no feature rows
+    carries no tree for the part or the equation rules to read, and the route's three
+    scopes - `part`, `equations`, `all` - are all document-scoped, so for the route that
+    condition is exactly `features[]` being empty.
+
+    **The four assembly rules are the exception, and the sentence says so.** They read the
+    mates and the component instances and never `features[]`, which is why
+    `_refuse_empty_feature_tree` lets an assembly-scoped run through, and a package of
+    assembly evidence with no part trees in it really does grade: `rms.assembly.*` finds
+    mates to faces and edges, an unfixed first component and a deep mate chain in it. This
+    tier withholds `check_rms_assembly` with the five tree readers anyway (T060), because a
+    report that closed out modeling resilience on the assembly rules alone would read as a
+    graded model rather than as an extract that never happened (constitution Principle I).
+    That is a **trade**, not an impossibility, and the reason states it as one: an engineer
+    who reads it can extract the tree, or ask for the assembly rules back. A sentence that
+    said instead that no assembly rule could be graded would be false, and a reason an
+    engineer cannot trust is worth less than silence.
+
+    **One writer for one sentence.** The error result a withheld tool hands the model, the
+    `unresolved` coverage item the same call writes, and the "NOT evaluated, and why" line
+    of a pre-run digest all render this string, so "not covered" and "not covered because"
+    cannot drift into two different explanations of one fact. The sentence names the rule,
+    the evidence for it and what to do about it, because a reason an engineer cannot act
+    on is worth no more than silence.
+    """
+    if package.features:
+        return None
+    return RMS_NOT_GRADABLE.format(profile=package.extractor.profile)
+
+
 @dataclass
 class ToolContext:
     """The package under review, the session being written, and the review checklist.
@@ -87,6 +136,12 @@ class ToolContext:
     the package directory into one). A plain list of records is also accepted, because a
     fixture and a golden case carry the exceptions inline; `exception_store()` is how a
     tool gets the store either way.
+
+    `extraction` says where this run's evidence comes from, and `eager` - the default -
+    is what every run before lever 10a did: the meshes are in the package. `lazy` has a
+    check fetch a body's mesh over the bridge when it needs one, and `lazy_bodies_fetched`
+    counts how many this review has pulled back, because `lazy_fetch_body_limit` bounds one
+    review rather than one call (contracts/levers.md, lever 10a).
     """
 
     package: LoadedPackage
@@ -95,6 +150,8 @@ class ToolContext:
     exceptions: ExceptionStore | list[Any] | None = None
     bridge: Any | None = None
     emit: EventCallback | None = None
+    extraction: ExtractionSettings = field(default_factory=ExtractionSettings)
+    lazy_bodies_fetched: int = 0
     finding_ids: FindingIdAllocator = field(default_factory=FindingIdAllocator)
     evidence_request_ids: EvidenceRequestIdAllocator = field(
         default_factory=EvidenceRequestIdAllocator
@@ -287,6 +344,10 @@ def new_session(package: EvidencePackage, model: str | None = None) -> ReviewSes
         session_id=uuid4(),
         package_id=package.package_id,
         design_id=package.design.design_id,
+        # Mirrored, not recomputed: the extractor decided the reuse and wrote it onto the
+        # package, and a session that said anything else would be a second opinion about a
+        # fact (data-model.md 9.5).
+        reused_from=package.reused_from,
         started_at=datetime.now(UTC),
         ended_at=None,
         model=model if model is not None else default_model(DEFAULT_PROVIDER),
@@ -308,12 +369,15 @@ def build_context(
     exceptions: ExceptionStore | list[Any] | None = None,
     bridge: Any | None = None,
     emit: EventCallback | None = None,
+    extraction: ExtractionSettings | None = None,
 ) -> ToolContext:
     """A context over `package` with a fresh session and the versioned checklist.
 
     `model` reaches `new_session` untouched, so the per-provider default is resolved in
     exactly one place rather than restated here. `emit` is the run's event stream; a
     caller with no stream to write to - a fixture, a golden case - leaves it unset.
+    `extraction` of `None` is the eager default, which is every caller that predates lever
+    10a.
     """
     return ToolContext(
         package=package,
@@ -322,6 +386,7 @@ def build_context(
         exceptions=exceptions,
         bridge=bridge,
         emit=emit,
+        extraction=extraction if extraction is not None else ExtractionSettings(),
     )
 
 

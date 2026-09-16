@@ -39,18 +39,19 @@ _RESOLUTION_ERRORS = (LookupError, ValidationError, TypeError)
 def check_fit(bore_dimension_ref: SourceRef, shaft_dimension_ref: SourceRef) -> ToolResult:
     """Clearance or interference between a bore and a shaft, from the drawn sizes alone.
 
-    Both dimensions are read off the drawing sheets in the package; there is no way to
-    supply a size directly. Returns the `fit.size_only` finding, which reports the
-    minimum and maximum diametral clearance, the fit class, and the effects size alone
-    does not cover (position, form, coating, temperature, deflection).
-
-    A tolerance the drawing does not state makes the finding `unresolved` naming the
-    side; an unknown or ambiguous reference is an error result.
-
     Args:
         bore_dimension_ref: Where the bore diameter is drawn: the document id, the sheet
             and the annotation of the dimension, as `find_dimensions` reports them.
         shaft_dimension_ref: Where the shaft diameter is drawn, in the same form.
+
+    Notes:
+        Both dimensions are read off the drawing sheets in the package; there is no way to
+        supply a size directly. Returns the `fit.size_only` finding, which reports the
+        minimum and maximum diametral clearance, the fit class, and the effects size alone
+        does not cover (position, form, coating, temperature, deflection).
+
+        A tolerance the drawing does not state makes the finding `unresolved` naming the
+        side; an unknown or ambiguous reference is an error result.
     """
     context = current_context()
     try:
@@ -73,21 +74,22 @@ def check_axial_stack(
 ) -> ToolResult:
     """Worst-case sum of drawn dimensions along one axis, against a target gap.
 
-    Every dimension is read off the drawing sheets in the package. `signs` says how each
-    one enters the stack: `+1` adds it, `-1` subtracts it, so a gap is the enclosing
-    dimension `+1` and everything inside it `-1`. Returns the `stack.worst_case` finding
-    with the nominal sum, the band around it, and - with a target gap - whether the
-    stack can fall outside it.
-
-    A contributor whose tolerance the drawing does not state makes the finding
-    `unresolved` naming it; an unknown or ambiguous reference, or a sign that is not +1
-    or -1, is an error result.
-
     Args:
         dimension_refs: Where each contributing dimension is drawn: document id, sheet
             and annotation, in stack order.
         signs: One sign per dimension, +1 to add and -1 to subtract.
         target_gap: Where the required gap is drawn, or null to report the band only.
+
+    Notes:
+        Every dimension is read off the drawing sheets in the package. `signs` says how each
+        one enters the stack: `+1` adds it, `-1` subtracts it, so a gap is the enclosing
+        dimension `+1` and everything inside it `-1`. Returns the `stack.worst_case` finding
+        with the nominal sum, the band around it, and - with a target gap - whether the
+        stack can fall outside it.
+
+        A contributor whose tolerance the drawing does not state makes the finding
+        `unresolved` naming it; an unknown or ambiguous reference, or a sign that is not +1
+        or -1, is an error result.
     """
     context = current_context()
     try:

@@ -95,10 +95,12 @@ public class BridgeDispatcherTests : IDisposable
         Assert.True(result.Pong);
 
         // The literal, not the constant: PROTOCOL.md says ping reports the host's own
-        // ProtocolVersion and that a client compares against it, and remodel_client.py's
-        // REMODEL_PROTOCOL_VERSION is "1.1". A comparison of the constant with itself would
-        // pass at any value, which is how the two ends came apart.
-        Assert.Equal("1.1", result.Protocol);
+        // ProtocolVersion and that a client compares against it. A comparison of the
+        // constant with itself would pass at any value, which is how the two ends came
+        // apart. 1.2 adds `tessellate` (T096); the `remodel.*` family of 1.1 is unchanged,
+        // so remodel_client.py's REMODEL_PROTOCOL_VERSION is the version that family needs
+        // rather than the version a host must report.
+        Assert.Equal("1.2", result.Protocol);
         Assert.Equal(SwBridgeDispatcher.ProtocolVersion, result.Protocol);
         Assert.Equal(@"C:\work\bracket-assy.SLDASM", result.Document);
         Assert.Equal("Default", result.Configuration);

@@ -76,7 +76,8 @@ public class BridgeSecretPolicyTests : IDisposable
     [InlineData(BridgeCommands.Capture)]
     [InlineData(BridgeCommands.Measure)]
     [InlineData(BridgeCommands.Interference)]
-    public void ScopedSecretPolicy_ReviewSecret_AuthorizesAllFourCommands(string command)
+    [InlineData(BridgeCommands.Tessellate)]
+    public void ScopedSecretPolicy_ReviewSecret_AuthorizesTheWholeReviewVocabulary(string command)
     {
         Assert.True(Scoped().IsAuthorized(ReviewSecret, command));
     }
@@ -94,6 +95,15 @@ public class BridgeSecretPolicyTests : IDisposable
     public void ScopedSecretPolicy_GeneralChatSecret_DoesNotAuthorizeInterference()
     {
         Assert.False(Scoped().IsAuthorized(ChatSecret, BridgeCommands.Interference));
+    }
+
+    [Fact]
+    public void ScopedSecretPolicy_GeneralChatSecret_DoesNotAuthorizeTessellate()
+    {
+        // Review scope only (T096): a mesh fetch writes a file and can take seconds, so it
+        // does not go to general chat. The refusal is the indistinguishable `unauthorized`
+        // every other out-of-scope command gets.
+        Assert.False(Scoped().IsAuthorized(ChatSecret, BridgeCommands.Tessellate));
     }
 
     [Theory]
@@ -136,6 +146,7 @@ public class BridgeSecretPolicyTests : IDisposable
                 BridgeCommands.Capture,
                 BridgeCommands.Measure,
                 BridgeCommands.Interference,
+                BridgeCommands.Tessellate,
             },
             ScopedSecretPolicy.ReviewCommands.ToArray());
 

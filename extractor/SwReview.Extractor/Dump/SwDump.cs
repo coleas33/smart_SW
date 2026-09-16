@@ -35,7 +35,7 @@ public static class SwDump
         return new PackageWriter(
             new ComponentTreeDumper(session, refs),
             new PropertyDumper(session, swApp),
-            new ManifestBuilder(),
+            new ManifestBuilder(session.Gate),
             new MateDumper(session, refs),
             new FeatureDumper(session.Gate, new SwFeatureReader(session.Gate, refs)),
             new EquationDumper(session.Gate, new SwEquationReader()),

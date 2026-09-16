@@ -1,7 +1,7 @@
 # Bridge protocol (Python side)
 
 **The authoritative protocol is
-`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.0). That
+`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.2). That
 file describes what `SwReview.Extractor.Console.exe serve --pipe <name>` speaks;
 `swreview.bridge.client` is written against it, and
 `reviewer/tests/unit/test_bridge_client.py` is the executable copy of what this client
@@ -18,9 +18,9 @@ One JSON object per line, UTF-8, `\n`-terminated, over `\\.\pipe\<name>`:
 ```
 
 `id` is a string (a monotonic counter rendered as decimal), `params` is the command's
-argument object, and `command` is one of `ping`, `capture`, `measure`, `interference` -
-the whole vocabulary. A client built with a `secret` adds one more top-level field,
-`"secret": "<per-launch>"`, on every line; a client built without one **omits the field
+argument object, and `command` is one of `ping`, `capture`, `measure`, `interference`,
+`tessellate` - the whole vocabulary. A client built with a `secret` adds one more
+top-level field, `"secret": "<per-launch>"`, on every line; a client built without one **omits the field
 entirely** rather than sending `""`, because an empty string is a wrong secret to the
 in-process host and the console host asks for none. The secret is never written into an
 error message, `last_error`, or a log line on this side either. `COMMANDS` in `client.py` is that allowlist and it is checked before

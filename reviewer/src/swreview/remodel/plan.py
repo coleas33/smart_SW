@@ -38,6 +38,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from pathlib import Path
+from types import MappingProxyType
 from typing import Annotated, Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
@@ -63,7 +65,10 @@ from swreview.remodel.target import Basis, NotContent, Resolved, target_group
 
 __all__ = [
     "CHANGE_ORDER",
+    "ENTERED_FROM",
+    "GLOBAL_NAME_PATTERN",
     "PACKAGE_BEFORE",
+    "PLAN_FILE_NAME",
     "PLAN_SCHEMA",
     "UNREAD_SIGNALS",
     "ChangeKind",
@@ -86,13 +91,20 @@ __all__ = [
     "TargetState",
     "non_contiguous_groups",
     "part_document_ids",
+    "plan_path",
     "plan_reorganize",
+    "record_state",
     "scope_report",
 ]
 
 PLAN_SCHEMA = "1.0"
 """The one `plan_schema` this reader knows. A plan carrying another is rejected rather
 than read part-way, exactly as the IR's major version is (Principle IV)."""
+
+GLOBAL_NAME_PATTERN = r"^[a-z][a-z0-9_]{1,31}$"
+"""The naming rule a global has to match (`contracts/tools.md`), spelled once: the model
+refuses a proposal by it and `remodel/units.py` refuses to compose a text with a name it
+does not match, and two spellings of it is two rules."""
 
 PACKAGE_BEFORE = "package-before.json"
 """The run folder's dump of the copy at open, named relative to the run folder so the
@@ -404,7 +416,7 @@ class GlobalProposal(_Model):
     (FR-030). The report says so in those words.
     """
 
-    name: Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{1,31}$")]
+    name: Annotated[str, StringConstraints(pattern=GLOBAL_NAME_PATTERN)]
     expression: str
     rationale: str
     evidence: tuple[GlobalEvidence, ...]
@@ -1334,3 +1346,74 @@ def _why_changes(
         "order the method wants and every group folder it needs already holds exactly its "
         "features"
     )
+
+
+# --- 8. The run's state on disk ------------------------------------------------------
+
+PLAN_FILE_NAME = "plan.json"
+"""The file, in the run folder (`contracts/run-artifacts.md`). One spelling, here."""
+
+ENTERED_FROM: Mapping[RunState, frozenset[RunState]] = MappingProxyType(
+    {
+        "planned": frozenset(),
+        "judging": frozenset({"planned"}),
+        "applying": frozenset({"planned", "judging"}),
+        "verifying": frozenset({"applying"}),
+        "saved": frozenset({"verifying"}),
+        "truncated": frozenset({"verifying"}),
+        "failed": frozenset(get_args(RunState)) - {"failed", "discarded"},
+        "discarded": frozenset({"saved", "truncated"}),
+    }
+)
+"""Which state each state of `data-model.md` section 11 may be entered from.
+
+The table's rules, read as a graph rather than as prose:
+
+- **the only path into `saved` or `truncated` runs through `verifying`**, which is the
+  rule the whole mutation exception rests on: a run that skipped the three checks cannot
+  record that it saved;
+- `judging` is skippable, so `applying` is entered from `planned` as well as from it;
+- **any state a run is still in can fail.** A scope refusal, a contract violation, a
+  failed gate, a save error and a source attestation mismatch all reach `failed`, and the
+  last of those is re-checked after the save, so `saved -> failed` is a real transition
+  and not a slip;
+- `discarded` is the engineer's, on a run that reached `saved` or `truncated`. It is not
+  reachable from a run that failed, because that run's copy is already gone.
+
+`planned` is entered from nothing: it is the first state written, by the planner, and a
+run that reached it again would be a second run in one folder."""
+
+
+def plan_path(run_dir: Path | str) -> Path:
+    """Where the plan of `run_dir` lives."""
+    return Path(run_dir) / PLAN_FILE_NAME
+
+
+def record_state(
+    run_dir: Path | str, plan: RemodelPlan, state: RunState, *, at: datetime
+) -> RemodelPlan:
+    """Move the run to `state`, rewrite `plan.json` in place, and return the moved plan.
+
+    The state is a single field on the plan and the file is rewritten at every transition,
+    so the run's state survives a crash and the pane reads it from disk rather than from a
+    process that may be gone (section 11).
+
+    Raises:
+        ValueError: `state` cannot be entered from the plan's current one. The refusal is
+            here rather than at the call sites because the transition that matters -
+            nothing reaches `saved` without passing through `verifying` - is the one a
+            caller in a hurry would take, and a rule checked only by the caller is a rule
+            the caller can skip.
+    """
+    allowed = ENTERED_FROM[state]
+    if plan.state not in allowed:
+        raise ValueError(
+            f"this run is {plan.state!r} and {state!r} is entered from "
+            f"{sorted(allowed) or 'nothing'} (data-model.md section 11); the transition "
+            "was not recorded and plan.json still says what the run last did"
+        )
+    moved = plan.model_copy(update={"state": state, "updated_at": at})
+    target = plan_path(run_dir)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(moved.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    return moved

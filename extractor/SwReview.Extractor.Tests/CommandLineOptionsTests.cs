@@ -94,6 +94,61 @@ public class CommandLineOptionsTests
         Assert.Throws<UsageError>(() => parsed.Flag("ignore-hidden"));
     }
 
+    // ---- dump --reuse (feature 005 lever 9, T091) ---------------------------------
+
+    [Fact]
+    public void Reuse_AbsentIsFalse()
+    {
+        // The lever is off unless it is asked for. A dump that quietly copied an earlier
+        // package would answer about a design nobody checked was the one on screen.
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--out", @"C:\out" }, 1, DumpOptions);
+
+        Assert.False(parsed.Flag("reuse"));
+    }
+
+    [Fact]
+    public void Reuse_BareSwitch_IsTrue()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--reuse", "--out", @"C:\out" }, 1, DumpOptions);
+
+        Assert.True(parsed.Flag("reuse"));
+        Assert.Equal(@"C:\out", parsed.Value("out"));
+    }
+
+    [Theory]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
+    public void Reuse_ExplicitValue_IsRead(string value, bool expected)
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--reuse", value, "--out", @"C:\out" }, 1, DumpOptions);
+
+        Assert.Equal(expected, parsed.Flag("reuse"));
+    }
+
+    [Fact]
+    public void Reuse_NonsenseValue_Throws()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--reuse", "sometimes", "--out", @"C:\out" }, 1, DumpOptions);
+
+        Assert.Throws<UsageError>(() => parsed.Flag("reuse"));
+    }
+
+    [Fact]
+    public void Reuse_IsADumpOptionAndNotAnOptionOfEveryCommand()
+    {
+        // It changes what a dump reads; nothing else in the CLI has anything to reuse.
+        Assert.Contains("reuse", DumpOptions);
+        Assert.DoesNotContain("reuse", InterferenceOptions);
+        Assert.DoesNotContain("reuse", CaptureOptions);
+        Assert.DoesNotContain("reuse", ServeOptions);
+        Assert.Throws<UsageError>(() =>
+            CommandLine.Parse(new[] { "capture", "--reuse" }, 1, CaptureOptions));
+    }
+
     // ---- --truncate-after --------------------------------------------------------
 
     [Fact]

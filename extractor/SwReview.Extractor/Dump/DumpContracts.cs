@@ -379,4 +379,15 @@ public interface IFaceSource
 public interface IMeshSource
 {
     IReadOnlyList<BodyRef> Dump(DumpScope scope, string meshDirectory);
+
+    /// <summary>
+    /// One component's bodies, through the same export path <see cref="Dump"/> uses (T097).
+    ///
+    /// Lever 10a fetches a mesh over the bridge for a package extracted without one, and it
+    /// reaches the export here rather than tessellating a second way: a different chord
+    /// tolerance in the two paths would make a clearance answer depend on how the mesh
+    /// arrived (FR-090).
+    /// </summary>
+    IReadOnlyList<BodyRef> DumpComponent(
+        DumpScope scope, ScopedComponent component, string meshDirectory);
 }

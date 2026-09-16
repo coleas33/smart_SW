@@ -15,6 +15,7 @@ in any package makes that total null, never a partial sum.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -70,10 +71,17 @@ class PackageSpec:
     total_tokens: int | None = 418_000
     rounds: int | None = 9
     tool_calls: int = 31
+    tool_names: tuple[str, ...] = ("list_holes",)
+    """The tools the steps cycle through, so the tool-name histogram has something to
+    count. One name reproduces the single-tool sessions every earlier study built."""
     wall_clock_s: float | None = 500.0
     seconds_to_first_finding: float | None = 44.0
     coverage_checked: int = 2
     coverage_unresolved: int = 3
+    coverage_withheld: int = 0
+    """How many of `coverage_unresolved` a withheld tool wrote (lever 4, FR-054). The
+    session names those checks in `withheld_checks` and the score splits on them, so the
+    two artifacts agree about the same items rather than holding two opinions."""
 
     def usage(self) -> TokenUsage | None:
         if self.total_tokens is None and self.input_tokens is None:
@@ -137,6 +145,15 @@ class RunSpec:
         )
 
 
+def step_tools(spec: PackageSpec) -> list[str]:
+    """The tool each of this package's steps called: `tool_names`, cycled.
+
+    Read by both the session and its score, so the histogram in `scorecard.json` is the
+    histogram of the steps in `session.json` rather than a second opinion about them.
+    """
+    return [spec.tool_names[index % len(spec.tool_names)] for index in range(spec.tool_calls)]
+
+
 def _sum_or_none(values: Iterable[int | None]) -> int | None:
     collected = list(values)
     return None if any(value is None for value in collected) else sum(collected)  # type: ignore[arg-type]
@@ -161,6 +178,11 @@ def package_score(spec: PackageSpec) -> PackageScore:
         cached_input_share=usage.cached_input_share if usage is not None else None,
         wall_clock_s=spec.wall_clock_s,
         seconds_to_first_finding=spec.seconds_to_first_finding,
+        unresolved_because_withheld=spec.coverage_withheld,
+        unresolved_other=spec.coverage_unresolved - spec.coverage_withheld,
+        tool_calls_by_name=dict(
+            sorted(Counter(step_tools(spec)).items(), key=lambda item: (-item[1], item[0]))
+        ),
         matched_defect_ids=list(spec.matched),
         missed_defect_ids=list(spec.missed),
         false_alarm_finding_ids=[f"F-{index:03d}" for index in range(spec.false_alarms)],
@@ -228,6 +250,11 @@ def arm(
     ]
 
 
+def _withheld_checks(package: PackageSpec) -> list[str]:
+    """The first `coverage_withheld` unresolved checks, named as the session names them."""
+    return [f"open-{index}" for index in range(package.coverage_withheld)]
+
+
 def _coverage_item(check: str) -> CoverageItem:
     return CoverageItem(check=check, scope=CoverageScope(), reason="r", error=None)
 
@@ -269,15 +296,16 @@ def session_of(spec: RunSpec, package: PackageSpec) -> ReviewSession:
         steps=[
             InvestigationStep(
                 index=index,
-                tool="list_holes",
+                tool=tool,
                 arguments={},
                 result_summary="ok",
                 status="ok",
                 error=None,
                 elapsed_s=0.1,
             )
-            for index in range(package.tool_calls)
+            for index, tool in enumerate(step_tools(package))
         ],
+        withheld_checks=_withheld_checks(package),
         coverage=Coverage(
             checked=[
                 _coverage_item(f"item-{index}") for index in range(package.coverage_checked)

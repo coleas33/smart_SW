@@ -63,6 +63,7 @@ from swreview.agent.providers import (
     call_tool,
     error_body,
     register,
+    tools_withdrawn,
     usage_body,
 )
 from swreview.agent.providers.schema import strictify
@@ -194,6 +195,28 @@ def usage_of(response: Response, *, latency_s: float) -> TokenUsage:
     )
 
 
+def _cache_diagnostic(response: Response) -> dict[str, Any] | None:
+    """What the prompt cache did with this round, recorded verbatim, or `None`.
+
+    Verbatim and nested: `tools_changed` with a `cache_missed_tokens` number beside it is
+    how lever 4 is priced before lever 4 is written, and a flattened or summarised record
+    would lose exactly that (contracts/usage.md section 7).
+
+    `exclude_unset=True` records the fields the endpoint actually sent, the convention the
+    echoed output items already follow. It matters here for the same reason
+    `cache_write_tokens` maps to `None` rather than `0` in `usage_of`: an omitted
+    `comparison_reusable_tokens` is absent, not null-and-therefore-zero.
+
+    `None` means no diagnostic arrived - the lever is off, the service did not send one,
+    or this SDK could not read one - and never a hit. Reading an absent diagnostic as
+    `cache_hit` would overstate every A/B row that rests on it (Principle I).
+    """
+    diagnostic = getattr(response, "prompt_cache_diagnostics", None)
+    if diagnostic is None:
+        return None
+    return diagnostic.model_dump(mode="json", exclude_unset=True)
+
+
 class OpenAIProvider:
     """One turn on the Responses API. `providers.get("openai")` returns this class."""
 
@@ -204,6 +227,7 @@ class OpenAIProvider:
         *,
         model: str,
         max_output_tokens: int | None = None,
+        parallel_tool_calls: bool = False,
         api_key: str | None = None,
         base_url: str | None = None,
         client: OpenAI | None = None,
@@ -218,6 +242,12 @@ class OpenAIProvider:
                 from it too. Omitted, it is `agent/settings.py`'s ceiling for this provider
                 and model, which is the one authority for it - never the `16000` feature
                 001's runner carried for a non-streaming provider.
+            parallel_tool_calls: Feature 005's lever 6, off by default and read here
+                rather than on `run`, whose signature is the port contract. Off, the
+                request pins `parallel_tool_calls: False` and the model asks for one call
+                per round trip, which is what feature 001 sent. On, several calls may
+                arrive in one response; this adapter still runs them serially, in request
+                order, because the win is the round trip and not the threads.
             api_key: The key, when this adapter builds its own client.
             base_url: An alternate endpoint (`OPENAI_BASE_URL`), when one is configured.
             client: A ready-made client, which is how the tests inject a recorded one.
@@ -234,10 +264,18 @@ class OpenAIProvider:
             raise ValueError("an OpenAI adapter needs either an api_key or a ready-made client")
         self.model = model
         self.max_output_tokens = ceiling
+        self.parallel_tool_calls = parallel_tool_calls
+        """Lever 6. `False` is the default and stays the default; `cli.provider_factory`
+        is the one place that reads `EfficiencySettings` and passes it in."""
         self._client = client if client is not None else OpenAI(api_key=api_key, base_url=base_url)
         self._api_key = api_key if api_key else str(getattr(self._client, "api_key", "") or "")
         self._clock = clock
         self._step_index = 0
+        self.prompt_cache_key: str | None = None
+        """This session's cache name, or `None` while lever 3 is off - which is the
+        default and stays the default. Set once, by `use_prompt_cache`."""
+        self._last_response_id: str | None = None
+        """The previous round's response id, for `comparison_response_id`. Per turn."""
         self.round_usage: list[TokenUsage] = []
         """This turn's round trips, one record each, in the order they were made.
 
@@ -246,6 +284,26 @@ class OpenAIProvider:
         a turn that raises on its sixth round never builds a `TurnResult`, and the five
         rounds it already paid for are the ones worth the most.
         """
+
+    # --- the prompt cache (feature 005, lever 3) ---------------------------------------
+
+    def use_prompt_cache(self, session_id: str) -> None:
+        """Name this session's prompt cache, and ask for the diagnostics with it.
+
+        `PromptCacheAware`; called once, by `start_review`, when
+        `EfficiencySettings.prompt_cache_key` is on. The id is passed in rather than
+        invented here because **the key must survive a process restart**: the pane
+        restarts the backend on a settings save and resumes the same run folder, and a
+        process-local value would look identical while silently dropping every hit
+        afterwards, which the API would report as `prompt_cache_key_changed`.
+
+        The diagnostics ride along rather than behind a second flag: they are the
+        instrument that tells us whether the key is doing anything at all, and a lever
+        whose effect cannot be seen is not worth measuring. Whether our seat accepts
+        `prompt_cache_options` is probe L3b; a `400` there is a recorded answer, not a
+        failure, and it ships the key half alone.
+        """
+        self.prompt_cache_key = str(session_id)
 
     # --- effort -----------------------------------------------------------------------
 
@@ -287,6 +345,10 @@ class OpenAIProvider:
         texts: list[str] = []
         steps = 0
         self.round_usage = []
+        # Per turn, like `round_usage` and for the same reason: an adapter sees one turn,
+        # and the first round of a turn has no earlier response of its own to be compared
+        # against.
+        self._last_response_id = None
 
         while True:
             started = self._clock()
@@ -295,6 +357,10 @@ class OpenAIProvider:
                 history=history,
                 tool_params=tool_params,
                 effort_value=str(mapping.provider_value),
+                # Lever 7, asked once per round because that is the granularity the answer
+                # has: the run decides between rounds that the review is finished, and
+                # what the answer buys is this round trip's tool calls.
+                withdraw_tools=tools_withdrawn(tools),
                 on_event=on_event,
             )
             # Per round, not per turn: `_respond` is one HTTP request and this loop runs
@@ -313,6 +379,7 @@ class OpenAIProvider:
                     round_index=len(self.round_usage) - 1,
                     provider=self.name,
                     model=self.model,
+                    cache_diagnostic=_cache_diagnostic(response),
                 ),
             )
             raw_output = [
@@ -366,20 +433,42 @@ class OpenAIProvider:
         history: Sequence[Mapping[str, Any]],
         tool_params: Sequence[dict[str, Any]],
         effort_value: str,
+        withdraw_tools: bool = False,
         on_event: EventCallback,
     ) -> Response:
-        """One streamed request; text deltas go out as they arrive."""
+        """One streamed request; text deltas go out as they arrive.
+
+        `withdraw_tools` is feature 005's lever 7: the tools stay in the request, because
+        the echoed history refers to them, but the model may not call one.
+        """
         request: dict[str, Any] = {
             "model": self.model,
             "instructions": system,
             "input": _encode_history(history),
             "reasoning": {"effort": effort_value},
             "max_output_tokens": self.max_output_tokens,
-            "parallel_tool_calls": False,
+            "parallel_tool_calls": self.parallel_tool_calls,
             "stream": True,
         }
         if tool_params:
             request["tools"] = list(tool_params)
+        if withdraw_tools:
+            # `"none"` is the API's own literal for "the model will not call any tool"
+            # (`openai/types/responses/tool_choice_options.py`). Sent only when the stop
+            # has fired, so a lever-7-off run sends no `tool_choice` at all and the two
+            # arms of the A/B differ in exactly one key.
+            request["tool_choice"] = "none"
+        if self.prompt_cache_key is not None:
+            # Both fields or neither, so a flag-off run sends exactly what feature 001
+            # sent and the two A/B arms differ in one thing. `prompt_cache_options`
+            # carries only the comparison id: `mode` defaults to `implicit`, which is the
+            # breakpoint we want, and `ttl` has one supported value, so naming either
+            # would be restating the default in a request we have to keep stable.
+            request["prompt_cache_key"] = self.prompt_cache_key
+            if self._last_response_id is not None:
+                request["prompt_cache_options"] = {
+                    "comparison_response_id": self._last_response_id
+                }
 
         final: Response | None = None
         try:
@@ -401,6 +490,10 @@ class OpenAIProvider:
                 retryable=True,
                 on_event=on_event,
             )
+        # After the round succeeded, so the next round in this turn is compared against
+        # the response that actually landed. A round that raised leaves the previous id
+        # in place: it is still the last prefix the service saw from us.
+        self._last_response_id = getattr(final, "id", None)
         return final
 
     def _hit_ceiling(self, response: Response, on_event: EventCallback) -> bool:
@@ -435,6 +528,15 @@ class OpenAIProvider:
             on_event("text.done", {"text": text})
         return TurnResult(reason=reason, text=text, steps=steps, messages=history)
 
+    def start_steps_at(self, index: int) -> None:
+        """`AgentProvider`: the session already holds `index` steps, so number from there.
+
+        Called by `start_review` only when setup wrote steps, which today means lever 5's
+        pre-run; the port's docstring says why the number is the session's and the counter
+        the adapter's.
+        """
+        self._step_index = index
+
     def _call(
         self,
         request: ToolCallRequest,
@@ -443,8 +545,10 @@ class OpenAIProvider:
     ) -> ToolCallResult:
         """Run one call and emit its two events, through the port's own shaper.
 
-        The counter is this turn's; everything after it is identical for every adapter and
-        lives in `providers.call_tool`.
+        The counter runs for the whole session and is never reset per turn, because
+        `step_index` names an `InvestigationStep` and the session keeps accumulating them;
+        everything after it is identical for every adapter and lives in
+        `providers.call_tool`.
         """
         step_index = self._step_index
         self._step_index += 1

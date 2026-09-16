@@ -102,6 +102,30 @@ class Coverage(ReviewModel):
     out_of_scope: list[CoverageItem] = Field(default_factory=list)
 
 
+CLOSEOUT_CHECK = "coverage.closeout"
+"""The check a turn cut short closes out under, and the checklist item id it shares.
+
+Three different facts are written under this one check, which is why `was_cut_short` reads
+the reason as well: `ReviewRun._closeout` writes one `unresolved` item when a turn ended on
+`max_steps` or on the provider's output ceiling; finalization writes one when the
+`coverage.closeout` **checklist item** was left open; and the model itself may close that
+item out through `mark_coverage` into any bucket it likes.
+"""
+
+MAX_STEPS_CLOSEOUT_PREFIX = "max_steps reached ("
+"""The fixed head of `MAX_STEPS_CLOSEOUT`, which the step count makes per-run."""
+
+MAX_STEPS_CLOSEOUT = (
+    MAX_STEPS_CLOSEOUT_PREFIX + "{max_steps} tool calls); the turn was cut short "
+    "and what it was still investigating was not finished"
+)
+
+TRUNCATED_CLOSEOUT = (
+    "the provider ended the turn on its output ceiling; the answer was cut short and "
+    "whatever it was still working on was not investigated"
+)
+
+
 CoverageBucket = Literal["checked", "skipped", "unresolved", "failed", "out_of_scope"]
 """One of `Coverage`'s five buckets, as an argument type.
 
@@ -251,6 +275,15 @@ class ReviewSession(ReviewModel):
     model: str
     provider_info: ProviderInfo | None = None
     retry_of: UUID | None = Field(default=None, strict=False)
+    reused_from: str | None = None
+    """The run folder this run's evidence was copied from, mirrored off the package.
+
+    `None` means the package was dumped for this run, which is every run with lever 9 off.
+    Reuse is stated, never silent: the package carries it, the pane's status line says it,
+    the report header states it and this is the copy an engineer reads back out of
+    `session.json` weeks later (feature 005 lever 9, data-model.md 9.5).
+    """
+
     efficiency: EfficiencySettings | None = None
     """Which efficiency levers this run had on (feature 005).
 
@@ -268,11 +301,49 @@ class ReviewSession(ReviewModel):
     something we did not measure, which is not zero (Principle I).
     """
 
+    withheld_checks: list[str] = Field(default_factory=list)
+    """The coverage checks a tool this run declined to offer closed out (feature 005 lever 4).
+
+    Empty for every run with `tool_tiers` off, which is every shipped run. A withheld tool
+    writes an `unresolved` coverage item naming its checklist item and records that check
+    here, which is what lets the scorecard read the unresolved count as the two numbers
+    FR-054 requires - the items withholding caused, and everything else - **without**
+    substring-matching the reason sentence. One rewording of that sentence would otherwise
+    silently change a measured number.
+    """
+
     steps: list[InvestigationStep] = Field(default_factory=list)
     evidence_requests: list[EvidenceRequest] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
     coverage: Coverage = Field(default_factory=Coverage)
     timing: Timing
+
+
+def was_cut_short(session: ReviewSession) -> bool:
+    """Whether a turn of `session` stopped rather than finished (`ReviewRun._closeout`).
+
+    `ended_at` does not say it: a run out of steps, or ended on the provider's output
+    ceiling, is finalized and timestamped exactly like a run that finished, and records no
+    `failed` item either, because nothing failed. The `unresolved` closeout item is the only
+    trace - but `CLOSEOUT_CHECK` is also a checklist item id, so the check alone would call
+    every review that left `coverage.closeout` open a review that was cut short. The two
+    reasons `_closeout` writes are therefore constants **here**, written by the runner and
+    read by this predicate, so neither side can reword the sentence out from under the
+    other.
+
+    The one reader is `carry_over.select_carry_over`, whose guard 1 refuses to carry a
+    verdict out of a run that gave up half way (feature 005 lever 11a); it lives beside the
+    session model rather than in `agent/runner.py` because `carry_over` cannot import the
+    runner - the runner imports `carry_over`.
+    """
+    return any(
+        item.check == CLOSEOUT_CHECK
+        and (
+            item.reason.startswith(MAX_STEPS_CLOSEOUT_PREFIX)
+            or item.reason == TRUNCATED_CLOSEOUT
+        )
+        for item in session.coverage.unresolved
+    )
 
 
 def load_session(path: Path | str) -> ReviewSession:

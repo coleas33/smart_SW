@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
-from swreview.findings import Calculation, Disposition, Finding
+from swreview.findings import Calculation, Disposition, Finding, carried_and_computed
 from swreview.ir.models import (
     Angle,
     ComponentInstance,
@@ -26,7 +26,6 @@ from swreview.ir.models import (
     SourceRef,
 )
 from swreview.report.session import (
-    Coverage,
     CoverageItem,
     CoverageScope,
     ReviewSession,
@@ -68,7 +67,7 @@ def render_report(session: ReviewSession, package: EvidencePackage | None = None
     lines.append("")
     lines.extend(_render_evidence_requests(session))
     lines.append("")
-    lines.extend(_render_coverage(session.coverage))
+    lines.extend(_render_coverage(session))
     lines.append("")
     lines.extend(_render_timing(session))
     lines.append("")
@@ -116,6 +115,11 @@ def _render_provider_info(session: ReviewSession) -> list[str]:
         )
     if session.retry_of is not None:
         lines.append(f"- Retry of session: {session.retry_of}")
+    if session.reused_from is not None:
+        # Lever 9: the evidence was copied from an earlier run rather than dumped for this
+        # one. A reader deciding how much to trust a finding needs that on the first screen,
+        # not in `session.json`.
+        lines.append(f"- Evidence reused from run: {session.reused_from}")
     return lines
 
 
@@ -302,7 +306,12 @@ def _render_finding(
     package: EvidencePackage | None,
     components_by_id: dict[str, ComponentInstance],
 ) -> list[str]:
-    lines = [f"#### {finding.id}: {finding.title}", ""]
+    heading = f"#### {finding.id}: {finding.title}"
+    if finding.carried_over_from is not None:
+        # The originating run in the heading, so an engineer scanning the report sees
+        # which verdicts were not computed today before reading a word of them (FR-102).
+        heading += f" (carried over from session {finding.carried_over_from})"
+    lines = [heading, ""]
     lines.append(f"- Check: {finding.check}")
     lines.append(f"- Status: {finding.status}")
     lines.append(f"- Severity: {finding.severity}")
@@ -446,10 +455,24 @@ def _render_coverage_bucket(heading: str, items: list[CoverageItem]) -> list[str
     return lines
 
 
-def _render_coverage(coverage: Coverage) -> list[str]:
+def _render_coverage(session: ReviewSession) -> list[str]:
+    """The five buckets, and - only when something was carried - what was not computed.
+
+    The carried line is written from `session.findings` rather than from the coverage
+    items, so it counts the findings in this report and cannot disagree with them. It is
+    omitted entirely when nothing was carried, which is every run with lever 11a off, so
+    the report of such a run is byte-identical to the one this build wrote before.
+    """
     lines = ["## Coverage", ""]
+    carried, computed = carried_and_computed(session.findings)
+    if carried:
+        lines.append(
+            f"- Findings carried over from an earlier run: {carried}; "
+            f"computed in this run: {computed}."
+        )
+        lines.append("")
     for key, heading in _COVERAGE_BUCKETS:
-        lines.extend(_render_coverage_bucket(heading, getattr(coverage, key)))
+        lines.extend(_render_coverage_bucket(heading, getattr(session.coverage, key)))
         lines.append("")
     return lines
 

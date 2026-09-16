@@ -9,9 +9,17 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    StringConstraints,
+    model_serializer,
+)
 
 from swreview.ids import SequentialIdAllocator
 from swreview.ir.models import (
@@ -21,6 +29,7 @@ from swreview.ir.models import (
     ManifestEntry,
     Quantity,
     SourceRef,
+    omit_when_null,
 )
 
 FindingStatus = Literal["demonstrated", "suspected", "unresolved", "checked_within_scope"]
@@ -84,6 +93,57 @@ class Finding(ReviewModel):
     capture_ids: list[str]
     disposition: Disposition | None
     exception_id: str | None
+
+    carried_over_from: UUID | None = Field(default=None, strict=False)
+    """The session that **produced** this verdict, when this run carried it rather than
+    computing it (lever 11a, `swreview.carry_over`). This is the machine-readable signal;
+    the other two fields are for a human reading the report.
+
+    Optional, and absent from `required` in `review-session.schema.json`, for the reason
+    `provider_info` and `retry_of` are on the session: a finding written before the field
+    existed loads unchanged. `None` is the normal case and means this run computed it.
+    """
+
+    carried_over_at: datetime | None = Field(default=None, strict=False)
+    """When the carry-over decision was made - not when the verdict was first produced."""
+
+    carry_over_key: str | None = None
+    """The key that justified the carry, stored so the decision is reproducible by hand
+    against the package (`carry_over.carry_over_key`)."""
+
+    @model_serializer(mode="wrap")
+    def _omit_null_carry_over_fields(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        """Leave the three lever 11a fields out when they are null (`omit_when_null`).
+
+        Every run with `carry_over_rms` off computes every finding it reports, so all three
+        are null on that arm and the finding serializes to the bytes it did before the
+        lever existed - in `session.json`, in the `finding` event and in the tool payload
+        the model is charged for.
+        """
+        return omit_when_null(
+            handler, self, "carried_over_from", "carried_over_at", "carry_over_key"
+        )
+
+
+def carried_count(findings: Iterable[Finding]) -> int:
+    """How many of `findings` this run carried rather than computed (lever 11a).
+
+    One definition, three readers - the report's coverage line, `PackageScore`'s
+    `carried_findings`, and the workstation harness's per-arm counter (FR-104) - so no two
+    of them can come to disagree about what "carried" means. It lives here rather than in
+    `carry_over.py` because it reads nothing but the field, and because a report that had
+    to import the carry-over machinery to count three findings would pull the whole check
+    registry in behind it.
+    """
+    return sum(1 for finding in findings if finding.carried_over_from is not None)
+
+
+def carried_and_computed(findings: Sequence[Finding]) -> tuple[int, int]:
+    """`(carried, computed)` over `findings`: the pair the report states (FR-102)."""
+    carried = carried_count(findings)
+    return carried, len(findings) - carried
 
 
 class FindingIdAllocator(SequentialIdAllocator):

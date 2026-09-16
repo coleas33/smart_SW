@@ -436,8 +436,14 @@ def test_tool_spec_description_is_the_docstring_without_the_args_section(
 
 
 def test_tool_spec_description_keeps_the_body_paragraphs() -> None:
+    """Lever 2 moved the second paragraph under `Notes:`; `full_description` rejoins it.
+
+    The assertion is the same text it always was, read through the accessor that now
+    holds it: FR-039 pins the rejoin byte-equal to the pre-split docstring body, and
+    `full_description` is what a flag-off run puts on the wire (`tools/registry.py`).
+    """
     spec = tool_spec(query.get_component)
-    assert spec.description == (
+    assert spec.full_description == (
         "Everything the package holds about one component instance.\n\n"
         "Returns the instance itself plus the holes, fasteners, faces and mates that "
         "belong\nto it."

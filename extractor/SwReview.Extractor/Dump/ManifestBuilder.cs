@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using SwReview.Extractor.Ir;
+using SwReview.Extractor.Sw;
 
 namespace SwReview.Extractor.Dump;
 
@@ -21,9 +23,27 @@ namespace SwReview.Extractor.Dump;
 /// </summary>
 public sealed class ManifestBuilder : IManifestSource
 {
+    /// <summary>
+    /// What the gate is asked about before a document's path is stat'ed. Every read a dump
+    /// makes is named at the door, so "what did this dump touch" is one record and not two.
+    /// </summary>
+    public const string FileStatMember = "FileInfo.LastWriteTimeUtc";
+
     private static readonly string[] RevisionProperties = { "Revision", "Rev" };
 
     private static readonly string[] VersionProperties = { "PDM Version", "Version", "PDMVersion" };
+
+    private readonly SwGate? _gate;
+
+    /// <summary>
+    /// Builds a manifest. <paramref name="gate"/> is the session's gate, so the file stat the
+    /// reuse key needs is recorded with every other read the dump made; null - the tests and
+    /// any caller with no session - stats the file directly.
+    /// </summary>
+    public ManifestBuilder(SwGate? gate = null)
+    {
+        _gate = gate;
+    }
 
     public Manifest Build(DumpScope scope, IReadOnlyList<Document> documents)
     {
@@ -46,6 +66,7 @@ public sealed class ManifestBuilder : IManifestSource
 
             string? revision = Lookup(properties, RevisionProperties);
             int? version = ParseVersion(Lookup(properties, VersionProperties));
+            FileStat stat = Stat(document.Path);
 
             manifest.Entries.Add(new ManifestEntry
             {
@@ -56,12 +77,50 @@ public sealed class ManifestBuilder : IManifestSource
                 Configuration = configuration,
                 LocalModified = null,
                 ExportMethod = ExportMethod.Native,
+                FileModifiedUtc = stat.ModifiedUtc,
+                FileSizeBytes = stat.SizeBytes,
             });
 
             RecordGaps(scope, document, revision, version);
+            RecordStatGap(scope, document, stat);
         }
 
         return manifest;
+    }
+
+    /// <summary>
+    /// The document file's modification time and size, or <see cref="FileStat.Unknown"/>.
+    ///
+    /// The read goes through the gate so it is named with every other read the dump made, and
+    /// it cannot throw through it: a path that is gone, on a share that dropped, or spelled in
+    /// a way the filesystem rejects is an <b>answer</b>, and counting it as a failed interop
+    /// call would push the circuit breaker towards stopping a dump that is working fine.
+    /// </summary>
+    private FileStat Stat(string path)
+    {
+        return _gate == null ? FileStat.Read(path) : _gate.Call(FileStatMember, () => FileStat.Read(path));
+    }
+
+    /// <summary>
+    /// A path that could not be stat'ed is null plus a gap, never 0 and never "now": a review
+    /// that cannot say when the file it read was last saved must say so (Principle I), and the
+    /// package-reuse key refuses to match on an unknown rather than assuming it unchanged.
+    /// </summary>
+    private static void RecordStatGap(DumpScope scope, Document document, FileStat stat)
+    {
+        if (stat.ModifiedUtc != null && stat.SizeBytes != null)
+        {
+            return;
+        }
+
+        scope.Gaps.Add(
+            GapKind.NotExtracted,
+            "manifest",
+            document.DocumentId,
+            $"The file modification time and size of '{document.FileName}' could not be read "
+            + $"from '{document.Path}', so a reader cannot tell whether it changed since a "
+            + "previous run.",
+            stat.Error);
     }
 
     private static void RecordGaps(DumpScope scope, Document document, string? revision, int? version)
@@ -131,6 +190,76 @@ public sealed class ManifestBuilder : IManifestSource
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// What one <see cref="FileInfo"/> read produced: both values, or neither and the reason.
+    ///
+    /// A pair rather than two reads, because a file that is replaced between the two would
+    /// otherwise contribute one document's size and another's modification time to the key.
+    /// </summary>
+    private sealed class FileStat
+    {
+        private FileStat(DateTimeOffset? modifiedUtc, long? sizeBytes, string? error)
+        {
+            ModifiedUtc = modifiedUtc;
+            SizeBytes = sizeBytes;
+            Error = error;
+        }
+
+        public DateTimeOffset? ModifiedUtc { get; }
+
+        public long? SizeBytes { get; }
+
+        /// <summary>What the read threw, or null when it simply found nothing there.</summary>
+        public string? Error { get; }
+
+        /// <summary>
+        /// Stats <paramref name="path"/>, answering unknown rather than throwing.
+        ///
+        /// The time is truncated to the microsecond the IR carries: a .NET tick is 100 ns, a
+        /// Python datetime stops at the microsecond, and a value written finer than it can be
+        /// read back would hash to one key on this side and another on the other.
+        /// </summary>
+        public static FileStat Read(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return new FileStat(null, null, null);
+            }
+
+            try
+            {
+                var file = new FileInfo(path);
+                if (!file.Exists)
+                {
+                    return new FileStat(null, null, null);
+                }
+
+                DateTime modified = file.LastWriteTimeUtc;
+                return new FileStat(
+                    new DateTimeOffset(
+                        new DateTime(modified.Ticks - (modified.Ticks % 10), DateTimeKind.Utc)),
+                    file.Length,
+                    null);
+            }
+            catch (ArgumentException error)
+            {
+                return new FileStat(null, null, error.Message);
+            }
+            catch (IOException error)
+            {
+                return new FileStat(null, null, error.Message);
+            }
+            catch (NotSupportedException error)
+            {
+                return new FileStat(null, null, error.Message);
+            }
+            catch (UnauthorizedAccessException error)
+            {
+                return new FileStat(null, null, error.Message);
+            }
+        }
     }
 
     /// <summary>A version is an integer or it is unknown; "A.2" is not silently truncated.</summary>

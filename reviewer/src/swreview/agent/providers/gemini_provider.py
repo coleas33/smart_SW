@@ -64,6 +64,7 @@ from swreview.agent.providers import (
     call_tool,
     error_body,
     register,
+    tools_withdrawn,
     usage_body,
 )
 from swreview.agent.providers.schema import gemini_adapt
@@ -372,9 +373,19 @@ class GeminiProvider:
         contents = _to_contents(history)
         texts: list[str] = []
         steps = 0
+        withdrawn = False
         self.round_usage = []
 
         while True:
+            if not withdrawn and tools_withdrawn(tools):
+                # Lever 7, and the one place this adapter rebuilds `config` inside the
+                # loop: the config is built once above because nothing else in a turn
+                # moves, and the stop fires at most once, so the rebuild happens at most
+                # once too. A per-round variant of lever 4 would want this same seam.
+                withdrawn = True
+                config = self._config(
+                    system=system, tools=tools, mapping=mapping, withdraw_tools=True
+                )
             started = self._clock()
             round_ = self._stream(contents, config, on_event)
             # Per round, not per turn: one `generate_content_stream` is one round trip, so
@@ -544,7 +555,27 @@ class GeminiProvider:
         system: str,
         tools: ToolSet,
         mapping: EffortMapping,
+        withdraw_tools: bool = False,
     ) -> types.GenerateContentConfig:
+        """The config for this turn, or - with `withdraw_tools` - for the rounds after
+        lever 7's stop fired.
+
+        The declarations stay in the config either way, because the history refers to
+        them; `tool_config` is what forbids a call ("Model will not predict any function
+        calls", `google/genai/types.py`). It is passed only when the stop has fired, so a
+        lever-7-off run builds the same five-field config feature 001 built.
+        """
+        withdrawal = (
+            {
+                "tool_config": types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(
+                        mode=types.FunctionCallingConfigMode.NONE
+                    )
+                )
+            }
+            if withdraw_tools
+            else {}
+        )
         declarations = [
             types.FunctionDeclaration(
                 name=tool.name,
@@ -559,9 +590,19 @@ class GeminiProvider:
             automatic_function_calling=AUTOMATIC_FUNCTION_CALLING_DISABLED,
             thinking_config=_thinking_config(mapping),
             max_output_tokens=self._max_output_tokens,
+            **withdrawal,
         )
 
     # --- one tool call -----------------------------------------------------------------
+
+    def start_steps_at(self, index: int) -> None:
+        """`AgentProvider`: the session already holds `index` steps, so number from there.
+
+        Called by `start_review` only when setup wrote steps, which today means lever 5's
+        pre-run; the port's docstring says why the number is the session's and the counter
+        the adapter's.
+        """
+        self._step_index = index
 
     def _call(
         self,
@@ -571,8 +612,10 @@ class GeminiProvider:
     ) -> ToolCallResult:
         """Run one call and emit its two events, through the port's own shaper.
 
-        The counter is this turn's; everything after it is identical for every adapter and
-        lives in `providers.call_tool`.
+        The counter runs for the whole session and is never reset per turn, because
+        `step_index` names an `InvestigationStep` and the session keeps accumulating them;
+        everything after it is identical for every adapter and lives in
+        `providers.call_tool`.
         """
         step_index = self._step_index
         self._step_index += 1

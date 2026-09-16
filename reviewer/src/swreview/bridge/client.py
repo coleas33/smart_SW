@@ -3,13 +3,14 @@
 One JSON request per line over a Windows named pipe to
 `SwReview.Extractor.Console.exe serve`, which owns the single STA thread that holds the
 `SldWorks.Application` reference. **The wire format is
-`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.0); the
+`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.2); the
 `PROTOCOL.md` beside this file records only what is true of the Python end. What this
 module adds around the wire format is the three guarantees the tool layer depends on:
 
 - **an allowlist.** `COMMANDS` is the whole vocabulary - `ping`, `capture`, `measure`,
-  `interference`. Nothing else reaches the pipe, so no tool can ask SOLIDWORKS to run a
-  member, a macro or a file (research R4, constitution Technical Constraints).
+  `interference`, `tessellate`. Nothing else reaches the pipe, so no tool can ask
+  SOLIDWORKS to run a member, a macro or a file (research R4, constitution Technical
+  Constraints).
 - **one failure type.** A non-`ok` status, an unreadable line, a response for another
   request, a dead pipe and a timeout are all `BridgeError`, which carries the host's
   `result` when it sent one (a failed `capture` carries a `Gap`). Callers have one thing
@@ -61,11 +62,16 @@ __all__ = [
 
 DEFAULT_PIPE_NAME = "swreview"
 DEFAULT_TIMEOUT_S = 60.0
-PROTOCOL_VERSION = "1.0"
+PROTOCOL_VERSION = "1.2"
 """The version of the host contract this client is written against; `ping` reports the
-host's, and a mismatch is worth an engineer's attention before anything is trusted."""
+host's, and a mismatch is worth an engineer's attention before anything is trusted.
 
-COMMANDS: tuple[str, ...] = ("ping", "capture", "measure", "interference")
+1.1 added the `remodel.*` family (feature 004) and 1.2 `tessellate` (feature 005); both are
+additive, so this client works against any of the three. `tests/unit/test_bridge_client.py`
+reads the host's `PROTOCOL.md` and `SwBridgeDispatcher.ProtocolVersion` and asserts all
+three agree, because the way two ends come apart is a constant bumped on one side only."""
+
+COMMANDS: tuple[str, ...] = ("ping", "capture", "measure", "interference", "tessellate")
 """Every command the bridge speaks. The allowlist of research R4, enforced before the
 request is written: an unknown command never reaches SOLIDWORKS."""
 
@@ -351,7 +357,7 @@ class BridgeClient:
             self._consecutive_failures += 1
         self._last_error = message
 
-    # --- the four operations -----------------------------------------------------
+    # --- the five operations -----------------------------------------------------
 
     def ping(self) -> Any:
         """Check the host is alive, and which document and configuration it is attached to."""
@@ -414,6 +420,20 @@ class BridgeClient:
                 "truncate_after": truncate_after,
             },
         )
+
+    def tessellate(self, component_id: str) -> Any:
+        """Tessellate one component's bodies; the result carries the IR `BodyRef` rows.
+
+        Protocol 1.2, lever 10a: a package extracted without meshes has a body's mesh
+        written on demand by the host, through the same export the dump uses, so a
+        clearance answer never depends on how the mesh arrived.
+
+        Only the component id goes out. The host chooses the directory, exactly as it does
+        for a capture: a filesystem path in a request would be a write the agent controls
+        (research R4). The call can take seconds and blocks every other bridge call behind
+        it, because one STA worker answers in arrival order.
+        """
+        return self.call("tessellate", {"component_id": component_id})
 
     def close(self) -> None:
         """Close the pipe. Safe to call when nothing was ever opened."""

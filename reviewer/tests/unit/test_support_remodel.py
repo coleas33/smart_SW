@@ -118,11 +118,12 @@ def test_every_package_is_stamped_with_the_model_check_profile(name: str) -> Non
 
 @pytest.mark.parametrize("name", sorted(TREE_BUILDERS))
 def test_every_package_is_at_the_schema_version_the_planner_receives(name: str) -> None:
-    """1.2.0 is the version that carries `extractor.profile`; a 1.1.0 package has no such
-    field, and both serializers forbid unknown members, so it can never be one."""
+    """1.2.0 is the version that carries `extractor.profile` and 1.3.0 the package-reuse
+    fields beside it; a 1.1.0 package has neither, and both serializers forbid unknown
+    members, so it can never be one."""
     package = remodel_package(TREE_BUILDERS[name]())
 
-    assert package.schema_version == SCHEMA_VERSION == "1.2.0"
+    assert package.schema_version == SCHEMA_VERSION == "1.3.0"
 
 
 @pytest.mark.parametrize("name", sorted(TREE_BUILDERS))

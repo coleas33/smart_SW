@@ -20,6 +20,9 @@ namespace SwReview.Extractor.Tests;
 /// </summary>
 public class IrSerializerTests
 {
+    /// <summary>A stand-in digest of the right shape; the key itself is ReuseKeyTests.</summary>
+    private const string SampleReuseKey =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     [Fact]
     public void SamplePackage_SerializesToJsonThatValidatesAgainstTheContract()
@@ -131,6 +134,75 @@ public class IrSerializerTests
     }
 
     [Fact]
+    public void SamplePackage_RoundTripsTheSchema130Members()
+    {
+        // T089. `reuse_key` and the per-document file stat are what lever 9 decides on. A
+        // member that survives serialization in one direction only is a package claiming to
+        // be something no reader can check it against.
+        EvidencePackage original = BuildSamplePackage();
+        original.ReuseKey = SampleReuseKey;
+
+        string json = PackageSerializer.Serialize(original);
+        EvidencePackage restored = PackageSerializer.Deserialize(json);
+
+        Assert.Equal("1.3.0", restored.SchemaVersion);
+        Assert.Equal(SampleReuseKey, restored.ReuseKey);
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 10, 8, 30, 0, TimeSpan.Zero),
+            restored.Manifest.Entries[0].FileModifiedUtc);
+        Assert.Equal(262144, restored.Manifest.Entries[0].FileSizeBytes);
+
+        // The second document was never stat'ed: unknown survives as null, never as 0.
+        Assert.Null(restored.Manifest.Entries[1].FileModifiedUtc);
+        Assert.Null(restored.Manifest.Entries[1].FileSizeBytes);
+
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+    }
+
+    [Fact]
+    public void ReuseKey_IsWrittenBeforeTheBulkOfThePackage()
+    {
+        // RunFolders answers "what is this run folder" from the first 8 KiB of package.json,
+        // because a full package is tens of megabytes and the read happens on the SOLIDWORKS
+        // application thread. The reuse lookup's fallback scan finds `reuse_key` the same
+        // way, which only works while it is written near the top of the file.
+        EvidencePackage package = BuildSamplePackage();
+        package.ReuseKey = SampleReuseKey;
+
+        string json = PackageSerializer.Serialize(package);
+
+        Assert.True(
+            json.IndexOf("\"reuse_key\"", StringComparison.Ordinal)
+                < json.IndexOf("\"extractor\"", StringComparison.Ordinal),
+            "reuse_key must be written before extractor so a bounded head read finds it.");
+    }
+
+    [Fact]
+    public void PackageWithoutTheSchema130Members_StillLoadsAndStillValidates()
+    {
+        // Every package written before 1.3.0 predates all three members. They are optional in
+        // the contract and optional here, so an older package is read, not rejected.
+        string json = PackageSerializer.Serialize(BuildSamplePackage());
+
+        string without = Regex.Replace(
+            Regex.Replace(json, "\\s*\"reuse_key\": (\"[^\"]*\"|null),", string.Empty),
+            ",\\s*\"file_modified_utc\": (\"[^\"]*\"|null),\\s*\"file_size_bytes\": (\\d+|null)",
+            string.Empty);
+
+        Assert.DoesNotContain("\"reuse_key\"", without, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"file_modified_utc\"", without, StringComparison.Ordinal);
+
+        EvidencePackage restored = PackageSerializer.Deserialize(without);
+
+        Assert.Null(restored.ReuseKey);
+        Assert.Null(restored.Manifest.Entries[0].FileModifiedUtc);
+        Assert.Null(restored.Manifest.Entries[0].FileSizeBytes);
+        EvaluationResults results = Evaluate(without);
+        Assert.True(results.IsValid, DescribeFailures(results, without));
+    }
+
+    [Fact]
     public void SamplePackage_RoundTripsTheSchema110Members()
     {
         // T006. The feature tree, the equations, the suppress-test run and the component's
@@ -140,7 +212,7 @@ public class IrSerializerTests
 
         EvidencePackage restored = PackageSerializer.Deserialize(PackageSerializer.Serialize(original));
 
-        Assert.Equal("1.2.0", restored.SchemaVersion);
+        Assert.Equal("1.3.0", restored.SchemaVersion);
         Assert.Equal(EvidencePackage.CurrentSchemaVersion, restored.SchemaVersion);
 
         Assert.Equal(6, restored.Features.Count);
@@ -248,7 +320,7 @@ public class IrSerializerTests
     {
         string json = PackageSerializer.Serialize(BuildSamplePackage());
 
-        Assert.Contains("\"schema_version\": \"1.2.0\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"schema_version\": \"1.3.0\"", json, StringComparison.Ordinal);
         Assert.Contains("\"folder_id\": null", json, StringComparison.Ordinal);
         Assert.Contains("\"raw_status\": null", json, StringComparison.Ordinal);
         Assert.Contains("\"consumer_ids\": null", json, StringComparison.Ordinal);
@@ -443,6 +515,8 @@ public class IrSerializerTests
                         Configuration = "Default",
                         LocalModified = false,
                         ExportMethod = ExportMethod.Native,
+                        FileModifiedUtc = new DateTimeOffset(2026, 9, 10, 8, 30, 0, TimeSpan.Zero),
+                        FileSizeBytes = 262144,
                     },
                     new ManifestEntry
                     {

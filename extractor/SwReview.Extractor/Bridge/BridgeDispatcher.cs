@@ -84,6 +84,46 @@ public sealed class MeasureCommandResult
     public Quantity? DeltaZ { get; set; }
 }
 
+/// <summary>What <c>tessellate</c> answers: the rows written, and where they landed.</summary>
+public sealed class TessellateCommandResult
+{
+    /// <summary>The IR rows to append to <c>bodies</c>, one per body that was written.</summary>
+    [JsonPropertyName("bodies")]
+    public List<BodyRef> Bodies { get; set; } = new List<BodyRef>();
+
+    /// <summary>
+    /// The absolute path of each row's <c>mesh_file</c>, in the same order, so a client can
+    /// see the files are inside the directory the host chose for them.
+    /// </summary>
+    [JsonPropertyName("paths")]
+    public List<string> Paths { get; set; } = new List<string>();
+
+    /// <summary>
+    /// Why a body is missing from <see cref="Bodies"/>. A component that produced none comes
+    /// back here rather than as an empty answer: an empty answer reads as "this component has
+    /// no body", which is a clear the reviewer never established.
+    /// </summary>
+    [JsonPropertyName("gaps")]
+    public List<Gap> Gaps { get; set; } = new List<Gap>();
+}
+
+/// <summary>
+/// T097, lever 10a. One component's bodies, tessellated into the package directory the host
+/// chose, through the same export path the dump uses.
+///
+/// An interface for the same reason the other three are: the dispatcher is unit tested with
+/// fakes and no SOLIDWORKS. The real one is <see cref="Dump.SwTessellateSource"/>.
+/// </summary>
+public interface ITessellateSource
+{
+    /// <param name="componentId">The package id of the component to tessellate.</param>
+    /// <param name="packageDirectory">
+    /// The package directory the host chose. Never a path from the request: that would be a
+    /// filesystem write the agent controls (research R4).
+    /// </param>
+    TessellateCommandResult Tessellate(string componentId, string packageDirectory);
+}
+
 /// <summary>What <c>interference</c> answers.</summary>
 public sealed class InterferenceCommandResult
 {
@@ -125,9 +165,10 @@ public sealed class BridgeServices
     public ComponentIndex Components { get; }
 
     /// <summary>
-    /// The package directory captures are written under. Chosen by the host from
-    /// <c>--out</c>, never by the client: a path in a request would be a filesystem write
-    /// the agent controls (research R4).
+    /// The package directory captures are written under, and the one <c>tessellate</c>
+    /// writes its <c>meshes/</c> under. Chosen by the host from <c>--out</c>, never by the
+    /// client: a path in a request would be a filesystem write the agent controls
+    /// (research R4).
     /// </summary>
     public string CaptureDirectory { get; }
 
@@ -136,6 +177,14 @@ public sealed class BridgeServices
     public string? DocumentPath { get; set; }
 
     public string? Configuration { get; set; }
+
+    /// <summary>
+    /// Feature 005, lever 10a. The mesh export <c>tessellate</c> calls, or null on a bridge
+    /// that answers no mesh fetch. Null is the default, so a host hands the command a source
+    /// deliberately, and a host that has not answers with a sentence rather than with an
+    /// empty body list that would read as "this component has no body".
+    /// </summary>
+    public ITessellateSource? TessellateSource { get; set; }
 
     /// <summary>
     /// Feature 004. The SOLIDWORKS side of the <c>remodel.*</c> family, or null on a bridge
@@ -192,12 +241,13 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     /// SwReview.Extractor.Console/Serve/PROTOCOL.md.
     ///
     /// 1.1 is additive: the four 1.0 commands and the envelope are untouched, and it adds the
-    /// <c>remodel.*</c> family and <c>result.error_code</c> on a failed reply. <c>ping</c>
-    /// reports this value and a client compares against it (<c>REMODEL_PROTOCOL_VERSION</c> in
-    /// <c>reviewer/src/swreview/bridge/remodel_client.py</c>), so it is what the document says
-    /// it is or the handshake refuses a host that does serve the family.
+    /// <c>remodel.*</c> family and <c>result.error_code</c> on a failed reply. 1.2 is additive
+    /// again: everything 1.1 speaks is unchanged and it adds one command, <c>tessellate</c>.
+    /// <c>ping</c> reports this value and a client compares against it
+    /// (<c>PROTOCOL_VERSION</c> in <c>reviewer/src/swreview/bridge/client.py</c>), so it is
+    /// what the document says it is or the two ends have already come apart.
     /// </summary>
-    public const string ProtocolVersion = "1.1";
+    public const string ProtocolVersion = "1.2";
 
     /// <summary>
     /// The whole of what a refused request is told (T045). One word, the same for a wrong
@@ -324,6 +374,9 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
             case BridgeCommands.Interference:
                 return Interference(request);
+
+            case BridgeCommands.Tessellate:
+                return Tessellate(request);
 
             default:
                 if (RemodelCommandTable.Find(request.Command) != null)
@@ -460,6 +513,39 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
                 Interferences = new List<IrInterference>(result.Interferences),
                 Gaps = new List<Gap>(result.Gaps),
             });
+    }
+
+    /// <summary>
+    /// T097, lever 10a. One component's bodies, written under the package directory the host
+    /// was started with - exactly as <c>capture</c> writes its PNG there, and for the same
+    /// reason: a filesystem path in a request would be a write the agent controls
+    /// (research R4), so nothing in <c>params</c> can move this.
+    ///
+    /// A component this document does not have is refused by name rather than answered with
+    /// no bodies, because "no bodies" is what a component with nothing to sweep looks like.
+    /// </summary>
+    private BridgeResponse Tessellate(BridgeRequest request)
+    {
+        string componentId = RequiredString(request, "component_id");
+
+        if (_services.TessellateSource == null)
+        {
+            return BridgeResponse.Failed(
+                request.Id,
+                "This bridge cannot tessellate: it was built without a mesh source.");
+        }
+
+        if (_services.Components.ById(componentId) == null)
+        {
+            return BridgeResponse.Failed(
+                request.Id,
+                $"'{componentId}' is not a component of the document this bridge is attached "
+                + $"to ({_services.DocumentPath ?? "unknown"}).");
+        }
+
+        return BridgeResponse.Ok(
+            request.Id,
+            _services.TessellateSource.Tessellate(componentId, _services.CaptureDirectory));
     }
 
     // =================================================================================

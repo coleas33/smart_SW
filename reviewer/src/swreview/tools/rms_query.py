@@ -43,17 +43,6 @@ def list_features(
 ) -> list[dict[str, Any]] | ToolResult:
     """The feature tree of one document, in traversal order, with its derived columns.
 
-    `class` and `group` are the method's own answers, not the extractor's: `class` is
-    `unknown` for a type name the RMS type table does not carry and `ambiguous` for one
-    that spans classes, and `group` is `null` for a feature before the first group folder.
-    Folders and end-tag markers are listed like any other row. `folder_id` is the nearest
-    enclosing *feature* as the extractor reported it, which is `null` in the traversal
-    shape that reports no sub-features; `folder` filters on the enclosing folder, which is
-    the same answer in both shapes.
-
-    A document whose tree was not extracted - an assembly, a suppressed component's part -
-    has no rows here; `list_gaps` says why.
-
     Args:
         document_id: Document id whose feature tree to list.
         folder: One of the six group names, a group folder's feature id (which selects
@@ -61,6 +50,18 @@ def list_features(
             members); null for the whole tree.
         include_suppressed: Keep the features that are suppressed in this configuration.
             A feature whose suppression state was not readable is kept either way.
+
+    Notes:
+        `class` and `group` are the method's own answers, not the extractor's: `class` is
+        `unknown` for a type name the RMS type table does not carry and `ambiguous` for one
+        that spans classes, and `group` is `null` for a feature before the first group folder.
+        Folders and end-tag markers are listed like any other row. `folder_id` is the nearest
+        enclosing *feature* as the extractor reported it, which is `null` in the traversal
+        shape that reports no sub-features; `folder` filters on the enclosing folder, which is
+        the same answer in both shapes.
+
+        A document whose tree was not extracted - an assembly, a suppressed component's part -
+        has no rows here; `list_gaps` says why.
     """
     context = current_context()
     if context.document(document_id) is None:
@@ -97,18 +98,19 @@ def list_features(
 def get_feature(feature_id: str) -> ToolResult:
     """Everything the package holds about one feature, plus what the method makes of it.
 
-    The whole `Feature` as it was extracted, then `class`, `group`, `is_folder` and
-    `is_end_tag` derived from the RMS type table and the group assignment, and then
-    `child_names`, `parent_names` and `consumer_names` - the dependency, dependent and
-    sketch-consumer id lists resolved to feature names, position by position.
-
-    A null id list stays null: it means `GetChildren` or `GetParents` failed for this
-    feature, which is not the same as having none. A name is null where the id names a
-    feature this package does not carry. `consumer_names` is null for a feature that has
-    no sketch at all; `sketch` itself says which of the two it is.
-
     Args:
         feature_id: Feature id, for example `feat:0004`.
+
+    Notes:
+        The whole `Feature` as it was extracted, then `class`, `group`, `is_folder` and
+        `is_end_tag` derived from the RMS type table and the group assignment, and then
+        `child_names`, `parent_names` and `consumer_names` - the dependency, dependent and
+        sketch-consumer id lists resolved to feature names, position by position.
+
+        A null id list stays null: it means `GetChildren` or `GetParents` failed for this
+        feature, which is not the same as having none. A name is null where the id names a
+        feature this package does not carry. `consumer_names` is null for a feature that has
+        no sketch at all; `sketch` itself says which of the two it is.
     """
     context = current_context()
     package = context.ir
@@ -134,18 +136,19 @@ def get_feature(feature_id: str) -> ToolResult:
 def list_equations(document_id: str) -> list[dict[str, Any]] | ToolResult:
     """One document's equation manager, row by row, in the order the manager holds them.
 
-    Every field of `Equation` and nothing derived: `text` as it was read, `lhs` (the text
-    left of the first `=`, unquoted) as evidence only, `is_global` as
-    `IEquationMgr.GlobalVariable(i)` answered, and `value`. A row whose global flag could
-    not be read carries `is_global: null`, which is not `false`: it is why
-    `check_rms_equations` leaves the document unresolved rather than reporting that it has
-    no global variables, and `list_gaps` gives the reason.
-
-    A document whose equation manager was not read - `--equations off`, an assembly, a
-    part nobody opened - has no rows here, which is also not "it has no equations".
-
     Args:
         document_id: Document id whose equations to list.
+
+    Notes:
+        Every field of `Equation` and nothing derived: `text` as it was read, `lhs` (the text
+        left of the first `=`, unquoted) as evidence only, `is_global` as
+        `IEquationMgr.GlobalVariable(i)` answered, and `value`. A row whose global flag could
+        not be read carries `is_global: null`, which is not `false`: it is why
+        `check_rms_equations` leaves the document unresolved rather than reporting that it has
+        no global variables, and `list_gaps` gives the reason.
+
+        A document whose equation manager was not read - `--equations off`, an assembly, a
+        part nobody opened - has no rows here, which is also not "it has no equations".
     """
     context = current_context()
     if context.document(document_id) is None:

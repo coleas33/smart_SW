@@ -29,11 +29,13 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SerializerFunctionWrapHandler,
     StringConstraints,
+    model_serializer,
     model_validator,
 )
 
-SCHEMA_VERSION = "1.2.0"
+SCHEMA_VERSION = "1.3.0"
 SUPPORTED_SCHEMA_MAJOR = 1
 SCHEMA_VERSION_PATTERN = r"^1\.[0-9]+\.[0-9]+$"
 
@@ -86,6 +88,30 @@ PersistRef = Annotated[
         description="IModelDocExtension.GetPersistReference3 bytes, base64",
     ),
 ]
+
+def omit_when_null(
+    handler: SerializerFunctionWrapHandler, model: BaseModel, *names: str
+) -> dict[str, Any]:
+    """Serialize `model` and drop the named fields when they are null (feature 005).
+
+    A field added by feature 005 is optional and absent from `required` in both contracts,
+    so a null is the same fact as an absent key - and the absent key is the one that keeps
+    a lever-off run *byte-identical* to a run of the tree before the lever existed
+    (SC-007). Two readers make that measurable rather than cosmetic: the model-facing tool
+    payload (`tools/registry.py` encodes the same objects), where five extra null members
+    per finding and per manifest entry are tokens paid on the off arm of an efficiency
+    feature, and `events.jsonl`, whose flag-off stream must be comparable line for line.
+
+    Only fields named here are dropped, and only when null: every field a package or a
+    session already carried keeps its null, because dropping those would change the shape
+    feature 001's readers were written against.
+    """
+    data = handler(model)
+    for name in names:
+        if data.get(name) is None:
+            data.pop(name, None)
+    return data
+
 
 Transform = Annotated[list[Annotated[list[float], Len(4, 4)]], Len(4, 4)]
 """Row-major 4x4, translation in meters (SOLIDWORKS internal units)."""
@@ -192,6 +218,30 @@ class ManifestEntry(IRModel):
     configuration: str
     local_modified: bool | None
     export_method: Literal["native", "pdf", "step", "manual"]
+    file_modified_utc: datetime | None = Field(
+        default=None,
+        strict=False,
+        description=(
+            "`FileInfo.LastWriteTimeUtc` of `vault_path` when the dump ran (schema 1.3.0). "
+            "Null plus a gap when the path could not be stat'ed, and null in every package "
+            "written before 1.3.0. Never 0 and never 'now': the package-reuse key (feature "
+            "005 lever 9) treats unknown as a refusal, not as a match."
+        ),
+    )
+    file_size_bytes: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "`FileInfo.Length` of `vault_path`, same source and same null-with-a-gap rule "
+            "as `file_modified_utc` (schema 1.3.0)."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_null_1_3_0_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Leave the 1.3.0 additions out when they are null, so a 1.2.0 entry round-trips
+        to the bytes a 1.2.0 build wrote (`omit_when_null`)."""
+        return omit_when_null(handler, self, "file_modified_utc", "file_size_bytes")
 
 
 class Discrepancy(IRModel):
@@ -645,6 +695,34 @@ class EvidencePackage(IRModel):
     # file. Both are still parsed and rejected when malformed.
     package_id: UUID = Field(strict=False)
     created_at: datetime = Field(strict=False)
+    reuse_key: str | None = Field(
+        default=None,
+        description=(
+            "SHA-256 over what this package claims to be - the extractor, the schema, the "
+            "profile, the four dump options, the root document and configuration, every "
+            "manifest entry's file stat and every component's suppression state (schema "
+            "1.3.0, feature 005 lever 9, `benchmark/reuse.py`). Null in a package written "
+            "by a build that computes none. Declared here, ahead of the bulk of the "
+            "package, so a bounded head read can find it without parsing tens of megabytes."
+        ),
+    )
+    reused_from: str | None = Field(
+        default=None,
+        description=(
+            "The run folder this package was copied from instead of dumped (schema 1.3.0, "
+            "feature 005 lever 9); null when it was freshly dumped. Reuse is stated, never "
+            "silent: this member, the pane's status line, the report header and "
+            "`session.json` all say it."
+        ),
+    )
+    reused_at: datetime | None = Field(
+        default=None,
+        strict=False,
+        description=(
+            "When the reuse decision was made - not when the original was dumped "
+            "(schema 1.3.0)."
+        ),
+    )
     extractor: ExtractorInfo
     manifest: Manifest
     design: Design

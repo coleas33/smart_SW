@@ -512,9 +512,15 @@ threshold reads, and that a null is never a zero - is fixed in spec.md FR-028.
 - **Reasoning and thoughts are named per provider in the cell, not in the header**: one
   header serves rows of both providers, so the row says which field it is quoting. The two
   are still never added together.
-- **`unresolved_because_withheld` and `unresolved_other` are not yet raw-row columns**:
-  `PackageScore` does not carry them until lever 4 lands (FR-054), and inventing a zero for
-  them would be a measurement nobody made.
+- **`unresolved_because_withheld` and `unresolved_other` are raw-row columns as of lever 4**
+  (T060-T062): `PackageScore` carries both, the raw rows render both, and lever 4's
+  `lever_counter` is the first of them. They split the **unresolved coverage items** and so
+  sum to `coverage_bucket_mix["unresolved"]`, **not** to `unresolved_count`, which counts
+  findings whose status is unresolved - section 8.1's "they sum to `unresolved_count`" names
+  the wrong population and is the one line of this contract the implementation does not
+  follow. The first half is set membership over `session.withheld_checks`, which the
+  withheld tool records beside the item it writes; reading it out of the reason sentence
+  would have made a rewording of that sentence a silent change to a measured number.
 - **`coverage_bucket_mix` is read from `session.coverage`**, one source, because
   `PackageScore` does not carry it either.
 - **`lever_counter` is `{name, off, on}`**, and the **name is always present** even when

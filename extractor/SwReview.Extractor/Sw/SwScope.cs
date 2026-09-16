@@ -1,5 +1,6 @@
 using System;
 using SolidWorks.Interop.sldworks;
+using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Capture;
 using SwReview.Extractor.Dump;
 using SwReview.Extractor.Interference;
@@ -20,11 +21,16 @@ namespace SwReview.Extractor.Sw;
 /// </summary>
 public sealed class SwScope
 {
-    private SwScope(ISldWorks swApp, ISwSession session, ComponentIndex components)
+    private SwScope(
+        ISldWorks swApp,
+        ISwSession session,
+        ComponentIndex components,
+        ComponentTreeResult tree)
     {
         SwApp = swApp;
         Session = session;
         Components = components;
+        Tree = tree;
         Refs = new PersistRefService(session.Gate);
     }
 
@@ -34,6 +40,13 @@ public sealed class SwScope
 
     /// <summary>Package component ids to live components and back.</summary>
     public ComponentIndex Components { get; }
+
+    /// <summary>
+    /// The traversal <see cref="Components"/> was built from, kept because
+    /// <see cref="TessellateSource"/> needs the nodes themselves - the transform, the key and
+    /// the live handle - and not only the id mapping.
+    /// </summary>
+    public ComponentTreeResult Tree { get; }
 
     public PersistRefService Refs { get; }
 
@@ -58,7 +71,7 @@ public sealed class SwScope
         ComponentTreeResult tree = new ComponentTreeDumper(session, refs)
             .Traverse(gaps, new DumpOptions { OutputDirectory = ".", Configuration = session.Configuration.Name });
 
-        return new SwScope(swApp, session, new ComponentIndex(tree));
+        return new SwScope(swApp, session, new ComponentIndex(tree), tree);
     }
 
     /// <summary>An already-open document by path, for references scoped to a part.</summary>
@@ -71,4 +84,24 @@ public sealed class SwScope
         new SwCaptureView(Session, Refs, OpenDocument, handle => Components.IdOf(handle));
 
     public IMeasureSource MeasureSource() => new SwMeasureSource(Session, Refs, OpenDocument);
+
+    /// <summary>
+    /// The mesh fetch <c>tessellate</c> answers with (T097, lever 10a).
+    ///
+    /// The scope it exports into is built by <see cref="PackageWriter.ScopeFor"/>, the same
+    /// call the dump and <c>probe rms</c> make, so a <c>cmp:0011</c> read out of package.json
+    /// names the same component here - exactly what <see cref="Components"/> promises for the
+    /// other commands, kept true by using one allocation rather than a second one.
+    /// </summary>
+    public ITessellateSource TessellateSource() => new SwTessellateSource(
+        new MeshExporter(Session, Refs),
+        PackageWriter.ScopeFor(
+            new GapCollector(),
+            new DumpOptions
+            {
+                OutputDirectory = ".",
+                Configuration = Session.Configuration.Name,
+                Meshes = MeshFormat.Glb,
+            },
+            Tree));
 }

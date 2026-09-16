@@ -73,27 +73,28 @@ NO_ROOT_DOCUMENT = (
 def check_rms_part(document_id: str | None = None) -> ToolResult:
     """Grade one part's feature tree, or every part's, against the part-scope RMS rules.
 
-    Each failing rule becomes one finding naming the features it is about, each passing,
-    skipped or unresolved rule becomes one aggregated coverage item per bucket, and the
-    `modeling.resilience` summary is rewritten from everything the session holds. Each
-    call re-evaluates its scope in full and replaces its own earlier *coverage* items, so
-    running it twice leaves one coverage item per rule; findings are appended, as they are
-    by every check tool, so a second call over a document you already graded adds a second
-    finding for each of its conditions. Grade every part in one call - no argument - and
-    re-grade a single document only when you mean to add findings for it.
-
-    A `fail` outcome consults the retained exceptions for exactly these component
-    instances, this configuration and this rule id: an `active` exception waives the
-    finding and is cited on it, one whose feature tree has changed leaves the finding
-    standing and says so. A `warn` outcome is advisory and never consults them.
-
-    A part whose tree was never read - every instance lightweight, suppressed or unloaded
-    - is unresolved for every part- and equation-scope rule, with the component state as
-    the reason. It is never silently left out of the report.
-
     Args:
         document_id: Part document to grade; null grades every part document in the
             package, including the ones whose tree was not read.
+
+    Notes:
+        Each failing rule becomes one finding naming the features it is about, each passing,
+        skipped or unresolved rule becomes one aggregated coverage item per bucket, and the
+        `modeling.resilience` summary is rewritten from everything the session holds. Each
+        call re-evaluates its scope in full and replaces its own earlier *coverage* items, so
+        running it twice leaves one coverage item per rule; findings are appended, as they are
+        by every check tool, so a second call over a document you already graded adds a second
+        finding for each of its conditions. Grade every part in one call - no argument - and
+        re-grade a single document only when you mean to add findings for it.
+
+        A `fail` outcome consults the retained exceptions for exactly these component
+        instances, this configuration and this rule id: an `active` exception waives the
+        finding and is cited on it, one whose feature tree has changed leaves the finding
+        standing and says so. A `warn` outcome is advisory and never consults them.
+
+        A part whose tree was never read - every instance lightweight, suppressed or unloaded
+        - is unresolved for every part- and equation-scope rule, with the component state as
+        the reason. It is never silently left out of the report.
     """
     return run_part_checks(
         current_context(), None if document_id is None else [document_id]
@@ -129,27 +130,28 @@ def run_part_checks(
 def check_rms_assembly() -> ToolResult:
     """Grade the root assembly's mates and components against the assembly-scope RMS rules.
 
-    Four rules: the mates reference planes, axes, points or coordinate systems rather than
-    faces, edges or vertices (`fail`); the first component is fixed or fully constrained
-    (`fail`); no component is more than three mates from the fixed root (`warn`); and
-    Toolbox hardware is inserted as parts rather than as configurations of one file
-    (`warn`). Each failing rule becomes one finding naming the mates and components it is
-    about, everything else becomes one aggregated coverage item per rule per bucket, and
-    the `modeling.resilience` summary is rewritten from everything the session holds.
+    Notes:
+        Four rules: the mates reference planes, axes, points or coordinate systems rather than
+        faces, edges or vertices (`fail`); the first component is fixed or fully constrained
+        (`fail`); no component is more than three mates from the fixed root (`warn`); and
+        Toolbox hardware is inserted as parts rather than as configurations of one file
+        (`warn`). Each failing rule becomes one finding naming the mates and components it is
+        about, everything else becomes one aggregated coverage item per rule per bucket, and
+        the `modeling.resilience` summary is rewritten from everything the session holds.
 
-    There is no argument because there is no choice: only the root assembly document's
-    mates are extracted, so that is the one document these rules can grade. The
-    subassemblies are reported as unresolved by name rather than passed over.
+        There is no argument because there is no choice: only the root assembly document's
+        mates are extracted, so that is the one document these rules can grade. The
+        subassemblies are reported as unresolved by name rather than passed over.
 
-    A package with no assembly document - a part-only dump, where the root document id
-    names the part - grades nothing: `documents` comes back empty and all four rules are
-    unresolved, naming that document and its kind. Nothing is claimed about an assembly
-    this package does not carry.
+        A package with no assembly document - a part-only dump, where the root document id
+        names the part - grades nothing: `documents` comes back empty and all four rules are
+        unresolved, naming that document and its kind. Nothing is claimed about an assembly
+        this package does not carry.
 
-    A `fail` outcome consults the retained exceptions for the root assembly instance, this
-    configuration and this rule id; a `warn` outcome is advisory and never does. Calling
-    this twice replaces its coverage and appends a second copy of every finding, so call
-    it once.
+        A `fail` outcome consults the retained exceptions for the root assembly instance, this
+        configuration and this rule id; a `warn` outcome is advisory and never does. Calling
+        this twice replaces its coverage and appends a second copy of every finding, so call
+        it once.
     """
     return run_assembly_checks(current_context())
 
@@ -186,21 +188,22 @@ def run_assembly_checks(context: ToolContext) -> ToolResult:
 def check_rms_equations(document_id: str | None = None) -> ToolResult:
     """Grade one part's equation manager, or every part's, against the equation rules.
 
-    The same two rules for every part document: at least one global variable exists
-    (`fail`), and at least one dimension is driven by an equation (`warn`). A manager that
-    was read and holds nothing is an answer and becomes those two outcomes; a manager
-    nobody could read - the `equations` gap, or a row whose global flag threw - is
-    unresolved instead, because "this part has no global variables" is a claim about data
-    someone actually saw (constitution Principle I).
-
-    Dispatch, exceptions, coverage and the effect of calling it twice are `check_rms_part`'s
-    exactly: null grades every part document including the ones whose tree was never read,
-    a `fail` outcome consults the retained exceptions for this rule id, coverage is
-    replaced and findings are appended.
-
     Args:
         document_id: Part document whose equations to grade; null grades every part
             document in the package.
+
+    Notes:
+        The same two rules for every part document: at least one global variable exists
+        (`fail`), and at least one dimension is driven by an equation (`warn`). A manager that
+        was read and holds nothing is an answer and becomes those two outcomes; a manager
+        nobody could read - the `equations` gap, or a row whose global flag threw - is
+        unresolved instead, because "this part has no global variables" is a claim about data
+        someone actually saw (constitution Principle I).
+
+        Dispatch, exceptions, coverage and the effect of calling it twice are `check_rms_part`'s
+        exactly: null grades every part document including the ones whose tree was never read,
+        a `fail` outcome consults the retained exceptions for this rule id, coverage is
+        replaced and findings are appended.
     """
     return run_equation_checks(
         current_context(), None if document_id is None else [document_id]

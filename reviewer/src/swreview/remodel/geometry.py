@@ -50,9 +50,11 @@ Two fields here are additions to `data-model.md` section 3.3, each earning its p
 
 from __future__ import annotations
 
+import json
 import math
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -86,6 +88,7 @@ __all__ = [
     "TierResult",
     "Verdict",
     "evaluate",
+    "reading_from_reply",
     "write_geometry_json",
 ]
 
@@ -171,6 +174,22 @@ class GeometryReading(BaseModel):
     face_count: int | None
     edge_count: int | None
     residual: ResidualReading | None = None
+
+
+def reading_from_reply(reply: Mapping[str, Any]) -> GeometryReading:
+    """One `remodel.geometry` reply as the typed reading.
+
+    The reply arrives as a decoded JSON object, where `center_of_mass_m`,
+    `principal_moments` and a residual's bounding boxes are **lists**, and
+    `GeometryReading` is strict: a list is not a tuple and strict means strict. Validating
+    the object as JSON is what converts them, and it converts the nested ones too, so
+    there is one conversion here rather than a field list that would have to be kept in
+    step with the model above it.
+
+    Every caller of `remodel.geometry` goes through this, so the two readings of a run are
+    read the same way and the subject the host stamped is carried, never chosen.
+    """
+    return GeometryReading.model_validate_json(json.dumps(reply))
 
 
 class Delta(BaseModel):

@@ -43,7 +43,7 @@ public static class Program
     private const int ExitError = 1;
 
     internal static readonly string[] DumpOptionNames =
-        { "doc", "config", "out", "meshes", "faces", "features", "equations", "profile" };
+        { "doc", "config", "out", "meshes", "faces", "features", "equations", "profile", "reuse" };
 
     internal static readonly string[] ResolveOptionNames = { "ref", "doc", "out" };
 
@@ -218,10 +218,17 @@ public static class Program
         DumpOptions options;
         bool allowStart;
 
+        bool reuse;
+
         try
         {
             parsed = CommandLine.Parse(args, 1, KnownOptions(DumpOptionNames));
             allowStart = parsed.Flag("allow-start");
+
+            // Feature 005 lever 9, off unless asked for: a dump that quietly copied an earlier
+            // package would be a dump that answered about a design nobody checked was the one
+            // on screen.
+            reuse = parsed.Flag("reuse");
             options = new DumpOptions
             {
                 OutputDirectory = parsed.Required("out"),
@@ -239,11 +246,11 @@ public static class Program
             return ExitError;
         }
 
-        return ExecuteDump(options, parsed.Value("doc"), allowStart);
+        return ExecuteDump(options, parsed.Value("doc"), allowStart, reuse);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static int ExecuteDump(DumpOptions options, string? documentPath, bool allowStart)
+    private static int ExecuteDump(DumpOptions options, string? documentPath, bool allowStart, bool reuse)
     {
         using (var log = new ExtractLog(options.OutputDirectory))
         {
@@ -262,7 +269,11 @@ public static class Program
                 log.Write($"Document: {session.DocumentPath}");
                 log.Write($"Configuration: {session.Configuration.Name}");
 
-                DumpResult result = SwDump.CreateWriter(swApp, session).Write(options);
+                PackageWriter writer = SwDump.CreateWriter(swApp, session);
+                string? runRoot = RunRootOf(options.OutputDirectory);
+                DumpResult result = Extract(writer, options, session, runRoot, reuse, log);
+
+                RecordInIndex(result, options, runRoot, log);
 
                 log.Write($"Wrote {result.PackageFilePath}");
                 log.Write($"{result.Package.Components.Count} components, "
@@ -282,6 +293,111 @@ public static class Program
                 log.WriteError("dump failed.", error);
                 return ExitError;
             }
+        }
+    }
+
+    /// <summary>
+    /// Dumps, or - with <c>--reuse</c> - copies an earlier run's package into this run's
+    /// output directory instead (feature 005 lever 9, T091).
+    ///
+    /// The decision is stated either way, in <c>extract.log</c> and on the package itself: a
+    /// run that reused an extraction and did not say so is a run whose evidence nobody can
+    /// date. A refusal falls through to the dump rather than failing the command, because the
+    /// worst outcome of a miss is the extraction the caller asked to skip.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static DumpResult Extract(
+        PackageWriter writer,
+        DumpOptions options,
+        SwSession session,
+        string? runRoot,
+        bool reuse,
+        ExtractLog log)
+    {
+        if (!reuse)
+        {
+            return writer.Write(options);
+        }
+
+        // The key is recomputed from the live document's references now, never trusted from
+        // the file: a stored key that matches a document that has moved is the one thing this
+        // mechanism must not do.
+        ReuseOutcome outcome = PackageReuse.Reuse(
+            writer.BuildReuseProbe(options), options, runRoot, SaveFlag(session, log), DateTimeOffset.Now);
+
+        log.Write(outcome.Message);
+        foreach (ReuseRefusal refusal in outcome.Refusals)
+        {
+            log.Write($"  [{refusal.Code}] {refusal.Reason}");
+        }
+
+        return outcome.Result ?? writer.Write(options);
+    }
+
+    /// <summary>
+    /// Whether the active document has edits that are not on disk, or null when the answer
+    /// could not be read. Null refuses reuse, exactly as true does: a modification time cannot
+    /// see an in-memory edit, so an unreadable save flag is not a reason to assume there is
+    /// none.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool? SaveFlag(SwSession session, ExtractLog log)
+    {
+        try
+        {
+            return session.Gate.Call("GetSaveFlag", session.Document.GetSaveFlag);
+        }
+        catch (Exception error)
+        {
+            log.Write($"The document's save state could not be read: {error.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The run root: the directory the run folders sit in, which is the parent of this run's
+    /// <c>--out</c>. The index lives there because it is about the folders, not about any one
+    /// of them.
+    /// </summary>
+    private static string? RunRootOf(string outputDirectory)
+    {
+        try
+        {
+            return Path.GetDirectoryName(Path.GetFullPath(outputDirectory));
+        }
+        catch (Exception error) when (error is ArgumentException || error is NotSupportedException
+            || error is PathTooLongException || error is System.Security.SecurityException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Appends this run folder to the run root's index, so a later <c>--reuse</c> can find it
+    /// without opening a package. A line that cannot be written is logged and nothing more:
+    /// the package is on disk either way, and the only cost is a future miss.
+    /// </summary>
+    private static void RecordInIndex(
+        DumpResult result, DumpOptions options, string? runRoot, ExtractLog log)
+    {
+        if (result.Package.ReuseKey == null || runRoot == null)
+        {
+            return;
+        }
+
+        var row = new PackageIndexRow
+        {
+            ReuseKey = result.Package.ReuseKey,
+            Folder = Path.GetFileName(Path.GetFullPath(options.OutputDirectory).TrimEnd(
+                Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+            WrittenAt = DateTimeOffset.Now,
+            Profile = PackageSerializer.EnumToJsonName(options.Profile),
+            PackageBytes = PackageIndex.PackageBytes(options.OutputDirectory),
+        };
+
+        if (!PackageIndex.Append(runRoot, row))
+        {
+            log.Write($"The run index under {runRoot} could not be updated; the package is unaffected.");
         }
     }
 
@@ -681,6 +797,10 @@ public static class Program
             SwVersion = session.SwVersion,
             DocumentPath = session.DocumentPath,
             Configuration = session.Configuration.Name,
+
+            // Lever 10a: `tessellate` writes its meshes under the same directory captures go
+            // to, which is this host's --out and never anything a request names.
+            TessellateSource = scope.TessellateSource(),
         };
 
         // The console host issues no secret: its boundary is the named pipe an engineer

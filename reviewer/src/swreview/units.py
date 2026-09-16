@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict
 
 from swreview.ir.models import Angle, LengthUnit, Quantity
 
-__all__ = ["Converted", "as_mm", "convert", "to_angle", "to_length"]
+__all__ = ["Converted", "as_degrees", "as_mm", "convert", "to_angle", "to_length"]
 
 _REGISTRY = pint.UnitRegistry()
 
@@ -76,3 +76,12 @@ def convert(q: Quantity | Angle, unit: LengthUnit) -> Converted:
 def as_mm(q: Quantity | Angle) -> float:
     """Return the magnitude of a length in millimetres."""
     return float(to_length(q).to(_REGISTRY.millimeter).magnitude)
+
+
+def as_degrees(a: Angle | Quantity) -> float:
+    """Return the magnitude of an angle in degrees.
+
+    The angular sibling of `as_mm`, and the same separation: a length raises
+    `pint.DimensionalityError` rather than being read as a number of radians.
+    """
+    return float(to_angle(a).to(_REGISTRY.degree).magnitude)

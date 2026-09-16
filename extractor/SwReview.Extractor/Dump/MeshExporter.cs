@@ -56,22 +56,60 @@ public sealed class MeshExporter : IMeshSource
 
         foreach (ScopedComponent component in scope.Components)
         {
-            if (component.Node.Suppression != SuppressionState.Resolved
-                || !(component.Node.Handle is IComponent2 handle))
-            {
-                scope.Gaps.Add(
-                    GapKind.NotExtracted,
-                    "body",
-                    null,
-                    $"'{component.Node.Key}' is not resolved, so no mesh was written for it.",
-                    null);
-                continue;
-            }
-
-            ExportComponent(handle, component, scope, meshDirectory, bodies);
+            Export(component, scope, meshDirectory, bodies);
         }
 
         return bodies;
+    }
+
+    /// <summary>
+    /// T097, lever 10a: the same export for one component, so a mesh fetched over the bridge
+    /// is written by the same <see cref="ExportBody"/>, at the same chord tolerance, as a
+    /// mesh the dump wrote.
+    /// </summary>
+    public IReadOnlyList<BodyRef> DumpComponent(
+        DumpScope scope, ScopedComponent component, string meshDirectory)
+    {
+        if (scope == null)
+        {
+            throw new ArgumentNullException(nameof(scope));
+        }
+
+        if (component == null)
+        {
+            throw new ArgumentNullException(nameof(component));
+        }
+
+        if (string.IsNullOrWhiteSpace(meshDirectory))
+        {
+            throw new ArgumentException("A mesh directory is required.", nameof(meshDirectory));
+        }
+
+        var bodies = new List<BodyRef>();
+        Directory.CreateDirectory(meshDirectory);
+        Export(component, scope, meshDirectory, bodies);
+        return bodies;
+    }
+
+    private void Export(
+        ScopedComponent component,
+        DumpScope scope,
+        string meshDirectory,
+        List<BodyRef> bodies)
+    {
+        if (component.Node.Suppression != SuppressionState.Resolved
+            || !(component.Node.Handle is IComponent2 handle))
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                "body",
+                null,
+                $"'{component.Node.Key}' is not resolved, so no mesh was written for it.",
+                null);
+            return;
+        }
+
+        ExportComponent(handle, component, scope, meshDirectory, bodies);
     }
 
     private void ExportComponent(

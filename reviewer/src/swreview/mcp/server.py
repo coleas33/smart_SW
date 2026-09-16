@@ -342,8 +342,16 @@ def _client_name(context: ServerRequestContext[Any]) -> str | None:
 
 
 def _as_tool(spec: ToolSpec) -> types.Tool:
-    """One `ToolSpec` as MCP sees it: the canonical schema, unaltered."""
-    return types.Tool(name=spec.name, description=spec.description, inputSchema=spec.schema)
+    """One `ToolSpec` as MCP sees it: the canonical schema, unaltered.
+
+    The description is the **rejoined** one - first paragraph, blank line, notes - and
+    stays that way whatever the review's `trim_tool_descriptions` flag says. A stated
+    choice, not an accident (FR-039b): this server has no system prompt to render the
+    notes into (`instructions` below is a fixed literal) and no `EfficiencySettings`
+    behind an Ask-tab call to read a flag from, so trimming here would drop the text
+    rather than move it.
+    """
+    return types.Tool(name=spec.name, description=spec.full_description, inputSchema=spec.schema)
 
 
 def _as_result(result: ToolCallResult) -> types.CallToolResult:

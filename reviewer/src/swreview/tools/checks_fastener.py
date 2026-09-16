@@ -209,23 +209,24 @@ def check_fastener_joint(
 ) -> ToolResult:
     """Check one screw-in-tapped-hole joint: bottoming, engagement, thread, head clearance.
 
-    Returns one finding per check. The clamped stack is the components you name, in order
-    from the head; each layer's thickness comes from its `Thickness` custom property, or
-    from its extracted bounding box measured along the fastener axis, or is unknown - and
-    the result says which for every layer. Washers coaxial with the fastener are found in
-    the package and added to the stack; you do not name them.
-
-    A screw whose usable thread depth the package does not carry leaves bottoming and
-    engagement `unresolved`: drill depth is not thread depth and is never used as one.
-    Head clearance stays `unresolved` until `check_tool_envelope` has swept the meshes.
-
-    A joint kind this phase does not model (a pin, a rivet, a nut) produces no finding at
-    all: it is recorded as `out_of_scope` coverage.
-
     Args:
         fastener_id: The screw or bolt, as `list_fasteners` reports it.
         hole_id: The tapped hole it goes into.
         clamped_component_ids: The components the screw clamps, from the head down.
+
+    Notes:
+        Returns one finding per check. The clamped stack is the components you name, in order
+        from the head; each layer's thickness comes from its `Thickness` custom property, or
+        from its extracted bounding box measured along the fastener axis, or is unknown - and
+        the result says which for every layer. Washers coaxial with the fastener are found in
+        the package and added to the stack; you do not name them.
+
+        A screw whose usable thread depth the package does not carry leaves bottoming and
+        engagement `unresolved`: drill depth is not thread depth and is never used as one.
+        Head clearance stays `unresolved` until `check_tool_envelope` has swept the meshes.
+
+        A joint kind this phase does not model (a pin, a rivet, a nut) produces no finding at
+        all: it is recorded as `out_of_scope` coverage.
     """
     context = current_context()
     fastener = context.fastener(fastener_id)
@@ -339,20 +340,21 @@ def check_hole_alignment(
 ) -> ToolResult:
     """Compare the offset between two hole axes with a coaxiality tolerance off a drawing.
 
-    The offset is the closest distance between the axes as modelled, with the angle
-    between them reported alongside. `tolerance` names the drawing dimension that governs
-    the pair; its nominal is read as the permitted offset. Without one the offset is still
-    measured and the finding is `unresolved` - the number is evidence, the verdict is not
-    available.
-
-    This compares modelled axes, not GD&T: no datum reference frame, no material
-    condition, no form error, and no allowance for component position or mate play.
-
     Args:
         hole_id_a: First hole id.
         hole_id_b: Second hole id.
         tolerance: Where the position tolerance is drawn - document id, sheet and
             annotation - or null when the package carries none.
+
+    Notes:
+        The offset is the closest distance between the axes as modelled, with the angle
+        between them reported alongside. `tolerance` names the drawing dimension that governs
+        the pair; its nominal is read as the permitted offset. Without one the offset is still
+        measured and the finding is `unresolved` - the number is evidence, the verdict is not
+        available.
+
+        This compares modelled axes, not GD&T: no datum reference frame, no material
+        condition, no form error, and no allowance for component position or mate play.
     """
     context = current_context()
     a = context.hole(hole_id_a)

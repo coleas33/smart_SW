@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using SwReview.Extractor.Dump;
@@ -53,6 +54,19 @@ public sealed class ManifestEntry
 
     [JsonPropertyName("export_method")]
     public ExportMethod ExportMethod { get; set; } = ExportMethod.Native;
+
+    /// <summary>
+    /// <c>FileInfo.LastWriteTimeUtc</c> of <see cref="VaultPath"/> when the dump ran (schema
+    /// 1.3.0), truncated to the microsecond the IR carries. Null plus a gap when the path
+    /// could not be stat'ed; never 0 and never "now", because the package-reuse key treats an
+    /// unknown as a refusal rather than as a match (data-model.md 9.1).
+    /// </summary>
+    [JsonPropertyName("file_modified_utc")]
+    public DateTimeOffset? FileModifiedUtc { get; set; }
+
+    /// <summary><c>FileInfo.Length</c> of the same path, same null-with-a-gap rule.</summary>
+    [JsonPropertyName("file_size_bytes")]
+    public long? FileSizeBytes { get; set; }
 }
 
 /// <summary>contracts/ir.schema.json #/$defs/Discrepancy.</summary>

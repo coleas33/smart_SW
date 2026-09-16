@@ -2,9 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
-using System.Text.Json;
 using SwReview.Extractor.Dump;
-using SwReview.Extractor.Ir;
 
 namespace SwReview.AddIn.Review;
 
@@ -56,14 +54,6 @@ public static class RunFolders
     public const string RemodelSuffix = "-remodel";
 
     private const string TimestampFormat = "yyyyMMdd-HHmmss";
-
-    /// <summary>How much of `package.json` <see cref="ProfileOf"/> reads. `extractor` is the
-    /// fourth property of the file and `profile` its last member, so the answer is inside the
-    /// first few hundred bytes; this leaves room for a long machine name.</summary>
-    private const int HeadBytes = 8 * 1024;
-
-    private static readonly byte[] ExtractorProperty = Encoding.UTF8.GetBytes("extractor");
-    private static readonly byte[] ProfileProperty = Encoding.UTF8.GetBytes("profile");
 
     /// <summary>Creates the run folder for a review of <paramref name="documentPath"/>.</summary>
     public static string CreateForDocument(string runRoot, string? documentPath, DateTime timestamp) =>
@@ -134,145 +124,28 @@ public static class RunFolders
     /// <see cref="HasEvidence"/>'s "is there any", because the step strip asks both questions
     /// in the same repaint (T084, FR-022).
     ///
-    /// <b>Only the head of the file is read.</b> `extractor` is the fourth property of a
-    /// package and `profile` the last of its members, so the answer is in the first few
-    /// hundred bytes; a full review package is tens of megabytes and this runs on the
-    /// SOLIDWORKS application thread every time a tab is selected.
-    /// <see cref="RunPackageIndex"/> deserializes the whole package because it needs the
-    /// component and document tables and can cache them for the life of a run; a repaint can
-    /// do neither, which is why this reader is a separate, bounded one rather than a second
-    /// copy of that one.
+    /// <b>Only the head of the file is read</b>, and by <see cref="PackageIndex.HeadOf"/>,
+    /// which is the same bounded read the reuse lookup makes and now the only copy of it: a
+    /// full review package is tens of megabytes and this runs on the SOLIDWORKS application
+    /// thread every time a tab is selected. <see cref="RunPackageIndex"/> deserializes the
+    /// whole package because it needs the component and document tables and can cache them for
+    /// the life of a run; a repaint can do neither.
     ///
     /// <b>Nothing here throws.</b> Every caller is a repaint.
     /// </summary>
-    public static DumpProfile? ProfileOf(string? runDirectory)
-    {
-        if (string.IsNullOrWhiteSpace(runDirectory))
-        {
-            return null;
-        }
-
-        byte[] head;
-        try
-        {
-            using (var file = new FileStream(
-                Path.Combine(runDirectory!, PackageWriter.PackageFileName),
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite))
-            {
-                head = new byte[HeadBytes];
-
-                // A stream may hand back less than it was asked for without being at its
-                // end, so the head is filled rather than read once.
-                int filled = 0;
-                int read;
-                while (filled < head.Length
-                    && (read = file.Read(head, filled, head.Length - filled)) > 0)
-                {
-                    filled += read;
-                }
-
-                if (filled < head.Length)
-                {
-                    Array.Resize(ref head, filled);
-                }
-            }
-        }
-        catch (IOException)
-        {
-            return null;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return null;
-        }
-        catch (ArgumentException)
-        {
-            return null;
-        }
-        catch (NotSupportedException)
-        {
-            return null;
-        }
-
-        try
-        {
-            return ReadProfile(head);
-        }
-        catch (JsonException)
-        {
-            // A package that is being written while it is being read is the ordinary case,
-            // not a broken one: the strip repaints again when the dump ends.
-            return null;
-        }
-    }
+    public static DumpProfile? ProfileOf(string? runDirectory) =>
+        PackageIndex.HeadOf(runDirectory).Profile;
 
     /// <summary>
-    /// `extractor.profile` out of the head of a package, or null when it is not in there.
+    /// The run folder whose package was dumped from this design, this way, or null (feature
+    /// 005 lever 9, T091). The add-in's one door to the reuse lookup, beside its one door to
+    /// naming a run folder, so the pane never learns the shape of the index itself.
     ///
-    /// <paramref name="head"/> is the first <see cref="HeadBytes"/> of the file, so the
-    /// reader is told the input is not final and simply runs out of tokens rather than
-    /// reporting the truncation as broken JSON.
+    /// A miss is the ordinary answer and never an error: it costs the dump the lever was
+    /// trying to skip.
     /// </summary>
-    private static DumpProfile? ReadProfile(byte[] head)
-    {
-        var reader = new Utf8JsonReader(head, isFinalBlock: false, state: default);
-        bool inExtractor = false;
-
-        while (reader.Read())
-        {
-            if (reader.TokenType != JsonTokenType.PropertyName)
-            {
-                continue;
-            }
-
-            if (reader.CurrentDepth == 1)
-            {
-                // The top level again: either this is `extractor`, or whatever object we
-                // were in has ended and the profile was not in it.
-                inExtractor = reader.ValueTextEquals(ExtractorProperty);
-                continue;
-            }
-
-            if (!inExtractor || reader.CurrentDepth != 2 || !reader.ValueTextEquals(ProfileProperty))
-            {
-                continue;
-            }
-
-            return reader.Read() && reader.TokenType == JsonTokenType.String
-                ? ProfileNamed(reader.GetString())
-                : null;
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// The member whose contract name is <paramref name="name"/>, or null for one this build
-    /// does not have. The names come from the serializer's own policy rather than from
-    /// literals here, so the two cannot drift apart.
-    /// </summary>
-    private static DumpProfile? ProfileNamed(string? name)
-    {
-        if (name == null)
-        {
-            return null;
-        }
-
-        foreach (DumpProfile candidate in Enum.GetValues(typeof(DumpProfile)))
-        {
-            if (string.Equals(
-                SnakeCaseLowerNamingPolicy.Instance.ConvertName(candidate.ToString()),
-                name,
-                StringComparison.Ordinal))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
+    public static PackageIndexRow? FindReusable(string? runRoot, string reuseKey, DumpProfile profile) =>
+        PackageIndex.FindReusable(runRoot, reuseKey, profile);
 
     /// <summary>
     /// The document's file name, reduced to something a folder can be called.

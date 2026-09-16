@@ -329,16 +329,29 @@ def test_replay_stops_at_a_line_the_crash_cut_in_half(
 def test_a_subscriber_receives_every_event_of_the_turn_in_order(
     chat: ChatSession, start_run: Callable[..., runner.ReviewRun]
 ) -> None:
+    """From the first event the turn writes, not from the first event of the file.
+
+    Setting a review up already writes: `session.started`, and on a run with feature 005's
+    levers on the carried findings and the pre-run's calls too. No subscriber can exist
+    yet - the pane has not been handed a session id to stream - which is why the stream is
+    replay *then* live, asserted by the test below this one.
+    """
     run = start_run([turn("hello there")], callbacks=[chat.publish])
     chat.attach(run)
+    setup = list(replay_events(chat.events_path))
 
     with chat.subscribe() as subscriber:
         run.start()
         received = subscriber.drain()
 
     written = list(replay_events(chat.events_path))
-    assert [event.seq for event in received] == [event.seq for event in written]
-    assert [event.type for event in received] == [event.type for event in written]
+    assert [event.type for event in setup] == ["session.started"]
+    assert [event.seq for event in received] == [
+        event.seq for event in written[len(setup) :]
+    ]
+    assert [event.type for event in received] == [
+        event.type for event in written[len(setup) :]
+    ]
 
 
 def test_a_subscriber_that_arrives_late_is_told_only_what_comes_next(

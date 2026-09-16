@@ -74,8 +74,11 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         reason = f"no provider key set: {', '.join(LIVE_KEYS)}"
         skips.append(("live", pytest.mark.skip(reason=reason)))
     for item in items:
-        for keyword, skip in skips:
-            if keyword in item.keywords:
+        for marker, skip in skips:
+            # The applied marker, not `item.keywords`, which also holds the directory name:
+            # a test that lives in `tests/integration/` but needs no native package - the
+            # lever 7 stop, replayed through `respx` - would otherwise never run anywhere.
+            if item.get_closest_marker(marker) is not None:
                 item.add_marker(skip)
 
 

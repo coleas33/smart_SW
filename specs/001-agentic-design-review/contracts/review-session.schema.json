@@ -15,8 +15,10 @@
     "model": { "type": "string" },
     "provider_info": { "anyOf": [{ "$ref": "#/$defs/ProviderInfo" }, { "type": "null" }] },
     "retry_of": { "type": ["string", "null"], "format": "uuid" },
+    "reused_from": { "type": ["string", "null"] },
     "efficiency": { "anyOf": [{ "$ref": "#/$defs/EfficiencySettings" }, { "type": "null" }] },
     "usage": { "anyOf": [{ "$ref": "#/$defs/SessionUsage" }, { "type": "null" }] },
+    "withheld_checks": { "type": "array", "items": { "type": "string" }, "description": "Coverage checks closed out by a tool this run declined to offer (feature 005 lever 4, FR-054). Added to properties and left out of required, so a session written before the field existed still validates; empty for every run with tool_tiers off" },
     "steps": { "type": "array", "items": { "$ref": "#/$defs/InvestigationStep" } },
     "evidence_requests": { "type": "array", "items": { "$ref": "#/$defs/EvidenceRequest" } },
     "findings": { "type": "array", "items": { "$ref": "#/$defs/Finding" } },
@@ -149,7 +151,10 @@
           "properties": { "key": { "type": "string" }, "member_component_ids": { "type": "array", "minItems": 2, "items": { "type": "string" } } } }, { "type": "null" }] },
         "capture_ids": { "type": "array", "items": { "type": "string" } },
         "disposition": { "anyOf": [{ "$ref": "#/$defs/Disposition" }, { "type": "null" }] },
-        "exception_id": { "type": ["string", "null"] }
+        "exception_id": { "type": ["string", "null"] },
+        "carried_over_from": { "type": ["string", "null"], "format": "uuid", "description": "The session that produced this verdict, when this run carried it over instead of computing it; null when this run computed it (feature 005, lever 11a)" },
+        "carried_over_at": { "type": ["string", "null"], "format": "date-time", "description": "When the carry-over decision was made, not when the verdict was first produced" },
+        "carry_over_key": { "type": ["string", "null"], "description": "The key that justified the carry-over, stored so the decision is reproducible by hand against the package" }
       },
       "allOf": [
         { "anyOf": [{ "properties": { "component_ids": { "minItems": 1 } } }, { "properties": { "drawing_locations": { "minItems": 1 } } }] },

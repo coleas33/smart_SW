@@ -1609,6 +1609,34 @@
           ],
           "title": "Export Method",
           "type": "string"
+        },
+        "file_modified_utc": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`FileInfo.LastWriteTimeUtc` of `vault_path` when the dump ran (schema 1.3.0). Null plus a gap when the path could not be stat'ed, and null in every package written before 1.3.0. Never 0 and never 'now': the package-reuse key (feature 005 lever 9) treats unknown as a refusal, not as a match.",
+          "title": "File Modified Utc"
+        },
+        "file_size_bytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "`FileInfo.Length` of `vault_path`, same source and same null-with-a-gap rule as `file_modified_utc` (schema 1.3.0).",
+          "title": "File Size Bytes"
         }
       },
       "required": [
@@ -2333,6 +2361,46 @@
       "format": "date-time",
       "title": "Created At",
       "type": "string"
+    },
+    "reuse_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "SHA-256 over what this package claims to be - the extractor, the schema, the profile, the four dump options, the root document and configuration, every manifest entry's file stat and every component's suppression state (schema 1.3.0, feature 005 lever 9, `benchmark/reuse.py`). Null in a package written by a build that computes none. Declared here, ahead of the bulk of the package, so a bounded head read can find it without parsing tens of megabytes.",
+      "title": "Reuse Key"
+    },
+    "reused_from": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The run folder this package was copied from instead of dumped (schema 1.3.0, feature 005 lever 9); null when it was freshly dumped. Reuse is stated, never silent: this member, the pane's status line, the report header and `session.json` all say it.",
+      "title": "Reused From"
+    },
+    "reused_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When the reuse decision was made - not when the original was dumped (schema 1.3.0).",
+      "title": "Reused At"
     },
     "extractor": {
       "$ref": "#/$defs/ExtractorInfo"

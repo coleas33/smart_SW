@@ -51,6 +51,8 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from pydantic import Field
+
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE
 from swreview.agent.runner import SESSION_FILE_NAME
 from swreview.agent.settings import LEVER_NAMES
@@ -92,9 +94,16 @@ folders, and `--check` is what stops the document drifting from them (T045). The
 does not exist until the first study is run, and an empty ledger is the honest rendering of
 a feature that has measured nothing yet."""
 
+TRIM_LEVER = "trim_tool_descriptions"
+"""Lever 2, whose counter is the tool-name histogram rather than one of `adoption.METRICS`."""
+
+TIER_LEVER = "tool_tiers"
+"""Lever 4, whose counter is the withheld half of the unresolved count (FR-054). Also not
+one of `adoption.METRICS`: both halves are per package, and `Aggregate` carries neither."""
+
 LEVER_COUNTERS: dict[str, str] = {
-    "trim_tool_descriptions": "tool-name histogram (arrives with lever 2)",
-    "tool_tiers": "unresolved because withheld (arrives with lever 4)",
+    TRIM_LEVER: "distinct tool names called",
+    "tool_tiers": "unresolved because withheld",
     "prompt_cache_key": "cache miss reasons and cache_missed_tokens (arrives with lever 3)",
     "gemini_explicit_cache": "cached-content hit rate (arrives with lever 3, Gemini)",
     "prerun_checks": "check_fit and check_axial_stack call counts (arrives with lever 5)",
@@ -108,8 +117,10 @@ LEVER_COUNTERS: dict[str, str] = {
 """The number **this** lever's gate needs and no other's (ab-harness section 6).
 
 Every lever is named here even when the counter itself lands with that lever's own task,
-so the column says *which* number is missing rather than going blank. Only lever 6's is
-computable from what the scorecard and the session already carry."""
+so the column says *which* number is missing rather than going blank. Levers 2 and 6 are
+the two that compute today: lever 6's from `tool_calls`, lever 2's from the tool-name
+histogram `PackageScore` carries (`_histogram_counter`). Lever 4's landed with it: the
+withheld half of the unresolved count (`_withheld_counter`)."""
 
 COUNTER_METRIC: dict[str, str] = {"parallel_tool_calls": "tool_calls"}
 """The counters that are already a metric in `adoption.METRICS`; the rest render unknown
@@ -151,6 +162,13 @@ class RunRow(ReviewModel):
     missed_known_defects: int
     false_alarms: int
     unresolved_count: int
+    unresolved_because_withheld: int
+    unresolved_other: int
+    """The unresolved **coverage** items read as the two numbers FR-054 requires, both from
+    `PackageScore`. They sum to `coverage_bucket_mix["unresolved"]` beside them and never to
+    `unresolved_count`, which counts findings: lever 4 is expected to raise the first and
+    its gate is that the second does not move."""
+
     coverage_bucket_mix: dict[str, int]
     set_too_small_override: bool
 
@@ -162,6 +180,13 @@ class LeverCounter(ReviewModel):
     name: str
     off: float | None
     on: float | None
+
+    dropped_tools: list[str] = Field(default_factory=list)
+    """Lever 2 (T057, T059): every tool some off-run called that **no** on-run called.
+
+    A list and not a count, because "the repertoire lost one tool" is not a sentence an
+    owner can act on. Empty means measured and clean; an arm that never ran leaves `off`
+    and `on` unknown and this empty too, which is why the gate reads all three."""
 
 
 class LeverDecision(ReviewModel):
@@ -386,6 +411,8 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
         missed_known_defects=score.missed_known_defects,
         false_alarms=score.false_alarms,
         unresolved_count=score.unresolved_count,
+        unresolved_because_withheld=score.unresolved_because_withheld,
+        unresolved_other=score.unresolved_other,
         coverage_bucket_mix={
             bucket: len(getattr(coverage, bucket))
             for bucket in ("checked", "skipped", "unresolved", "failed", "out_of_scope")
@@ -471,11 +498,64 @@ def _arm_run(run: _LoadedRun) -> ArmRun:
 
 def _counter(lever: str, off: Sequence[ArmRun], on: Sequence[ArmRun]) -> LeverCounter:
     name = LEVER_COUNTERS.get(lever, lever)
+    if lever == TRIM_LEVER:
+        return _histogram_counter(name, off, on)
+    if lever == TIER_LEVER:
+        return _withheld_counter(name, off, on)
     metric_name = COUNTER_METRIC.get(lever)
     if metric_name is None:
         return LeverCounter(name=name, off=None, on=None)
     stat = off_on(metric(off, metric_name), metric(on, metric_name))
     return LeverCounter(name=name, off=stat.off_median, on=stat.on_median)
+
+
+def _withheld_total(run: ArmRun) -> float:
+    """How many unresolved items withholding wrote across this run's packages."""
+    return float(sum(score.unresolved_because_withheld for score in run.scorecard.per_package))
+
+
+def _withheld_counter(
+    name: str, off: Sequence[ArmRun], on: Sequence[ArmRun]
+) -> LeverCounter:
+    """Lever 4's counter: the median withheld half of the unresolved count, per arm (FR-054).
+
+    The half the lever is *expected* to raise. The half it must not - `unresolved_other` -
+    is a raw-row column rather than a counter, because it is read per package against the
+    off arm's own row and an arm median would hide one package losing coverage while
+    another gained it.
+    """
+    stat = off_on([_withheld_total(run) for run in off], [_withheld_total(run) for run in on])
+    return LeverCounter(name=name, off=stat.off_median, on=stat.on_median)
+
+
+def _repertoire(runs: Sequence[ArmRun]) -> set[str]:
+    """Every tool name any run of this arm called, over every package it scored."""
+    return {
+        name
+        for run in runs
+        for score in run.scorecard.per_package
+        for name in score.tool_calls_by_name
+    }
+
+
+def _histogram_counter(
+    name: str, off: Sequence[ArmRun], on: Sequence[ArmRun]
+) -> LeverCounter:
+    """Lever 2's counter, read from `PackageScore.tool_calls_by_name` (T057).
+
+    The number is how many distinct tools each arm called; the list beside it is what
+    T059's gate actually reads. Both are taken over the **arm**, not over a run: a tool
+    one on-run skipped and another called is still in the repertoire, and the worst case
+    the ledger cares about is a tool the whole arm stopped picking.
+    """
+    off_tools = _repertoire(off)
+    on_tools = _repertoire(on)
+    return LeverCounter(
+        name=name,
+        off=float(len(off_tools)) if off else None,
+        on=float(len(on_tools)) if on else None,
+        dropped_tools=sorted(off_tools - on_tools) if off and on else [],
+    )
 
 
 def _decision_row(
@@ -685,6 +765,8 @@ RUN_COLUMNS: tuple[str, ...] = (
     "missed",
     "false alarms",
     "unresolved",
+    "unresolved withheld",
+    "unresolved other",
     "coverage bucket mix",
 )
 
@@ -747,9 +829,19 @@ def _run_line(row: RunRow) -> str:
         _count(row.missed_known_defects),
         _count(row.false_alarms),
         _count(row.unresolved_count),
+        _count(row.unresolved_because_withheld),
+        _count(row.unresolved_other),
         mix,
     )
     return "| " + " | ".join(cells) + " |"
+
+
+def _counter_cell(counter: LeverCounter) -> str:
+    """The counter column: the name, the two numbers, and what the on arm stopped calling."""
+    cell = f"{counter.name}: {_count(counter.off)} -> {_count(counter.on)}"
+    if counter.dropped_tools:
+        cell += "; no longer called: " + ", ".join(counter.dropped_tools)
+    return cell
 
 
 def _quality(row: LeverDecision) -> str:
@@ -765,7 +857,6 @@ def _quality(row: LeverDecision) -> str:
 
 
 def _lever_line(row: LeverDecision) -> str:
-    counter = row.lever_counter
     cells = (
         row.lever,
         f"{_text(row.provider)} {_text(row.model)}",
@@ -785,7 +876,7 @@ def _lever_line(row: LeverDecision) -> str:
         _quality(row),
         _off_on(row.recall_held_out),
         _count(row.worst_case_defects_lost),
-        f"{counter.name}: {_count(counter.off)} -> {_count(counter.on)}",
+        _counter_cell(row.lever_counter),
         row.decision if row.decision is not None else UNKNOWN,
         SIGNED if row.owner_signed_off else UNSIGNED,
         _text(row.owner_signed_off_at.isoformat() if row.owner_signed_off_at else None),

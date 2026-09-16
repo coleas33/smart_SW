@@ -30,6 +30,7 @@ from swreview.report.session import CoverageBucket
 
 __all__ = [
     "RULES",
+    "RULES_VERSION",
     "RmsRule",
     "RuleCoverageBucket",
     "RuleFn",
@@ -91,6 +92,24 @@ class RmsRule:
             )
         if not self.statement.strip():
             raise ValueError(f"{self.id}: a rule needs a statement to report as its requirement")
+
+
+RULES_VERSION = "1"
+"""This catalogue's version: the rms family's `Calculation.function_version`.
+
+The deterministic checks each carry a module-level `FUNCTION_VERSION` (`checks/fit.py`,
+`checks/fastener.py` and the rest) that rides into every finding's `Calculation` and says
+which implementation produced the number. The rms rules produce no calculation
+(`checks/rms/results.py`), so their findings have nowhere to carry one - and feature 005's
+carry-over key needs exactly that fact, because a verdict reused from an earlier run is a
+claim that **this** implementation would conclude the same thing (guard 5,
+`carry_over.carry_over_key`).
+
+**Bump it whenever a rule's verdict over an unchanged tree could change**: a rule added or
+removed, a severity changed, an evaluator's condition edited. Nothing detects an unbumped
+change, which is the honest cost of there being no calculation to version; the direction of
+the error is a carried verdict, so the bump is part of editing a rule, not an afterthought.
+"""
 
 
 def _catalogue(*rules: RmsRule) -> dict[str, RmsRule]:
