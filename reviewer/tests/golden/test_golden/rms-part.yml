@@ -200,6 +200,29 @@ result:
       - doc:4
       pairs: []
       positions: []
+  - bucket: checked
+    check: rms.detail.individually_suppressible
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: skipped
+    check: rms.detail.individually_suppressible
+    error: null
+    reason: '1 document(s): doc:3: feat:0035 Sketch4: already_suppressed; suppress-test
+      tested 5/7 Detail content feature(s)'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:3
+      pairs: []
+      positions: []
   - bucket: skipped
     check: rms.core.shell_last
     error: null
@@ -236,8 +259,9 @@ result:
   - bucket: unresolved
     check: rms.detail.individually_suppressible
     error: null
-    reason: '3 document(s): doc:2: no suppress-test run; doc:3: no suppress-test run;
-      doc:4: no suppress-test run'
+    reason: '3 document(s): doc:2: no suppress-test run; doc:3: feat:0041 Cut-Extrude4:
+      not tested; suppress-test tested 5/7 Detail content feature(s); doc:4: no suppress-test
+      run'
     scope:
       component_ids: []
       configuration: Default
@@ -346,8 +370,8 @@ result:
   - bucket: unresolved
     check: modeling.resilience
     error: null
-    reason: 30 checked, 3 skipped, 7 unresolved rule result(s) over 3 document(s);
-      17 finding(s)
+    reason: 31 checked, 4 skipped, 7 unresolved rule result(s) over 3 document(s);
+      18 finding(s)
     scope:
       component_ids: []
       configuration: Default
@@ -953,6 +977,39 @@ result:
     - 0
   - calculation: null
     capture_ids: []
+    check: rms.detail.individually_suppressible
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-017
+    inputs:
+    - feat:0036 Cut-Extrude2 [Cut] persist_ref=ZG9jOjMvQ3V0LUV4dHJ1ZGUy scope=doc:3
+    observed: 'Cut-Extrude2 cannot be suppressed alone; run baseline 0 rebuild error(s).
+      Cut-Extrude2: 2 rebuild error(s) after suppression: Cut-Extrude3: the sketch
+      plane no longer exists, Cut-Extrude3: rebuild failed'
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/bracket.SLDPRT
+      vault_version: 1
+    recommended_action: Rework the listed Detail feature(s) so each can be suppressed
+      on its own - remove the references that break the rebuild - and re-run the suppress-test.
+    requirement: Each Detail feature can be suppressed alone without rebuild errors.
+    severity: medium
+    status: demonstrated
+    title: Cut-Extrude2 cannot be suppressed alone; run baseline 0 rebuild error(s)
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
     check: rms.folders.present
     component_ids:
     - cmp:0004
@@ -962,7 +1019,7 @@ result:
     drawing_locations: []
     exception_id: null
     group: null
-    id: F-017
+    id: F-018
     inputs: []
     observed: 'missing group folder(s): 2-Construction, 5-Modify'
     provenance:

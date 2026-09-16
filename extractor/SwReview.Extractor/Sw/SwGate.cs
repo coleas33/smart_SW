@@ -41,15 +41,23 @@ public interface ISwGateObserver
 public sealed class SwGate
 {
     private readonly CircuitBreaker _breaker;
+    private readonly ICallGuard _guard;
 
     public SwGate()
         : this(new CircuitBreaker())
     {
     }
 
-    public SwGate(CircuitBreaker breaker)
+    /// <summary>
+    /// Builds a gate on <paramref name="breaker"/>. <paramref name="guard"/> is null
+    /// everywhere but the engineer-run suppress-test, which passes a
+    /// <see cref="SuppressTestGuard"/>; null means the read-only guard, so the add-in, the
+    /// bridge and every dump still refuse ForceRebuild3 and SetSuppression2 (research R6).
+    /// </summary>
+    public SwGate(CircuitBreaker breaker, ICallGuard? guard = null)
     {
         _breaker = breaker ?? throw new ArgumentNullException(nameof(breaker));
+        _guard = guard ?? ReadOnlyCallGuard.Instance;
     }
 
     /// <summary>The breaker this gate counts failures against.</summary>
@@ -90,6 +98,21 @@ public sealed class SwGate
     }
 
     /// <summary>
+    /// The guard on its own, for an interop call the caller makes itself.
+    ///
+    /// <c>SwSuppressTarget</c> - the one class in the product that calls a mutating member -
+    /// makes its interop calls directly, the way <c>SwFeatureReader</c> does, so it asks here
+    /// at the call site instead of trusting whoever built it to have asked. A mutating member
+    /// must not be reachable with the guard never consulted, whatever the caller does.
+    ///
+    /// The guard and the observer, and NOT the breaker: the call that follows is already
+    /// wrapped in <see cref="Call{T}"/> by that caller, so counting it twice would open the
+    /// circuit on half the failures it should take - and a guard refusal is a decision, not a
+    /// sick SOLIDWORKS session.
+    /// </summary>
+    public void Assert(string interopMember) => Guard(interopMember);
+
+    /// <summary>
     /// The guard check, with the observer told what happened. The member is reported before
     /// the guard judges it, so a refused name is in the gated set as well as in the refusals:
     /// the SC-004 audit reads "what did this request touch", and a call that was attempted
@@ -100,14 +123,14 @@ public sealed class SwGate
         ISwGateObserver? observer = Observer;
         if (observer == null)
         {
-            ReadOnlyGuard.Assert(interopMember);
+            _guard.Assert(interopMember);
             return;
         }
 
         observer.Gated(interopMember);
         try
         {
-            ReadOnlyGuard.Assert(interopMember);
+            _guard.Assert(interopMember);
         }
         catch (MutatingCallError refusal)
         {

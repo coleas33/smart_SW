@@ -21,6 +21,12 @@ public class ReadOnlyGuardTests
     [InlineData("EditUnsuppress2")]
     [InlineData("EditDelete")]
     [InlineData("ModifyDefinition")]
+    [InlineData("SetSuppression2")]
+    [InlineData("SetSuppression")]
+    [InlineData("ForceRebuildAll")]
+    [InlineData("AccessSelections")]
+    [InlineData("EditRollback")]
+    [InlineData("SetSaveFlag")]
     public void Assert_DeniedMember_Throws(string member)
     {
         MutatingCallError error = Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(member));
@@ -102,6 +108,44 @@ public class ReadOnlyGuardTests
     public void AssertSaveAs_MissingPath_Throws(string? path)
     {
         Assert.Throws<ArgumentException>(() => ReadOnlyGuard.AssertSaveAs(path!));
+    }
+}
+
+/// <summary>
+/// T048. The instance form of the read-only guard: the seam <see cref="SwReview.Extractor.Sw.SwGate"/>
+/// consults, and the default every gate gets. It must answer exactly as the static guard does.
+/// </summary>
+public class ReadOnlyCallGuardTests
+{
+    [Theory]
+    [InlineData("ForceRebuild3")]
+    [InlineData("SetSuppression2")]
+    [InlineData("SetSaveFlag")]
+    [InlineData("FeatureCut4")]
+    public void Assert_DeniedMember_ThrowsLikeTheStaticGuard(string member)
+    {
+        MutatingCallError error = Assert.Throws<MutatingCallError>(
+            () => ReadOnlyCallGuard.Instance.Assert(member));
+
+        Assert.Equal(member, error.MemberName);
+    }
+
+    [Theory]
+    [InlineData("GetChildren")]
+    [InlineData("GetSuppression2")]
+    [InlineData("GetSaveFlag")]
+    public void Assert_AllowedMember_Passes(string member)
+    {
+        ReadOnlyCallGuard.Instance.Assert(member);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void Assert_MissingMemberName_Throws(string? member)
+    {
+        Assert.Throws<ArgumentException>(() => ReadOnlyCallGuard.Instance.Assert(member!));
     }
 }
 

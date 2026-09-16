@@ -1007,7 +1007,7 @@
       "index": 14,
       "depth": 1,
       "folder_id": "feat:0034",
-      "suppressed": false,
+      "suppressed": true,
       "error_code": 0,
       "child_ids": [
         "feat:0036"
@@ -1600,6 +1600,96 @@
     }
   ],
   "equations": [],
-  "rms_suppress_test": null,
+  "rms_suppress_test": {
+    "document_id": "doc:3",
+    "configuration": "Default",
+    "group": "4-Detail",
+    "plan_file": "suppress-plan.json",
+    "run_at": "2026-09-12T12:00:00Z",
+    "acknowledged": true,
+    "baseline_whats_wrong_count": 0,
+    "limit": 50,
+    "timeout_seconds": 600,
+    "features_present": 6,
+    "restore_verified": true,
+    "unrestored_feature_ids": [],
+    "rows": [
+      {
+        "feature_id": "feat:0035",
+        "persist_ref": "ZG9jOjMvU2tldGNoNA==",
+        "persist_ref_scope": "doc:3",
+        "name": "Sketch4",
+        "outcome": "already_suppressed",
+        "whats_wrong_count": null,
+        "messages": [],
+        "messages_truncated": 0,
+        "error": null,
+        "elapsed_ms": 4
+      },
+      {
+        "feature_id": "feat:0036",
+        "persist_ref": "ZG9jOjMvQ3V0LUV4dHJ1ZGUy",
+        "persist_ref_scope": "doc:3",
+        "name": "Cut-Extrude2",
+        "outcome": "rebuild_errors",
+        "whats_wrong_count": 2,
+        "messages": [
+          "Cut-Extrude3: the sketch plane no longer exists",
+          "Cut-Extrude3: rebuild failed"
+        ],
+        "messages_truncated": 0,
+        "error": null,
+        "elapsed_ms": 880
+      },
+      {
+        "feature_id": "feat:0037",
+        "persist_ref": "ZG9jOjMvQ3V0LUV4dHJ1ZGUz",
+        "persist_ref_scope": "doc:3",
+        "name": "Cut-Extrude3",
+        "outcome": "ok",
+        "whats_wrong_count": 0,
+        "messages": [],
+        "messages_truncated": 0,
+        "error": null,
+        "elapsed_ms": 610
+      },
+      {
+        "feature_id": "feat:0038",
+        "persist_ref": "ZG9jOjMvU2tldGNoNQ==",
+        "persist_ref_scope": "doc:3",
+        "name": "Sketch5",
+        "outcome": "ok",
+        "whats_wrong_count": 0,
+        "messages": [],
+        "messages_truncated": 0,
+        "error": null,
+        "elapsed_ms": 240
+      },
+      {
+        "feature_id": "feat:0039",
+        "persist_ref": "ZG9jOjMvSG9sZTE=",
+        "persist_ref_scope": "doc:3",
+        "name": "Hole1",
+        "outcome": "ok",
+        "whats_wrong_count": 0,
+        "messages": [],
+        "messages_truncated": 0,
+        "error": null,
+        "elapsed_ms": 520
+      },
+      {
+        "feature_id": "feat:0040",
+        "persist_ref": "ZG9jOjMvQ3V0LUV4dHJ1ZGU1",
+        "persist_ref_scope": "doc:3",
+        "name": "Cut-Extrude5",
+        "outcome": "ok",
+        "whats_wrong_count": 0,
+        "messages": [],
+        "messages_truncated": 0,
+        "error": null,
+        "elapsed_ms": 570
+      }
+    ]
+  },
   "gaps": []
 }

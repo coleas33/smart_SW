@@ -135,6 +135,41 @@ public static class PackageAppender
             Ids.IdAllocator.HighestIssued(Capture.CaptureService.IdPrefix, existing));
     }
 
+    /// <summary>
+    /// Merges one suppress-test run into <paramref name="package"/>, replacing whatever run
+    /// was there.
+    ///
+    /// A package holds ONE run (<c>rms_suppress_test</c> is a single object in the schema), and
+    /// replacing is the only honest merge: a second run is a complete re-test of one document
+    /// in one configuration, and keeping the first alongside it would leave the reviewer
+    /// reading rows about a model that has since been re-tested.
+    /// </summary>
+    public static void Merge(EvidencePackage package, SuppressTestRun run)
+    {
+        if (package == null)
+        {
+            throw new ArgumentNullException(nameof(package));
+        }
+
+        if (run == null)
+        {
+            throw new ArgumentNullException(nameof(run));
+        }
+
+        package.RmsSuppressTest = run;
+    }
+
+    /// <summary>
+    /// Merges one suppress-test run into the package on disk and saves it. Returns the path
+    /// written.
+    /// </summary>
+    public static string AppendSuppressTest(string packageDirectory, SuppressTestRun run)
+    {
+        EvidencePackage package = Load(packageDirectory);
+        Merge(package, run);
+        return Save(packageDirectory, package);
+    }
+
     /// <summary>Merges one capture into <paramref name="package"/>. Captures are purely additive.</summary>
     public static void Merge(EvidencePackage package, IrCapture? capture, Gap? gap)
     {

@@ -19,10 +19,11 @@ Three parts, per T030:
   the holes trailing Detail, the draft before the pattern in Modify, and Quarantine holding
   one chamfer then non-increasing fillets that nothing depends on.
 - **bracket** (`doc:3`) seeds one violation of every part rule that is reachable while all
-  six group folders exist - sixteen of the eighteen. The two that are not reachable here
-  are `rms.folders.present`, which can only be violated by a *missing* group (widget below
-  is missing two), and `rms.detail.individually_suppressible`, which needs a
-  `suppress-test` run this package deliberately does not carry, so it stays unresolved.
+  six group folders exist - seventeen of the eighteen. The one that is not reachable here
+  is `rms.folders.present`, which can only be violated by a *missing* group (widget below
+  is missing two). `rms.detail.individually_suppressible` is reachable because this is
+  also the one part the package carries a `suppress-test` run for (`suppress_test` below),
+  so it lands in four buckets at once.
   The duplicated `3-Core` folder after `4-Detail` does double duty exactly as the native
   recipe's part B does (`benchmarks/native/rms-part/RECIPE.md`): it fails
   `rms.folders.ordered`, and it is what puts a Core feature *after* a Detail feature in
@@ -51,17 +52,22 @@ from tests.support.features import (  # noqa: E402
     folder,
     rms_package,
     sketch_feature,
+    suppress_row,
+    suppress_run,
 )
 
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore  # noqa: E402
 from swreview.ir.loader import save_package  # noqa: E402
-from swreview.ir.models import EvidencePackage  # noqa: E402
+from swreview.ir.models import EvidencePackage, SuppressTestRun  # noqa: E402
 
 CASE_CALLABLE = "swreview.checks.golden_rms:part_case"
 
 UNDER_DEFINED = 2
 OVER_DEFINED = 4
 """`swConstrainedStatus_e` raw values, as `checks/rms_types.yaml` maps them."""
+
+BRACKET_DOCUMENT = "doc:3"
+DETAIL_GROUP = "4-Detail"
 
 WAIVED_RULE = "rms.quarantine.only_fillets_and_chamfers"
 BRACKET_INSTANCE = "cmp:0003"
@@ -157,7 +163,7 @@ def bracket() -> PartSpec:
             ),
             folder(
                 "4-Detail",
-                sketch_feature("Sketch4", consumers=("Cut-Extrude2",)),
+                sketch_feature("Sketch4", consumers=("Cut-Extrude2",), suppressed=True),
                 feature("Cut-Extrude2", "Cut", child_names=("Cut-Extrude3",)),
                 feature("Cut-Extrude3", "Cut", parent_names=("Cut-Extrude2",)),
                 sketch_feature("Sketch5", raw_status=OVER_DEFINED, consumers=("Cut-Extrude5",)),
@@ -219,10 +225,66 @@ def widget() -> PartSpec:
     )
 
 
+def suppress_test(package: EvidencePackage) -> SuppressTestRun:
+    """The `suppress-test` run US4 appends, on the bracket and on no other part (T057).
+
+    One row per outcome the rule has to grade differently, so the baseline pins four
+    buckets for one document at once:
+
+    - `Cut-Extrude2` fails: `Cut-Extrude3` is sketched on it, inside `4-Detail`, so
+      suppressing it alone leaves the two rebuild errors the messages name. It is the same
+      seed `rms.detail.no_internal_references` reports, which is the point - an internal
+      reference is what makes a Detail feature unsuppressible;
+    - `Sketch4` is skipped: it is suppressed in the tree the dump read, so the command
+      found nothing to do and recorded `already_suppressed`;
+    - `Cut-Extrude3`, `Sketch5`, `Hole1` and `Cut-Extrude5` pass;
+    - `Cut-Extrude4` has no row at all, so the rule reports it `not tested`.
+
+    The coverage line reads 5/7: the five features the run answered for are the failing
+    one and the four passing ones. `Sketch4` was walked past rather than tested and
+    `Cut-Extrude4` was never reached, so neither is counted as covered - the same sentence
+    that names a feature skipped or not tested cannot also call it tested.
+
+    The other two parts carry no run and stay unresolved with `no suppress-test run`,
+    which is what `quickstart.md` scenario 1 expects to see.
+    """
+    rows = {
+        row.name: row
+        for row in package.features
+        if row.document_id == BRACKET_DOCUMENT
+    }
+    return suppress_run(
+        document_id=BRACKET_DOCUMENT,
+        configuration=package.design.active_configuration,
+        group=DETAIL_GROUP,
+        rows=[
+            suppress_row(rows["Sketch4"], "already_suppressed", elapsed_ms=4),
+            suppress_row(
+                rows["Cut-Extrude2"],
+                "rebuild_errors",
+                whats_wrong_count=2,
+                messages=[
+                    "Cut-Extrude3: the sketch plane no longer exists",
+                    "Cut-Extrude3: rebuild failed",
+                ],
+                elapsed_ms=880,
+            ),
+            suppress_row(rows["Cut-Extrude3"], "ok", whats_wrong_count=0, elapsed_ms=610),
+            suppress_row(rows["Sketch5"], "ok", whats_wrong_count=0, elapsed_ms=240),
+            suppress_row(rows["Hole1"], "ok", whats_wrong_count=0, elapsed_ms=520),
+            suppress_row(rows["Cut-Extrude5"], "ok", whats_wrong_count=0, elapsed_ms=570),
+        ],
+    )
+
+
 def build() -> EvidencePackage:
+    parts = [frame(), bracket(), widget()]
+    assembly = AssemblySpec(document_id="doc:1", name="rms-part-assy")
+    # Built twice: a row identifies its feature by the id the builder allocates, so the
+    # run can only be written once the tree it is about exists.
+    tree_only = rms_package(parts=parts, assembly=assembly)
     return rms_package(
-        parts=[frame(), bracket(), widget()],
-        assembly=AssemblySpec(document_id="doc:1", name="rms-part-assy"),
+        parts=parts, assembly=assembly, suppress_test=suppress_test(tree_only)
     )
 
 

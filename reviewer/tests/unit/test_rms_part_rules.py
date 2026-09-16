@@ -16,8 +16,9 @@ contract and not the detail of any one rule:
 - **observed text.** A finding that does not name the feature it is about is not evidence,
   so every fail and warn asserts the substring an engineer would search for.
 
-`rms.detail.individually_suppressible` is US4 (T057); only the "no run in the package" row
-of its outcome table is bound here, and the test for it says so.
+`rms.detail.individually_suppressible` is US4: the rows of its outcome table that need a
+`suppress-test` run live in `test_rms_suppress_rule.py` (T056), and what is here is the
+tree half of it - no Detail group, no run, a run for another document.
 """
 
 from __future__ import annotations
@@ -1337,7 +1338,8 @@ class TestIndividuallySuppressible:
 
         assert keyed["skip"].reason == "no Detail group"
 
-    def test_a_run_for_this_document_is_left_to_t057(self) -> None:
+    def test_a_run_for_this_document_is_graded(self) -> None:
+        """The rest of the outcome table is `test_rms_suppress_rule.py`; this is the seam."""
         rows = build_tree([folder(DETAIL, feature("Cut1", "Cut"))]).rows
         detail = next(row for row in rows if row.name == "Cut1")
         tree = build_tree(
@@ -1346,9 +1348,9 @@ class TestIndividuallySuppressible:
                 document_id=DOCUMENT, rows=[suppress_row(detail, "ok")], group=DETAIL
             ),
         )
+        keyed = by_outcome(RULES[self.RULE].fn(tree))
 
-        with pytest.raises(NotImplementedError, match="T057"):
-            RULES[self.RULE].fn(tree)
+        assert names(tree, keyed["pass"]) == ["Cut1"]
 
 
 # --- evaluate_part ----------------------------------------------------------------

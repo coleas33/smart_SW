@@ -19,7 +19,7 @@ Two answers are deliberately not classifications (constitution Principle I):
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -39,8 +39,10 @@ __all__ = [
     "ConstrainedStatus",
     "FeatureClass",
     "RmsTypeTable",
+    "UnknownType",
     "class_of",
     "load_table",
+    "unknown_types",
 ]
 
 DEFAULT_TYPES_PATH = Path(__file__).with_name("rms_types.yaml")
@@ -331,3 +333,48 @@ def class_of(feature: Feature, table: RmsTypeTable | None = None) -> Classificat
     not the extractor's - the IR carries `type_name` verbatim and derives nothing.
     """
     return (table or load_table()).classify(feature.type_name)
+
+
+@dataclass(frozen=True)
+class UnknownType:
+    """One `GetTypeName2` string the table does not classify, and where it was seen."""
+
+    type_name: str
+    count: int
+    """How many content features of the surveyed set carry it."""
+
+    document_ids: tuple[str, ...]
+    """The documents those features are in, first seen first."""
+
+
+def unknown_types(
+    features: Iterable[Feature], table: RmsTypeTable | None = None
+) -> list[UnknownType]:
+    """The census of type names `features` carry that the table cannot classify.
+
+    The calibration question, asked in one place: `swreview rms types` prints this for a
+    whole package, and the `rms.types.unknown` coverage item reports it for the documents
+    one check evaluated (`checks/rms/report.py`), so what counts as "not classified" is
+    decided here and not twice.
+
+    Only content features count - a folder and an end-tag marker are structure, and the
+    table classifies neither by class (`contracts/rules.md`, "Content features") - and only
+    `unknown` counts: `ambiguous` *is* a classification, and the rules act on it.
+
+    Rows come back in first-seen order, which is traversal order for a package's
+    `features[]`, so the census reads in the order an engineer would walk the tree.
+    """
+    resolved = table or load_table()
+    counts: dict[str, int] = {}
+    documents: dict[str, list[str]] = {}
+    for row in features:
+        if not resolved.is_content(row) or resolved.classify(row.type_name) != "unknown":
+            continue
+        counts[row.type_name] = counts.get(row.type_name, 0) + 1
+        seen = documents.setdefault(row.type_name, [])
+        if row.document_id not in seen:
+            seen.append(row.document_id)
+    return [
+        UnknownType(type_name=name, count=count, document_ids=tuple(documents[name]))
+        for name, count in counts.items()
+    ]

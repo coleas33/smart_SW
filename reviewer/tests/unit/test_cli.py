@@ -1727,52 +1727,46 @@ def test_check_rms_on_a_missing_package_exits_1(tmp_path: Path) -> None:
 
 
 def test_check_rms_reports_a_rule_that_cannot_grade_as_an_error_not_a_traceback(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Grading raises for input the rules cannot grade yet; that is exit 1, not a crash.
+    """A raise out of the rule layer is exit 1 and one line on stderr, not a crash.
 
     `run_part_checks` sits outside `_context_for`, so it needs its own guard: everything
-    the rule layer raises for input it can describe is in `HANDLED_ERRORS`, and a package
-    that reaches one of those paths must leave the same one-line `error: ...` on stderr
-    as an unreadable package does. A `suppress-test` run naming the document being graded
-    is the path this build has (`rms.detail.individually_suppressible` is T057).
+    the rule layer raises for input it can describe is in `HANDLED_ERRORS`, and a raise
+    from one of those paths must leave the same one-line `error: ...` on stderr as an
+    unreadable package does. Since T057 no package reaches such a raise - the one that
+    did was the `rms.detail.individually_suppressible` stub, and `part_tree`'s remaining
+    `ValueError`s are about rows the loader cannot produce - so the raise is injected at
+    the dispatch entry the guard wraps rather than built out of a fixture.
     """
-    from tests.support.features import (
-        AssemblySpec,
-        PartSpec,
-        feature,
-        folder,
-        rms_package,
-        suppress_row,
-        suppress_run,
-    )
+    from tests.support.features import AssemblySpec, PartSpec, feature, folder, rms_package
 
-    parts = [
-        PartSpec(
-            document_id=RMS_FRAME,
-            name="frame",
-            features=(
-                folder("3-Core", feature("Boss-Extrude1", "Extrusion")),
-                folder("4-Detail", feature("Hole1", "HoleWzd")),
-            ),
-        )
-    ]
-    assembly = AssemblySpec(document_id="doc:1", name="cover-assy")
-    hole = next(
-        row for row in rms_package(parts=parts, assembly=assembly).features if row.name == "Hole1"
-    )
     package = rms_package(
-        parts=parts,
-        assembly=assembly,
-        suppress_test=suppress_run(document_id=RMS_FRAME, rows=[suppress_row(hole, "ok")]),
+        parts=[
+            PartSpec(
+                document_id=RMS_FRAME,
+                name="frame",
+                features=(
+                    folder("3-Core", feature("Boss-Extrude1", "Extrusion")),
+                    folder("4-Detail", feature("Hole1", "HoleWzd")),
+                ),
+            )
+        ],
+        assembly=AssemblySpec(document_id="doc:1", name="cover-assy"),
     )
-    directory = tmp_path / "rms-suppress-test"
+    directory = tmp_path / "rms-raising-rule"
     save_package(package, directory)
 
-    result = invoke("check", "rms", "--package", str(directory))
+    def raising(*_args: Any, **_kwargs: Any) -> Any:
+        raise ValueError("the shipped type table names 5 groups; the method has 6")
+
+    monkeypatch.setitem(cli.RMS_SCOPE_CHECKS, cli.RmsScope.part, raising)
+
+    result = invoke("check", "rms", "--package", str(directory), "--scope", "part")
 
     assert result.exit_code == 1
     assert result.stderr.startswith("error: ")
+    assert "the method has 6" in result.stderr
     assert "Traceback" not in result.stderr
 
 

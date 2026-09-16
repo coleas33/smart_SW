@@ -37,6 +37,7 @@ public static class ReadOnlyGuard
         // Rebuild: changes the model and can resolve lightweight components.
         "EditRebuild3",
         "ForceRebuild3",
+        "ForceRebuildAll",
 
         // Writing files. SaveAs3 has one legitimate use - saving a capture image - which
         // goes through AssertSaveAs so the extension is checked.
@@ -47,12 +48,23 @@ public static class ReadOnlyGuard
         "Delete2",
         "EditDelete",
 
-        // Suppression state changes the geometry a later check would read.
+        // Suppression state changes the geometry a later check would read. SetSuppression2
+        // and ForceRebuild3 are the two the engineer-run suppress-test is exempted from, and
+        // it is exempted by building its gate with SuppressTestGuard, never by this list.
         "EditSuppress2",
         "EditUnsuppress2",
+        "SetSuppression2",
+        "SetSuppression",
 
-        // Rewriting a feature definition.
+        // Rewriting a feature definition. AccessSelections is part of that edit: it rolls
+        // the model back to the feature and must be released before anything else runs.
         "ModifyDefinition",
+        "AccessSelections",
+
+        // Rolling the tree back, and marking the document dirty so SOLIDWORKS offers to
+        // save it - both leave the reviewed document changed for the engineer.
+        "EditRollback",
+        "SetSaveFlag",
     };
 
     /// <summary>

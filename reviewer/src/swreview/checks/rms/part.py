@@ -25,9 +25,9 @@ normative paragraphs rather than a style choice:
   recalibrated to other spellings than `1-Ref`; the reasons an engineer reads say "no
   Quarantine group" either way, and the table's own order is the method's order.
 
-`rms.detail.individually_suppressible` needs the suppress-test run that US4 produces; only
-the first row of its outcome table (no run in the package) is implemented here, and the
-rest is T057.
+`rms.detail.individually_suppressible` is the one rule that reads more than the tree: it
+grades the Detail content features against `package.rms_suppress_test`, the run the US4
+console command appends, and reports what that run covered as well as what it found.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ from swreview.checks.rms.results import (
     unresolved,
 )
 from swreview.checks.rms_types import Classification, RmsTypeTable, class_of
-from swreview.ir.models import EvidencePackage, Feature
+from swreview.ir.models import EvidencePackage, Feature, SuppressTestRow
 
 __all__ = [
     "PartTree",
@@ -987,15 +987,62 @@ def one_sketch_per_feature(tree: PartTree) -> list[RuleResult]:
 # --- rms.detail.individually_suppressible (US4) -----------------------------------
 
 
+SUPPRESS_SKIPPED: frozenset[str] = frozenset({"already_suppressed", "truncated"})
+"""The two row outcomes that are not an answer about the feature: it was already
+suppressed before the run, or the run never reached it (`rules.md`, outcome table)."""
+
+SUPPRESS_ANSWERED: frozenset[str] = frozenset({"ok", "rebuild_errors"})
+"""The two row outcomes that answer the rule's question for a feature - it was suppressed
+alone and the rebuild either held or did not. Every other outcome leaves the feature
+ungraded, so only these count as `tested` in the coverage line."""
+
+
+def _suppress_coverage(tested: int, present: int, unused: Sequence[SuppressTestRow]) -> str:
+    """The coverage line the outcome table requires of every reason this rule writes.
+
+    `present` is the Detail content set of the tree - the same set `suppress-plan` writes
+    - and `tested` the features of it the run answered for (`SUPPRESS_ANSWERED`), so a run
+    cut short by `--limit`, or one that walked past a feature that was already suppressed,
+    reads as the partial answer it is. A feature the run did not answer for stays visible
+    as not covered rather than being folded into the count, because the same reason often
+    names it as skipped or unresolved in the same sentence. A row naming a feature that is
+    not in that set is ignored by the grading and named here instead, because a plan row
+    the package no longer recognises must be reported and not dropped (`spec.md`, edge
+    cases).
+    """
+    line = f"suppress-test tested {tested}/{present} {ROLES[DETAIL]} content feature(s)"
+    if not unused:
+        return line
+    listed = ", ".join(f"{row.feature_id} {row.name}" for row in unused)
+    return (
+        f"{line}; {len(unused)} run row(s) unused, "
+        f"not {ROLES[DETAIL]} content in this package: {listed}"
+    )
+
+
+def _rebuild_errors(row: Feature, tried: SuppressTestRow) -> str:
+    """One failing feature's count and messages, as an engineer would read them."""
+    messages = ", ".join(tried.messages) if tried.messages else "no message recorded"
+    if tried.messages_truncated:
+        messages += f" (+{tried.messages_truncated} more)"
+    return f"{row.name}: {tried.whats_wrong_count} rebuild error(s) after suppression: {messages}"
+
+
 @bind(INDIVIDUALLY_SUPPRESSIBLE)
 def individually_suppressible(tree: PartTree) -> list[RuleResult]:
     """Each Detail feature can be suppressed alone without rebuild errors.
 
-    Only the first row of the outcome table in `contracts/rules.md` is implemented here:
-    with no `suppress-test` run for this document there is nothing to grade and every
-    Detail content feature is unresolved. The rest of the table needs the run US4
-    produces and is T057, which replaces this function; until then a package that does
-    carry a run for this document raises rather than reporting a grade it has not made.
+    The outcome table of `contracts/rules.md` in full, graded per Detail content feature
+    of *the tree* rather than per row of the run: the run is evidence about the features
+    the method holds to this rule, not the list of them, so a row the package no longer
+    recognises is unused and a feature with no row is `not tested`, never a pass.
+
+    Unlike the other per-subject rules this one does not use `_verdict`: a fail here does
+    not replace the passes, because one fragile Detail feature says nothing about the
+    others and the expected report of `quickstart.md` scenario 1 names both buckets for
+    the same document. Every reason it writes for a document with a run ends with the
+    coverage line, and when the run left nothing else to explain that line is a `skip` of
+    its own, so `<tested>/<present>` is never absent from the report.
     """
     rule = RULES[INDIVIDUALLY_SUPPRESSIBLE]
     if not tree.has_group(DETAIL):
@@ -1007,9 +1054,98 @@ def individually_suppressible(tree: PartTree) -> list[RuleResult]:
     run = tree.package.rms_suppress_test
     if run is None or run.document_id != tree.document_id:
         return [unresolved(rule, tree.document_id, "no suppress-test run", rows)]
-    raise NotImplementedError(
-        f"{INDIVIDUALLY_SUPPRESSIBLE}: the suppress-test outcome table is T057"
+
+    by_feature_id = {row.feature_id: row for row in run.rows}
+    planned = {row.id for row in rows}
+    unused = [row for row in run.rows if row.feature_id not in planned]
+    tested = sum(
+        1
+        for row in rows
+        if row.id in by_feature_id and by_feature_id[row.id].outcome in SUPPRESS_ANSWERED
     )
+    coverage = _suppress_coverage(tested, len(rows), unused)
+
+    configuration = tree.package.design.active_configuration
+    if run.configuration != configuration:
+        return [
+            unresolved(
+                rule,
+                tree.document_id,
+                f"suppress-test ran in configuration {run.configuration}, "
+                f"the review reads {configuration}; {coverage}",
+                rows,
+            )
+        ]
+    if not run.restore_verified:
+        return [unresolved(rule, tree.document_id, f"restore not verified; {coverage}", rows)]
+
+    failing: list[tuple[Feature, SuppressTestRow]] = []
+    passing: list[Feature] = []
+    skipping: list[tuple[Feature, str]] = []
+    unknown: list[tuple[Feature, str]] = []
+    for row in rows:
+        tried = by_feature_id.get(row.id)
+        if tried is None:
+            unknown.append((row, "not tested"))
+        elif tried.outcome == "ok":
+            passing.append(row)
+        elif tried.outcome == "rebuild_errors":
+            # Errors reported without a count is a missing input, and a missing input is
+            # never a fail (constitution Principle I).
+            if tried.whats_wrong_count is None:
+                unknown.append((row, "rebuild_errors with no rebuild-error count"))
+            else:
+                failing.append((row, tried))
+        elif tried.outcome in SUPPRESS_SKIPPED:
+            skipping.append((row, tried.outcome))
+        else:
+            reason = tried.outcome if tried.error is None else f"{tried.outcome}: {tried.error}"
+            unknown.append((row, reason))
+
+    results: list[RuleResult] = []
+    if failing:
+        results.append(
+            finding(
+                rule,
+                tree.document_id,
+                [row for row, _ in failing],
+                observed=(
+                    # The feature names lead, because the first 70-odd characters of
+                    # `observed` are the finding's title in the report.
+                    f"{_named([row for row, _ in failing])} cannot be suppressed alone; "
+                    f"run baseline {run.baseline_whats_wrong_count} rebuild error(s). "
+                    + "; ".join(_rebuild_errors(row, tried) for row, tried in failing)
+                ),
+                recommended_action=(
+                    f"Rework the listed {ROLES[DETAIL]} feature(s) so each can be suppressed "
+                    "on its own - remove the references that break the rebuild - and re-run "
+                    "the suppress-test."
+                ),
+            )
+        )
+    if passing:
+        results.append(passed(rule, tree.document_id, passing))
+    if skipping:
+        results.append(
+            skipped(
+                rule,
+                tree.document_id,
+                f"{subject_reasons(skipping)}; {coverage}",
+                [row for row, _ in skipping],
+            )
+        )
+    if unknown:
+        results.append(
+            unresolved(
+                rule,
+                tree.document_id,
+                f"{subject_reasons(unknown)}; {coverage}",
+                [row for row, _ in unknown],
+            )
+        )
+    if not skipping and not unknown:
+        results.append(skipped(rule, tree.document_id, coverage))
+    return results
 
 
 # --- the whole document -----------------------------------------------------------
