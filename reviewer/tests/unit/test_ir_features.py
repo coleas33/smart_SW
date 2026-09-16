@@ -31,10 +31,12 @@ from swreview.ir.models import (
     SuppressTestRun,
     UnsupportedSchemaVersionError,
 )
+from tests.golden.test_golden import case_dirs
 from tests.support.features import AssemblySpec, InstanceSpec, MateSpec, PartSpec, rms_package
 from tests.support.packages import IDENTITY_TRANSFORM, build_package, persist_ref
 
 GOLDEN_FIXTURES = Path(__file__).resolve().parents[1] / "golden" / "fixtures"
+GOLDEN_FIXTURE_DIRS = case_dirs(GOLDEN_FIXTURES)
 
 OUTCOMES = (
     "ok",
@@ -581,16 +583,20 @@ def test_a_one_zero_zero_package_without_the_new_members_still_loads() -> None:
 
 
 @pytest.mark.parametrize(
-    "fixture", sorted(path.name for path in GOLDEN_FIXTURES.iterdir() if path.is_dir())
+    "fixture", GOLDEN_FIXTURE_DIRS, ids=lambda path: path.name
 )
-def test_every_shipped_golden_fixture_still_loads(fixture: str) -> None:
+def test_every_shipped_golden_fixture_still_loads(fixture: Path) -> None:
     """Every committed fixture loads; the pre-1.1.0 ones still get the new defaults.
 
     The version is read from the file rather than asserted, so a fixture written at 1.1.0
     (the RMS goldens of this feature) is covered for loading without turning the
     back-compat assertion into a contradiction.
+
+    The fixtures are discovered by the golden harness's own walk, so a feature that groups
+    its cases in a subdirectory is covered here by the same listing that runs them rather
+    than by a second one that would silently skip them.
     """
-    text = (GOLDEN_FIXTURES / fixture / "package.json").read_text(encoding="utf-8")
+    text = (fixture / "package.json").read_text(encoding="utf-8")
     declared = json.loads(text)["schema_version"]
 
     package = EvidencePackage.model_validate_json(text)

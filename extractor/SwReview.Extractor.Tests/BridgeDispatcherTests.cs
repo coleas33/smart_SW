@@ -93,6 +93,12 @@ public class BridgeDispatcherTests : IDisposable
 
         var result = Assert.IsType<PingResult>(response.Result);
         Assert.True(result.Pong);
+
+        // The literal, not the constant: PROTOCOL.md says ping reports the host's own
+        // ProtocolVersion and that a client compares against it, and remodel_client.py's
+        // REMODEL_PROTOCOL_VERSION is "1.1". A comparison of the constant with itself would
+        // pass at any value, which is how the two ends came apart.
+        Assert.Equal("1.1", result.Protocol);
         Assert.Equal(SwBridgeDispatcher.ProtocolVersion, result.Protocol);
         Assert.Equal(@"C:\work\bracket-assy.SLDASM", result.Document);
         Assert.Equal("Default", result.Configuration);
@@ -398,6 +404,345 @@ public class BridgeDispatcherTests : IDisposable
 
         var result = Assert.IsType<InterferenceCommandResult>(response.Result);
         Assert.Equal("Default", Assert.Single(result.Interferences).Configuration);
+    }
+
+    // ---- the remodel.* command shapes (T059) -------------------------------------
+    //
+    // contracts/bridge-remodel.md is normative for the request and response shape of every
+    // remodel.* command, and the shapes are asserted here as a TABLE rather than one command
+    // at a time. The central property of the family - "no command that writes takes a document
+    // parameter", so the engineer's file is unreachable rather than validated - is a property
+    // of the whole table, and a per-command assertion would pass a thirteenth command added
+    // later without anyone noticing.
+
+    /// <summary>
+    /// The names a path or a document would arrive under, if one ever could: every spelling
+    /// that has actually appeared in a bridge request, this family's two included.
+    ///
+    /// <b>It is the same set as <c>remodel_client.DOCUMENT_PARAM_NAMES</c></b>
+    /// (reviewer/src/swreview/bridge/remodel_client.py), because the two ends check the same
+    /// property over the same table and a name added on one side and not the other makes a
+    /// thirteenth command pass here and fail there. <c>scope_document</c> and the
+    /// <c>scope_document_a</c> / <c>_b</c> pair are what this same bridge already calls a
+    /// document in <c>capture</c> and <c>measure</c>, so they belong here more than any
+    /// spelling nobody has ever sent.
+    /// </summary>
+    private static readonly string[] DocumentParameterVocabulary =
+    {
+        "source_path", "copy_path", "path", "document", "document_path", "scope_document",
+        "scope_document_a", "scope_document_b", "model",
+    };
+
+    [Fact]
+    public void RemodelCommands_AreTheTwelveTheContractNames()
+    {
+        Assert.Equal(
+            new[]
+            {
+                "remodel.probe_scope",
+                "remodel.open",
+                "remodel.snapshot",
+                "remodel.rename",
+                "remodel.reorder",
+                "remodel.folder",
+                "remodel.describe",
+                "remodel.equation",
+                "remodel.rebuild",
+                "remodel.geometry",
+                "remodel.save",
+                "remodel.close",
+            },
+            RemodelCommands.All);
+
+        // The family is named by its prefix, and the four 1.0 commands are outside it.
+        Assert.All(RemodelCommands.All, command => Assert.True(RemodelCommands.IsRemodelCommand(command)));
+        Assert.All(BridgeCommands.All, command => Assert.False(RemodelCommands.IsRemodelCommand(command)));
+    }
+
+    [Fact]
+    public void RemodelCommandTable_HasOneRowPerCommand()
+    {
+        Assert.Equal(
+            RemodelCommands.All,
+            RemodelCommandTable.Commands.Select(shape => shape.Command).ToArray());
+    }
+
+    [Fact]
+    public void RemodelCommandTable_NoCommandOnTheScopeTakesADocumentParameter()
+    {
+        // The property, over the whole table: once the scope exists, RemodelScope holds the
+        // only IModelDoc2 the run can reach and nothing in a request can name another.
+        foreach (RemodelCommandShape shape in RemodelCommandTable.Commands)
+        {
+            if (shape.Stage != RemodelCommandStage.OnScope)
+            {
+                continue;
+            }
+
+            Assert.All(
+                shape.ParameterNames,
+                name => Assert.DoesNotContain(
+                    name, DocumentParameterVocabulary, StringComparer.OrdinalIgnoreCase));
+            Assert.False(shape.NamesAPath, shape.Command + " names a path");
+        }
+    }
+
+    [Fact]
+    public void RemodelCommandTable_ExactlyTwoCommandsNameAPath_AndBothRunBeforeTheScopeExists()
+    {
+        string[] naming = RemodelCommandTable.Commands
+            .Where(shape => shape.NamesAPath)
+            .Select(shape => shape.Command)
+            .ToArray();
+
+        Assert.Equal(new[] { RemodelCommands.ProbeScope, RemodelCommands.Open }, naming);
+        Assert.All(
+            naming,
+            command => Assert.Equal(
+                RemodelCommandStage.BeforeScope, RemodelCommandTable.For(command).Stage));
+    }
+
+    [Fact]
+    public void RemodelCommandTable_AfterOpenReturns_NoCommandInTheFamilyAcceptsAPathAgain()
+    {
+        // Everything but the two pre-scope commands, checked as a list so a new command cannot
+        // be added to the family without appearing here.
+        string[] afterOpen = RemodelCommandTable.Commands
+            .Where(shape => shape.Stage == RemodelCommandStage.OnScope)
+            .Select(shape => shape.Command)
+            .ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                RemodelCommands.Snapshot,
+                RemodelCommands.Rename,
+                RemodelCommands.Reorder,
+                RemodelCommands.Folder,
+                RemodelCommands.Describe,
+                RemodelCommands.Equation,
+                RemodelCommands.Rebuild,
+                RemodelCommands.Geometry,
+                RemodelCommands.Save,
+                RemodelCommands.Close,
+            },
+            afterOpen);
+
+        Assert.All(afterOpen, command => Assert.False(RemodelCommandTable.For(command).NamesAPath));
+    }
+
+    [Fact]
+    public void RemodelCommandTable_EveryAddressingParameterIsAPersistRef()
+    {
+        // Never a name and never an index: names change and indices change on every reorder.
+        string[] addressing = RemodelCommandTable.Commands
+            .SelectMany(shape => shape.AddressingParameterNames)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                "anchor_persist_ref",
+                "feature_persist_ref",
+                "folder_persist_ref",
+                "member_persist_refs",
+                "persist_ref",
+            },
+            addressing);
+
+        Assert.All(
+            addressing,
+            name => Assert.True(
+                name.EndsWith("persist_ref", StringComparison.Ordinal)
+                || name.EndsWith("persist_refs", StringComparison.Ordinal),
+                name));
+    }
+
+    [Fact]
+    public void RemodelRename_TakesAPersistRefAndANewName_AndHasNoDimensionForm()
+    {
+        // FR-030: v1 addresses no dimension at all, and IDimension.set_Name is off the
+        // stage-1 allowlist, so there is nowhere for a dimension form to arrive.
+        Assert.Equal(
+            new[] { "persist_ref", "new_name" },
+            RemodelCommandTable.For(RemodelCommands.Rename).ParameterNames);
+
+        Assert.All(
+            RemodelCommandTable.Commands.SelectMany(shape => shape.ParameterNames),
+            name => Assert.DoesNotContain("dimension", name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void RemodelReorder_LocationIsTheClosedSetBeforeAfter()
+    {
+        Assert.Equal(new[] { "before", "after" }, RemodelReorderLocations.All);
+
+        RemodelReorderParams parsed = RemodelReorderParams.Read(
+            Request(
+                "1",
+                RemodelCommands.Reorder,
+                "{\"feature_persist_ref\":\"YQ==\",\"anchor_persist_ref\":\"Yg==\","
+                + "\"location\":\"after\"}"));
+        Assert.Equal(RemodelReorderLocations.After, parsed.Location);
+
+        RemodelCommandError refused = Assert.Throws<RemodelCommandError>(() => RemodelReorderParams.Read(
+            Request(
+                "1",
+                RemodelCommands.Reorder,
+                "{\"feature_persist_ref\":\"YQ==\",\"anchor_persist_ref\":\"Yg==\","
+                + "\"location\":\"somewhere\"}")));
+        Assert.Contains("before", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RemodelEquation_OpIsTheClosedSetAddSetDelete()
+    {
+        Assert.Equal(new[] { "add", "set", "delete" }, RemodelEquationOps.All);
+
+        Assert.Equal(
+            RemodelEquationOps.Set,
+            RemodelEquationParams.Read(
+                Request(
+                    "1",
+                    RemodelCommands.Equation,
+                    "{\"op\":\"set\",\"index\":2,\"text\":\"\\\"w\\\" = 120\"}")).Op);
+
+        Assert.Throws<RemodelCommandError>(() => RemodelEquationParams.Read(
+            Request("1", RemodelCommands.Equation, "{\"op\":\"replace\",\"index\":2}")));
+    }
+
+    [Fact]
+    public void RemodelFolder_OpIsTheClosedSetCreateRenameDissolve()
+    {
+        // dissolve stays in the protocol so stage 2 adds a handler branch and an allowlist
+        // entry rather than a new command; the handler answers not_in_v1 (T063).
+        Assert.Equal(new[] { "create", "rename", "dissolve" }, RemodelFolderOps.All);
+
+        Assert.Equal(
+            RemodelFolderOps.Dissolve,
+            RemodelFolderParams.Read(
+                Request(
+                    "1",
+                    RemodelCommands.Folder,
+                    "{\"op\":\"dissolve\",\"folder_persist_ref\":\"Zg==\"}")).Op);
+
+        Assert.Throws<RemodelCommandError>(() => RemodelFolderParams.Read(
+            Request("1", RemodelCommands.Folder, "{\"op\":\"merge\"}")));
+    }
+
+    [Fact]
+    public void RemodelParams_MissingRequiredField_NamesIt()
+    {
+        Assert.Contains(
+            "persist_ref",
+            Assert.Throws<RemodelCommandError>(() => RemodelRenameParams.Read(
+                Request("1", RemodelCommands.Rename, "{\"new_name\":\"Fillet-Outer\"}"))).Message,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "source_path",
+            Assert.Throws<RemodelCommandError>(() => RemodelProbeScopeParams.Read(
+                Request("1", RemodelCommands.ProbeScope, "{}"))).Message,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            "probe_id",
+            Assert.Throws<RemodelCommandError>(() => RemodelOpenParams.Read(
+                Request(
+                    "1",
+                    RemodelCommands.Open,
+                    "{\"source_path\":\"C:\\\\work\\\\bracket.SLDPRT\","
+                    + "\"copy_path\":\"C:\\\\runs\\\\copy\\\\bracket-RMS.SLDPRT\","
+                    + "\"run_id\":\"r1\"}"))).Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RemodelResultShapes_CarryTheContractsFieldNames()
+    {
+        // One row of contracts/bridge-remodel.md's command table per assertion, read off the
+        // wire rather than off the property names, because the wire is what the Python client
+        // sees. remodel.geometry's GeometryReading is the one row not here: it is the geometry
+        // phase's record, and the command's shape - no parameters at all, because there is
+        // nothing to name - is asserted in the table cases above.
+        Assert.Equal(
+            new[] { "probe_id", "source_path", "scope_signals" },
+            Keys(new RemodelProbeScopeResult()));
+        Assert.Equal(
+            new[]
+            {
+                "document_path", "tag", "feature_count", "scope_signals", "configurations",
+                "document_length_unit", "source_attestation",
+            },
+            Keys(new RemodelOpenResult()));
+        Assert.Equal(
+            new[]
+            {
+                "order", "names", "descriptions", "equations", "unreadable_equation_indexes",
+                "rebuild_errors", "feature_count",
+            },
+            Keys(new RemodelSnapshotResult()));
+        Assert.Equal(new[] { "previous_name", "new_name" }, Keys(new RemodelRenameResult()));
+        Assert.Equal(
+            new[]
+            {
+                "previous_anchor_persist_ref", "previous_location", "previous_index", "new_index",
+            },
+            Keys(new RemodelReorderResult()));
+        Assert.Equal(
+            new[] { "folder_persist_ref", "name", "member_persist_refs" },
+            Keys(new RemodelFolderResult()));
+        Assert.Equal(new[] { "previous_text" }, Keys(new RemodelDescribeResult()));
+        Assert.Equal(
+            new[]
+            {
+                "index", "count_before", "count_after", "previous_text", "round_trip_text",
+                "helper_path",
+            },
+            Keys(new RemodelEquationResult()));
+        Assert.Equal(
+            new[] { "rebuild_errors", "whats_wrong", "elapsed_ms", "feature_errors" },
+            Keys(new RemodelRebuildResult()));
+        Assert.Equal(
+            new[] { "path", "errors", "warnings", "save_flag_after" },
+            Keys(new RemodelSaveResult()));
+        Assert.Equal(new[] { "closed", "copy_deleted" }, Keys(new RemodelCloseResult()));
+    }
+
+    [Fact]
+    public void RemodelErrorResult_CarriesTheStableTokenAndADetail()
+    {
+        // The 1.0 envelope's one addition: on status "error" a remodel.* response carries
+        // {error_code, detail} instead of null, so the client maps a refusal to a class
+        // without matching on prose.
+        var error = new RemodelErrorResult(
+            RemodelErrorCodes.SourceNotOpen, "source_path", @"C:\work\bracket.SLDPRT");
+
+        Assert.Equal(new[] { "error_code", "detail" }, Keys(error));
+        Assert.Equal("source_not_open", error.ErrorCode);
+        Assert.Equal(@"C:\work\bracket.SLDPRT", error.Detail!["source_path"]);
+        Assert.Contains(RemodelErrorCodes.NotInV1, RemodelErrorCodes.All);
+    }
+
+    [Fact]
+    public void Dispatch_UnknownRemodelCommand_IsAnErrorResultAndNeverAnException()
+    {
+        BridgeResponse response = Dispatch(Request("1", "remodel.frobnicate"));
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Contains("remodel.frobnicate", response.Error!, StringComparison.Ordinal);
+    }
+
+    /// <summary>The wire keys of a result object, in declaration order.</summary>
+    private static string[] Keys(object result)
+    {
+        using (JsonDocument document = JsonDocument.Parse(
+            JsonSerializer.Serialize(result, result.GetType(), BridgeCodec.Options)))
+        {
+            return document.RootElement.EnumerateObject().Select(member => member.Name).ToArray();
+        }
     }
 
     // ---- helpers -----------------------------------------------------------------

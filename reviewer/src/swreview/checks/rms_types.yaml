@@ -29,6 +29,28 @@ classes:
 # own recipe builds holes as cuts; on a real part an ICE boss would then read as a hole. Here
 # ICE counts as material for the group-content rule and is unresolved for holes_last.
 ambiguous: [ICE]
+# The planner's target group per class (feature 004). The checker grades what a part is;
+# this says what it should be, from the same file, so the two cannot drift. Values are group
+# names from `groups` above, or `needs_judgement` where the table cannot decide and the
+# planner must ask or report unresolved (constitution Principle I) - `needs_judgement` is not
+# a seventh group. Two rules are code, not table, and are tested there: a *consumed* sketch
+# follows its single consumer into that consumer's group (the value below is where an
+# unconsumed sketch goes), and a fillet or chamfer with dependents can never be moved to
+# 6-Quarantine (research R6.1).
+default_group_by_class:
+  sketch: 2-Construction
+  solid: 3-Core
+  cut: 4-Detail
+  hole: 4-Detail
+  fillet: 3-Core          # the safe default; a cosmetic fillet moves only by judgement (OQ-4)
+  chamfer: 3-Core         # same reasoning; no judgement tool in v1
+  shell: 3-Core           # rms.core.shell_last ranks it last inside Core
+  draft: 5-Modify
+  pattern: 5-Modify
+  reference: 1-Ref
+  construction: 2-Construction
+  unknown: needs_judgement    # a type name nobody recognised is never guessed into a group
+  ambiguous: needs_judgement  # ICE
 tolerated_loose: [OriginProfileFeature, MateGroup, HistoryFolder, SensorFolder, DetailCabinet, CommentFolder, FavoriteFolder, SolidBodyFolder, SurfaceBodyFolder, DocsFolder, MaterialFolder, EnvFolder, LightFolder, EqnFolder, RefPlane, OriginPoint, CoordSys, CommentsFolder, SelectionSetFolder, InkMarkupFolder]
 default_names_excluded: ["Front Plane", "Top Plane", "Right Plane", "Origin"]
 # swConstrainedStatus_e (2024 SP5 and 2026 SP1.1 agree): 1 swUnknownConstraint,

@@ -65,11 +65,17 @@ handle, and `remodel.open`, which names the source to copy from and the copy to 
 below is addressed by persistent reference, never by name and never by index, because names change
 and indices change on every reorder.
 
+**Every key in a command's `Params` cell is always present on the wire**, with `null` for a value
+this call has none of and `[]` for an absent list; `bridge/remodel_client.py` composes the whole
+object for every command, so a handler reads a fixed set of keys and never has to tell "absent"
+from "null". `remodel.snapshot` and `remodel.geometry` send `params: {}`, which is the whole
+shape and not an abbreviation of one.
+
 | Command | Params | Result on `ok` |
 |---------|--------|----------------|
 | `remodel.probe_scope` | `{source_path}` | `{probe_id, source_path, scope_signals}` |
 | `remodel.open` | `{source_path, copy_path, run_id, probe_id}` | `{document_path, tag, feature_count, scope_signals, configurations[], document_length_unit, source_attestation}` |
-| `remodel.snapshot` | `{}` | `{order[], names{}, descriptions{}, equations[], rebuild_errors, feature_count}` |
+| `remodel.snapshot` | `{}` | `{order[], names{}, descriptions{}, equations[], unreadable_equation_indexes[], rebuild_errors, feature_count}` |
 | `remodel.rename` | `{persist_ref, new_name}` | `{previous_name, new_name}` |
 | `remodel.reorder` | `{feature_persist_ref, anchor_persist_ref, location}` | `{previous_anchor_persist_ref, previous_location, previous_index, new_index}` |
 | `remodel.folder` | `{op, name, member_persist_refs[], folder_persist_ref}` | `{folder_persist_ref, name, member_persist_refs[]}` |
@@ -77,7 +83,7 @@ and indices change on every reorder.
 | `remodel.equation` | `{op, index, text, which_configs}` | `{index, count_before, count_after, previous_text, round_trip_text, helper_path}` |
 | `remodel.rebuild` | `{force}` | `{rebuild_errors, whats_wrong[], elapsed_ms, feature_errors[]}` |
 | `remodel.geometry` | `{}` | `GeometryReading` |
-| `remodel.save` | `{}` | `{path, errors, warnings, save_flag_after}` |
+| `remodel.save` | `{verdict}` | `{path, errors, warnings, save_flag_after}` |
 | `remodel.close` | `{discard_copy}` | `{closed, copy_deleted}` |
 
 ### `remodel.probe_scope`
@@ -202,6 +208,12 @@ keyed by persist ref (a description read as `null` means **unreadable**, which i
 `""`, which means absent); `equations[]` mirrors the IR `Equation` shape; `rebuild_errors` is
 `GetWhatsWrongCount()`.
 
+`unreadable_equation_indexes[]` is the equation half of the same rule. `Equation.text` is a string
+and `""` would be a default written over engineering data, so a manager position whose text reads
+back null carries **no** `equations[]` row and its index is named here instead. The surviving rows
+keep the indexes the manager addresses them by, so `equations[]` is shorter than `GetCount()` on
+exactly these positions and never quietly.
+
 ### `remodel.rename`
 
 `IFeature.set_Name` (VERIFIED). Used for two things and no others: repairing a duplicate feature
@@ -233,6 +245,13 @@ raises the "Cannot reorder" modal on the STA thread is a hang rather than an err
 | `create` | Select the contiguous member run with `IFeature.Select2(append, mark)` (VERIFIED), then `IFeatureManager.InsertFeatureTreeFolder2(swFeatureTreeFolder_Containing = 2)` (VERIFIED value), then `set_Name`, then verify membership with `IFeatureManager.FeatureFolderLocation(Feature)` (VERIFIED) for every member |
 | `rename` | `set_Name` on a folder resolved from `folder_persist_ref`; the `___EndTag___` marker is matched on its **suffix**, never on the folder's name, because the marker keeps the folder's default name after a rename (PROBE-10) |
 | `dissolve` | **Refused in v1** with `not_in_v1`. Reserved for stage 2. `IModelDoc2.EditDelete` is not on the stage-1 allowlist, and a part needing a dissolve is refused by the scope gate before anything is copied |
+
+All four params travel on every `remodel.folder` request. `create` carries `name` and
+`member_persist_refs[]` with `folder_persist_ref: null`; `rename` carries `name` and
+`folder_persist_ref` with `member_persist_refs: []`; `dissolve` carries `folder_persist_ref` with
+`name: null` and `member_persist_refs: []`. `dissolve` is **sent**, not refused on the Python side:
+the host answers `not_in_v1`, so the refusal is one fact in one place and stage 2 adds a handler
+branch rather than a command.
 
 Members must be contiguous in the current tree order before `create` is called; the planner proves
 it, and a non-contiguous request is `folder_members_not_contiguous` rather than an attempt.
@@ -293,7 +312,14 @@ is only ever the inverse of an `add` this run made. It never deletes a global th
 had, and never one that any equation still references.
 
 `which_configs` comes from the configuration count `remodel.open` recorded. A single-configuration
-assumption is checked, never assumed.
+assumption is checked, never assumed. On the wire it is the `swInConfigurationOpts_e` integer
+(`swThisConfiguration = 1`, `swAllConfiguration = 2`, both VERIFIED values) and it is `null` on a
+`delete`, which addresses an equation that already exists and changes no configuration scope.
+
+`index` is required for `set` and `delete`, where it names the equation being changed; a `null`
+there is a missing-parameter error, not a default. On an `add` it is the insertion index, and
+`null` means **append at the current `GetCount()`**, which is the only position an add takes in
+v1. `text` is `null` on a `delete`.
 
 **The number in an equation text is in the document's length unit, not metres.** The document's
 unit is returned by `remodel.open` as `document_length_unit` and the executor converts the value
@@ -411,9 +437,26 @@ runs first anyway. Options are asserted as exact integers in a unit test: `Silen
 The command refuses with `gate_not_passed` unless the geometry gate has already returned `pass`
 for this run. The copy is saved **once**, at the end.
 
+`verdict` is that gate result - `pass`, `fail` or `unresolved`, the three tokens of
+`remodel/geometry.py`'s `Verdict` - and it is the one parameter `remodel.save` carries. The host
+is **told** the verdict rather than computing it, because the measurement is the bridge's and the
+decision is Python's; what the host checks for itself is that it took the two readings a verdict
+is reached from, `copy_at_open` and `copy_at_end`, so a reported `pass` from a run whose gate
+never ran is refused with the same token. The refusal names every reason that applied.
+
+The clause is enforced here, beside `Save3`, and not only in the caller that reports the verdict:
+the constitution's mutation exception permits the save "only after the geometry comparison has
+passed", and a clause checked solely by the caller is a clause the caller can skip.
+
 ### `remodel.close`
 
-`ISldWorks.CloseDoc` (VERIFIED) on the tagged copy only. With `discard_copy: true` it also deletes
+`ISldWorks.CloseDoc` (VERIFIED) on the tagged copy only. The session tag is removed first, with
+`ICustomPropertyManager.Delete2` (VERIFIED), which is the call path that allowlist entry exists
+for: the target is verified one last time, then the tag goes and the document closes, in that
+order and behind that one verification, because the tag **is** `VerifyTarget`'s check 2 and a
+verification between the two would fail on the tag the run just removed on purpose. The copy on
+disk keeps the tag it was saved with - `remodel.save` runs before this and the run saves once - so
+this removes the tag from the open document, not from the artifact. With `discard_copy: true` it also deletes
 `copy/` and nothing else: **Discard keeps every other artifact**, because deleting the run folder
 would lose the evidence Principle VI asks for and "what did it propose" must stay answerable after
 the engineer says no. The system toggles are restored in the `finally` that wraps the run,
@@ -424,6 +467,10 @@ including on recovery from a previous run that died.
 `result.error_code` on `status: "error"`. Each maps to one Python class in
 `bridge/remodel_client.py`, which subclasses the existing `BridgeError` so a caller that catches
 the base type cannot crash on any of them and every one becomes failed coverage the same way.
+`result.detail` travels beside it and is always an object, `{}` when the host has nothing to add,
+never null; the client carries it onto the exception unread. A token with no row in the table
+below raises `RemodelError` itself, carrying that token: a code this client has never heard of
+stays unknown and is never guessed into the nearest class.
 
 | `error_code` | Meaning | Python class | Run effect |
 |--------------|---------|--------------|------------|
@@ -450,11 +497,69 @@ the base type cannot crash on any of them and every one becomes failed coverage 
 | `save_failed` | `Save3` returned a non-zero error | `RemodelSaveError` | Failed run |
 | `not_in_v1` | A reserved stage-2 operation was requested | `RemodelNotInV1Error` | Refused |
 | `run_in_progress` | A second run was started on the same host | `RemodelRunInProgress` | Refused |
+| `bad_request` | The request cannot be honoured as sent: a missing or empty parameter, `folder` `rename` aimed at a feature that is not an `FtrFolder`, a `describe` whose previous text will not read and therefore has no inverse, or a command in the table with no handler in this build | `RemodelContractError` | Refused; the change never lands. A bug in the caller, not a condition of the part, which is why it is a contract error and not a change error |
 
-`unauthorized`, `no longer open` and `circuit_open` keep their existing meanings and their
-existing Python classes (`BridgeUnauthorizedError`, `BridgeDocumentClosedError`,
-`BridgeOpenError`); the circuit breaker's three-consecutive-failures rule is unchanged, and an
-open circuit leaves the copy and `changes.jsonl` on disk. **The run never auto-resumes.**
+`unauthorized` and `no longer open` keep their existing meanings and their existing Python classes
+(`BridgeUnauthorizedError`, `BridgeDocumentClosedError`): neither carries an `error_code`, so
+neither is reclassified. `circuit_open` keeps its meaning and the circuit breaker's
+three-consecutive-failures rule is unchanged, but `RemodelClient` **returns** it as a
+`CircuitOpen` value rather than re-raising the `BridgeOpenError` the inherited call raises: the
+run is run-to-completion and records "the bridge stopped answering" against the change it was
+making, in `changes.jsonl`, instead of unwinding out of the change loop. Nothing is sent once the
+circuit is open, an open circuit leaves the copy and `changes.jsonl` on disk, and
+`CircuitOpen` is a plain frozen dataclass (`command`, `last_error`, `status: "circuit_open"`), not
+an exception, so a caller catching `BridgeError` cannot swallow it by accident. **The run never
+auto-resumes.**
+
+## The Python client
+
+`reviewer/src/swreview/bridge/remodel_client.py` (T072) is the whole Python end of this page, and
+`reviewer/tests/unit/test_remodel_client.py` (T071) is where the properties below are asserted.
+It is a subclass of `BridgeClient`, not a second client: the framing, the id sequencing, the
+per-launch secret, the transport and the circuit breaker are inherited and there is no second copy
+of any of them.
+
+| Command | Method |
+|---|---|
+| `remodel.probe_scope` | `probe_scope(source_path)` |
+| `remodel.open` | `open(source_path, copy_path, run_id, probe_id)` |
+| `remodel.snapshot` | `snapshot()` |
+| `remodel.rename` | `rename(persist_ref, new_name)` |
+| `remodel.reorder` | `reorder(feature_persist_ref, anchor_persist_ref, location)` |
+| `remodel.folder` | `folder(op, name, member_persist_refs, folder_persist_ref)` |
+| `remodel.describe` | `describe(persist_ref, text)` |
+| `remodel.equation` | `equation(op, index, text, which_configs)` |
+| `remodel.rebuild` | `rebuild(force)` |
+| `remodel.geometry` | `geometry()` |
+| `remodel.save` | `save(verdict)` |
+| `remodel.close` | `close_document(discard_copy)` |
+
+One name deviates: `remodel.close` is `close_document`, because `BridgeClient.close()` already
+means "close the pipe" and the two are not the same act - one ends the document, the other ends
+the transport. Every other method is named for its command.
+
+- **Its own vocabulary.** `REMODEL_COMMANDS` is `ping` plus these twelve, and it *replaces* the
+  inherited allowlist rather than widening it, so `capture`, `measure` and `interference` are
+  refused on the Python side before a line is written - the client-side mirror of
+  `RemodelSecret`'s scope. `COMMANDS` in `client.py` stays the four coarse calls of feature 001.
+- **No document argument after `remodel.open`.** `DOCUMENT_PARAM_NAMES` is every spelling of "a
+  document" that has appeared in any bridge request (`source_path`, `copy_path`, `path`,
+  `document`, `document_path`, `scope_document`, `scope_document_a`, `scope_document_b`,
+  `model`), and one test asserts over the **whole command table** that only `remodel.probe_scope`
+  and `remodel.open` carry any of them. A path added to a thirteenth request shape fails that
+  test rather than being reviewed for.
+- **The three closed sets are checked before the line goes out**: `location` against
+  `{before, after}`, folder `op` against `{create, rename, dissolve}`, equation `op` against
+  `{add, set, delete}`. A value outside one is a `BridgeError` and nothing is sent, because an
+  out-of-set value is a bug in the planner and a bug in the planner should not become a write
+  attempt on a document. `dissolve` is inside its set and is sent; the host refuses it.
+- **`error_code` becomes a class, unchanged.** `ERROR_CLASSES` is the table above, token for
+  token, and the exception carries `error_code` and `detail` as the host sent them.
+- **An open circuit is a value, not an exception** (see "Error codes" above).
+
+The client declares `REMODEL_PROTOCOL_VERSION = "1.1"`. `PROTOCOL_VERSION` in `client.py` stays
+`"1.0"`: the review client needs only the 1.0 envelope, and 1.1 is additive, so it keeps working
+against a host serving this family.
 
 ## Logging
 

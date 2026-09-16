@@ -1,0 +1,26 @@
+{
+  "callable": "swreview.checks.golden_remodel:plan_case",
+  "kwargs": {
+    "signals": {
+      "document_type": 1,
+      "solid_body_count": 1,
+      "sheet_body_count": 0,
+      "is_weldment": false,
+      "sheet_metal_folder_present": false,
+      "mesh_body_present": true,
+      "graphics_body_present": false,
+      "is_3d_interconnect": false,
+      "imported_file_names": [],
+      "configuration_names": [
+        "Default"
+      ],
+      "rms_named_folders": [],
+      "external_reference_count": 0,
+      "save_flag_dirty": false,
+      "read_only": false,
+      "rebuild_error_count": 0,
+      "vault": null
+    },
+    "probe_id": "probe:remodel-refusal-mesh-body"
+  }
+}

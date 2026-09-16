@@ -282,8 +282,9 @@ def test_events_are_written_in_order_with_a_monotonic_seq(
 
     events = events_of(run)
     assert [event["seq"] for event in events] == list(range(1, len(events) + 1))
-    assert [event["type"] for event in events][:4] == [
+    assert [event["type"] for event in events][:5] == [
         "session.started",
+        "usage",
         "tool.started",
         "tool.finished",
         "text.delta",

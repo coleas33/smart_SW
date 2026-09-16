@@ -32,7 +32,7 @@ public class MutatingCallError : Exception
 public static class ReadOnlyGuard
 {
     /// <summary>Members refused outright, matched case-insensitively.</summary>
-    private static readonly HashSet<string> DeniedMembers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> DeniedMemberSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         // Rebuild: changes the model and can resolve lightweight components.
         "EditRebuild3",
@@ -71,13 +71,24 @@ public static class ReadOnlyGuard
     /// Member families refused by prefix, matched case-insensitively. These are the
     /// feature-creation and system-setting calls; each has many numbered and Thin variants.
     /// </summary>
-    private static readonly string[] DeniedPrefixes =
+    private static readonly string[] DeniedPrefixArray =
     {
         "FeatureCut",
         "FeatureExtrusion",
         "InsertFeature",
         "SetSystemValue",
     };
+
+    /// <summary>
+    /// The denied surface, for reading only (feature 004, contracts/guard-allowlist.md): the
+    /// re-modeler's allowlist is asserted as a set against it, so a denial added here cannot
+    /// silently widen that allowlist. The lookups below stay on the concrete collections, so
+    /// exposing these changes neither the comparer nor the cost of a call.
+    /// </summary>
+    public static readonly IReadOnlyCollection<string> DeniedMembers = DeniedMemberSet;
+
+    /// <inheritdoc cref="DeniedMembers" />
+    public static readonly IReadOnlyCollection<string> DeniedPrefixes = DeniedPrefixArray;
 
     /// <summary>Image extensions SaveAs3 may write. Anything else is a model write.</summary>
     private static readonly HashSet<string> AllowedSaveAsExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -101,14 +112,14 @@ public static class ReadOnlyGuard
 
         string member = interopMemberName.Trim();
 
-        if (DeniedMembers.Contains(member))
+        if (DeniedMemberSet.Contains(member))
         {
             throw new MutatingCallError(
                 member,
                 $"{member} modifies the model. The review assistant is read-only (research R4).");
         }
 
-        foreach (string prefix in DeniedPrefixes)
+        foreach (string prefix in DeniedPrefixArray)
         {
             if (member.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {

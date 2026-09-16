@@ -1,0 +1,395 @@
+result:
+  changes:
+  - expect:
+      rebuild_errors_delta: 0
+    kind: reorder
+    params:
+      anchor_persist_ref: ZG9jOjEvRmlsbGV0MQ==
+      feature_persist_ref: ZG9jOjEvQm9zcy1FeHRydWRlMg==
+      location: after
+    seq: 1
+    subject:
+      feature_id: feat:0007
+      name: Boss-Extrude2
+      persist_ref: ZG9jOjEvQm9zcy1FeHRydWRlMg==
+    subject_kind: feature
+  - expect:
+      rebuild_errors_delta: 0
+    kind: reorder
+    params:
+      anchor_persist_ref: ZG9jOjEvRGVmb3JtMQ==
+      feature_persist_ref: ZG9jOjEvQ3V0LUV4dHJ1ZGUx
+      location: after
+    seq: 2
+    subject:
+      feature_id: feat:0003
+      name: Cut-Extrude1
+      persist_ref: ZG9jOjEvQ3V0LUV4dHJ1ZGUx
+    subject_kind: feature
+  - expect:
+      folder_location: 3-Core
+      rebuild_errors_delta: 0
+    kind: folder.create
+    params:
+      folder_persist_ref: null
+      member_persist_refs:
+      - ZG9jOjEvQm9zcy1FeHRydWRlMQ==
+      - ZG9jOjEvRmlsbGV0MQ==
+      - ZG9jOjEvQm9zcy1FeHRydWRlMg==
+      - ZG9jOjEvRmlsbGV0LVZhcmlhYmxlMQ==
+      name: 3-Core
+      op: create
+    seq: 3
+    subject: null
+    subject_kind: folder
+  - expect:
+      folder_location: 4-Detail
+      rebuild_errors_delta: 0
+    kind: folder.create
+    params:
+      folder_persist_ref: null
+      member_persist_refs:
+      - ZG9jOjEvQ3V0LUV4dHJ1ZGUx
+      name: 4-Detail
+      op: create
+    seq: 4
+    subject: null
+    subject_kind: folder
+  configuration: Default
+  configuration_names:
+  - Default
+  copy_path: null
+  coverage:
+  - feature_ids: []
+    item: scope
+    reason: solid_body_count could not be read, so the multibody question is unresolved;
+      an unread signal is never a pass; is_weldment could not be read, so the weldment
+      question is unresolved; an unread signal is never a pass; sheet_metal_folder_present
+      could not be read, so the sheet_metal question is unresolved; an unread signal
+      is never a pass; mesh_body_present could not be read, so the mesh_or_graphics_body
+      question is unresolved; an unread signal is never a pass; graphics_body_present
+      could not be read, so the mesh_or_graphics_body question is unresolved; an unread
+      signal is never a pass; is_3d_interconnect could not be read, so the three_d_interconnect
+      question is unresolved; an unread signal is never a pass; rms_named_folders
+      could not be read, so the rms_named_folder_wrong_members question is unresolved;
+      an unread signal is never a pass
+  - feature_ids:
+    - feat:0001
+    - feat:0006
+    item: target group
+    reason: 2 of 7 content feature(s) have no target group; the judgement phase has
+      not run, and an undecided feature is never moved
+  - feature_ids: []
+    item: feature descriptions
+    reason: 0 description(s) unreadable and 0 blank of 7 content feature(s); the planner
+      never invents description prose, so revision 1 proposes none, and an unreadable
+      one is refused as a change target because it has no recoverable inverse
+  - feature_ids:
+    - feat:0004
+    item: global variables
+    reason: 1 feature reading(s) could justify a global; revision 1 proposes none,
+      and a v1 global names a value and drives nothing
+  - feature_ids: []
+    item: equations
+    reason: '0 equation row(s): 0 global, 0 driving a dimension, 0 broken, 0 unjudgeable;
+      revision 1 repairs none and adds none'
+  - feature_ids: []
+    item: sketch dimensions
+    reason: not carried by IR 1.2.0, so this version can neither name a dimension,
+      rename one, nor drive one from a global (FR-030)
+  - feature_ids: []
+    item: folders
+    reason: 2 folder(s) to create, 0 already correct, 0 refused
+  - feature_ids: []
+    item: changes
+    reason: 4 change(s) planned, in the fixed order of section 1.11
+  created_at: '2026-09-16T14:22:01Z'
+  descriptions: []
+  deviations:
+  - chosen: 3-Core
+    feature_id: feat:0004
+    kind: fillet_default_core
+    rationale: Fillet1 is a fillet and the type table sends every fillet to 3-Core;
+      no judgement phase has run, so nothing has looked at whether it is structural
+      or cosmetic
+    report_line: reviewed as structural; move to Quarantine if cosmetic
+  - chosen: 3-Core
+    feature_id: feat:0005
+    kind: fillet_default_core
+    rationale: Fillet-Variable1 is a fillet and the type table sends every fillet
+      to 3-Core; no judgement phase has run, so nothing has looked at whether it is
+      structural or cosmetic
+    report_line: reviewed as structural; move to Quarantine if cosmetic
+  document_id: doc:1
+  folders:
+    actions:
+    - contiguous: true
+      existing_folder_id: null
+      member_feature_ids:
+      - feat:0002
+      - feat:0004
+      - feat:0007
+      - feat:0005
+      name: 3-Core
+      op: create
+      status: planned
+    - contiguous: true
+      existing_folder_id: null
+      member_feature_ids:
+      - feat:0003
+      name: 4-Detail
+      op: create
+      status: planned
+    refusals: []
+  globals: []
+  limits:
+    max_changes: 250
+    max_minutes: 20
+    max_rebuild_seconds: 120
+  order:
+    achievable:
+    - feat:0001
+    - feat:0002
+    - feat:0004
+    - feat:0007
+    - feat:0005
+    - feat:0006
+    - feat:0003
+    cycle: null
+    edit_script:
+    - anchor_feature_id: feat:0004
+      feature_id: feat:0007
+      location: after
+    - anchor_feature_id: feat:0006
+      feature_id: feat:0003
+      location: after
+    kept:
+    - feat:0001
+    - feat:0002
+    - feat:0004
+    - feat:0005
+    - feat:0006
+    move_count: 2
+  package_before: package-before.json
+  pins: []
+  plan_revision: 1
+  plan_schema: '1.0'
+  ranks:
+  - feature_id: feat:0002
+    group_index: 3
+    intra_rank: 1
+    intra_rule_id: null
+    original_index: 1
+    rankable: true
+  - feature_id: feat:0003
+    group_index: 4
+    intra_rank: 1
+    intra_rule_id: null
+    original_index: 2
+    rankable: true
+  - feature_id: feat:0004
+    group_index: 3
+    intra_rank: 1
+    intra_rule_id: null
+    original_index: 3
+    rankable: true
+  - feature_id: feat:0005
+    group_index: 3
+    intra_rank: null
+    intra_rule_id: null
+    original_index: 4
+    rankable: false
+  - feature_id: feat:0007
+    group_index: 3
+    intra_rank: 1
+    intra_rule_id: null
+    original_index: 6
+    rankable: true
+  rebuild:
+  - blocking_edge: null
+    detail: Sketch1 is consumed by 2 features (Boss-Extrude1, Cut-Extrude1); it can
+      be contiguous with only one of them
+    feature_id: feat:0001
+    name: Sketch1
+    reason: shared_sketch
+  - blocking_edge: null
+    detail: DefaultRadius is unreadable (a variable-radius fillet, or a radius that
+      did not read), so largest_fillet_first cannot rank it
+    feature_id: feat:0005
+    name: Fillet-Variable1
+    reason: radius_unreadable
+  - blocking_edge: null
+    detail: 'GetTypeName2 returned ''Deform'', which rms_types.yaml does not carry:
+      the feature is unresolved and is never moved'
+    feature_id: feat:0006
+    name: Deform1
+    reason: unclassified
+  - blocking_edge: null
+    detail: 'GetChildren and GetParents both failed: nothing is known about what this
+      feature depends on or what depends on it'
+    feature_id: feat:0007
+    name: Boss-Extrude2
+    reason: graph_unreadable
+  rejected_proposals: []
+  renames: []
+  run_id: null
+  scope:
+    notes:
+    - sheet_body_count could not be read, so whether this part carries surface bodies
+      the mass-property gate cannot see is unresolved, not covered
+    - imported_file_names could not be read, so whether the reorganize stage is a
+      no-op over an imported dumb solid is unresolved
+    - the configuration names could not be read, so which_configs is unknown and no
+      equation may be added until it is
+    probe_id: null
+    refusals:
+    - code: signal_unresolved
+      message: solid_body_count could not be read, so the multibody question is unresolved;
+        an unread signal is never a pass
+      signal: solid_body_count
+    - code: signal_unresolved
+      message: is_weldment could not be read, so the weldment question is unresolved;
+        an unread signal is never a pass
+      signal: is_weldment
+    - code: signal_unresolved
+      message: sheet_metal_folder_present could not be read, so the sheet_metal question
+        is unresolved; an unread signal is never a pass
+      signal: sheet_metal_folder_present
+    - code: signal_unresolved
+      message: mesh_body_present could not be read, so the mesh_or_graphics_body question
+        is unresolved; an unread signal is never a pass
+      signal: mesh_body_present
+    - code: signal_unresolved
+      message: graphics_body_present could not be read, so the mesh_or_graphics_body
+        question is unresolved; an unread signal is never a pass
+      signal: graphics_body_present
+    - code: signal_unresolved
+      message: is_3d_interconnect could not be read, so the three_d_interconnect question
+        is unresolved; an unread signal is never a pass
+      signal: is_3d_interconnect
+    - code: signal_unresolved
+      message: rms_named_folders could not be read, so the rms_named_folder_wrong_members
+        question is unresolved; an unread signal is never a pass
+      signal: rms_named_folders
+    signals: null
+    signals_probe:
+      configuration_names: null
+      document_type: null
+      external_reference_count: null
+      graphics_body_present: null
+      imported_file_names: null
+      is_3d_interconnect: null
+      is_weldment: null
+      mesh_body_present: null
+      read_only: null
+      rebuild_error_count: null
+      rms_named_folders: null
+      save_flag_dirty: null
+      sheet_body_count: null
+      sheet_metal_folder_present: null
+      solid_body_count: null
+      vault: null
+    verdict: unresolved
+  source: null
+  state: planned
+  targets:
+  - basis: null
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: sketch
+    feature_id: feat:0001
+    model: null
+    name: Sketch1
+    provider: null
+    rationale: null
+    state: unresolved
+    target_group: null
+    type_name: ProfileFeature
+  - basis: type_table
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: solid
+    feature_id: feat:0002
+    model: null
+    name: Boss-Extrude1
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 3-Core
+    type_name: Extrusion
+  - basis: type_table
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: cut
+    feature_id: feat:0003
+    model: null
+    name: Cut-Extrude1
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 4-Detail
+    type_name: Cut
+  - basis: type_table
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: fillet
+    feature_id: feat:0004
+    model: null
+    name: Fillet1
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 3-Core
+    type_name: Fillet
+  - basis: type_table
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: fillet
+    feature_id: feat:0005
+    model: null
+    name: Fillet-Variable1
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 3-Core
+    type_name: Fillet
+  - basis: null
+    candidates:
+    - 1-Ref
+    - 2-Construction
+    - 3-Core
+    - 4-Detail
+    - 5-Modify
+    - 6-Quarantine
+    current_group: null
+    decided_by: planner
+    feature_class: unknown
+    feature_id: feat:0006
+    model: null
+    name: Deform1
+    provider: null
+    rationale: null
+    state: needs_judgement
+    target_group: null
+    type_name: Deform
+  - basis: type_table
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: solid
+    feature_id: feat:0007
+    model: null
+    name: Boss-Extrude2
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 3-Core
+    type_name: Extrusion
+  type_table_calibrated_version: 2026 SP1.1
+  type_table_version: '1'
+  updated_at: '2026-09-16T14:22:01Z'

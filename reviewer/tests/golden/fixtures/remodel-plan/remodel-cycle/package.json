@@ -1,0 +1,179 @@
+{
+  "schema_version": "1.2.0",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "created_at": "2026-09-12T12:00:00Z",
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "test",
+    "profile": "model_check"
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:1",
+        "vault_path": "/Designs/remodel-cycle.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:1",
+    "name": "remodel-cycle",
+    "root_assembly_document_id": "doc:1",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:1",
+      "kind": "part",
+      "file_name": "remodel-cycle.SLDPRT",
+      "path": "native/remodel-cycle.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:1",
+      "name": "remodel-cycle-1",
+      "document_id": "doc:1",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "remodel-cycle-1",
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "ZG9jOjEvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0002"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0002"
+        ]
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "ZG9jOjEvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrusion",
+      "description": "intent",
+      "index": 1,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0003"
+      ],
+      "parent_ids": [
+        "feat:0001",
+        "feat:0003"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "ZG9jOjEvQ3V0LUV4dHJ1ZGUx",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Cut-Extrude1",
+      "type_name": "Cut",
+      "description": "intent",
+      "index": 2,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0002"
+      ],
+      "parent_ids": [
+        "feat:0002"
+      ],
+      "sketch": null,
+      "fillet": null
+    }
+  ],
+  "equations": [],
+  "rms_suppress_test": null,
+  "gaps": []
+}

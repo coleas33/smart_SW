@@ -10,7 +10,9 @@ plain dictionaries by the tools and the runner, so ISO strings are accepted for
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -18,7 +20,8 @@ from uuid import UUID
 from annotated_types import Len
 from pydantic import Field, StringConstraints, model_validator
 
-from swreview.agent.providers import EffortMapping
+from swreview.agent.providers import EffortMapping, TokenUsage
+from swreview.agent.settings import EfficiencySettings
 from swreview.findings import Finding, ReviewModel
 from swreview.ids import SequentialIdAllocator
 
@@ -150,6 +153,95 @@ class Timing(ReviewModel):
         return self
 
 
+TOKEN_FIELDS: tuple[str, ...] = (
+    "input_tokens",
+    "cached_input_tokens",
+    "cache_write_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+    "tool_result_input_tokens",
+    "total_tokens",
+)
+"""The nullable counts of `TokenUsage`, in declaration order. Named once, because
+`summed` walks them and naming them seven times is seven chances to omit one."""
+
+
+class SessionUsage(ReviewModel):
+    """What this whole run cost, summed from the `usage` events of every round trip.
+
+    Lives here rather than in the provider package because the session is what is written
+    and read back, and because the usage ledger, the report and the scorecard all call
+    the same `summed` rule. `TokenUsage` is provider-neutral and stays with the adapters
+    that produce it; `report/session.py` already imports across that boundary.
+    """
+
+    rounds: int = Field(ge=0)
+    """Model round trips across the session. **Not** `len(steps)`, which counts tool
+    calls: the two diverge by exactly the amount lever 6 is trying to save."""
+
+    turns: int = Field(ge=0)
+    """Turns that produced at least one round, delimited by the `turn.ended` events."""
+
+    totals: TokenUsage
+    by_turn: list[TokenUsage] = Field(default_factory=list)
+
+    @classmethod
+    def summed(cls, rounds: Sequence[TokenUsage], turn_boundaries: Sequence[int]) -> SessionUsage:
+        """The one place token counts are added. Any null in a field makes that total null.
+
+        A sum over rounds where **any** round reported `None` for a field is `None` for
+        that field, not a partial sum: a partial sum silently understates and no reader
+        of the number can tell it happened. The rule is per field, so a provider that
+        stops reporting one sub-count does not erase the rest. `latency_s` is never null,
+        because we timed every request we made, so it always sums.
+
+        Args:
+            rounds: Every round trip's usage, in the order the `usage` events arrived.
+            turn_boundaries: How many rounds had been recorded when each turn ended - one
+                entry per `turn.ended` event, ascending. Rounds after the last boundary
+                are the turn that never ended, which is the failure path this whole
+                design exists for: a turn that raises on its third round emits no
+                `turn.ended`, and the two rounds it already paid for still count.
+        """
+        segments = cls._segments(len(rounds), turn_boundaries)
+        by_turn = [cls._sum(rounds[start:end]) for start, end in segments if end > start]
+        return cls(
+            rounds=len(rounds),
+            turns=len(by_turn),
+            totals=cls._sum(rounds),
+            by_turn=by_turn,
+        )
+
+    @staticmethod
+    def _segments(count: int, turn_boundaries: Sequence[int]) -> list[tuple[int, int]]:
+        """`(start, end)` per turn, with any trailing rounds as a final unended turn."""
+        previous = 0
+        for boundary in turn_boundaries:
+            if not 0 <= boundary <= count:
+                raise ValueError(
+                    f"turn boundary {boundary} is outside the {count} round(s) recorded"
+                )
+            if boundary < previous:
+                raise ValueError(f"turn boundaries must ascend; {boundary} follows {previous}")
+            previous = boundary
+        edges = [0, *turn_boundaries]
+        if previous < count:
+            edges.append(count)
+        return list(pairwise(edges))
+
+    @staticmethod
+    def _sum(rounds: Sequence[TokenUsage]) -> TokenUsage:
+        """Field by field, with `None` swallowing the whole field."""
+        counts: dict[str, int | None] = {}
+        for field in TOKEN_FIELDS:
+            values = [getattr(one, field) for one in rounds]
+            counts[field] = None if any(value is None for value in values) else sum(values)
+        return TokenUsage(
+            **counts,
+            latency_s=sum(one.latency_s for one in rounds),
+        )
+
+
 class ReviewSession(ReviewModel):
     session_id: UUID = Field(strict=False)
     package_id: UUID = Field(strict=False)
@@ -159,6 +251,23 @@ class ReviewSession(ReviewModel):
     model: str
     provider_info: ProviderInfo | None = None
     retry_of: UUID | None = Field(default=None, strict=False)
+    efficiency: EfficiencySettings | None = None
+    """Which efficiency levers this run had on (feature 005).
+
+    Optional for the same reason `provider_info` is: a session written before the field
+    existed has none, and it loads unchanged. Every run this build makes records it, even
+    with every lever off, because `benchmark compare` cannot attribute a results row to a
+    configuration without it and refuses a run that carries none.
+    """
+
+    usage: SessionUsage | None = None
+    """What this run cost, summed from the `usage` events (feature 005).
+
+    Optional for the same reason `efficiency` is, and `None` rather than an all-zero
+    record when the adapter reported nothing: a run whose provider sent no counts cost
+    something we did not measure, which is not zero (Principle I).
+    """
+
     steps: list[InvestigationStep] = Field(default_factory=list)
     evidence_requests: list[EvidenceRequest] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)

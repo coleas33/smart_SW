@@ -10,7 +10,7 @@
     "seq": { "type": "integer", "minimum": 1 },
     "at": { "type": "string", "format": "date-time" },
     "type": {
-      "enum": ["session.started", "text.delta", "text.done", "tool.started", "tool.finished", "finding", "evidence.requested", "evidence.answered", "disposition", "coverage", "turn.ended", "session.ended", "error"]
+      "enum": ["session.started", "text.delta", "text.done", "tool.started", "tool.finished", "finding", "evidence.requested", "evidence.answered", "disposition", "coverage", "usage", "turn.ended", "session.ended", "error"]
     },
     "body": { "type": "object" }
   },
@@ -39,11 +39,29 @@
     { "if": { "properties": { "type": { "const": "coverage" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["bucket", "item"],
         "properties": { "bucket": { "enum": ["checked", "skipped", "unresolved", "failed", "out_of_scope"] }, "item": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/CoverageItem" } } } } } },
+    { "if": { "properties": { "type": { "const": "usage" } } },
+      "then": { "properties": { "body": { "type": "object", "additionalProperties": false,
+        "description": "What one model round trip cost, emitted by the adapter once per request (feature 005). Every count is nullable because a field the endpoint omitted is unknown, not zero, and the two providers' sub-counts nest differently and are never summed across them. Required is every field: the event is new, so there is no older producer to keep valid.",
+        "required": ["round_index", "provider", "model", "input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "tool_result_input_tokens", "total_tokens", "latency_s", "cache_diagnostic"],
+        "properties": {
+          "round_index": { "type": "integer", "minimum": 0, "description": "The adapter's own per-turn counter, zero-based and reset each turn, the convention tool.started.step_index already uses. No turn number is carried: turns are delimited by the turn.ended events" },
+          "provider": { "enum": ["openai", "gemini", "fake"] },
+          "model": { "type": "string" },
+          "input_tokens": { "type": ["integer", "null"], "minimum": 0 },
+          "cached_input_tokens": { "type": ["integer", "null"], "minimum": 0 },
+          "cache_write_tokens": { "type": ["integer", "null"], "minimum": 0, "description": "OpenAI only; null on Gemini" },
+          "output_tokens": { "type": ["integer", "null"], "minimum": 0 },
+          "reasoning_tokens": { "type": ["integer", "null"], "minimum": 0 },
+          "tool_result_input_tokens": { "type": ["integer", "null"], "minimum": 0, "description": "Gemini only; the same tokens are already inside input_tokens on OpenAI" },
+          "total_tokens": { "type": ["integer", "null"], "minimum": 0 },
+          "latency_s": { "type": "number", "minimum": 0, "description": "Wall clock of the one request, measured by the adapter. Never null" },
+          "cache_diagnostic": { "type": ["object", "null"], "description": "OpenAI's prompt-cache outcome for this round, recorded verbatim; null on Gemini, null on fake, and null on OpenAI whenever prompt_cache_options.comparison_response_id was not sent" } } } } } },
     { "if": { "properties": { "type": { "const": "turn.ended" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["reason"], "properties": { "reason": { "enum": ["end", "max_steps", "error", "stopped", "truncated"] } } } } } },
     { "if": { "properties": { "type": { "const": "session.ended" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["ended_at", "timing"],
-        "properties": { "ended_at": { "type": "string", "format": "date-time" }, "timing": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/Timing" } } } } } },
+        "properties": { "ended_at": { "type": "string", "format": "date-time" }, "timing": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/Timing" },
+          "usage": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/SessionUsage", "description": "What the session cost, summed under the one rule SessionUsage defines, so the pane does not own a second one (feature 005). Optional: absent when no round reported usage, and absent on every stream written before this feature" } } } } } },
     { "if": { "properties": { "type": { "const": "error" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["error_class", "message", "retryable"],
         "properties": { "error_class": { "type": "string" }, "message": { "type": "string" }, "retryable": { "type": "boolean" } } } } } }

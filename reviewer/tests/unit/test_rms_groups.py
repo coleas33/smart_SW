@@ -490,12 +490,66 @@ def test_every_feature_has_an_entry_in_both_maps(shape: str) -> None:
     assert list(assignment.subfolder_by_feature_id) == ids
 
 
+@pytest.mark.parametrize("shape", SHAPES)
+def test_the_enclosing_folder_is_read_the_same_way_in_both_shapes(shape: str) -> None:
+    """The nearest enclosing folder, group folders included.
+
+    `subfolder_by_feature_id` deliberately reports `None` for a row sitting directly in a
+    *group* folder - a group is not a subfolder - so it cannot say who a group folder's own
+    members are. That question has one answer and it is this map, so feature 004's folder
+    plan reads it here instead of walking `folder_id` a second time and getting `None` for
+    every row of a flat document.
+    """
+    rows, assignment = assign(
+        [
+            feature("Boss-Extrude1", "Extrusion"),
+            folder(
+                "3-Core",
+                feature("Boss-Extrude2", "Extrusion"),
+                folder("Ribs", feature("Rib1", "Extrusion")),
+            ),
+        ],
+        shape,
+    )
+    name_by_id = {row.id: row.name for row in rows}
+    enclosing = {
+        row.name: (
+            None
+            if (found := assignment.enclosing_folder_by_feature_id[row.id]) is None
+            else name_by_id[found]
+        )
+        for row in rows
+    }
+
+    assert enclosing["Boss-Extrude1"] is None
+    assert enclosing["3-Core"] is None
+    assert enclosing["Boss-Extrude2"] == "3-Core"
+    assert enclosing["Ribs"] == "3-Core"
+    assert enclosing["Rib1"] == "Ribs"
+    assert list(assignment.enclosing_folder_by_feature_id) == [row.id for row in rows]
+
+
+def test_an_end_tag_marker_is_enclosed_by_the_folder_outside_the_one_it_closes() -> None:
+    """A marker closes its folder before it is placed, so it never reads as a member of it."""
+    rows, assignment = assign(
+        [folder("3-Core", folder("Ribs", feature("Rib1", "Extrusion")))], "flat"
+    )
+    name_by_id = {row.id: row.name for row in rows}
+    marker = next(row for row in rows if row.name == f"Ribs{END_TAG_SUFFIX}")
+
+    found = assignment.enclosing_folder_by_feature_id[marker.id]
+
+    assert found is not None
+    assert name_by_id[found] == "3-Core"
+
+
 def test_an_empty_tree_assigns_nothing() -> None:
     assignment = assign_groups([], TABLE)
 
     assert assignment == GroupAssignment(
         by_feature_id={},
         subfolder_by_feature_id={},
+        enclosing_folder_by_feature_id={},
         groups_seen=[],
         duplicates=[],
         order_ok=True,

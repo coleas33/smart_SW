@@ -147,15 +147,28 @@ message names the field:
 | `session.efficiency` equals the provenance record's full settings dump | `session.json` against the provenance record. A missing `efficiency` is refused with "this run predates the flag carrier and cannot be attributed to an arm" |
 | provider, model, effort | `session.json` `provider_info` and `model`, against the provenance record |
 | commit sha | the provenance record |
-| benchmark set sha256 | the `benchmark-set.json` copy `benchmark run` already saves into the run directory, against the provenance record |
-| answer-keys path | `scorecard.json` |
-| checklist digest | `session.json` against the provenance record |
+| benchmark set sha256 | the `benchmark-set.json` copy `benchmark run` already saves into the run directory, against the provenance record's `set_digest`, which **is the sha256 of that saved copy** (section 10.2) |
+| answer-keys path | **not cross-checked**: `scorecard.json` records none (section 10.4). What is asserted instead, by path, is that `compare` reads no file under the answer-keys directory at all |
+| checklist digest | **across the runs of a study, not against `session.json`**, which carries no checklist digest (section 10.3) |
 | the scorecard exists | `scorecard.json` beside the run |
 | the arm matches the studied lever's flag | for a run whose provenance `arm` is `off` or `on`, `session.efficiency[<the provenance record's `lever`>]` must equal `arm == "on"`; the refusal names the lever. This is a **second** clause and not a narrowing of the row above it, which still compares the whole settings dump field by field. A baseline run (`lever: "none"`, `arm: "baseline"`) has no lever under test and is exempt from this clause; it is checked instead as every flag false |
 
 **Across the set**, `compare` refuses to place two runs in one comparison when the commit, model,
 effort, set file or checklist differ, and it says which field differed. **There is no declared
 exception**: every lever's two arms are one commit, including lever 2 (section 2).
+
+**And the set has to be six runs, not one run named six times.** The adoption rule's repetition
+precondition counts the runs it was handed, so `compare` refuses two things before counting:
+
+- the **same run directory named more than once** on the command line, compared as resolved paths
+  so `off-1` and `./off-1` are one folder, naming the folder; and
+- two runs of one study **in the same arm at the same `rep`**, naming the arm and the repetition.
+  A gated arm (`off` or `on`) whose run carries no `rep` at all is refused the same way, telling
+  the operator to re-run it with `--rep <n>`. A baseline arm is exempt from that last clause only,
+  because it gates nothing (section 8).
+
+Without these, three copies of one folder satisfy "three repetitions per arm" and an `adopt` can
+rest on a single measurement - the precise failure `compare` exists to prevent.
 
 A run directory with **no provenance record at all** is not an error: it is rendered as a row with
 those columns null. A run made before the convention existed is still a real run, and dropping it
@@ -213,6 +226,12 @@ Every field has **exactly one source and no field is computed twice**.
 never omitted (RK-1). A median over a column containing nulls is computed over the non-null values
 **and the row count is stated beside it**; a worst case over a column containing nulls is `null`.
 
+This binds `worst_case_defects_lost` too. `0` there is a **measurement** - the defects-lost
+comparison ran and found nothing - so it may be printed only from a verdict that reached rule 1.
+A refused precondition, an unstable control arm and a baseline study all decide before rule 1
+fires, so their `worst_case_defects_lost` is `null` and the cell reads `unknown`. A study nobody
+compared may not report that nothing was lost.
+
 ## 5. The decision rows, and who owns the Decision
 
 `compare` renders **one decision row per lever per provider and model** into `ledger.md`, applying
@@ -224,7 +243,8 @@ the four rules of levers.md section 7.
 | Reasoning or thoughts off -> on (named per provider) | Round trips off -> on |
 | Tool calls off -> on | Wall clock off -> on | Dump wall clock off -> on (levers 9, 10) |
 | Valid / missed / false alarms / unresolved off -> on | Recall (held out) off -> on |
-| Worst-case defects lost | Lever-specific counter | Decision | Owner signed off | Link to run dirs |
+| Worst-case defects lost | Lever-specific counter | Decision |
+| Owner signed off | Owner signed off at | Link to run dirs |
 ```
 
 **`Decision` is computed, not typed.** It is derived from the scorecards by the rule below and is
@@ -237,6 +257,17 @@ field beside the computed one: `owner_signed_off: bool` with `owner_signed_off_a
 hand into the committed `ledger.md` after the owner has read the row. A row may be computed `adopt`
 and unsigned; **no flag default changes until it is signed**. What the owner may not do is retype
 the computed column.
+
+**A sign-off is carried, never computed.** `compare` regenerates the whole table between the
+markers, so a hand-written sign-off would be erased by the next run and `--check` would report the
+signed document as drifted. Instead, before rendering, `compare` **reads the two sign-off cells
+back off the ledger it is about to overwrite** - the `--into` document, and the `ledger.md` already
+in the `--out` directory, the document winning where both exist - and copies them onto the matching
+`(lever, provider, model)` row. A row with no committed predecessor keeps its `false` default, and
+nothing about a run can ever set the field. So the hand edit survives regeneration byte for byte,
+and `--check` stays green on a signed document. Both cells are `yes` or `no` and an ISO date or
+`unknown`; anything else in the sign-off cell is a typo in the column the gate rests on and is
+refused rather than read as `no`.
 
 **The precondition, read before the four rules (FR-029, SC-011).** `compare` **refuses to render a
 decision row** for a study when either holds:
@@ -374,8 +405,10 @@ All of these run with no key and no seat, because every input is a file.
    fourth.
 10. `compare` applies the 20 percent threshold to the **median**, and a 19 percent median with a
     35 percent best case does not pass.
-11. `owner_signed_off` defaults false and is never written by `compare`; a computed `adopt` with
-    `owner_signed_off: false` changes no flag default.
+11. `owner_signed_off` defaults false and is never **computed** by `compare`; a computed `adopt`
+    with `owner_signed_off: false` changes no flag default. A hand-written `yes` with a date in the
+    committed ledger is **carried forward** into the next regeneration byte for byte, `--check`
+    stays green on that signed document, and the computed `Decision` beside it is unchanged.
 12. A baseline study renders a distribution and no `Decision`.
 13. `compare` reads no file under the answer-keys directory (asserted by path, the way
     `_reject_answer_key_path` already asserts it).
@@ -389,3 +422,130 @@ All of these run with no key and no seat, because every input is a file.
 16. `compare` refuses a run whose provenance `arm` is `on` while `session.efficiency` has the
     studied lever false (and the mirror case for `off`), naming the lever; a baseline run with
     `lever: "none"`, `arm: "baseline"` and every flag false is accepted.
+17. `compare` refuses the **same run directory named twice** and refuses two runs of one arm at the
+    same `rep`; a study whose three off-runs are all `--rep 1` cannot compute `adopt`. A gated-arm
+    run with no `rep` is refused naming the folder.
+18. `worst_case_defects_lost` is `null`, and its cell reads `unknown`, for an unstable control arm,
+    for either refused precondition and for a baseline row; it is `0` only where the comparison
+    ran and found nothing.
+
+## 10. What the implementation settled (T037-T045)
+
+Everything below was decided while building `benchmark/runner.py`, `benchmark/compare.py`,
+`benchmark/adoption.py` and the `compare` command, and is recorded here rather than in a
+fifth contract file.
+
+### 10.1 The provenance record is `run-provenance.json`
+
+`RunProvenance` (`reviewer/src/swreview/benchmark/runner.py`), written by `cli.py` into the
+**root** of the run directory beside `benchmark-set.json`, because it describes the whole
+invocation rather than one package. Its fields: `commit`, `lever`, `arm`, `rep`,
+`provider`, `model`, `effort`, `max_steps`, `checklist_digest`, `set_digest`, `started_at`,
+`set_too_small_override` and the complete `efficiency` dump. A record carrying a field this
+build does not know **fails loudly**, for the reason `EfficiencySettings` does; a run
+directory with no record at all reads as `None` and renders with its four provenance
+columns null.
+
+`commit` is the short sha from `git rev-parse --short HEAD`, and is **null** outside a
+checkout or when git cannot answer. Null, never a guess (Principle I).
+
+`max_steps` is recorded as `DEFAULT_MAX_STEPS`, because `swreview benchmark run` exposes no
+`--max-steps` option and its review path takes the default. If that option is ever added,
+the recorded value has to come from it.
+
+### 10.2 `set_digest` is the digest of the saved copy
+
+The sha256 of the `benchmark-set.json` the run saved, **not** of the file `--set` named.
+Two consequences, both wanted: the cross-check of section 3 can be run entirely inside the
+run directory, and two set files that differ only in whitespace are one set.
+
+### 10.3 The checklist digest is checked across a study, not against the session
+
+`ReviewSession` carries no checklist digest and this feature added none - that would be a
+contract edit on `review-session.schema.json` paid for one cross-check. The digest is
+therefore recorded in the provenance record and compared **between the runs of a study**,
+which is where it is load-bearing: a checklist that changed mid-study invalidates the pair.
+
+### 10.4 The answer-keys path is not cross-checked
+
+`scorecard.json` records no answer-keys path, so there is nothing to compare it against.
+The guarantee that matters is asserted directly instead: a test records every path
+`compare` reads and asserts none of them is under the answer-keys directory (section 9,
+test 13). Principle VI and FR-025 stand.
+
+### 10.5 The same-commit refusal is applied within a study
+
+The provider and the model are part of the study key - one decision row per lever per
+provider and model - so **two models are two studies, not a refusal**, and a `compare` over
+an OpenAI study and a Gemini study renders two rows as section 5 asks. Within one study the
+four fields that must be equal are `commit`, `effort`, `set_digest` and `checklist_digest`,
+and the refusal names the one that differed. There is still no declared exception, lever 2
+included.
+
+### 10.6 Two exits, which are not the same thing
+
+A **refused run** - two records that disagree, a session with no `efficiency`, two runs of
+one study at different commits, a missing `scorecard.json` - aborts the whole ledger: exit
+1 and nothing is written, because such a run may not be placed in a comparison at all. A
+**refused decision row** (section 5) writes `ledger.json` and `ledger.md` with the raw rows
+in them and then exits 1, because those runs are real and only the gate is unreadable.
+
+### 10.7 The decision, and the two cases `re-measure` also covers
+
+The rules fire in this order, which is normative because more than one can hold at once:
+the two preconditions of section 5, then control-arm stability, then defects lost, then
+false alarms, then the repetition count and the presence of a metric, then the threshold.
+A quality failure therefore decides at any repetition count, while `adopt` is reachable
+only from a full six-run study. Beyond the unstable control arm, `re-measure` is also the
+computed value when **an arm holds fewer than three runs** and when **neither a
+total-token nor a wall-clock median is in the scorecards**; neither may be `adopt`
+(SC-009). The remaining detail of the rule - what "no new false alarm" compares, what the
+threshold reads, and that a null is never a zero - is fixed in spec.md FR-028.
+
+### 10.8 Columns the implementation added, and columns it deferred
+
+- **`total_tokens` is a decision-row column in its own right**, because the threshold reads
+  its delta and section 5's header list did not name it.
+- **`OffOn` carries `off_rows` and `on_rows`**, the number of runs that contributed to each
+  median. That is how section 4's "the row count is stated beside it" is implemented, and
+  it is rendered as `n=` in the cell.
+- **Reasoning and thoughts are named per provider in the cell, not in the header**: one
+  header serves rows of both providers, so the row says which field it is quoting. The two
+  are still never added together.
+- **`unresolved_because_withheld` and `unresolved_other` are not yet raw-row columns**:
+  `PackageScore` does not carry them until lever 4 lands (FR-054), and inventing a zero for
+  them would be a measurement nobody made.
+- **`coverage_bucket_mix` is read from `session.coverage`**, one source, because
+  `PackageScore` does not carry it either.
+- **`lever_counter` is `{name, off, on}`**, and the **name is always present** even when
+  the numbers are null, so the column says *which* number is missing rather than going
+  blank. Only lever 6's counter - tool calls beside round trips - is computable from what
+  the scorecard and the session carry today; every other lever's arrives with that lever.
+
+### 10.9 A six-run set is six directories at six repetitions
+
+`adoption.MIN_REPS` counts the runs it was handed, which copies satisfy. `compare` therefore
+refuses a run directory named more than once (resolved paths) and two runs of one arm sharing a
+`rep`, and requires a `rep` on every `off` and `on` run. The refusal is in `compare`, not in the
+adoption rule, because the rule reads scorecards and cannot see a folder or a command line.
+
+### 10.10 The sign-off lives in the regenerated block and is carried through it
+
+The alternative was a second, hand-kept table outside the markers. It was rejected: two tables
+describing one ledger is the drift this feature exists to stop, and a sign-off that does not sit
+beside the row it approves is not beside it at all. So the sign-off stays in the generated block,
+and `compare` reads it back before re-rendering (section 5). The `Owner signed off at` column was
+added at the same time, because FR-027 asks for a date and the field had no column to live in.
+
+### 10.11 `--into` and `--check`: the committed document cannot drift
+
+`docs/llm-efficiency-options.md` holds the ledger between the markers `<!-- ledger:begin
+-->` and `<!-- ledger:end -->`. `swreview benchmark compare ... --into <file>` rewrites
+what sits between them, and `--check` verifies it and writes nothing, exiting 1 when the
+file has drifted. The run directories the committed table is rendered from live under
+`benchmarks/studies/`, and a unit test regenerates the section from exactly those folders
+and asserts byte-identity.
+
+`compare` accepts **zero** run directories and renders the empty ledger. That is the
+honest rendering of a feature that has measured nothing yet, and it is what the committed
+document holds today.

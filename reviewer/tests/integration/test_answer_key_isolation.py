@@ -54,7 +54,13 @@ def test_run_benchmark_on_the_real_pilot_set_never_passes_an_answer_key_path(
     calls: list[Path] = []
 
     def fake_review_fn(
-        package_dir: Path, session_out_dir: Path, *, provider: str, model: str, effort: str
+        package_dir: Path,
+        session_out_dir: Path,
+        *,
+        provider: str,
+        model: str,
+        effort: str,
+        efficiency: object,
     ) -> None:
         calls.append(package_dir)
 

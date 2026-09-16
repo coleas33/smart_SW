@@ -5,6 +5,16 @@
 answer key (constitution Principle VI, FR-025). Output shapes follow data-model.md
 section 3 and must validate against `contracts/scorecard.schema.json`.
 
+## What a run cost
+
+Feature 005 adds the usage columns beside the quality ones, because every adoption
+decision reads both: a lever that halves the token bill and loses a known defect is not
+adopted. The counts are **copied** from `session.usage`, never re-summed, and the one
+derivation, `cached_input_share`, is `TokenUsage`'s own property. `seconds_to_first_finding`
+is read from the `events.jsonl` beside the `session.json` - one more file read per package
+and still no answer-key contact. A session that carries no usage scores to nulls; a null
+in any package makes that aggregate total null rather than a partial sum.
+
 ## Matching rule
 
 A finding matches a known defect (or a correct condition) when both hold:
@@ -27,20 +37,28 @@ false alarm and it is not a valid finding.
 
 from __future__ import annotations
 
+import json
 import statistics
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import Field
 
+from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
+from swreview.agent.runner import EVENTS_FILE_NAME
 from swreview.benchmark.answer_key import AnswerKey, CorrectCondition, load_answer_key
 from swreview.benchmark.sets import BenchmarkSet
 from swreview.findings import Finding, ReviewModel
 from swreview.report.session import ReviewSession, load_session
 
 MatchRule = Literal["exact", "prefix"]
+
+UNKNOWN = "unknown"
+"""What a number no run reported renders as in the markdown. Never `0`, which is a
+measurement, and never the `-` the timing columns have always used for a missing minute
+count: a token column that reads `-` invites "no tokens" (Principle I)."""
 
 
 def check_prefix(check: str) -> str:
@@ -76,6 +94,30 @@ class PackageScore(ReviewModel):
     assisted_minutes: float | None
     unattended_runtime_minutes: float = Field(ge=0)
     net_saved_minutes: float | None
+
+    usage: TokenUsage | None = None
+    """`session.usage.totals`, copied and never re-summed: two writers of one number is
+    how a ledger and the session it was built from come to disagree."""
+
+    round_trips: Annotated[int, Field(ge=0)] | None = None
+    """`session.usage.rounds`. Model round trips, **not** `len(session.steps)`, which
+    counts tool calls; the two diverge by exactly the amount lever 6 is trying to save."""
+
+    cached_input_share: Annotated[float, Field(ge=0, le=1)] | None = None
+    """`TokenUsage.cached_input_share`, the one formula. Computed from the first commit
+    of this feature and published only once probe L1 has recorded that cached input is
+    contained in input (FR-047); until then `render_scorecard_md` prints `unknown`."""
+
+    wall_clock_s: Annotated[float, Field(ge=0)] | None = None
+    """`started_at` to `ended_at`, in seconds, and the wall clock FR-028's threshold
+    reads. Deliberately **not** `unattended_runtime_minutes * 60`: that field has two
+    writers and the benchmark runner's `perf_counter` span wins, which also covers package
+    load and adapter construction. `None` on a session that never ended."""
+
+    seconds_to_first_finding: Annotated[float, Field(ge=0)] | None = None
+    """The first `finding` event's `at` minus `session.started`'s, from `events.jsonl`.
+    `None` when the run found nothing, or when the run kept no event stream."""
+
     matched_defect_ids: list[str] = Field(default_factory=list)
     missed_defect_ids: list[str] = Field(default_factory=list)
     false_alarm_finding_ids: list[str] = Field(default_factory=list)
@@ -92,6 +134,22 @@ class Aggregate(ReviewModel):
     false_alarm_rate: Annotated[float, Field(ge=0, le=1)] | None
     median_net_saved_minutes: float | None
     packages_with_timing: int = Field(ge=0)
+
+    input_tokens: Annotated[int, Field(ge=0)] | None = None
+    cached_input_tokens: Annotated[int, Field(ge=0)] | None = None
+    output_tokens: Annotated[int, Field(ge=0)] | None = None
+    reasoning_tokens: Annotated[int, Field(ge=0)] | None = None
+    total_tokens: Annotated[int, Field(ge=0)] | None = None
+    round_trips: Annotated[int, Field(ge=0)] | None = None
+    """Summed over packages under the same rule `SessionUsage.summed` applies over rounds:
+    one package that reported nothing makes that total `None`, not a partial sum. Only the
+    five counts the ledger compares are aggregated; `scorecard.json` keeps all seven per
+    package."""
+
+    median_seconds_to_first_finding: float | None = None
+    packages_with_usage: int = Field(default=0, ge=0)
+    """How many packages contributed usage, mirroring `packages_with_timing`. Without it a
+    `None` total cannot be told from a run where nothing was measured at all."""
 
 
 class Scorecard(ReviewModel):
@@ -165,8 +223,52 @@ def _count_valid_findings(findings: Sequence[Finding], answer_key: AnswerKey) ->
     return count
 
 
+def seconds_to_first_finding(events_path: Path) -> float | None:
+    """How long the run took to say something, from the stream it already writes.
+
+    Both stamps are already there: `session.started` and every `finding` event carry an
+    `at` (VERIFIED, `EventSink.emit`), so this needs no new recording and, crucially, no
+    answer key - `score_run` reads one more file per package and Principle VI and FR-025
+    are untouched.
+
+    `None` rather than an error whenever the number cannot be had: no stream (a run made
+    before the convention is still a real run), no finding, no `session.started`, or a
+    stream truncated by a process that died mid-write. The scorer's job is to score the
+    session; an unreadable auxiliary file makes one column unknown, not the run unscored.
+    """
+    try:
+        lines = events_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+
+    started_at: datetime | None = None
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if event.get("type") == "session.started" and started_at is None:
+            started_at = datetime.fromisoformat(event["at"])
+        elif event.get("type") == "finding" and started_at is not None:
+            return (datetime.fromisoformat(event["at"]) - started_at).total_seconds()
+    return None
+
+
+def _wall_clock_s(session: ReviewSession) -> float | None:
+    """`started_at` to `ended_at`, or `None` for a session that never ended."""
+    if session.ended_at is None:
+        return None
+    return (session.ended_at - session.started_at).total_seconds()
+
+
 def _score_package(
-    package_id: str, held_out: bool, session: ReviewSession, answer_key: AnswerKey
+    package_id: str,
+    held_out: bool,
+    session: ReviewSession,
+    answer_key: AnswerKey,
+    first_finding_s: float | None,
 ) -> PackageScore:
     matched_defect_ids, missed_defect_ids, false_alarm_ids, unresolved_count = (
         _score_package_findings(session.findings, answer_key)
@@ -178,6 +280,7 @@ def _score_package(
         + timing.assisted_verification_minutes
         + timing.false_alarm_handling_minutes
     )
+    usage = session.usage
     return PackageScore(
         package_id=package_id,
         held_out=held_out,
@@ -190,9 +293,34 @@ def _score_package(
         assisted_minutes=assisted_minutes,
         unattended_runtime_minutes=timing.unattended_runtime_minutes,
         net_saved_minutes=timing.net_saved_minutes,
+        usage=usage.totals if usage is not None else None,
+        round_trips=usage.rounds if usage is not None else None,
+        cached_input_share=usage.totals.cached_input_share if usage is not None else None,
+        wall_clock_s=_wall_clock_s(session),
+        seconds_to_first_finding=first_finding_s,
         matched_defect_ids=matched_defect_ids,
         missed_defect_ids=missed_defect_ids,
         false_alarm_finding_ids=false_alarm_ids,
+    )
+
+
+def _sum_or_none(values: Iterable[int | None]) -> int | None:
+    """Add the counts, unless any one of them is unknown, in which case so is the sum.
+
+    The same rule `SessionUsage.summed` applies one level down, over the rounds of one
+    session, applied here over the packages of one run. A partial sum silently understates
+    and no reader of the number can tell that it happened.
+    """
+    collected = list(values)
+    if any(value is None for value in collected):
+        return None
+    return sum(value for value in collected if value is not None)
+
+
+def _token_totals(per_package: Sequence[PackageScore], field: str) -> int | None:
+    """One `TokenUsage` count summed over packages; a package with no usage is unknown."""
+    return _sum_or_none(
+        getattr(score.usage, field) if score.usage is not None else None for score in per_package
     )
 
 
@@ -213,6 +341,12 @@ def _aggregate(per_package: Sequence[PackageScore]) -> Aggregate:
     ]
     median_net_saved_minutes = statistics.median(timed_savings) if timed_savings else None
 
+    first_finding_times = [
+        score.seconds_to_first_finding
+        for score in per_package
+        if score.seconds_to_first_finding is not None
+    ]
+
     return Aggregate(
         packages=len(per_package),
         held_out_packages=len(held_out_scores),
@@ -224,6 +358,16 @@ def _aggregate(per_package: Sequence[PackageScore]) -> Aggregate:
         false_alarm_rate=false_alarm_rate,
         median_net_saved_minutes=median_net_saved_minutes,
         packages_with_timing=len(timed_savings),
+        input_tokens=_token_totals(per_package, "input_tokens"),
+        cached_input_tokens=_token_totals(per_package, "cached_input_tokens"),
+        output_tokens=_token_totals(per_package, "output_tokens"),
+        reasoning_tokens=_token_totals(per_package, "reasoning_tokens"),
+        total_tokens=_token_totals(per_package, "total_tokens"),
+        round_trips=_sum_or_none(score.round_trips for score in per_package),
+        median_seconds_to_first_finding=(
+            statistics.median(first_finding_times) if first_finding_times else None
+        ),
+        packages_with_usage=sum(1 for score in per_package if score.usage is not None),
     )
 
 
@@ -238,9 +382,18 @@ def score_run(
     run_dir = Path(run_dir)
     per_package: list[PackageScore] = []
     for ref in benchmark_set.packages:
-        session = load_session(run_dir / ref.package_id / "session.json")
+        package_dir = run_dir / ref.package_id
+        session = load_session(package_dir / "session.json")
         answer_key = load_answer_key(answer_keys_dir, ref.package_id)
-        per_package.append(_score_package(ref.package_id, ref.held_out, session, answer_key))
+        per_package.append(
+            _score_package(
+                ref.package_id,
+                ref.held_out,
+                session,
+                answer_key,
+                seconds_to_first_finding(package_dir / EVENTS_FILE_NAME),
+            )
+        )
 
     return Scorecard(
         run_id=Path(run_dir).resolve().name,
@@ -252,22 +405,46 @@ def score_run(
     )
 
 
+def _fmt_count(value: int | None) -> str:
+    return str(value) if value is not None else UNKNOWN
+
+
+def _fmt_cached_share(share: float | None) -> str:
+    """The cached share, or `unknown` while it is not publishable.
+
+    Two reasons for the same word, both honest: probe L1 has not recorded that cached
+    input is contained in input, so the ratio is not yet a share (FR-047); or the provider
+    reported no counts to divide. `scorecard.json` carries the number either way, so
+    flipping `CACHED_SHARE_PUBLISHABLE` publishes the column without rescoring a run.
+    """
+    if not CACHED_SHARE_PUBLISHABLE or share is None:
+        return UNKNOWN
+    return f"{share:.0%}"
+
+
 def render_scorecard_md(scorecard: Scorecard) -> str:
-    """Render a per-package table plus the aggregate, for `scorecard.md`."""
+    """Render a per-package table plus the aggregate, for `scorecard.md`.
+
+    The table gains **three** usage columns and not seven: the markdown is a scan, and
+    `scorecard.json` holds every count the ledger renders.
+    """
     lines = [
         f"# Scorecard: {scorecard.benchmark_set} ({scorecard.run_id})",
         "",
         f"Scored at {scorecard.scored_at.isoformat()}.",
         "",
-        "| package | held out | valid | missed | false alarms | unresolved | net saved (min) |",
-        "|---|---|---|---|---|---|---|",
+        "| package | held out | valid | missed | false alarms | unresolved | net saved (min) "
+        "| total tokens | cached share | round trips |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for score in scorecard.per_package:
         net_saved = "-" if score.net_saved_minutes is None else f"{score.net_saved_minutes:.1f}"
+        total_tokens = _fmt_count(score.usage.total_tokens if score.usage is not None else None)
         lines.append(
             f"| {score.package_id} | {score.held_out} | {score.valid_findings} | "
             f"{score.missed_known_defects} | {score.false_alarms} | {score.unresolved_count} | "
-            f"{net_saved} |"
+            f"{net_saved} | {total_tokens} | {_fmt_cached_share(score.cached_input_share)} "
+            f"| {_fmt_count(score.round_trips)} |"
         )
 
     aggregate = scorecard.aggregate
@@ -279,6 +456,11 @@ def render_scorecard_md(scorecard: Scorecard) -> str:
         "-"
         if aggregate.median_net_saved_minutes is None
         else f"{aggregate.median_net_saved_minutes:.1f}"
+    )
+    median_first_finding = (
+        UNKNOWN
+        if aggregate.median_seconds_to_first_finding is None
+        else f"{aggregate.median_seconds_to_first_finding:.1f} s"
     )
     lines += [
         "",
@@ -293,5 +475,9 @@ def render_scorecard_md(scorecard: Scorecard) -> str:
         f"- false-alarm rate: {false_alarm_rate}",
         f"- median net saved minutes ({aggregate.packages_with_timing} packages with timing): "
         f"{median_net_saved}",
+        f"- total tokens ({aggregate.packages_with_usage} packages with usage): "
+        f"{_fmt_count(aggregate.total_tokens)}",
+        f"- round trips: {_fmt_count(aggregate.round_trips)}",
+        f"- median seconds to first finding: {median_first_finding}",
     ]
     return "\n".join(lines) + "\n"

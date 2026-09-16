@@ -55,6 +55,7 @@ from swreview.agent.providers import (
     EffortMapping,
     EventCallback,
     ProviderName,
+    TokenUsage,
     ToolCallRequest,
     ToolCallResult,
     ToolSet,
@@ -63,6 +64,7 @@ from swreview.agent.providers import (
     call_tool,
     error_body,
     register,
+    usage_body,
 )
 from swreview.agent.providers.schema import gemini_adapt
 from swreview.agent.settings import redact
@@ -84,6 +86,7 @@ __all__ = [
     "GeminiRequestError",
     "GeminiServerError",
     "UnsupportedEffortError",
+    "usage_of",
 ]
 
 LEVEL_PARAM = "thinking_config.thinking_level"
@@ -204,6 +207,12 @@ class _Round:
     calls: list[ToolCallRequest]
     parts: list[types.Part]
     finish_reason: types.FinishReason | None
+    usage: types.GenerateContentResponseUsageMetadata | None = None
+    """The provider's own usage object, unmapped, or `None` when no chunk carried one.
+
+    Kept raw here and mapped once in `run()`, so the arithmetic lives in `usage_of` and
+    not in the stream loop.
+    """
 
     def content(self, keep_calls: int) -> types.Content:
         """The model's own `Content`, keeping only the first `keep_calls` function calls.
@@ -221,6 +230,49 @@ class _Round:
                     continue
             parts.append(part)
         return types.Content(role="model", parts=parts)
+
+
+def usage_of(
+    metadata: types.GenerateContentResponseUsageMetadata | None, *, latency_s: float
+) -> TokenUsage:
+    """What one round trip cost, from the `usage_metadata` the stream carried.
+
+    Every field of `GenerateContentResponseUsageMetadata` is `Optional[int] = None` by
+    declaration (VERIFIED, `google/genai/types.py:8445-8496`), and a stream may carry no
+    usage at all, so `metadata` itself is nullable and every field is read with
+    `getattr(..., None)`. An unreported count maps to `None` and never to `0`: "the
+    service did not say" is not "it said zero" (Principle I).
+
+    **The two arithmetic facts this mapping must not get wrong are opposites of each
+    other**, both VERIFIED from the package's own field descriptions:
+
+    - `cached_content_token_count` is **inside** `prompt_token_count` (`types.py:8468-
+      8471`: "When `cached_content` is set, this also includes the number of tokens in the
+      cached content"). Adding them double counts, so `input_tokens` is the prompt count
+      unchanged and cached input is recorded beside it, contained in it.
+    - `tool_use_prompt_token_count` is **outside** `prompt_token_count` and is a separate
+      addend of `total_token_count` (`types.py:8488-8491`). It is therefore kept in its
+      own field rather than folded into `input_tokens`, which would make the parts stop
+      adding up to the provider's total. It is a first-class number for us because our
+      reviewer feeds every tool result back as input, and dropping it would understate
+      our input cost by whatever sixty-odd tool results weigh.
+
+    The same asymmetry runs the other way on output: `thoughts_token_count` is a separate
+    addend of the total here, while OpenAI's `reasoning_tokens` is a subset of its output
+    count. Nothing is derived; `total_tokens` is the service's own number.
+
+    `cache_write_tokens` is `None` because Gemini reports no cache-write count at all.
+    """
+    return TokenUsage(
+        input_tokens=getattr(metadata, "prompt_token_count", None),
+        cached_input_tokens=getattr(metadata, "cached_content_token_count", None),
+        cache_write_tokens=None,
+        output_tokens=getattr(metadata, "candidates_token_count", None),
+        reasoning_tokens=getattr(metadata, "thoughts_token_count", None),
+        tool_result_input_tokens=getattr(metadata, "tool_use_prompt_token_count", None),
+        total_tokens=getattr(metadata, "total_token_count", None),
+        latency_s=latency_s,
+    )
 
 
 class GeminiProvider:
@@ -259,6 +311,14 @@ class GeminiProvider:
         self._max_output_tokens = max_output_tokens
         self._clock = clock
         self._step_index = 0
+        self.round_usage: list[TokenUsage] = []
+        """This turn's round trips, one record each, in the order they were made.
+
+        Reset by `run()`, because an adapter sees one turn - the convention `step_index`
+        already follows. Per round and not a field on `TurnResult`, because a turn that
+        raises on its sixth round never builds a `TurnResult` and the five rounds it
+        already paid for are the ones worth the most.
+        """
 
     # --- effort ------------------------------------------------------------------------
 
@@ -312,9 +372,28 @@ class GeminiProvider:
         contents = _to_contents(history)
         texts: list[str] = []
         steps = 0
+        self.round_usage = []
 
         while True:
+            started = self._clock()
             round_ = self._stream(contents, config, on_event)
+            # Per round, not per turn: one `generate_content_stream` is one round trip, so
+            # a turn with six serial tool calls records seven of these. The clock is read
+            # around the stream alone, so local tool time is outside this latency.
+            recorded = usage_of(round_.usage, latency_s=max(self._clock() - started, 0.0))
+            self.round_usage.append(recorded)
+            # Straight onto the stream, before this round's tool calls are dispatched. The
+            # sink appends and closes per event, so a round that is paid for is on disk
+            # even if the next one raises and no `TurnResult` is ever built.
+            on_event(
+                "usage",
+                usage_body(
+                    recorded,
+                    round_index=len(self.round_usage) - 1,
+                    provider=self.name,
+                    model=self.model,
+                ),
+            )
             if round_.text:
                 texts.append(round_.text)
 
@@ -384,6 +463,7 @@ class GeminiProvider:
         calls: list[ToolCallRequest] = []
         parts: list[types.Part] = []
         finish_reason: types.FinishReason | None = None
+        usage: types.GenerateContentResponseUsageMetadata | None = None
         try:
             stream = self._client.models.generate_content_stream(
                 model=self.model,
@@ -391,6 +471,17 @@ class GeminiProvider:
                 config=config,
             )
             for chunk in stream:
+                # Outside the candidates loop, and last chunk that carries usage wins.
+                # The loop below runs per candidate and a final chunk can carry usage and
+                # no candidate at all, so a read inside it drops that whole round's cost.
+                # The SDK does not aggregate chunk usage (VERIFIED: `google/genai/
+                # models.py:1718` and `:1757` copy `usageMetadata` straight through per
+                # chunk and nothing under `google/genai/` merges it), so the adapter has
+                # to choose. Last-carrying-chunk-wins is right under both "cumulative"
+                # and "only the final chunk carries it", and wrong only under "each chunk
+                # is a delta", which is UNVERIFIED and is settled by probe G3.
+                if chunk.usage_metadata is not None:
+                    usage = chunk.usage_metadata
                 for candidate in chunk.candidates or []:
                     if candidate.finish_reason is not None:
                         finish_reason = candidate.finish_reason
@@ -404,7 +495,13 @@ class GeminiProvider:
                             on_event("text.delta", {"text": part.text})
         except errors.APIError as exc:
             raise self._report(exc, on_event) from exc
-        return _Round(text="".join(texts), calls=calls, parts=parts, finish_reason=finish_reason)
+        return _Round(
+            text="".join(texts),
+            calls=calls,
+            parts=parts,
+            finish_reason=finish_reason,
+            usage=usage,
+        )
 
     def _report(self, exc: errors.APIError, on_event: EventCallback) -> GeminiProviderError:
         """Map, redact, report and return the failure the caller should raise."""

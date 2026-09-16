@@ -1,0 +1,1409 @@
+{
+  "manifest_schema": "1.0",
+  "assembly": "SolidWorks.Interop.sldworks",
+  "assembly_version": "32.5.0.48",
+  "swconst_version": "32.5.0.48",
+  "product": "SOLIDWORKS 2024 SP5",
+  "generated_at": "2026-09-16T00:58:00Z",
+  "generated_by": "reflection over the installed SolidWorks.Interop.sldworks and .swconst assemblies (T055); swreview-extract probe interop --emit-manifest is the Phase 2 command that regenerates it by the same dump",
+  "members": [
+    {
+      "interface": "IModelDocExtension",
+      "member": "ReorderFeature",
+      "kind": "method",
+      "arity": 3,
+      "parameters": [
+        {
+          "name": "FeatureToMove",
+          "type": "System.String"
+        },
+        {
+          "name": "TargetFeature",
+          "type": "System.String"
+        },
+        {
+          "name": "MoveLocation",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.reorder"
+      ],
+      "allowlisted": true,
+      "note": "the only move operation; MoveLocation is Before = 2 or After = 3"
+    },
+    {
+      "interface": "IFeatureManager",
+      "member": "InsertFeatureTreeFolder2",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Type",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "SolidWorks.Interop.sldworks.Feature",
+      "used_by": [
+        "remodel.folder"
+      ],
+      "allowlisted": true,
+      "note": "Containing = 2; the one exception to 'stage 1 creates nothing'"
+    },
+    {
+      "interface": "IFeatureManager",
+      "member": "EditRollback",
+      "kind": "method",
+      "arity": 2,
+      "parameters": [
+        {
+          "name": "Location",
+          "type": "System.Int32"
+        },
+        {
+          "name": "Feature",
+          "type": "System.String"
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.open"
+      ],
+      "allowlisted": true,
+      "note": "swMoveRollbackBarToEnd = 1, then no feature may report IsRolledBack"
+    },
+    {
+      "interface": "IFeature",
+      "member": "set_Name",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Retval",
+          "type": "System.String"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.rename",
+        "remodel.folder"
+      ],
+      "allowlisted": true,
+      "note": "duplicate-name repair before any reorder, and naming a folder the run just created"
+    },
+    {
+      "interface": "IFeature",
+      "member": "set_Description",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Description",
+          "type": "System.String"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.describe"
+      ],
+      "allowlisted": true
+    },
+    {
+      "interface": "IFeature",
+      "member": "Select2",
+      "kind": "method",
+      "arity": 2,
+      "parameters": [
+        {
+          "name": "Append",
+          "type": "System.Boolean"
+        },
+        {
+          "name": "Mark",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.folder"
+      ],
+      "allowlisted": true,
+      "note": "builds the contiguous member run a folder wraps"
+    },
+    {
+      "interface": "IEquationMgr",
+      "member": "Add3",
+      "kind": "method",
+      "arity": 5,
+      "parameters": [
+        {
+          "name": "Index",
+          "type": "System.Int32"
+        },
+        {
+          "name": "Equation",
+          "type": "System.String"
+        },
+        {
+          "name": "Solve",
+          "type": "System.Boolean"
+        },
+        {
+          "name": "WhichConfigurations",
+          "type": "System.Int32"
+        },
+        {
+          "name": "ConfigNames",
+          "type": "System.Object"
+        }
+      ],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.equation"
+      ],
+      "allowlisted": true,
+      "note": "AddEquationVerified step 1"
+    },
+    {
+      "interface": "IEquationMgr",
+      "member": "Add2",
+      "kind": "method",
+      "arity": 3,
+      "parameters": [
+        {
+          "name": "Index",
+          "type": "System.Int32"
+        },
+        {
+          "name": "Equation",
+          "type": "System.String"
+        },
+        {
+          "name": "Solve",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.equation"
+      ],
+      "allowlisted": true,
+      "note": "AddEquationVerified step 3, the fallback"
+    },
+    {
+      "interface": "IEquationMgr",
+      "member": "Delete",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Index",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.equation"
+      ],
+      "allowlisted": true,
+      "note": "the inverse of an add this run made, never of a global the part already had"
+    },
+    {
+      "interface": "IEquationMgr",
+      "member": "set_Equation",
+      "kind": "property-set",
+      "arity": 2,
+      "parameters": [
+        {
+          "name": "Index",
+          "type": "System.Int32"
+        },
+        {
+          "name": "Equation",
+          "type": "System.String"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.equation"
+      ],
+      "allowlisted": true,
+      "note": "SetEquationVerified step 2, the op: set repair path of FR-029"
+    },
+    {
+      "interface": "IEquationMgr",
+      "member": "SetEquationAndConfigurationOption",
+      "kind": "method",
+      "arity": 4,
+      "parameters": [
+        {
+          "name": "Index",
+          "type": "System.Int32"
+        },
+        {
+          "name": "Equation",
+          "type": "System.String"
+        },
+        {
+          "name": "WhichConfigurations",
+          "type": "System.Int32"
+        },
+        {
+          "name": "ConfigNames",
+          "type": "System.Object"
+        }
+      ],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.equation"
+      ],
+      "allowlisted": true,
+      "note": "SetEquationVerified step 4, the fallback"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "ForceRebuild3",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "TopOnly",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.open",
+        "remodel.rebuild"
+      ],
+      "allowlisted": true,
+      "note": "one rebuild call, one meaning; EditRebuild3 is excluded"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "ClearSelection2",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "All",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.folder"
+      ],
+      "allowlisted": true,
+      "note": "around every selection-based operation"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "Save3",
+      "kind": "method",
+      "arity": 3,
+      "parameters": [
+        {
+          "name": "Options",
+          "type": "System.Int32"
+        },
+        {
+          "name": "Errors",
+          "type": "System.Int32&",
+          "by_ref": true
+        },
+        {
+          "name": "Warnings",
+          "type": "System.Int32&",
+          "by_ref": true
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.save"
+      ],
+      "allowlisted": true,
+      "note": "takes no filename; this is the structural reason it cannot reach the source"
+    },
+    {
+      "interface": "IModelDocExtension",
+      "member": "SelectByID2",
+      "kind": "method",
+      "arity": 9,
+      "parameters": [
+        {
+          "name": "Name",
+          "type": "System.String"
+        },
+        {
+          "name": "Type",
+          "type": "System.String"
+        },
+        {
+          "name": "X",
+          "type": "System.Double"
+        },
+        {
+          "name": "Y",
+          "type": "System.Double"
+        },
+        {
+          "name": "Z",
+          "type": "System.Double"
+        },
+        {
+          "name": "Append",
+          "type": "System.Boolean"
+        },
+        {
+          "name": "Mark",
+          "type": "System.Int32"
+        },
+        {
+          "name": "Callout",
+          "type": "SolidWorks.Interop.sldworks.Callout"
+        },
+        {
+          "name": "SelectOption",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.folder"
+      ],
+      "allowlisted": true,
+      "note": "selection where Select2 is not enough"
+    },
+    {
+      "interface": "ICustomPropertyManager",
+      "member": "Add3",
+      "kind": "method",
+      "arity": 4,
+      "parameters": [
+        {
+          "name": "FieldName",
+          "type": "System.String"
+        },
+        {
+          "name": "FieldType",
+          "type": "System.Int32"
+        },
+        {
+          "name": "FieldValue",
+          "type": "System.String"
+        },
+        {
+          "name": "OverwriteExisting",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.open"
+      ],
+      "allowlisted": true,
+      "note": "the SwReviewRemodelRun session tag, written at open"
+    },
+    {
+      "interface": "ICustomPropertyManager",
+      "member": "Delete2",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "FieldName",
+          "type": "System.String"
+        }
+      ],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.close"
+      ],
+      "allowlisted": true,
+      "note": "the session tag removed at close; the bare name Delete2 means IEntity.Delete2, which is the collision the qualified key exists for"
+    },
+    {
+      "interface": "ISldWorks",
+      "member": "SetUserPreferenceToggle",
+      "kind": "method",
+      "arity": 2,
+      "parameters": [
+        {
+          "name": "UserPreferenceValue",
+          "type": "System.Int32"
+        },
+        {
+          "name": "OnFlag",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.open",
+        "remodel.close"
+      ],
+      "allowlisted": true,
+      "note": "the three toggles 10, 77 and 329 only, restored in a finally"
+    },
+    {
+      "interface": "ISldWorks",
+      "member": "set_CommandInProgress",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "VbControl",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.open",
+        "remodel.close"
+      ],
+      "allowlisted": true,
+      "note": "a property, not a swUserPreferenceToggle_e value; it is deliberately absent from the enums block"
+    },
+    {
+      "interface": "ISldWorks",
+      "member": "CloseDoc",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Name",
+          "type": "System.String"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.close"
+      ],
+      "allowlisted": true,
+      "note": "closes the tagged copy only"
+    },
+    {
+      "interface": "ISldWorks",
+      "member": "GetOpenDocumentByName",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "DocumentName",
+          "type": "System.String"
+        }
+      ],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open",
+        "VerifyTarget"
+      ],
+      "allowlisted": false,
+      "note": "reaches the engineer's already-open source, and is VerifyTarget check 3 on the copy"
+    },
+    {
+      "interface": "ISldWorks",
+      "member": "OpenDoc7",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Specification",
+          "type": "System.Object"
+        }
+      ],
+      "returns": "SolidWorks.Interop.sldworks.ModelDoc2",
+      "used_by": [
+        "remodel.open"
+      ],
+      "allowlisted": false,
+      "note": "opens the copy at its own path with Silent "
+    },
+    {
+      "interface": "ISldWorks",
+      "member": "GetUserPreferenceToggle",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "UserPreferenceToggle",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.open"
+      ],
+      "allowlisted": false,
+      "note": "records each toggle's original value; a value that cannot be read refuses the start"
+    },
+    {
+      "interface": "ISldWorks",
+      "member": "get_CommandInProgress",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.open"
+      ],
+      "allowlisted": false,
+      "note": "records the flag's original value for the finally restore"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "GetPathName",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.String",
+      "used_by": [
+        "remodel.open",
+        "VerifyTarget"
+      ],
+      "allowlisted": false,
+      "note": "VerifyTarget check 1, and the post-open assertion that the handle is the copy and not the source"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "GetSaveFlag",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open",
+        "remodel.save"
+      ],
+      "allowlisted": false,
+      "note": "the source must not be dirty; after the save it must read false"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "ListExternalFileReferencesCount2",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open"
+      ],
+      "allowlisted": false,
+      "note": "zero, or the run is refused with external_refs"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "GetConfigurationNames",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.open"
+      ],
+      "allowlisted": false,
+      "note": "the configuration count is checked, never assumed"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "GetType",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.probe_scope"
+      ],
+      "allowlisted": false,
+      "note": "swDocPART = 1; parts only"
+    },
+    {
+      "interface": "IModelDoc2",
+      "member": "EditDelete",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Void",
+      "used_by": [
+        "(no call path in v1)"
+      ],
+      "allowlisted": false,
+      "note": "recorded so an upgrade cannot quietly change what it is: it is NOT allowlisted, because v1 refuses a mis-membered RMS-named folder instead of dissolving it"
+    },
+    {
+      "interface": "IModelDocExtension",
+      "member": "GetWhatsWrongCount",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.open",
+        "remodel.rebuild"
+      ],
+      "allowlisted": false,
+      "note": "non-zero at baseline stops the run and deletes the copy"
+    },
+    {
+      "interface": "IModelDocExtension",
+      "member": "GetWhatsWrong",
+      "kind": "method",
+      "arity": 3,
+      "parameters": [
+        {
+          "name": "Features",
+          "type": "System.Object&",
+          "by_ref": true
+        },
+        {
+          "name": "ErrorCodes",
+          "type": "System.Object&",
+          "by_ref": true
+        },
+        {
+          "name": "Warnings",
+          "type": "System.Object&",
+          "by_ref": true
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.rebuild"
+      ],
+      "allowlisted": false,
+      "note": "corroborating only; its out-array element type is UNVERIFIED (PROBE-9)"
+    },
+    {
+      "interface": "IModelDocExtension",
+      "member": "GetObjectByPersistReference3",
+      "kind": "method",
+      "arity": 2,
+      "parameters": [
+        {
+          "name": "PersistId",
+          "type": "System.Object"
+        },
+        {
+          "name": "ErrorCode",
+          "type": "System.Int32&",
+          "by_ref": true
+        }
+      ],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.rename",
+        "remodel.reorder",
+        "remodel.folder",
+        "remodel.describe"
+      ],
+      "allowlisted": false,
+      "note": "the ByRef error code is read on every resolve"
+    },
+    {
+      "interface": "IModelDocExtension",
+      "member": "CreateMassProperty2",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "the typed interface, not the raw Object from GetMassProperties2"
+    },
+    {
+      "interface": "IModelDocExtension",
+      "member": "get_CustomPropertyManager",
+      "kind": "property-get",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "ConfigName",
+          "type": "System.String"
+        }
+      ],
+      "returns": "SolidWorks.Interop.sldworks.CustomPropertyManager",
+      "used_by": [
+        "remodel.open",
+        "remodel.close",
+        "VerifyTarget"
+      ],
+      "allowlisted": false,
+      "note": "the document-scoped property manager, asked for with the empty configuration name"
+    },
+    {
+      "interface": "ICustomPropertyManager",
+      "member": "Get4",
+      "kind": "method",
+      "arity": 4,
+      "parameters": [
+        {
+          "name": "FieldName",
+          "type": "System.String"
+        },
+        {
+          "name": "UseCached",
+          "type": "System.Boolean"
+        },
+        {
+          "name": "ValOut",
+          "type": "System.String&",
+          "by_ref": true
+        },
+        {
+          "name": "ResolvedValOut",
+          "type": "System.String&",
+          "by_ref": true
+        }
+      ],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.open",
+        "VerifyTarget"
+      ],
+      "allowlisted": false,
+      "note": "the session tag read back; VerifyTarget check 2"
+    },
+    {
+      "interface": "IFeature",
+      "member": "get_Name",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.String",
+      "used_by": [
+        "remodel.rename",
+        "remodel.reorder",
+        "remodel.snapshot"
+      ],
+      "allowlisted": false,
+      "note": "read in the same breath as the name-addressed call"
+    },
+    {
+      "interface": "IFeature",
+      "member": "get_Description",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.String",
+      "used_by": [
+        "remodel.snapshot",
+        "remodel.describe"
+      ],
+      "allowlisted": false,
+      "note": "null means unreadable, which is not the same as the empty string"
+    },
+    {
+      "interface": "IFeature",
+      "member": "GetTypeName2",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.String",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.snapshot"
+      ],
+      "allowlisted": false,
+      "note": "FtrFolder is how a feature folder is recognised"
+    },
+    {
+      "interface": "IFeature",
+      "member": "GetErrorCode2",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "IsWarning",
+          "type": "System.Boolean&",
+          "by_ref": true
+        }
+      ],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.rebuild"
+      ],
+      "allowlisted": false,
+      "note": "the primary per-feature error reading; swFeatureErrorNone = 0 is the only acceptable value at verify time"
+    },
+    {
+      "interface": "IFeature",
+      "member": "IsRolledBack",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.open"
+      ],
+      "allowlisted": false,
+      "note": "asserted false for every feature after EditRollback"
+    },
+    {
+      "interface": "IFeature",
+      "member": "get_Is3DInterconnectFeature",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.probe_scope"
+      ],
+      "allowlisted": false,
+      "note": "scope signal"
+    },
+    {
+      "interface": "IFeature",
+      "member": "GetImportedFileName",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.String",
+      "used_by": [
+        "remodel.probe_scope"
+      ],
+      "allowlisted": false,
+      "note": "scope signal: an imported dumb solid"
+    },
+    {
+      "interface": "IFeatureManager",
+      "member": "GetSheetMetalFolder",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.probe_scope"
+      ],
+      "allowlisted": false,
+      "note": "scope signal: non-null means sheet metal"
+    },
+    {
+      "interface": "IFeatureManager",
+      "member": "FeatureFolderLocation",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Feature",
+          "type": "SolidWorks.Interop.sldworks.Feature"
+        }
+      ],
+      "returns": "SolidWorks.Interop.sldworks.Feature",
+      "used_by": [
+        "remodel.folder"
+      ],
+      "allowlisted": false,
+      "note": "membership is verified for every member after a folder is created"
+    },
+    {
+      "interface": "IFeatureManager",
+      "member": "get_ShowFeatureDescription",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.snapshot"
+      ],
+      "allowlisted": false,
+      "note": "a description hidden in the tree can be detected here and, per the absence below, not turned on"
+    },
+    {
+      "interface": "IEquationMgr",
+      "member": "GetCount",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.equation"
+      ],
+      "allowlisted": false,
+      "note": "the count is asserted to have incremented, or to be unchanged, around every equation write"
+    },
+    {
+      "interface": "IEquationMgr",
+      "member": "get_Equation",
+      "kind": "property-get",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Index",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.String",
+      "used_by": [
+        "remodel.equation",
+        "remodel.snapshot"
+      ],
+      "allowlisted": false,
+      "note": "the round-trip read that proves an equation write landed"
+    },
+    {
+      "interface": "IEquationMgr",
+      "member": "get_Value",
+      "kind": "property-get",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Index",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.Double",
+      "used_by": [
+        "remodel.snapshot"
+      ],
+      "allowlisted": false,
+      "note": "whether it answers in document units or metres is UNVERIFIED and blocking (PROBE-2)"
+    },
+    {
+      "interface": "IPartDoc",
+      "member": "GetBodies2",
+      "kind": "method",
+      "arity": 2,
+      "parameters": [
+        {
+          "name": "BodyType",
+          "type": "System.Int32"
+        },
+        {
+          "name": "BVisibleOnly",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.probe_scope",
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "swSolidBody = 0 and swSheetBody = 1"
+    },
+    {
+      "interface": "IPartDoc",
+      "member": "IsWeldment",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.probe_scope"
+      ],
+      "allowlisted": false,
+      "note": "scope signal"
+    },
+    {
+      "interface": "IPartDoc",
+      "member": "GetMaterialPropertyName2",
+      "kind": "method",
+      "arity": 2,
+      "parameters": [
+        {
+          "name": "ConfigName",
+          "type": "System.String"
+        },
+        {
+          "name": "Database",
+          "type": "System.String&",
+          "by_ref": true
+        }
+      ],
+      "returns": "System.String",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "material_name, compared separately from geometry"
+    },
+    {
+      "interface": "IBody2",
+      "member": "IsMeshBody",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.probe_scope"
+      ],
+      "allowlisted": false,
+      "note": "scope signal"
+    },
+    {
+      "interface": "IBody2",
+      "member": "IsGraphicsBody",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.probe_scope"
+      ],
+      "allowlisted": false,
+      "note": "scope signal"
+    },
+    {
+      "interface": "IBody2",
+      "member": "GetFaceCount",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "face_count, compared exactly"
+    },
+    {
+      "interface": "IBody2",
+      "member": "GetEdgeCount",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Int32",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "edge_count, compared exactly"
+    },
+    {
+      "interface": "IMassProperty2",
+      "member": "Recalculate",
+      "kind": "method",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Boolean",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "its Boolean is checked before anything is read"
+    },
+    {
+      "interface": "IMassProperty2",
+      "member": "set_AccuracyLevel",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Retval",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "swMassPropertyAccuracyLevel_Higher = 2"
+    },
+    {
+      "interface": "IMassProperty2",
+      "member": "set_SelectedItems",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Retval",
+          "type": "System.Object"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "the body the reading is taken over"
+    },
+    {
+      "interface": "IMassProperty2",
+      "member": "set_UseSystemUnits",
+      "kind": "property-set",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Retval",
+          "type": "System.Boolean"
+        }
+      ],
+      "returns": "System.Void",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "set true BEFORE Recalculate, or the numbers come back in the document's display units (research R12)"
+    },
+    {
+      "interface": "IMassProperty2",
+      "member": "get_Volume",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Double",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false
+    },
+    {
+      "interface": "IMassProperty2",
+      "member": "get_SurfaceArea",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Double",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false
+    },
+    {
+      "interface": "IMassProperty2",
+      "member": "get_CenterOfMass",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false
+    },
+    {
+      "interface": "IMassProperty2",
+      "member": "get_PrincipalMomentsOfInertia",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Object",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "sorted ascending by the C# side before comparison"
+    },
+    {
+      "interface": "IMassProperty2",
+      "member": "get_Mass",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Double",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "recorded and compared separately, never as geometry"
+    },
+    {
+      "interface": "IMassProperty2",
+      "member": "get_Density",
+      "kind": "property-get",
+      "arity": 0,
+      "parameters": [],
+      "returns": "System.Double",
+      "used_by": [
+        "remodel.geometry"
+      ],
+      "allowlisted": false,
+      "note": "comes from the material, which is not geometry"
+    },
+    {
+      "interface": "ISelectionMgr",
+      "member": "GetSelectedObjectCount2",
+      "kind": "method",
+      "arity": 1,
+      "parameters": [
+        {
+          "name": "Mark",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.Int32",
+      "used_by": [
+        "AssertFolderSelection"
+      ],
+      "allowlisted": false,
+      "note": "the first half of the one selected object and it is a FtrFolder reading"
+    },
+    {
+      "interface": "ISelectionMgr",
+      "member": "GetSelectedObject6",
+      "kind": "method",
+      "arity": 2,
+      "parameters": [
+        {
+          "name": "Index",
+          "type": "System.Int32"
+        },
+        {
+          "name": "Mark",
+          "type": "System.Int32"
+        }
+      ],
+      "returns": "System.Object",
+      "used_by": [
+        "AssertFolderSelection"
+      ],
+      "allowlisted": false,
+      "note": "the second half of that reading"
+    }
+  ],
+  "enums": [
+    {
+      "enum": "swMoveLocation_e",
+      "values": {
+        "swMoveToEnd": 1,
+        "swMoveBefore": 2,
+        "swMoveAfter": 3,
+        "swMoveToTop": 4,
+        "swMoveToFolder": 5
+      }
+    },
+    {
+      "enum": "swFeatureTreeFolderType_e",
+      "values": {
+        "swFeatureTreeFolder_EmptyBefore": 1,
+        "swFeatureTreeFolder_Containing": 2,
+        "swFeatureTreeFolder_Mold": 3
+      }
+    },
+    {
+      "enum": "swOpenDocOptions_e",
+      "values": {
+        "swOpenDocOptions_Silent": 1,
+        "swOpenDocOptions_ReadOnly": 2,
+        "swOpenDocOptions_ViewOnly": 4,
+        "swOpenDocOptions_LoadModel": 16
+      }
+    },
+    {
+      "enum": "swSaveAsOptions_e",
+      "values": {
+        "swSaveAsOptions_Silent": 1,
+        "swSaveAsOptions_Copy": 2,
+        "swSaveAsOptions_SaveReferenced": 4,
+        "swSaveAsOptions_AvoidRebuildOnSave": 8
+      }
+    },
+    {
+      "enum": "swUserPreferenceToggle_e",
+      "values": {
+        "swInputDimValOnCreate": 10,
+        "swShowErrorsEveryRebuild": 77,
+        "swWarnSaveUpdateErrors": 329
+      }
+    },
+    {
+      "enum": "swCustomInfoType_e",
+      "values": {
+        "swCustomInfoText": 30
+      }
+    },
+    {
+      "enum": "swCustomPropertyAddOption_e",
+      "values": {
+        "swCustomPropertyOnlyIfNew": 0,
+        "swCustomPropertyDeleteAndAdd": 1,
+        "swCustomPropertyReplaceValue": 2
+      }
+    },
+    {
+      "enum": "swMassPropertyAccuracyLevel_e",
+      "values": {
+        "swMassPropertyAccuracyLevel_Lower": 0,
+        "swMassPropertyAccuracyLevel_Medium": 1,
+        "swMassPropertyAccuracyLevel_Higher": 2
+      }
+    },
+    {
+      "enum": "swMassPropertiesStatus_e",
+      "values": {
+        "swMassPropertiesStatus_OK": 0,
+        "swMassPropertiesStatus_UnknownError": 1,
+        "swMassPropertiesStatus_NoBody": 2
+      }
+    },
+    {
+      "enum": "swFeatureError_e",
+      "values": {
+        "swFeatureErrorNone": 0
+      }
+    },
+    {
+      "enum": "swMoveRollbackBarTo_e",
+      "values": {
+        "swMoveRollbackBarToEnd": 1,
+        "swMoveRollbackBarToPreviousPosition": 2,
+        "swMoveRollbackBarToBeforeFeature": 3,
+        "swMoveRollbackBarToAfterFeature": 4
+      }
+    },
+    {
+      "enum": "swFileSaveWarning_e",
+      "values": {
+        "swFileSaveWarning_RebuildError": 1,
+        "swFileSaveWarning_NeedsRebuild": 2
+      }
+    },
+    {
+      "enum": "swBodyType_e",
+      "values": {
+        "swSolidBody": 0,
+        "swSheetBody": 1,
+        "swMeshBody": 6,
+        "swGraphicsBody": 7
+      }
+    },
+    {
+      "enum": "swDocumentTypes_e",
+      "values": {
+        "swDocPART": 1
+      }
+    },
+    {
+      "enum": "swInConfigurationOpts_e",
+      "values": {
+        "swThisConfiguration": 1,
+        "swAllConfiguration": 2,
+        "swSpecifyConfiguration": 3
+      }
+    }
+  ],
+  "absences": [
+    {
+      "interface": "IEquationMgr",
+      "member": "set_GlobalVariable",
+      "consequence": "a global is created by equation syntax, \"name\" = expr, not by a flag"
+    },
+    {
+      "interface": "IFeatureManager",
+      "member_pattern": "*Shell*",
+      "except": [
+        "GetPlasticsShellType"
+      ],
+      "consequence": "shell is IModelDoc2.InsertFeatureShell(Double, Boolean) returning Void, from the current face selection; GetPlasticsShellType is a Plastics query and not a creator, so it is excepted rather than narrowing the pattern"
+    },
+    {
+      "interface": "ISketchRelation",
+      "member": "Name",
+      "consequence": "sketch relations cannot be named; intent is recorded in the parent feature's Description"
+    },
+    {
+      "interface": "IFeature",
+      "member": "set_ShowFeatureDescription",
+      "consequence": "descriptions hidden in the tree can be DETECTED via IFeatureManager.get_ShowFeatureDescription but not turned on"
+    }
+  ]
+}

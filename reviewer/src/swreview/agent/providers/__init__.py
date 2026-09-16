@@ -43,12 +43,13 @@ import json
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Annotated, Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "ADAPTER_MODULES",
+    "CACHED_SHARE_PUBLISHABLE",
     "SUMMARY_LENGTH",
     "AgentEvent",
     "AgentProvider",
@@ -58,6 +59,7 @@ __all__ = [
     "EventType",
     "ProviderName",
     "ProviderTool",
+    "TokenUsage",
     "ToolCallRequest",
     "ToolCallResult",
     "ToolSet",
@@ -70,6 +72,8 @@ __all__ = [
     "get",
     "register",
     "summarize_result",
+    "usage_body",
+    "usage_from_body",
 ]
 
 
@@ -95,6 +99,7 @@ EventType = Literal[
     "evidence.answered",
     "disposition",
     "coverage",
+    "usage",
     "turn.ended",
     "session.ended",
     "error",
@@ -122,6 +127,112 @@ class EffortMapping(ProviderModel):
     requested: EffortLevel
     provider_param: str
     provider_value: str | int
+
+
+TokenCount = Annotated[int, Field(ge=0)] | None
+"""One reported token count. `None` is "the provider did not report it", `0` is "it
+reported zero", and nothing anywhere coerces one into the other (Principle I)."""
+
+
+class TokenUsage(ProviderModel):
+    """What one model round trip cost, in the fields the provider actually reported.
+
+    Provider-neutral and produced by the adapters, so it lives here beside
+    `EffortMapping` for the same reason that one does. **One record is one round trip,
+    not one turn**: `OpenAIProvider.run` is a `while True` loop whose body makes exactly
+    one request, so a turn with six serial tool calls is seven requests and seven of
+    these.
+
+    The two providers' sub-counts nest differently and are never summed across them: on
+    OpenAI `reasoning_tokens` is a subset of `output_tokens` and tool-result tokens are
+    already inside `input_tokens`, while on Gemini `thoughts_token_count` and
+    `tool_use_prompt_token_count` are separate addends of the total. The raw fields are
+    what is recorded; `total_tokens` is the only one a cross-provider comparison may use.
+    """
+
+    input_tokens: TokenCount
+    cached_input_tokens: TokenCount
+    cache_write_tokens: TokenCount  # OpenAI only; always None on Gemini
+    output_tokens: TokenCount
+    reasoning_tokens: TokenCount
+    tool_result_input_tokens: TokenCount  # Gemini only; inside input_tokens on OpenAI
+    total_tokens: TokenCount
+    latency_s: float = Field(ge=0)
+    """Wall clock for the one request, measured by the adapter. Never `None`: if we made
+    the call, we timed it."""
+
+    @property
+    def _contained_counts(self) -> tuple[int, int] | None:
+        """`(input_tokens, cached_input_tokens)` when both are known **and** cached is a
+        part of input; `None` otherwise.
+
+        The one containment check, read by both derived values below so neither decides
+        for itself. The containment is VERIFIED for Gemini and UNVERIFIED for OpenAI
+        until probe L1 (T025) runs, so a record that violates it is reachable and must
+        not become arithmetic anybody trusts: both derived values go `None` - unknown -
+        while the raw counts are still recorded verbatim, so the violation stays visible
+        wherever the record is read.
+        """
+        input_tokens, cached = self.input_tokens, self.cached_input_tokens
+        if input_tokens is None or cached is None or cached > input_tokens:
+            return None
+        return input_tokens, cached
+
+    @property
+    def uncached_input_tokens(self) -> int | None:
+        """`input - cached` when both are known and cached is contained in input.
+
+        A property and not a field, so it cannot go stale - the rule `Timing.replace`
+        already follows. It is well defined only because cached input is contained in
+        input on both providers (VERIFIED for Gemini, asserted by probe L1 for OpenAI),
+        so a record where it is not returns `None` rather than a negative count.
+        """
+        counts = self._contained_counts
+        if counts is None:
+            return None
+        input_tokens, cached = counts
+        return input_tokens - cached
+
+    @property
+    def cached_input_share(self) -> float | None:
+        """`cached / input` when both are known and input is not zero, `None` otherwise.
+
+        Defined here, once, because the report and the scorecard both publish it and two
+        formulas would be two numbers (data-model.md section 2.1). A share of nothing is
+        `None` and not `0.0`: no input tokens were reported, so no share was reported.
+
+        The number is meaningful only if cached input is contained in input, which is
+        VERIFIED for Gemini and UNVERIFIED for OpenAI until probe L1 runs, which is why
+        `CACHED_SHARE_PUBLISHABLE` gates what a reader is shown rather than what is
+        computed. A record that reports `cached > input` therefore has **no** share:
+        `None`, never a ratio above 1. That keeps the `0..1` bound the scorecard and
+        `scorecard.schema.json` declare true, so an unverified fact about a provider's
+        own counts cannot make a whole benchmark run unscoreable.
+        """
+        counts = self._contained_counts
+        if counts is None:
+            return None
+        input_tokens, cached = counts
+        if input_tokens == 0:
+            return None
+        return cached / input_tokens
+
+
+CACHED_SHARE_PUBLISHABLE = False
+"""Has probe L1 recorded that cached input is contained in input (FR-047)?
+
+`TokenUsage.cached_input_share` is computed from the first commit of this feature, but a
+share is only well defined if the cached count is a part of the input count rather than a
+number beside it. That containment is VERIFIED for Gemini and UNVERIFIED for OpenAI until
+probe L1 (T025) runs against a live key and its output is recorded in
+`specs/005-llm-efficiency/probe-log.md`. Until then every published surface - the report's
+`## Tokens` section, the scorecard's markdown column and the ledger's - renders the share
+as `unknown`, which is what it is.
+
+Flipping this to `True` is the act of publishing the column, and it belongs in the same
+change that records L1's output. It lives beside `TokenUsage` because it is a claim about
+what the providers' own counts mean.
+"""
 
 
 class ToolCallRequest(ProviderModel):
@@ -182,6 +293,59 @@ def error_body(*, error_class: str, message: str, retryable: bool) -> dict[str, 
     caller knows which secret was in reach (FR-015).
     """
     return {"error_class": error_class, "message": message, "retryable": retryable}
+
+
+def usage_body(
+    usage: TokenUsage,
+    *,
+    round_index: int,
+    provider: ProviderName | str,
+    model: str,
+    cache_diagnostic: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The one shape a model round trip's cost is reported in.
+
+    Three producers emit this event - both adapters and the fake - and a body written out
+    three times is three shapes of the same event, so it is built here instead
+    (constitution V, the rule `error_body` above already follows). The seven counts and
+    `latency_s` come straight off the model, so a count added to `TokenUsage` is carried
+    by the event without anyone remembering to add it twice.
+
+    Args:
+        usage: What the round cost, already mapped by the adapter that made it.
+        round_index: The adapter's **own per-turn counter**, zero-based and reset at each
+            turn, exactly the convention `tool.started.step_index` follows and for the
+            reason this module's docstring gives: an adapter sees one turn and cannot know
+            a session-level number. No turn number is carried either, because turns are
+            delimited by the existing `turn.ended` events and the runner therefore never
+            has to enrich an adapter's event.
+        provider: Which adapter paid for it. On the event and not inferred from the
+            session, because the round is the thing that was billed.
+        model: The model id this round was billed against.
+        cache_diagnostic: OpenAI's prompt-cache outcome for this round, recorded verbatim.
+            `None` on Gemini and on the fake always, and `None` on OpenAI whenever
+            `prompt_cache_options.comparison_response_id` was not sent - which is every
+            round until lever 3 lands.
+    """
+    return {
+        "round_index": round_index,
+        "provider": str(provider),
+        "model": model,
+        **usage.model_dump(mode="json"),
+        "cache_diagnostic": dict(cache_diagnostic) if cache_diagnostic is not None else None,
+    }
+
+
+def usage_from_body(body: Mapping[str, Any]) -> TokenUsage:
+    """Read one `usage` event body back into the `TokenUsage` it was built from.
+
+    The inverse of `usage_body`, here rather than in the ledger that calls it so the field
+    list lives in exactly one place. The body carries four fields `TokenUsage` does not
+    (`round_index`, `provider`, `model`, `cache_diagnostic`) and the model forbids extras,
+    so the counts are selected by name; a missing one raises rather than becoming a `None`
+    that would read as "the provider did not report it".
+    """
+    return TokenUsage.model_validate({name: body[name] for name in TokenUsage.model_fields})
 
 
 class TurnResult(ProviderModel):

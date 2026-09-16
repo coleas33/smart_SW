@@ -8,13 +8,23 @@ option is a hypothesis to be measured before it is adopted. The rule for feature
 
 | What | Measured | Consequence |
 |---|---|---|
-| Tool schemas sent with every model request | 32 tools, 34,065 bytes, about 8,500 tokens (35 tools and 37,709 bytes with the bridge), re-measured 2026-09-16 after the RMS tools landed | A review with 60 tool calls spends roughly 510,000 tokens on schemas alone; the three longest descriptions are `check_rms_assembly` (1,455 characters), `check_rms_part` (1,296) and `check_fastener_joint` (871); about 45 percent of the payload is JSON structure that trimming cannot reach, so lever 2's realistic ceiling is about 30 percent |
+| Tool schemas sent with every model request | 32 tools, **34,065 bytes** in the OpenAI encoding and 34,217 in the Gemini one (35 tools, 37,712 and 37,682 with the bridge); regenerated 2026-09-16 by `python -m tests.unit.test_tool_payload --write`, run from `reviewer/` | A review with 60 tool calls resends the whole array 60 times; the longest descriptions are `check_rms_assembly` (1,455 bytes), `check_rms_part` (1,296), `check_fastener_joint` (871) and `check_interference_group` (870), and the largest whole tool objects are `check_axial_stack` (2,734 bytes), `check_fit` (2,413) and `record_drawing_finding` (2,156); with every description emptied the array still weighs **15,274 bytes**, 45 percent of the payload and a floor no trimming can reach, so lever 2's ceiling is the other 55 percent |
 | System prompt plus checklist | 5,057 plus 2,909 bytes, about 2,000 tokens, plus the package census | Resent every request, but stable, so cacheable |
 | Step budget | `max_steps` 200 per turn, no coverage-driven stop | A turn ends on the budget or on the model's own decision, never because coverage is complete |
 | Parallel tool calls | `parallel_tool_calls: False` in the OpenAI adapter | One round trip per query; each round trip resends the whole growing history |
 | Usage accounting | None recorded by either adapter or in `session.json` | No token or cost number exists for any run; gains cannot be measured or shown |
 | First turn | The census from `package_summary`; every deterministic check is invoked by the model through tools | Discovery costs one round trip per check per subject |
 | Extraction | Meshes and faces are dump phases with flags (`--meshes`, `--faces`); a new run always re-extracts | Wall clock is paid again for an unchanged assembly |
+
+The tool-schema row first said 29 tools and 32,435 bytes. That count was taken before the
+feature 003 RMS tools landed, which is why it was already wrong when this document was
+read; the figures above are regenerated from `reviewer/tests/unit/test_tool_payload.py`,
+which pins them, rather than typed in a second time.
+
+**Bytes are not tokens.** Every figure in that row is UTF-8 bytes on the wire, which is
+all that can be measured without a provider. Any token count derived from it is an
+estimate, and the first instrumented run (lever 1) replaces the estimate with what the
+provider actually billed.
 
 ## Evaluation protocol (applies to every lever)
 
@@ -67,6 +77,46 @@ option is a hypothesis to be measured before it is adopted. The rule for feature
 
 ## Results
 
-| Lever | Provider and model | Tokens off → on | Wall clock off → on | Scorecard off → on | Decision |
-|---|---|---|---|---|---|
-| (none measured yet) | | | | | |
+**This table is generated, never typed.** It is a rendering of the `scorecard.json` files
+in the run directories under `benchmarks/studies/`, produced by `swreview benchmark
+compare`, because a hand-kept table goes stale and cannot be audited - which is what the
+table that used to sit here had become.
+
+Regenerate it, and verify it, from `reviewer/`:
+
+```powershell
+uv run swreview benchmark compare <every run directory under ../benchmarks/studies> `
+  --into ../docs/llm-efficiency-options.md
+uv run swreview benchmark compare <the same directories> `
+  --into ../docs/llm-efficiency-options.md --check   # exits 1 if this file has drifted
+```
+
+**Nothing has been measured yet.** No agent review has been run against any package on any
+provider, so there is no baseline row and no lever row, and the ledger below is empty
+rather than optimistic. The first thing the harness produces is the baseline study of
+`contracts/ab-harness.md` section 8, three repetitions per provider, and every row after
+that is measured against it.
+
+<!-- ledger:begin -->
+
+## Results ledger
+
+### Runs
+
+| run | commit | lever | arm | rep | provider | model | effort | package | input | cached in | uncached in | output | reasoning/thoughts | tool-result in | total | rounds | tool calls | cached share | wall clock s | s to 1st finding | valid | missed | false alarms | unresolved | coverage bucket mix |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+
+No runs: no run directories were compared.
+
+### Decisions
+
+| Lever | Provider and model | Commit | Reps | Other levers on | Input tokens off -> on (median, min-max) | Cached input off -> on | Output off -> on | Reasoning or thoughts off -> on | Total tokens off -> on | Round trips off -> on | Tool calls off -> on | Wall clock off -> on | Dump wall clock off -> on | Valid / missed / false alarms / unresolved off -> on | Recall (held out) off -> on | Worst-case defects lost | Lever-specific counter | Decision | Owner signed off | Owner signed off at | Decision reason | Link to run dirs |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+
+No decisions: no run directories were compared.
+
+`Decision` is computed by the adoption rule and is never typed; `Owner signed off` and `Owner signed off at` are the owner's separate act, written by hand into the committed table once the row has been read and carried forward verbatim by every later regeneration. No flag default changes until they are written.
+
+`wall clock s` is the session's own `started_at` to `ended_at`, **not** `unattended_runtime_minutes`, which the benchmark runner overwrites with a span that also covers package load and adapter construction.
+
+<!-- ledger:end -->

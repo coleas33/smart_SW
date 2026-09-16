@@ -46,9 +46,12 @@ from swreview.agent.providers import (
     AgentProvider,
     EffortLevel,
     EventType,
+    TokenUsage,
     TurnResult,
     error_body,
+    usage_from_body,
 )
+from swreview.agent.settings import EfficiencySettings
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.findings import Finding
@@ -60,6 +63,7 @@ from swreview.report.session import (
     KeySource,
     ProviderInfo,
     ReviewSession,
+    SessionUsage,
     save_session,
 )
 from swreview.tools.context import ToolContext, build_context
@@ -313,6 +317,55 @@ class EventSink:
             listener(event)
         return event
 
+    def add_listener(self, listener: EventListener) -> None:
+        """Attach a consumer after the sink was built.
+
+        `ReviewRun` is handed a sink it did not construct - `start_review` builds it with
+        the caller's callbacks - and it has to put its usage ledger on that same stream.
+        Registering here rather than threading the ledger through `start_review` means a
+        `ReviewRun` built any other way (a test, a future caller) still accumulates, and
+        there is no second construction site to keep in step.
+        """
+        self._listeners.append(listener)
+
+
+class UsageLedger:
+    """The one accumulator of what a session cost: an `EventSink` listener.
+
+    It reads the stream rather than the adapters, and that is the whole point. Both
+    adapters raise out of their round loop on a provider error and `ReviewRun._run_turn`'s
+    `except Exception` branch finalizes and re-raises with **no `TurnResult` to read**, so
+    usage carried home on the turn's result would report zero cost for the turn that cost
+    the most - five paid rounds and a rate limit on the sixth. `EventSink.emit` appends and
+    closes per event, so by the time the exception arrives those five rounds are on disk
+    and this ledger has already counted them.
+
+    It owns no arithmetic: `SessionUsage.summed` is the one summing rule and this calls it.
+    `turn.ended` delimits a turn, which is why no adapter has to carry a turn number.
+    """
+
+    def __init__(self) -> None:
+        self._rounds: list[TokenUsage] = []
+        self._turn_boundaries: list[int] = []
+        """How many rounds had been recorded when each turn ended, one entry per
+        `turn.ended`. Rounds after the last entry are a turn that never ended."""
+
+    def __call__(self, event: AgentEvent) -> None:
+        if event.type == "usage":
+            self._rounds.append(usage_from_body(event.body))
+        elif event.type == "turn.ended":
+            self._turn_boundaries.append(len(self._rounds))
+
+    def usage(self) -> SessionUsage | None:
+        """What the session has cost so far, or `None` if no round reported anything.
+
+        `None` and not an all-zero record: a run whose provider reported nothing cost
+        something we did not measure, which is not zero (Principle I).
+        """
+        if not self._rounds:
+            return None
+        return SessionUsage.summed(self._rounds, self._turn_boundaries)
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -402,6 +455,7 @@ class ReviewRun:
         out_dir: Path,
         effort: EffortLevel,
         max_steps: int,
+        efficiency: EfficiencySettings | None = None,
         bridge: Any | None = None,
         redact: Callable[[str], str] = no_redaction,
     ) -> None:
@@ -413,6 +467,8 @@ class ReviewRun:
         self.out_dir = Path(out_dir)
         self.effort = effort
         self.max_steps = max_steps
+        self.efficiency = efficiency if efficiency is not None else EfficiencySettings()
+        """Which efficiency levers this run has on; every one of them off by default."""
         self.redact = redact
         """Applied to provider error text before it is written to `events.jsonl`."""
         self.messages: list[dict[str, Any]] = []
@@ -422,6 +478,14 @@ class ReviewRun:
         self.started = context.session.started_at
         self._bridge = bridge
         self._finalized: list[CoverageItem] = []
+        self.usage_ledger = UsageLedger()
+        """What this session has cost so far, accumulated off the stream.
+
+        Registered on the sink here rather than passed in, so every `ReviewRun` has one
+        and there is no construction site that can forget it. It is attached before
+        `session.started` is emitted, so no round can arrive before it is listening.
+        """
+        sink.add_listener(self.usage_ledger)
 
     @property
     def session(self) -> ReviewSession:
@@ -497,15 +561,20 @@ class ReviewRun:
     def finalize(self) -> ReviewSession:
         """Close the session out, write `session.json`, and say so on the stream."""
         session = finalize_session(self.context, self.started, written=self._finalized)
+        # Before `save_session`, and recomputed from the whole ledger on every call, the
+        # same rule finalization itself follows: finalizing twice is finalizing once.
+        session.usage = self.usage_ledger.usage()
         save_session(session, self.session_path)
         ended_at = session.ended_at
-        self.sink.emit(
-            "session.ended",
-            {
-                "ended_at": ended_at.isoformat() if ended_at is not None else None,
-                "timing": session.timing.model_dump(mode="json"),
-            },
-        )
+        body: dict[str, Any] = {
+            "ended_at": ended_at.isoformat() if ended_at is not None else None,
+            "timing": session.timing.model_dump(mode="json"),
+        }
+        if session.usage is not None:
+            # Optional in the contract, so a run with nothing to report says nothing. It
+            # is here at all so the pane does not have to own a second summing rule.
+            body["usage"] = session.usage.model_dump(mode="json")
+        self.sink.emit("session.ended", body)
         return session
 
     def close(self) -> None:
@@ -602,6 +671,7 @@ def start_review(
     key_source: KeySource = "none",
     retry_of: str | UUID | None = None,
     max_steps: int = DEFAULT_MAX_STEPS,
+    efficiency: EfficiencySettings | None = None,
     fail_tool: Iterable[str] = (),
     bridge: bool = False,
     pipe_name: str = DEFAULT_PIPE_NAME,
@@ -631,6 +701,10 @@ def start_review(
         retry_of: The failed session this run replaces (FR-028), or None.
         max_steps: Tool-call budget for **one turn**. Hitting it is unresolved coverage,
             not a finish.
+        efficiency: Which efficiency levers this run has on (feature 005). One object for
+            all ten flags, recorded whole on the session so the run can be attributed to
+            a configuration afterwards; `None` means every lever off, which is what is
+            recorded.
         fail_tool: Tool names forced to fail; the `--fail-tool` test hook. An unknown
             name raises.
         bridge: Open the live SOLIDWORKS bridge and add the three bridge tools (US3).
@@ -681,6 +755,7 @@ def start_review(
             key_source=key_source,
         )
         session.retry_of = UUID(str(retry_of)) if retry_of is not None else None
+        session.efficiency = efficiency if efficiency is not None else EfficiencySettings()
         record_partial_evidence(session, loaded.package)
         tools = ToolRegistry().dispatch(context, fail_tool=fail_tool)
     except Exception:
@@ -697,6 +772,7 @@ def start_review(
         out_dir=out,
         effort=effort,
         max_steps=max_steps,
+        efficiency=session.efficiency,
         bridge=bridge_client,
         redact=redact,
     )
@@ -724,7 +800,7 @@ def run_review(
         model: Model id; the provider's own model when omitted.
         effort: What the engineer asked for; the adapter maps it or fails fast.
         options: The rest of `start_review`'s keyword arguments - `key_source`,
-            `retry_of`, `max_steps`, `fail_tool`, `bridge`, `pipe_name`,
+            `retry_of`, `max_steps`, `efficiency`, `fail_tool`, `bridge`, `pipe_name`,
             `bridge_secret`, `bridge_factory`, `callbacks`, `redact` - documented there
             rather than restated here.
     """

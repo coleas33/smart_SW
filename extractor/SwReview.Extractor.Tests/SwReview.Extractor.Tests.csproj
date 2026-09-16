@@ -38,4 +38,15 @@
     </Content>
   </ItemGroup>
 
+  <!--
+    T055. The frozen interop-surface manifest (specs/004-.../contracts/interop-manifest.md).
+    Generated once by reflection over SOLIDWORKS 2024 SP5 interop 32.5.0.48 and checked in;
+    regenerating it is a deliberate, reviewed commit and never something a test does.
+  -->
+  <ItemGroup>
+    <Content Include="Fixtures\InteropSurface\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

@@ -55,6 +55,7 @@ from swreview.agent.providers import (
     EventCallback,
     ProviderName,
     ProviderTool,
+    TokenUsage,
     ToolCallRequest,
     ToolCallResult,
     ToolSet,
@@ -62,6 +63,7 @@ from swreview.agent.providers import (
     call_tool,
     error_body,
     register,
+    usage_body,
 )
 from swreview.agent.providers.schema import strictify
 from swreview.agent.settings import output_ceiling, redact
@@ -74,6 +76,7 @@ __all__ = [
     "OpenAIProvider",
     "OpenAIProviderError",
     "tool_param",
+    "usage_of",
 ]
 
 EFFORT_PARAM = "reasoning.effort"
@@ -152,6 +155,45 @@ def tool_param(tool: ProviderTool | Any) -> dict[str, Any]:
     }
 
 
+def usage_of(response: Response, *, latency_s: float) -> TokenUsage:
+    """What one round trip cost, from the `Response` the API finished on.
+
+    Streaming and non-streaming read the same object: `ResponseCompletedEvent.response`
+    and `ResponseIncompleteEvent.response` are both a `Response` (VERIFIED), which is
+    exactly what `_respond` already captures as `final`, so no `stream_options` and no
+    `include` flag is needed and there is no usage-only stream event to subscribe to.
+
+    Every field is read with `getattr(..., None)` rather than by attribute access, because
+    `Response.usage` is `Optional[ResponseUsage]` and because the SDK builds these models
+    with `BaseModel.construct`, which leaves a field the server omitted at its default -
+    `None` for a required field. `input_tokens_details` can therefore be `None` on a real
+    response, and a newly added sub-count such as `cache_write_tokens` can be missing from
+    an endpoint that does not report it yet. Those cases map to `None` and never to `0`:
+    "the endpoint did not say" is not "it said zero" (Principle I).
+
+    `tool_result_input_tokens` is `None` because OpenAI does not report it separately -
+    the tokens our tool results cost are already inside `input_tokens`. Gemini reports the
+    same quantity as its own field, and writing `0` here would make the two look
+    comparable on a column only one of them has.
+
+    `reasoning_tokens` is a **subset of** `output_tokens` here (the opposite of Gemini,
+    where thoughts are a separate addend of the total), so the two are never summed.
+    """
+    usage = getattr(response, "usage", None)
+    input_details = getattr(usage, "input_tokens_details", None)
+    output_details = getattr(usage, "output_tokens_details", None)
+    return TokenUsage(
+        input_tokens=getattr(usage, "input_tokens", None),
+        cached_input_tokens=getattr(input_details, "cached_tokens", None),
+        cache_write_tokens=getattr(input_details, "cache_write_tokens", None),
+        output_tokens=getattr(usage, "output_tokens", None),
+        reasoning_tokens=getattr(output_details, "reasoning_tokens", None),
+        tool_result_input_tokens=None,
+        total_tokens=getattr(usage, "total_tokens", None),
+        latency_s=latency_s,
+    )
+
+
 class OpenAIProvider:
     """One turn on the Responses API. `providers.get("openai")` returns this class."""
 
@@ -196,6 +238,14 @@ class OpenAIProvider:
         self._api_key = api_key if api_key else str(getattr(self._client, "api_key", "") or "")
         self._clock = clock
         self._step_index = 0
+        self.round_usage: list[TokenUsage] = []
+        """This turn's round trips, one record each, in the order they were made.
+
+        Reset by `run()`, because an adapter sees one turn - the convention `step_index`
+        already follows. It is a per-round record and not a field on `TurnResult` because
+        a turn that raises on its sixth round never builds a `TurnResult`, and the five
+        rounds it already paid for are the ones worth the most.
+        """
 
     # --- effort -----------------------------------------------------------------------
 
@@ -236,14 +286,34 @@ class OpenAIProvider:
         history = [dict(message) for message in messages]
         texts: list[str] = []
         steps = 0
+        self.round_usage = []
 
         while True:
+            started = self._clock()
             response = self._respond(
                 system=system,
                 history=history,
                 tool_params=tool_params,
                 effort_value=str(mapping.provider_value),
                 on_event=on_event,
+            )
+            # Per round, not per turn: `_respond` is one HTTP request and this loop runs
+            # once per request, so a turn with six serial tool calls records seven of
+            # these. The clock is read around the request alone, so the local time the
+            # tool calls take is outside the latency this records.
+            recorded = usage_of(response, latency_s=max(self._clock() - started, 0.0))
+            self.round_usage.append(recorded)
+            # Straight onto the stream, before this round's tool calls are dispatched. The
+            # sink appends and closes per event, so a round that is paid for is on disk
+            # even if the next one raises and no `TurnResult` is ever built.
+            on_event(
+                "usage",
+                usage_body(
+                    recorded,
+                    round_index=len(self.round_usage) - 1,
+                    provider=self.name,
+                    model=self.model,
+                ),
             )
             raw_output = [
                 item.model_dump(mode="json", exclude_unset=True) for item in response.output

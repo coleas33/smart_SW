@@ -30,7 +30,11 @@ A pattern is not a folder, and its seed features are not a coupled pair.
 A feature's derived subfolder is the id of the nearest enclosing folder, or null when that
 folder is a group folder or there is none: a group folder is a group, never a subfolder,
 so the coupled-pair exception in `rms.detail.no_internal_references` can compare subfolder
-ids without accidentally pairing everything in Detail.
+ids without accidentally pairing everything in Detail. The enclosing folder itself is
+published unfiltered as `enclosing_folder_by_feature_id`, because "who are this group
+folder's direct members" is a question only this walk can answer and feature 004's folder
+plan asks it; deriving it a second time from `folder_id` alone would answer `None` for
+every row of a flat document.
 """
 
 from __future__ import annotations
@@ -49,9 +53,10 @@ __all__ = ["GroupAssignment", "assign_groups"]
 class GroupAssignment:
     """Where the features of one document sit (`data-model.md` section 2).
 
-    Both maps carry an entry for every feature - folders and end-tag markers included, so a
-    rule may look any feature up - and `None` means "no group" / "no subfolder", which is
-    an answer, not a gap: a feature before the first group folder genuinely has no group.
+    All three maps carry an entry for every feature - folders and end-tag markers included,
+    so a rule may look any feature up - and `None` means "no group" / "no subfolder" / "no
+    enclosing folder", which is an answer, not a gap: a feature before the first group
+    folder genuinely has no group.
     """
 
     by_feature_id: dict[str, str | None]
@@ -59,6 +64,17 @@ class GroupAssignment:
 
     subfolder_by_feature_id: dict[str, str | None]
     """Feature id to the id of the non-group folder holding it; `None` when there is none."""
+
+    enclosing_folder_by_feature_id: dict[str, str | None]
+    """Feature id to the id of the nearest enclosing folder, **group folders included**;
+    `None` when the row sits at the top of the tree.
+
+    The same walk `subfolder_by_feature_id` is derived from, before the group folders are
+    nulled out of it. A group is not a subfolder, so `subfolder_by_feature_id` cannot say
+    who a group folder's own direct members are; that question has one answer and this is
+    it, so feature 004's folder plan reads it here rather than walking `folder_id` a
+    second time - a walk that returns `None` for every row of a flat document and would
+    report every correct group folder as holding nothing."""
 
     groups_seen: list[tuple[str, str]]
     """Every group folder in traversal order, as `(group name, folder feature id)`."""
@@ -85,6 +101,7 @@ def assign_groups(features: Sequence[Feature], table: RmsTypeTable) -> GroupAssi
 
     by_feature_id: dict[str, str | None] = {}
     subfolder_by_feature_id: dict[str, str | None] = {}
+    enclosing_folder_by_feature_id: dict[str, str | None] = {}
     groups_seen: list[tuple[str, str]] = []
     duplicates: list[tuple[str, str]] = []
     open_folders: list[Feature] = []  # flat shape only; the nested shape reads folder_id
@@ -99,6 +116,9 @@ def assign_groups(features: Sequence[Feature], table: RmsTypeTable) -> GroupAssi
             enclosing = _enclosing_folder(row, rows_by_id, table)
         else:
             enclosing = open_folders[-1] if open_folders else None
+        enclosing_folder_by_feature_id[row.id] = (
+            None if enclosing is None else enclosing.id
+        )
         subfolder_by_feature_id[row.id] = (
             None
             if enclosing is None or enclosing.name in group_names
@@ -120,6 +140,7 @@ def assign_groups(features: Sequence[Feature], table: RmsTypeTable) -> GroupAssi
     return GroupAssignment(
         by_feature_id=by_feature_id,
         subfolder_by_feature_id=subfolder_by_feature_id,
+        enclosing_folder_by_feature_id=enclosing_folder_by_feature_id,
         groups_seen=groups_seen,
         duplicates=duplicates,
         order_ok=all(before < after for before, after in pairwise(order)),

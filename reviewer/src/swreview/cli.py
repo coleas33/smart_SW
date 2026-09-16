@@ -51,7 +51,7 @@ from pydantic import ValidationError
 from pydantic_core import to_jsonable_python
 
 from swreview.agent import providers
-from swreview.agent.checklist import load_checklist
+from swreview.agent.checklist import CHECKLIST_FILE, load_checklist
 from swreview.agent.providers import AgentProvider, EffortLevel, ProviderName
 from swreview.agent.providers.fake import ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import (
@@ -63,12 +63,32 @@ from swreview.agent.runner import (
 from swreview.agent.settings import (
     DEFAULT_EFFORT,
     DEFAULT_PROVIDER,
+    LEVER_NAMES,
+    NO_STUDY,
+    EfficiencySettings,
     ProviderSettings,
+    check_study_arm,
     configure_logging_redaction,
+    efficiency_from_levers,
     output_ceiling,
     redact,
 )
-from swreview.benchmark.runner import run_benchmark
+from swreview.benchmark.compare import (
+    carry_sign_offs,
+    committed_sign_off_sources,
+    compare_runs,
+    refused_decisions,
+    render_ledger_md,
+    splice_ledger,
+    write_ledger,
+)
+from swreview.benchmark.runner import (
+    RunProvenance,
+    current_commit,
+    run_benchmark,
+    sha256_of,
+    write_provenance,
+)
 from swreview.benchmark.scorecard import render_scorecard_md, score_run
 from swreview.benchmark.sets import BenchmarkSet, load_set
 from swreview.benchmark.timing import record_timing
@@ -84,6 +104,13 @@ from swreview.ingest.package_builder import build_package
 from swreview.ir.loader import AnswerKeyAccessError, load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
 from swreview.ir.summary import summarize
+from swreview.remodel.feasibility import REBUILD_REASONS
+from swreview.remodel.plan import (
+    RemodelPlan,
+    non_contiguous_groups,
+    part_document_ids,
+    plan_reorganize,
+)
 from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition, find_finding
 from swreview.report.markdown import render_report
 from swreview.report.session import CoverageBucket, ReviewSession, load_session, save_session
@@ -116,11 +143,16 @@ rms_app = typer.Typer(
     no_args_is_help=True,
     help="Resilient Modeling helpers that grade nothing: calibration and plans.",
 )
+remodel_app = typer.Typer(
+    no_args_is_help=True,
+    help="The resilient re-modeler: plan the reorganize stage without SOLIDWORKS.",
+)
 app.add_typer(check_app, name="check")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(exceptions_app, name="exceptions")
 app.add_typer(chat_app, name="chat")
 app.add_typer(rms_app, name="rms")
+app.add_typer(remodel_app, name="remodel")
 
 FAKE_REVIEW_SCRIPT: tuple[ScriptedTurn, ...] = (
     ScriptedTurn(
@@ -194,6 +226,16 @@ ModelOption = Annotated[
 ]
 EffortOption = Annotated[Effort, typer.Option("--effort", help="Reasoning effort.")]
 PackageOption = Annotated[Path, typer.Option("--package", help="Directory holding package.json.")]
+LeverOption = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--lever",
+        help=(
+            "Turn an efficiency lever on for this run; repeatable. One of: "
+            + ", ".join(LEVER_NAMES)
+        ),
+    ),
+]
 
 
 # --- the provider one run talks to -----------------------------------------------
@@ -239,6 +281,34 @@ def _provider_settings(
     """
     effort_level: EffortLevel = effort.value  # type: ignore[assignment]
     return ProviderSettings.from_env(provider=provider, model=model, effort=effort_level)
+
+
+def _efficiency(
+    levers: Sequence[str] | None,
+    *,
+    provider: ProviderName,
+    study: str = NO_STUDY,
+    arm: str | None = None,
+    allow_workstation_levers: bool = True,
+) -> EfficiencySettings:
+    """What `--lever`, `--study` and `--arm` resolve to for one run, or a usage error.
+
+    Every refusal `agent/settings.py` states is about what was typed on this command line,
+    so each is a usage error - exit 2 - and each happens here, before an adapter is built
+    or a package is read. That is the whole reason the study refusals live on the command
+    that chooses the lever rather than on `benchmark compare`: a refusal after six paid
+    runs is worthless (contracts/ab-harness.md section 2).
+    """
+    try:
+        efficiency = efficiency_from_levers(
+            levers or (),
+            provider=provider,
+            allow_workstation_levers=allow_workstation_levers,
+        )
+        check_study_arm(study=study, arm=arm, efficiency=efficiency)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    return efficiency
 
 
 @contextmanager
@@ -437,9 +507,11 @@ def review(
     max_steps: Annotated[
         int, typer.Option("--max-steps", help="Tool-call budget.")
     ] = DEFAULT_MAX_STEPS,
+    lever: LeverOption = None,
     json_output: JsonFlag = False,
 ) -> None:
     """Run the agent loop over a package; write session.json and report.md."""
+    efficiency = _efficiency(lever, provider=provider)
     with _errors_as_exit_1():
         settings = _provider_settings(provider, model, effort)
         with _redacting(settings) as redactor:
@@ -451,6 +523,7 @@ def review(
                 effort=settings.effort,
                 key_source=settings.key_source,
                 max_steps=max_steps,
+                efficiency=efficiency,
                 fail_tool=tuple(fail_tool or ()),
                 bridge=bridge,
                 redact=redactor,
@@ -956,6 +1029,250 @@ def rms_suppress_plan_command(
     _emit(payload, lines, json_output)
 
 
+# --- remodel plan ----------------------------------------------------------------
+
+
+def _remodel_refusals(plan: RemodelPlan) -> list[dict[str, str]]:
+    """Every reason this part is refused, never only the first (`research.md` R4.1).
+
+    Three sources, one vocabulary: the scope gate's own codes, the folder plan's
+    `rms_named_folder_wrong_members`, and a dependency cycle, which has no legal order and
+    is therefore a refusal rather than a plan with nothing in it.
+    """
+    refusals = [
+        {"code": refusal.code, "signal": refusal.signal, "message": refusal.message}
+        for refusal in plan.scope.refusals
+        if refusal.code != "signal_unresolved"
+    ]
+    refusals += [
+        {
+            "code": refusal.reason,
+            "signal": refusal.name,
+            "message": (
+                f"the folder {refusal.name} ({refusal.existing_folder_id}) holds "
+                f"{len(refusal.actual_member_ids)} feature(s) where the method puts "
+                f"{len(refusal.expected_member_ids)}; this version has no dissolve path, "
+                "so the part is refused before anything is copied"
+            ),
+        }
+        for refusal in plan.folders.refusals
+    ]
+    if plan.order.cycle is not None:
+        refusals.append(
+            {
+                "code": "cycle",
+                "signal": "parent_ids",
+                "message": (
+                    "the dependency graph has a cycle through "
+                    f"{', '.join(plan.order.cycle)}, so no legal order exists"
+                ),
+            }
+        )
+    return refusals
+
+
+def _remodel_row(plan: RemodelPlan, document: Any, table: Any) -> dict[str, Any]:
+    """One part's dry-run numbers, as `plan.md` point 10 asks for them.
+
+    "Reaching its target group" is counted as: a content feature the planner resolved a
+    group for, that no dependency edge pins away from the position the method wants, and
+    that is on no rebuild list. Each of the three exclusions is a reason the report already
+    prints, so the count can always be taken apart again - which is what makes it a
+    measurement rather than a score.
+    """
+    pinned = {pin.feature_id for pin in plan.pins}
+    rebuilt = {entry.feature_id for entry in plan.rebuild}
+    content = [item for item in plan.targets if item.state != "not_content"]
+    reaching = [
+        item.feature_id
+        for item in content
+        if item.state == "resolved"
+        and item.feature_id not in pinned
+        and item.feature_id not in rebuilt
+    ]
+    by_reason = {reason: 0 for reason in REBUILD_REASONS}
+    for entry in plan.rebuild:
+        by_reason[entry.reason] += 1
+
+    return {
+        "document_id": plan.document_id,
+        "file_name": document.file_name,
+        "state": plan.state,
+        "configuration": plan.configuration,
+        "content_features": len(content),
+        "reaching_target_group": len(reaching),
+        "reorganizable_fraction": {
+            "reaching": len(reaching),
+            "of": len(content),
+            "value": (len(reaching) / len(content)) if content else None,
+            "measurement": (
+                "content features that reach their target group: resolved, unpinned and "
+                "not on the rebuild list. Null when this document has no content feature, "
+                "because a fraction of nothing is not 1.0"
+            ),
+        },
+        "move_count": plan.order.move_count,
+        "changes": len(plan.changes),
+        "renames": len(plan.renames),
+        "pins": [
+            {
+                "feature_id": pin.feature_id,
+                "desired_index": pin.desired_index,
+                "achievable_index": pin.achievable_index,
+                "blocking_edge": {
+                    "parent_id": pin.blocking_edge.parent_id,
+                    "child_id": pin.blocking_edge.child_id,
+                },
+                "reason": pin.reason,
+            }
+            for pin in plan.pins
+        ],
+        "non_contiguous": [
+            {
+                "group": item.item,
+                "interloper_feature_ids": list(item.feature_ids),
+                "reason": item.reason,
+            }
+            for item in non_contiguous_groups(plan, table)
+        ],
+        "rebuild": [
+            {
+                "feature_id": entry.feature_id,
+                "name": entry.name,
+                "reason": entry.reason,
+                "detail": entry.detail,
+                "blocking_edge": (
+                    None
+                    if entry.blocking_edge is None
+                    else {
+                        "parent_id": entry.blocking_edge.parent_id,
+                        "child_id": entry.blocking_edge.child_id,
+                    }
+                ),
+            }
+            for entry in plan.rebuild
+        ],
+        "rebuild_by_reason": by_reason,
+        "folders": {
+            "create": len(
+                [action for action in plan.folders.actions if action.status == "planned"]
+            ),
+            "no_op": len(
+                [action for action in plan.folders.actions if action.status == "no_op"]
+            ),
+        },
+        "scope": {
+            "verdict": plan.scope.verdict,
+            "notes": list(plan.scope.notes),
+        },
+        "refusals": _remodel_refusals(plan),
+        "coverage": [
+            {"item": item.item, "reason": item.reason, "feature_ids": list(item.feature_ids)}
+            for item in plan.coverage
+        ],
+    }
+
+
+def _remodel_lines(row: dict[str, Any]) -> list[str]:
+    """One part's numbers as the engineer reads them, the fraction with its denominator."""
+    fraction = row["reorganizable_fraction"]
+    measured = "n/a" if fraction["value"] is None else f"{fraction['value']:.3f}"
+    lines = [
+        f"{row['document_id']} {row['file_name']}: {row['state']}",
+        f"  {fraction['reaching']} of {fraction['of']} content features reach their "
+        f"target group ({measured})",
+        f"  {row['move_count']} move(s), {row['renames']} rename(s), "
+        f"{row['folders']['create']} folder(s) to create, {row['changes']} change(s)",
+        f"  {len(row['pins'])} pinned",
+    ]
+    lines += [
+        f"    {pin['feature_id']}: {pin['reason']} "
+        f"({pin['blocking_edge']['parent_id']} -> {pin['blocking_edge']['child_id']})"
+        for pin in row["pins"]
+    ]
+    lines += [
+        f"  non-contiguous {item['group']}: {item['reason']}"
+        for item in row["non_contiguous"]
+    ]
+    lines.append(
+        "  rebuild "
+        + str(len(row["rebuild"]))
+        + ": "
+        + (
+            ", ".join(
+                f"{reason} x{count}"
+                for reason, count in row["rebuild_by_reason"].items()
+                if count
+            )
+            or "none"
+        )
+    )
+    lines += [
+        f"    {entry['name']}: {entry['reason']} - {entry['detail']}"
+        for entry in row["rebuild"]
+    ]
+    lines += [
+        f"  refused {refusal['code']} ({refusal['signal']}): {refusal['message']}"
+        for refusal in row["refusals"]
+    ]
+    return lines
+
+
+@remodel_app.command("plan")
+def remodel_plan_command(
+    package: PackageOption,
+    document: Annotated[
+        list[str] | None,
+        typer.Option("--document", help="Part document id to plan; repeatable."),
+    ] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Plan the reorganize stage for a package's part documents, with no SOLIDWORKS.
+
+    The dry run, and the deliverable Phase 0 decides on: per part it prints how many
+    content features reach their target group, how many are pinned and by which dependency
+    edge, which groups come out non-contiguous and what splits them, and the rebuild list
+    with one reason each from the closed taxonomy. The fraction is printed with its
+    numerator and its denominator, because stage 1's output is a partition with reasons and
+    a bare percentage would read as a score.
+
+    It reads the package and writes nothing - no plan file, no session, no report - and
+    constructs no provider: every decision here comes from `rms_types.yaml` and the
+    dependency graph, so the same package plans the same way on a machine with no key.
+
+    The scope gate is **unresolved** on every dry run and says so: multibody, weldment,
+    sheet metal, mesh and 3D Interconnect are COM readings `remodel.probe_scope` takes from
+    the engineer's open document, and a package carries none of them. An unread signal is
+    never a pass.
+
+    Exit 1 when a part is refused - a scope signal that refuses it, an existing group-named
+    folder holding the wrong members, or a dependency cycle - and the output names every
+    reason, not the first. The numbers are printed first: a refused part is still a part
+    the owner has numbers for.
+    """
+    with _errors_as_exit_1():
+        package_ir = load_package(package).package
+        table = load_table()
+        document_ids = part_document_ids(package_ir, list(document) if document else None)
+        documents = {row.document_id: row for row in package_ir.documents}
+        rows = [
+            _remodel_row(
+                plan_reorganize(package_ir, document_id=document_id, table=table),
+                documents[document_id],
+                table,
+            )
+            for document_id in document_ids
+        ]
+
+    payload = {"package": str(Path(package).resolve()), "parts": rows}
+    lines: list[str] = []
+    for row in rows:
+        lines += _remodel_lines(row)
+    _emit(payload, lines, json_output)
+    if any(row["state"] == "failed" for row in rows):
+        raise typer.Exit(1)
+
+
 # --- exceptions accept | list | accept-rms ---------------------------------------
 
 
@@ -1339,7 +1656,13 @@ def exceptions_list(
 
 
 def _review_fn(
-    package_dir: Path, session_out_dir: Path, *, provider: str, model: str, effort: str
+    package_dir: Path,
+    session_out_dir: Path,
+    *,
+    provider: str,
+    model: str,
+    effort: str,
+    efficiency: EfficiencySettings | None = None,
 ) -> Any:
     """One package of a benchmark set, reviewed through the same hooks as `review`.
 
@@ -1359,8 +1682,31 @@ def _review_fn(
             model=settings.model,
             effort=settings.effort,
             key_source=settings.key_source,
+            efficiency=efficiency,
             redact=redactor,
         )
+
+
+def _refuse_a_set_too_small_to_gate(benchmark_set: BenchmarkSet, override: bool) -> None:
+    """Precondition P-3: a study gated on a set with no held-out package decides nothing.
+
+    One package with two known defects and no geometry means one lost defect is a 50
+    percent regression and `recall` never computes at all (`scorecard.py:200-204`), so
+    this is a refusal rather than a warning. `--i-know-the-set-is-too-small` is accepted
+    for a smoke test and is recorded in the run's provenance, so the row it produces can
+    never be read as a gate.
+
+    It applies to a run that declares itself part of a study - one that typed `--lever`,
+    `--study` or `--arm`. A plain `benchmark run` over a small set is a smoke test and is
+    not held to a gate's precondition; it produces no arm and gates nothing.
+    """
+    if override or any(ref.held_out for ref in benchmark_set.packages):
+        return
+    raise typer.BadParameter(
+        f"benchmark set {benchmark_set.name!r} holds no held_out: true package, so recall "
+        f"never computes and this study can gate nothing; pass "
+        f"--i-know-the-set-is-too-small for a smoke test, which is recorded with the run"
+    )
 
 
 @benchmark_app.command("run")
@@ -1372,12 +1718,43 @@ def benchmark_run(
     provider: ProviderOption = DEFAULT_PROVIDER,
     model: ModelOption = None,
     effort: EffortOption = DEFAULT_EFFORT_CHOICE,
+    lever: LeverOption = None,
+    study: Annotated[
+        str,
+        typer.Option("--study", help="The lever this run is an arm of, or none."),
+    ] = NO_STUDY,
+    arm: Annotated[
+        str | None,
+        typer.Option("--arm", help="Which arm of the study this run is: off, on or baseline."),
+    ] = None,
+    rep: Annotated[
+        int | None,
+        typer.Option("--rep", min=1, help="Which repetition of this arm the run is."),
+    ] = None,
+    set_too_small_override: Annotated[
+        bool,
+        typer.Option(
+            "--i-know-the-set-is-too-small",
+            help="Run a study over a set with no held-out package; recorded with the run.",
+        ),
+    ] = False,
     json_output: JsonFlag = False,
 ) -> None:
     """Review every package in the set, with answer keys unreadable."""
+    declares_a_study = bool(lever) or study != NO_STUDY or arm is not None
+    efficiency = _efficiency(
+        lever,
+        provider=provider,
+        study=study,
+        arm=arm,
+        allow_workstation_levers=False,
+    )
     with _errors_as_exit_1():
         benchmark_set = load_set(set_file)
+        if declares_a_study:
+            _refuse_a_set_too_small_to_gate(benchmark_set, set_too_small_override)
         settings = _provider_settings(provider, model, effort)
+        started_at = datetime.now(UTC)
         with _redacting(settings):
             package_dirs = run_benchmark(
                 set_file,
@@ -1386,15 +1763,35 @@ def benchmark_run(
                 model=settings.model,
                 effort=settings.effort,
                 review_fn=_review_fn,
+                efficiency=efficiency,
             )
         saved_set = Path(out).resolve() / SAVED_SET_FILE
         saved_set.write_text(benchmark_set.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        provenance_file = write_provenance(
+            Path(out).resolve(),
+            RunProvenance(
+                commit=current_commit(),
+                lever=study,
+                arm=arm,
+                rep=rep,
+                provider=settings.provider.value,
+                model=settings.model,
+                effort=settings.effort,
+                max_steps=DEFAULT_MAX_STEPS,
+                checklist_digest=sha256_of(CHECKLIST_FILE),
+                set_digest=sha256_of(saved_set),
+                started_at=started_at,
+                set_too_small_override=set_too_small_override,
+                efficiency=efficiency,
+            ),
+        )
 
     payload = {
         "set": str(Path(set_file).resolve()),
         "benchmark_set": benchmark_set.name,
         "out_dir": str(Path(out).resolve()),
         "saved_set_file": str(saved_set),
+        "provenance_file": str(provenance_file),
         "provider": settings.provider.value,
         "model": settings.model,
         "packages": [
@@ -1498,6 +1895,78 @@ def benchmark_time(
         f"net saved: {timing.net_saved_minutes}",
     ]
     _emit(payload, lines, json_output)
+
+
+@benchmark_app.command("compare")
+def benchmark_compare(
+    run_dirs: Annotated[
+        list[Path] | None,
+        typer.Argument(
+            help="The run directories of one or more studies; none renders an empty ledger."
+        ),
+    ] = None,
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help="Write ledger.json and ledger.md into this directory."),
+    ] = None,
+    into: Annotated[
+        Path | None,
+        typer.Option("--into", help="Markdown file whose ledger section is regenerated."),
+    ] = None,
+    check: Annotated[
+        bool,
+        typer.Option("--check", help="With --into: verify it is current, write nothing."),
+    ] = False,
+    json_output: JsonFlag = False,
+) -> None:
+    """Render the results ledger from scored run directories; contacts no provider.
+
+    Two exits are not the same thing. A **refused run** - two records that disagree, a
+    session with no `efficiency`, two runs of one study at different commits - stops the
+    whole ledger, because such a run may not be placed in a comparison at all. A
+    **refused decision row** (FR-029, SC-011) still writes the ledger with the raw rows
+    in it and exits 1, because the runs are real and only the gate is unreadable.
+
+    The owner's `Owner signed off` and `Owner signed off at` cells are read back off the
+    ledger this invocation is about to overwrite and re-rendered unchanged, so a
+    hand-written sign-off survives regeneration and does not read as drift (FR-027).
+    """
+    with _errors_as_exit_1():
+        ledger = carry_sign_offs(
+            compare_runs(run_dirs or []), *committed_sign_off_sources(out, into)
+        )
+        rendered = render_ledger_md(ledger)
+        written: list[str] = []
+        if out is not None:
+            written += [str(path) for path in write_ledger(ledger, out)]
+        drifted = False
+        if into is not None:
+            current = Path(into).read_text(encoding="utf-8")
+            spliced = splice_ledger(current, rendered)
+            if check:
+                drifted = spliced != current
+            elif spliced != current:
+                Path(into).write_text(spliced, encoding="utf-8")
+                written.append(str(Path(into).resolve()))
+
+    refused = refused_decisions(ledger)
+    payload = {
+        "runs": len(ledger.runs),
+        "levers": len(ledger.levers),
+        "written": written,
+        "refused_decisions": [
+            {"lever": row.lever, "reason": row.decision_reason} for row in refused
+        ],
+        "drifted": drifted,
+    }
+    lines = [f"compared {len(ledger.runs)} run rows over {len(ledger.levers)} studies"]
+    lines += [f"wrote {path}" for path in written]
+    lines += [f"no decision for {row.lever}: {row.decision_reason}" for row in refused]
+    if drifted:
+        lines.append(f"{into} is out of date: re-run without --check to regenerate it")
+    _emit(payload, lines, json_output)
+    if refused or drifted:
+        raise typer.Exit(1)
 
 
 # --- chat serve ------------------------------------------------------------------

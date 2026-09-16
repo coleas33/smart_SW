@@ -326,25 +326,10 @@ public sealed class EquationDumper : IEquationSource
             DocumentId = documentId,
             Index = index,
             Text = text!,
-            Lhs = Lhs(text!),
+            Lhs = Equation.LhsOf(text!),
             IsGlobal = isGlobal,
             Value = value,
         };
     }
 
-    /// <summary>
-    /// Everything left of the FIRST '=', with quotes stripped and the whitespace trimmed:
-    /// <c>"D1@Sketch1" = "Wall" * 2</c> becomes <c>D1@Sketch1</c>. It is evidence and a
-    /// rule input, never an identity - <c>is_global</c> comes off the manager's own flag.
-    ///
-    /// A row with no '=' is its own left-hand side rather than an empty string: the manager
-    /// also hands back rows that are not assignments, and dropping their text would hide
-    /// what an engineer reading the finding needs to see.
-    /// </summary>
-    private static string Lhs(string text)
-    {
-        int split = text.IndexOf('=');
-        string left = split < 0 ? text : text.Substring(0, split);
-        return left.Replace("\"", string.Empty).Trim();
-    }
 }
