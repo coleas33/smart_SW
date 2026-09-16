@@ -99,19 +99,19 @@ public sealed class MateDumper : IMateSource
     {
         SwGate gate = _session.Gate;
         int type = gate.Call("Mate.Type", () => mate.Type);
+        string id = scope.MateIds.Next();
 
         var record = new IrMate
         {
-            Id = scope.MateIds.Next(),
+            Id = id,
             PersistRef = string.Empty,
             PersistRefScope = scope.DocumentId(
                 gate.Call("GetPathName", () => _session.Document.GetPathName())),
             Type = MateTypeName(type),
             Alignment = ReadAlignment(gate.Call("Mate.Alignment", () => mate.Alignment)),
 
-            // IFeature.IsSuppressed is not exposed on IMate2; a suppressed mate sits in the
-            // tree with no solved entities, which the entity list below makes visible.
-            Suppressed = false,
+            // Suppression is not exposed on IMate2, but the mate FEATURE answers for it.
+            Suppressed = ReadSuppressed(feature, featureName, id, scope),
         };
 
         ScopedPersistRef? reference = _refs.TryGet(_session.Document, feature);
@@ -146,6 +146,49 @@ public sealed class MateDumper : IMateSource
         }
 
         return record;
+    }
+
+    /// <summary>
+    /// The mate feature's <c>IsSuppressed2</c> for the configuration being dumped. The chain
+    /// depth rule must not walk a suppressed mate as an edge.
+    ///
+    /// It answers with a VARIANT - one flag per configuration asked about - so the shape is
+    /// unwrapped by <see cref="SuppressionAnswer.FirstFlag"/> rather than cast blindly. A read that failed or answered with something
+    /// else is <c>false</c> plus a Gap with entity kind <c>mate_suppression</c>, and the rule
+    /// reports that mate unresolved instead of trusting the false (Principle I).
+    /// </summary>
+    private bool ReadSuppressed(IFeature feature, string featureName, string mateId, DumpScope scope)
+    {
+        bool? suppressed = null;
+
+        bool read = scope.Gaps.TryStep(
+            "mate_suppression", mateId, $"read IsSuppressed2 for mate '{featureName}'", () =>
+            {
+                object? answer = _session.Gate.Call(
+                    "IsSuppressed2",
+                    () => feature.IsSuppressed2((int)swInConfigurationOpts_e.swThisConfiguration, null));
+                suppressed = SuppressionAnswer.FirstFlag(answer);
+            });
+
+        if (!read)
+        {
+            // TryStep already recorded the failure under the same entity kind.
+            return false;
+        }
+
+        if (suppressed == null)
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                "mate_suppression",
+                mateId,
+                $"Mate '{featureName}' gave no suppression state, so it is recorded as "
+                + "unsuppressed and any check that walks it is unresolved.",
+                null);
+            return false;
+        }
+
+        return suppressed.Value;
     }
 
     private void ReadEntities(IMate2 mate, IrMate record, string featureName, DumpScope scope)

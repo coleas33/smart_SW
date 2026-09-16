@@ -4,7 +4,7 @@
 |----------|------|---------------------|
 | IR 1.1.0 additions (`features`, `equations`, `rms_suppress_test`, `ComponentInstance.constrained_status_raw`, new gap kinds) | feature 001 `contracts/ir.schema.json` (minor bump; `$defs` added: `Feature`, `SketchInfo`, `FilletInfo`, `Equation`, `SuppressTestRun`, `SuppressTestRow`) | C# extractor and `suppress-test` → Python rules and tools |
 | Rule catalogue, outcome mapping, group semantics | `rules.md` | Python `checks/rms/` → findings, coverage, docs |
-| Type tables | `rms-types.yaml` is the **draft**; T001 moves it to `reviewer/src/swreview/checks/rms_types.yaml`, which is then the single normative file (this directory keeps no copy) | Data → `RmsTypeTable` |
+| Type tables | `reviewer/src/swreview/checks/rms_types.yaml` (the single normative file; this directory keeps no copy) | Data → `RmsTypeTable` |
 | Exceptions (waivers) | feature 001 `exceptions.json` via `ReviewException.fingerprint_kind`; the checker's flat waiver file is an import input described in `cli.md` | Engineer → `ExceptionStore` → Python rules |
 | Tools | `tools.md` | Python tool layer → model; query tools → MCP and the terminal profile |
 | Command lines | `cli.md` | Engineer → `swreview check rms`, `swreview rms types`, `swreview exceptions accept-rms`, `swreview-extract dump --features/--equations`, `probe rms`, `suppress-test` |

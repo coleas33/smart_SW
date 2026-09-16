@@ -185,3 +185,25 @@ public enum GapKind
     ToolError,
     NoText,
 }
+
+/// <summary>SuppressTestRow.outcome (schema 1.1.0).</summary>
+public enum SuppressTestOutcome
+{
+    /// <summary>Suppressed, rebuilt, and no new rebuild error above the baseline.</summary>
+    Ok,
+
+    /// <summary>The rebuild reported more wrong than the baseline did.</summary>
+    RebuildErrors,
+
+    /// <summary>The feature was already suppressed before the run, so nothing was proved.</summary>
+    AlreadySuppressed,
+
+    /// <summary>The suppression did not take effect.</summary>
+    NotApplied,
+
+    /// <summary>Beyond --limit; planned but never attempted.</summary>
+    Truncated,
+
+    /// <summary>The run stopped before this feature finished.</summary>
+    Aborted,
+}

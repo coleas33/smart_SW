@@ -94,7 +94,12 @@ def check_interference_group(group_key: str) -> ToolResult:
     exception = (
         None
         if store is None
-        else store.match(context.ir, selected.component_ids, selected.configuration)
+        else store.match(
+            context.ir,
+            selected.component_ids,
+            selected.configuration,
+            interference_check.CHECK,
+        )
     )
     recorded = record_result(
         context,

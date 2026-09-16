@@ -33,7 +33,7 @@ from pydantic import (
     model_validator,
 )
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 SUPPORTED_SCHEMA_MAJOR = 1
 SCHEMA_VERSION_PATTERN = r"^1\.[0-9]+\.[0-9]+$"
 
@@ -254,6 +254,90 @@ class ComponentInstance(IRModel):
     full_path: str = Field(
         description="IComponent2.Name2 full instance path, unique in the assembly"
     )
+    constrained_status_raw: int | None = Field(
+        default=None,
+        description="IComponent2.GetConstrainedStatus verbatim; null (plus a "
+        "component_constrained_status gap) when unreadable. Named in Python, not here.",
+    )
+
+
+class SketchInfo(IRModel):
+    """What the extractor reads off a feature's sketch (schema 1.1.0).
+
+    `raw_status` is `ISketch.GetConstrainedStatus` verbatim: the extractor classifies
+    nothing, so the name behind the number is Python's job (`RmsTypeTable`).
+    """
+
+    raw_status: int | None = Field(
+        description="ISketch.GetConstrainedStatus verbatim; null plus a sketch_status gap"
+    )
+    consumer_ids: list[str] | None = Field(
+        description="Feature ids that consume this sketch (GetChildren); "
+        "null plus a feature_children gap when unavailable, [] when there are none"
+    )
+
+
+class FilletInfo(IRModel):
+    """The default radius of a simple fillet feature (schema 1.1.0)."""
+
+    default_radius: Quantity | None = Field(
+        description="ISimpleFilletFeatureData2.DefaultRadius in meters; null plus a "
+        "fillet_radius gap when unreadable or when the fillet is variable"
+    )
+
+
+class Feature(IRModel):
+    """One node of a part document's feature tree, in traversal order (schema 1.1.0).
+
+    The extractor decides nothing about folders, end tags, groups or classes: those are
+    derived in Python from `type_name` and `name` against `checks/rms_types.yaml`.
+    """
+
+    id: Annotated[str, StringConstraints(pattern=r"^feat:[0-9]{4,}$")]
+    persist_ref: PersistRef
+    persist_ref_scope: str = Field(
+        description="document_id whose IModelDocExtension produced persist_ref; "
+        "resolve against that document"
+    )
+    document_id: str
+    configuration: str = Field(
+        description="The configuration the tree was read in (the document's active one)"
+    )
+    name: str
+    type_name: str = Field(description="GetTypeName2 verbatim; may be a name no table knows")
+    description: str | None = Field(
+        description="IFeature.Description; null when unreadable (gap), '' when blank"
+    )
+    index: int = Field(description="Flat order within the document's tree, folders inline")
+    depth: int = Field(description="0 top level, 1 inside a folder, from sub-features only")
+    folder_id: str | None = Field(description="id of the nearest enclosing feature")
+    suppressed: bool | None = Field(description="In `configuration`; null when unreadable")
+    error_code: int | None = Field(description="GetErrorCode2; null when unreadable")
+    child_ids: list[str] | None = Field(
+        description="Dependents from GetChildren; null plus a feature_children gap"
+    )
+    parent_ids: list[str] | None = Field(
+        description="Dependencies from GetParents; null plus a feature_parents gap"
+    )
+    sketch: SketchInfo | None = Field(
+        description="Present only for features GetSpecificFeature2 returns an ISketch for"
+    )
+    fillet: FilletInfo | None = Field(
+        description="Present only for features whose definition is a simple fillet"
+    )
+
+
+class Equation(IRModel):
+    """One row of a document's equation manager (schema 1.1.0)."""
+
+    document_id: str
+    index: int = Field(description="Position in the equation manager")
+    text: str = Field(description="Full equation text as read")
+    lhs: str = Field(description="Left of the first '=', quotes stripped; evidence only")
+    is_global: bool | None = Field(
+        description="IEquationMgr.GlobalVariable(i); null plus an equations gap"
+    )
+    value: float | None = Field(description="Value(i); null when unreadable")
 
 
 class MateEntity(IRModel):
@@ -405,6 +489,58 @@ class Interference(IRModel):
     )
 
 
+class SuppressTestRow(IRModel):
+    """What one planned feature's suppression attempt produced (schema 1.1.0)."""
+
+    feature_id: str
+    persist_ref: PersistRef
+    persist_ref_scope: str = Field(
+        description="document_id whose IModelDocExtension produced persist_ref; "
+        "resolve against that document"
+    )
+    name: str
+    outcome: Literal[
+        "ok", "rebuild_errors", "already_suppressed", "not_applied", "truncated", "aborted"
+    ]
+    whats_wrong_count: int | None
+    messages: Annotated[list[str], Len(0, 20)]
+    messages_truncated: int = Field(ge=0, description="Messages dropped beyond the 20 kept")
+    error: str | None
+    elapsed_ms: int | None
+
+
+class SuppressTestRun(IRModel):
+    """One `suppress-test` run appended to the package (schema 1.1.0).
+
+    Written only by the console command through `PackageAppender`; a later `dump`
+    overwrites the package and drops it, exactly as interference results are dropped.
+    """
+
+    document_id: str
+    configuration: str
+    group: str = Field(description="The Detail group name from the plan")
+    plan_file: str = Field(description="Path of the plan consumed")
+    # Relaxed like EvidencePackage.created_at: the package's custom __init__ validates
+    # nested models in python mode even when the input came from JSON, which a strict
+    # datetime would reject for the ISO string in the file.
+    run_at: datetime = Field(strict=False)
+    acknowledged: bool = Field(description="Always true; the command refuses otherwise")
+    baseline_whats_wrong_count: int = Field(
+        description="Read before the first suppression; the command refuses when non-zero, "
+        "so this is 0 in every written run and is recorded for audit"
+    )
+    limit: int = Field(description="--limit in effect")
+    timeout_seconds: int = Field(description="--timeout-seconds in effect")
+    features_present: int = Field(description="Planned features; equals len(rows)")
+    restore_verified: bool = Field(
+        description="The post-run tree matched the pre-run snapshot"
+    )
+    unrestored_feature_ids: list[str] = Field(description="Empty when restore_verified")
+    rows: list[SuppressTestRow] = Field(
+        description="One per planned feature, in plan order; untested ones are truncated"
+    )
+
+
 class Capture(IRModel):
     id: str
     persist_ref: PersistRef | None
@@ -487,6 +623,9 @@ class EvidencePackage(IRModel):
     interferences: list[Interference] = Field(default_factory=list)
     captures: list[Capture] = Field(default_factory=list)
     drawings: list[DrawingSheet] = Field(default_factory=list)
+    features: list[Feature] = Field(default_factory=list)
+    equations: list[Equation] = Field(default_factory=list)
+    rms_suppress_test: SuppressTestRun | None = None
     gaps: list[Gap]
 
     # The three entry points below gate the schema major before pydantic runs, so an

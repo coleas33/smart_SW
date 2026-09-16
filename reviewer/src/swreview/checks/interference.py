@@ -283,7 +283,7 @@ def check_interference_group(
     exception = (
         None
         if exceptions is None
-        else exceptions.match(package, group.component_ids, group.configuration)
+        else exceptions.match(package, group.component_ids, group.configuration, CHECK)
     )
     if exception is not None and exception.status == "active":
         return _excepted(group, exception)

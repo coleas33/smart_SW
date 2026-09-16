@@ -57,4 +57,11 @@ public sealed class ComponentInstance
     /// <summary>IModelDocExtension.ToolboxPartType != 0.</summary>
     [JsonPropertyName("is_toolbox")]
     public bool IsToolbox { get; set; }
+
+    /// <summary>
+    /// IComponent2.GetConstrainedStatus verbatim (swConstrainedStatus_e); null plus a
+    /// component_constrained_status gap when unreadable. Named in Python, not here.
+    /// </summary>
+    [JsonPropertyName("constrained_status_raw")]
+    public int? ConstrainedStatusRaw { get; set; }
 }

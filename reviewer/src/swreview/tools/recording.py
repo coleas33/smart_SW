@@ -50,6 +50,7 @@ def result_to_finding(
     component_ids: Sequence[str] = (),
     drawing_locations: Sequence[SourceRef] = (),
     exception_id: str | None = None,
+    tool_result_ids: Sequence[int] = (),
 ) -> Finding:
     """One `CheckResult` as a session-ready `Finding`.
 
@@ -57,8 +58,15 @@ def result_to_finding(
     session knows - the next finding id, the package the provenance comes from, and the
     configuration the review is running against.
 
+    `tool_result_ids` are the investigation steps whose results the finding rests on -
+    `ToolContext.current_step_id` for a check that produces one. A check whose evidence is
+    the model itself rather than arithmetic (an RMS rule reading a feature tree) carries no
+    `Calculation`, and `build_finding` accepts a numeric status from it only when a step id
+    says where the evidence came from.
+
     Raises `ValueError` when the evidence rules of data-model.md section 3 are not met
-    (an unresolved result with no coverage limit, a finding naming nothing at all).
+    (an unresolved result with no coverage limit, a finding naming nothing at all, a
+    numeric result with neither a calculation nor a step id).
     """
     return build_finding_model(
         finding_id=next(context.finding_ids),
@@ -75,6 +83,7 @@ def result_to_finding(
         drawing_locations=drawing_locations,
         inputs=result.inputs,
         calculation=result.calculation,
+        tool_result_ids=tool_result_ids,
         coverage_limits=result.coverage_limits,
         exception_id=exception_id,
     )
@@ -86,11 +95,12 @@ def record_result(
     component_ids: Sequence[str] = (),
     drawing_locations: Sequence[SourceRef] = (),
     exception_id: str | None = None,
+    tool_result_ids: Sequence[int] = (),
 ) -> ToolResult:
     """Append the finding for `result` to the session and return it."""
     try:
         finding = result_to_finding(
-            context, result, component_ids, drawing_locations, exception_id
+            context, result, component_ids, drawing_locations, exception_id, tool_result_ids
         )
     except ValueError as exc:
         return error_result(str(exc))
@@ -103,17 +113,27 @@ def record_results(
     results: Sequence[CheckResult],
     component_ids: Sequence[str] = (),
     drawing_locations: Sequence[SourceRef] = (),
+    tool_result_ids: Sequence[int] = (),
 ) -> ToolResult:
     """Append one finding per `CheckResult` and return them all.
 
     A check that produces several results - a fastener joint is four - is one tool call
     and one result, so the model sees the whole joint at once rather than four calls it
-    has to correlate.
+    has to correlate. They came from one call, so they all cite the same
+    `tool_result_ids`.
     """
     findings = []
     for result in results:
         try:
-            findings.append(result_to_finding(context, result, component_ids, drawing_locations))
+            findings.append(
+                result_to_finding(
+                    context,
+                    result,
+                    component_ids,
+                    drawing_locations,
+                    tool_result_ids=tool_result_ids,
+                )
+            )
         except ValueError as exc:
             return error_result(str(exc))
     for finding in findings:

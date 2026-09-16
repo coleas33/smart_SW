@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using Json.Schema;
@@ -125,6 +126,135 @@ public class IrSerializerTests
         Gap gap = Assert.Single(restored.Gaps);
         Assert.Equal(GapKind.NotExtracted, gap.Kind);
         Assert.Equal("hole", gap.EntityKind);
+    }
+
+    [Fact]
+    public void SamplePackage_RoundTripsTheSchema110Members()
+    {
+        // T006. The feature tree, the equations, the suppress-test run and the component's
+        // raw constrained status are what the RMS checks read; a member that survives
+        // serialization in one direction only is a silently empty check.
+        EvidencePackage original = BuildSamplePackage();
+
+        EvidencePackage restored = PackageSerializer.Deserialize(PackageSerializer.Serialize(original));
+
+        Assert.Equal("1.1.0", restored.SchemaVersion);
+        Assert.Equal(EvidencePackage.CurrentSchemaVersion, restored.SchemaVersion);
+
+        Assert.Equal(6, restored.Features.Count);
+        Assert.Equal(
+            new[] { "feat:0001", "feat:0002", "feat:0003", "feat:0004", "feat:0005", "feat:0006" },
+            restored.Features.Select(f => f.Id));
+        Assert.Equal(new[] { 0, 1, 2, 3, 4, 5 }, restored.Features.Select(f => f.Index));
+        Assert.Equal(new[] { 0, 0, 0, 1, 1, 0 }, restored.Features.Select(f => f.Depth));
+        Assert.Equal(
+            new string?[] { null, null, null, "feat:0003", "feat:0003", null },
+            restored.Features.Select(f => f.FolderId));
+
+        Feature sketch = restored.Features[0];
+        Assert.Equal("doc:housing", sketch.DocumentId);
+        Assert.Equal("Default", sketch.Configuration);
+        Assert.Equal("Sketch1", sketch.Name);
+        Assert.Equal("ProfileFeature", sketch.TypeName);
+        Assert.Equal("outer profile of the boss", sketch.Description);
+        Assert.False(sketch.Suppressed);
+        Assert.Equal(0, sketch.ErrorCode);
+        Assert.Equal(new[] { "feat:0002" }, sketch.ChildIds);
+        Assert.Empty(sketch.ParentIds!);
+        Assert.NotNull(sketch.Sketch);
+        Assert.Equal(3, sketch.Sketch!.RawStatus);
+        Assert.Equal(new[] { "feat:0002" }, sketch.Sketch.ConsumerIds);
+        Assert.Null(sketch.Fillet);
+
+        // A folder is a feature like any other here: the extractor classifies nothing.
+        Feature folder = restored.Features[2];
+        Assert.Equal("FtrFolder", folder.TypeName);
+        Assert.Equal(string.Empty, folder.Description);
+        Assert.Null(folder.Sketch);
+        Assert.Null(folder.Fillet);
+
+        Feature fillet = restored.Features[3];
+        Assert.True(fillet.Suppressed);
+        Assert.NotNull(fillet.Fillet);
+        Assert.Equal(0.003, fillet.Fillet!.DefaultRadius!.Value);
+        Assert.Equal(LengthUnit.M, fillet.Fillet.DefaultRadius.Unit);
+
+        // Principle I: unknown stays unknown. A variable fillet has no single radius, and a
+        // read that failed is null, never a default the reader cannot tell from a value.
+        Feature variableFillet = restored.Features[4];
+        Assert.Null(variableFillet.Description);
+        Assert.Null(variableFillet.Suppressed);
+        Assert.Null(variableFillet.ErrorCode);
+        Assert.Null(variableFillet.ChildIds);
+        Assert.Null(variableFillet.ParentIds);
+        Assert.NotNull(variableFillet.Fillet);
+        Assert.Null(variableFillet.Fillet!.DefaultRadius);
+
+        Feature unreadSketch = restored.Features[5];
+        Assert.NotNull(unreadSketch.Sketch);
+        Assert.Null(unreadSketch.Sketch!.RawStatus);
+        Assert.Null(unreadSketch.Sketch.ConsumerIds);
+
+        Assert.Equal(2, restored.Equations.Count);
+        Assert.Equal("doc:housing", restored.Equations[0].DocumentId);
+        Assert.Equal(0, restored.Equations[0].Index);
+        Assert.Equal("\"WallThickness\" = 3", restored.Equations[0].Text);
+        Assert.Equal("WallThickness", restored.Equations[0].Lhs);
+        Assert.True(restored.Equations[0].IsGlobal);
+        Assert.Equal(3.0, restored.Equations[0].Value);
+        Assert.Equal(1, restored.Equations[1].Index);
+        Assert.Equal("D1@Sketch1", restored.Equations[1].Lhs);
+        Assert.Null(restored.Equations[1].IsGlobal);
+        Assert.Null(restored.Equations[1].Value);
+
+        SuppressTestRun run = restored.RmsSuppressTest!;
+        Assert.Equal("doc:housing", run.DocumentId);
+        Assert.Equal("Default", run.Configuration);
+        Assert.Equal("4-Detail", run.Group);
+        Assert.Equal(@"C:\work\bracket\rms-suppress-plan.json", run.PlanFile);
+        Assert.True(run.Acknowledged);
+        Assert.Equal(0, run.BaselineWhatsWrongCount);
+        Assert.Equal(20, run.Limit);
+        Assert.Equal(120, run.TimeoutSeconds);
+        Assert.Equal(2, run.FeaturesPresent);
+        Assert.False(run.RestoreVerified);
+        Assert.Equal(new[] { "feat:0005" }, run.UnrestoredFeatureIds);
+
+        Assert.Equal(2, run.Rows.Count);
+        Assert.Equal("feat:0004", run.Rows[0].FeatureId);
+        Assert.Equal("doc:housing", run.Rows[0].PersistRefScope);
+        Assert.Equal("Fillet1", run.Rows[0].Name);
+        Assert.Equal(SuppressTestOutcome.Ok, run.Rows[0].Outcome);
+        Assert.Equal(0, run.Rows[0].WhatsWrongCount);
+        Assert.Equal(new[] { "Fillet1 rebuilt cleanly" }, run.Rows[0].Messages);
+        Assert.Equal(0, run.Rows[0].MessagesTruncated);
+        Assert.Null(run.Rows[0].Error);
+        Assert.Equal(412, run.Rows[0].ElapsedMs);
+        Assert.Equal(SuppressTestOutcome.Aborted, run.Rows[1].Outcome);
+        Assert.Null(run.Rows[1].WhatsWrongCount);
+        Assert.Equal(3, run.Rows[1].MessagesTruncated);
+        Assert.Equal(
+            "TimeoutException: the rebuild did not finish inside 120 s", run.Rows[1].Error);
+        Assert.Null(run.Rows[1].ElapsedMs);
+
+        Assert.Equal(3, restored.Components[0].ConstrainedStatusRaw);
+        Assert.Null(restored.Components[1].ConstrainedStatusRaw);
+    }
+
+    [Fact]
+    public void SamplePackage_WritesTheSchema110NamesAndKeepsUnknownAsNull()
+    {
+        string json = PackageSerializer.Serialize(BuildSamplePackage());
+
+        Assert.Contains("\"schema_version\": \"1.1.0\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"folder_id\": null", json, StringComparison.Ordinal);
+        Assert.Contains("\"raw_status\": null", json, StringComparison.Ordinal);
+        Assert.Contains("\"consumer_ids\": null", json, StringComparison.Ordinal);
+        Assert.Contains("\"default_radius\": null", json, StringComparison.Ordinal);
+        Assert.Contains("\"is_global\": null", json, StringComparison.Ordinal);
+        Assert.Contains("\"constrained_status_raw\": null", json, StringComparison.Ordinal);
+        Assert.Contains("\"baseline_whats_wrong_count\": 0", json, StringComparison.Ordinal);
+        Assert.Contains("\"messages_truncated\": 3", json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -298,6 +428,9 @@ public class IrSerializerTests
                     IsFixed = true,
                     PatternId = null,
                     IsToolbox = false,
+
+                    // swFullyConstrained; the extractor records the number, Python names it.
+                    ConstrainedStatusRaw = 3,
                 },
                 new ComponentInstance
                 {
@@ -389,6 +522,120 @@ public class IrSerializerTests
                     GroupKey = "pat:0001|cmp:0001",
                 },
             },
+
+            // Schema 1.1.0. The tree is recorded verbatim: the extractor decides nothing
+            // about folders, end tags, groups or classes, so "6-Quarantine" and "FtrFolder"
+            // are just a name and a type name here.
+            Features =
+            {
+                NewFeature("feat:0001", "Sketch1", "ProfileFeature", index: 0, depth: 0, folderId: null,
+                    description: "outer profile of the boss",
+                    childIds: new List<string> { "feat:0002" },
+                    parentIds: new List<string>(),
+                    sketch: new SketchInfo
+                    {
+                        RawStatus = 3,
+                        ConsumerIds = new List<string> { "feat:0002" },
+                    }),
+                NewFeature("feat:0002", "Boss-Extrude1", "Extrusion", index: 1, depth: 0, folderId: null,
+                    description: "core stock the detail is cut from",
+                    childIds: new List<string>(),
+                    parentIds: new List<string> { "feat:0001" }),
+                NewFeature("feat:0003", "6-Quarantine", "FtrFolder", index: 2, depth: 0, folderId: null,
+                    description: string.Empty,
+                    childIds: new List<string>(),
+                    parentIds: new List<string>()),
+                NewFeature("feat:0004", "Fillet1", "Fillet", index: 3, depth: 1, folderId: "feat:0003",
+                    description: "cosmetic break on the outer edge",
+                    childIds: new List<string>(),
+                    parentIds: new List<string> { "feat:0002" },
+                    fillet: new FilletInfo { DefaultRadius = new Quantity(0.003, LengthUnit.M) },
+                    suppressed: true),
+
+                // A variable fillet has no single default radius, and this feature's state
+                // could not be read at all: every unknown stays null (Principle I).
+                NewFeature("feat:0005", "VarFillet1", "VarFillet", index: 4, depth: 1, folderId: "feat:0003",
+                    description: null,
+                    childIds: null,
+                    parentIds: null,
+                    fillet: new FilletInfo { DefaultRadius = null },
+                    suppressed: null,
+                    errorCode: null),
+
+                // A sketch whose constrained status and consumers could not be read.
+                NewFeature("feat:0006", "Sketch2", "ProfileFeature", index: 5, depth: 0, folderId: null,
+                    description: "locating slot",
+                    childIds: new List<string>(),
+                    parentIds: new List<string>(),
+                    sketch: new SketchInfo { RawStatus = null, ConsumerIds = null }),
+            },
+            Equations =
+            {
+                new Equation
+                {
+                    DocumentId = "doc:housing",
+                    Index = 0,
+                    Text = "\"WallThickness\" = 3",
+                    Lhs = "WallThickness",
+                    IsGlobal = true,
+                    Value = 3.0,
+                },
+                new Equation
+                {
+                    DocumentId = "doc:housing",
+                    Index = 1,
+                    Text = "\"D1@Sketch1\" = \"WallThickness\" * 2",
+                    Lhs = "D1@Sketch1",
+
+                    // GlobalVariable(1) threw, so whether this drives a dimension is unknown.
+                    IsGlobal = null,
+                    Value = null,
+                },
+            },
+            RmsSuppressTest = new SuppressTestRun
+            {
+                DocumentId = "doc:housing",
+                Configuration = "Default",
+                Group = "4-Detail",
+                PlanFile = @"C:\work\bracket\rms-suppress-plan.json",
+                RunAt = new DateTimeOffset(2026, 9, 15, 9, 0, 0, TimeSpan.Zero),
+                Acknowledged = true,
+                BaselineWhatsWrongCount = 0,
+                Limit = 20,
+                TimeoutSeconds = 120,
+                FeaturesPresent = 2,
+                RestoreVerified = false,
+                UnrestoredFeatureIds = { "feat:0005" },
+                Rows =
+                {
+                    new SuppressTestRow
+                    {
+                        FeatureId = "feat:0004",
+                        PersistRef = Convert.ToBase64String(new byte[] { 0x41, 0x42, 0x43 }),
+                        PersistRefScope = "doc:housing",
+                        Name = "Fillet1",
+                        Outcome = SuppressTestOutcome.Ok,
+                        WhatsWrongCount = 0,
+                        Messages = { "Fillet1 rebuilt cleanly" },
+                        MessagesTruncated = 0,
+                        Error = null,
+                        ElapsedMs = 412,
+                    },
+                    new SuppressTestRow
+                    {
+                        FeatureId = "feat:0005",
+                        PersistRef = Convert.ToBase64String(new byte[] { 0x51, 0x52, 0x53 }),
+                        PersistRefScope = "doc:housing",
+                        Name = "VarFillet1",
+                        Outcome = SuppressTestOutcome.Aborted,
+                        WhatsWrongCount = null,
+                        Messages = { "the rebuild was still running when the timeout expired" },
+                        MessagesTruncated = 3,
+                        Error = "TimeoutException: the rebuild did not finish inside 120 s",
+                        ElapsedMs = null,
+                    },
+                },
+            },
             Gaps =
             {
                 new Gap
@@ -402,4 +649,44 @@ public class IrSerializerTests
             },
         };
     }
+
+    /// <summary>
+    /// One feature row of the sample tree. The defaults are the readable case (present,
+    /// unsuppressed, no rebuild error); every "could not be read" member is passed as null
+    /// explicitly, so the fixture never hides an unknown behind a default.
+    /// </summary>
+    private static Feature NewFeature(
+        string id,
+        string name,
+        string typeName,
+        int index,
+        int depth,
+        string? folderId,
+        string? description,
+        List<string>? childIds,
+        List<string>? parentIds,
+        SketchInfo? sketch = null,
+        FilletInfo? fillet = null,
+        bool? suppressed = false,
+        int? errorCode = 0) =>
+        new Feature
+        {
+            Id = id,
+            PersistRef = Convert.ToBase64String(Encoding.UTF8.GetBytes(id)),
+            PersistRefScope = "doc:housing",
+            DocumentId = "doc:housing",
+            Configuration = "Default",
+            Name = name,
+            TypeName = typeName,
+            Description = description,
+            Index = index,
+            Depth = depth,
+            FolderId = folderId,
+            Suppressed = suppressed,
+            ErrorCode = errorCode,
+            ChildIds = childIds,
+            ParentIds = parentIds,
+            Sketch = sketch,
+            Fillet = fillet,
+        };
 }

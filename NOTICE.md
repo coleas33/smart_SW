@@ -3,6 +3,12 @@
 This project is licensed under the GNU Affero General Public License v3.0 or later
 (`LICENSE`). The notices below cover what it references, vendors, or depends on.
 
+## Published methods
+
+| Method | Author | How it is used here |
+|--------|--------|---------------------|
+| Resilient Modeling Strategy (RMS) | Richard Gebhard, 2013 | The method the `rms.*` checks grade a model against: the six group names (`1-Ref`, `2-Construction`, `3-Core`, `4-Detail`, `5-Modify`, `6-Quarantine`), the group and reference rules, and the sketch, description, and equation discipline. RMS is a published method taught by its author; the rule statements are used as its vocabulary. This project is not affiliated with, endorsed by, or certified by the author of the method. |
+
 ## Repositories studied or reimplemented
 
 This project reuses ideas, and in some places patterns, from the repositories below. No
@@ -18,6 +24,7 @@ code was copied from repositories whose license does not permit it.
 | arthurle3210/swapi-pilot-solidworks-mcp | No license file | Documents a hosted MCP server for searching the SOLIDWORKS API reference. Not connected by default; see the research notes before enabling. |
 | microsoft/terminal (`samples/ConPTY/MiniTerm`) | MIT | Reference for the ConPTY sequence a host must follow - `CreatePseudoConsole`, the `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` startup attribute, `ResizePseudoConsole`, and closing the console to end the client. Reimplemented in `extractor/SwReview.AddIn/Terminal/ConPty.cs` against the Win32 documentation; the sample's source is not vendored. |
 | Adam-CAD/CADAM | GPL-3.0 | Not linked. |
+| LifeDay/Solidworks-Resilient-Modeling-Skill | No license file (unlicensed, so all rights reserved by default) | The source of the Resilient Modeling check semantics at commit `df49e6d`: the rule statements and their severities, the `GetTypeName2` type-name tables, the folder and end-tag conventions, and the SOLIDWORKS API notes. Reused with the author's permission, granted to the project owner on 2026-09-15 (personal communication). **No code copied**: its pywin32 checker is not vendored and nothing is derived from its source text; the rules here are written against this project's own IR in `reviewer/src/swreview/checks/rms/`, and the type tables it inspired are re-verified on SOLIDWORKS 2024 in `reviewer/src/swreview/checks/rms_types.yaml`. The project has asked the author to add an explicit license upstream; until that exists, the permission above is the only basis for this reuse and no redistribution of the upstream repository is made here. |
 | github/spec-kit | MIT | The Spec-Driven Development scaffold: the `/speckit-*` skills under `.claude/skills/`, the PowerShell scripts and templates under `.specify/`, and the two integration manifests are the upstream distribution files for Spec Kit 1.0.6, tracked verbatim so every clone runs the same workflow. Upstream: https://github.com/github/spec-kit. |
 
 ## Vendored files

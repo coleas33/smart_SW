@@ -227,6 +227,8 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             Handle = component,
         };
 
+        ReadConstrainedStatus(component, node);
+
         double[][]? transform = ReadTransform(component, key, gaps);
         if (transform != null)
         {
@@ -338,6 +340,34 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
         }
 
         return _session.Gate.Call("ToolboxPartType", () => model.Extension.ToolboxPartType) != 0;
+    }
+
+    /// <summary>
+    /// <c>GetConstrainedStatus</c> verbatim (swConstrainedStatus_e). The extractor does not
+    /// name the number - Python maps it through the same table sketches use - and a failed
+    /// read is null plus a Gap, never a guessed status: the first-component rule reports
+    /// unresolved rather than treating "not read" as "not constrained".
+    ///
+    /// The Gap is not written here. Every <c>component_constrained_status</c> gap names one
+    /// <c>entity_id</c> (data-model section 1) and cmp:NNNN does not exist during traversal,
+    /// so the failure rides on the node and <c>PackageWriter</c> writes the gap once the id
+    /// is allocated. The catch policy is still <see cref="GapCollector.TryStep"/>'s - a
+    /// throwaway collector holds the description rather than a second hand-rolled try/catch
+    /// that would have to repeat which exception types must never be swallowed.
+    /// </summary>
+    private void ReadConstrainedStatus(IComponent2 component, ComponentNode node)
+    {
+        var deferred = new GapCollector();
+        int? status = null;
+
+        deferred.TryStep(
+            "component_constrained_status",
+            null,
+            $"read GetConstrainedStatus for '{node.Key}'",
+            () => status = _session.Gate.Call("GetConstrainedStatus", () => component.GetConstrainedStatus()));
+
+        node.ConstrainedStatusRaw = status;
+        node.ConstrainedStatusError = deferred.Count == 0 ? null : deferred.Gaps[0].Error;
     }
 
     /// <summary>"sub-2/bracket-3" to "bracket-3".</summary>
