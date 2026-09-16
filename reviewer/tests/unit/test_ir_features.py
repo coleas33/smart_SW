@@ -516,14 +516,15 @@ def test_the_fixture_builder_emits_only_documented_gap_entity_kinds() -> None:
 # --- EvidencePackage --------------------------------------------------------------
 
 
-def test_schema_version_is_one_one_zero() -> None:
-    assert SCHEMA_VERSION == "1.1.0"
+def test_the_current_schema_version_is_readable_here() -> None:
+    # Bumped to 1.2.0 by T065 (extractor.profile); the 1.1.0 members below are unchanged.
+    assert SCHEMA_VERSION == "1.2.0"
 
 
 def test_the_new_package_members_default_to_empty() -> None:
     package = build_package()
 
-    assert package.schema_version == "1.1.0"
+    assert package.schema_version == SCHEMA_VERSION
     assert package.features == []
     assert package.equations == []
     assert package.rms_suppress_test is None

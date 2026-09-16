@@ -210,6 +210,60 @@ public sealed class CommandLine
         }
     }
 
+    /// <summary>The <c>--profile</c> spelling of <c>DumpProfile.Full</c>.</summary>
+    private const string ProfileFullName = "full";
+
+    /// <summary>The <c>--profile</c> spelling of <c>DumpProfile.ModelCheck</c>.</summary>
+    private const string ProfileModelCheckName = "model-check";
+
+    /// <summary>
+    /// <c>--profile full|model-check</c>, defaulting to full (contracts/cli.md).
+    ///
+    /// The spelling differs on purpose either side of the package: the option is hyphenated
+    /// the way every other option on this command line is, and <c>extractor.profile</c>
+    /// records <c>model_check</c> the way every other enum in the IR is written. Only these
+    /// two spellings are accepted; a near miss is a usage error, because a dump that silently
+    /// fell back to full would tessellate every body on the one path built to avoid it.
+    /// </summary>
+    public DumpProfile DumpProfile()
+    {
+        string value = Value("profile") ?? ProfileFullName;
+        switch (value.ToLowerInvariant())
+        {
+            case ProfileFullName:
+                return Dump.DumpProfile.Full;
+            case ProfileModelCheckName:
+                return Dump.DumpProfile.ModelCheck;
+            default:
+                throw new UsageError(
+                    $"--profile must be {ProfileFullName} or {ProfileModelCheckName}; got '{value}'.");
+        }
+    }
+
+    /// <summary>
+    /// The command line spelling of <paramref name="profile"/>: the inverse of
+    /// <see cref="DumpProfile()"/>, and the only place either spelling is written.
+    ///
+    /// <c>extract.log</c> reconstructs the command that ran, and the IR spelling
+    /// (<c>model_check</c>, from <c>PackageSerializer.EnumToJsonName</c>) is a usage error on
+    /// this command line, so a log line written through it records a command that cannot be
+    /// run again. Both directions read the same two constants rather than each carrying its
+    /// own copy.
+    /// </summary>
+    public static string CliName(DumpProfile profile)
+    {
+        switch (profile)
+        {
+            case Dump.DumpProfile.Full:
+                return ProfileFullName;
+            case Dump.DumpProfile.ModelCheck:
+                return ProfileModelCheckName;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(profile), profile, "Unknown dump profile.");
+        }
+    }
+
     /// <summary>
     /// <c>--fasteners include|exclude|only</c>, defaulting to include (contracts/cli.md).
     /// </summary>

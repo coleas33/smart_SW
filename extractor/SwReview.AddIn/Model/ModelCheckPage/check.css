@@ -1,0 +1,217 @@
+/*
+  The Model check page's stylesheet (T082).
+
+  A separate file rather than a `<style>` block because the CSP is `style-src 'self'`: the page
+  it is served with refuses an inline one, which is the point of the policy. Nothing here is
+  generated and nothing is set from script, so a hostile feature name cannot reach a declaration.
+
+  The pane is a narrow strip docked beside a model, so everything below stacks and wraps rather
+  than assuming a width.
+*/
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  padding: 8px;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.document {
+  font-weight: 600;
+}
+
+.badge {
+  border: 1px solid #999;
+  border-radius: 9px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+.badge.warn {
+  border-color: #b35c00;
+}
+
+.banner {
+  margin: 6px 0;
+  padding: 6px;
+  border: 1px solid #b35c00;
+  border-radius: 3px;
+}
+
+.session .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.note {
+  display: block;
+  margin-top: 4px;
+  opacity: 0.85;
+  word-break: break-all;
+}
+
+/* ---- the grade ------------------------------------------------------------------------- */
+
+.grade {
+  margin: 10px 0 6px;
+}
+
+.grade-heading {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.count {
+  white-space: nowrap;
+}
+
+.fraction,
+.unresolved-rules,
+.nothing-evaluated {
+  margin: 4px 0 0;
+}
+
+/* ---- the chips ------------------------------------------------------------------------- */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.chip {
+  border: 1px solid #999;
+  border-radius: 10px;
+  padding: 1px 8px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.chip[aria-pressed="true"] {
+  border-color: #205493;
+  font-weight: 600;
+}
+
+/* ---- the rules ------------------------------------------------------------------------- */
+
+.document-name {
+  margin: 10px 0 2px;
+  font-size: 12px;
+}
+
+.bucket-name {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bucket-rules,
+.subjects {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rule {
+  margin: 0 0 8px;
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+/* The rule the engineer has just accepted, so the row they were looking at is findable in the
+   list the acceptance re-rendered. */
+.rule.just-accepted {
+  border-color: #205493;
+}
+
+.rule-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.rule-id {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.statement,
+.observed,
+.reason,
+.exception {
+  margin: 4px 0 0;
+}
+
+.observed {
+  word-break: break-word;
+}
+
+.subject {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.subject-name {
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dotted currentColor;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.subject-meta,
+.subject-note {
+  opacity: 0.85;
+}
+
+.row.accept {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.row.accept .note {
+  flex: 1 1 14em;
+  margin-top: 0;
+}
+
+.row.accept .by {
+  flex: 0 1 9em;
+}
+
+.accept-state {
+  flex-basis: 100%;
+}

@@ -123,10 +123,7 @@ def run_part_checks(
         rows = [row for row in context.ir.features if row.document_id == part]
         results.extend(evaluate_part(part, rows, table, assign_groups(rows, table), context.ir))
 
-    reported = report_results(context, results)
-    if "error" in reported:
-        return reported
-    return {**reported, "documents": documents}
+    return _reported(context, results, documents)
 
 
 def check_rms_assembly() -> ToolResult:
@@ -183,10 +180,7 @@ def run_assembly_checks(context: ToolContext) -> ToolResult:
         results = evaluate_assembly(context.ir, load_table())
         documents = [document_id]
 
-    reported = report_results(context, results)
-    if "error" in reported:
-        return reported
-    return {**reported, "documents": documents}
+    return _reported(context, results, documents)
 
 
 def check_rms_equations(document_id: str | None = None) -> ToolResult:
@@ -233,10 +227,24 @@ def run_equation_checks(
         rows = [row for row in context.ir.equations if row.document_id == part]
         results.extend(evaluate_equations(part, rows, context.ir))
 
+    return _reported(context, results, documents)
+
+
+def _reported(
+    context: ToolContext, results: Sequence[RuleResult], documents: Sequence[str]
+) -> ToolResult:
+    """`report_results` plus the documents the caller graded, for all three check tools.
+
+    The three runners differ only in which rules they dispatch and over what; what they do
+    with the results afterwards is one thing and is written once (constitution Principle
+    V). An error result is handed straight back rather than having `documents` added to
+    it: the caller has to be able to tell "this call reported nothing" from "this call
+    graded nothing", and an error result carrying a document list reads as the second.
+    """
     reported = report_results(context, results)
     if "error" in reported:
         return reported
-    return {**reported, "documents": documents}
+    return {**reported, "documents": list(documents)}
 
 
 def part_documents(

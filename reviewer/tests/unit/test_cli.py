@@ -1731,14 +1731,16 @@ def test_check_rms_reports_a_rule_that_cannot_grade_as_an_error_not_a_traceback(
 ) -> None:
     """A raise out of the rule layer is exit 1 and one line on stderr, not a crash.
 
-    `run_part_checks` sits outside `_context_for`, so it needs its own guard: everything
-    the rule layer raises for input it can describe is in `HANDLED_ERRORS`, and a raise
-    from one of those paths must leave the same one-line `error: ...` on stderr as an
-    unreadable package does. Since T057 no package reaches such a raise - the one that
-    did was the `rms.detail.individually_suppressible` stub, and `part_tree`'s remaining
-    `ValueError`s are about rows the loader cannot produce - so the raise is injected at
-    the dispatch entry the guard wraps rather than built out of a fixture.
+    The command dispatches through `run_rms_check`, which dispatches the check tools
+    through the tool registry, so a raise out of the rule layer comes back as an error
+    result and `run_rms_check` re-raises it as an `RmsRunError` that `HANDLED_ERRORS`
+    covers. It must leave the same one-line `error: ...` on stderr as an unreadable
+    package does. Since T057 no package reaches such a raise - the one that did was the
+    `rms.detail.individually_suppressible` stub, and `part_tree`'s remaining
+    `ValueError`s are about rows the loader cannot produce - so the raise is injected
+    where the tool reaches the rule layer rather than built out of a fixture.
     """
+    from swreview.tools import rms_checks
     from tests.support.features import AssemblySpec, PartSpec, feature, folder, rms_package
 
     package = rms_package(
@@ -1760,7 +1762,7 @@ def test_check_rms_reports_a_rule_that_cannot_grade_as_an_error_not_a_traceback(
     def raising(*_args: Any, **_kwargs: Any) -> Any:
         raise ValueError("the shipped type table names 5 groups; the method has 6")
 
-    monkeypatch.setitem(cli.RMS_SCOPE_CHECKS, cli.RmsScope.part, raising)
+    monkeypatch.setattr(rms_checks, "run_part_checks", raising)
 
     result = invoke("check", "rms", "--package", str(directory), "--scope", "part")
 

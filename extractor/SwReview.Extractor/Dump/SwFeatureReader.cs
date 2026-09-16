@@ -53,8 +53,7 @@ public sealed class SwFeatureReader : IFeatureReader
             throw new ArgumentNullException(nameof(component));
         }
 
-        var handle = component.Node.Handle as IComponent2;
-        return handle == null ? null : handle.GetModelDoc2() as IModelDoc2;
+        return ComponentDocuments.Of(component.Node);
     }
 
     public string ActiveConfiguration(object document)

@@ -39,7 +39,7 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from swreview.checks.rms.registry import RULES, RmsRule, bind, evaluable
+from swreview.checks.rms.registry import RULES, bind, evaluable
 from swreview.checks.rms.results import (
     RuleResult,
     finding,
@@ -47,6 +47,7 @@ from swreview.checks.rms.results import (
     skipped,
     subject_reasons,
     unresolved,
+    verdict,
 )
 from swreview.checks.rms_types import ConstrainedStatus, RmsTypeTable
 from swreview.ir.models import ComponentInstance, EvidencePackage, Mate
@@ -324,38 +325,6 @@ def assembly_tree(package: EvidencePackage, table: RmsTypeTable) -> Assembly:
 # --- shared shapes ----------------------------------------------------------------
 
 
-def _verdict(
-    rule: RmsRule,
-    document_id: str,
-    *,
-    violation: RuleResult | None = None,
-    passing: Sequence[Subject] = (),
-    unknown: Sequence[tuple[Subject, str]] = (),
-) -> list[RuleResult]:
-    """The outcomes of a per-subject rule: at most one verdict, plus the unresolved half.
-
-    The same shape as `part._verdict` - a violation replaces the pass, and a rule whose
-    every subject was unresolved does not also report a pass - over subjects that are
-    mates and components rather than features. A shared home for it would be `results.py`,
-    which this task does not own.
-    """
-    results: list[RuleResult] = []
-    if violation is not None:
-        results.append(violation)
-    elif passing or not unknown:
-        results.append(passed(rule, document_id, passing))
-    if unknown:
-        results.append(
-            unresolved(
-                rule,
-                document_id,
-                subject_reasons(unknown),
-                [subject for subject, _ in unknown],
-            )
-        )
-    return results
-
-
 def _paths(rows: Sequence[ComponentInstance]) -> str:
     return ", ".join(row.full_path for row in rows)
 
@@ -449,7 +418,7 @@ def mates_to_reference_geometry(tree: Assembly) -> list[RuleResult]:
                 "mates survive a change to the faces and edges they sit on."
             ),
         )
-    return _verdict(rule, tree.document_id, violation=violation, passing=passing, unknown=unknown)
+    return verdict(rule, tree.document_id, violation=violation, passing=passing, unknown=unknown)
 
 
 # --- rms.assembly.first_component_fixed -------------------------------------------
@@ -573,7 +542,7 @@ def mate_chain_depth(tree: Assembly) -> list[RuleResult]:
                 f"no chain is longer than {limit} mate(s)."
             ),
         )
-    return _verdict(rule, tree.document_id, violation=violation, passing=passing, unknown=unknown)
+    return verdict(rule, tree.document_id, violation=violation, passing=passing, unknown=unknown)
 
 
 # --- rms.assembly.toolbox_parts_not_configurations --------------------------------
@@ -635,7 +604,7 @@ def toolbox_parts_not_configurations(tree: Assembly) -> list[RuleResult]:
                 "configuration of one file, so a size change cannot follow every instance."
             ),
         )
-    return _verdict(
+    return verdict(
         rule,
         tree.document_id,
         violation=violation,

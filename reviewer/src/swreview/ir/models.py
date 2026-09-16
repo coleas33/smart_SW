@@ -33,7 +33,7 @@ from pydantic import (
     model_validator,
 )
 
-SCHEMA_VERSION = "1.1.0"
+SCHEMA_VERSION = "1.2.0"
 SUPPORTED_SCHEMA_MAJOR = 1
 SCHEMA_VERSION_PATTERN = r"^1\.[0-9]+\.[0-9]+$"
 
@@ -616,6 +616,15 @@ class ExtractorInfo(IRModel):
         description="e.g. '2024 SP3'; null for exported-file-only packages"
     )
     machine: str
+    profile: Literal["full", "model_check"] = Field(
+        default="full",
+        description=(
+            "Which dump profile wrote this package (schema 1.2.0). 'model_check' skips "
+            "the hole, fastener, face and body phases, so those arrays are empty by "
+            "design rather than by failure. Absent in 1.0.0 and 1.1.0 packages, which "
+            "were all 'full'."
+        ),
+    )
 
 
 class EvidencePackage(IRModel):

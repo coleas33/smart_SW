@@ -359,7 +359,21 @@ result:
     - 'exception:EX-001: the boss after the shell is a moulding pad the tool needs;
       accepted as modelled'
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:2
+      page: null
+      persist_ref: ZG9jOjIvU2hlbGwx
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:2
+      page: null
+      persist_ref: ZG9jOjIvQm9zcy1FeHRydWRlMg==
+      sheet: null
+      view: null
     exception_id: EX-001
     group: null
     id: F-001
@@ -395,7 +409,21 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvRmlsbGV0MQ==
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQ2hhbWZlcjE=
+      sheet: null
+      view: null
     exception_id: EX-002
     group: null
     id: F-002

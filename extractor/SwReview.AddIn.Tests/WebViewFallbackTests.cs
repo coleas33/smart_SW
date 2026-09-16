@@ -54,8 +54,8 @@ namespace SwReview.AddIn.Tests;
 ///   }
 /// </code>
 ///
-/// The tabs are found by their `Text` - Review, Ask, Extract - and nothing else about the
-/// control's shape is assumed, so T043 keeps a free hand over layout.
+/// The tabs are found by their `Text` - Review, Ask, Extract, Model check - and nothing else
+/// about the control's shape is assumed, so T043 keeps a free hand over layout.
 /// </summary>
 public sealed class WebViewFallbackTests
 {
@@ -85,8 +85,57 @@ public sealed class WebViewFallbackTests
 
             // The sentence names the tabs the engineer is actually looking at. "The Actions
             // tab still works" was a pointer to a tab that no longer exists under that name.
-            Assert.Contains("Review and Ask tabs cannot be shown", review);
+            Assert.Contains("Review, Ask and Model check tabs cannot be shown", review);
             Assert.Contains("The Extract tab still works.", review);
+        });
+    }
+
+    /// <summary>
+    /// The fourth tab (T083) is created on first activation rather than at add-in load, so its
+    /// failure arrives later than the other two - and it must arrive as the same panel.
+    ///
+    /// Both halves are asserted here because they are one behaviour seen twice. Before the tab
+    /// is opened it holds its placeholder and has asked WebView2 for nothing; after it is
+    /// opened it holds the documented fallback, with the download URL and the run root in plain
+    /// text, and the Extract tab is still doing its three jobs.
+    /// </summary>
+    [Fact]
+    public void TheModelCheckTabIsLoadedOnFirstActivationAndFailsIntoTheSameFallback()
+    {
+        WithPane(async (control, factory) =>
+        {
+            TabPage tab = TabNamed(control, "Model check");
+
+            string before = TextOf(tab);
+            Assert.False(
+                EvergreenDownload.IsMatch(before),
+                "The Model check tab loaded its page at add-in load; it is created on first "
+                    + "activation (T083). It showed:" + Environment.NewLine + before);
+            Assert.Contains(TaskPaneControl.ModelCheckPending, before);
+
+            Exception? escaped = await Record.ExceptionAsync(() => control.ActivateModelCheckAsync());
+            Assert.True(
+                escaped == null,
+                "Opening the Model check tab with no WebView2 runtime threw: " + escaped);
+
+            string after = TextOf(tab);
+            Assert.True(
+                EvergreenDownload.IsMatch(after),
+                "The Model check tab shows no Evergreen WebView2 download URL when the runtime "
+                    + "is missing. It showed:" + Environment.NewLine + after);
+            Assert.Contains(RunRoot, after);
+            Assert.Contains("Review, Ask and Model check tabs cannot be shown", after);
+
+            // Still one environment: the fourth tab shares the cached failure rather than
+            // asking the factory again on every activation.
+            Assert.Equal(1, factory.Calls);
+            await control.ActivateModelCheckAsync();
+            Assert.Equal(1, factory.Calls);
+
+            Assert.True(
+                Descendants(TabNamed(control, "Extract")).OfType<Button>().Any(
+                    button => button.Text == "Extract evidence" && button.Enabled),
+                "The Extract tab stopped working when the Model check tab failed.");
         });
     }
 
@@ -159,6 +208,7 @@ public sealed class WebViewFallbackTests
             // where the runtime is present, over the same user data folder.
             Assert.NotNull(TabNamed(control, "Review"));
             Assert.NotNull(TabNamed(control, "Ask"));
+            Assert.NotNull(TabNamed(control, "Model check"));
             Assert.Equal(1, factory.Calls);
 
             // The failure is cached like a success: a workstation with no runtime must not
@@ -191,7 +241,18 @@ public sealed class WebViewFallbackTests
     /// Builds the pane on an STA thread with a factory that fails the way a workstation without
     /// the runtime fails, initializes it, and asserts that nothing escaped.
     /// </summary>
-    private static void WithPane(Action<TaskPaneControl, CountingEnvironmentFactory> assertions)
+    private static void WithPane(Action<TaskPaneControl, CountingEnvironmentFactory> assertions) =>
+        WithPane((control, factory) =>
+        {
+            assertions(control, factory);
+            return Task.CompletedTask;
+        });
+
+    /// <summary>
+    /// The same pane for a body that has to await something - opening the Model check tab,
+    /// which is loaded on first activation rather than at add-in load (T083).
+    /// </summary>
+    private static void WithPane(Func<TaskPaneControl, CountingEnvironmentFactory, Task> assertions)
     {
         var factory = new CountingEnvironmentFactory();
 
@@ -213,7 +274,7 @@ public sealed class WebViewFallbackTests
                 // fallback assertions by never reaching the failure they describe.
                 Assert.True(factory.Calls >= 1, "The pane never asked for a WebView2 environment.");
 
-                assertions(control, factory);
+                await assertions(control, factory);
             }
         });
     }

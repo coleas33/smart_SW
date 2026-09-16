@@ -36,6 +36,7 @@ from swreview.checks.rms.report import report_results
 from swreview.checks.rms.results import RuleResult, finding, passed, skipped, unresolved
 from swreview.checks.rms_types import load_table
 from swreview.exceptions import ExceptionStore, ReviewException
+from swreview.findings import Finding
 from swreview.ir.models import EvidencePackage, Feature, Gap
 from swreview.report.session import CoverageItem
 from swreview.tools.context import ToolContext, context_for
@@ -658,3 +659,244 @@ class TestUnresolvedDocument:
                 f"1 document(s): {HOUSING}: component housing-1 lightweight; tree not read"
             )
         assert context.require_session().findings == []
+
+
+# --- 9. the subjects, emitted twice (T070) ----------------------------------------
+
+
+@dataclass(frozen=True)
+class SubjectRow:
+    """A subject that is not a `Feature` row.
+
+    Structurally what `results.py` reads off a subject - `checks/rms/assembly.py` presents
+    its mates and component instances this way rather than duplicating four constructors -
+    and it is built here rather than taken from a package for the case no package can
+    produce: `persist_ref` null, which `Feature` forbids and the extractor will hand over
+    the day a reference cannot be read. The report layer must not fall over then, and must
+    not invent a locator either.
+    """
+
+    id: str
+    name: str
+    type_name: str
+    persist_ref: str | None
+    persist_ref_scope: str | None
+    suppressed: bool
+    configuration: str
+
+
+def unreferenced_result(rule_id: str = "rms.core.shell_last") -> RuleResult:
+    return finding(
+        RULES[rule_id],
+        HOUSING,
+        [
+            SubjectRow(
+                id="feat:0099",
+                name="Ghost",
+                type_name="Extrusion",
+                persist_ref=None,
+                persist_ref_scope=None,
+                suppressed=False,
+                configuration="Default",
+            )
+        ],
+        observed="Ghost violates the rule",
+        recommended_action="Fix it.",
+    )
+
+
+class TestSubjectSourceRefs:
+    """D2: the subject a rule named must reach the pane as something it can act on.
+
+    The Review page builds its `entity.show` payload from `drawing_locations`, so an RMS
+    finding that left it empty had a dead Show button - in the Review page as well as in
+    the Model check tab. One `SourceRef` per subject fixes both, and a source reference
+    carrying only a persistent reference is legal (`ir/models.py`, `SourceRef`).
+    """
+
+    def test_one_source_ref_per_subject_in_subject_order(
+        self, package: EvidencePackage, context: ToolContext
+    ) -> None:
+        report_results(
+            context,
+            [fail_result(package, "rms.intent.every_feature_described", HOUSING, "Boss", "Hole1")],
+        )
+
+        [recorded] = context.require_session().findings
+        boss, hole = named(package, HOUSING, "Boss", "Hole1")
+        assert [(ref.document_id, ref.persist_ref) for ref in recorded.drawing_locations] == [
+            (boss.persist_ref_scope, boss.persist_ref),
+            (hole.persist_ref_scope, hole.persist_ref),
+        ]
+        assert all(
+            ref.sheet is None and ref.annotation is None for ref in recorded.drawing_locations
+        )
+
+    def test_the_display_strings_in_inputs_are_unchanged(
+        self, package: EvidencePackage, context: ToolContext
+    ) -> None:
+        """The reference is emitted *beside* the display string, not instead of it: no
+        consumer parses `inputs`, and no consumer loses what it reads there either."""
+        report_results(context, [fail_result(package, "rms.core.shell_last", HOUSING, "Boss")])
+
+        [recorded] = context.require_session().findings
+        [boss] = named(package, HOUSING, "Boss")
+        assert recorded.inputs == [
+            f"{boss.id} Boss [Extrusion] persist_ref={boss.persist_ref} scope={HOUSING}"
+        ]
+
+    def test_a_finding_about_the_document_itself_carries_no_source_ref(
+        self, package: EvidencePackage, context: ToolContext
+    ) -> None:
+        rule = RULES["rms.assembly.first_component_fixed"]
+        report_results(
+            context,
+            [finding(rule, ROOT, [], observed="housing-1 is not fixed", recommended_action="Fix.")],
+        )
+
+        [recorded] = context.require_session().findings
+        assert recorded.drawing_locations == []
+
+    def test_a_subject_with_no_persistent_reference_produces_no_source_ref(
+        self, context: ToolContext
+    ) -> None:
+        report_results(context, [unreferenced_result()])
+
+        [recorded] = context.require_session().findings
+        assert recorded.drawing_locations == []
+        assert recorded.component_ids == ["cmp:0002", "cmp:0003"]
+
+
+class TestSubjectArray:
+    """The structured subjects the route hands the page, beside the finding."""
+
+    def test_returned_beside_the_findings_keyed_by_finding_id(
+        self, package: EvidencePackage, context: ToolContext
+    ) -> None:
+        result = report_results(
+            context,
+            [
+                fail_result(package, "rms.core.shell_last", HOUSING, "Boss"),
+                fail_result(package, "rms.detail.holes_last", HOUSING, "Hole1"),
+            ],
+        )
+
+        assert [item["id"] for item in result["findings"]] == ["F-001", "F-002"]
+        assert sorted(result["subjects"]) == ["F-001", "F-002"]
+        assert [entry["name"] for entry in result["subjects"]["F-001"]] == ["Boss"]
+        assert [entry["name"] for entry in result["subjects"]["F-002"]] == ["Hole1"]
+
+    def test_each_entry_carries_the_feature_its_group_and_its_reference(
+        self, package: EvidencePackage, context: ToolContext
+    ) -> None:
+        result = report_results(
+            context, [fail_result(package, "rms.detail.holes_last", HOUSING, "Hole1")]
+        )
+
+        [hole] = named(package, HOUSING, "Hole1")
+        assert result["subjects"]["F-001"] == [
+            {
+                "feature_id": hole.id,
+                "name": "Hole1",
+                "type_name": "HoleWzd",
+                "group": DETAIL,
+                "persist_ref": hole.persist_ref,
+                "persist_ref_scope": HOUSING,
+                "component_ids": ["cmp:0002", "cmp:0003"],
+                "reason": None,
+            }
+        ]
+
+    def test_the_group_is_the_one_the_assignment_gives_the_feature(
+        self, package: EvidencePackage, context: ToolContext
+    ) -> None:
+        result = report_results(
+            context, [fail_result(package, "rms.core.shell_last", HOUSING, "Boss")]
+        )
+
+        assert result["subjects"]["F-001"][0]["group"] == CORE
+
+    def test_a_subject_that_is_not_a_feature_of_the_document_has_no_group(
+        self, package: EvidencePackage, context: ToolContext
+    ) -> None:
+        """A mate or a component instance is a subject too, and neither is in a group."""
+        rule = RULES["rms.assembly.mates_to_reference_geometry"]
+        component = next(item for item in package.components if item.id == "cmp:0001")
+        subject = SubjectRow(
+            id=component.id,
+            name=component.full_path,
+            type_name="component",
+            persist_ref=component.persist_ref,
+            persist_ref_scope=component.persist_ref_scope,
+            suppressed=False,
+            configuration="Default",
+        )
+        result = report_results(
+            context,
+            [
+                finding(
+                    rule,
+                    ROOT,
+                    [subject],
+                    observed="cover-assy mates to a face",
+                    recommended_action="Mate to reference geometry.",
+                )
+            ],
+        )
+
+        [entry] = result["subjects"]["F-001"]
+        assert entry["group"] is None
+        assert entry["feature_id"] == "cmp:0001"
+        assert entry["persist_ref"] == component.persist_ref
+        [ref] = context.require_session().findings[0].drawing_locations
+        assert (ref.document_id, ref.persist_ref) == (ROOT, component.persist_ref)
+
+    def test_subjects_is_not_a_field_on_the_finding(
+        self, package: EvidencePackage, context: ToolContext
+    ) -> None:
+        """FR-026: the feature 001 finding contract does not move for User Story 6."""
+        result = report_results(
+            context, [fail_result(package, "rms.core.shell_last", HOUSING, "Boss")]
+        )
+
+        [recorded] = context.require_session().findings
+        assert "subjects" not in recorded.model_dump()
+        assert "subjects" not in Finding.model_fields
+        assert "subjects" not in result["findings"][0]
+
+    def test_a_subject_with_no_reference_is_reported_with_the_reason(
+        self, context: ToolContext
+    ) -> None:
+        result = report_results(context, [unreferenced_result()])
+
+        [entry] = result["subjects"]["F-001"]
+        assert entry["persist_ref"] is None
+        assert entry["persist_ref_scope"] is None
+        assert entry["reason"] is not None
+        assert "persistent reference" in entry["reason"]
+
+    def test_a_finding_with_no_subject_has_an_empty_array(
+        self, package: EvidencePackage, context: ToolContext
+    ) -> None:
+        rule = RULES["rms.assembly.first_component_fixed"]
+        result = report_results(
+            context,
+            [finding(rule, ROOT, [], observed="housing-1 is not fixed", recommended_action="Fix.")],
+        )
+
+        assert result["subjects"] == {"F-001": []}
+
+    def test_a_waived_finding_still_carries_its_subjects(
+        self, package: EvidencePackage, context: ToolContext
+    ) -> None:
+        """The Accept button re-renders the rule; its Show buttons must survive that."""
+        accepted(package, context, "rms.core.shell_last")
+
+        result = report_results(
+            context, [fail_result(package, "rms.core.shell_last", HOUSING, "Boss")]
+        )
+
+        [recorded] = context.require_session().findings
+        assert recorded.status == "checked_within_scope"
+        assert [entry["name"] for entry in result["subjects"]["F-001"]] == ["Boss"]
+        assert len(recorded.drawing_locations) == 1

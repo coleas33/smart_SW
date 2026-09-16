@@ -65,7 +65,12 @@ assembly rules have landed and been calibrated; a request naming it is answered 
       "exception": {"id": "EX-001", "state": "active", "note": "..."}
     }
   ],
-  "coverage": [ /* the aggregated coverage items, one per rule per bucket */ ],
+  "coverage": [
+    {"bucket": "unresolved", "check": "rms.refs.direction",
+     "scope": {"component_ids": ["cmp:0003"], "pairs": [], "configuration": "Default",
+               "positions": [], "document_ids": ["doc:ab12"]},
+     "reason": "reference directions are not in the evidence package", "error": null}
+  ],
   "subjects": {
     "<finding_id>": [
       {"feature_id": "feat:0007", "name": "Cut-Extrude1", "type_name": "ICE",
@@ -88,6 +93,11 @@ Three points the shape exists to enforce:
   well. The page never parses a display string.
 - `acceptable` is the rule's severity expressed for the button: `true` only for `fail` rules.
   `exception` is present only when one matched, and carries `active` or `needs_review`.
+- A coverage item is the session's `CoverageItem` with its bucket in front of it, exactly as
+  `coverage_rows` in `checks/rms/run.py` emits it, so the documents it covers are in its
+  **`scope`** and not at the top level. `document` is null whenever the run graded more than
+  one document, so a page that read the ids anywhere else would lose every coverage row in a
+  multi-document check and show a grade counting rules it was no longer listing.
 
 ## 2. Model check page to host
 
@@ -109,9 +119,18 @@ the rows are proven identical rather than assumed.
 
 | type | payload |
 |------|---------|
-| `status` | `{stage: "extracting" \| "ready" \| "error", message}` |
-| `document.changed` | `{path, configuration} \| null` when the active document changes |
+| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
+| `document.changed` | `{path, configuration, kind} \| null` when the active document changes |
 | `backend.stopped` | `{exit_code, log_path}` |
+
+`kind` is what the page decides with - the Model check reads a part's feature tree, so the tab
+says whether a check can run at all instead of offering a button the host will refuse.
+
+The two backend stages are here because this page calls the check routes itself. A tab opened
+while the backend was starting was given a null endpoint in `init`, so `status {stage: "ready"}`
+is its cue to re-send `ready` and take the endpoint from the fresh `init`; the page re-asks only
+while it holds no endpoint, so the host's own end-of-extraction `ready` does not re-initialise
+it in the middle of a check.
 
 ## 4. The run folder rule
 

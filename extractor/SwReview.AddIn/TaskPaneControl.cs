@@ -7,6 +7,7 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using SwReview.AddIn.Review;
+using SwReview.Extractor.Dump;
 
 namespace SwReview.AddIn;
 
@@ -124,21 +125,26 @@ public sealed class TaskPaneOptions
 
 /// <summary>
 /// The Task Pane: <b>Review</b> (the chat page in WebView2), <b>Ask</b> (the CLI terminal,
-/// US3) and <b>Extract</b> (the three buttons that write an evidence package by hand).
+/// US3), <b>Extract</b> (the three buttons that write an evidence package by hand) and
+/// <b>Model check</b> (the rule grade, tab 4, with no provider and no key).
 ///
 /// The tabs are named for what the engineer gets, not for what the code does, and each one
 /// carries the same sentence twice - as a banner across the top of the tab and as the tab's
-/// tooltip - because a pane whose three tabs are nouns tells a first-time user nothing about
-/// which of them to press. Above all three is the <see cref="StepStrip"/>: open a document,
+/// tooltip - because a pane whose tabs are nouns tells a first-time user nothing about
+/// which of them to press. Above all four is the <see cref="StepStrip"/>: open a document,
 /// extract evidence, review or ask, each done or pending with the reason. None of this is
 /// decoration; every one of these sentences replaces a question the pane was being asked.
 ///
-/// Four rules live here because nowhere else can enforce them:
+/// Five rules live here because nowhere else can enforce them:
 ///
 /// <b>One environment for the process.</b> <see cref="EnvironmentAsync"/> creates it once and
-/// hands the same task to every caller, so the Review and Ask tabs share one browser
+/// hands the same task to every caller, so all three WebView2 tabs share one browser
 /// process over one user data folder. Two environments over the same folder with different
 /// options fail at runtime (contracts/pane-host-messages.md).
+///
+/// <b>The fourth tab is loaded when it is opened.</b> <see cref="ActivateModelCheckAsync"/>
+/// runs on the first selection of the Model check tab rather than at add-in load, and its
+/// failure ends as the same fallback panel the other two get (T083).
 ///
 /// <b>Nothing thrown here reaches SOLIDWORKS.</b> <see cref="InitializeAsync"/> never throws.
 /// The add-in is loaded in-process and an exception out of a Task Pane control on the
@@ -167,6 +173,9 @@ public sealed class TaskPaneControl : UserControl
     /// <summary>The Ask tab's terminal page inside the same mapped folder (T060).</summary>
     public const string TerminalPageUrl = PageOrigin + "/Terminal/TerminalPage/index.html";
 
+    /// <summary>The Model check tab's page, tab 4 (T083, contracts/model-check.md).</summary>
+    public const string ModelCheckPageUrl = PageOrigin + "/Model/ModelCheckPage/index.html";
+
     /// <summary>Where the Evergreen runtime comes from, shown when it is missing.</summary>
     public const string RuntimeDownloadUrl = "https://developer.microsoft.com/en-us/microsoft-edge/webview2/";
 
@@ -188,16 +197,38 @@ public sealed class TaskPaneControl : UserControl
         + "interference results, capture the current selection. The Review tab does this for "
         + "you automatically.";
 
+    /// <summary>
+    /// What the <b>Model check</b> tab is for. "No AI, no key" is the sentence engineers ask
+    /// for first, because every other tab in this pane needs one.
+    /// </summary>
+    public const string ModelCheckPurpose =
+        "Grade the open document against the Resilient Modeling Strategy rules in seconds. "
+        + "No AI, no key; read-only.";
+
+    /// <summary>
+    /// What the Model check tab holds before anyone opens it.
+    ///
+    /// The tab's WebView2 is created on first activation rather than at add-in load: a third
+    /// page loaded into every SOLIDWORKS session that never presses Model check is a renderer
+    /// process and a page load nobody asked for, and the tab is the one of the four an engineer
+    /// is least likely to want on the day they install the add-in.
+    /// </summary>
+    public const string ModelCheckPending = "The Model check page opens when you select this tab.";
+
     private readonly TaskPaneOptions _options;
     private readonly TabControl _tabs;
     private readonly TabPage _reviewTab;
     private readonly TabPage _terminalTab;
+    private readonly TabPage _actionsTab;
+    private readonly TabPage _modelCheckTab;
     private readonly ActionsPanel _actions;
     private readonly StepStrip _steps;
 
     private Task<CoreWebView2Environment>? _environment;
     private WebView2? _reviewView;
     private WebView2? _terminalView;
+    private WebView2? _modelCheckView;
+    private Task? _modelCheckActivation;
     private bool _initializing;
 
     /// <summary>The terminal-first run folder this pane created, once it has created one.</summary>
@@ -211,15 +242,24 @@ public sealed class TaskPaneControl : UserControl
         _terminalTab = NewTab("Ask", AskPurpose, Note("Starting the Ask page..."));
 
         _actions = new ActionsPanel();
-        TabPage actionsTab = NewTab("Extract", ExtractPurpose, _actions);
-        actionsTab.Padding = new Padding(6);
+        _actionsTab = NewTab("Extract", ExtractPurpose, _actions);
+        _actionsTab.Padding = new Padding(6);
+
+        // Tab 4, and it holds a placeholder until it is selected (contracts/model-check.md;
+        // feature 004's Remodel tab is tab 5).
+        _modelCheckTab = NewTab("Model check", ModelCheckPurpose, Note(ModelCheckPending));
 
         _tabs = new TabControl { Dock = DockStyle.Fill, ShowToolTips = true };
         _tabs.TabPages.Add(_reviewTab);
         _tabs.TabPages.Add(_terminalTab);
-        _tabs.TabPages.Add(actionsTab);
+        _tabs.TabPages.Add(_actionsTab);
+        _tabs.TabPages.Add(_modelCheckTab);
 
         _steps = new StepStrip { Dock = DockStyle.Top };
+
+        // The strip's one action (T084). The strip says what the evidence is; the tab that
+        // extracts the rest of it is this pane's business, so the pane answers.
+        _steps.ExtractFullEvidenceRequested += (sender, args) => _tabs.SelectedTab = _actionsTab;
 
         MinimumSize = new Size(260, 320);
 
@@ -230,10 +270,11 @@ public sealed class TaskPaneControl : UserControl
 
         // Switching tabs is the moment an engineer is looking at the strip, and it costs a
         // file-exists check; the add-in refreshes it from the events that actually change it.
-        _tabs.SelectedIndexChanged += (sender, args) => RefreshSteps();
+        _tabs.SelectedIndexChanged += OnSelectedTabChanged;
 
         ReviewChannel = new PageChannel(this, () => _reviewView);
         TerminalChannel = new PageChannel(this, () => _terminalView);
+        ModelCheckChannel = new PageChannel(this, () => _modelCheckView);
 
         RefreshSteps();
     }
@@ -256,6 +297,13 @@ public sealed class TaskPaneControl : UserControl
     public IPageChannel TerminalChannel { get; }
 
     /// <summary>
+    /// Posts host messages to the Model check page, from any thread. Valid before the page
+    /// exists: the channel asks for the view per post, so a message sent to a tab nobody has
+    /// opened yet is dropped rather than thrown (see <see cref="IPageChannel"/>).
+    /// </summary>
+    public IPageChannel ModelCheckChannel { get; }
+
+    /// <summary>
     /// One `{type, id, payload}` document from the Review page, raised on the UI thread. The
     /// add-in hands it to <see cref="ReviewHost"/> off this thread and one at a time.
     /// </summary>
@@ -269,11 +317,22 @@ public sealed class TaskPaneControl : UserControl
     /// </summary>
     public event EventHandler<string>? TerminalPageMessageReceived;
 
+    /// <summary>
+    /// One `{type, id, payload}` document from the Model check page, raised on the UI thread.
+    /// Kept apart from the other two for the same reason they are kept apart from each other:
+    /// the three pages have three vocabularies, and a `check.start` answered by the review host
+    /// would be answered `error` while the tab waited.
+    /// </summary>
+    public event EventHandler<string>? ModelCheckPageMessageReceived;
+
     /// <summary>Whether the Review page is loaded (false on a workstation with no runtime).</summary>
     public bool ReviewPageReady => _reviewView != null && _reviewView.CoreWebView2 != null;
 
     /// <summary>Whether the Terminal page is loaded.</summary>
     public bool TerminalPageReady => _terminalView != null && _terminalView.CoreWebView2 != null;
+
+    /// <summary>Whether the Model check page is loaded; false until the tab is first opened.</summary>
+    public bool ModelCheckPageReady => _modelCheckView != null && _modelCheckView.CoreWebView2 != null;
 
     /// <summary>
     /// The process's one WebView2 environment. Created on the first call and shared by every
@@ -336,8 +395,68 @@ public sealed class TaskPaneControl : UserControl
     }
 
     /// <summary>
-    /// Loads one page into one tab. Both tabs go through here so neither can be given a weaker
-    /// set of guards than the other: they share a browser process and a page origin, so a
+    /// Loads the Model check page, once, on the first activation of its tab.
+    ///
+    /// Not at add-in load: a third page in every SOLIDWORKS session is a renderer process and a
+    /// page load nobody asked for, and this is the tab an engineer is least likely to open on
+    /// the day they install the add-in. It is the same environment the other two share, so the
+    /// "one per process" rule is untouched - and when that environment failed, this tab shows
+    /// the documented fallback panel exactly as they do rather than an empty tab.
+    ///
+    /// Never throws: it runs on the SOLIDWORKS UI thread, from a tab click. The task is cached
+    /// including its failure, because the environment's failure is cached too and a retry would
+    /// only ask a question that has already been answered.
+    /// </summary>
+    public Task ActivateModelCheckAsync()
+    {
+        if (IsDisposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _modelCheckActivation ??= LoadModelCheckAsync();
+    }
+
+    private async Task LoadModelCheckAsync()
+    {
+        try
+        {
+            CoreWebView2Environment environment = await EnvironmentAsync().ConfigureAwait(true);
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            _modelCheckView = await AttachPageAsync(
+                environment, _modelCheckTab, ModelCheckPageUrl, OnModelCheckMessageReceived)
+                .ConfigureAwait(true);
+        }
+        catch (Exception failure)
+        {
+            _modelCheckView = null;
+            SetTabContent(_modelCheckTab, BuildFallback(failure));
+        }
+    }
+
+    /// <summary>
+    /// Switching tabs is the moment an engineer is looking at the step strip, and it is also
+    /// the moment the Model check page is wanted for the first time.
+    /// </summary>
+    private void OnSelectedTabChanged(object sender, EventArgs args)
+    {
+        RefreshSteps();
+
+        if (ReferenceEquals(_tabs.SelectedTab, _modelCheckTab))
+        {
+            // Not awaited: the page load must not block the tab from being drawn, and
+            // ActivateModelCheckAsync answers its own failures.
+            _ = ActivateModelCheckAsync();
+        }
+    }
+
+    /// <summary>
+    /// Loads one page into one tab. Every tab goes through here so none can be given a weaker
+    /// set of guards than the others: they share a browser process and a page origin, so a
     /// terminal that followed an off-origin link would be doing it on the Review page's origin.
     /// </summary>
     private async Task<WebView2> AttachPageAsync(
@@ -455,12 +574,21 @@ public sealed class TaskPaneControl : UserControl
     {
         bool document = Ask(_options.DocumentPresent);
         bool evidence = Ask(_options.EvidencePresent);
+        string? session = SessionRunDirectory;
 
-        _steps.Show(document, evidence);
+        // The profile is read from the package itself rather than remembered from the dump
+        // that wrote it: the folder the pane is showing may have been written by a previous
+        // session, by the command line, or by the other pane in a second SOLIDWORKS window.
+        bool checkOnly = evidence && RunFolders.ProfileOf(session) == DumpProfile.ModelCheck;
+
+        _steps.Show(document, evidence, checkOnly);
 
         try
         {
-            _actions.SuggestOutputDirectory(SessionRunDirectory);
+            // Never the check folder: a full extract into it would overwrite the package its
+            // own `session.json` and `report.md` describe (T084). The engineer chooses where
+            // the full dump goes, which is what the Extract tab's folder box is for.
+            _actions.SuggestOutputDirectory(checkOnly ? null : session);
         }
         catch (Exception)
         {
@@ -507,6 +635,9 @@ public sealed class TaskPaneControl : UserControl
 
     private void OnReviewMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e) =>
         Raise(e, PageMessageReceived);
+
+    private void OnModelCheckMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e) =>
+        Raise(e, ModelCheckPageMessageReceived);
 
     private void OnTerminalMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e) =>
         Raise(e, TerminalPageMessageReceived);
@@ -616,8 +747,8 @@ public sealed class TaskPaneControl : UserControl
         panel.Controls.Add(Copyable(RuntimeDownloadUrl));
         panel.Controls.Add(Note("Install the Evergreen runtime from:"));
         panel.Controls.Add(Note(
-            "The Microsoft Edge WebView2 runtime is not available, so the Review and Ask "
-            + "tabs cannot be shown. The Extract tab still works."));
+            "The Microsoft Edge WebView2 runtime is not available, so the Review, Ask and "
+            + "Model check tabs cannot be shown. The Extract tab still works."));
 
         return panel;
     }
@@ -731,10 +862,17 @@ public sealed class TaskPaneControl : UserControl
 /// "why did nothing happen". A step that is pending says why it is pending, in the same words
 /// everywhere, and a step that is done says so.
 ///
-/// It decides nothing. The two facts it renders are answered by the add-in through
-/// <see cref="TaskPaneOptions.DocumentPresent"/> and
-/// <see cref="TaskPaneOptions.EvidencePresent"/>, which is what makes it testable with no
-/// SOLIDWORKS and no WebView2 at all.
+/// Under step 2, when this session's evidence came from a Model check, one more line:
+/// <see cref="CheckOnlyEvidence"/> and an <see cref="ExtractFullEvidence"/> button (T084,
+/// FR-022). It is not a fourth step - the evidence is there and step 2 is done - but a review
+/// of a check package reads "no holes" and "no fasteners" as facts about the design, and the
+/// engineer has to know that before pressing Review rather than out of the report afterwards.
+///
+/// It decides nothing. The three facts it renders are answered by the add-in and by the pane
+/// through <see cref="TaskPaneOptions.DocumentPresent"/>,
+/// <see cref="TaskPaneOptions.EvidencePresent"/> and <see cref="RunFolders.ProfileOf"/>, and
+/// the button raises an event rather than starting anything, which is what makes the whole
+/// strip testable with no SOLIDWORKS and no WebView2 at all.
 /// </summary>
 public sealed class StepStrip : UserControl
 {
@@ -747,15 +885,56 @@ public sealed class StepStrip : UserControl
     /// <summary>Why step 2 is pending. "This session" is the pane's current run folder.</summary>
     public const string NoEvidence = "no evidence for this session yet";
 
+    /// <summary>
+    /// What the strip says when this session's evidence came from a Model check (FR-022).
+    ///
+    /// Not a step and not a warning: the evidence is there, it is simply a fraction of the
+    /// design. A review of it reports "no holes" and "no fasteners" as facts about the model,
+    /// so the sentence names what is in the package rather than what is missing from it, and
+    /// the button beside it is the way to get the rest.
+    /// </summary>
+    public const string CheckOnlyEvidence = "Evidence: model check only (features and equations)";
+
+    /// <summary>The action beside <see cref="CheckOnlyEvidence"/>: it opens the Extract tab,
+    /// which dumps every phase.</summary>
+    public const string ExtractFullEvidence = "Extract full evidence";
+
     private static readonly Color DoneColor = Color.FromArgb(0, 100, 0);
 
     private readonly Label _document;
     private readonly Label _evidence;
     private readonly Label _work;
+    private readonly FlowLayoutPanel _notice;
+    private readonly Label _noticeText;
+    private readonly Button _extractFull;
 
     public StepStrip()
     {
         _work = Row();
+        _noticeText = Row();
+        _extractFull = new Button
+        {
+            Text = ExtractFullEvidence,
+            AutoSize = true,
+            Margin = new Padding(8, 0, 0, 0),
+        };
+        _extractFull.Click += (sender, args) => ExtractFullEvidenceRequested?.Invoke(this, EventArgs.Empty);
+
+        _notice = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false,
+            Margin = new Padding(0),
+            Padding = new Padding(0, 2, 0, 2),
+            Visible = false,
+        };
+        _noticeText.Dock = DockStyle.None;
+        _noticeText.Anchor = AnchorStyles.Left;
+        _notice.Controls.Add(_noticeText);
+        _notice.Controls.Add(_extractFull);
+
         _evidence = Row();
         _document = Row();
 
@@ -763,16 +942,31 @@ public sealed class StepStrip : UserControl
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Padding = new Padding(6, 4, 6, 4);
 
-        // Added last-to-first: DockStyle.Top stacks in reverse order of addition.
+        // Added last-to-first: DockStyle.Top stacks in reverse order of addition. The notice
+        // sits between step 2, which put the evidence there, and step 3, which is the press
+        // of Review it is about.
         Controls.Add(_work);
+        Controls.Add(_notice);
         Controls.Add(_evidence);
         Controls.Add(_document);
 
-        Show(document: false, evidence: false);
+        Show(document: false, evidence: false, checkOnly: false);
     }
+
+    /// <summary>Raised by the <see cref="ExtractFullEvidence"/> button. The pane answers it by
+    /// opening the Extract tab; the strip itself starts nothing.</summary>
+    public event EventHandler? ExtractFullEvidenceRequested;
 
     /// <summary>The three lines as they read on screen, top to bottom. The tests' whole view.</summary>
     public IReadOnlyList<string> Lines => new[] { _document.Text, _evidence.Text, _work.Text };
+
+    /// <summary>
+    /// The partial-evidence sentence when it is showing, and the empty string when it is not.
+    ///
+    /// Beside <see cref="Lines"/> rather than inside it, because it is not a step: the three
+    /// steps read exactly the same on a Model check package as on a full one.
+    /// </summary>
+    public string Notice => _notice.Visible ? _noticeText.Text : string.Empty;
 
     /// <summary>
     /// Repaints the strip from the two facts it is given.
@@ -785,13 +979,21 @@ public sealed class StepStrip : UserControl
     /// Its reason is the first thing in the way, because an engineer reading "Review or Ask -
     /// pending" wants the blocker, not a pointer to another line of the strip.
     /// </summary>
-    public void Show(bool document, bool evidence)
+    /// <param name="document">Whether a document is open.</param>
+    /// <param name="evidence">Whether this session's run folder holds an evidence package.</param>
+    /// <param name="checkOnly">Whether that package came from a Model check, and therefore
+    /// carries features and equations and none of the geometry phases (FR-022). It says
+    /// nothing about the three steps: partial evidence is evidence, and step 2 is done.</param>
+    public void Show(bool document, bool evidence, bool checkOnly)
     {
         bool ready = document && evidence;
 
         Set(_document, "1 Open a document", document, document ? Ready : NoDocument);
         Set(_evidence, "2 Extract evidence", evidence, evidence ? Ready : NoEvidence);
         Set(_work, "3 Review or Ask", ready, ready ? Ready : (document ? NoEvidence : NoDocument));
+
+        _noticeText.Text = CheckOnlyEvidence;
+        _notice.Visible = checkOnly;
     }
 
     private static void Set(Label row, string step, bool done, string reason)
@@ -960,19 +1162,26 @@ public sealed class ActionsPanel : UserControl
     /// append to the package.json the Review or Ask tab already wrote there - but it is a
     /// suggestion, not a setting: a box the engineer typed into, or browsed to, is left exactly
     /// as it is, and so is one this panel has already suggested and had changed.
+    ///
+    /// <b>No folder withdraws the suggestion</b> rather than leaving the last one standing. The
+    /// pane passes null when there is nowhere it can honestly point - a session folder that has
+    /// gone, or a Model check folder a full extract would overwrite (T084) - and a box still
+    /// showing the previous answer would be the pane pointing at it anyway.
     /// </summary>
     public void SuggestOutputDirectory(string? folder)
     {
-        if (string.IsNullOrWhiteSpace(folder))
-        {
-            return;
-        }
-
         string current = OutputDirectory;
         bool ours = current.Length == 0
             || string.Equals(current, _suggested, StringComparison.OrdinalIgnoreCase);
         if (!ours)
         {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            OutputDirectory = string.Empty;
+            _suggested = null;
             return;
         }
 

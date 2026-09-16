@@ -28,94 +28,26 @@
 
   // ---- DOM helpers --------------------------------------------------------------------
 
-  /** An element with an optional class and an optional run of literal text. */
-  function el(tag, className, value) {
-    var node = document.createElement(tag);
-    if (className) {
-      node.className = className;
-    }
-    if (value !== undefined && value !== null && value !== '') {
-      node.appendChild(document.createTextNode(String(value)));
-    }
-    return node;
-  }
-
-  /** Appends literal text to a node. The only way text ever enters this page. */
-  function write(node, value) {
-    node.appendChild(document.createTextNode(String(value === undefined || value === null ? '' : value)));
-    return node;
-  }
-
-  function clear(node) {
-    while (node.firstChild) {
-      node.removeChild(node.firstChild);
-    }
-    return node;
-  }
-
-  function append(parent, children) {
-    for (var index = 0; index < children.length; index++) {
-      if (children[index]) {
-        parent.appendChild(children[index]);
-      }
-    }
-    return parent;
-  }
-
-  function button(label, action, className) {
-    var node = el('button', className || 'action', label);
-    node.setAttribute('type', 'button');
-    node.setAttribute('data-action', action);
-    return node;
-  }
-
-  /** A labelled row in a card's detail list. Absent values are skipped by the caller. */
-  function field(label, value) {
-    var row = el('div', 'field-row');
-    row.appendChild(el('span', 'field-label', label));
-    row.appendChild(el('span', 'field-value', value));
-    return row;
-  }
+  /*
+    `el`, `write`, `clear`, `append`, `button`, `field`, `list`, `scalar`, `compact` and
+    `seconds` live in `web/shared/dom.js`, loaded by index.html before this file and shared
+    with the Model check page (T080). They are not copied here: they are the single
+    enforcement point for "every untrusted string reaches the screen through
+    createTextNode", and a rule with two copies has one that is out of date.
+  */
+  var dom = window.SwReviewDom;
+  var el = dom.el;
+  var write = dom.write;
+  var clear = dom.clear;
+  var append = dom.append;
+  var button = dom.button;
+  var field = dom.field;
+  var list = dom.list;
+  var scalar = dom.scalar;
+  var compact = dom.compact;
+  var seconds = dom.seconds;
 
   // ---- formatting ---------------------------------------------------------------------
-
-  /**
-   * Values are formatted rather than interpolated, so a card never shows `[object Object]`
-   * and never shows `undefined` where a field was simply absent.
-   */
-  function list(values) {
-    if (!values || !values.length) {
-      return '';
-    }
-    var parts = [];
-    for (var index = 0; index < values.length; index++) {
-      parts.push(scalar(values[index]));
-    }
-    return parts.join(', ');
-  }
-
-  function scalar(value) {
-    if (value === null || value === undefined) {
-      return '';
-    }
-    if (typeof value === 'object') {
-      return compact(value);
-    }
-    return String(value);
-  }
-
-  /** JSON, as text. Used for tool arguments and any nested object a card shows. */
-  function compact(value) {
-    try {
-      return JSON.stringify(value);
-    } catch (error) {
-      return String(value);
-    }
-  }
-
-  function seconds(value) {
-    return typeof value === 'number' && isFinite(value) ? value.toFixed(2) + ' s' : '';
-  }
 
   function location(reference) {
     if (!reference) {

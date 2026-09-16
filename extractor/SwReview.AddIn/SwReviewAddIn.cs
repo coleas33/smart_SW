@@ -14,6 +14,7 @@ using SwReview.Extractor.Interference;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.PersistRefs;
 using SwReview.Extractor.Sw;
+using SwReview.AddIn.Model;
 using SwReview.AddIn.Native;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
@@ -106,6 +107,7 @@ public class SwReviewAddIn : ISwAddin
     private BackendClient? _backend;
     private ReviewHost? _reviewHost;
     private TerminalHost? _terminalHost;
+    private ModelCheckHost? _modelCheckHost;
     private ToolServiceGate? _toolService;
 
     /// <summary>
@@ -120,6 +122,18 @@ public class SwReviewAddIn : ISwAddin
     private readonly BlockingCollection<string> _pageMessages = new BlockingCollection<string>();
 
     private Thread? _pageMessagePump;
+
+    /// <summary>
+    /// The Model check page's messages, on a queue and a thread of their own.
+    ///
+    /// Separate from the Review page's for the reason its handlers are separate: a
+    /// `check.start` runs a dump on the application thread and takes seconds, and queueing it
+    /// behind - or in front of - a review's messages would make one tab's work wait on the
+    /// other's. One thread each, one message at a time each, because neither host is re-entrant.
+    /// </summary>
+    private readonly BlockingCollection<string> _modelCheckMessages = new BlockingCollection<string>();
+
+    private Thread? _modelCheckPump;
 
     /// <summary>The running SOLIDWORKS session, or null while disconnected.</summary>
     public ISldWorks? SwApp => _swApp;
@@ -214,6 +228,7 @@ public class SwReviewAddIn : ISwAddin
         if (_pane != null)
         {
             _pane.PageMessageReceived -= OnPageMessage;
+            _pane.ModelCheckPageMessageReceived -= OnModelCheckPageMessage;
         }
 
         if (_events != null)
@@ -223,6 +238,7 @@ public class SwReviewAddIn : ISwAddin
         }
 
         StopPageMessagePump();
+        StopModelCheckPump();
 
         // Before the review host, because the tool service is what still holds SOLIDWORKS
         // pointers: the pipe stops listening and the scope is let go while the add-in is still
@@ -234,6 +250,12 @@ public class SwReviewAddIn : ISwAddin
         // console and the generated profile, and it is stopped rather than left to the job.
         _terminalHost?.Dispose();
         _terminalHost = null;
+
+        // Before the review host, because a check's record is registered on it: the Model
+        // check host holds nothing SOLIDWORKS owns, so this is only about the order the two
+        // stop answering in.
+        _modelCheckHost?.Dispose();
+        _modelCheckHost = null;
 
         _reviewHost?.Dispose();
         _reviewHost = null;
@@ -386,6 +408,8 @@ public class SwReviewAddIn : ISwAddin
             // run folder the CLI is working in (contracts/pane-host-messages.md).
             reviewOptions.Dump);
 
+        StartModelCheckHost(reviewOptions);
+
         // The pane follows the engineer: the Review button and the document name track
         // whatever is active, so a review is never started against the document that was open
         // when the pane was created (pane-host-messages.md, `document.changed`).
@@ -404,6 +428,115 @@ public class SwReviewAddIn : ISwAddin
         UserSettings settings = _reviewHost.Settings;
         ResolvedApiKey key = settings.ResolveApiKey();
         ThreadPool.QueueUserWorkItem(_ => StartBackend(settings, key));
+    }
+
+    /// <summary>
+    /// The Model check tab's host (T083, contracts/model-check.md).
+    ///
+    /// It shares three things with the Review tab rather than owning copies of them: the same
+    /// in-process extractor (asked for the reduced <c>ModelCheck</c> profile), the same entity
+    /// resolver, so Show selects the same way on both pages, and the same answer to "which
+    /// folder is the pane looking at" - the check registers its own folder through
+    /// <see cref="ReviewHost.TrackCheck"/>, which is what makes <c>CurrentSessionRunDirectory</c>
+    /// and the package index point at the check the engineer just ran.
+    ///
+    /// It shares no base class with <see cref="ReviewHost"/>: inheritance would drag settings
+    /// and backend state into a host that has neither (plan.md, Structure decision).
+    /// </summary>
+    private void StartModelCheckHost(ReviewHostOptions reviewOptions)
+    {
+        if (_pane == null)
+        {
+            return;
+        }
+
+        _modelCheckHost = new ModelCheckHost(new ModelCheckHostOptions(
+            _pane.ModelCheckChannel,
+            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+        {
+            Backend = () => _backend?.Endpoint,
+            CurrentDocument = CurrentDocument,
+            Dump = reviewOptions.Dump,
+            EntityResolver = () => reviewOptions.EntityResolver,
+
+            // One answer to "which folder is the pane looking at", and it is the review host's
+            // to keep: a check that registered itself anywhere else would silently degrade Show
+            // to "no full path" for every finding and open the Ask tab in an unrelated folder.
+            RegisterLatestRun = runDirectory =>
+            {
+                _reviewHost?.TrackCheck(runDirectory);
+                _pane?.RefreshSteps();
+            },
+
+            // The same secret the Review host masks out of its own messages. This host is
+            // handed the backend's start-up failures too, and a key-resolution failure is
+            // exactly the kind of message that carries one (FR-015).
+            Secrets = () => new[]
+            {
+                (_reviewHost?.Settings ?? UserSettings.Defaults()).ResolveApiKey().Key,
+            },
+        });
+
+        StartModelCheckPump();
+        _pane.ModelCheckPageMessageReceived += OnModelCheckPageMessage;
+    }
+
+    private void OnModelCheckPageMessage(object sender, string json)
+    {
+        try
+        {
+            _modelCheckMessages.Add(json);
+        }
+        catch (Exception)
+        {
+            // The pump is shutting down; the page is about to go with it.
+        }
+    }
+
+    private void StartModelCheckPump()
+    {
+        _modelCheckPump = new Thread(() =>
+        {
+            foreach (string json in _modelCheckMessages.GetConsumingEnumerable())
+            {
+                try
+                {
+                    _modelCheckHost?.Receive(json);
+                }
+                catch (Exception)
+                {
+                    // ModelCheckHost.Receive answers its own failures; an exception escaping
+                    // onto this background thread would take SOLIDWORKS down with it.
+                }
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "swreview-model-check-messages",
+        };
+
+        _modelCheckPump.Start();
+    }
+
+    private void StopModelCheckPump()
+    {
+        if (_modelCheckPump == null)
+        {
+            return;
+        }
+
+        try
+        {
+            _modelCheckMessages.CompleteAdding();
+        }
+        catch (Exception)
+        {
+        }
+
+        // Bounded, like the review pump: the thread may be inside a dump, and SOLIDWORKS is
+        // not made to wait for it.
+        _modelCheckPump.Join(TimeSpan.FromSeconds(2));
+        _modelCheckPump = null;
     }
 
     /// <summary>
@@ -436,9 +569,14 @@ public class SwReviewAddIn : ISwAddin
     {
         try
         {
-            _reviewHost?.PostStatus("backend_starting", "Starting the review backend...");
+            // To both pages. The Model check tab calls `/checks/rms` itself with the endpoint
+            // its `init` carried, so a tab opened while the backend was still starting holds a
+            // null endpoint; the `ready` below is what tells it to ask again. A page nobody has
+            // opened yet is not a problem: `PageChannel` asks for the view per post and drops
+            // the message when there is none.
+            PostStatusToPages("backend_starting", "Starting the review backend...");
             _backend?.Start(settings, key);
-            _reviewHost?.PostStatus("ready", "Backend ready.");
+            PostStatusToPages("ready", "Backend ready.");
         }
         catch (Exception failure)
         {
@@ -448,9 +586,23 @@ public class SwReviewAddIn : ISwAddin
             // before that wrapper - and the page must never be the first place a key appears.
             // Reported to the page and to the log, never thrown from a thread pool thread,
             // where it would end the process.
-            _reviewHost?.PostStatus("error", failure.Message);
+            PostStatusToPages("error", failure.Message);
             Report("The SwReview backend did not start.", failure);
         }
+    }
+
+    /// <summary>
+    /// One backend lifecycle `status` to every page that has a backend of its own to track.
+    ///
+    /// Each host masks the configured key out of the message itself (FR-015), which is why this
+    /// hands both of them the raw text rather than redacting once here: the masking belongs to
+    /// the thing that posts to a page, and a caller that remembered to redact would be the one
+    /// place it could be forgotten.
+    /// </summary>
+    private void PostStatusToPages(string stage, string message)
+    {
+        _reviewHost?.PostStatus(stage, message);
+        _modelCheckHost?.PostStatus(stage, message);
     }
 
     /// <summary>
@@ -501,6 +653,7 @@ public class SwReviewAddIn : ISwAddin
         try
         {
             _reviewHost?.DocumentChanged();
+            _modelCheckHost?.DocumentChanged();
 
             // Step 1 of the strip above the tabs has just changed answer, and this is the event
             // that says so (pane-host-messages.md, `document.changed`).

@@ -43,7 +43,7 @@ public static class Program
     private const int ExitError = 1;
 
     internal static readonly string[] DumpOptionNames =
-        { "doc", "config", "out", "meshes", "faces", "features", "equations" };
+        { "doc", "config", "out", "meshes", "faces", "features", "equations", "profile" };
 
     internal static readonly string[] ResolveOptionNames = { "ref", "doc", "out" };
 
@@ -230,6 +230,7 @@ public static class Program
                 Faces = parsed.FaceScope(),
                 Features = parsed.FeatureScope(),
                 Equations = parsed.EquationScope(),
+                Profile = parsed.DumpProfile(),
             };
         }
         catch (UsageError error)
@@ -252,7 +253,8 @@ public static class Program
                     + $"--meshes {options.Meshes.ToString().ToLowerInvariant()} "
                     + $"--faces {options.Faces.ToString().ToLowerInvariant()} "
                     + $"--features {options.Features.ToString().ToLowerInvariant()} "
-                    + $"--equations {options.Equations.ToString().ToLowerInvariant()}");
+                    + $"--equations {options.Equations.ToString().ToLowerInvariant()} "
+                    + $"--profile {CommandLine.CliName(options.Profile)}");
 
                 ISldWorks swApp = Connect(allowStart, log);
 
@@ -749,11 +751,8 @@ public static class Program
 
                 ProbeFeatures(session, refs);
                 ProbeEquations(session);
-
-                if (kind == DocumentKind.Assembly)
-                {
-                    ProbeAssembly(session, refs);
-                }
+                ProbeRootComponent(session);
+                ProbeComponentTree(session, refs, kind);
 
                 return ExitSuccess;
             }
@@ -855,13 +854,51 @@ public static class Program
     }
 
     /// <summary>
-    /// The two assembly answers research R5 could not settle from the signatures: what
-    /// <c>GetConstrainedStatus</c> reports per component, and whether a mate's feature reports
-    /// its suppression. Both run through the shipped dumpers, so what the probe prints is what
-    /// a dump would record, with the same component ids.
+    /// PROBE-15, the single observation User Story 6 and feature 004 both rest on: what
+    /// <c>IConfiguration.GetRootComponent3(false)</c> answers for a PART configuration on
+    /// 2024. <see cref="ComponentTreeDumper"/> synthesizes a part root when it answers
+    /// nothing (FR-023, RK-15), and that is a claim about this release, so it is printed
+    /// rather than believed. The line is written for an assembly too: the same call is the
+    /// start of every traversal, and a probe that only printed it in the case under suspicion
+    /// would have nothing to compare it against.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void ProbeAssembly(SwSession session, PersistRefService refs)
+    private static void ProbeRootComponent(SwSession session)
+    {
+        SwGate gate = session.Gate;
+
+        Out.WriteLine("root_component: " + Describe(() =>
+        {
+            object? root = gate.Call(
+                "GetRootComponent3", () => session.Configuration.GetRootComponent3(false));
+
+            if (root == null)
+            {
+                return "(null)";
+            }
+
+            // The dumper casts the same way, so an object that is not an IComponent2 is
+            // exactly as good as null to it - and very different to whoever reads this.
+            if (!(root is IComponent2 component))
+            {
+                return $"(not IComponent2: {root.GetType().Name})";
+            }
+
+            return Quote(gate.Call("Name2", () => component.Name2));
+        }));
+    }
+
+    /// <summary>
+    /// The traversal exactly as the dump performs it - same dumper, same ids - so the
+    /// components the probe prints are the ones package.json would carry. For a part opened
+    /// alone that is the synthesized part root, including whether SOLIDWORKS gave it a
+    /// persistent reference (PROBE-15). For an assembly it is also where the two answers
+    /// research R5 could not settle from the signatures appear: what
+    /// <c>GetConstrainedStatus</c> reports per component, and whether a mate's feature
+    /// reports its suppression.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbeComponentTree(SwSession session, PersistRefService refs, DocumentKind kind)
     {
         var gaps = new GapCollector();
         var options = new DumpOptions { Meshes = MeshFormat.None, Features = FeatureScope.None };
@@ -877,11 +914,29 @@ public static class Program
                 + " constrained_status_raw="
                 + (node.ConstrainedStatusRaw?.ToString(CultureInfo.InvariantCulture) ?? "null")
                 + $" is_fixed={node.IsFixed}"
-                + $" suppression={PackageSerializer.EnumToJsonName(node.Suppression)}");
+                + $" suppression={PackageSerializer.EnumToJsonName(node.Suppression)}"
+                + $" persist_ref={(node.PersistRef == null ? "null" : "present")}");
         }
 
+        if (kind == DocumentKind.Assembly)
+        {
+            ProbeMates(session, refs, scope);
+        }
+
+        Out.WriteLine($"gaps: {gaps.Count}");
+        foreach (Gap gap in gaps.Gaps)
+        {
+            Out.WriteLine($"  {gap.EntityKind} {gap.EntityId ?? "-"}: {gap.Reason}");
+        }
+    }
+
+    /// <summary>The root assembly's mates, through the shipped dumper and the same ids.</summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbeMates(SwSession session, PersistRefService refs, DumpScope scope)
+    {
         IReadOnlyList<IrMate> mates = new MateDumper(session, refs).Dump(scope);
         Out.WriteLine($"mates: {mates.Count}");
+
         foreach (IrMate mate in mates)
         {
             var kinds = new List<string>();
@@ -892,12 +947,6 @@ public static class Program
 
             Out.WriteLine($"  {mate.Id} {mate.Type} suppressed={mate.Suppressed} "
                 + $"entities=[{string.Join(", ", kinds)}]");
-        }
-
-        Out.WriteLine($"gaps: {gaps.Count}");
-        foreach (Gap gap in gaps.Gaps)
-        {
-            Out.WriteLine($"  {gap.EntityKind} {gap.EntityId ?? "-"}: {gap.Reason}");
         }
     }
 
@@ -1190,7 +1239,11 @@ public static class Program
         writer.WriteLine("  dump          --doc <path> --config <name> --out <dir>");
         writer.WriteLine("                --meshes glb|stl|none --faces needed|all");
         writer.WriteLine("                --features tree|none --equations on|off");
+        writer.WriteLine("                --profile full|model-check");
         writer.WriteLine("                Write package.json and meshes/ for the active or named document.");
+        writer.WriteLine("                --profile model-check reads documents, mates, features and");
+        writer.WriteLine("                equations only: no holes, fasteners, faces or meshes. The");
+        writer.WriteLine("                package records which profile wrote it as extractor.profile.");
         writer.WriteLine("  interference  --config <name> --pairs all|<id,id>... --out <dir>");
         writer.WriteLine("                --coincident-as-interference --subassemblies-as-components");
         writer.WriteLine("                --include-multibody --ignore-hidden");
@@ -1203,8 +1256,9 @@ public static class Program
         writer.WriteLine("                Print what a persistent reference resolves to (round-trip test).");
         writer.WriteLine("  probe rms     [--doc <path>]");
         writer.WriteLine("                Print the raw feature walk, sketch statuses, descriptions,");
-        writer.WriteLine("                equations and fillet data for one document, and for an");
-        writer.WriteLine("                assembly its component constrained status and mate");
+        writer.WriteLine("                equations and fillet data for one document, what");
+        writer.WriteLine("                GetRootComponent3 returned, the components the traversal");
+        writer.WriteLine("                produced, and for an assembly its mates and their");
         writer.WriteLine("                suppression. Writes nothing.");
         writer.WriteLine("  suppress-test --doc <part> --plan <suppress-plan.json> --acknowledge-rebuild");
         writer.WriteLine("                --out <package dir> [--limit <n>] [--timeout-seconds <n>]");

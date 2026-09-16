@@ -12,7 +12,7 @@ namespace SwReview.Extractor.Ir;
 public sealed class EvidencePackage
 {
     /// <summary>The schema version this package was written against.</summary>
-    public const string CurrentSchemaVersion = "1.1.0";
+    public const string CurrentSchemaVersion = "1.2.0";
 
     /// <summary>Semver; consumers reject any major other than 1 (FR-016).</summary>
     [JsonPropertyName("schema_version")]

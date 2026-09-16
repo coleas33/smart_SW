@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -10,6 +10,7 @@ using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
 using SwReview.AddIn.Terminal;
 using SwReview.AddIn.ToolService;
+using SwReview.Extractor.Dump;
 using Xunit;
 
 namespace SwReview.AddIn.Tests;
@@ -495,6 +496,10 @@ public sealed class TerminalHostTests
             Assert.Equal(FakeDump.Gaps, counts.GetProperty("gaps").GetInt32());
 
             Assert.Equal(new[] { fixture.RunDirectory }, fixture.Dump.Folders.ToArray());
+
+            // T064. `evidence.extract` is the Ask tab's full extract, not a check; the agent
+            // behind it reads geometry, so it asks for every phase.
+            Assert.Equal(DumpProfile.Full, fixture.Dump.LastProfile);
         }
     }
 
@@ -961,9 +966,14 @@ public sealed class TerminalHostTests
         /// <summary>When set, the dump throws it instead of writing anything.</summary>
         public Exception? Failure { get; set; }
 
-        public DumpSummary Run(string outputDirectory, Action<string> progress)
+        /// <summary>The profile the host asked for; evidence.extract must stay on Full.</summary>
+        public DumpProfile? LastProfile { get; private set; }
+
+        public DumpSummary Run(
+            string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)
         {
             _folders.Add(outputDirectory);
+            LastProfile = profile;
             if (Failure != null)
             {
                 throw Failure;

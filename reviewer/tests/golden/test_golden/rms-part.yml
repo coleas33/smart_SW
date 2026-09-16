@@ -458,7 +458,28 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvMy1Db3Jl
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvNC1EZXRhaWw=
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvMy1Db3JlIzI=
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-001
@@ -495,7 +516,14 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQXhpczE=
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-002
@@ -525,7 +553,14 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQm9zcy1FeHRydWRlMQ==
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-003
@@ -559,7 +594,28 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvU2hlbGwx
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQm9zcy1FeHRydWRlNA==
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQm9zcy1FeHRydWRlNQ==
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-004
@@ -594,7 +650,28 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvSG9sZTE=
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQ3V0LUV4dHJ1ZGU1
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQ3V0LUV4dHJ1ZGU0
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-005
@@ -626,7 +703,21 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvTFBhdHRlcm4x
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvRHJhZnQx
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-006
@@ -657,7 +748,21 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvRmlsbGV0MQ==
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQ2hhbWZlcjE=
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-007
@@ -688,7 +793,21 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvRmlsbGV0MQ==
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvRmlsbGV0Mg==
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-008
@@ -721,7 +840,14 @@ result:
     - 'exception:EX-001: legacy bracket; the Quarantine draft is scheduled for removal
       at the next revision'
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvRHJhZnQy
+      sheet: null
+      view: null
     exception_id: EX-001
     group: null
     id: F-009
@@ -756,7 +882,21 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQ3V0LUV4dHJ1ZGU0
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQm9zcy1FeHRydWRlNQ==
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-010
@@ -790,7 +930,21 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvRmlsbGV0MQ==
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvRmlsbGV0Mw==
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-011
@@ -821,7 +975,21 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQ3V0LUV4dHJ1ZGUy
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQ3V0LUV4dHJ1ZGUz
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-012
@@ -855,7 +1023,14 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvRHJhZnQx
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-013
@@ -885,7 +1060,21 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvU2tldGNoMg==
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvU3VyZmFjZS1FeHRydWRlMQ==
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-014
@@ -917,7 +1106,21 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvU2tldGNoNQ==
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQ3V0LUV4dHJ1ZGU1
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-015
@@ -949,7 +1152,28 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvU2tldGNoMw==
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQm9zcy1FeHRydWRlMg==
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQm9zcy1FeHRydWRlMw==
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-016
@@ -983,7 +1207,14 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:3
+      page: null
+      persist_ref: ZG9jOjMvQ3V0LUV4dHJ1ZGUy
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-017

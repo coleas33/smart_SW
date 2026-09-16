@@ -7,7 +7,8 @@ model decides what to investigate and explains, never computes a verdict.
 
 The design documents live in `specs/001-agentic-design-review/` (spec, plan, research,
 data model, contracts, quickstart, tasks), the Task Pane assistant that runs the reviewer
-from inside SOLIDWORKS in `specs/002-task-pane-assistant/`, and the governing rules in
+from inside SOLIDWORKS in `specs/002-task-pane-assistant/`, the Resilient Modeling checks
+and the Model check tab in `specs/003-resilient-modeling/`, and the governing rules in
 `.specify/memory/constitution.md`. `README-complete.md` is the original pilot proposal and
 `sw-review-architecture-proposal.md` the architecture decision record.
 
@@ -50,9 +51,10 @@ dotnet test  extractor\SwReview.sln -c Release
 See `specs/001-agentic-design-review/quickstart.md` for the validation scenarios and
 `specs/002-task-pane-assistant/quickstart.md` for the Task Pane ones. The main entry points
 are `swreview` (Python CLI: `validate`, `ingest`, `review`, `report`, `disposition`,
-`check`, `benchmark`, plus `chat serve` for the Task Pane backend, `mcp` for the read-only
-toolset an external CLI connects to, and `audit-secrets`) and `swreview-extract` (C#
-console: `dump`, `interference`, `capture`, `resolve`, `serve`).
+`check`, `rms`, `benchmark`, plus `chat serve` for the Task Pane backend, `mcp` for the
+read-only toolset an external CLI connects to, and `audit-secrets`) and `swreview-extract`
+(C# console: `dump`, `interference`, `capture`, `resolve`, `serve`, `probe rms`,
+`suppress-test`).
 
 The review loop runs on OpenAI by default, or on Gemini with `--provider gemini`. It needs
 `OPENAI_API_KEY`, or `GOOGLE_API_KEY` (`GEMINI_API_KEY` is read second) for Gemini. Inside SOLIDWORKS the key comes from the pane's settings instead,
@@ -61,6 +63,38 @@ through its environment block: it is never a command-line argument, and `swrevie
 audit-secrets <run> <logs>` is the check that it never reached a file.
 
 Command-line contracts: `specs/001-agentic-design-review/contracts/cli.md`.
+
+## Resilient Modeling checks
+
+A second family of findings, deterministic like the first and with no language model
+anywhere in it: does the part's feature tree follow the Resilient Modeling convention -
+the six ordered group folders `1-Ref`, `2-Construction`, `3-Core`, `4-Detail`,
+`5-Modify`, `6-Quarantine` - and are the references between features the ones that survive
+an edit? The rules grade what the extractor read (`features[]`, `equations[]`, mates,
+component instances); a rule with no evidence to read is reported as unresolved coverage,
+never as a pass. The catalogue is `specs/003-resilient-modeling/contracts/rules.md` and
+the feature type tables are `reviewer/src/swreview/checks/rms_types.yaml`.
+
+```powershell
+swreview-extract dump --out <package dir>            # --features tree --equations on
+swreview check rms --package <package dir>           # findings, coverage, session.json, report.md
+swreview rms types --package <package dir>           # type names the tables do not classify
+```
+
+One rule cannot be answered from a static dump: whether a Detail feature can be suppressed
+on its own without breaking the rebuild. `swreview rms suppress-plan` writes the plan -
+which features, in which order, in which configuration - and the engineer runs
+`swreview-extract suppress-test` against the open document to carry it out. That command is
+the only mutation path in this product: it is acknowledged on the command line, guarded,
+restores the tree, never saves, and is not reachable from the pane, the bridge or the MCP
+toolset. `benchmarks/README.md` has the workflow end to end.
+
+The **Model check tab** is the same checks from inside SOLIDWORKS: it dumps the active
+document with `--profile model-check` (features and equations only, so it is seconds rather
+than a full extract), runs the same `run_rms_check` the command line runs, and shows the
+grade, the findings and an Accept control for a demonstrated failure. It registers no tool
+and adds no mutation - the model is not in this loop at all, and no API key is needed to
+use it.
 
 ## Spec Kit
 

@@ -4,7 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Json.Schema;
+using SwReview.Extractor.Dump;
 using SwReview.Extractor.Ir;
 using Xunit;
 // SwReview.Extractor.Interference is a namespace (T069), so the IR type is named explicitly.
@@ -138,7 +140,7 @@ public class IrSerializerTests
 
         EvidencePackage restored = PackageSerializer.Deserialize(PackageSerializer.Serialize(original));
 
-        Assert.Equal("1.1.0", restored.SchemaVersion);
+        Assert.Equal("1.2.0", restored.SchemaVersion);
         Assert.Equal(EvidencePackage.CurrentSchemaVersion, restored.SchemaVersion);
 
         Assert.Equal(6, restored.Features.Count);
@@ -246,7 +248,7 @@ public class IrSerializerTests
     {
         string json = PackageSerializer.Serialize(BuildSamplePackage());
 
-        Assert.Contains("\"schema_version\": \"1.1.0\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"schema_version\": \"1.2.0\"", json, StringComparison.Ordinal);
         Assert.Contains("\"folder_id\": null", json, StringComparison.Ordinal);
         Assert.Contains("\"raw_status\": null", json, StringComparison.Ordinal);
         Assert.Contains("\"consumer_ids\": null", json, StringComparison.Ordinal);
@@ -255,6 +257,59 @@ public class IrSerializerTests
         Assert.Contains("\"constrained_status_raw\": null", json, StringComparison.Ordinal);
         Assert.Contains("\"baseline_whats_wrong_count\": 0", json, StringComparison.Ordinal);
         Assert.Contains("\"messages_truncated\": 3", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SamplePackage_DefaultsToTheFullProfile()
+    {
+        // T065, schema 1.2.0. Every package this extractor has ever written was a full dump;
+        // the member is added with that as its default so nothing has to be back-filled.
+        string json = PackageSerializer.Serialize(BuildSamplePackage());
+
+        Assert.Contains("\"profile\": \"full\"", json, StringComparison.Ordinal);
+        Assert.Equal(DumpProfile.Full, PackageSerializer.Deserialize(json).Extractor.Profile);
+    }
+
+    [Fact]
+    public void ModelCheckPackage_WritesTheProfileAndValidatesAgainstTheContract()
+    {
+        // The Model check profile leaves holes[], fasteners[], faces[] and bodies[] empty on
+        // purpose; profile is the only thing that tells a reader that from a lost dump.
+        EvidencePackage package = BuildSamplePackage();
+        package.Extractor.Profile = DumpProfile.ModelCheck;
+
+        string json = PackageSerializer.Serialize(package);
+
+        Assert.Contains("\"profile\": \"model_check\"", json, StringComparison.Ordinal);
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+        Assert.Equal(
+            DumpProfile.ModelCheck, PackageSerializer.Deserialize(json).Extractor.Profile);
+    }
+
+    [Fact]
+    public void PackageWithoutTheProfileMember_StillLoadsAndStillValidates()
+    {
+        // 1.0.0 and 1.1.0 packages predate the member. It is optional in the contract and
+        // optional here, so an older package is read, not rejected.
+        string json = PackageSerializer.Serialize(BuildSamplePackage());
+
+        string without = Regex.Replace(json, ",\\s*\"profile\": \"full\"", string.Empty);
+
+        Assert.DoesNotContain("\"profile\"", without, StringComparison.Ordinal);
+        Assert.Equal(DumpProfile.Full, PackageSerializer.Deserialize(without).Extractor.Profile);
+        EvaluationResults results = Evaluate(without);
+        Assert.True(results.IsValid, DescribeFailures(results, without));
+    }
+
+    [Fact]
+    public void UnknownProfile_IsRejectedByTheReaderAndByTheContract()
+    {
+        string json = PackageSerializer.Serialize(BuildSamplePackage())
+            .Replace("\"profile\": \"full\"", "\"profile\": \"quick\"");
+
+        Assert.Throws<JsonException>(() => PackageSerializer.Deserialize(json));
+        Assert.False(Evaluate(json).IsValid);
     }
 
     [Fact]
@@ -335,6 +390,14 @@ public class IrSerializerTests
     // schema by its $id in a process-wide registry and the same $id cannot be registered
     // twice.
     private static JsonSchema LoadContractSchema() => IrContract.Load();
+
+    private static EvaluationResults Evaluate(string json)
+    {
+        using JsonDocument instance = JsonDocument.Parse(json);
+        return LoadContractSchema().Evaluate(
+            instance.RootElement,
+            new EvaluationOptions { OutputFormat = OutputFormat.List });
+    }
 
     private static string DescribeFailures(EvaluationResults results, string json) =>
         IrContract.DescribeFailures(results, json);

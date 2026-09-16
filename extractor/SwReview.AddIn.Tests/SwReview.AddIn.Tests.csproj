@@ -92,6 +92,13 @@
     <Content Include="..\..\specs\002-task-pane-assistant\contracts\cli-profiles.md" Link="cli-profiles.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!--
+      And for ModelCheckPageTests (T081), which reads the tab-4 message tables out of the
+      feature 003 contract the same way.
+    -->
+    <Content Include="..\..\specs\003-resilient-modeling\contracts\model-check.md" Link="model-check.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

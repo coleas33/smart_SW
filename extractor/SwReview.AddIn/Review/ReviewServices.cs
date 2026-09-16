@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using SwReview.Extractor.Dump;
 
 namespace SwReview.AddIn.Review;
 
@@ -21,11 +22,26 @@ public interface IApplicationThread
 /// <summary>What one in-process dump produced, as the pane reports it.</summary>
 public sealed class DumpSummary
 {
-    public DumpSummary(string packageFilePath, int components, int gaps)
+    /// <param name="documents">Documents in the package, or null when the caller did not count
+    /// them. Null rather than zero throughout: a zero is a statement about the design - "this
+    /// part has no equations" - and the constitution forbids writing a default for engineering
+    /// data. The Model check tab renders a count it was not given as absent.</param>
+    /// <param name="features">Feature rows in the package, or null; same rule.</param>
+    /// <param name="equations">Equation rows in the package, or null; same rule.</param>
+    public DumpSummary(
+        string packageFilePath,
+        int components,
+        int gaps,
+        int? documents = null,
+        int? features = null,
+        int? equations = null)
     {
         PackageFilePath = packageFilePath ?? throw new ArgumentNullException(nameof(packageFilePath));
         Components = components;
         Gaps = gaps;
+        Documents = documents;
+        Features = features;
+        Equations = equations;
     }
 
     /// <summary>Absolute path of the package.json that was written.</summary>
@@ -35,6 +51,15 @@ public sealed class DumpSummary
 
     /// <summary>Gaps are normal and are reported, never hidden (constitution Principle I).</summary>
     public int Gaps { get; }
+
+    /// <summary>Documents in the package; null when the dump did not report a count.</summary>
+    public int? Documents { get; }
+
+    /// <summary>Feature rows in the package; null when the dump did not report a count.</summary>
+    public int? Features { get; }
+
+    /// <summary>Equation rows in the package; null when the dump did not report a count.</summary>
+    public int? Equations { get; }
 }
 
 /// <summary>
@@ -52,8 +77,16 @@ public interface IReviewDump
     /// Dumps the active document into <paramref name="outputDirectory"/>, which already
     /// exists. <paramref name="progress"/> is called with one line per phase; the host turns
     /// each into a `status {stage: "extracting"}` message.
+    ///
+    /// <paramref name="profile"/> is how much of the design to read. It defaults to
+    /// <see cref="DumpProfile.Full"/> so the review path keeps asking for every phase without
+    /// restating it; a Model check asks for <see cref="DumpProfile.ModelCheck"/>, which reads
+    /// documents, mates, features and equations and skips holes, fasteners, faces and meshes.
+    /// The package records which one ran as `extractor.profile`, so a thin package is never
+    /// mistaken for a model with no holes in it (FR-022).
     /// </summary>
-    DumpSummary Run(string outputDirectory, Action<string> progress);
+    DumpSummary Run(
+        string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full);
 }
 
 /// <summary>One `entity.show` from the page (pane-host-messages.md).</summary>
@@ -105,9 +138,13 @@ public sealed class EntityShowOutcome
     /// <summary>`IComponent2.Name2`, the full instance path, when one is known.</summary>
     public string? FullPath { get; }
 
-    /// <summary>Selected and zoomed to.</summary>
-    public static EntityShowOutcome Shown(string? fullPath) =>
-        new EntityShowOutcome(true, 0, "ok", fullPath);
+    /// <summary>
+    /// Selected. <paramref name="message"/> says what happened when it is worth saying - a
+    /// folder has no geometry to zoom to, so "selected in the feature tree" is the difference
+    /// between a working Show and an engineer staring at an unchanged graphics area.
+    /// </summary>
+    public static EntityShowOutcome Shown(string? fullPath, string? message = null) =>
+        new EntityShowOutcome(true, 0, message ?? "ok", fullPath);
 
     /// <summary>Not selected; <paramref name="stateCode"/> and <paramref name="fullPath"/> say why and where.</summary>
     public static EntityShowOutcome NotShown(int stateCode, string message, string? fullPath) =>

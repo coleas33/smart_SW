@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
+<title>SwReview Model check</title>
+<link rel="stylesheet" href="check.css">
+</head>
+<body>
+<!--
+  The Model check tab (T082, contracts/model-check.md). Served from the virtual host
+  https://swreview.invalid, so the CSP above - byte-for-byte the Review and Terminal pages',
+  which is byte-for-byte contracts/pane-host-messages.md's - is what the page actually runs
+  under: no inline script, no inline style, no remote anything, and connections only to the
+  loopback backend.
+
+  Every handler is attached in check.js with addEventListener; there is no event-handler
+  attribute anywhere in this file. Every node is built through shared/dom.js, which is the one
+  place the "insert every untrusted string with createTextNode" rule is written down (T080).
+  The untrusted text here is not a model's: a feature name is whatever an engineer typed into
+  the SOLIDWORKS feature tree, and an observed string is assembled out of those names.
+
+  Nothing on this page needs a provider, a key or a network beyond the loopback backend. That
+  is the point of the tab, and the banner on the tab says so.
+-->
+<header class="bar">
+  <span id="document-name" class="document">No document open</span>
+  <span id="backend-state" class="badge">Backend starting</span>
+</header>
+
+<p id="banner" class="banner" hidden></p>
+
+<section id="session" class="session">
+  <div class="row">
+    <button type="button" id="run-check" disabled>Model check</button>
+    <button type="button" id="open-report" disabled>Open report</button>
+    <button type="button" id="open-folder" disabled>Open check folder</button>
+    <button type="button" id="open-log">View log</button>
+  </div>
+  <span id="run-dir" class="note"></span>
+  <span id="check-state" class="note" role="status"></span>
+  <span id="carried-forward" class="note"></span>
+</section>
+
+<section id="grade" class="grade" aria-live="polite"></section>
+
+<!-- The chips are built from the buckets the result actually carries, so nothing offers a
+     filter for a bucket that is empty. Fail and warn are on when the page opens. -->
+<div id="filters" class="filters" role="group" aria-label="Which rules are shown"></div>
+
+<main id="rules" class="rules"></main>
+
+<script src="../../shared/dom.js"></script>
+<script src="check.js"></script>
+</body>
+</html>

@@ -94,9 +94,23 @@ from swreview.chat.sessions import (
     record_disposition,
     replay_events,
 )
-from swreview.ir.models import UnsupportedSchemaVersionError
-from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME
+from swreview.checks.rms.registry import RULES
+from swreview.checks.rms.run import (
+    RMS_SCOPE_RUNS,
+    NotACheckError,
+    RmsCheckRun,
+    RmsRunError,
+    RmsScope,
+    is_check_folder,
+    read_rms_check,
+    run_rms_check,
+)
+from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
+from swreview.ir.loader import load_package
+from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
+from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
 from swreview.report.markdown import render_report
+from swreview.report.session import load_session
 
 __all__ = [
     "DEFAULT_ALLOW_ORIGIN",
@@ -255,6 +269,73 @@ class ProviderFailed(ChatError):
     @classmethod
     def wrapping(cls, exc: BaseException) -> ProviderFailed:
         return cls(type(exc).__name__, str(exc))
+
+
+# --- what the Model check routes refuse (`contracts/model-check.md`) ---------------------
+
+
+class UnknownCheck(ChatError):
+    """No check run folder of that name under the run root, or none that ran a check.
+
+    The folder name *is* the check id, so a check is addressable after a restart without
+    any server-side registry; the price is that an id is a path, and every id-addressed
+    route puts it through the same rule a `run_dir` body field goes through. A refused
+    path is reported as an unknown check and not as an invalid one, so the route cannot be
+    used to find out what else is on the workstation.
+    """
+
+    status = 404
+    error_class = "UnknownCheck"
+
+
+class ScopeNotAvailable(ChatError):
+    """A rule family this build does not offer the tab (`contracts/model-check.md`)."""
+
+    error_class = "ScopeNotAvailable"
+
+
+class EmptyNote(ChatError):
+    """An exception with no reason is the blanket exclusion Principle VI does not allow."""
+
+    error_class = "EmptyNote"
+
+
+class RuleNotAcceptable(ChatError):
+    """FR-016: only a `fail` rule is waivable, so a `warn` one is refused here as well.
+
+    409 and not 400: the request is well formed and names a real finding; it is the
+    finding's rule that cannot take an exception. The page draws no Accept button for one,
+    and the route refuses it anyway - a rule that is not waivable must not become waivable
+    by going round the page.
+    """
+
+    status = 409
+    error_class = "RuleNotAcceptable"
+
+
+class AlreadyAccepted(ChatError):
+    """An active exception already covers this condition; a second record would be dead.
+
+    `ExceptionStore.match` returns the first non-retired match, so everything written
+    after it is unreachable as well as untrue.
+    """
+
+    status = 409
+    error_class = "AlreadyAccepted"
+
+
+class CheckRefused(ChatError):
+    """An `RmsRunError` as the contract's error body, keeping the run's own class.
+
+    `EmptyFeatureTree` and `UnreadableExceptions` are named by `contracts/model-check.md`
+    and are decided by `checks/rms/run.py`, which is where the reason for each one lives.
+    Re-deciding them here would be a second rule about the same condition, so the class
+    travels with the exception instead.
+    """
+
+    def __init__(self, exc: RmsRunError) -> None:
+        super().__init__(str(exc))
+        self.error_class = exc.error_class
 
 
 # --- stopping a turn ---------------------------------------------------------------------
@@ -491,6 +572,158 @@ def environment_secrets(env: Mapping[str, str] | None = None) -> tuple[str, ...]
     return tuple(
         value for name in KEY_VARIABLES if (value := (source.get(name) or "").strip())
     )
+
+
+# --- the Model check result (`contracts/model-check.md`) ---------------------------------
+
+
+OFFERED_SCOPES: tuple[RmsScope, ...] = (RmsScope.part, RmsScope.equations, RmsScope.all)
+"""The rule families `POST /checks/rms` runs.
+
+`assembly` is deliberately absent: its rules are in the catalogue and this build can
+dispatch them, but they have not been calibrated, so the tab does not offer the scope and
+a request naming it is refused rather than answered. Refusing is the point - a check that
+returned an uncalibrated assembly verdict would be read as a clean one.
+"""
+
+
+def _offered_families(scope: RmsScope) -> tuple[RmsScope, ...]:
+    """The families this route runs for `scope`: the scope's own, minus the uncalibrated.
+
+    `RMS_SCOPE_RUNS` says what a scope means, here as everywhere else, and this subtracts
+    the one family the tab does not offer - so `all` cannot run by alias the rules
+    `assembly` is refused by name for. Derived rather than listed again: a second table
+    would be a second answer to "what does `all` mean".
+    """
+    families = tuple(
+        family for family in RMS_SCOPE_RUNS[scope] if family is not RmsScope.assembly
+    )
+    if not families:
+        raise ScopeNotAvailable(
+            f"the {scope.value} rules are not offered by the Model check until they have "
+            "been calibrated"
+        )
+    return families
+
+
+def _check_scope(raw: Any) -> RmsScope:
+    """The body's `scope` as a rule family, or the refusal that names what is offered.
+
+    Required rather than defaulted: which rule families ran is the first thing a reader of
+    a check has to know, and a route that guessed it would answer a question nobody asked.
+    """
+    offered = ", ".join(scope.value for scope in OFFERED_SCOPES)
+    if not isinstance(raw, str) or not raw.strip():
+        raise ChatError(f"scope is required and names a rule family: one of {offered}")
+    text = raw.strip()
+    for scope in OFFERED_SCOPES:
+        if scope.value == text:
+            return scope
+    if text == RmsScope.assembly.value:
+        raise ScopeNotAvailable(
+            "the assembly rules are not offered by the Model check until they have been "
+            f"calibrated; this check runs {offered}"
+        )
+    raise ChatError(f"scope {text!r} is not a rule family; this backend runs {offered}")
+
+
+def check_result(check_dir: Path, run: RmsCheckRun) -> dict[str, Any]:
+    """One `RmsCheckRun` as the `CheckResult` of `contracts/model-check.md`.
+
+    The package is read again here rather than carried on `RmsCheckRun`: that dataclass is
+    what a *check produced*, and the four fields this needs from the package - the graded
+    document, when it was extracted and which dump profile wrote it - are the package's
+    own evidence and not the run's conclusion. One extra read of a model-check dump is the
+    cheaper half of that trade.
+    """
+    package = load_package(check_dir).package
+    exceptions = _exceptions_by_id(check_dir, run.findings)
+    carried = run.exceptions_carried_forward
+    return {
+        "check_id": check_dir.name,
+        "run_dir": str(check_dir),
+        "document": _checked_document(package, run.documents),
+        "extracted_at": package.created_at.isoformat(),
+        "profile": package.extractor.profile,
+        "grade": run.grade.as_dict(),
+        "findings": [_finding_row(finding, exceptions) for finding in run.findings],
+        "coverage": run.coverage,
+        "subjects": run.subjects,
+        "exceptions_carried_forward": {
+            "from_run": carried.from_run,
+            "count": carried.count,
+            "reason": carried.reason,
+        },
+    }
+
+
+def _checked_document(package: EvidencePackage, documents: Sequence[str]) -> dict[str, Any] | None:
+    """The one part document this check graded, or `None` when it graded several.
+
+    A model-check dump carries the open part, so the tab's check names one document and
+    the page can title itself with it. A run that graded two has no single document to
+    name, and naming the first would be a claim about which one the page is showing.
+    """
+    if len(documents) != 1:
+        return None
+    found = next(
+        (item for item in package.documents if item.document_id == documents[0]), None
+    )
+    if found is None:  # pragma: no cover - the run graded it, so the package carries it
+        return None
+    return {
+        "id": found.document_id,
+        "path": found.path,
+        "configuration": found.active_configuration,
+        "kind": found.kind,
+    }
+
+
+def _exceptions_by_id(
+    check_dir: Path, findings: Sequence[Mapping[str, Any]]
+) -> dict[str, ReviewException]:
+    """The exceptions the findings cite, by id; empty when none of them cites one.
+
+    The finding already names the exception that matched (`report.py`), so this looks the
+    records up rather than matching the bindings a second time: a second match would be a
+    second opinion about which exception covers a condition.
+    """
+    wanted = {str(finding["exception_id"]) for finding in findings if finding.get("exception_id")}
+    if not wanted:
+        return {}
+    store = ExceptionStore(check_dir / EXCEPTIONS_FILE_NAME).load()
+    return {
+        exception.id: exception for exception in store.exceptions if exception.id in wanted
+    }
+
+
+def _finding_row(
+    finding: Mapping[str, Any], exceptions: Mapping[str, ReviewException]
+) -> dict[str, Any]:
+    """One finding as the tab reads it: the `Finding`, its rule, and what it can do.
+
+    `finding` is the feature 001 `Finding` untouched (FR-026). Everything the tab needs
+    beyond it - the rule's statement, whether the rule is waivable at all, and the
+    exception that matched - sits beside it, so a consumer that only knows feature 001
+    sees exactly what it always saw.
+    """
+    rule = RULES.get(str(finding["check"]))
+    row: dict[str, Any] = {
+        "finding": finding,
+        "rule_id": finding["check"],
+        "severity": None if rule is None else rule.severity,
+        "statement": None if rule is None else rule.statement,
+        "observed": finding["observed"],
+        "acceptable": rule is not None and rule.severity == "fail",
+    }
+    exception = exceptions.get(str(finding.get("exception_id") or ""))
+    if exception is not None:
+        row["exception"] = {
+            "id": exception.id,
+            "state": exception.status,
+            "note": exception.note,
+        }
+    return row
 
 
 # --- the door ------------------------------------------------------------------------------
@@ -821,6 +1054,236 @@ class ChatServer:
             path.read_text(encoding="utf-8"), media_type="text/markdown; charset=utf-8"
         )
 
+    # --- the Model check (`contracts/model-check.md`) --------------------------------
+
+    async def run_check(self, request: Request) -> Response:
+        """`POST /checks/rms`: grade the dump in `run_dir` and answer the `CheckResult`.
+
+        Synchronous, and no chat: there is no provider, no network call and no turn, so
+        the folder is not claimed, nothing is registered and nothing has to be finalized.
+        The work is the rule layer over one feature tree - tens of milliseconds - and it
+        runs off the event loop because it is file I/O and CPU, not because it is slow.
+        """
+        body = await self._json(request)
+        run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
+        scope = _check_scope(body.get("scope"))
+        document_id = body.get("document_id")
+        if document_id is not None and not isinstance(document_id, str):
+            raise ChatError(
+                "document_id is one part document id, or null for every part document"
+            )
+        result = await run_in_threadpool(
+            partial(self._check, run_dir, scope=scope, document_id=document_id or None)
+        )
+        return JSONResponse(result, status_code=201)
+
+    async def read_check(self, request: Request) -> Response:
+        """`GET /checks/{check_id}`: the check that run folder holds, read back.
+
+        A read, and not a re-evaluation (`contracts/model-check.md` section 1): answering
+        it by running the rules again would write a new `session.json` and `report.md`
+        every time the page was refreshed, over the evidence `swreview exceptions accept`
+        reads by name and an engineer's recorded disposition lives in.
+        """
+        check_dir = self._check_dir(request.path_params["check_id"])
+        return JSONResponse(await run_in_threadpool(partial(self._read_check, check_dir)))
+
+    async def accept_check_exception(self, request: Request) -> Response:
+        """`POST /checks/{check_id}/exceptions/{finding_id}`: accept a rule for this part.
+
+        The exception binds to the part's component instances, its configuration and a
+        feature-tree fingerprint, which means it waives the rule **on the part** and not on
+        one feature (`contracts/model-check.md`, section 5). It is written through the same
+        helpers `swreview exceptions accept-rms` uses, so a waiver written from the tab and
+        one written from the command line are one kind of record and not two.
+
+        The finding comes back re-rendered rather than edited in place: only the rule layer
+        turns an accepted condition into a `checked_within_scope` finding, so the check is
+        run again over the store that was just written and the row for this finding is what
+        is returned. That re-run is also what re-renders `report.md`.
+        """
+        check_dir = self._check_dir(request.path_params["check_id"])
+        finding_id = str(request.path_params["finding_id"])
+        body = await self._json(request)
+        note = str(body.get("note") or "").strip()
+        if not note:
+            raise EmptyNote(
+                "an exception states why the condition is accepted; an unexplained one is "
+                "a blanket exclusion and is refused"
+            )
+        exception_id = await run_in_threadpool(
+            partial(
+                self._accept_exception,
+                check_dir,
+                finding_id,
+                note=note,
+                by=str(body.get("by") or "").strip(),
+            )
+        )
+        result = await run_in_threadpool(partial(self._recheck, check_dir))
+        # A waived finding keeps its row (Principle VI: never hidden), so this is the same
+        # finding rendered as checked within scope rather than a finding that went away.
+        row = next(
+            (item for item in result["findings"] if item["finding"]["id"] == finding_id), None
+        )
+        return JSONResponse({"finding": row, "exception_id": exception_id})
+
+    def _check_dir(self, check_id: Any) -> Path:
+        """The check run folder `check_id` names, under the run root.
+
+        The folder name is the whole registry, so a check id is a path segment, and it goes
+        through the same rule a caller-supplied `run_dir` goes through. Anything the rule
+        refuses is reported as an unknown check: the id is caller-supplied, and a route that
+        told a caller *why* a path was refused would be a way to probe the workstation.
+        """
+        raw = str(check_id)
+        try:
+            directory = resolve_run_dir(str(self.run_root / raw), self.run_root)
+        except InvalidRunDir as exc:
+            raise UnknownCheck(f"no check {raw!r} under the run root") from exc
+        if not directory.is_dir():
+            raise UnknownCheck(f"no check {raw!r} under the run root")
+        return directory
+
+    def _check(
+        self, package_dir: Path, *, scope: RmsScope, document_id: list[str] | str | None
+    ) -> dict[str, Any]:
+        """One evaluation of the package in `package_dir`, as the contract's `CheckResult`.
+
+        `run_rms_check` is the one no-language-model entry point (FR-024): what the tab
+        shows and what `swreview check rms` prints cannot be two different evaluations of
+        the same part, so this route adds no rule and no finding of its own. Blocking, so
+        every caller runs it off the event loop.
+
+        Two things this route states rather than inherits: the families it runs (the
+        uncalibrated assembly rules are refused by name, so they are not run under the
+        `all` alias either), and the run root the carry-forward may copy an earlier
+        `exceptions.json` from, which is this server's own `--run-root`.
+        """
+        families = _offered_families(scope)
+        try:
+            run = run_rms_check(
+                package_dir,
+                scope=scope,
+                document_id=document_id,
+                families=families,
+                run_root=self.run_root,
+            )
+        except RmsRunError as exc:
+            raise CheckRefused(exc) from exc
+        except PACKAGE_ERRORS as exc:
+            raise InvalidPackage(
+                f"{package_dir} is not a readable evidence package: "
+                f"{type(exc).__name__}: {self.redact(str(exc))}"
+            ) from exc
+        return check_result(package_dir, run)
+
+    def _read_check(self, check_dir: Path) -> dict[str, Any]:
+        """The check `check_dir` holds, as the contract's `CheckResult`. Nothing is run.
+
+        The folder is the whole registry, so this is the whole read: `session.json` holds
+        the findings, the coverage and therefore the grade, and `check.json` holds what it
+        does not - the scope, the documents graded, the subjects beside each finding, and
+        what the carry-forward did.
+        """
+        run = self._recorded_check(check_dir)
+        try:
+            return check_result(check_dir, run)
+        except PACKAGE_ERRORS as exc:
+            raise InvalidPackage(
+                f"{check_dir} is not a readable evidence package: "
+                f"{type(exc).__name__}: {self.redact(str(exc))}"
+            ) from exc
+
+    def _recorded_check(self, check_dir: Path) -> RmsCheckRun:
+        """The check recorded in `check_dir`, or `UnknownCheck` naming what it holds.
+
+        A folder that was never checked, one holding a record this build cannot read, and
+        one whose session is no longer the one its record describes are all the same
+        answer to the caller: there is no such check here.
+        """
+        try:
+            return read_rms_check(check_dir)
+        except NotACheckError as exc:
+            raise UnknownCheck(self.redact(str(exc))) from exc
+
+    def _recheck(self, check_dir: Path) -> dict[str, Any]:
+        """Evaluate a check folder again, exactly as the check that wrote it was run.
+
+        What Accept needs and a read does not: an exception accepted a moment ago has to
+        read as checked within scope, and only `report.py` renders that, so the rules run
+        again over the store that was just written - which is also what re-renders
+        `report.md`. The scope and the document selection come off the folder's own check
+        record, so what a scope means still has one answer.
+
+        One field does differ from the first answer, and honestly:
+        `exceptions_carried_forward` then reports that the folder already holds its own
+        store, because it does - that is a different statement from "there was none".
+        """
+        record = self._recorded_check(check_dir)
+        return self._check(
+            check_dir, scope=record.scope, document_id=record.documents or None
+        )
+
+    def _accept_exception(
+        self, check_dir: Path, finding_id: str, *, note: str, by: str
+    ) -> str:
+        """Write the exception for `finding_id` and return its id. Blocking.
+
+        The helpers are imported from the command line rather than copied: they are what
+        `exceptions accept-rms` decides an acceptance with, and a second copy of "which
+        rule may be waived", "is this condition already covered" and "accept or re-bind"
+        is exactly the drift that would let the tab and the command line disagree about
+        one waiver. The import is inside the function so `chat.server` stays importable
+        without pulling in typer, as `build_provider` already does.
+        """
+        from swreview.cli import (
+            _accept_or_reaccept,
+            _default_user,
+            _rms_waiver_invalidity,
+            _store_for,
+            _uncovered,
+        )
+
+        session_file = check_dir / SESSION_FILE_NAME
+        if not session_file.is_file():
+            raise UnknownCheck(
+                f"{check_dir.name} holds no {SESSION_FILE_NAME}: no check has run in it"
+            )
+        session = load_session(session_file)
+        try:
+            finding = find_finding(session, finding_id)
+        except KeyError as exc:
+            raise UnknownFinding(
+                f"no finding {finding_id!r} in check {check_dir.name}"
+            ) from exc
+        invalidity = _rms_waiver_invalidity(finding.check)
+        if invalidity is not None:
+            raise RuleNotAcceptable(
+                f"{finding.check} cannot be accepted: it is {invalidity}. Only a rule the "
+                "method grades as a failure is waivable"
+            )
+        try:
+            store, evidence = _store_for(check_dir)
+        except PACKAGE_ERRORS as exc:
+            raise InvalidPackage(
+                f"{check_dir} is not a readable evidence package: "
+                f"{type(exc).__name__}: {self.redact(str(exc))}"
+            ) from exc
+        store.refresh(evidence)
+        pending = _uncovered(store, evidence, [finding])
+        if not pending:
+            raise AlreadyAccepted(
+                f"an active exception already covers {finding.check} on these components "
+                f"in configuration {finding.configuration}; one condition keeps one record"
+            )
+        [(target, retained)] = pending
+        exception = _accept_or_reaccept(
+            store, evidence, target, retained, by=by or _default_user(), note=note
+        )
+        store.save()
+        return exception.id
+
     # --- the request ----------------------------------------------------------------
 
     async def _json(self, request: Request) -> dict[str, Any]:
@@ -888,6 +1351,15 @@ class ChatServer:
         So: a folder a live chat is reviewing is a 409, and a folder that already holds a
         session is a 400 - unless this request is the Retry that replaces it, which
         `_rotate_previous` moves the old pair aside for rather than writing over.
+
+        A Model check's folder is the one other exception, and for the same reason read
+        the other way: a check writes `session.json` and **no** `events.jsonl`, so there
+        is no stream for a review to restart the `seq` of. Handing the check package to a
+        review is the last step of User Story 6, and refusing it would mean no folder a
+        check ran in could ever be reviewed. `_rotate_previous` still moves the check's
+        session aside, so the check's record survives as `session.1.json` rather than
+        being written over, and the folder stops answering `GET /checks/{check_id}`
+        because its `check.json` no longer names the session that is in it.
         """
         live = next(
             (
@@ -901,7 +1373,7 @@ class ChatServer:
             raise RunDirInUse(
                 f"chat {live.chat_id} is already reviewing {run_dir}; one chat per run folder"
             )
-        if retry_of is None and _session_files(run_dir):
+        if retry_of is None and _session_files(run_dir) and not is_check_folder(run_dir):
             raise InvalidRunDir(
                 f"{run_dir} already holds a review session; retry it with 'retry_of' or "
                 f"review into a new run folder"
@@ -1220,6 +1692,15 @@ def create_app(
         ),
         Route("/sessions/{chat_id}/stop", server.stop, methods=["POST"]),
         Route("/sessions/{chat_id}/report", server.report, methods=["GET"]),
+        # The Model check tab (`contracts/model-check.md`). `/checks/rms` is listed first
+        # so the literal path is matched before the `{check_id}` pattern that follows it.
+        Route("/checks/rms", server.run_check, methods=["POST"]),
+        Route("/checks/{check_id}", server.read_check, methods=["GET"]),
+        Route(
+            "/checks/{check_id}/exceptions/{finding_id}",
+            server.accept_check_exception,
+            methods=["POST"],
+        ),
     ]
     app = Starlette(
         routes=routes,

@@ -46,6 +46,7 @@ from swreview.checks.rms.results import (
     skipped,
     subject_reasons,
     unresolved,
+    verdict,
 )
 from swreview.checks.rms_types import Classification, RmsTypeTable, class_of
 from swreview.ir.models import EvidencePackage, Feature, SuppressTestRow
@@ -216,27 +217,10 @@ def _verdict(
     passing: Sequence[Feature] = (),
     unknown: Sequence[tuple[Feature, str]] = (),
 ) -> list[RuleResult]:
-    """The outcomes of a per-subject rule: at most one verdict, plus the unresolved half.
-
-    A violation replaces the pass rather than joining it - a rule that failed on this
-    document is not also `checked` for it - and a rule whose every subject was unresolved
-    reports only that, while a rule with nothing to look at at all passes vacuously.
-    """
-    results: list[RuleResult] = []
-    if violation is not None:
-        results.append(violation)
-    elif passing or not unknown:
-        results.append(passed(rule, tree.document_id, passing))
-    if unknown:
-        results.append(
-            unresolved(
-                rule,
-                tree.document_id,
-                subject_reasons(unknown),
-                [row for row, _ in unknown],
-            )
-        )
-    return results
+    """`results.verdict` for a part rule, which names its document by its tree."""
+    return verdict(
+        rule, tree.document_id, violation=violation, passing=passing, unknown=unknown
+    )
 
 
 def _ordered(rows: Sequence[Feature]) -> list[Feature]:

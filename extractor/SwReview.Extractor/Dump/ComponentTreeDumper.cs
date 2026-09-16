@@ -84,13 +84,43 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
         IModelDoc2 document = _session.Document;
         string rootPath = gate.Call("GetPathName", () => document.GetPathName());
 
+        // Read before the tree is built, because whether a missing root component means "a
+        // part opened alone" or "an assembly that answered nothing" turns on it. A failed
+        // read is a gap rather than a thrown dump: Traverse runs outside RunPhase, so an
+        // escaping exception would cost the whole package.
+        DocumentKind? rootKind = null;
+        gaps.TryStep(
+            "component",
+            null,
+            "read the document type of the open document",
+            () => rootKind = SwSession.KindOf(document, gate));
+
         var tree = new ComponentTreeResult
         {
             RootDocumentPath = rootPath,
-            RootDocumentKind = SwSession.KindOf(document, gate),
             DesignName = Path.GetFileNameWithoutExtension(rootPath),
             ActiveConfiguration = gate.Call("Configuration.Name", () => _session.Configuration.Name),
+            RootDocumentKind = rootKind,
         };
+
+        if (rootKind == null)
+        {
+            // An unread kind stays unread. Every node carries a DocumentKind, and the two
+            // choices here are both defaults for engineering data: "part" walks a tree that
+            // may be an assembly's, and "assembly" is worse, because FeatureDumper and
+            // EquationDumper skip every node that is not a Part, so the document's whole
+            // feature tree and equation list would be dropped without a word. An empty tree
+            // and this gap say what happened; before T064 the failed read escaped Traverse
+            // and cost the whole package, so this is the quieter of the two, not a silence.
+            gaps.Add(
+                GapKind.NotExtracted,
+                "component",
+                null,
+                "The type of the open document could not be read, so no component was "
+                + "recorded and nothing was traversed; the document kind is not assumed.",
+                null);
+            return tree;
+        }
 
         // GetRootComponent3(false) is used rather than GetRootComponent: it returns the
         // modern Component2 the rest of this code needs, and false means "do not resolve",
@@ -101,6 +131,20 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
 
         if (root == null)
         {
+            // T064, RK-15. A part opened alone is expected to answer nothing here (PROBE-15
+            // records what 2024 SP5 actually returns), and without a node for it the
+            // component list is empty, FeatureDumper iterates nothing, and every part rule
+            // comes back unresolved on a part that is fine. The document IS the root, so it
+            // is recorded as one instance rather than the dump reporting a design with no
+            // components. An unread document kind never reaches here - it was refused above
+            // with its own gap - because "assume it was a part" is exactly the default
+            // engineering data must not get.
+            if (rootKind == DocumentKind.Part)
+            {
+                tree.Nodes.Add(PartRootNode(tree, document, gaps));
+                return tree;
+            }
+
             gaps.Add(
                 GapKind.NotExtracted,
                 "component",
@@ -114,13 +158,20 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
 
         // The root component of an assembly is the assembly itself and carries no
         // persistent reference of its own, so it is recorded from the document.
-        tree.Nodes.Add(RootNode(tree, root));
+        tree.Nodes.Add(RootNode(tree, root, rootKind.Value));
         Visit(root, tree.Nodes[0].Key, tree, gaps, patternByComponent, depth: 0);
 
         return tree;
     }
 
-    private ComponentNode RootNode(ComponentTreeResult tree, IComponent2 root)
+    /// <summary>
+    /// The root node of a traversed tree. The document kind is a parameter rather than a
+    /// read of <see cref="ComponentTreeResult.RootDocumentKind"/>, because a node must carry
+    /// a kind that was read: <c>Traverse</c> refuses the dump before it gets here when the
+    /// kind is unknown, and the signature is what says so.
+    /// </summary>
+    private ComponentNode RootNode(
+        ComponentTreeResult tree, IComponent2 root, DocumentKind rootKind)
     {
         SwGate gate = _session.Gate;
         string name = gate.Call("Name2", () => root.Name2);
@@ -131,7 +182,7 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             ParentKey = null,
             Name = string.IsNullOrEmpty(name) ? tree.DesignName : name,
             DocumentPath = tree.RootDocumentPath,
-            DocumentKind = tree.RootDocumentKind,
+            DocumentKind = rootKind,
             ReferencedConfiguration = tree.ActiveConfiguration,
             Transform = Ir.Transform.Identity(),
             Suppression = SuppressionState.Resolved,
@@ -145,6 +196,65 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             PersistRef = _refs.TryGet(_session.Document, root)?.Base64,
             PersistRefScopePath = tree.RootDocumentPath,
             Handle = root,
+        };
+    }
+
+    /// <summary>
+    /// The single root node for a part opened alone (T064, FR-023).
+    ///
+    /// <c>GetRootComponent3(false)</c> is expected to answer nothing for a part
+    /// configuration - what 2024 SP5 actually returns is recorded by PROBE-15, not assumed -
+    /// and an empty tree costs the dump every part feature: <see cref="FeatureDumper"/> walks
+    /// <c>DumpScope.Components</c>, so no component means no feature rows and all 34 RMS
+    /// rules unresolved on the one document type the family was written for (RK-15).
+    ///
+    /// The node IS the document. Nothing in it is guessed: a part opened alone is resolved,
+    /// and it is fixed, because there is no parent for it to be under-constrained in. As on
+    /// the assembly root, <c>GetConstrainedStatus</c> is not read - it describes how an
+    /// instance is mated inside its parent, and this node has none.
+    ///
+    /// The persistent reference is the one thing that cannot be had for certain: there is no
+    /// <c>IComponent2</c> to hand <c>GetPersistReference3</c>, so the document is offered as
+    /// its own subject and a refusal becomes a gap (written by <see cref="PackageWriter"/>,
+    /// where cmp:NNNN exists) rather than an invented locator. That costs the instance in
+    /// <c>components[]</c> and not the feature rows, which are dumped from the scope before
+    /// the instances are written.
+    /// </summary>
+    private ComponentNode PartRootNode(ComponentTreeResult tree, IModelDoc2 document, GapCollector gaps)
+    {
+        ScopedPersistRef? reference = gaps.TryStep(
+            "component",
+            null,
+            $"read a persistent reference for the part root of '{tree.DesignName}'",
+            () => _refs.TryGet(document, document));
+
+        bool isToolbox = false;
+        gaps.TryStep(
+            "component",
+            null,
+            $"read Toolbox identity for the part root of '{tree.DesignName}'",
+            () => isToolbox = ReadIsToolbox(document));
+
+        return new ComponentNode
+        {
+            Key = tree.DesignName,
+            ParentKey = null,
+            Name = tree.DesignName,
+            DocumentPath = tree.RootDocumentPath,
+            DocumentKind = DocumentKind.Part,
+            ReferencedConfiguration = tree.ActiveConfiguration,
+            Transform = Ir.Transform.Identity(),
+            Suppression = SuppressionState.Resolved,
+            IsFixed = true,
+            PatternId = null,
+            IsToolbox = isToolbox,
+            ConstrainedStatusRaw = null,
+            PersistRef = reference?.Base64,
+            PersistRefScopePath = reference?.ScopeDocumentPath ?? tree.RootDocumentPath,
+
+            // No IComponent2 exists, so the document itself is the handle; the feature and
+            // equation readers take it as the document rather than asking a component for one.
+            Handle = document,
         };
     }
 
@@ -343,8 +453,16 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             return false;
         }
 
-        return _session.Gate.Call("ToolboxPartType", () => model.Extension.ToolboxPartType) != 0;
+        return ReadIsToolbox(model);
     }
+
+    /// <summary>
+    /// The same read, from a document that is already in hand. Separate so the component
+    /// path and the part-root path ask SOLIDWORKS the same question under the same gated
+    /// member name rather than each spelling it out.
+    /// </summary>
+    private bool ReadIsToolbox(IModelDoc2 model) =>
+        _session.Gate.Call("ToolboxPartType", () => model.Extension.ToolboxPartType) != 0;
 
     /// <summary>
     /// <c>GetConstrainedStatus</c> verbatim (swConstrainedStatus_e). The extractor does not

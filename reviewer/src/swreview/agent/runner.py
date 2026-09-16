@@ -75,6 +75,15 @@ DEFAULT_MAX_STEPS = 200
 
 CLOSEOUT_CHECK = "coverage.closeout"
 EVIDENCE_CHECK = "coverage.evidence_request"
+PROFILE_CHECK = "coverage.extractor_profile"
+
+MODEL_CHECK_SKIPPED = (
+    "the evidence was written by the {profile!r} dump profile: the hole, fastener, face "
+    "and body or mesh phases were never run, so holes, fasteners, faces and bodies are "
+    "empty because nothing read them - not because this design has none. Extract full "
+    "evidence and review again to cover anything that depends on them (FR-022)."
+)
+"""Why a Model check package cannot answer the checks that read the four skipped phases."""
 
 OPENING_MESSAGE = (
     "Review the evidence package described in the system prompt. Work through the "
@@ -143,6 +152,35 @@ def _unresolved(
     )
     session.coverage.unresolved.append(item)
     return item
+
+
+def record_partial_evidence(session: ReviewSession, package: EvidencePackage) -> None:
+    """Record what the dump profile never extracted, before the first turn (FR-022).
+
+    A `model_check` package carries documents, mates, features and equations and nothing
+    else. Reviewed as if it were a full extract it reads as a design with no holes, no
+    fasteners and no geometry - the one reading of a partial package that is worse than
+    no reading at all - so the review says up front that those phases were skipped, in
+    the same coverage the report already renders rather than in a new channel nobody
+    reads.
+
+    Written here rather than on the `POST /sessions` route (T084) so the command line
+    gets it too: `swreview review` over a check folder is the same partial evidence, and
+    two places deciding what a profile means would be two answers to one question.
+
+    A `full` package is untouched, which is why every feature 001 and 002 golden is
+    byte-identical after this.
+    """
+    if package.extractor.profile != "model_check":
+        return
+    session.coverage.skipped.append(
+        CoverageItem(
+            check=PROFILE_CHECK,
+            scope=CoverageScope(),
+            reason=MODEL_CHECK_SKIPPED.format(profile=package.extractor.profile),
+            error=None,
+        )
+    )
 
 
 def load_exceptions(loaded: LoadedPackage) -> ExceptionStore | None:
@@ -643,6 +681,7 @@ def start_review(
             key_source=key_source,
         )
         session.retry_of = UUID(str(retry_of)) if retry_of is not None else None
+        record_partial_evidence(session, loaded.package)
         tools = ToolRegistry().dispatch(context, fail_tool=fail_tool)
     except Exception:
         if bridge_client is not None:

@@ -30,8 +30,7 @@ public sealed class SwEquationReader : IEquationReader
             throw new System.ArgumentNullException(nameof(component));
         }
 
-        var handle = component.Node.Handle as IComponent2;
-        return handle == null ? null : handle.GetModelDoc2() as IModelDoc2;
+        return ComponentDocuments.Of(component.Node);
     }
 
     public object? Manager(object document) => ((IModelDoc2)document).GetEquationMgr();

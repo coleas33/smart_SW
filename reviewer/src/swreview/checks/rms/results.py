@@ -48,6 +48,7 @@ __all__ = [
     "subject_input",
     "subject_reasons",
     "unresolved",
+    "verdict",
 ]
 
 RuleOutcome = Literal["pass", "fail", "warn", "skip", "unresolved", "waived"]
@@ -94,6 +95,17 @@ class RuleResult:
     """Feature, mate, or component ids sharing this outcome, in the order the rule named
     them; empty when the subject is the document itself."""
 
+    subject_rows: tuple[Feature, ...] = ()
+    """The rows behind `subjects`, in the same order, when a rule named any.
+
+    `subjects` is what a rule result *says*; these are what it said it about, kept so the
+    report layer can emit each subject a second time as a `SourceRef` and as a structured
+    entry (D2) without looking a display string back up or re-finding the row in the
+    package. Annotated `Feature` for the same structural reason the constructors are: a
+    mate and a component instance are subjects too (`checks/rms/assembly.py`, `Subject`).
+    Empty when a result was built without rows - the subject is then the document itself.
+    """
+
     result: CheckResult | None = None
     """The finding body, for `fail`, `warn` and `waived`; `None` otherwise."""
 
@@ -139,6 +151,7 @@ def passed(rule: RmsRule, document_id: str, subjects: Sequence[Feature] = ()) ->
         document_id=document_id,
         outcome="pass",
         subjects=[row.id for row in subjects],
+        subject_rows=tuple(subjects),
     )
 
 
@@ -151,6 +164,7 @@ def skipped(
         document_id=document_id,
         outcome="skip",
         subjects=[row.id for row in subjects],
+        subject_rows=tuple(subjects),
         reason=reason,
     )
 
@@ -164,8 +178,51 @@ def unresolved(
         document_id=document_id,
         outcome="unresolved",
         subjects=[row.id for row in subjects],
+        subject_rows=tuple(subjects),
         reason=reason,
     )
+
+
+def verdict(
+    rule: RmsRule,
+    document_id: str,
+    *,
+    violation: RuleResult | None = None,
+    passing: Sequence[Feature] = (),
+    unknown: Sequence[tuple[Feature, str]] = (),
+) -> list[RuleResult]:
+    """The outcomes of a per-subject rule: at most one verdict, plus the unresolved half.
+
+    Every rule that grades subjects one at a time ends this way, so it is written once
+    here rather than once per evaluator module (constitution Principle V). Three branches,
+    each a sentence of `contracts/rules.md`:
+
+    - a violation *replaces* the pass - a rule that failed on this document is not also
+      `checked` for it;
+    - a rule whose every subject was unresolved reports only that, with no vacuous pass
+      beside it, while a rule with nothing to look at at all passes vacuously;
+    - the unresolved half is one result carrying every subject the rule lacked an input
+      for, with the per-subject reasons joined the way `subject_reasons` joins them.
+
+    `passing` and `unknown` are annotated `Feature` for the same structural reason the
+    constructors above are: `checks/rms/assembly.py` grades mates and component instances,
+    which are subjects too and are presented in the same seven attributes.
+    """
+    results: list[RuleResult] = []
+    if violation is not None:
+        results.append(violation)
+    elif passing or not unknown:
+        results.append(passed(rule, document_id, passing))
+    if unknown:
+        results.append(
+            unresolved(
+                rule,
+                document_id,
+                subject_reasons(unknown),
+                [subject for subject, _ in unknown],
+            )
+        )
+    return results
 
 
 def finding(
@@ -196,6 +253,7 @@ def finding(
         document_id=document_id,
         outcome=rule.severity,
         subjects=[row.id for row in subjects],
+        subject_rows=tuple(subjects),
         result=CheckResult(
             check=rule.id,
             status=_STATUS_BY_OUTCOME[rule.severity],
