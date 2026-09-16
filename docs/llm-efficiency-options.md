@@ -103,8 +103,8 @@ that is measured against it.
 
 ### Runs
 
-| run | commit | lever | arm | rep | provider | model | effort | package | input | cached in | uncached in | output | reasoning/thoughts | tool-result in | total | rounds | tool calls | cached share | wall clock s | s to 1st finding | valid | missed | false alarms | unresolved | coverage bucket mix |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| run | commit | lever | arm | rep | provider | model | effort | package | input | cached in | uncached in | output | reasoning/thoughts | tool-result in | total | rounds | tool calls | cached share | wall clock s | s to 1st finding | valid | missed | false alarms | unresolved | unresolved withheld | unresolved other | coverage bucket mix |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 No runs: no run directories were compared.
 

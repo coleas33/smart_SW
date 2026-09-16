@@ -44,6 +44,7 @@ from swreview.remodel.geometry import (
     write_geometry_json,
 )
 from swreview.remodel.tolerances import CALIBRATION_LEDGER, IDENTITY, UncalibratedProfileError
+from tests.support.remodel import code_lines, stage_1_sources
 
 SOURCE_SHA = "4c" * 32
 OTHER_SHA = "77" * 32
@@ -304,38 +305,6 @@ def test_the_writer_opens_nothing_but_the_artifact_it_writes(
     monkeypatch.undo()
     assert source.read_text(encoding="utf-8") == "the engineer's file"
     assert json.loads(artifact.read_text(encoding="utf-8"))["gate"]["verdict"] == "pass"
-
-
-STAGE_1_SOURCE_DIRS: tuple[tuple[str, str], ...] = (
-    ("reviewer/src/swreview/remodel", "*.py"),
-    ("extractor/SwReview.Extractor/Rms", "*.cs"),
-    ("extractor/SwReview.Extractor/Guard", "*.cs"),
-)
-"""Every directory the re-modeler's stage-1 surface is written in, Python and C#. A member
-can only be called from one of these, so scanning them is what makes the claim below a
-claim about stage 1 rather than about two modules that could never have named it."""
-
-_COMMENT_PREFIXES = ("#", "//", "/*", "*")
-
-
-def code_lines(path: Path) -> list[str]:
-    """The file's lines with whole-line comments dropped, so prose about a member the
-    guard refuses does not read as a call to it."""
-    return [
-        line
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if not line.lstrip().startswith(_COMMENT_PREFIXES)
-    ]
-
-
-def stage_1_sources() -> list[Path]:
-    root = Path(__file__).resolve().parents[3]
-    files: list[Path] = []
-    for directory, pattern in STAGE_1_SOURCE_DIRS:
-        found = sorted((root / directory).glob(pattern))
-        assert found, f"{directory} matched no {pattern}: this scan would pass vacuously"
-        files.extend(found)
-    return files
 
 
 def test_no_reference_body_can_enter_any_tree_anywhere_in_stage_1() -> None:

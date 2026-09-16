@@ -1126,6 +1126,11 @@ public class PackageWriterTests : IDisposable
             };
         }
 
+        /// <summary>The dump never calls this one; the bridge's `tessellate` does (T097).</summary>
+        IReadOnlyList<BodyRef> IMeshSource.DumpComponent(
+            DumpScope scope, ScopedComponent component, string meshDirectory) =>
+            throw new NotSupportedException("The dump exports every component, not one.");
+
         private static ComponentNode NewNode(string key, string? parentKey, string path, DocumentKind kind) =>
             new ComponentNode
             {

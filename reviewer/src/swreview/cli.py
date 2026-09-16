@@ -241,7 +241,9 @@ LeverOption = Annotated[
 # --- the provider one run talks to -----------------------------------------------
 
 
-def provider_factory(settings: ProviderSettings) -> AgentProvider:
+def provider_factory(
+    settings: ProviderSettings, efficiency: EfficiencySettings | None = None
+) -> AgentProvider:
     """Build the adapter a review talks to. The single injection point for the tests.
 
     The adapter class comes from `providers.get`, which imports the module (and so the
@@ -254,7 +256,12 @@ def provider_factory(settings: ProviderSettings) -> AgentProvider:
 
     Tests replace this function wholesale rather than patching a client onto it, so no
     test needs to know how any SDK client is constructed.
+
+    `efficiency` is here for the one lever that is decided at construction rather than at
+    `start_review`: lever 6's `parallel_tool_calls`, which is an OpenAI request field.
+    Omitted, every lever is off, which is what the pane and every library caller get.
     """
+    levers = efficiency if efficiency is not None else EfficiencySettings()
     adapter = providers.get(settings.provider)
     if settings.provider is ProviderName.GEMINI:
         from google import genai
@@ -267,7 +274,11 @@ def provider_factory(settings: ProviderSettings) -> AgentProvider:
         )
     if settings.provider is ProviderName.FAKE:
         return adapter(script=FAKE_REVIEW_SCRIPT, model=settings.model)
-    return adapter(model=settings.model, **settings.client_kwargs())
+    return adapter(
+        model=settings.model,
+        parallel_tool_calls=levers.parallel_tool_calls,
+        **settings.client_kwargs(),
+    )
 
 
 def _provider_settings(
@@ -518,7 +529,7 @@ def review(
             session = run_review(
                 package_dir,
                 out,
-                provider=provider_factory(settings),
+                provider=provider_factory(settings, efficiency),
                 model=settings.model,
                 effort=settings.effort,
                 key_source=settings.key_source,
@@ -1678,7 +1689,7 @@ def _review_fn(
         return run_review(
             package_dir,
             session_out_dir,
-            provider=provider_factory(settings),
+            provider=provider_factory(settings, efficiency),
             model=settings.model,
             effort=settings.effort,
             key_source=settings.key_source,

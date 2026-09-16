@@ -25,9 +25,9 @@ import os
 import subprocess
 import sys
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import pytest
 from google.genai import types
@@ -35,7 +35,7 @@ from google.genai import types
 from swreview.agent.providers.openai_provider import tool_param
 from swreview.agent.providers.schema import ToolSpec, gemini_adapt, tool_spec
 from swreview.mcp.server import MCP_BRIDGE_TOOL_FUNCTIONS, MCP_TOOL_FUNCTIONS
-from swreview.tools.registry import BRIDGE_TOOL_FUNCTIONS, TOOL_FUNCTIONS
+from swreview.tools.registry import BRIDGE_TOOL_FUNCTIONS, RMS_TIER_TOOLS, TOOL_FUNCTIONS
 
 ToolFunction = Callable[..., Any]
 
@@ -47,12 +47,22 @@ def _compact(payload: Any) -> bytes:
     return json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
 
-def openai_objects(specs: Sequence[ToolSpec]) -> list[dict[str, Any]]:
-    """The array `OpenAIProvider.run` builds: `tool_param` per tool (`openai_provider.py`)."""
-    return [tool_param(spec) for spec in specs]
+def openai_objects(specs: Sequence[ToolSpec], *, trim: bool = False) -> list[dict[str, Any]]:
+    """The array `OpenAIProvider.run` builds: `tool_param` per tool (`openai_provider.py`).
+
+    `trim` is lever 2's arm, and it is applied through `ToolSpec.wire_description` - the
+    same call `RecordedTool.description` makes for a real run - so the arm this module
+    measures and the arm a run sends cannot drift apart.
+    """
+    return [tool_param(_for_wire(spec, trim=trim)) for spec in specs]
 
 
-def gemini_objects(specs: Sequence[ToolSpec]) -> list[dict[str, Any]]:
+def _for_wire(spec: ToolSpec, *, trim: bool) -> ToolSpec:
+    """`spec` with the description this arm actually sends on it."""
+    return replace(spec, description=spec.wire_description(trim=trim), notes="")
+
+
+def gemini_objects(specs: Sequence[ToolSpec], *, trim: bool = False) -> list[dict[str, Any]]:
     """The array `GeminiProvider._config` builds, in the shape the SDK sends it.
 
     `_config` hands the SDK `types.FunctionDeclaration` objects, and the request layer
@@ -65,7 +75,7 @@ def gemini_objects(specs: Sequence[ToolSpec]) -> list[dict[str, Any]]:
     declarations = [
         types.FunctionDeclaration(
             name=spec.name,
-            description=spec.description,
+            description=spec.wire_description(trim=trim),
             parameters_json_schema=gemini_adapt(spec.schema),
         )
         for spec in specs
@@ -76,11 +86,26 @@ def gemini_objects(specs: Sequence[ToolSpec]) -> list[dict[str, Any]]:
     ]
 
 
-ENCODINGS: dict[str, Callable[[Sequence[ToolSpec]], list[dict[str, Any]]]] = {
+class Encoding(Protocol):
+    """One provider's tool encoding, in either arm of lever 2."""
+
+    def __call__(
+        self, specs: Sequence[ToolSpec], *, trim: bool = False
+    ) -> list[dict[str, Any]]: ...
+
+
+ENCODINGS: dict[str, Encoding] = {
     "openai": openai_objects,
     "gemini": gemini_objects,
 }
 """The provider encodings this feature measures. No Claude: the product has two providers."""
+
+ARMS: tuple[bool, ...] = (False, True)
+"""Lever 2 off, then on. `False` is the arm every pre-lever pin in this module measures."""
+
+
+def arm_name(trim: bool) -> str:
+    return "on" if trim else "off"
 
 
 def specs_of(functions: Iterable[ToolFunction]) -> list[ToolSpec]:
@@ -102,21 +127,25 @@ class PayloadRow:
 
     label: str
     encoding: str
+    trim: bool
     tools: int
     total_bytes: int
     largest_tool: str
     largest_tool_bytes: int
 
 
-def measure(label: str, functions: Sequence[ToolFunction], encoding: str) -> PayloadRow:
+def measure(
+    label: str, functions: Sequence[ToolFunction], encoding: str, *, trim: bool = False
+) -> PayloadRow:
     """Encode this toolset and weigh it, whole array and largest single object."""
     specs = specs_of(functions)
-    objects = ENCODINGS[encoding](specs)
+    objects = ENCODINGS[encoding](specs, trim=trim)
     sizes = {spec.name: len(_compact(obj)) for spec, obj in zip(specs, objects, strict=True)}
     largest = max(sizes, key=lambda name: sizes[name]) if sizes else ""
     return PayloadRow(
         label=label,
         encoding=encoding,
+        trim=trim,
         tools=len(specs),
         total_bytes=len(_compact(objects)),
         largest_tool=largest,
@@ -134,7 +163,7 @@ TOOLSETS: dict[str, tuple[ToolFunction, ...]] = {
 
 
 def baseline_rows() -> list[PayloadRow]:
-    """Every toolset under every encoding, in table order."""
+    """Every toolset under every encoding, lever 2 off: what is on the wire today."""
     return [
         measure(label, functions, encoding)
         for label, functions in TOOLSETS.items()
@@ -142,17 +171,29 @@ def baseline_rows() -> list[PayloadRow]:
     ]
 
 
+def lever_two_rows() -> list[PayloadRow]:
+    """The review array in both arms of lever 2, per encoding.
+
+    Only the two review arrays: the MCP toolset has **one** arm, because `mcp/server.py`
+    is handed the rejoined description whatever the review's flag says (FR-039b), and a
+    table that printed a trimmed MCP number would be quoting bytes nothing ever sends.
+    """
+    return [
+        measure(label, TOOLSETS[label], encoding, trim=trim)
+        for label in ("review", "review+bridge")
+        for encoding in ENCODINGS
+        for trim in ARMS
+    ]
+
+
 # --- the RMS tier (lever 4 reads this) --------------------------------------------------
 
-RMS_TIER_WITHHELD: tuple[str, ...] = (
-    "check_rms_part",
-    "check_rms_assembly",
-    "check_rms_equations",
-    "list_features",
-    "get_feature",
-    "list_equations",
-)
-"""The six tools a package with no feature tree cannot use, withheld together (lever 4)."""
+RMS_TIER_WITHHELD: tuple[str, ...] = RMS_TIER_TOOLS
+"""The six tools a package with no feature tree cannot use, withheld together (lever 4).
+
+Imported from `tools/registry.py`, where the tier declares them once. A second list here
+would be exactly the transcription this module exists to prevent, and the byte pins below
+would keep passing while the lever withheld a different six."""
 
 
 @dataclass(frozen=True)
@@ -178,7 +219,10 @@ class TierDelta:
 
 
 def tier_delta(
-    withheld: Sequence[str] = RMS_TIER_WITHHELD, encoding: str = "openai"
+    withheld: Sequence[str] = RMS_TIER_WITHHELD,
+    encoding: str = "openai",
+    *,
+    trim: bool = False,
 ) -> TierDelta:
     """Weigh the curated array with `withheld` taken out of it.
 
@@ -188,13 +232,13 @@ def tier_delta(
     """
     names = set(withheld)
     kept = [function for function in TOOL_FUNCTIONS if function.__name__ not in names]
-    sizes = tool_object_bytes(encoding)
+    sizes = tool_object_bytes(encoding, trim=trim)
     return TierDelta(
         encoding=encoding,
         withheld=tuple(withheld),
         kept_tools=len(kept),
-        kept_bytes=measure("kept", kept, encoding).total_bytes,
-        full_bytes=measure("review", TOOL_FUNCTIONS, encoding).total_bytes,
+        kept_bytes=measure("kept", kept, encoding, trim=trim).total_bytes,
+        full_bytes=measure("review", TOOL_FUNCTIONS, encoding, trim=trim).total_bytes,
         object_bytes=sum(sizes[name] for name in withheld),
     )
 
@@ -202,16 +246,19 @@ def tier_delta(
 # --- what the descriptions cost (docs/llm-efficiency-options.md reads this) ---------------
 
 
-def description_bytes() -> dict[str, int]:
-    """UTF-8 bytes of each tool's own description, longest first."""
-    sizes = {spec.name: len(spec.description.encode("utf-8")) for spec in specs_of(TOOL_FUNCTIONS)}
+def description_bytes(*, trim: bool = False) -> dict[str, int]:
+    """UTF-8 bytes of each tool's own description on the wire, longest first."""
+    sizes = {
+        spec.name: len(spec.wire_description(trim=trim).encode("utf-8"))
+        for spec in specs_of(TOOL_FUNCTIONS)
+    }
     return dict(sorted(sizes.items(), key=lambda item: (-item[1], item[0])))
 
 
-def tool_object_bytes(encoding: str = "openai") -> dict[str, int]:
+def tool_object_bytes(encoding: str = "openai", *, trim: bool = False) -> dict[str, int]:
     """Encoded bytes of each whole tool object, largest first."""
     specs = specs_of(TOOL_FUNCTIONS)
-    objects = ENCODINGS[encoding](specs)
+    objects = ENCODINGS[encoding](specs, trim=trim)
     sizes = {spec.name: len(_compact(obj)) for spec, obj in zip(specs, objects, strict=True)}
     return dict(sorted(sizes.items(), key=lambda item: (-item[1], item[0])))
 
@@ -257,6 +304,18 @@ GEMINI_ARRAY_BYTES = 34_217
 asks for 34,248; this tree produces 34,217, and a pin is a measurement or it is nothing.
 Six files of the spec package still quote 34,248 (and 37,709 for the bridge, measured
 37,712); probe-log.md lists them by line for the change that is allowed to edit them."""
+TRIMMED_OPENAI_ARRAY_BYTES = 21_432
+TRIMMED_GEMINI_ARRAY_BYTES = 21_584
+TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES = 23_944
+"""Lever 2 on: the same 32 tools carrying the first paragraph of each docstring instead of
+the whole body. **Regenerated, never transcribed** - `--write` prints them.
+
+**Deviation, and it is in the lever's favour.** `contracts/levers.md` and T056 quote 23,834
+bytes and 30 percent, measured before the split existed; the split that keeps the rejoin
+byte-equal (T052) leaves 21,432 bytes and 37.1 percent on OpenAI. Nothing here is typed to
+match a document: a pin is a measurement or it is nothing, and the same rule already
+applies to `GEMINI_ARRAY_BYTES` above."""
+
 MCP_TOOL_COUNT = 20
 MCP_OPENAI_ARRAY_BYTES = 14_866
 MCP_GEMINI_ARRAY_BYTES = 14_084
@@ -289,8 +348,58 @@ def test_curated_tool_count_is_pinned() -> None:
     [("openai", OPENAI_ARRAY_BYTES), ("gemini", GEMINI_ARRAY_BYTES)],
 )
 def test_curated_array_bytes_per_encoding(encoding: str, expected: int) -> None:
-    """The whole tool array, compact, as each adapter sends it."""
+    """The whole tool array, compact, as each adapter sends it with every lever off."""
     assert measure("review", TOOL_FUNCTIONS, encoding).total_bytes == expected
+
+
+@pytest.mark.parametrize(
+    ("encoding", "expected"),
+    [("openai", TRIMMED_OPENAI_ARRAY_BYTES), ("gemini", TRIMMED_GEMINI_ARRAY_BYTES)],
+)
+def test_trimmed_array_bytes_per_encoding(encoding: str, expected: int) -> None:
+    """The same array with `trim_tool_descriptions` on: lever 2's whole arithmetic."""
+    assert measure("review", TOOL_FUNCTIONS, encoding, trim=True).total_bytes == expected
+
+
+def test_the_bridge_array_is_pinned_in_both_arms() -> None:
+    """The 35-tool array a bridged run sends, so a US3 session is measured too."""
+    bridged = TOOLSETS["review+bridge"]
+    assert measure("review+bridge", bridged, "openai").total_bytes == 37_712
+    assert (
+        measure("review+bridge", bridged, "openai", trim=True).total_bytes
+        == TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES
+    )
+
+
+@pytest.mark.parametrize("encoding", sorted(ENCODINGS))
+def test_the_trim_takes_the_same_bytes_off_either_encoding(encoding: str) -> None:
+    """The saving is description text, which both encodings carry identically; only the
+    schema conversion differs, and lever 2 does not touch a schema."""
+    off = measure("review", TOOL_FUNCTIONS, encoding).total_bytes
+    on = measure("review", TOOL_FUNCTIONS, encoding, trim=True).total_bytes
+
+    assert off - on == 12_633
+
+
+def test_the_trim_is_bounded_by_the_structural_floor() -> None:
+    """37 percent off, and the remaining 15,274 bytes is structure no trim can reach."""
+    off = measure("review", TOOL_FUNCTIONS, "openai").total_bytes
+    on = measure("review", TOOL_FUNCTIONS, "openai", trim=True).total_bytes
+
+    assert round(100 * (off - on) / off, 1) == 37.1
+    assert on > structural_floor_bytes()
+
+
+def test_the_mcp_toolset_has_one_arm_because_it_sends_the_rejoined_description() -> None:
+    """FR-039b, pinned as bytes: what the Ask tab sends does not move when lever 2 does.
+
+    `mcp/server.py`'s `_as_tool` reads `full_description`, so the trimmed measurement
+    below is a number nothing ever puts on a wire. It is asserted *different* rather than
+    printed in the baseline table, so no reader can quote it as the Ask tab's payload.
+    """
+    off = measure("mcp", MCP_TOOL_FUNCTIONS, "openai").total_bytes
+    assert off == MCP_OPENAI_ARRAY_BYTES
+    assert measure("mcp", MCP_TOOL_FUNCTIONS, "openai", trim=True).total_bytes != off
 
 
 @pytest.mark.parametrize("encoding", sorted(ENCODINGS))
@@ -327,6 +436,18 @@ def test_rms_tier_row_is_the_array_delta_not_the_object_sum() -> None:
     assert delta.delta_bytes == delta.object_bytes + len(RMS_TIER_WITHHELD)
 
 
+def test_the_rms_tier_delta_shrinks_once_lever_2_has_taken_its_bytes() -> None:
+    """Levers 2 and 4 are not additive: what lever 4 withholds, lever 2 already thinned.
+
+    8,093 bytes of the untrimmed array, 2,745 of the trimmed one. An A/B row that ran both
+    levers in one arm and added their published savings would overstate by 5,348 bytes,
+    which is why every row records which other levers were on.
+    """
+    assert tier_delta(trim=True).delta_bytes == 2_745
+    assert tier_delta(trim=True).delta_percent == 12.8
+    assert tier_delta(trim=True).kept_tools == RMS_TIER_KEPT_TOOLS
+
+
 def test_rms_tier_delta_is_smaller_on_gemini() -> None:
     """Stated so no reader quotes the OpenAI saving for a Gemini run."""
     assert tier_delta(encoding="gemini").delta_bytes < RMS_TIER_DELTA_BYTES
@@ -349,7 +470,12 @@ def test_structural_floor_is_45_percent_of_the_payload() -> None:
 
 
 def test_longest_descriptions_and_largest_objects_are_the_documented_ones() -> None:
-    """The two lists `docs/llm-efficiency-options.md` quotes, regenerated here (T002)."""
+    """The two lists `docs/llm-efficiency-options.md` quotes, regenerated here (T002).
+
+    Lever 2 off, which is what the document measured: `description_bytes()` reads
+    `wire_description(trim=False)`, the rejoined text, so these four numbers are the same
+    ones the pre-split tree produced.
+    """
     assert list(description_bytes().items())[:4] == [
         ("check_rms_assembly", 1_455),
         ("check_rms_part", 1_296),
@@ -412,14 +538,31 @@ def baseline_table() -> str:
             f"| `{row.largest_tool}` | {row.largest_tool_bytes:,} |"
         )
     lines.append("")
-    lines.append("| RMS tier | Encoding | Kept tools | Kept bytes | Delta | Delta % |")
-    lines.append("|---|---|---:|---:|---:|---:|")
-    for encoding in ENCODINGS:
-        delta = tier_delta(encoding=encoding)
+    lines.append("| Lever 2 | Encoding | Arm | Tools | Bytes | Delta | Delta % |")
+    lines.append("|---|---|---|---:|---:|---:|---:|")
+    for row in lever_two_rows():
+        off = measure(row.label, TOOLSETS[row.label], row.encoding).total_bytes
+        delta = off - row.total_bytes
         lines.append(
-            f"| withhold {len(delta.withheld)} RMS tools | {encoding} | {delta.kept_tools} "
-            f"| {delta.kept_bytes:,} | {delta.delta_bytes:,} | {delta.delta_percent} |"
+            f"| {row.label} | {row.encoding} | {arm_name(row.trim)} | {row.tools} "
+            f"| {row.total_bytes:,} | {delta:,} | {round(100 * delta / off, 1)} |"
         )
+    lines.append("")
+    lines.append(
+        "The MCP toolset has one arm: `mcp/server.py` is handed the rejoined description "
+        "whatever the review's flag says (FR-039b)."
+    )
+    lines.append("")
+    lines.append("| RMS tier | Encoding | Arm | Kept tools | Kept bytes | Delta | Delta % |")
+    lines.append("|---|---|---|---:|---:|---:|---:|")
+    for encoding in ENCODINGS:
+        for trim in ARMS:
+            delta = tier_delta(encoding=encoding, trim=trim)
+            lines.append(
+                f"| withhold {len(delta.withheld)} RMS tools | {encoding} "
+                f"| {arm_name(trim)} | {delta.kept_tools} | {delta.kept_bytes:,} "
+                f"| {delta.delta_bytes:,} | {delta.delta_percent} |"
+            )
     lines.append("")
     floor = structural_floor_bytes()
     total = measure("review", TOOL_FUNCTIONS, "openai").total_bytes
@@ -428,10 +571,15 @@ def baseline_table() -> str:
         f"{round(100 * floor / total)} percent of {total:,}."
     )
     lines.append("")
-    longest = ", ".join(f"`{n}` {b:,}" for n, b in list(description_bytes().items())[:4])
-    largest = ", ".join(f"`{n}` {b:,}" for n, b in list(tool_object_bytes().items())[:3])
-    lines.append(f"Longest descriptions: {longest}")
-    lines.append(f"Largest tool objects (openai): {largest}")
+    for trim in ARMS:
+        longest = ", ".join(
+            f"`{n}` {b:,}" for n, b in list(description_bytes(trim=trim).items())[:4]
+        )
+        largest = ", ".join(
+            f"`{n}` {b:,}" for n, b in list(tool_object_bytes(trim=trim).items())[:3]
+        )
+        lines.append(f"Longest descriptions (lever 2 {arm_name(trim)}): {longest}")
+        lines.append(f"Largest tool objects (openai, lever 2 {arm_name(trim)}): {largest}")
     lines.append("")
     lines.append("sha256: " + ", ".join(f"{k} {v}" for k, v in encoding_digests().items()))
     return "\n".join(lines)

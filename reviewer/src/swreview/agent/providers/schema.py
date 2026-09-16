@@ -39,6 +39,13 @@ trap:
   default that is not null is kept, because it tells the model what to send for a
   parameter it does not care about. That is also what `openai/lib/_pydantic.py` does.
 
+**The description has two halves** (lever 2, feature 005): `parse_docstring` returns the
+docstring's `Notes:` block beside the description instead of discarding it, and
+`ToolSpec.full_description` rejoins them byte-equal to the pre-split docstring body, so the
+flag-off path sends exactly the bytes this tree sent before the split (FR-039). The caps
+the split is measured at - `MAX_DESCRIPTION_LENGTH`, `MAX_PARAMETER_DESCRIPTION_LENGTH` -
+are enforced by a test through `cap_violations` and never by truncating at run time.
+
 **Gemini** (`gemini_adapt`): `types.FunctionDeclaration(parameters_json_schema=...)` takes
 standard JSON Schema, so the canonical form goes across almost unchanged - only
 `additionalProperties` and `$defs` come out. Nullable unions stay `anyOf` (research R3).
@@ -49,16 +56,19 @@ from __future__ import annotations
 import copy
 import inspect
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from pydantic import TypeAdapter
 
 __all__ = [
+    "MAX_DESCRIPTION_LENGTH",
     "MAX_NAME_LENGTH",
+    "MAX_PARAMETER_DESCRIPTION_LENGTH",
     "ToolSpec",
     "canonical_schema",
+    "cap_violations",
     "gemini_adapt",
     "parse_docstring",
     "strictify",
@@ -78,7 +88,22 @@ SECTION_HEADER = re.compile(
 """A Google-style section header, at column zero once the docstring is dedented."""
 
 ARGS_SECTIONS = ("Args", "Arguments")
+NOTES_SECTIONS = ("Notes", "Note")
+"""The section lever 2 moves the second and later paragraphs into, either spelling.
+
+Both already ended the description, so collecting only one of them would drop the other's
+text on the floor instead of moving it to the system prompt.
+"""
+
 ARG_ENTRY = re.compile(r"^(\w+)\s*:\s*(.*)$")
+
+MAX_DESCRIPTION_LENGTH = 160
+MAX_PARAMETER_DESCRIPTION_LENGTH = 90
+"""The lever 2 caps, in characters, enforced by a test and never by truncation (T053).
+
+These are the numbers `contracts/levers.md` measures its 23,834-byte / 30 percent row at,
+so the cap the build enforces and the saving the ledger quotes are one number.
+"""
 
 SCHEMA_MAP_KEYWORDS = ("properties", "$defs", "definitions", "patternProperties")
 """Keywords whose value is a mapping of name to schema."""
@@ -96,12 +121,18 @@ EXPRESSIBLE_KEYWORDS = ("type", "$ref", "enum", "const", "anyOf", "oneOf", "prop
 # --- docstrings -------------------------------------------------------------------
 
 
-def parse_docstring(doc: str | None) -> tuple[str, dict[str, str]]:
-    """`(description, {parameter: description})` from a Google-style docstring.
+def parse_docstring(doc: str | None) -> tuple[str, dict[str, str], str]:
+    """`(description, {parameter: description}, notes)` from a Google-style docstring.
 
     The description is everything before the first section header, kept as written
     (paragraph breaks included). Each `Args:` entry is `name: text`, with continuation
     lines - indented further than the entry - joined onto it with a single space.
+
+    The `Notes:` block comes back dedented to column zero rather than discarded, which is
+    the whole of lever 2's split: the first paragraph stays on the tool and the rest moves
+    under `Notes:` **in the same docstring**, so the text still lives in exactly one place.
+    `ToolSpec.full_description` rejoins the two halves, and FR-039 pins that rejoin
+    byte-equal to the pre-split docstring body.
     """
     text = inspect.cleandoc(doc or "")
     body: list[str] = []
@@ -117,10 +148,37 @@ def parse_docstring(doc: str | None) -> tuple[str, dict[str, str]]:
             body.append(line)
         else:
             sections[current].append(line)
+    return (
+        "\n".join(body).strip(),
+        _parse_args_block(_section_lines(sections, ARGS_SECTIONS)),
+        _dedent_block(_section_lines(sections, NOTES_SECTIONS)),
+    )
+
+
+def _section_lines(sections: dict[str, list[str]], names: Sequence[str]) -> list[str]:
+    """The lines of every section spelled one of `names`, in the order `names` gives."""
     block: list[str] = []
-    for name in ARGS_SECTIONS:
+    for name in names:
         block.extend(sections.get(name, []))
-    return "\n".join(body).strip(), _parse_args_block(block)
+    return block
+
+
+def _base_indent(lines: list[str]) -> int:
+    """The indent a section block sits at: the least of its non-blank lines."""
+    return min(len(line) - len(line.lstrip()) for line in lines)
+
+
+def _dedent_block(block: list[str]) -> str:
+    """A section block moved back to column zero, with its blank lines kept.
+
+    Indentation *below* the block's own base survives, because a code sample or a nested
+    list inside a `Notes:` block is part of the text the rejoin has to reproduce.
+    """
+    lines = [line for line in block if line.strip()]
+    if not lines:
+        return ""
+    base = _base_indent(lines)
+    return "\n".join(line[base:] if line.strip() else "" for line in block).strip()
 
 
 def _parse_args_block(block: list[str]) -> dict[str, str]:
@@ -128,7 +186,7 @@ def _parse_args_block(block: list[str]) -> dict[str, str]:
     lines = [line for line in block if line.strip()]
     if not lines:
         return {}
-    base = min(len(line) - len(line.lstrip()) for line in lines)
+    base = _base_indent(lines)
     entries: dict[str, list[str]] = {}
     current: str | None = None
     for line in lines:
@@ -163,7 +221,7 @@ def canonical_schema(fn: Callable[..., Any]) -> dict[str, Any]:
     properties: dict[str, Any] = schema.setdefault("properties", {})
     schema.setdefault("required", [])
 
-    _, descriptions = parse_docstring(fn.__doc__)
+    _, descriptions, _ = parse_docstring(fn.__doc__)
     undocumented = [name for name in properties if name not in descriptions]
     if undocumented:
         raise ValueError(
@@ -391,12 +449,40 @@ class ToolSpec:
 
     Built once per tool by `tool_spec` and wrapped by `tools/registry.py`'s `RecordedTool`,
     which is what actually validates, records and calls.
+
+    `description` is the docstring's first section - after lever 2's split, its first
+    paragraph - and `notes` is its `Notes:` block, the half that belongs in the system
+    prompt rather than on every tool object of every request. Which of the two strings
+    reaches a provider is the `trim_tool_descriptions` flag's decision, and it is taken
+    **after** `spec_for`, because `_SPECS` is process-global and a flag read while
+    building the spec would let one run's setting leak into the next one in the process.
     """
 
     name: str
     description: str
+    notes: str
     schema: dict[str, Any]
     fn: Callable[..., Any]
+
+    @property
+    def full_description(self) -> str:
+        """Both halves rejoined: the string the flag-off path sends (FR-039).
+
+        One blank line between them and nothing appended when there are no notes, which
+        is what keeps this byte-equal to the pre-split docstring body.
+        """
+        return f"{self.description}\n\n{self.notes}" if self.notes else self.description
+
+    def wire_description(self, *, trim: bool) -> str:
+        """Which half of the docstring an arm of lever 2 puts on a tool object.
+
+        The one place the flag's meaning is written down: `tools/registry.py`'s
+        `RecordedTool.description` calls it for a run, and the payload measurement calls
+        it for a table, so a measured arm and a sent arm cannot drift apart. *Where* the
+        flag is read is the registry's business, and deliberately not this module's:
+        `spec_for` caches by function across runs (`registry.py`).
+        """
+        return self.description if trim else self.full_description
 
 
 def tool_spec(fn: Callable[..., Any]) -> ToolSpec:
@@ -411,7 +497,41 @@ def tool_spec(fn: Callable[..., Any]) -> ToolSpec:
             f"tool name {name!r} is not a legal tool name: at most {MAX_NAME_LENGTH} "
             "characters of [a-z0-9_]"
         )
-    description, _ = parse_docstring(fn.__doc__)
+    description, _, notes = parse_docstring(fn.__doc__)
     if not description:
         raise ValueError(f"tool {name!r} has no description: the docstring is what the model reads")
-    return ToolSpec(name=name, description=description, schema=canonical_schema(fn), fn=fn)
+    return ToolSpec(
+        name=name,
+        description=description,
+        notes=notes,
+        schema=canonical_schema(fn),
+        fn=fn,
+    )
+
+
+def cap_violations(spec: ToolSpec) -> list[str]:
+    """Every description on this tool that is over the lever 2 cap, one message each.
+
+    Characters, not bytes, and the caps are inclusive. The cap is enforced from a test and
+    never at run time on purpose: truncating a description mid-sentence produces "...and
+    never used as o", and the model reads the fragment as a complete sentence. A docstring
+    that cannot be split under the cap without rewording is a **named lever 2 exception
+    recorded in the ledger row**, not a silent rewrite.
+
+    Every offender is listed rather than the first, because a build that fails one
+    docstring at a time is a build nobody finishes fixing.
+    """
+    messages: list[str] = []
+    if len(spec.description) > MAX_DESCRIPTION_LENGTH:
+        messages.append(
+            f"{spec.name}: description is {len(spec.description)} characters, over the "
+            f"{MAX_DESCRIPTION_LENGTH}-character cap"
+        )
+    for parameter, schema in spec.schema.get("properties", {}).items():
+        text = schema.get("description", "")
+        if len(text) > MAX_PARAMETER_DESCRIPTION_LENGTH:
+            messages.append(
+                f"{spec.name}.{parameter}: description is {len(text)} characters, over the "
+                f"{MAX_PARAMETER_DESCRIPTION_LENGTH}-character cap"
+            )
+    return messages

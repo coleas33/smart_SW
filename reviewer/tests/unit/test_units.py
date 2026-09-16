@@ -81,6 +81,15 @@ def test_angle_passed_to_a_length_function_raises_dimensionality_error() -> None
 def test_length_passed_to_the_angle_function_raises_dimensionality_error() -> None:
     with pytest.raises(DimensionalityError):
         units.to_angle(Quantity(value=10.0, unit="mm"))
+    with pytest.raises(DimensionalityError):
+        units.as_degrees(Quantity(value=10.0, unit="mm"))
+
+
+def test_as_degrees_reads_an_angle_in_degrees() -> None:
+    """The angular sibling of `as_mm`: every angle an equation carries is in degrees
+    (`swAngularEquationUnits_e`), and this is the one place the conversion happens."""
+    assert units.as_degrees(Angle(value=45.0, unit="deg")) == pytest.approx(45.0, abs=1e-12)
+    assert units.as_degrees(Angle(value=math.pi, unit="rad")) == pytest.approx(180.0, abs=1e-9)
 
 
 def test_unknown_target_unit_raises_value_error() -> None:
@@ -89,4 +98,11 @@ def test_unknown_target_unit_raises_value_error() -> None:
 
 
 def test_module_exports_only_the_agreed_surface() -> None:
-    assert set(units.__all__) == {"Converted", "as_mm", "convert", "to_angle", "to_length"}
+    assert set(units.__all__) == {
+        "Converted",
+        "as_degrees",
+        "as_mm",
+        "convert",
+        "to_angle",
+        "to_length",
+    }

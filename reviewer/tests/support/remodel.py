@@ -23,6 +23,10 @@ section 4.1 as a plain dict, because `ScopeSignals` itself is `remodel/scope.py`
 signal, never a pass, so every default here is a readable, in-scope value and a test that
 wants unreadable asks for it by name.
 
+`stage_1_sources` and `code_lines` are the fifth: the file list every "nothing in stage 1
+calls this member" assertion scans, kept here so the re-modeler's tests scan the same
+surface rather than each keeping its own idea of what stage 1 is.
+
 Convention, inherited from `features.py`: absence is `None` plus a gap, never a favourable
 default (constitution Principle I). `child_names=None` still means "`GetChildren` failed",
 and `linked` leaves such a direction alone rather than inventing the reading.
@@ -32,6 +36,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from swreview.ir.models import EvidencePackage, Gap
@@ -402,3 +407,39 @@ def scope_signals(**overrides: Any) -> dict[str, Any]:
     }
     signals.update(overrides)
     return signals
+
+
+# --- 5. The stage-1 source scan ---------------------------------------------------
+
+STAGE_1_SOURCE_DIRS: tuple[tuple[str, str], ...] = (
+    ("reviewer/src/swreview/remodel", "*.py"),
+    ("extractor/SwReview.Extractor/Rms", "*.cs"),
+    ("extractor/SwReview.Extractor/Guard", "*.cs"),
+)
+"""Every directory the re-modeler's stage-1 surface is written in, Python and C#. A member
+can only be called from one of these, so scanning them is what makes "nothing calls it" a
+claim about stage 1 rather than about two modules that could never have named it."""
+
+_COMMENT_PREFIXES = ("#", "//", "/*", "*")
+
+
+def code_lines(path: Path) -> list[str]:
+    """The file's lines with whole-line comments dropped, so prose about a member the
+    guard refuses does not read as a call to it."""
+    return [
+        line
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith(_COMMENT_PREFIXES)
+    ]
+
+
+def stage_1_sources() -> list[Path]:
+    """Every stage-1 source file, refusing a directory that matched nothing: a scan over
+    an empty list passes vacuously, which is the one way this assertion could rot."""
+    root = Path(__file__).resolve().parents[3]
+    files: list[Path] = []
+    for directory, pattern in STAGE_1_SOURCE_DIRS:
+        found = sorted((root / directory).glob(pattern))
+        assert found, f"{directory} matched no {pattern}: this scan would pass vacuously"
+        files.extend(found)
+    return files

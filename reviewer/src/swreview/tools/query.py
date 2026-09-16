@@ -82,9 +82,10 @@ def package_summary(package: EvidencePackage) -> dict[str, Any]:
 def get_package_summary() -> ToolResult:
     """Census of the evidence package under review. Call this first.
 
-    Reports the design, its active configuration, how many documents, components, holes,
-    fasteners and drawing sheets were extracted, every manifest discrepancy, and how many
-    gaps the extractor recorded.
+    Notes:
+        Reports the design, its active configuration, how many documents, components, holes,
+        fasteners and drawing sheets were extracted, every manifest discrepancy, and how many
+        gaps the extractor recorded.
     """
     return package_summary(current_context().ir)
 
@@ -124,11 +125,12 @@ def list_components(
 def get_component(component_id: str) -> ToolResult:
     """Everything the package holds about one component instance.
 
-    Returns the instance itself plus the holes, fasteners, faces and mates that belong
-    to it.
-
     Args:
         component_id: Component instance id, for example `cmp:0001`.
+
+    Notes:
+        Returns the instance itself plus the holes, fasteners, faces and mates that belong
+        to it.
     """
     context = current_context()
     component = context.component(component_id)
@@ -152,11 +154,12 @@ def get_component(component_id: str) -> ToolResult:
 def find_components(name_pattern: str, document_id: str | None = None) -> list[str] | ToolResult:
     """Component instance ids whose name or instance path matches a glob.
 
-    Matching is case-insensitive; `*`, `?` and `[seq]` work as in a shell glob.
-
     Args:
         name_pattern: Glob such as `M6*` or `*housing*`.
         document_id: Restrict to instances of one document, or null for all.
+
+    Notes:
+        Matching is case-insensitive; `*`, `?` and `[seq]` work as in a shell glob.
     """
     context = current_context()
     if document_id is not None and context.document(document_id) is None:
@@ -217,14 +220,15 @@ def list_holes(
 ) -> list[dict[str, Any]] | ToolResult:
     """Holes, optionally filtered by component instance and hole type.
 
-    A hole whose usable thread depth was not reported comes back with
-    `thread_depth: null` and `thread_depth_note: "unknown"`. Drill depth
-    (`hole_depth`) is not usable thread depth and must not be used as one.
-
     Args:
         component_id: Component instance id, or null for every hole.
         hole_type: One of tapped, clearance, counterbore, countersink, simple, unknown;
             null for every type.
+
+    Notes:
+        A hole whose usable thread depth was not reported comes back with
+        `thread_depth: null` and `thread_depth_note: "unknown"`. Drill depth
+        (`hole_depth`) is not usable thread depth and must not be used as one.
     """
     context = current_context()
     if component_id is not None and context.component(component_id) is None:
@@ -245,12 +249,13 @@ def list_fasteners(
 ) -> list[dict[str, Any]] | ToolResult:
     """Fasteners with the source their identity came from.
 
-    `identity_source` says how much the thread designation and length can be trusted:
-    `toolbox` is Toolbox data, `name_parse` was read out of a file name.
-
     Args:
         component_id: Component instance id, or null for every fastener.
         kind: One of screw, bolt, nut, washer, pin, other; null for every kind.
+
+    Notes:
+        `identity_source` says how much the thread designation and length can be trusted:
+        `toolbox` is Toolbox data, `name_parse` was read out of a file name.
     """
     context = current_context()
     if component_id is not None and context.component(component_id) is None:
@@ -271,12 +276,13 @@ def list_interferences(
 ) -> list[dict[str, Any]] | ToolResult:
     """Interference results grouped by `group_key`, including truncated and failed ones.
 
-    A group whose status is not `computed` is not a clear result: it is unresolved
-    coverage and has to be reported as such.
-
     Args:
         configuration: Configuration name the results were computed in, or null for all.
         component_id: Keep only groups that involve this component instance, or null.
+
+    Notes:
+        A group whose status is not `computed` is not a clear result: it is unresolved
+        coverage and has to be reported as such.
     """
     context = current_context()
     if component_id is not None and context.component(component_id) is None:
@@ -313,12 +319,13 @@ def sheet_reason(package: EvidencePackage, sheet: DrawingSheet) -> str | None:
 def get_drawing_sheet(document_id: str, sheet_name: str | None = None) -> ToolResult:
     """One drawing sheet: its notes, dimensions, views and parse status.
 
-    When `parse_status` is not `text` the sheet carries no readable dimensions and the
-    result says why. That is unresolved coverage, not a pass.
-
     Args:
         document_id: Drawing document id.
         sheet_name: Sheet name, or null for the first sheet of the document.
+
+    Notes:
+        When `parse_status` is not `text` the sheet carries no readable dimensions and the
+        result says why. That is unresolved coverage, not a pass.
     """
     context = current_context()
     if context.document(document_id) is None:
@@ -368,13 +375,14 @@ def find_dimensions(
 ) -> list[dict[str, Any]] | ToolResult:
     """Dimensions read off drawing sheets, with the text exactly as it was read.
 
-    `text_as_read` is the raw callout; `nominal` and `tolerance` are what the dimension
-    grammar made of it. A tolerance whose kind is `none` was not stated on the drawing.
-
     Args:
         document_id: Restrict to one drawing document, or null for all.
         text_regex: Python regular expression matched against `text_as_read`, or null.
         near_view: Keep dimensions attached to, or inside the box of, this view.
+
+    Notes:
+        `text_as_read` is the raw callout; `nominal` and `tolerance` are what the dimension
+        grammar made of it. A tolerance whose kind is `none` was not stated on the drawing.
     """
     context = current_context()
     if document_id is not None and context.document(document_id) is None:
@@ -404,8 +412,9 @@ def find_dimensions(
 def list_gaps() -> list[dict[str, Any]]:
     """Everything the extractor could not provide, and why.
 
-    A gap is the reason a check stays unresolved. Read this early: it bounds what can be
-    concluded from this package at all.
+    Notes:
+        A gap is the reason a check stays unresolved. Read this early: it bounds what can be
+        concluded from this package at all.
     """
     return [as_json(gap) for gap in current_context().ir.gaps]
 
@@ -413,11 +422,12 @@ def list_gaps() -> list[dict[str, Any]]:
 def get_exceptions(check: str | None = None) -> list[dict[str, Any]]:
     """Retained exceptions (previously accepted conditions) that apply to this package.
 
-    Empty when no exception store is wired to this run, which is the case for a package
-    reviewed without the exception store.
-
     Args:
         check: Restrict to one check identifier, or null for every exception.
+
+    Notes:
+        Empty when no exception store is wired to this run, which is the case for a package
+        reviewed without the exception store.
     """
     context = current_context()
     if not context.exceptions:

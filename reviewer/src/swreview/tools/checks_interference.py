@@ -67,21 +67,22 @@ def _select(
 def check_interference_group(group_key: str) -> ToolResult:
     """The verdict on one grouped interference condition, honoring retained exceptions.
 
-    `group_key` is the key `list_interferences` prints. Every pair in the group is one
-    condition: the finding names them all rather than repeating itself once per pair.
-
-    A group with an overlap volume is `demonstrated` - the overlap is a fact SOLIDWORKS
-    computed. A group SOLIDWORKS reported as coincident or touching, with no volume, is
-    `suspected`. A group with a truncated or failed pair is `unresolved` and each such
-    pair is also written into the session's unresolved coverage: nothing is known about
-    them, and an exception cannot speak for a pair that was never evaluated.
-
-    An exception accepted for exactly these components in this configuration clears the
-    group and is cited on the finding; one whose geometry or configuration has since
-    changed leaves the finding standing and says so.
-
     Args:
         group_key: The interference group to judge, from `list_interferences`.
+
+    Notes:
+        `group_key` is the key `list_interferences` prints. Every pair in the group is one
+        condition: the finding names them all rather than repeating itself once per pair.
+
+        A group with an overlap volume is `demonstrated` - the overlap is a fact SOLIDWORKS
+        computed. A group SOLIDWORKS reported as coincident or touching, with no volume, is
+        `suspected`. A group with a truncated or failed pair is `unresolved` and each such
+        pair is also written into the session's unresolved coverage: nothing is known about
+        them, and an exception cannot speak for a pair that was never evaluated.
+
+        An exception accepted for exactly these components in this configuration clears the
+        group and is cited on the finding; one whose geometry or configuration has since
+        changed leaves the finding standing and says so.
     """
     context = current_context()
     selected = _select(context, groups_of(context.ir), group_key)

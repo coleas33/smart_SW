@@ -8,7 +8,7 @@ using SwReview.Extractor.Rms;
 namespace SwReview.Extractor.Bridge;
 
 /// <summary>
-/// The four commands the bridge answers (contracts/cli.md, contracts/agent-tools.md).
+/// The five commands the bridge answers (contracts/cli.md, contracts/agent-tools.md).
 /// Anything else is an error response naming these, never a silent no-op.
 /// </summary>
 public static class BridgeCommands
@@ -18,8 +18,15 @@ public static class BridgeCommands
     public const string Measure = "measure";
     public const string Interference = "interference";
 
+    /// <summary>
+    /// Protocol 1.2 (T096): one component's bodies tessellated into the package's mesh
+    /// directory, for a review whose package was extracted without meshes (lever 10a).
+    /// Review scope only - a mesh fetch writes a file and can take seconds.
+    /// </summary>
+    public const string Tessellate = "tessellate";
+
     /// <summary>For the "unknown command" message and for SwReview.Extractor.Console/Serve/PROTOCOL.md.</summary>
-    public static readonly string[] All = { Ping, Capture, Measure, Interference };
+    public static readonly string[] All = { Ping, Capture, Measure, Interference, Tessellate };
 }
 
 /// <summary>The <c>status</c> of a response.</summary>

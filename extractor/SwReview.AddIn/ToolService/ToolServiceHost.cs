@@ -790,6 +790,10 @@ public sealed class ToolServiceHost : IToolService
             DocumentPath = documentPath,
             Configuration = session.Configuration.Name,
 
+            // Lever 10a. Review scope only, which the ScopedSecretPolicy enforces: a mesh
+            // fetch writes a file and can take seconds, so it is not general chat's to call.
+            TessellateSource = scope.TessellateSource(),
+
             // The gate the remodel.* commands call through. The seat itself is not wired here:
             // this host attaches to the document the engineer has open, and the re-modeler
             // reaches SOLIDWORKS through its own seat, so until one is handed over every

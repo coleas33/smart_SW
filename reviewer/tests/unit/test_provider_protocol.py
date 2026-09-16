@@ -337,6 +337,9 @@ class _StubProvider:
     ) -> TurnResult:
         return TurnResult(reason="end", text="", steps=0, messages=list(messages))
 
+    def start_steps_at(self, index: int) -> None:
+        """Part of the port since feature 005: the session's step count seeds the counter."""
+
 
 def test_stub_satisfies_the_provider_protocol() -> None:
     assert isinstance(_StubProvider(), AgentProvider)

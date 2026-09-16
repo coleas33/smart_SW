@@ -112,7 +112,21 @@ public sealed class PackageWriter
     }
 
     /// <summary>Runs every phase without writing anything. Used by the tests and the add-in preview.</summary>
-    public EvidencePackage Build(DumpOptions options)
+    public EvidencePackage Build(DumpOptions options) => Build(options, keyOnly: false);
+
+    /// <summary>
+    /// The package a full dump would write, built only as far as the package-reuse key needs
+    /// it: the traversal, the document phase, the manifest and the component instances
+    /// (feature 005 lever 9, T091).
+    ///
+    /// The remaining phases are the minutes of hole, face and mesh work the lever exists to
+    /// skip, and none of them is in the key, so a probe that ran them would cost exactly what
+    /// reusing was meant to save. What comes back is a package in every other sense - and one
+    /// nothing writes to disk: it is an answer to "which design is on screen, right now".
+    /// </summary>
+    public EvidencePackage BuildReuseProbe(DumpOptions options) => Build(options, keyOnly: true);
+
+    private EvidencePackage Build(DumpOptions options, bool keyOnly)
     {
         var gaps = new GapCollector();
 
@@ -152,6 +166,11 @@ public sealed class PackageWriter
         {
             aborted |= !RunPhase(gaps, "manifest", "build the document manifest", () =>
                 package.Manifest = _manifest.Build(scope, documents));
+        }
+
+        if (keyOnly)
+        {
+            return Finish(package, scope, gaps, options);
         }
 
         if (!aborted)
@@ -234,6 +253,20 @@ public sealed class PackageWriter
                 package.Bodies.AddRange(_meshes.Dump(scope, meshDirectory)));
         }
 
+        return Finish(package, scope, gaps, options);
+    }
+
+    /// <summary>
+    /// The tail every build shares: the component instances, the feature types the sweep did
+    /// not read, the drawing gap, the reuse key and the gaps themselves.
+    ///
+    /// Shared with the reuse probe rather than repeated for it, so the probe's key is taken
+    /// over the same package the dump would have hashed - a second copy of these five steps is
+    /// a second chance for the two to disagree about what a package is.
+    /// </summary>
+    private static EvidencePackage Finish(
+        EvidencePackage package, DumpScope scope, GapCollector gaps, DumpOptions options)
+    {
         AddComponentInstances(package, scope);
         AddSkippedFeatureTypes(scope);
 
@@ -245,6 +278,12 @@ public sealed class PackageWriter
             null,
             "The native extractor does not read drawing sheets; they come from the PDF ingest.",
             null);
+
+        // Last, because the key is taken over the manifest and the component instances and
+        // both are complete only now. Gaps are deliberately not in it: they are evidence
+        // about the dump, not about the design, and a dump that stopped short is refused by
+        // ReuseRefusals rather than hidden behind a key that happens not to match.
+        package.ReuseKey = ReuseKey.Of(package, options);
 
         package.Gaps.AddRange(gaps.Gaps);
         return package;

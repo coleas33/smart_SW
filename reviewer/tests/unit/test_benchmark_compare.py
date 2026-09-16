@@ -161,6 +161,61 @@ def test_every_column_comes_from_its_one_source(tmp_path: Path) -> None:
     }
 
 
+def test_the_raw_row_reads_the_unresolved_count_as_two_numbers(tmp_path: Path) -> None:
+    """FR-054 on the raw ledger: lever 4 is allowed to raise the withheld half and nothing
+    else, and a single `unresolved` column cannot show which half moved.
+
+    Both come from `PackageScore`, the one source, and they sum to the unresolved bucket of
+    the mix beside them - never to `unresolved_count`, which counts findings.
+    """
+    spec = RunSpec(
+        run="on-1", arm="on", lever="tool_tiers", packages=(PackageSpec(coverage_withheld=1),)
+    )
+    write_run(tmp_path, spec)
+
+    row = one_row(compare_runs([tmp_path / "on-1"]), "on-1")
+
+    package = spec.packages[0]
+    assert row.unresolved_because_withheld == 1
+    assert row.unresolved_other == package.coverage_unresolved - 1
+    assert (
+        row.unresolved_because_withheld + row.unresolved_other
+        == row.coverage_bucket_mix["unresolved"]
+    )
+
+
+def test_both_unresolved_numbers_are_rendered_columns(tmp_path: Path) -> None:
+    """A number only `ledger.json` carries is a number the owner does not read."""
+    write_run(tmp_path, RunSpec(run="on-1", arm="on", packages=(PackageSpec(coverage_withheld=2),)))
+
+    cells = cells_of(render_ledger_md(compare_runs([tmp_path / "on-1"])), "on-1")
+
+    assert cells["unresolved withheld"] == "2"
+    assert cells["unresolved other"] == "1"
+
+
+def test_the_lever_four_counter_reads_the_withheld_half(tmp_path: Path) -> None:
+    """Lever 4's gate number, computed now that lever 4 has landed (FR-054, T062).
+
+    The counter was a placeholder naming a number nobody could compute; a study of the
+    lever now renders the median withheld count per arm, which is the half the lever is
+    expected to raise.
+    """
+    dirs = write_study(
+        tmp_path,
+        study_specs(
+            lever="tool_tiers",
+            off={"packages": (PackageSpec(coverage_withheld=0),)},
+            on={"packages": (PackageSpec(coverage_withheld=2),)},
+        ),
+    )
+
+    row = lever_row(compare_runs(dirs), "tool_tiers")
+
+    assert row.lever_counter.name == "unresolved because withheld"
+    assert (row.lever_counter.off, row.lever_counter.on) == (0.0, 2.0)
+
+
 def test_tool_calls_and_rounds_are_two_different_numbers(tmp_path: Path) -> None:
     """Lever 6 makes them diverge by exactly the amount it is trying to save."""
     write_run(tmp_path, RunSpec(run="on-1", arm="on", packages=(PackageSpec(rounds=4),)))

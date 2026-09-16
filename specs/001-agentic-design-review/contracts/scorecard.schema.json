@@ -17,7 +17,7 @@
   "$defs": {
     "PackageScore": {
       "type": "object", "additionalProperties": false,
-      "required": ["package_id", "held_out", "session_id", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "baseline_minutes", "assisted_minutes", "unattended_runtime_minutes", "net_saved_minutes", "usage", "round_trips", "cached_input_share", "wall_clock_s", "seconds_to_first_finding", "matched_defect_ids", "missed_defect_ids", "false_alarm_finding_ids"],
+      "required": ["package_id", "held_out", "session_id", "valid_findings", "missed_known_defects", "false_alarms", "unresolved_count", "baseline_minutes", "assisted_minutes", "unattended_runtime_minutes", "net_saved_minutes", "usage", "round_trips", "cached_input_share", "wall_clock_s", "seconds_to_first_finding", "carried_findings", "unresolved_because_withheld", "unresolved_other", "coverage_bucket_mix", "tool_calls_by_name", "matched_defect_ids", "missed_defect_ids", "false_alarm_finding_ids"],
       "properties": {
         "package_id": { "type": "string" }, "held_out": { "type": "boolean" }, "session_id": { "type": "string" },
         "valid_findings": { "type": "integer", "minimum": 0 },
@@ -32,7 +32,12 @@
         "round_trips": { "type": ["integer", "null"], "minimum": 0, "description": "session.usage.rounds: model round trips, not tool calls; null when the session carried no usage" },
         "cached_input_share": { "type": ["number", "null"], "minimum": 0, "maximum": 1, "description": "cached_input_tokens / input_tokens; null when either is null or input_tokens is 0. Rendered as unknown until probe L1 records that cached input is contained in input (FR-047)" },
         "wall_clock_s": { "type": ["number", "null"], "minimum": 0, "description": "started_at to ended_at in seconds; not unattended_runtime_minutes, which the benchmark runner overwrites with its own span. Null on a session that never ended" },
-        "seconds_to_first_finding": { "type": ["number", "null"], "minimum": 0, "description": "First finding event's at minus session.started's, from events.jsonl; null when the run found nothing or kept no event stream" },
+        "seconds_to_first_finding": { "type": ["number", "null"], "minimum": 0, "description": "First computed finding event's at minus session.started's, from events.jsonl; a finding carrying carried_over_from is skipped, since lever 11a writes carried findings during setup and timing them would measure the carry rather than the review (feature 005, FR-104); null when the run computed nothing or kept no event stream" },
+        "carried_findings": { "type": "integer", "minimum": 0, "description": "Findings carried from an earlier run rather than computed by this one; zero unless carry_over_rms was on (feature 005, lever 11a)" },
+        "unresolved_because_withheld": { "type": "integer", "minimum": 0, "description": "Unresolved coverage items written by a tool this run declined to offer; zero unless tool_tiers was on (feature 005, FR-054)" },
+        "unresolved_other": { "type": "integer", "minimum": 0, "description": "Every other unresolved coverage item. Lever 4's gate is that this one must not rise. With unresolved_because_withheld it sums to coverage_bucket_mix.unresolved, never to unresolved_count, which counts findings (feature 005, FR-054)" },
+        "coverage_bucket_mix": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 }, "description": "Coverage bucket to the number of items this run closed out in it; all five buckets are always present, zeros included, so two arms line up column for column. Lever 7 cannot be gated without it: a run that closed the checklist with skipped items looks efficient in every other column (feature 005, FR-074)" },
+        "tool_calls_by_name": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 }, "description": "Tool name to the number of times this run called it, most called first; empty when the run called nothing. Read from session.steps, failed calls included, because the question is which tool the model picked (feature 005, T057)" },
         "matched_defect_ids": { "type": "array", "items": { "type": "string" } },
         "missed_defect_ids": { "type": "array", "items": { "type": "string" } },
         "false_alarm_finding_ids": { "type": "array", "items": { "type": "string" } }

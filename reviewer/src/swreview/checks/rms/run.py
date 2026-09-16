@@ -90,6 +90,7 @@ __all__ = [
     "RmsRunError",
     "RmsScope",
     "UnreadableExceptionsError",
+    "carry_forward",
     "is_check_folder",
     "read_rms_check",
     "run_rms_check",
@@ -181,6 +182,14 @@ NO_RUN_ROOT = (
     "carried forward; the directory above a package is a run root only when a caller says "
     "it is"
 )
+
+SUPPLIED_STORE = (
+    "the caller supplied the exception store this check was graded against, so nothing "
+    "was looked for under a run root and nothing was copied into {directory}"
+)
+"""What a check reports when its store was handed in. Feature 004 grades two dumps of one
+copy against **one** store it refreshed once, so this is the honest reading of what its
+carry-forward did: it happened, once, in the run that owns both grades."""
 
 NOT_A_CHECK = "{directory} holds no {file}, so no check has run in it"
 
@@ -289,6 +298,7 @@ def run_rms_check(
     document_id: str | Sequence[str] | None = None,
     families: Sequence[RmsScope] | None = None,
     run_root: Path | str | None = None,
+    exceptions: ExceptionStore | None = None,
 ) -> RmsCheckRun:
     """Grade the package in `package_dir` against the Resilient Modeling rules.
 
@@ -308,6 +318,18 @@ def run_rms_check(
             `exceptions.json` from (FR-029). Named rather than inferred from
             `package_dir.parent`, because a package is not always a run folder: `None`
             carries nothing forward and reports that.
+        exceptions: The store to grade against, for a caller that owns more than one
+            grade of the same part and has to apply one store to all of them unchanged.
+            Feature 004's re-modeler is that caller: it grades a dump of the copy before
+            and after its changes, and `fingerprint_kind_for` makes every `rms.*`
+            exception a `feature_tree` fingerprint over every feature row in index order,
+            so refreshing again for the second grade would re-open every waiver over the
+            rename and the reorder the run just made, and move the delta for exactly the
+            wrong reason (`specs/004-resilient-remodeler/contracts/run-artifacts.md`).
+            A store given here is used as it is: nothing is carried forward over it and it
+            is **not** refreshed, because the caller has already refreshed it against the
+            dump it chose. `None`, the default, is every other caller - carry forward
+            under `run_root`, load what is beside the package, refresh it here.
 
     Returns:
         Everything the run produced, with `session.json` and `report.md` written into
@@ -330,10 +352,18 @@ def run_rms_check(
     context = build_context(loaded)
     documents = _part_documents(context, document_id)
 
-    carried = _carry_forward(directory, package, run_root)
-    store = load_exceptions(loaded)
-    if store is not None:
-        store.refresh(package)
+    if exceptions is None:
+        carried = _carry_forward(directory, package, run_root)
+        store = load_exceptions(loaded)
+        if store is not None:
+            store.refresh(package)
+    else:
+        store = exceptions
+        carried = CarriedForward(
+            from_run=None,
+            count=len(store.exceptions),
+            reason=SUPPLIED_STORE.format(directory=directory),
+        )
     context.exceptions = store
 
     started = perf_counter()
@@ -536,6 +566,19 @@ def _write_report(directory: Path, session: ReviewSession, package: EvidencePack
 def _carry_forward(
     directory: Path, package: EvidencePackage, run_root: Path | str | None
 ) -> CarriedForward:
+    """This check's carry-forward: the design is the package's own (FR-029)."""
+    return carry_forward(
+        directory, design_id=package.design.design_id, run_root=run_root
+    )
+
+
+def carry_forward(
+    directory: Path,
+    *,
+    design_id: str,
+    run_root: Path | str | None,
+    design_id_of: Callable[[Path], str | None] | None = None,
+) -> CarriedForward:
     """Copy the newest same-design `exceptions.json` under `run_root` into `directory`.
 
     A candidate is a folder directly under the run root that holds both a package naming
@@ -552,7 +595,14 @@ def _carry_forward(
 
     The copy is a byte copy, not a load and a re-save: a store that round-tripped through
     this build would silently rewrite what an engineer accepted under an older one.
+
+    `design_id_of` is how a candidate folder's design is read, and it is a parameter
+    because feature 004's candidates are read two ways: a `-check` folder from its
+    `package.json`, a `-remodel` folder from its `source-attestation.json`, whose packages
+    are dumps of a copy and carry that copy's path-derived id. The default is this
+    module's: `package.json`, `design.design_id`.
     """
+    read_design_id = _design_id_of if design_id_of is None else design_id_of
     target = directory / EXCEPTIONS_FILE_NAME
     if target.exists():
         return CarriedForward(
@@ -565,14 +615,13 @@ def _carry_forward(
         return CarriedForward(from_run=None, count=0, reason=NO_RUN_ROOT)
 
     root = Path(run_root).resolve()
-    design_id = package.design.design_id
     candidates = [
         candidate / EXCEPTIONS_FILE_NAME
         for candidate in sorted(root.iterdir() if root.is_dir() else [])
         if candidate.is_dir()
         and candidate.resolve() != directory
         and (candidate / EXCEPTIONS_FILE_NAME).is_file()
-        and _design_id_of(candidate) == design_id
+        and read_design_id(candidate) == design_id
     ]
     if not candidates:
         return CarriedForward(

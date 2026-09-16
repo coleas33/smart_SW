@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import statistics
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -50,8 +51,8 @@ from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
 from swreview.agent.runner import EVENTS_FILE_NAME
 from swreview.benchmark.answer_key import AnswerKey, CorrectCondition, load_answer_key
 from swreview.benchmark.sets import BenchmarkSet
-from swreview.findings import Finding, ReviewModel
-from swreview.report.session import ReviewSession, load_session
+from swreview.findings import Finding, ReviewModel, carried_count
+from swreview.report.session import Coverage, ReviewSession, load_session
 
 MatchRule = Literal["exact", "prefix"]
 
@@ -59,6 +60,63 @@ UNKNOWN = "unknown"
 """What a number no run reported renders as in the markdown. Never `0`, which is a
 measurement, and never the `-` the timing columns have always used for a missing minute
 count: a token column that reads `-` invites "no tokens" (Principle I)."""
+
+
+def tool_histogram(session: ReviewSession) -> dict[str, int]:
+    """How many times this session called each tool, most-called first, then by name.
+
+    **The token count is arithmetic; which tool the model picked is the thing that needs
+    watching** (T057). A trim, a withheld tier or a pre-run digest that changed the answer
+    shows first as a call-pattern change - a check tool dropping out of the repertoire, or
+    one that used to be called once per package being called once per document - and none
+    of that moves the token totals or the finding counts enough for the general gate to
+    fire.
+
+    Every step counts, a failed call included: the question is which tool was chosen, not
+    which call came back clean. The order is deterministic so two runs of one arm produce
+    comparable JSON.
+    """
+    counts = Counter(step.tool for step in session.steps)
+    return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
+def coverage_bucket_mix(session: ReviewSession) -> dict[str, int]:
+    """How many coverage items this session closed out in each of the five buckets.
+
+    **Lever 7 cannot be gated without this column** (FR-074). The coverage-driven stop
+    turns `mark_coverage` into a turn-ending call, so a model that wants to finish can
+    close the checklist with nine `mark_coverage(bucket="skipped")` calls: today that
+    makes a bad report, and with the lever on it also makes a short, cheap run that reads
+    as a win in every other column of the table. `unresolved_count` does not catch it -
+    that counts *findings* whose status is unresolved, not coverage items - and neither do
+    the token totals, which is exactly the point.
+
+    Every bucket is named, zeros included, so two arms' rows line up column for column. A
+    `0` here is a measurement: this run recorded no item in that bucket.
+    """
+    return {
+        bucket: len(getattr(session.coverage, bucket)) for bucket in Coverage.model_fields
+    }
+
+
+def unresolved_split(session: ReviewSession) -> tuple[int, int]:
+    """The unresolved coverage items as two numbers: withheld, and everything else (FR-054).
+
+    **Lever 4's gate needs both halves separately.** Withholding a tool is *supposed* to
+    raise the first - that is what "not covered, and here is why" looks like in the
+    coverage - and must not raise the second, which is the review quietly covering less.
+    One number cannot tell those apart, and neither can `unresolved_count`, which counts
+    *findings* whose status is unresolved rather than coverage items. The two returned here
+    sum to `coverage_bucket_mix(session)["unresolved"]` and never to `unresolved_count`.
+
+    The first half is set membership over `session.withheld_checks`, which the withheld
+    tool wrote when it wrote the item. Reading it out of the reason sentence instead would
+    make a rewording of that sentence a silent change to a measured number.
+    """
+    withheld = set(session.withheld_checks)
+    items = session.coverage.unresolved
+    because = sum(1 for item in items if item.check in withheld)
+    return because, len(items) - because
 
 
 def check_prefix(check: str) -> str:
@@ -115,8 +173,35 @@ class PackageScore(ReviewModel):
     load and adapter construction. `None` on a session that never ended."""
 
     seconds_to_first_finding: Annotated[float, Field(ge=0)] | None = None
-    """The first `finding` event's `at` minus `session.started`'s, from `events.jsonl`.
-    `None` when the run found nothing, or when the run kept no event stream."""
+    """The first **computed** finding event's `at` minus `session.started`'s, from
+    `events.jsonl`. A carried finding (lever 11a) is skipped, because it is written during
+    setup and would time the carry rather than the review (FR-104). `None` when the run
+    computed nothing, or when it kept no event stream."""
+
+    carried_findings: int = Field(default=0, ge=0)
+    """Findings this run carried from an earlier one rather than computing (lever 11a).
+    Zero unless `carry_over_rms` was on. The row records it beside the quality numbers
+    because a lever that "improves" recall by remembering is not an improvement (FR-104)."""
+
+    unresolved_because_withheld: int = Field(default=0, ge=0)
+    """Unresolved coverage items a tool this run declined to offer wrote (lever 4, FR-054).
+    Zero unless `tool_tiers` was on, and a zero here is a measurement."""
+
+    unresolved_other: int = Field(default=0, ge=0)
+    """Every other unresolved coverage item. **T064's gate is that this one must not
+    rise**: the lever may trade coverage it names for bytes, never coverage it does not.
+    With `unresolved_because_withheld` it sums to `coverage_bucket_mix["unresolved"]`, and
+    never to `unresolved_count`, which counts findings rather than coverage items."""
+
+    coverage_bucket_mix: dict[str, int] = Field(default_factory=dict)
+    """`coverage_bucket_mix(session)`: the five closing buckets and how many items each
+    holds. Lever 7's second guard, shipped with the lever because the run it has to catch
+    looks efficient in every other column (FR-074)."""
+
+    tool_calls_by_name: dict[str, int] = Field(default_factory=dict)
+    """`tool_histogram(session)`: every tool this package's run called and how often, most
+    called first. Empty for a run that called nothing, which is a measurement and not an
+    absence. The ledger's lever-specific counter reads these per arm (T057, FR-034)."""
 
     matched_defect_ids: list[str] = Field(default_factory=list)
     missed_defect_ids: list[str] = Field(default_factory=list)
@@ -224,12 +309,20 @@ def _count_valid_findings(findings: Sequence[Finding], answer_key: AnswerKey) ->
 
 
 def seconds_to_first_finding(events_path: Path) -> float | None:
-    """How long the run took to say something, from the stream it already writes.
+    """How long the run took to find something itself, from the stream it already writes.
 
     Both stamps are already there: `session.started` and every `finding` event carry an
     `at` (VERIFIED, `EventSink.emit`), so this needs no new recording and, crucially, no
     answer key - `score_run` reads one more file per package and Principle VI and FR-025
     are untouched.
+
+    **A carried finding does not start the clock.** Lever 11a writes its carried findings
+    during `start_review` setup, before the first turn (`carry_over.carry_over_findings`),
+    so a stream that counted them would report a second or two for the on-arm of the A/B and
+    call it speed - timing the carry rather than the review. A lever that "improves" a
+    number by remembering is not an improvement (FR-104), and the scorecard's job is to show
+    that rather than bury it, so this reads the first finding whose `carried_over_from` is
+    absent or null. `carried_findings` beside it is what counts the rest.
 
     `None` rather than an error whenever the number cannot be had: no stream (a run made
     before the convention is still a real run), no finding, no `session.started`, or a
@@ -251,7 +344,11 @@ def seconds_to_first_finding(events_path: Path) -> float | None:
             return None
         if event.get("type") == "session.started" and started_at is None:
             started_at = datetime.fromisoformat(event["at"])
-        elif event.get("type") == "finding" and started_at is not None:
+        elif (
+            event.get("type") == "finding"
+            and started_at is not None
+            and event.get("body", {}).get("carried_over_from") is None
+        ):
             return (datetime.fromisoformat(event["at"]) - started_at).total_seconds()
     return None
 
@@ -281,6 +378,7 @@ def _score_package(
         + timing.false_alarm_handling_minutes
     )
     usage = session.usage
+    because_withheld, unresolved_other = unresolved_split(session)
     return PackageScore(
         package_id=package_id,
         held_out=held_out,
@@ -298,6 +396,11 @@ def _score_package(
         cached_input_share=usage.totals.cached_input_share if usage is not None else None,
         wall_clock_s=_wall_clock_s(session),
         seconds_to_first_finding=first_finding_s,
+        carried_findings=carried_count(session.findings),
+        unresolved_because_withheld=because_withheld,
+        unresolved_other=unresolved_other,
+        coverage_bucket_mix=coverage_bucket_mix(session),
+        tool_calls_by_name=tool_histogram(session),
         matched_defect_ids=matched_defect_ids,
         missed_defect_ids=missed_defect_ids,
         false_alarm_finding_ids=false_alarm_ids,

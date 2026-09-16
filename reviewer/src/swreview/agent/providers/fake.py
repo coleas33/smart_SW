@@ -106,6 +106,71 @@ class ScriptedTurn:
     whose cost the service did not report. It records no usage rather than a zero one.
     """
 
+    one_round: bool = False
+    """Whether `tool_calls` were asked for together, which is feature 005's lever 6.
+
+    It changes the **history shape** and nothing else: the calls still run one after
+    another, in the order they are scripted, because that is what the real adapters do and
+    what keeps the step log deterministic. Off (the default), the turn records one
+    assistant message per call, the serial shape every earlier test was written against.
+    On, it records one assistant message carrying every call it dispatched, followed by one
+    `tool` message each - the shape a response with several `function_call` items really
+    takes.
+
+    A turn the step budget cuts short records the calls it dispatched and no others, on
+    both settings. The real adapter's `BUDGET_EXHAUSTED` output exists because a wire
+    history with an unanswered call is rejected on the next request; the fake has no wire,
+    and inventing an output here would model the adapter's rule rather than exercise it.
+    """
+
+
+def _assistant_message(requests: Sequence[ToolCallRequest]) -> dict[str, Any]:
+    """One assistant turn asking for these calls, in the order it asked for them."""
+    return {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {
+                "call_id": request.call_id,
+                "name": request.name,
+                "arguments": dict(request.arguments),
+            }
+            for request in requests
+        ],
+    }
+
+
+def _tool_message(request: ToolCallRequest, result: ToolCallResult) -> dict[str, Any]:
+    return {
+        "role": "tool",
+        "call_id": result.call_id,
+        "name": request.name,
+        "content": result.payload,
+        "is_error": result.is_error,
+    }
+
+
+def _append_round(
+    history: list[dict[str, Any]],
+    dispatched: Sequence[tuple[ToolCallRequest, ToolCallResult]],
+    *,
+    one_round: bool,
+) -> None:
+    """Record what this turn dispatched, grouped the way the script said it was asked for.
+
+    `one_round` is the only difference between the two shapes, and it is a shape only: the
+    calls have already run, serially and in order, by the time this is called.
+    """
+    if not dispatched:
+        return
+    if one_round:
+        history.append(_assistant_message([request for request, _ in dispatched]))
+        history.extend(_tool_message(request, result) for request, result in dispatched)
+        return
+    for request, result in dispatched:
+        history.append(_assistant_message([request]))
+        history.append(_tool_message(request, result))
+
 
 class FakeProvider:
     """The scripted provider. `providers.get("fake")` returns this class."""
@@ -163,34 +228,16 @@ class FakeProvider:
                 ),
             )
 
+        dispatched: list[tuple[ToolCallRequest, ToolCallResult]] = []
         for scripted in turn.tool_calls:
             if steps >= max_steps:
+                _append_round(history, dispatched, one_round=turn.one_round)
                 return TurnResult(reason="max_steps", text="", steps=steps, messages=history)
             request = self._request(scripted)
             result = self._call(request, tools, on_event)
-            history.append(
-                {
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": [
-                        {
-                            "call_id": request.call_id,
-                            "name": request.name,
-                            "arguments": dict(request.arguments),
-                        }
-                    ],
-                }
-            )
-            history.append(
-                {
-                    "role": "tool",
-                    "call_id": result.call_id,
-                    "name": request.name,
-                    "content": result.payload,
-                    "is_error": result.is_error,
-                }
-            )
+            dispatched.append((request, result))
             steps += 1
+        _append_round(history, dispatched, one_round=turn.one_round)
 
         if turn.text:
             for delta in _DELTA.findall(turn.text):
@@ -218,6 +265,15 @@ class FakeProvider:
             arguments=dict(scripted.arguments),
         )
 
+    def start_steps_at(self, index: int) -> None:
+        """`AgentProvider`: the session already holds `index` steps, so number from there.
+
+        Called by `start_review` only when setup wrote steps, which today means lever 5's
+        pre-run; the port's docstring says why the number is the session's and the counter
+        the adapter's.
+        """
+        self._step_index = index
+
     def _call(
         self,
         request: ToolCallRequest,
@@ -226,8 +282,10 @@ class FakeProvider:
     ) -> ToolCallResult:
         """Run one call and emit its two events, through the port's own shaper.
 
-        The counter is this turn's; everything after it is identical for every adapter and
-        lives in `providers.call_tool`.
+        The counter runs for the whole session and is never reset per turn, because
+        `step_index` names an `InvestigationStep` and the session keeps accumulating them;
+        everything after it is identical for every adapter and lives in
+        `providers.call_tool`.
         """
         step_index = self._step_index
         self._step_index += 1

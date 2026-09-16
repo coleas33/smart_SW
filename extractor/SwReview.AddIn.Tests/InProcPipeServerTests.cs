@@ -246,7 +246,13 @@ public sealed class InProcPipeServerTests
         RemodelCommands.All.Select(command => new object[] { command });
 
     public static IEnumerable<object[]> NonRemodelCommandRows =>
-        new[] { BridgeCommands.Capture, BridgeCommands.Measure, BridgeCommands.Interference }
+        new[]
+            {
+                BridgeCommands.Capture,
+                BridgeCommands.Measure,
+                BridgeCommands.Interference,
+                BridgeCommands.Tessellate,
+            }
             .Select(command => new object[] { command });
 
     [Theory]

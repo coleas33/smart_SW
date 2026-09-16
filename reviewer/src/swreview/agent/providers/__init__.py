@@ -57,6 +57,7 @@ __all__ = [
     "EffortMapping",
     "EventCallback",
     "EventType",
+    "PromptCacheAware",
     "ProviderName",
     "ProviderTool",
     "TokenUsage",
@@ -66,12 +67,14 @@ __all__ = [
     "TurnEndReason",
     "TurnResult",
     "UnknownProviderError",
+    "WithdrawableTools",
     "available",
     "call_tool",
     "error_body",
     "get",
     "register",
     "summarize_result",
+    "tools_withdrawn",
     "usage_body",
     "usage_from_body",
 ]
@@ -325,7 +328,7 @@ def usage_body(
         cache_diagnostic: OpenAI's prompt-cache outcome for this round, recorded verbatim.
             `None` on Gemini and on the fake always, and `None` on OpenAI whenever
             `prompt_cache_options.comparison_response_id` was not sent - which is every
-            round until lever 3 lands.
+            round of a lever-3-off run, and the first round of every turn.
     """
     return {
         "round_index": round_index,
@@ -425,6 +428,77 @@ class AgentProvider(Protocol):
     ) -> TurnResult:
         """Run one turn: stream text, drive tool calls, stop on an end or on `max_steps`."""
         ...
+
+    def start_steps_at(self, index: int) -> None:
+        """Number this session's tool calls from `index`, the session's own step count.
+
+        Called by `start_review` when setup already wrote steps, which today means feature
+        005's lever 5: the pre-run calls tools through the same dispatch the adapter is
+        about to be handed, so `session.steps` is already several deep before the model's
+        first call. The counter stays the adapter's - it is the one thing an adapter can
+        count without knowing a session-level number - but the number it starts from is the
+        session's, because `tool.started.step_index` has to keep identifying the
+        `InvestigationStep` the call produced: the pane keys its tool cards on it and
+        `Finding.tool_result_ids` is joined to those cards. Not called at all on a run whose
+        setup wrote nothing, which is every run with lever 5 off.
+
+        Part of the port rather than an optional extension like `PromptCacheAware`: every
+        adapter numbers steps, and an adapter that quietly did not would corrupt provenance
+        rather than merely forgo a saving.
+        """
+        ...
+
+
+@runtime_checkable
+class PromptCacheAware(Protocol):
+    """An adapter whose provider lets a session name its prompt cache (feature 005).
+
+    An **optional** extension of the port, not part of `AgentProvider`: only OpenAI has a
+    cache key to name, and making every adapter carry a no-op would be a method three
+    classes implement so that one of them can mean it. `start_review` asks with
+    `isinstance` - rather than `hasattr` - so the one thing it calls has a name, a
+    signature and a docstring to read.
+
+    The session id is passed in, never invented by the adapter, because **the key must
+    survive a process restart**: the pane restarts the backend on a settings save and
+    resumes the same run folder, and a process-local value would look identical while
+    silently dropping every hit afterwards (contracts/levers.md, lever 3).
+    """
+
+    def use_prompt_cache(self, session_id: str) -> None:
+        """Name this session's prompt cache. Called once, at `start_review`."""
+        ...
+
+
+@runtime_checkable
+class WithdrawableTools(Protocol):
+    """A `ToolSet` that can ask for the next round to go out with no tool call allowed.
+
+    An **optional** extension of `ToolSet`, for the same reason `PromptCacheAware` is one
+    of `AgentProvider`: only a run with feature 005's lever 7 on has anything to say here,
+    and making every `ToolSet` carry a `return False` would be a method three classes
+    implement so that one of them can mean it. `agent/runner.py`'s `CoverageStopTools` is
+    the implementation.
+
+    An adapter asks between rounds, never between the calls of one round: the answer is
+    "the review is finished", and what it buys is the *next* round trip.
+    """
+
+    def tools_withdrawn(self) -> bool:
+        """May the next round of this turn still call a tool?"""
+        ...
+
+
+def tools_withdrawn(tools: ToolSet) -> bool:
+    """Whether `tools` has asked for the next round to carry no tools (lever 7).
+
+    Both adapters ask this once per round and act on it in their own dialect -
+    `tool_choice: "none"` on OpenAI, `FunctionCallingConfig(mode=NONE)` on Gemini - so the
+    question itself is asked in one place rather than restated per adapter. `False` for
+    every `ToolSet` that does not implement `WithdrawableTools`, which is every run with
+    the lever off.
+    """
+    return isinstance(tools, WithdrawableTools) and tools.tools_withdrawn()
 
 
 SUMMARY_LENGTH = 200

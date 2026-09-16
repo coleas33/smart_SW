@@ -292,13 +292,20 @@ def test_withheld_tools_are_absent(run_dir: Path) -> None:
 
 
 def test_schemas_and_descriptions_are_the_canonical_ones(run_dir: Path) -> None:
+    """The rejoined description, which is what this server sends in either arm (FR-039b).
+
+    Lever 2 moves the paragraphs after the first into the *review's* system prompt. This
+    server has no system prompt to move them into, so it keeps sending both halves and
+    the flag does not reach it at all (`mcp/server.py:_as_tool`).
+    """
+
     async def scenario(client: ClientSession) -> list[types.Tool]:
         return (await client.list_tools()).tools
 
     for tool in talk_to(create_server(run_dir, bridge_pipe="swreview-test"), scenario):
         spec = tool_spec(tool_function(tool.name))
         assert tool.input_schema == spec.schema, tool.name
-        assert tool.description == spec.description, tool.name
+        assert tool.description == spec.full_description, tool.name
 
 
 def test_every_tool_schema_is_an_object(run_dir: Path) -> None:

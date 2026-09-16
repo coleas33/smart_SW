@@ -33,6 +33,7 @@ from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, Script
 from swreview.agent.settings import (
     ENTERPRISE_ENV,
     MASK,
+    EfficiencySettings,
     GeminiEnterprise,
     ProviderSettings,
 )
@@ -88,18 +89,27 @@ class RecordingProvider(FakeProvider):
     """A scripted provider that keeps what the CLI resolved and what the runner bound.
 
     `settings` is the `ProviderSettings` the command built from `--provider`, `--model`
-    and `--effort`; `tool_names` is what `start_review` handed the turn, which is how the
-    `--bridge` tests see the three bridge tools appear and disappear.
+    and `--effort`; `efficiency` is what it built from `--lever`, which the real factory
+    reads for the one lever decided at construction (lever 6); `tool_names` is what
+    `start_review` handed the turn, which is how the `--bridge` tests see the three bridge
+    tools appear and disappear.
 
     It reports the chosen provider's name rather than `fake`, because it stands in for
     whichever adapter the factory would have built: that is what makes `provider_info` in
     `session.json` an assertion about `--provider` reaching the session.
     """
 
-    def __init__(self, *, settings: ProviderSettings, script: Sequence[ScriptedTurn]) -> None:
+    def __init__(
+        self,
+        *,
+        settings: ProviderSettings,
+        script: Sequence[ScriptedTurn],
+        efficiency: EfficiencySettings | None = None,
+    ) -> None:
         super().__init__(script=script, model=settings.model)
         self.name = settings.provider
         self.settings = settings
+        self.efficiency = efficiency
         self.tool_names: tuple[str, ...] = ()
 
     def run(self, **kwargs: Any) -> Any:
@@ -139,8 +149,12 @@ def fake_provider(monkeypatch: pytest.MonkeyPatch) -> Callable[..., list[Recordi
     def install(script: Sequence[ScriptedTurn] = SCRIPT) -> list[RecordingProvider]:
         built: list[RecordingProvider] = []
 
-        def factory(settings: ProviderSettings) -> RecordingProvider:
-            provider = RecordingProvider(settings=settings, script=script)
+        def factory(
+            settings: ProviderSettings, efficiency: EfficiencySettings | None = None
+        ) -> RecordingProvider:
+            provider = RecordingProvider(
+                settings=settings, script=script, efficiency=efficiency
+            )
             built.append(provider)
             return provider
 
@@ -553,7 +567,7 @@ def test_a_provider_error_that_echoes_the_key_is_redacted_in_the_event_stream(
     monkeypatch.setattr(
         cli,
         "provider_factory",
-        lambda settings: LeakingProvider(script=SCRIPT, model=settings.model),
+        lambda settings, efficiency=None: LeakingProvider(script=SCRIPT, model=settings.model),
     )
     out = tmp_path / "run"
 
@@ -594,7 +608,7 @@ def test_the_key_is_masked_out_of_log_records_while_the_review_runs(
     monkeypatch.setattr(
         cli,
         "provider_factory",
-        lambda settings: LoggingProvider(script=SCRIPT, model=settings.model),
+        lambda settings, efficiency=None: LoggingProvider(script=SCRIPT, model=settings.model),
     )
 
     with caplog.at_level(logging.ERROR, logger="openai"):
@@ -658,6 +672,45 @@ def test_review_passes_the_provider_model_and_effort_through(
     session = json.loads((out / "session.json").read_text(encoding="utf-8"))
     assert session["model"] == "gpt-5.5"
     assert session["provider_info"]["effort_mapping"]["requested"] == "medium"
+
+
+def test_review_hands_the_levers_it_resolved_to_the_adapter_factory(
+    tmp_package_dir: Path, tmp_path: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    """Lever 6 is decided when the adapter is built, so `--lever` has to reach the factory.
+
+    Every other lever is read at `start_review` off `session.efficiency`, which the
+    provenance tests already pin; this one is an OpenAI request field set in the
+    constructor, and the factory is the only place that can set it.
+    """
+    built = fake_provider()
+
+    result = invoke(
+        "review",
+        str(tmp_package_dir),
+        "--out",
+        str(tmp_path / "run"),
+        "--provider",
+        "fake",
+        "--lever",
+        "parallel_tool_calls",
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert built[0].efficiency == EfficiencySettings(parallel_tool_calls=True)
+
+
+def test_review_without_a_lever_hands_the_factory_settings_with_every_lever_off(
+    tmp_package_dir: Path, tmp_path: Path, fake_provider: Callable[..., list[RecordingProvider]]
+) -> None:
+    built = fake_provider()
+
+    result = invoke(
+        "review", str(tmp_package_dir), "--out", str(tmp_path / "run"), "--provider", "fake"
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert built[0].efficiency == EfficiencySettings()
 
 
 def test_review_with_an_unknown_provider_is_a_usage_error(

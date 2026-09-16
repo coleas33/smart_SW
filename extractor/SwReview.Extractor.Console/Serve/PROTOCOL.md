@@ -1,6 +1,6 @@
 # Bridge protocol (`swreview-extract serve`)
 
-Protocol version **1.1**. This file is the contract the Python client in
+Protocol version **1.2**. This file is the contract the Python client in
 `reviewer/src/swreview/bridge/client.py` (T073) is written against; the agent-facing tool
 names and arguments are in
 `specs/001-agentic-design-review/contracts/agent-tools.md`.
@@ -11,8 +11,16 @@ envelopes, the `secret` rules, and the four commands `ping`, `capture`, `measure
 against a 1.1 host without an edit. 1.1 adds one command family, `remodel.*`, one carve-out
 in the `result` field of an error response, and a third secret scope; all three are
 described under "The `remodel.*` family" below and specified in
-`specs/004-resilient-remodeler/contracts/bridge-remodel.md`. `ping` reports the host's own
-`SwBridgeDispatcher.ProtocolVersion`, which is what a client compares against.
+`specs/004-resilient-remodeler/contracts/bridge-remodel.md`.
+
+**1.2 is additive to 1.1** (feature 005, T096). Everything 1.1 speaks is untouched, and 1.2
+adds exactly one command, `tessellate`, described under "`tessellate`" below. A client
+written against 1.0 or 1.1 works against a 1.2 host without an edit. Feature 005's task list
+names this bump "1.1" because it was written before feature 004 landed and took that number;
+the rule it states - one additive minor per added command - is what 1.2 obeys.
+
+`ping` reports the host's own `SwBridgeDispatcher.ProtocolVersion`, which is what a client
+compares against.
 
 **Two hosts speak it** (T045). The command handling — `SwBridgeDispatcher`,
 `BridgeProtocol`, `BridgeServices` and the command result types — lives in
@@ -38,13 +46,13 @@ described under "The `remodel.*` family" below and specified in
 ## Request
 
 ```json
-{"id": "<string>", "command": "ping|capture|measure|interference", "params": {}, "secret": null}
+{"id": "<string>", "command": "ping|capture|measure|interference|tessellate", "params": {}, "secret": null}
 ```
 
 | Field | Type | Rules |
 |-------|------|-------|
 | `id` | string | Required, non-empty. Echoed on the response so a client can match them up. |
-| `command` | string | Required. One of the four below, or one of the twelve `remodel.*` commands of `specs/004-resilient-remodeler/contracts/bridge-remodel.md`. |
+| `command` | string | Required. One of the five below, or one of the twelve `remodel.*` commands of `specs/004-resilient-remodeler/contracts/bridge-remodel.md`. |
 | `params` | object | Command arguments. May be omitted for `ping`. |
 | `secret` | string or null | Optional on the wire. Ignored by the console host; **required** by the in-process host, where it also selects the command scope (below). |
 
@@ -65,10 +73,10 @@ what that line may ask for:
 
 | Secret | Held by | Authorizes |
 |--------|---------|------------|
-| review | the add-in's own review session | `ping`, `capture`, `measure`, `interference` |
+| review | the add-in's own review session | `ping`, `capture`, `measure`, `interference`, `tessellate` |
 | general-chat | the CLI, through its generated restriction profile | `ping`, `capture`, `measure` |
 
-`interference` with the general-chat secret is answered:
+`interference` or `tessellate` with the general-chat secret is answered:
 
 ```json
 {"id":"4","status":"error","result":null,"error":"unauthorized","elapsed_ms":0}
@@ -114,7 +122,7 @@ an `Interference` that travels over the bridge is byte-identical to one written 
 ```
 
 ```json
-{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.1","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17},"error":null,"elapsed_ms":1}
+{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.2","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17},"error":null,"elapsed_ms":1}
 ```
 
 `document` and `component_count` are how a client checks that the component ids in its
@@ -213,6 +221,42 @@ never a number:
   sorted ordinally and joined with `|`. Rows that share a key collapse into one finding
   (FR-011).
 
+## `tessellate` — lever 10a's mesh fetch (1.2)
+
+```json
+{"id": "5", "command": "tessellate", "params": {"component_id": "cmp:0007"}}
+```
+
+| Param | Type | Rules |
+|-------|------|-------|
+| `component_id` | string | Required. The package id of the component to tessellate. An id this document does not have is refused by name, never answered with no bodies. |
+
+```json
+{"id":"5","status":"ok","result":{"bodies":[{"id":"bod:0001","persist_ref":"<base64>","persist_ref_scope":"doc:2","component_id":"cmp:0007","mesh_file":"meshes/cmp-0007-bod-0001.glb","triangle_count":8412,"is_solid":true}],"paths":["C:\work\pkg\meshes\cmp-0007-bod-0001.glb"],"gaps":[]},"error":null,"elapsed_ms":2400}
+```
+
+- `bodies` are IR `BodyRef` rows to append to `package.json`'s `bodies`, and `paths` holds
+  each row's absolute path in the same order. As with `capture`, `mesh_file` is
+  package-relative and forward-slashed while `path` is absolute.
+- **The directory is chosen by the host**, the same `serve --out <dir>` captures go under,
+  with the meshes written to `meshes/` inside it. A client never names a path: a filesystem
+  path in a request would be a write the agent controls (research R4), so a `params` field
+  naming one is ignored like any other unknown field.
+- **The same tessellation the dump uses.** The host exports through `MeshExporter.ExportBody`
+  rather than a second tessellator, at the same chord tolerance, so a clearance answer never
+  depends on how the mesh arrived (FR-090).
+- **A component that produced no body is `gaps`, not an empty answer.** `gaps` are IR `Gap`
+  objects to append to `package.json`'s `gaps`, and the reviewer turns "no body came back"
+  into unresolved coverage naming the component. An empty `bodies` with nothing said would
+  read as a component with nothing in the way, which is a clear nothing established.
+- **Review scope only.** A mesh fetch writes a file and can take seconds, so the general-chat
+  secret is refused with the same indistinguishable `unauthorized` as anything else out of
+  scope.
+- **One STA worker answers in arrival order**, so a tessellation blocks every other bridge
+  call behind it. `elapsed_ms` is how long it did.
+- The read-only guard passes it unchanged: `ReadOnlyGuard` is a denylist, and
+  `GetTessellation`, `Tessellate`, `CurveChordTolerance` and `GetBodies2` are not on it.
+
 ## The `remodel.*` family (1.1)
 
 Twelve commands — `remodel.probe_scope`, `open`, `snapshot`, `rename`, `reorder`, `folder`,
@@ -232,8 +276,8 @@ and it is three things:
 
    | Secret | Authorizes | Refused |
    |--------|------------|---------|
-   | review | `ping`, `capture`, `measure`, `interference` | every `remodel.*` |
-   | general-chat | `ping`, `capture`, `measure` | every `remodel.*` |
+   | review | `ping`, `capture`, `measure`, `interference`, `tessellate` | every `remodel.*` |
+   | general-chat | `ping`, `capture`, `measure` | every `remodel.*`, and `tessellate` |
    | remodel | `ping`, `remodel.*` | everything else, `interference` included |
 
    The refusal is the same `error: "unauthorized"` line as every other scope failure, so a

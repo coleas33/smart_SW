@@ -47,13 +47,14 @@ CAPTURE_VIEWS: tuple[str, ...] = get_args(CaptureView)
 def request_evidence(what: str, why: str, entity_ids: list[str]) -> ToolResult:
     """Record something you need and the package does not have. Returns its id.
 
-    Use this instead of assuming a missing value. The request stays open in the report
-    until an engineer answers it, and the check it blocks stays unresolved.
-
     Args:
         what: The evidence you need, in the engineer's terms.
         why: Which check it unblocks and what you would conclude with it.
         entity_ids: Component, hole, fastener or document ids the request is about.
+
+    Notes:
+        Use this instead of assuming a missing value. The request stays open in the report
+        until an engineer answers it, and the check it blocks stays unresolved.
     """
     context = current_context()
     unknown = [
@@ -82,16 +83,17 @@ def mark_coverage(
 ) -> ToolResult:
     """Record what a check covered, or why it could not be run.
 
-    Nothing is silently skipped: every checklist item ends the review with a finding or a
-    coverage entry. `failed` is not available here; the tool layer writes that bucket when
-    a tool fails.
-
     Args:
         check: Check identifier, or a checklist item id such as `fasteners`.
         bucket: One of checked, skipped, unresolved, out_of_scope.
         scope: What it covered: component_ids, pairs (two ids each), configuration,
             positions, document_ids. State the ones the check actually covered.
         reason: Why this bucket, in one sentence.
+
+    Notes:
+        Nothing is silently skipped: every checklist item ends the review with a finding or a
+        coverage entry. `failed` is not available here; the tool layer writes that bucket when
+        a tool fails.
     """
     context = current_context()
     if bucket not in MODEL_COVERAGE_BUCKETS:
@@ -124,10 +126,6 @@ def record_drawing_finding(
 ) -> ToolResult:
     """Record a drawing problem that no calculation stands behind.
 
-    For missing manufacturing inputs, ambiguous callouts and unreadable sheets. Because
-    nothing numeric backs it, the strongest status available is `suspected`;
-    `demonstrated` and `checked_within_scope` are not.
-
     Args:
         document_id: Drawing document id the finding is about.
         sheet: Sheet name on that document.
@@ -137,6 +135,11 @@ def record_drawing_finding(
             sheet, annotation, persist_ref or page.
         status: suspected or unresolved.
         recommended_action: What the engineer should do next.
+
+    Notes:
+        For missing manufacturing inputs, ambiguous callouts and unreadable sheets. Because
+        nothing numeric backs it, the strongest status available is `suspected`;
+        `demonstrated` and `checked_within_scope` are not.
     """
     context = current_context()
     if context.document(document_id) is None:
@@ -197,9 +200,10 @@ def _drawing_coverage_limits(document_id: str, sheet: str, status: str) -> list[
 def get_review_checklist() -> list[dict[str, str]]:
     """The mandatory review checklist with the bucket each item currently sits in.
 
-    `bucket` is `finding` when a finding already covers the item, one of `checked`,
-    `skipped`, `unresolved`, `out_of_scope` when a coverage entry does, and `open` when
-    nothing does yet. The review is not finished while anything is `open`.
+    Notes:
+        `bucket` is `finding` when a finding already covers the item, one of `checked`,
+        `skipped`, `unresolved`, `out_of_scope` when a coverage entry does, and `open` when
+        nothing does yet. The review is not finished while anything is `open`.
     """
     context = current_context()
     return context.checklist.buckets(context.session)
@@ -208,13 +212,14 @@ def get_review_checklist() -> list[dict[str, str]]:
 def request_capture(entity_id: str, view: CaptureView) -> ToolResult:
     """A rendered view of one entity, when the package already holds one.
 
-    Returns an existing capture from the package. Without the live SOLIDWORKS bridge
-    there is no way to make a new one, and the result is `unresolved` rather than a
-    description of what the view would show.
-
     Args:
         entity_id: Component, hole or fastener id to look at.
         view: One of iso, front, back, left, right, top, bottom, current.
+
+    Notes:
+        Returns an existing capture from the package. Without the live SOLIDWORKS bridge
+        there is no way to make a new one, and the result is `unresolved` rather than a
+        description of what the view would show.
     """
     context = current_context()
     if context.entity_kind(entity_id) is None:

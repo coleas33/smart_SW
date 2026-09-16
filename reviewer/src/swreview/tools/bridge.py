@@ -25,6 +25,13 @@ nothing here reformats a value. The rules that keep this side honest:
   model - arrive as the named `BridgeError` subclasses and are answered the same way, with
   a sentence saying which of the two it was. The secret itself is the client's business:
   nothing here reads or forwards it.
+
+`fetch_bodies_through_bridge` is not an agent tool at all: lever 10a has
+`check_tool_envelope` pull a body's mesh back over the same bridge when the package was
+extracted without meshes, so the model never asks for a tessellation and never chooses when
+one happens. It lives here rather than in `tools/measure.py` because everything that makes
+a bridge call honest - the package-relative path check, the host's gaps, the one exception
+type - is already in this module.
 """
 
 from __future__ import annotations
@@ -41,7 +48,13 @@ from swreview.bridge.client import (
     BridgeError,
     BridgeUnauthorizedError,
 )
-from swreview.ir.models import Capture, Gap, Interference, InterferenceSettings
+from swreview.ir.models import (
+    BodyRef,
+    Capture,
+    Gap,
+    Interference,
+    InterferenceSettings,
+)
 from swreview.tools.context import (
     ToolContext,
     current_context,
@@ -55,6 +68,7 @@ __all__ = [
     "bridge_interference",
     "bridge_measure",
     "capture_through_bridge",
+    "fetch_bodies_through_bridge",
 ]
 
 CAPTURE_ID_PREFIX = "cap"
@@ -203,16 +217,129 @@ def capture_through_bridge(
     }
 
 
+def fetch_bodies_through_bridge(context: ToolContext, *, exclude_component_id: str) -> list[str]:
+    """Lever 10a. Fetch every component's bodies over the bridge; return what could not be.
+
+    The reviewer's only mesh reader is `check_tool_envelope`, and with `extraction.meshes`
+    set to `lazy` the package it reads carries no `bodies` at all: they are written on
+    demand here, by the host, through the same export the dump uses, so a clearance answer
+    never depends on how the mesh arrived (FR-090).
+
+    Every way this can fail has one answer: **the component is named in the list this
+    returns**, which the caller reports as `unresolved`. A body that was not fetched is a
+    body the sweep did not test, and a sweep that did not test a body has not established
+    that it is out of the way (constitution Principle I). Nothing here raises and nothing
+    here stops the check:
+
+    - no bridge at all - the ordinary case off the workstation - is one reason saying so;
+    - a `BridgeError`, which is every refusal, dead pipe and open circuit, is that
+      component's reason, and the next component is still attempted: the circuit breaker
+      in the client is what stops the asking, not a decision taken here;
+    - reaching `extraction.lazy_fetch_body_limit` is that component's reason too. It is
+      **unresolved coverage, not a stop**, because one STA worker answers every bridge call
+      in arrival order and a runaway fetch would stall the application thread (RK-14);
+    - a row naming a path outside the package directory is refused before anything is read.
+
+    A component whose bodies are already in the package is skipped, so two checks in one
+    review fetch it once.
+
+    Args:
+        context: The run's context; `context.ir.bodies` grows by what came back.
+        exclude_component_id: The component the caller is not sweeping - the fastener's
+            own - which is not worth a round trip.
+    """
+    unresolved: list[str] = []
+    if context.extraction.meshes != "lazy":
+        return unresolved
+    if context.bridge is None:
+        return [
+            "this package was extracted without meshes and this run has no live "
+            "SOLIDWORKS bridge, so no body could be fetched to sweep"
+        ]
+
+    fetched = {body.component_id for body in context.ir.bodies}
+    limit = context.extraction.lazy_fetch_body_limit
+    for component in context.ir.components:
+        if component.id == exclude_component_id or component.id in fetched:
+            continue
+        if context.lazy_bodies_fetched >= limit:
+            unresolved.append(
+                f"{component.id}: this review has already fetched "
+                f"{context.lazy_bodies_fetched} bodies, which is its "
+                f"extraction.lazy_fetch_body_limit ({limit}), so no mesh was fetched for it"
+            )
+            continue
+        unresolved.extend(_fetch_component(context, component.id))
+    return unresolved
+
+
+def _fetch_component(context: ToolContext, component_id: str) -> list[str]:
+    """One `tessellate` round trip, as rows on the package and reasons for what is missing."""
+    try:
+        result = context.bridge.tessellate(component_id)
+    except BridgeError as exc:
+        note = REFUSALS.get(type(exc))
+        reason = f"{component_id}: {type(exc).__name__}: {exc}"
+        return [reason if note is None else f"{reason}; {note}"]
+
+    payload: dict[str, Any] = result if isinstance(result, dict) else {}
+    gaps = [
+        reason
+        for reason in (_record_gap(context, item) for item in payload.get("gaps", []) or [])
+        if reason is not None
+    ]
+
+    rows = payload.get("bodies")
+    if not isinstance(rows, list):
+        return [
+            f"{component_id}: the bridge returned {type(rows).__name__} where a list of "
+            f"bodies was expected"
+        ]
+
+    bodies: list[BodyRef] = []
+    unresolved: list[str] = []
+    for row in rows:
+        try:
+            body = BodyRef.model_validate(row)
+        except ValidationError as exc:
+            unresolved.append(
+                f"{component_id}: the bridge returned a body this package cannot hold: "
+                f"{exc.errors(include_url=False)}"
+            )
+            continue
+        relative = _relative_inside_package(context, body.mesh_file)
+        if relative is None:
+            unresolved.append(
+                f"{component_id} body {body.id}: the bridge returned a mesh path outside "
+                f"the package directory: {body.mesh_file!r}"
+            )
+            continue
+        bodies.append(body.model_copy(update={"mesh_file": relative}))
+
+    if not bodies and not unresolved:
+        # Never a silent clear: a component that answered with no body is a component
+        # whose bodies were not tested, whatever the host's reason was.
+        unresolved.append(
+            f"{component_id}: the bridge fetched no body for it"
+            + (f" ({'; '.join(gaps)})" if gaps else "")
+        )
+
+    context.ir.bodies.extend(bodies)
+    context.lazy_bodies_fetched += len(bodies)
+    return unresolved
+
+
 def bridge_capture(persist_ref: str, view: str) -> ToolResult:
     """Render one entity in the open SOLIDWORKS document and save a PNG.
-
-    The host frames the entity the persistent reference resolves to, applies the view, and
-    saves an image; it chooses where, so no path is ever sent. The capture is added to the
-    package so the report can show it, and the result carries its package-relative path.
 
     Args:
         persist_ref: The entity's persistent reference, as the package records it.
         view: One of iso, front, top, right, fit.
+
+    Notes:
+        The host frames the entity the persistent reference resolves to, applies the view, and
+        saves an image; it chooses where, so no path is ever sent. The capture is added to the
+        package so the report can show it, and the result carries its package-relative path.
     """
     context = current_context()
     if view not in BRIDGE_VIEWS:
@@ -223,14 +350,15 @@ def bridge_capture(persist_ref: str, view: str) -> ToolResult:
 def bridge_measure(persist_ref_a: str, persist_ref_b: str) -> ToolResult:
     """SOLIDWORKS' own Measure between two entities, with the units it reports.
 
-    This is the live counterpart of `measure_axis_distance` and `measure_face_gap`: it
-    measures what the open document holds rather than what the package recorded, which is
-    the point of running with the bridge at all. The result is the host's, unaltered -
-    note that it answers in **metres**, not the millimetres the offline tools report.
-
     Args:
         persist_ref_a: First entity's persistent reference.
         persist_ref_b: Second entity's persistent reference.
+
+    Notes:
+        This is the live counterpart of `measure_axis_distance` and `measure_face_gap`: it
+        measures what the open document holds rather than what the package recorded, which is
+        the point of running with the bridge at all. The result is the host's, unaltered -
+        note that it answers in **metres**, not the millimetres the offline tools report.
     """
     context = current_context()
     if context.bridge is None:
@@ -255,15 +383,6 @@ def bridge_interference(
 ) -> ToolResult:
     """Run interference detection live and add the results to the package.
 
-    The results come back in the IR's own shape and are appended to the package under
-    review, so `list_interferences` and `check_interference_group` work on them exactly as
-    they work on results the extractor dumped. A result whose id the package already holds
-    is not added twice. Every `Gap` the host reports - the volume-unit caveat among them -
-    is appended to the package's gaps, because it bounds what the results mean.
-
-    Each row carries its own status: a `truncated` or `failed` row is unresolved coverage,
-    never a pass.
-
     Args:
         component_ids: Components to test, or an empty list for the whole assembly.
         configuration: Configuration to compute in.
@@ -272,6 +391,16 @@ def bridge_interference(
             booleans) and fastener_folder_treatment (include, exclude or only). They are
             the settings the results are then read under, so none of them is assumed
             here.
+
+    Notes:
+        The results come back in the IR's own shape and are appended to the package under
+        review, so `list_interferences` and `check_interference_group` work on them exactly as
+        they work on results the extractor dumped. A result whose id the package already holds
+        is not added twice. Every `Gap` the host reports - the volume-unit caveat among them -
+        is appended to the package's gaps, because it bounds what the results mean.
+
+        Each row carries its own status: a `truncated` or `failed` row is unresolved coverage,
+        never a pass.
     """
     context = current_context()
     if context.bridge is None:

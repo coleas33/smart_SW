@@ -39,7 +39,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from typing import Any, Literal, Self
+from typing import Any, Literal, Self, get_args
 
 from pydantic import (
     BaseModel,
@@ -60,14 +60,17 @@ __all__ = [
     "ENTERPRISE_ENV",
     "LEVER_NAMES",
     "MASK",
+    "MESH_MODES",
     "MODEL_OUTPUT_CEILINGS",
     "NO_STUDY",
     "OUTPUT_CEILINGS",
     "WORKSTATION_LEVERS",
     "EfficiencySettings",
+    "ExtractionSettings",
     "GeminiEnterprise",
     "KeySource",
     "LogRecordRedactor",
+    "MeshMode",
     "ProviderSettings",
     "RedactingFilter",
     "check_study_arm",
@@ -444,6 +447,57 @@ class EfficiencySettings(BaseModel):
 
     carry_over_rms: bool = False
     """Lever 11a, workstation: unchanged `rms.*` findings are carried over."""
+
+
+MeshMode = Literal["eager", "lazy", "off"]
+"""Where a body's mesh comes from: the package, the bridge, or nowhere."""
+
+MESH_MODES: tuple[str, ...] = get_args(MeshMode)
+
+DEFAULT_LAZY_FETCH_BODY_LIMIT = 200
+"""How many bodies one review may pull back over the bridge before it stops asking.
+
+A bound rather than a budget: one STA worker answers every bridge call in arrival order,
+so a review that fetched a thousand bodies would stall the application thread for minutes
+(RK-14). Reaching it is unresolved coverage naming what was not fetched, never a stop, so
+the number only decides how much of an answer a runaway still gives.
+"""
+
+
+class ExtractionSettings(BaseModel):
+    """Where this run's evidence comes from. Lever 10a is the only reader today.
+
+    Separate from `EfficiencySettings` because these are not flags: `meshes` is a three-way
+    statement about the package under review, and a package extracted with `--meshes none`
+    is described by `off` whether or not any lever is on. `for_efficiency` is the one place
+    the lever and the statement are tied together, so nothing else has to know that
+    `lazy_meshes` means `meshes="lazy"`.
+
+    Frozen and `extra="forbid"` for the same reasons `EfficiencySettings` is: it is a
+    statement about a run, and a field a later build removed must fail loudly rather than
+    be ignored.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    meshes: MeshMode = "eager"
+    """`eager`: the dump wrote them. `lazy`: fetch one over the bridge when a check needs
+    it. `off`: there are none and none are coming, which is unresolved coverage wherever a
+    check needed one.
+
+    **`eager` is the default, and that is the constitution's position rather than a
+    preference**: a lazily extracted package reviewed off the workstation is a package with
+    less evidence, and the flag that reduces evidence is the one that is opted into."""
+
+    lazy_fetch_body_limit: int = Field(default=DEFAULT_LAZY_FETCH_BODY_LIMIT, ge=0)
+    """How many bodies one review may fetch; reaching it is unresolved, not a stop."""
+
+    @classmethod
+    def for_efficiency(cls, efficiency: EfficiencySettings | None) -> ExtractionSettings:
+        """The extraction this run's levers ask for. `None` is every lever off."""
+        if efficiency is not None and efficiency.lazy_meshes:
+            return cls(meshes="lazy")
+        return cls()
 
 
 LEVER_NAMES: tuple[str, ...] = tuple(EfficiencySettings.model_fields)

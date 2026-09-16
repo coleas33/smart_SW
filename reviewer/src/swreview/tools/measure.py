@@ -33,6 +33,7 @@ from swreview.geometry.axis import axis_distance, face_gap
 from swreview.geometry.envelope import envelope_raycast
 from swreview.geometry.mesh import load_mesh
 from swreview.ir.models import BBox3D, BodyRef, FaceGeometry, Quantity, Vec3
+from swreview.tools.bridge import fetch_bodies_through_bridge
 from swreview.tools.context import (
     ToolContext,
     current_context,
@@ -75,16 +76,17 @@ def _face(context: ToolContext, face_id: str) -> FaceGeometry | None:
 def measure_axis_distance(hole_id_a: str, hole_id_b: str) -> ToolResult:
     """Closest distance and angle between the axes of two holes, in the world frame.
 
-    For parallel axes the distance is the perpendicular distance between them; for skew
-    axes it is the common-perpendicular distance. `relation` says which case this is:
-    `coincident`, `parallel`, `intersecting` or `skew`.
-
-    This is a measurement, not a verdict: comparing it with a tolerance is
-    `check_hole_alignment`.
-
     Args:
         hole_id_a: First hole id.
         hole_id_b: Second hole id.
+
+    Notes:
+        For parallel axes the distance is the perpendicular distance between them; for skew
+        axes it is the common-perpendicular distance. `relation` says which case this is:
+        `coincident`, `parallel`, `intersecting` or `skew`.
+
+        This is a measurement, not a verdict: comparing it with a tolerance is
+        `check_hole_alignment`.
     """
     context = current_context()
     a = context.hole(hole_id_a)
@@ -111,17 +113,18 @@ def measure_axis_distance(hole_id_a: str, hole_id_b: str) -> ToolResult:
 def measure_face_gap(face_id_a: str, face_id_b: str) -> ToolResult:
     """Signed gap between two parallel planes or two coaxial cylinders.
 
-    For planes the gap is measured along face A's normal, so it is positive when B lies
-    on the side A faces. For cylinders it is the radius difference B - A, negative when B
-    is the smaller of the two - the shaft-in-bore convention.
-
-    Any other pair - non-parallel planes, offset cylinders, a cone or a torus, a face
-    whose surface the extractor did not record - comes back `unsupported` with the reason.
-    That is unresolved coverage, not a measurement of zero.
-
     Args:
         face_id_a: First face id.
         face_id_b: Second face id.
+
+    Notes:
+        For planes the gap is measured along face A's normal, so it is positive when B lies
+        on the side A faces. For cylinders it is the radius difference B - A, negative when B
+        is the smaller of the two - the shaft-in-bore convention.
+
+        Any other pair - non-parallel planes, offset cylinders, a cone or a torus, a face
+        whose surface the extractor did not record - comes back `unsupported` with the reason.
+        That is unresolved coverage, not a measurement of zero.
     """
     context = current_context()
     a = _face(context, face_id_a)
@@ -165,13 +168,14 @@ def measure_face_gap(face_id_a: str, face_id_b: str) -> ToolResult:
 def bounding_box(component_id: str) -> ToolResult:
     """World axis-aligned bounding box of one component, from its extracted faces.
 
-    The box is the union of the world bounding boxes the extractor recorded per face, so
-    it covers the faces that were extracted and nothing else: with `--faces needed` that
-    is a subset of the part, and the result says how many faces went into it. A component
-    with no extracted face geometry is `unresolved`, never a zero-sized box.
-
     Args:
         component_id: Component instance id.
+
+    Notes:
+        The box is the union of the world bounding boxes the extractor recorded per face, so
+        it covers the faces that were extracted and nothing else: with `--faces needed` that
+        is a subset of the part, and the result says how many faces went into it. A component
+        with no extracted face geometry is `unresolved`, never a zero-sized box.
     """
     context = current_context()
     if context.component(component_id) is None:
@@ -233,19 +237,20 @@ def check_tool_envelope(
 ) -> ToolResult:
     """Sweep a driving tool back from a fastener head and report what it runs into.
 
-    The envelope is a cylinder whose radius comes from `checks/tool_envelopes.yaml` - a
-    multiple of the fastener's nominal thread diameter, plus a clearance - swept from the
-    head plane along the fastener axis, away from the tip, for `length`. The result lists
-    every component the sweep hits and how far away the first hit is.
-
-    The bodies swept are the ones whose exported mesh could be loaded, excluding the
-    fastener's own. Any body whose mesh is missing makes the result `unresolved` and is
-    named: a sweep that could not test a body has not shown it is out of the way.
-
     Args:
         fastener_id: Fastener whose head the tool reaches for.
         tool: hex_key, socket or screwdriver.
         length: How far back from the head the tool needs, with its unit.
+
+    Notes:
+        The envelope is a cylinder whose radius comes from `checks/tool_envelopes.yaml` - a
+        multiple of the fastener's nominal thread diameter, plus a clearance - swept from the
+        head plane along the fastener axis, away from the tip, for `length`. The result lists
+        every component the sweep hits and how far away the first hit is.
+
+        The bodies swept are the ones whose exported mesh could be loaded, excluding the
+        fastener's own. Any body whose mesh is missing makes the result `unresolved` and is
+        named: a sweep that could not test a body has not shown it is out of the way.
     """
     context = current_context()
     fastener = context.fastener(fastener_id)
@@ -281,7 +286,14 @@ def check_tool_envelope(
 
     radius_mm = envelopes.radius_mm(tool, diameter.value)
     meshes: list[tuple[str, trimesh.Trimesh]] = []
-    unresolved: list[str] = []
+    # Lever 10a. With `extraction.meshes` eager - every run before the lever, and every run
+    # with it off - this returns an empty list without touching anything, and the sweep
+    # below is exactly the sweep it always was. With it lazy the package carries no bodies
+    # until the fetch has run, and every component the fetch could not pull back is named
+    # here rather than quietly missing from the sweep.
+    unresolved: list[str] = fetch_bodies_through_bridge(
+        context, exclude_component_id=fastener.component_id
+    )
     for body in context.ir.bodies:
         if body.component_id == fastener.component_id:
             continue

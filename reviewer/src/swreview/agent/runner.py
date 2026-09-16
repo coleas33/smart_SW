@@ -34,32 +34,43 @@ injectable for the same reason: `--bridge` needs a workstation, a unit test does
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from swreview.agent.checklist import Checklist, load_checklist
+from swreview.agent.checklist import FINDING_BUCKET, Checklist, load_checklist
 from swreview.agent.providers import (
     AgentEvent,
     AgentProvider,
     EffortLevel,
     EventType,
+    PromptCacheAware,
+    ProviderTool,
     TokenUsage,
+    ToolCallResult,
+    ToolSet,
     TurnResult,
     error_body,
     usage_from_body,
 )
-from swreview.agent.settings import EfficiencySettings
+from swreview.agent.providers.schema import ToolSpec
+from swreview.agent.settings import EfficiencySettings, ExtractionSettings
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient
+from swreview.carry_over import carry_over_findings, stamp_carry_over_keys
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.findings import Finding
 from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
+from swreview.prerun import prerun_checks
 from swreview.report.session import (
+    CLOSEOUT_CHECK,
+    MAX_STEPS_CLOSEOUT,
+    TRUNCATED_CLOSEOUT,
     CoverageItem,
     CoverageScope,
+    EvidenceRequest,
     KeySource,
     ProviderInfo,
     ReviewSession,
@@ -68,7 +79,7 @@ from swreview.report.session import (
 )
 from swreview.tools.context import ToolContext, build_context
 from swreview.tools.query import package_summary
-from swreview.tools.registry import ToolDispatch, ToolRegistry
+from swreview.tools.registry import ToolRegistry
 
 SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_v1.md"
 SESSION_FILE_NAME = "session.json"
@@ -77,7 +88,6 @@ EVENTS_FILE_NAME = "events.jsonl"
 DEFAULT_MAX_STEPS = 200
 """Tool calls one turn may make. A session of many turns may make many times this."""
 
-CLOSEOUT_CHECK = "coverage.closeout"
 EVIDENCE_CHECK = "coverage.evidence_request"
 PROFILE_CHECK = "coverage.extractor_profile"
 
@@ -103,11 +113,14 @@ ANSWER_MESSAGE = (
     "close out anything the answer unblocks."
 )
 
-TRUNCATED_REASON = (
-    "the provider ended the turn on its output ceiling; the answer was cut short and "
-    "whatever it was still working on was not investigated"
-)
+TOOL_NOTES_HEADER = "## Tool notes"
+"""The heading lever 2's moved paragraphs land under, named so a test can look for it."""
 
+TOOL_NOTES_LEAD = (
+    "Call notes for the tools below. Each tool's own description is its first paragraph; "
+    "everything else it used to say is here, once, rather than on every tool of every "
+    "request. Read a tool's notes before calling it for the first time."
+)
 
 def no_redaction(text: str) -> str:
     """What a run with no secret to hide masks with: nothing.
@@ -119,17 +132,52 @@ def no_redaction(text: str) -> str:
     return text
 
 
-def build_system_prompt(checklist: Checklist, package: EvidencePackage) -> str:
-    """The versioned prompt, the checklist, and the package census as one system prompt."""
-    return "\n\n".join(
-        [
-            SYSTEM_PROMPT_FILE.read_text(encoding="utf-8").strip(),
-            "## Review checklist\n\n" + checklist.render(),
-            "## This package\n\n```json\n"
-            + json.dumps(package_summary(package), indent=2)
-            + "\n```",
-        ]
-    )
+def build_system_prompt(
+    checklist: Checklist,
+    package: EvidencePackage,
+    tools: Iterable[ToolSpec] = (),
+    *,
+    efficiency: EfficiencySettings | None = None,
+) -> str:
+    """The versioned prompt, the checklist, the package census, and the tool notes.
+
+    The last of those is lever 2's other half and is rendered **only** when
+    `trim_tool_descriptions` is on: the paragraphs the tool descriptions no longer carry
+    arrive here once per session instead of once per tool per request. With the flag off
+    the prompt is byte for byte what feature 001 built, which is what lets one commit run
+    both arms of the A/B (FR-039, SC-007).
+
+    Args:
+        checklist: The review checklist, rendered under its own heading.
+        package: The package under review, rendered as the census.
+        tools: The specs the adapter is about to be handed, in the order it gets them, so
+            the notes follow the tool list rather than a second copy of it. Lever 4 will
+            hand over fewer; the block must shrink with them.
+        efficiency: The run's lever flags. `None` - every caller that predates the lever -
+            is read as every lever off.
+    """
+    sections = [
+        SYSTEM_PROMPT_FILE.read_text(encoding="utf-8").strip(),
+        "## Review checklist\n\n" + checklist.render(),
+        "## This package\n\n```json\n" + json.dumps(package_summary(package), indent=2) + "\n```",
+    ]
+    if efficiency is not None and efficiency.trim_tool_descriptions:
+        notes = tool_notes_block(tools)
+        if notes:
+            sections.append(notes)
+    return "\n\n".join(sections)
+
+
+def tool_notes_block(tools: Iterable[ToolSpec]) -> str:
+    """The `## Tool notes` section, or `""` when no tool handed over has any notes.
+
+    One heading per tool that has notes and nothing at all for a tool that does not: a
+    heading over an empty block tells the model there was something it did not get.
+    """
+    entries = [f"### {spec.name}\n\n{spec.notes}" for spec in tools if spec.notes]
+    if not entries:
+        return ""
+    return "\n\n".join([TOOL_NOTES_HEADER, TOOL_NOTES_LEAD, *entries])
 
 
 def _unresolved(
@@ -201,6 +249,17 @@ def load_exceptions(loaded: LoadedPackage) -> ExceptionStore | None:
     return ExceptionStore(path).load()
 
 
+def open_evidence_requests(session: ReviewSession) -> list[EvidenceRequest]:
+    """The requests still waiting for an engineer's answer.
+
+    One enumeration with two readers: finalization, which turns each of them into
+    `unresolved` coverage, and lever 7's `coverage_complete`, for which a single open
+    request means the review is not finished. Copied rather than shared, the two would
+    part company the first time `status` grew a third value.
+    """
+    return [request for request in session.evidence_requests if request.status == "open"]
+
+
 def finalize_session(
     context: ToolContext,
     started: datetime,
@@ -232,9 +291,7 @@ def finalize_session(
     ]
     previous.clear()
 
-    for request in review.evidence_requests:
-        if request.status != "open":
-            continue
+    for request in open_evidence_requests(review):
         previous.append(
             _unresolved(
                 review,
@@ -256,12 +313,131 @@ def finalize_session(
             )
         )
 
+    stamp_carry_over_keys(
+        review,
+        context.ir,
+        efficiency=review.efficiency if review.efficiency is not None else EfficiencySettings(),
+    )
+
     ended = datetime.now(UTC)
     review.ended_at = ended
     review.timing = review.timing.replace(
         unattended_runtime_minutes=(ended - started).total_seconds() / 60.0
     )
     return review
+
+
+# --- lever 7: the coverage-driven stop ---------------------------------------------------
+
+
+STOP_CLOSING_BUCKETS: frozenset[str] = frozenset({FINDING_BUCKET, "checked"})
+"""The only two ways an item is closed **for the purpose of stopping early** (OQ-5)."""
+
+COVERAGE_STOP_KEY = "coverage_stop"
+"""Where the sentence below rides on the tool result that closed the last item."""
+
+COVERAGE_STOP_SENTENCE = (
+    "Coverage is complete: every checklist item is closed by a finding or by a checked "
+    "coverage entry, and no evidence request is open. The tools are withdrawn for the "
+    "rest of this turn - write your closing summary now."
+)
+"""What the model is told alongside the last call's result, so the withdrawal is not a
+silent one: it reads the sentence and writes its summary rather than trying a call that
+the request will not permit."""
+
+
+def coverage_complete(checklist: Checklist, session: ReviewSession) -> bool:
+    """Has this review actually finished? Lever 7's stop predicate (FR-070, FR-071).
+
+    True when no evidence request is open and every checklist item is closed **by a
+    finding or by a `checked` coverage entry**. Both halves read exactly the state
+    finalization reads - `open_evidence_requests` is literally the same function - because
+    finalization's whole job is to enumerate these two sets, and a second enumeration
+    would drift.
+
+    **The bucket rule is deliberately stricter than `Checklist.open_items`, and the two
+    must not be merged.** `bucket_of` searches `("checked", "skipped", "unresolved",
+    "out_of_scope")`, and for *finalizing* that is right: an item closed any way is
+    closed, and the report says in which bucket. For *stopping early* it is not - a review
+    that skipped six of nine items has not finished, it has given up - and lever 7 acts on
+    the answer by taking the tools away, so a loose predicate would freeze the give-up in
+    place and pay it back as a short, cheap run in the results table (RK-7). The strict
+    rule makes the lever fire less often and save less, which is the correct trade.
+    """
+    if open_evidence_requests(session):
+        return False
+    return all(
+        checklist.bucket_of(item, session) in STOP_CLOSING_BUCKETS for item in checklist.items
+    )
+
+
+class CoverageStopTools:
+    """The run's `ToolSet` with one question asked after each call: is the review finished?
+
+    Lever 7, and built only when `EfficiencySettings.coverage_stop` is on - with the flag
+    off the adapter is handed the `ToolDispatch` itself and nothing anywhere behaves
+    differently (FR-039). The tool boundary is the only seam inside a turn, because
+    `provider.run` does not return until the model stops, which is the same seam
+    `chat/server.py`'s `StoppableTools` uses for the Stop button.
+
+    **It answers the call instead of raising, and that difference is the design.**
+    `StoppableTools` raises out of `call`, which leaves the triggering `function_call`
+    with no `function_call_output`; Stop gets away with that because the engineer
+    abandoned the turn, and coverage completion does not - a history missing an output is
+    rejected on the next request (`openai_provider.py` module docstring), so the session
+    could never be continued or have an evidence request answered, which is precisely what
+    `continue_session` and `answer_evidence` exist to do. So the call is answered, the
+    answer carries `COVERAGE_STOP_SENTENCE` saying why it is the last one, and the adapter
+    withdraws the tools for the **next** round through `providers.tools_withdrawn`.
+
+    The latch is per **turn**: `reopen()` is called at the top of every turn, because an
+    answered evidence request or a follow-up question arrives at a session whose checklist
+    is already closed, and a latch that outlived the turn would hand the engineer a model
+    that can no longer look anything up - `continue_session` broken in a quieter way than
+    raising would break it.
+    """
+
+    def __init__(
+        self, tools: ToolSet, checklist: Checklist, session: ReviewSession
+    ) -> None:
+        self.tools = tools
+        self.checklist = checklist
+        self.session = session
+        self._withdrawn = False
+
+    def __iter__(self) -> Iterator[ProviderTool]:
+        return iter(self.tools)
+
+    def __len__(self) -> int:
+        return len(self.tools)
+
+    def tools_withdrawn(self) -> bool:
+        """`providers.WithdrawableTools`: may the next round of this turn call a tool?"""
+        return self._withdrawn
+
+    def reopen(self) -> None:
+        """Put the tools back on the wire for a new turn. See the class docstring."""
+        self._withdrawn = False
+
+    def call(
+        self, name: str, arguments: Mapping[str, Any], call_id: str = ""
+    ) -> ToolCallResult:
+        """Dispatch the call, then ask whether it was the one that finished the review.
+
+        Asked after the call and never before it, because the call that closes the last
+        checklist item is the one whose result the model is owed.
+        """
+        result = self.tools.call(name, arguments, call_id)
+        if self._withdrawn or not coverage_complete(self.checklist, self.session):
+            return result
+        self._withdrawn = True
+        # The sentence is this lever's annotation on the result, not the tool's own
+        # output, so the `InvestigationStep` the tool layer already recorded keeps saying
+        # what the tool returned. What the model was handed is on the stream, in this
+        # call's `tool.finished`, and in the session history the next request echoes.
+        return result.model_copy(
+            update={"payload": {**result.payload, COVERAGE_STOP_KEY: COVERAGE_STOP_SENTENCE}}
+        )
 
 
 # --- the event stream -------------------------------------------------------------------
@@ -449,13 +625,14 @@ class ReviewRun:
         *,
         context: ToolContext,
         provider: AgentProvider,
-        tools: ToolDispatch,
+        tools: ToolSet,
         system: str,
         sink: EventSink,
         out_dir: Path,
         effort: EffortLevel,
         max_steps: int,
         efficiency: EfficiencySettings | None = None,
+        opening_message: str = OPENING_MESSAGE,
         bridge: Any | None = None,
         redact: Callable[[str], str] = no_redaction,
     ) -> None:
@@ -463,6 +640,13 @@ class ReviewRun:
         self.provider = provider
         self.tools = tools
         self.system = system
+        self.opening_message = opening_message
+        """What `start()` says first: `OPENING_MESSAGE`, or lever 5's digest above it.
+
+        A per-package digest belongs here and not in `system`, which is the cacheable
+        prefix: anything per-package put into the system prompt invalidates that prefix for
+        the whole session (contracts/levers.md, lever 3).
+        """
         self.sink = sink
         self.out_dir = Path(out_dir)
         self.effort = effort
@@ -478,12 +662,20 @@ class ReviewRun:
         self.started = context.session.started_at
         self._bridge = bridge
         self._finalized: list[CoverageItem] = []
+        self._coverage_stop = tools if isinstance(tools, CoverageStopTools) else None
+        """Lever 7's wrapper when this run has it, `None` when it does not.
+
+        Held by identity, once, rather than asked for with `isinstance` per turn: the pane
+        replaces `run.tools` with its own Stop wrapper after construction
+        (`chat/server.py`), and a per-turn check on `self.tools` would then stop finding
+        the one object that has to be reopened.
+        """
         self.usage_ledger = UsageLedger()
         """What this session has cost so far, accumulated off the stream.
 
         Registered on the sink here rather than passed in, so every `ReviewRun` has one
-        and there is no construction site that can forget it. It is attached before
-        `session.started` is emitted, so no round can arrive before it is listening.
+        and there is no construction site that can forget it. It is attached before the
+        first turn runs, so no round can arrive before it is listening.
         """
         sink.add_listener(self.usage_ledger)
 
@@ -505,23 +697,14 @@ class ReviewRun:
     # --- turns --------------------------------------------------------------------
 
     def start(self) -> ReviewSession:
-        """Announce the session and play the opening turn."""
-        mapping = self.session.provider_info
-        self.sink.emit(
-            "session.started",
-            {
-                "session_id": str(self.session.session_id),
-                "package_id": str(self.session.package_id),
-                "provider": mapping.provider if mapping is not None else "",
-                "model": self.session.model,
-                "effort_mapping": (
-                    mapping.effort_mapping.model_dump(mode="json")
-                    if mapping is not None
-                    else {}
-                ),
-            },
-        )
-        return self._say(OPENING_MESSAGE)
+        """Play the opening turn.
+
+        `session.started` is already on the stream: `start_review` emits it, because setup
+        itself writes events - `record_partial_evidence` writes coverage, lever 11a writes
+        carried findings, and lever 5's pre-run writes whole tool calls - and
+        `session.started` is the first line of every `events.jsonl`.
+        """
+        return self._say(self.opening_message)
 
     def continue_session(self, text: str) -> ReviewSession:
         """Append an engineer turn and run it.
@@ -603,6 +786,11 @@ class ReviewRun:
         """
         self.turns += 1
         self.session.ended_at = None
+        if self._coverage_stop is not None:
+            # Lever 7: the withdrawal lasts one turn. A follow-up question, or an answered
+            # evidence request, arrives at a session whose checklist is already closed and
+            # must still be able to look things up (`CoverageStopTools`).
+            self._coverage_stop.reopen()
         try:
             result = self.provider.run(
                 system=self.system,
@@ -635,12 +823,9 @@ class ReviewRun:
         self.messages = [dict(message) for message in result.messages]
         self.total_steps += result.steps
         if result.reason == "max_steps":
-            self._closeout(
-                f"max_steps reached ({self.max_steps} tool calls); the turn was cut short "
-                "and what it was still investigating was not finished"
-            )
+            self._closeout(MAX_STEPS_CLOSEOUT.format(max_steps=self.max_steps))
         elif result.reason == "truncated":
-            self._closeout(TRUNCATED_REASON)
+            self._closeout(TRUNCATED_CLOSEOUT)
         self.sink.emit("turn.ended", {"reason": result.reason})
         return result
 
@@ -672,6 +857,7 @@ def start_review(
     retry_of: str | UUID | None = None,
     max_steps: int = DEFAULT_MAX_STEPS,
     efficiency: EfficiencySettings | None = None,
+    previous_session: Path | str | None = None,
     fail_tool: Iterable[str] = (),
     bridge: bool = False,
     pipe_name: str = DEFAULT_PIPE_NAME,
@@ -705,6 +891,10 @@ def start_review(
             all ten flags, recorded whole on the session so the run can be attributed to
             a configuration afterwards; `None` means every lever off, which is what is
             recorded.
+        previous_session: The `session.json` of an earlier review of this design, for
+            lever 11a to carry unchanged `rms.*` verdicts from. Read only when
+            `efficiency.carry_over_rms` is on; a path that is not there raises, because a
+            run that silently carried nothing would be an off arm wearing an on label.
         fail_tool: Tool names forced to fail; the `--fail-tool` test hook. An unknown
             name raises.
         bridge: Open the live SOLIDWORKS bridge and add the three bridge tools (US3).
@@ -756,8 +946,63 @@ def start_review(
         )
         session.retry_of = UUID(str(retry_of)) if retry_of is not None else None
         session.efficiency = efficiency if efficiency is not None else EfficiencySettings()
+        # Lever 10a, read here rather than in the tool: `extraction` is a statement about
+        # where this run's evidence comes from, and the one place the lever is turned into
+        # that statement is `ExtractionSettings.for_efficiency`.
+        context.extraction = ExtractionSettings.for_efficiency(session.efficiency)
+        if session.efficiency.prompt_cache_key and isinstance(provider, PromptCacheAware):
+            # Lever 3, read **once**, here: a flag re-read per turn could change the
+            # request mid-session, and the cache key is the one thing that must not move
+            # while the session lasts. The session id rather than anything this process
+            # made up, because the pane restarts the backend on a settings save and
+            # resumes this same run folder (contracts/levers.md, lever 3).
+            provider.use_prompt_cache(str(session.session_id))
+        # The stream opens before anything is written to it. Everything below this line
+        # emits - partial evidence writes coverage, lever 11a writes carried findings, and
+        # lever 5's pre-run writes a tool call, two findings and coverage of its own - and
+        # `session.started` first is the one ordering rule `events.jsonl` has: the pane
+        # opens a session on it and `benchmark/scorecard.py::seconds_to_first_finding`
+        # counts no finding before it. It is emitted here rather than in `ReviewRun.start()`
+        # for that reason, and a run with every lever off is unchanged by the move, because
+        # setup wrote nothing between the two places.
+        sink.emit(
+            "session.started",
+            {
+                "session_id": str(session.session_id),
+                "package_id": str(session.package_id),
+                "provider": str(provider.name),
+                "model": chosen_model,
+                "effort_mapping": effort_mapping.model_dump(mode="json"),
+            },
+        )
         record_partial_evidence(session, loaded.package)
-        tools = ToolRegistry().dispatch(context, fail_tool=fail_tool)
+        carry_over_findings(
+            context,
+            previous_session=previous_session,
+            efficiency=session.efficiency,
+        )
+        tools = ToolRegistry().dispatch(
+            context, fail_tool=fail_tool, efficiency=session.efficiency
+        )
+        # Lever 5, and the last thing setup does: the checks that enumerate themselves run
+        # here, through the dispatch the provider is about to be handed, so their steps,
+        # findings and events are the ones a model-driven call would have produced. `None`
+        # with the flag off, and then nothing above is different either.
+        prerun = prerun_checks(context, tools, efficiency=session.efficiency)
+        if session.steps:
+            # Setup wrote steps - today only the pre-run does - so the adapter numbers its
+            # own calls from there rather than from 0. `tool.started.step_index` identifies
+            # an `InvestigationStep`, which is what the pane keys its tool cards on and what
+            # `Finding.tool_result_ids` is joined to; a counter that restarted would point
+            # the model's first call at the pre-run's card.
+            provider.start_steps_at(len(session.steps))
+        # Lever 7, and the last decision setup makes: after the pre-run, because the
+        # pre-run is not a turn and has no next round to withdraw anything from. With the
+        # flag off the adapter is handed the dispatch itself, so nothing in this module or
+        # in either adapter takes a different path (FR-039).
+        offered: ToolSet = tools
+        if session.efficiency.coverage_stop:
+            offered = CoverageStopTools(tools, checklist, session)
     except Exception:
         if bridge_client is not None:
             bridge_client.close()
@@ -766,13 +1011,21 @@ def start_review(
     return ReviewRun(
         context=context,
         provider=provider,
-        tools=tools,
-        system=build_system_prompt(checklist, loaded.package),
+        tools=offered,
+        system=build_system_prompt(
+            checklist,
+            loaded.package,
+            [tool.spec for tool in tools],
+            efficiency=session.efficiency,
+        ),
         sink=sink,
         out_dir=out,
         effort=effort,
         max_steps=max_steps,
         efficiency=session.efficiency,
+        opening_message=(
+            OPENING_MESSAGE if prerun is None else f"{prerun.digest()}\n\n{OPENING_MESSAGE}"
+        ),
         bridge=bridge_client,
         redact=redact,
     )
@@ -800,9 +1053,9 @@ def run_review(
         model: Model id; the provider's own model when omitted.
         effort: What the engineer asked for; the adapter maps it or fails fast.
         options: The rest of `start_review`'s keyword arguments - `key_source`,
-            `retry_of`, `max_steps`, `efficiency`, `fail_tool`, `bridge`, `pipe_name`,
-            `bridge_secret`, `bridge_factory`, `callbacks`, `redact` - documented there
-            rather than restated here.
+            `retry_of`, `max_steps`, `efficiency`, `previous_session`, `fail_tool`,
+            `bridge`, `pipe_name`, `bridge_secret`, `bridge_factory`, `callbacks`,
+            `redact` - documented there rather than restated here.
     """
     run = start_review(
         package_dir, out_dir, provider=provider, model=model, effort=effort, **options

@@ -1,7 +1,7 @@
 """Unit tests for the live SOLIDWORKS bridge client (T064, T073).
 
 The wire format under test is `extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`
-version 1.0. The transport is injectable, so the whole protocol is exercised without a
+version 1.2. The transport is injectable, so the whole protocol is exercised without a
 named pipe and without SOLIDWORKS: a fake transport records the lines the client wrote and
 replays the lines it should read. What these tests pin is research R3 and R4:
 
@@ -23,6 +23,8 @@ open` - are named failures the tool layer turns into failed coverage rather than
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -31,12 +33,20 @@ from swreview.bridge.client import (
     BRIDGE_VIEWS,
     CIRCUIT_LIMIT,
     COMMANDS,
+    PROTOCOL_VERSION,
     BridgeClient,
     BridgeDocumentClosedError,
     BridgeError,
     BridgeOpenError,
     BridgeUnauthorizedError,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PROTOCOL_DOC = REPO_ROOT / "extractor" / "SwReview.Extractor.Console" / "Serve" / "PROTOCOL.md"
+DISPATCHER = (
+    REPO_ROOT / "extractor" / "SwReview.Extractor" / "Bridge" / "BridgeDispatcher.cs"
+)
+"""The host's contract and the constant `ping` reports, read by the version test below."""
 
 
 class FakeTransport:
@@ -129,7 +139,27 @@ def test_the_pipe_name_becomes_a_windows_pipe_path() -> None:
 
 
 def test_the_commands_are_the_ones_the_contract_lists() -> None:
-    assert set(COMMANDS) == {"capture", "measure", "interference", "ping"}
+    assert set(COMMANDS) == {"capture", "measure", "interference", "ping", "tessellate"}
+
+
+def test_the_client_and_the_host_agree_on_the_protocol_version() -> None:
+    """The version this client is written against is the one the host reports on `ping`.
+
+    Read out of the host's own two files rather than restated here, because the way the two
+    ends come apart is a constant bumped on one side only: `PROTOCOL.md` is the contract and
+    `SwBridgeDispatcher.ProtocolVersion` is what `ping` actually answers with.
+    """
+    stated = re.search(
+        r"^Protocol version \*\*([0-9.]+)\*\*", PROTOCOL_DOC.read_text(encoding="utf-8"), re.M
+    )
+    constant = re.search(
+        r'public const string ProtocolVersion = "([0-9.]+)";',
+        DISPATCHER.read_text(encoding="utf-8"),
+    )
+    assert stated is not None, f"no protocol version stated in {PROTOCOL_DOC}"
+    assert constant is not None, f"no ProtocolVersion constant in {DISPATCHER}"
+    assert stated.group(1) == constant.group(1)
+    assert PROTOCOL_VERSION == constant.group(1)
 
 
 def test_the_views_are_the_ones_the_host_can_frame() -> None:
@@ -174,6 +204,22 @@ def test_capture_measure_and_interference_send_their_parameters() -> None:
     assert transport.requests[2]["params"]["component_ids"] == ["cmp:0001"]
     assert transport.requests[2]["params"]["configuration"] == "Default"
     assert transport.requests[2]["params"]["truncate_after"] is None
+
+
+def test_tessellate_sends_the_component_id_and_never_a_path() -> None:
+    """Protocol 1.2, lever 10a: one component id, and nothing that names a directory.
+
+    The host chooses where the meshes go, exactly as it does for a capture: a filesystem
+    path in a request would be a write the agent controls (research R4).
+    """
+    bridge, transport = client(
+        ok("1", {"bodies": [], "paths": [], "gaps": []}),
+    )
+
+    bridge.tessellate("cmp:0007")
+
+    assert transport.requests[0]["command"] == "tessellate"
+    assert transport.requests[0]["params"] == {"component_id": "cmp:0007"}
 
 
 def test_capture_defaults_to_the_fit_view() -> None:

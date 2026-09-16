@@ -30,6 +30,7 @@ says the containment was measured.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -40,10 +41,22 @@ from jsonschema import Draft202012Validator
 
 from swreview.agent.providers import TokenUsage
 from swreview.benchmark.answer_key import AnswerKey, KnownDefect
-from swreview.benchmark.scorecard import Scorecard, render_scorecard_md, score_run
+from swreview.benchmark.scorecard import (
+    Scorecard,
+    render_scorecard_md,
+    score_run,
+    seconds_to_first_finding,
+)
 from swreview.benchmark.sets import BenchmarkPackageRef, BenchmarkSet
 from swreview.findings import build_finding
-from swreview.report.session import ReviewSession, SessionUsage, Timing, save_session
+from swreview.report.session import (
+    Coverage,
+    InvestigationStep,
+    ReviewSession,
+    SessionUsage,
+    Timing,
+    save_session,
+)
 from tests.support.contracts import load_contract
 from tests.support.packages import build_package
 
@@ -115,6 +128,9 @@ def write_package(
     first_finding_after_s: float | None = 42.0,
     with_events: bool = True,
     ended_at: datetime | None = ENDED_AT,
+    steps: Sequence[InvestigationStep] = (),
+    coverage: Coverage | None = None,
+    withheld_checks: Sequence[str] = (),
 ) -> BenchmarkPackageRef:
     """One scored package: its answer key, its `session.json` and its `events.jsonl`."""
     answer_key = AnswerKey(
@@ -161,6 +177,9 @@ def write_package(
         ended_at=ended_at,
         model="gpt-5.6",
         findings=findings,
+        steps=list(steps),
+        coverage=coverage if coverage is not None else Coverage(),
+        withheld_checks=list(withheld_checks),
         timing=Timing(
             baseline_minutes=90.0,
             assisted_supervision_minutes=10.0,
@@ -297,6 +316,66 @@ def test_seconds_to_first_finding_is_null_when_the_run_found_nothing(tmp_path: P
     scorecard = score(tmp_path, with_findings=False)
 
     assert scorecard.per_package[0].seconds_to_first_finding is None
+
+
+def write_stream(tmp_path: Path, *findings: dict[str, Any]) -> Path:
+    """One `events.jsonl`: `session.started`, then one `finding` event per argument, ten
+    seconds apart."""
+    events: list[dict[str, Any]] = [
+        {"seq": 1, "at": STARTED_AT.isoformat(), "type": "session.started", "body": {}}
+    ]
+    for index, body in enumerate(findings, start=1):
+        events.append(
+            {
+                "seq": index + 1,
+                "at": (STARTED_AT + timedelta(seconds=10 * index)).isoformat(),
+                "type": "finding",
+                "body": body,
+            }
+        )
+    path = tmp_path / "events.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(event) + "\n" for event in events), encoding="utf-8")
+    return path
+
+
+def test_a_carried_finding_does_not_start_the_clock(tmp_path: Path) -> None:
+    """Lever 11a writes its carried findings during `start_review` setup, before the first
+    turn, so counting them would report a second or two on the on-arm and call it speed.
+    The column measures how long the run took to *find* something, so it reads the first
+    finding this run computed (FR-104: a lever that "improves" a number by remembering is
+    not an improvement, and the row must show that rather than hide it).
+    """
+    path = write_stream(
+        tmp_path,
+        {"id": "F-001", "carried_over_from": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"},
+        {"id": "F-002"},
+    )
+
+    assert seconds_to_first_finding(path) == pytest.approx(20.0)
+
+
+def test_a_run_whose_only_findings_were_carried_reports_nothing(tmp_path: Path) -> None:
+    """Null, not zero and not the carry time: this run found nothing of its own."""
+    path = write_stream(
+        tmp_path, {"id": "F-001", "carried_over_from": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"}
+    )
+
+    assert seconds_to_first_finding(path) is None
+
+
+def test_a_computed_finding_starts_the_clock_whether_or_not_the_field_is_there(
+    tmp_path: Path,
+) -> None:
+    """A finding this run computed serializes **without** `carried_over_from` (the null is
+    dropped, `ir.models.omit_when_null`), and a session written before the field existed has
+    none either. Absent and null are the same fact here: this run found it.
+    """
+    absent = write_stream(tmp_path / "absent", {"id": "F-001"})
+    null = write_stream(tmp_path / "null", {"id": "F-001", "carried_over_from": None})
+
+    assert seconds_to_first_finding(absent) == pytest.approx(10.0)
+    assert seconds_to_first_finding(null) == pytest.approx(10.0)
 
 
 def test_a_run_directory_with_no_event_stream_scores_with_a_null(tmp_path: Path) -> None:

@@ -49,7 +49,7 @@ public sealed class NoSecretPolicy : ISecretPolicy
 /// separate scopes.
 ///
 ///   * the <b>review</b> secret, held by the add-in's own review session, authorizes
-///     <c>ping | capture | measure | interference</c>;
+///     <c>ping | capture | measure | interference | tessellate</c>;
 ///   * the <b>general-chat</b> secret, handed to the CLI through its generated profile,
 ///     authorizes <c>ping | capture | measure</c> only;
 ///   * the <b>remodel</b> secret, handed only to the remodel backend session, authorizes
@@ -72,9 +72,17 @@ public sealed class ScopedSecretPolicy : ISecretPolicy
         BridgeCommands.Capture,
         BridgeCommands.Measure,
         BridgeCommands.Interference,
+
+        // Protocol 1.2, lever 10a. Here and not in the general-chat scope: a mesh fetch
+        // writes a file and can take seconds on the one STA worker every other call queues
+        // behind, which is a review's cost to pay and not a chat turn's.
+        BridgeCommands.Tessellate,
     };
 
-    /// <summary>What the general-chat secret authorizes: everything but <c>interference</c>.</summary>
+    /// <summary>
+    /// What the general-chat secret authorizes: everything but <c>interference</c> and
+    /// <c>tessellate</c>.
+    /// </summary>
     public static readonly IReadOnlyList<string> GeneralChatCommands = new[]
     {
         BridgeCommands.Ping,
