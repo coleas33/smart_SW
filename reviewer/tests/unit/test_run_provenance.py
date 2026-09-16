@@ -341,6 +341,17 @@ def test_current_commit_matches_git(tmp_path: Path) -> None:
     assert current_commit() == expected
 
 
-def test_current_commit_is_none_outside_a_git_tree(tmp_path: Path) -> None:
-    """Null, never a guess: a run whose commit we do not know renders as unknown."""
-    assert current_commit(tmp_path) is None
+def test_current_commit_is_none_outside_a_git_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Null, never a guess: a run whose commit we do not know renders as unknown.
+
+    `tmp_path` is not necessarily outside a git tree: CI runs pytest with
+    `--basetemp=.pytest-tmp` inside the checkout, where `git rev-parse` walks up and
+    finds this repository. `GIT_CEILING_DIRECTORIES` stops git from ascending past
+    `tmp_path`, so the directory below it is outside any repository wherever it lives.
+    """
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+    assert current_commit(outside) is None
