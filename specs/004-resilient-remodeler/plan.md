@@ -100,7 +100,7 @@ graphics bodies, 3D Interconnect and in-context references are refused before an
 |-----------|------|------------------------|--------|
 | I. Evidence before conclusions | Unknown stays unknown | A feature whose type is not in `rms_types.yaml` is `unclassified` on the rebuild list, never "movable"; a feature whose `child_ids` and `parent_ids` are both null is `graph_unreadable` and is never moved; a fillet with `default_radius is None` is `radius_unreadable`, never given an arbitrary position; a description read as `None` (unreadable) is refused up front rather than overwritten as if it were `""`; the geometry gate returns `unresolved` and never infers a pass from a clean rebuild; a run that hits a limit reports `truncated` with the applied and unapplied counts, never a silent partial success | PASS |
 | II. Deterministic numerics | No LLM judgement in verdicts | The model's whole surface is four `propose_*` tools plus one read-back, all of which write to the plan and none of which name a document, a move, an order, a rollback or a verdict (`contracts/tools.md`); the planner, the executor, the limits and the gate are pure functions and deterministic code; stage 1's apply loop runs with no model in it | PASS |
-| III. Test-first with goldens | Tests precede code | Every planner module has its test task before its implementation task; four golden plans and one fixture per refusal category; the geometry gate's full case table (identical, inside and outside tolerance, mirrored, translated, scaled, one sliver, many slivers, null bounding box, each boolean error code, mass-properties status not OK, zero-volume prototype) is written before `evaluate`; the executor's rollback paths are tested against a fake bridge scripted to fail at change N; 001, 002 and 003 goldens untouched | PASS |
+| III. Test-first with goldens | Tests precede code | Every planner module has its test task before its implementation task; four golden plans and one fixture per refusal category; the geometry gate's full case table (identical, inside and outside tolerance, mirrored, translated, scaled, one sliver, many slivers, null bounding box, each boolean error code, mass-properties status not OK, zero-volume baseline reading) is written before `evaluate`; the executor's rollback paths are tested against a fake bridge scripted to fail at change N; 001, 002 and 003 goldens untouched | PASS |
 | IV. Semantic fidelity | Persistent refs, versioned IR | Every change is addressed by persistent reference and never by name or index, because names change and indices change on every reorder; `GetObjectByPersistReference3`'s ByRef error code is read on every resolve; the IR is read at 1.2.0 and gains no field; `plan.json` and `changes.jsonl` carry `plan_schema` and are versioned with the feature | PASS |
 | V. Engineered enough | No speculative abstraction | `EventSink` is **extracted** from `agent/runner.py` into `agent/events.py` and shared rather than copied; the pane delegates `entity.show`, `report.open`, `folder.open` and `log.open` to 003's `PaneActions` and loads 003's `web/shared/dom.js`; `run_rms_check` and `RmsGrade` come from 003; `RunFolders` names the folder; `bridge/remodel_client.py` subclasses the existing client rather than forking the transport; `ReviewRun` is **not** reused because it is review-shaped (checklist, findings, evidence requests, coverage buckets, finalization) and none of it fits a remodel run; one verified equation helper, one selection assertion, one undo derivation, each with one call path | PASS |
 | VI. Inspectable findings, coverage tracked | Every run ends in evidence | Every attempted change is two `changes.jsonl` lines (before and after the call) so a crash mid-change names what was in flight; the report states the change list, the before and after grade with its unresolved rule ids, the geometry comparison **and what tier 1 cannot detect**; every feature that could not be reorganized is named with a reason from a closed taxonomy and its blocking dependency edge; Discard keeps every artifact except the `.SLDPRT`, so "what did it propose" stays answerable after the engineer says no | PASS |
@@ -160,6 +160,9 @@ extractor/SwReview.Extractor/
 ├── Guard/RemodelGuard.cs      # ICallGuard; interface-qualified ALLOWLIST; delegates to ReadOnlyGuard
 ├── Rms/RemodelScope.cs        # the only object holding the copy's IModelDoc2; VerifyTarget before
 │                              #   every write; AssertSaveTarget; AssertFolderSelection (refusal helper)
+├── Rms/RemodelScopeProbe.cs   # remodel.probe_scope: reads the scope signals off the engineer's
+│                              #   already-open source, read members only, returns no IModelDoc2,
+│                              #   so FR-001's refusal lands before any copy exists
 ├── Rms/IRemodelTarget.cs      # the fake seam the scope tests drive
 ├── Rms/RemodelTargetError.cs
 ├── Rms/RemodelCopy.cs         # File.Copy with overwrite:false, FileShare.ReadWrite stream fallback,
@@ -213,25 +216,32 @@ Research in [research.md](research.md); design in [data-model.md](data-model.md)
    quoted left-hand side with no `@`): `IEquationMgr.set_GlobalVariable` is a VERIFIED ABSENCE,
    so no design may assume a flag.
 
-4. **Rename before equations, and never delete a global in order to change it.** Renaming a
-   dimension breaks every equation that referenced the old name, so the apply order is fixed:
-   duplicate feature names, then dimension renames, then descriptions, then reorders, then
-   folders, then globals, then dimension equations. To change a global prefer
-   `set_Equation(i, text)` (VERIFIED), then `SetEquationAndConfigurationOption` (VERIFIED), and
-   treat delete-and-re-add as the last resort: while a referenced global is missing, the
-   dependent equations enter an error state that does not clear when it returns. Globals are
-   added after the dimensions that drive from them and removed in reverse order.
+4. **Never delete a global in order to change it, and there is no dimension step.** The apply
+   order is fixed: duplicate feature names, then descriptions, then reorders, then folders, then
+   in-place global repairs, then new globals (data-model.md section 1.11, C1 to C6). Repairing a
+   global is its own change kind, `equation.edit`, carried by `remodel.equation` with
+   `op: "set"`: prefer `set_Equation(i, text)` (VERIFIED), then
+   `SetEquationAndConfigurationOption` (VERIFIED), and **never** fall back to delete-and-re-add,
+   because while a referenced global is missing the dependent equations enter an error state that
+   does not clear when it returns. If neither member can be proven to have written, the change
+   fails and is inverted. The brief's dimension-rename step and dimension-equation step are both
+   out: FR-030 forbids driving a dimension the planner never saw, the IR carries no dimensions in
+   v1, and `IDimension.set_Name` is therefore off the stage-1 allowlist. The rename-before-
+   equations ordering rule is preserved in research.md R3.5 for the later dimensions feature and
+   is implemented by nothing here.
 
 5. **The units sequence is normative.** The number in an equation text is in the **document's**
-   length unit, not metres, which is the exact opposite of `IDimension.SystemValue`. Getting it
+   length unit, not metres, which is the exact opposite of every length the IR carries. Getting it
    backwards builds a 120-metre part that rebuilds cleanly and passes every non-geometric check.
-   Per parameterized dimension: read `SystemValue` (metres); convert to the document's length
-   unit and seed the global with that exact value; add the global and assert it landed and
-   evaluated; add the dimension equation and assert it landed; `ForceRebuild3(false)`, re-read
-   `SystemValue` and assert equality at the document's stored precision, not at a loose epsilon;
-   compare the geometry snapshot against the pre-change one. Whether `EquationMgr.get_Value(i)`
-   returns document units or metres is **UNVERIFIED** and blocking (PROBE-2). One pure regression
-   test: a 120 mm dimension never produces `"w" = 0.12`.
+   Per global: read the justifying value from the package's feature data (metres); convert it to
+   the document's length unit and seed the global's literal with that exact value; add the global
+   through `AddEquationVerified` and assert it landed and evaluated; `ForceRebuild3(false)`,
+   re-read the equation and assert the text and value round-trip at the document's stored
+   precision, not at a loose epsilon; compare the geometry snapshot against the pre-change one,
+   which must be identical because a global that drives nothing cannot move geometry. A document
+   whose length unit cannot be read refuses the change instead of assuming metres. Whether
+   `EquationMgr.get_Value(i)` returns document units or metres is **UNVERIFIED** and blocking
+   (PROBE-2). One pure regression test: a 120 mm value never produces `"w" = 0.12`.
 
 6. **Limits are the executor's, never the model's.** `max_changes` 250, `max_minutes` 20 wall
    clock, `max_rebuild_seconds` 120. Hitting one is `truncated`: stop, finalize, and report how
@@ -290,9 +300,15 @@ Research in [research.md](research.md); design in [data-model.md](data-model.md)
     non-interactive by design.
 
 15. **Exceptions are copied forward, not centralized.** Before the plan is written, the newest
-    `exceptions.json` under `run_root` whose package carries the same `design_id` is copied into
-    this run folder, byte-identical, so the before and after grades are measured against the same
-    waivers the engineer already granted. A different `design_id` is not copied, no candidate is
+    `exceptions.json` under `run_root` whose run resolves to the same **source** `design_id` is
+    copied into this run folder, byte-identical, so the before and after grades are measured
+    against the same waivers the engineer already granted. The match is on the source's id, never
+    on this run's: `DocumentIds.DesignId` is path-derived and this run's packages are dumps of the
+    copy, so a `-check` candidate is matched through `package.json`'s `design.design_id` and a
+    prior `-remodel` candidate through `source-attestation.json`'s `source_design_id`. The carried
+    exceptions are rebound to the copy's `document_id` and fingerprint-refreshed once, against
+    `package-before.json`, with that store applied unchanged to both grades
+    (`contracts/run-artifacts.md`). A different source `design_id` is not copied, no candidate is
     not an error, and an unreadable candidate is a refusal rather than a silent empty store.
     There is no per-design store in v1.
 
@@ -306,7 +322,7 @@ Cannot start before feature 003 US6 sub-phases 9a (the part-root node and
 | **0. Decide** | Run the Phase 1 planner over the benchmark packages and 3 to 5 real parts; publish the per-part partition numbers; decide from them how much of stage 1 to build | No | n/a |
 | **1. Planner** | `remodel/{target,rank,order,feasibility,folders,intent,names,scope,geometry,plan}.py`, `default_group_by_class` in `rms_types.yaml`, `swreview remodel plan --json`, four golden plans and one fixture per refusal category | No | Yes |
 | **2. Probe** | `swreview-extract probe remodel` over a throwaway part the probe builds itself: PROBE-1, 2, 3, 4, 5, 6, 7, 10, 12, 13, 20, plus **PROBE-8**, the tolerance calibration on a box and a cylinder of exactly known analytic volume | **Yes** | n/a |
-| **3. Guard and scope** | `RemodelGuard` (interface-qualified allowlist), `RemodelScope` with `VerifyTarget`, `IRemodelTarget`, `AssertSaveTarget`, `AssertFolderSelection`, `RemodelCopy` (copy, tag, attestation), `RemodelTargetError`, the frozen interop manifest and its two tests | No | Yes, over fakes |
+| **3. Guard and scope** | `RemodelGuard` (interface-qualified allowlist), `RemodelScope` with `VerifyTarget`, `IRemodelTarget`, `AssertSaveTarget`, `AssertFolderSelection` (built and tested now as a pure refusal predicate; its only write-precondition call site arrives in stage 2), `RemodelCopy` (copy, tag, attestation), `RemodelTargetError`, the frozen interop manifest and its two tests | No | Yes, over fakes |
 | **4. Bridge and host** | the `remodel.*` commands in `BridgeProtocol` and `BridgeDispatcher`, the third secret in `ToolServiceHost` and `ScopedSecretPolicy`, `remodel.log` with the target path per mutating call, `bridge/remodel_client.py` | No | Yes, over fakes |
 | **5. Executor and artifacts** | `remodel/apply.py`, `apply_log.py`, `changes.jsonl`, `grades.json`, `source-attestation.json`, `report.md`, the three limits, the per-change inverse, the catastrophic replay fallback | No | Yes, fake bridge scripting a failure at change N |
 | **6. Geometry gate** | `remodel.geometry` in C#, `remodel/geometry.py::evaluate`, the `IDENTITY` and `EQUIVALENCE` profiles, the full case table | No, readings come from fakes | Yes |
