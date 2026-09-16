@@ -8,7 +8,7 @@ option is a hypothesis to be measured before it is adopted. The rule for feature
 
 | What | Measured | Consequence |
 |---|---|---|
-| Tool schemas sent with every model request | 29 tools, 32,435 bytes, about 8,100 tokens (32 tools once the RMS tools land) | A review with 60 tool calls spends roughly 490,000 tokens on schemas alone; the three longest descriptions are 870 to 1,006 characters (`check_rms_part`, `check_fastener_joint`, `check_interference_group`) |
+| Tool schemas sent with every model request | 32 tools, 34,065 bytes, about 8,500 tokens (35 tools and 37,709 bytes with the bridge), re-measured 2026-09-16 after the RMS tools landed | A review with 60 tool calls spends roughly 510,000 tokens on schemas alone; the three longest descriptions are `check_rms_assembly` (1,455 characters), `check_rms_part` (1,296) and `check_fastener_joint` (871); about 45 percent of the payload is JSON structure that trimming cannot reach, so lever 2's realistic ceiling is about 30 percent |
 | System prompt plus checklist | 5,057 plus 2,909 bytes, about 2,000 tokens, plus the package census | Resent every request, but stable, so cacheable |
 | Step budget | `max_steps` 200 per turn, no coverage-driven stop | A turn ends on the budget or on the model's own decision, never because coverage is complete |
 | Parallel tool calls | `parallel_tool_calls: False` in the OpenAI adapter | One round trip per query; each round trip resends the whole growing history |
