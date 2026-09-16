@@ -337,7 +337,17 @@ internal static class OffscreenReviewPage
     /// <param name="beforeNavigate">Runs on the UI thread with the page not yet navigated;
     /// this is where event handlers are attached. May be null.</param>
     /// <param name="body">Runs once the page has loaded.</param>
-    public static void WithPage(Action<CoreWebView2>? beforeNavigate, Func<CoreWebView2, Task> body)
+    public static void WithPage(Action<CoreWebView2>? beforeNavigate, Func<CoreWebView2, Task> body) =>
+        WithPage(ReviewPageFiles.PageUrl, beforeNavigate, body);
+
+    /// <summary>
+    /// The same boot for either page. The virtual host is mapped at the `web` folder, which is
+    /// the mapping the add-in makes, so the Terminal page loads from its own URL under the same
+    /// origin and the same CSP as the Review page.
+    /// </summary>
+    /// <param name="pageUrl">Which page to navigate to, on the virtual host.</param>
+    public static void WithPage(
+        string pageUrl, Action<CoreWebView2>? beforeNavigate, Func<CoreWebView2, Task> body)
     {
         if (body == null)
         {
@@ -380,13 +390,13 @@ internal static class OffscreenReviewPage
 
                     beforeNavigate?.Invoke(view.CoreWebView2);
 
-                    view.CoreWebView2.Navigate(ReviewPageFiles.PageUrl);
+                    view.CoreWebView2.Navigate(pageUrl);
 
                     CoreWebView2NavigationCompletedEventArgs navigation = await loaded.Task;
                     if (!navigation.IsSuccess)
                     {
                         throw new InvalidOperationException(
-                            $"{ReviewPageFiles.PageUrl} did not load: {navigation.WebErrorStatus}.");
+                            $"{pageUrl} did not load: {navigation.WebErrorStatus}.");
                     }
 
                     await body(view.CoreWebView2);

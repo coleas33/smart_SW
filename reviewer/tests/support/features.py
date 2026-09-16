@@ -129,6 +129,11 @@ class MateSpec:
     suppression_gap: bool = False
     """Emit the `mate_suppression` gap: `IsSuppressed2` was unreadable for this mate."""
 
+    entity_gap: bool = False
+    """Emit the `mate` gap `MateDumper.ReadEntities` records when one entity could not be
+    read: that entity is missing from `entities`, so the list here is incomplete and the
+    entities that survived cannot answer for the one that did not."""
+
 
 @dataclass(frozen=True)
 class PartSpec:
@@ -409,7 +414,45 @@ def suppress_run(
     )
 
 
-# --- 5. The package ---------------------------------------------------------------
+# --- 5. The gaps the dumpers record -----------------------------------------------
+
+# One home for the two gap reasons a rule matches on prose, because prose is all the
+# dumper leaves behind: the reason is the only link back to the subject. A fixture and a
+# unit test that each spell the sentence themselves agree with each other and with nothing
+# (constitution Principle V), so they call these instead. The C# side is still unpinned -
+# reword `ComponentTreeDumper.ReadIsToolbox` or `MateDumper.ReadEntities` and these go
+# stale silently.
+
+
+def toolbox_identity_gap(full_path: str) -> Gap:
+    """`ComponentTreeDumper.ReadIsToolbox` verbatim: no `entity_id`, and the component's
+    `IComponent2.Name2` key - its `full_path` - quoted in the reason, which is the only
+    link back to the instance. `is_toolbox` is false-on-failure, so a rule that misses
+    this gap reads an unreadable component as "not Toolbox"."""
+    return Gap(
+        kind="not_extracted",
+        entity_kind="component",
+        entity_id=None,
+        reason=f"'{full_path}' has no loaded model document, so Toolbox identity "
+        "could not be read.",
+        error=None,
+    )
+
+
+def mate_entity_gap(mate_id: str, index: int, mate_name: str = "Coincident1") -> Gap:
+    """`MateDumper.ReadEntities` verbatim: each entity read is wrapped in
+    `Gaps.TryStep("mate", <mate id>, "read entity <i> of mate '<name>'")`, so a failed
+    read drops that entity from `Mate.entities` and records this gap against the mate."""
+    return Gap(
+        kind="tool_error",
+        entity_kind="mate",
+        entity_id=mate_id,
+        reason=f"read entity {index} of mate '{mate_name}'",
+        error="System.Runtime.InteropServices.COMException: the entity was not readable",
+    )
+
+
+# --- 6. The package ---------------------------------------------------------------
 
 
 def rms_package(
@@ -579,6 +622,8 @@ def rms_package(
                         error=None,
                     )
                 )
+            if mate_spec.entity_gap:
+                built_gaps.append(mate_entity_gap(mate_id, len(mate_spec.entities)))
 
     features: list[Feature] = []
     equations: list[Equation] = []

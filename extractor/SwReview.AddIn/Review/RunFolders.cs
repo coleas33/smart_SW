@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using SwReview.Extractor.Dump;
 
 namespace SwReview.AddIn.Review;
 
@@ -41,6 +42,33 @@ public static class RunFolders
     /// <summary>Creates the run folder for a terminal session started without a review.</summary>
     public static string CreateForTerminal(string runRoot, DateTime timestamp) =>
         Create(runRoot, timestamp, TerminalName);
+
+    /// <summary>
+    /// Whether a run folder already holds an evidence package.
+    ///
+    /// One definition of "this session has evidence", used by the step strip above the tabs,
+    /// by `init.evidence` on the Ask page and by nothing else: two would be two answers to the
+    /// same question on the same screen.
+    ///
+    /// A path that cannot even be combined is answered "no" rather than thrown at the caller:
+    /// every caller is a repaint or a page message, and neither is a place to fail.
+    /// </summary>
+    public static bool HasEvidence(string? runDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(runDirectory))
+        {
+            return false;
+        }
+
+        try
+        {
+            return File.Exists(Path.Combine(runDirectory, PackageWriter.PackageFileName));
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     /// The document's file name, reduced to something a folder can be called.

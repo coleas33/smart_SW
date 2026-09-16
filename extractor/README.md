@@ -34,6 +34,33 @@ Build and test the solution rather than a single project with `--no-build`: the 
 share build outputs and a stale one turns into a failure that does not belong to the change
 being tested.
 
+## Register the add-in
+
+From an **elevated x64** prompt, with SOLIDWORKS closed:
+
+```powershell
+extractor\tools\register-addin.ps1                 # -Configuration Release, -Unregister
+```
+
+The script stages `SolidWorks.Interop.{sldworks,swconst,swpublished}.dll` from the seat's
+`api\redist` into the add-in's output folder and then runs the 64-bit
+`regasm /codebase SwReview.AddIn.dll`. The staging step is not optional: `regasm` loads
+`swpublished` to reflect over `ISwAddin` while registering, and this project sets
+`<Private>false</Private>` so the build does not copy the seat's interops, which live outside
+every assembly probing path. A plain `regasm` on a clean build fails with `RA0000`. The copies
+are local to `bin\`, which is not tracked, and are never redistributed.
+
+The `[ComRegisterFunction]` in `SwReviewAddIn.cs`, which `regasm` invokes, writes both the
+`HKLM\SOFTWARE\SOLIDWORKS\AddIns` keys and `HKCU\...\AddInsStartup = 1` for the account that
+ran it, so **SwReview** is already ticked in Tools > Add-ins the next time SOLIDWORKS starts.
+(If the elevated prompt ran as a *different* admin account, that flag landed in that account's
+hive and this one has to tick the box once.)
+
+A check box that is clear there is therefore not a step still to do: the add-in failed to
+load, and SOLIDWORKS reports it that way and nothing else. Read
+`%LOCALAPPDATA%\SwReview\logs\addin.log`, which carries a line per load step, and
+`../docs/addin-load-fix.md`.
+
 ## Third-party licenses
 
 The terminal page's vendored xterm.js and fit addon carry their versions, digests and MIT

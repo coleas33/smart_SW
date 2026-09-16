@@ -1,0 +1,690 @@
+{
+  "schema_version": "1.1.0",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "created_at": "2026-09-12T12:00:00Z",
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "test"
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:1",
+        "vault_path": "/Designs/rms-equations-assy.SLDASM",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:2",
+        "vault_path": "/Designs/housing.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:3",
+        "vault_path": "/Designs/cover.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:4",
+        "vault_path": "/Designs/bracket.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:5",
+        "vault_path": "/Designs/plate.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:1",
+    "name": "rms-equations-assy",
+    "root_assembly_document_id": "doc:1",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:1",
+      "kind": "assembly",
+      "file_name": "rms-equations-assy.SLDASM",
+      "path": "native/rms-equations-assy.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:2",
+      "kind": "part",
+      "file_name": "housing.SLDPRT",
+      "path": "native/housing.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:3",
+      "kind": "part",
+      "file_name": "cover.SLDPRT",
+      "path": "native/cover.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:4",
+      "kind": "part",
+      "file_name": "bracket.SLDPRT",
+      "path": "native/bracket.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:5",
+      "kind": "part",
+      "file_name": "plate.SLDPRT",
+      "path": "native/plate.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:1",
+      "name": "rms-equations-assy",
+      "document_id": "doc:1",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "rms-equations-assy",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:1",
+      "name": "housing-1",
+      "document_id": "doc:2",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "housing-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:1",
+      "name": "cover-1",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "cover-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:1",
+      "name": "bracket-1",
+      "document_id": "doc:4",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "bracket-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0005",
+      "persist_ref": "Y21wOjAwMDU=",
+      "persist_ref_scope": "doc:1",
+      "name": "plate-1",
+      "document_id": "doc:5",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "plate-1",
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "ZG9jOjIvMy1Db3Jl",
+      "persist_ref_scope": "doc:2",
+      "document_id": "doc:2",
+      "configuration": "Default",
+      "name": "3-Core",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "ZG9jOjIvaG91c2luZy1Ta2V0Y2gx",
+      "persist_ref_scope": "doc:2",
+      "document_id": "doc:2",
+      "configuration": "Default",
+      "name": "housing-Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0001",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0003"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0003"
+        ]
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "ZG9jOjIvaG91c2luZy1Cb3NzLUV4dHJ1ZGUx",
+      "persist_ref_scope": "doc:2",
+      "document_id": "doc:2",
+      "configuration": "Default",
+      "name": "housing-Boss-Extrude1",
+      "type_name": "Extrusion",
+      "description": "intent",
+      "index": 2,
+      "depth": 1,
+      "folder_id": "feat:0001",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0002"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0004",
+      "persist_ref": "ZG9jOjMvMy1Db3Jl",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Default",
+      "name": "3-Core",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0005",
+      "persist_ref": "ZG9jOjMvY292ZXItU2tldGNoMQ==",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Default",
+      "name": "cover-Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0004",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0006"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0006"
+        ]
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0006",
+      "persist_ref": "ZG9jOjMvY292ZXItQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Default",
+      "name": "cover-Boss-Extrude1",
+      "type_name": "Extrusion",
+      "description": "intent",
+      "index": 2,
+      "depth": 1,
+      "folder_id": "feat:0004",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0005"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0007",
+      "persist_ref": "ZG9jOjQvMy1Db3Jl",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Default",
+      "name": "3-Core",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0008",
+      "persist_ref": "ZG9jOjQvYnJhY2tldC1Ta2V0Y2gx",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Default",
+      "name": "bracket-Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0007",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0009"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0009"
+        ]
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0009",
+      "persist_ref": "ZG9jOjQvYnJhY2tldC1Cb3NzLUV4dHJ1ZGUx",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Default",
+      "name": "bracket-Boss-Extrude1",
+      "type_name": "Extrusion",
+      "description": "intent",
+      "index": 2,
+      "depth": 1,
+      "folder_id": "feat:0007",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0008"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0010",
+      "persist_ref": "ZG9jOjUvMy1Db3Jl",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
+      "configuration": "Default",
+      "name": "3-Core",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0011",
+      "persist_ref": "ZG9jOjUvcGxhdGUtU2tldGNoMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
+      "configuration": "Default",
+      "name": "plate-Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0010",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0012"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0012"
+        ]
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0012",
+      "persist_ref": "ZG9jOjUvcGxhdGUtQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
+      "configuration": "Default",
+      "name": "plate-Boss-Extrude1",
+      "type_name": "Extrusion",
+      "description": "intent",
+      "index": 2,
+      "depth": 1,
+      "folder_id": "feat:0010",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0011"
+      ],
+      "sketch": null,
+      "fillet": null
+    }
+  ],
+  "equations": [
+    {
+      "document_id": "doc:2",
+      "index": 0,
+      "text": "\"thickness\" = 3mm",
+      "lhs": "thickness",
+      "is_global": true,
+      "value": 0.003
+    },
+    {
+      "document_id": "doc:2",
+      "index": 1,
+      "text": "\"depth\" = 20mm",
+      "lhs": "depth",
+      "is_global": true,
+      "value": 0.02
+    },
+    {
+      "document_id": "doc:2",
+      "index": 2,
+      "text": "\"D1@housing-Sketch1\" = \"thickness\" * 2",
+      "lhs": "D1@housing-Sketch1",
+      "is_global": false,
+      "value": 0.006
+    },
+    {
+      "document_id": "doc:2",
+      "index": 3,
+      "text": "\"D2@housing-Sketch1\" = \"depth\"",
+      "lhs": "D2@housing-Sketch1",
+      "is_global": false,
+      "value": 0.02
+    },
+    {
+      "document_id": "doc:4",
+      "index": 0,
+      "text": "\"width\" = 40mm",
+      "lhs": "width",
+      "is_global": true,
+      "value": 0.04
+    },
+    {
+      "document_id": "doc:5",
+      "index": 0,
+      "text": "\"pitch\" = 12mm",
+      "lhs": "pitch",
+      "is_global": true,
+      "value": 0.012
+    },
+    {
+      "document_id": "doc:5",
+      "index": 1,
+      "text": "\"D1@plate-Sketch1\" = \"pitch\"",
+      "lhs": "D1@plate-Sketch1",
+      "is_global": null,
+      "value": 0.012
+    }
+  ],
+  "rms_suppress_test": null,
+  "gaps": [
+    {
+      "kind": "not_extracted",
+      "entity_kind": "equations",
+      "entity_id": "doc:4",
+      "reason": "The equation manager of bracket.SLDPRT was not read.",
+      "error": null
+    }
+  ]
+}

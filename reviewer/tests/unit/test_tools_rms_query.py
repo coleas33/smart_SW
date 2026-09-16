@@ -1,7 +1,7 @@
-"""Unit tests for the RMS feature-tree query tools (T025).
+"""Unit tests for the RMS feature-tree query tools (T025, `list_equations` T041).
 
 One test per row of the query table in `specs/003-resilient-modeling/contracts/tools.md`,
-plus the three rules that hold across both of them and are the reason these tools exist at
+plus the three rules that hold across all of them and are the reason these tools exist at
 all rather than the model reading `package.json` itself:
 
 - **every derived answer is the one the rules use.** `class`, `group`, `is_folder` and
@@ -30,6 +30,7 @@ from tests.support.features import (
     END_TAG_SUFFIX,
     PartSpec,
     Shape,
+    equation,
     feature,
     folder,
     rms_package,
@@ -48,6 +49,18 @@ ROW_KEYS: tuple[str, ...] = (
     "description",
 )
 """The columns `contracts/tools.md` gives `list_features`, in its order."""
+
+EQUATION_KEYS: tuple[str, ...] = (
+    "document_id",
+    "index",
+    "text",
+    "lhs",
+    "is_global",
+    "value",
+)
+"""Every field of `Equation` (data-model section 1): `list_equations` returns the row, not
+a summary of it, because `is_global: null` and `value: null` are half of what a reader
+needs and a projection would be the place they went missing."""
 
 
 def bracket(shape: Shape = "nested") -> PartSpec:
@@ -87,7 +100,15 @@ PLATE = PartSpec(
     document_id="doc:3",
     name="plate",
     features=(folder("3-Core", feature("Plate-Extrude1", "Extrusion")),),
+    equations=(
+        equation('"thickness" = 3mm', is_global=True, value=0.003),
+        equation('"D1@Sketch1" = "thickness" * 2', value=0.006),
+        equation('"D2@Sketch1" = 5', is_global=None),
+    ),
 )
+"""The part with an equation manager: one global, one driven dimension, and one row whose
+`GlobalVariable(i)` was unreadable. `bracket` has no equations at all, which is the other
+answer `list_equations` has to give."""
 
 
 def package(shape: Shape = "nested") -> EvidencePackage:
@@ -343,3 +364,55 @@ def test_get_feature_is_registered_and_records_a_step(context: ToolContext) -> N
 
     assert payload["name"] == "Sketch1"
     assert [step.tool for step in context.session.steps] == ["get_feature"]
+
+
+# --- list_equations -----------------------------------------------------------------
+
+
+def test_list_equations_returns_every_field_of_every_row_in_index_order(
+    context: ToolContext,
+) -> None:
+    rows = rms_query.list_equations("doc:3")
+
+    assert [list(row) for row in rows] == [list(EQUATION_KEYS)] * len(rows)
+    assert [row["index"] for row in rows] == [0, 1, 2]
+    assert rows[0] == {
+        "document_id": "doc:3",
+        "index": 0,
+        "text": '"thickness" = 3mm',
+        "lhs": "thickness",
+        "is_global": True,
+        "value": 0.003,
+    }
+
+
+def test_list_equations_leaves_an_unreadable_global_flag_null(context: ToolContext) -> None:
+    """`GlobalVariable(i)` failed for this row; `false` would say it is not a global."""
+    rows = rms_query.list_equations("doc:3")
+
+    assert rows[2]["is_global"] is None
+    assert rows[2]["lhs"] == "D2@Sketch1"
+
+
+def test_list_equations_covers_one_document_only(context: ToolContext) -> None:
+    """`bracket` has no equations; the rows of `plate` are not borrowed to fill that in."""
+    assert rms_query.list_equations("doc:2") == []
+
+
+def test_list_equations_refuses_a_document_the_package_does_not_carry(
+    context: ToolContext,
+) -> None:
+    assert rms_query.list_equations("doc:99") == {"error": "unknown document id 'doc:99'"}
+
+
+def test_list_equations_is_registered_and_records_a_step(context: ToolContext) -> None:
+    tool = recorded(context, "list_equations")
+
+    payload = tool.call({"document_id": "doc:3"}).payload
+
+    assert [row["lhs"] for row in payload["result"]] == [
+        "thickness",
+        "D1@Sketch1",
+        "D2@Sketch1",
+    ]
+    assert [step.tool for step in context.session.steps] == ["list_equations"]

@@ -42,6 +42,10 @@
     able to *load* them - the JIT resolves SolidWorks.Interop.sldworks the moment it prepares a
     fake that implements ISwSession, and a missing assembly there surfaces as a start that
     silently never happened rather than as a build error.
+
+    swpublished is here for the same reason: `SwReviewAddIn` implements `ISwAddin`, which lives
+    in that assembly, so AddInComCallbackTests cannot so much as name the add-in type without
+    it (docs/addin-load-fix.md, cause 1).
   -->
   <ItemGroup>
     <Reference Include="SolidWorks.Interop.sldworks">
@@ -51,6 +55,11 @@
     </Reference>
     <Reference Include="SolidWorks.Interop.swconst">
       <HintPath>$(SwRedist)\SolidWorks.Interop.swconst.dll</HintPath>
+      <EmbedInteropTypes>false</EmbedInteropTypes>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swpublished">
+      <HintPath>$(SwRedist)\SolidWorks.Interop.swpublished.dll</HintPath>
       <EmbedInteropTypes>false</EmbedInteropTypes>
       <Private>true</Private>
     </Reference>

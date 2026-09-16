@@ -22,7 +22,13 @@ uv run pytest                      # provider adapters, chat server, MCP server,
 cd ..
 dotnet build extractor\SwReview.sln -c Release
 dotnet test  extractor\SwReview.sln -c Release
-# register the add-in as in feature 001 (elevated regasm); restart SOLIDWORKS
+# register the add-in from an elevated x64 prompt, with SOLIDWORKS closed: the script stages
+# the seat's SolidWorks.Interop.{sldworks,swconst,swpublished}.dll into the add-in's output
+# folder (regasm reflects over ISwAddin and the build does not copy them) and runs
+# regasm /codebase. See extractor/README.md and docs/addin-load-fix.md.
+.\extractor\tools\register-addin.ps1
+# regasm enables it for the account that ran the script, so SwReview is already ticked in
+# Tools > Add-ins on the next start; a clear box there is a load failure, not a step to do.
 ```
 
 ## Scenario 1 (US1): Review from the pane with the fake provider

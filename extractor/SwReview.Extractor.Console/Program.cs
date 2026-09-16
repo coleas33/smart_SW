@@ -41,7 +41,7 @@ public static class Program
     private const int ExitError = 1;
 
     internal static readonly string[] DumpOptionNames =
-        { "doc", "config", "out", "meshes", "faces", "features" };
+        { "doc", "config", "out", "meshes", "faces", "features", "equations" };
 
     internal static readonly string[] ResolveOptionNames = { "ref", "doc", "out" };
 
@@ -207,6 +207,7 @@ public static class Program
                 Meshes = parsed.MeshFormat(),
                 Faces = parsed.FaceScope(),
                 Features = parsed.FeatureScope(),
+                Equations = parsed.EquationScope(),
             };
         }
         catch (UsageError error)
@@ -228,7 +229,8 @@ public static class Program
                 log.Write($"dump --out \"{options.OutputDirectory}\" "
                     + $"--meshes {options.Meshes.ToString().ToLowerInvariant()} "
                     + $"--faces {options.Faces.ToString().ToLowerInvariant()} "
-                    + $"--features {options.Features.ToString().ToLowerInvariant()}");
+                    + $"--features {options.Features.ToString().ToLowerInvariant()} "
+                    + $"--equations {options.Equations.ToString().ToLowerInvariant()}");
 
                 ISldWorks swApp = Connect(allowStart, log);
 
@@ -241,6 +243,7 @@ public static class Program
                 log.Write($"Wrote {result.PackageFilePath}");
                 log.Write($"{result.Package.Components.Count} components, "
                     + $"{result.Package.Features.Count} features, "
+                    + $"{result.Package.Equations.Count} equations, "
                     + $"{result.Package.Holes.Count} holes, "
                     + $"{result.Package.Fasteners.Count} fasteners, "
                     + $"{result.Package.Faces.Count} faces, "
@@ -1010,7 +1013,7 @@ public static class Program
         writer.WriteLine("Commands:");
         writer.WriteLine("  dump          --doc <path> --config <name> --out <dir>");
         writer.WriteLine("                --meshes glb|stl|none --faces needed|all");
-        writer.WriteLine("                --features tree|none");
+        writer.WriteLine("                --features tree|none --equations on|off");
         writer.WriteLine("                Write package.json and meshes/ for the active or named document.");
         writer.WriteLine("  interference  --config <name> --pairs all|<id,id>... --out <dir>");
         writer.WriteLine("                --coincident-as-interference --subassemblies-as-components");

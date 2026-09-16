@@ -97,6 +97,28 @@ body {
   color: var(--bad);
 }
 
+.evidence {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#evidence-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#extract {
+  flex: 0 0 auto;
+}
+
 .install {
   flex: 0 0 auto;
   margin: 0;

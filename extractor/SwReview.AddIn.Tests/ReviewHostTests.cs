@@ -128,6 +128,10 @@ public sealed class ReviewHostTests
 
             Assert.Equal("ready", stages.Last());
             Assert.All(stages.Take(stages.Length - 1), stage => Assert.Equal("extracting", stage));
+
+            // "Extracting bracket..." meant nothing to an engineer who had not been told what
+            // the pane extracts. The first line the page shows names the thing being written.
+            Assert.StartsWith("Extracting evidence from bracket", messages[0]);
             Assert.Contains("Walking the component tree...", messages);
             Assert.Contains("Exporting 12 meshes...", messages);
             Assert.True(

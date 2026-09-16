@@ -195,6 +195,21 @@ public sealed class CommandLine
         }
     }
 
+    /// <summary><c>--equations on|off</c>, defaulting to on (contracts/cli.md).</summary>
+    public EquationScope EquationScope()
+    {
+        string value = Value("equations") ?? "on";
+        switch (value.ToLowerInvariant())
+        {
+            case "on":
+                return Dump.EquationScope.On;
+            case "off":
+                return Dump.EquationScope.Off;
+            default:
+                throw new UsageError($"--equations must be on or off; got '{value}'.");
+        }
+    }
+
     /// <summary>
     /// <c>--fasteners include|exclude|only</c>, defaulting to include (contracts/cli.md).
     /// </summary>

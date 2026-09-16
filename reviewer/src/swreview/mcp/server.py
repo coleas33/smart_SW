@@ -27,8 +27,9 @@ allowlist alone was never going to be the boundary.
 **A run folder with no package is a working server, not a crash.** The engineer may open
 the Terminal tab before pressing Review. The tool list is offered in full - a CLI that
 cannot list tools cannot explain itself to anyone - and every call comes back as an error
-result naming the missing `package.json`, so the CLI can say "press Review or Dump IR
-first" rather than inventing an answer.
+result naming the missing `package.json`, so the CLI can say "press Review or Extract
+evidence first" rather than inventing an answer. The package is re-read lazily on every
+call, so one that appears a minute later is picked up without restarting the CLI.
 
 **stdout belongs to the transport.** Nothing in this module prints; diagnostics are
 logging, which goes to stderr.
@@ -38,8 +39,9 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -139,7 +141,7 @@ def _tool_functions(*, with_bridge: bool) -> tuple[Callable[..., Any], ...]:
 # --- the toolset --------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass
 class Toolset:
     """What the server can offer and how it calls it, for one run folder.
 
@@ -147,6 +149,11 @@ class Toolset:
     so `unavailable` says why and every call becomes that error - recorded through the same
     sink and in the same shape as any other failed call, because a call the engineer made
     that no log mentions is the one thing SC-003 forbids.
+
+    It is mutable because the run folder is: the Ask tab extracts evidence into the folder
+    the CLI is already running in, and the Review tab writes a second `package.json` over
+    the first. `refresh` is what makes that visible without restarting the CLI - see it for
+    what "changed" means and what it deliberately does not re-do.
     """
 
     specs: tuple[ToolSpec, ...]
@@ -154,12 +161,73 @@ class Toolset:
     package: LoadedPackage | None
     dispatch: ToolDispatch | None
     unavailable: str | None
+    run_dir: Path
+    bridge: Any | None = None
+    stamp: tuple[int, int] | None = None
+    """`package.json`'s modification time and size as they were when it was last read."""
+
+    lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+    """Held for the whole of `refresh`, and for every read of what `refresh` writes.
+
+    A `threading.Lock` rather than an `anyio.Lock` because the two callers are not on one
+    loop: `on_call_tool` runs `call` on a worker thread, and the resource handlers refresh
+    on a worker thread of their own, while the low-level server dispatches every request in
+    its own task. Nothing here awaits, so the lock is never held across a suspension point.
+    """
+
+    def refresh(self) -> None:
+        """Re-read `package.json` when it has appeared, changed or gone away.
+
+        Lazily and by stamp rather than on every call: parsing a package is the expensive
+        thing this server does, and a CLI asks several questions of one package. The stamp
+        is modification time *and* size, because a rewrite inside one filesystem tick is
+        exactly what a second extraction into the same folder looks like.
+
+        The specs are not rebuilt. They depend on the bridge, not on the package, and the
+        tool list was sent to the CLI when it connected; a set of tools that changed
+        underneath a running CLI would be a list it has no reason to ask for again.
+
+        Nothing raises out of here. `build_toolset` refuses to start over an unreadable
+        `exceptions.json` - a condition an engineer accepted must never be silently dropped
+        - but a reload happens mid-session, where the only honest answer is the same error
+        result every other failure gets.
+
+        The whole of it is under `lock`, so the four fields move together: a caller that
+        read a fresh `package` and a stale `dispatch` would be dispatching feature 001's
+        tools over a context bound to the package before last.
+        """
+        with self.lock:
+            stamp = _stamp(self.run_dir)
+            if self.package is not None and stamp == self.stamp:
+                return
+
+            self.stamp = stamp
+            try:
+                package, dispatch, unavailable = _bind(
+                    self.run_dir, bridge=self.bridge, sink=self.sink
+                )
+            except Exception as exc:  # noqa: BLE001 - a reload may not end the session
+                package, dispatch = None, None
+                unavailable = f"{self.run_dir} could not be re-read: {type(exc).__name__}: {exc}"
+
+            self.package = package
+            self.dispatch = dispatch
+            self.unavailable = unavailable
 
     def call(self, name: str, arguments: Mapping[str, Any]) -> ToolCallResult:
         """Dispatch one call, or refuse it because this run folder has no package."""
-        if self.dispatch is not None:
-            return self.dispatch.call(name, arguments)
-        message = self.unavailable or f"no {PACKAGE_FILE_NAME} for this run"
+        self.refresh()
+
+        # One read, into locals: a refresh on another thread between "is there a dispatch"
+        # and "call it" used to raise `AttributeError` out of here - past the sink, so the
+        # call the engineer made appeared in no chat-log line at all (SC-003).
+        with self.lock:
+            dispatch = self.dispatch
+            unavailable = self.unavailable
+
+        if dispatch is not None:
+            return dispatch.call(name, arguments)
+        message = unavailable or f"no {PACKAGE_FILE_NAME} for this run"
         payload = error_payload(message)
         record_call(
             self.sink,
@@ -187,11 +255,31 @@ def build_toolset(
     recorder = sink if sink is not None else ChatLogSink(chat_log_path(run_dir))
     functions = _tool_functions(with_bridge=bridge is not None)
     specs = tuple(spec_for(function) for function in functions)
+    loaded, dispatch, unavailable = _bind(run_dir, bridge=bridge, sink=recorder)
+    return Toolset(
+        specs=specs,
+        sink=recorder,
+        package=loaded,
+        dispatch=dispatch,
+        unavailable=unavailable,
+        run_dir=run_dir,
+        bridge=bridge,
+        stamp=_stamp(run_dir),
+    )
+
+
+def _bind(
+    run_dir: Path, *, bridge: Any | None, sink: ChatLogSink
+) -> tuple[LoadedPackage | None, ToolDispatch | None, str | None]:
+    """Load `run_dir/package.json` and bind the tools over it, or say why there are none.
+
+    One function for both the first load and every reload, so a run folder that grew a
+    package while the CLI was connected is bound exactly the way one that had it from the
+    start is.
+    """
     loaded, unavailable = _load(run_dir)
     if loaded is None:
-        return Toolset(
-            specs=specs, sink=recorder, package=None, dispatch=None, unavailable=unavailable
-        )
+        return None, None, unavailable
     # `session=None` is the general-chat context the registry was given a sink seam for:
     # nothing here writes a finding, so there is no review session to write it to. The
     # checklist is the real one even though `get_review_checklist` is withheld - a stub
@@ -203,13 +291,20 @@ def build_toolset(
         exceptions=load_exceptions(loaded),
         bridge=bridge,
     )
-    return Toolset(
-        specs=specs,
-        sink=recorder,
-        package=loaded,
-        dispatch=MCP_REGISTRY.dispatch(context, sink=recorder),
-        unavailable=None,
-    )
+    return loaded, MCP_REGISTRY.dispatch(context, sink=sink), None
+
+
+def _stamp(run_dir: Path) -> tuple[int, int] | None:
+    """`package.json`'s modification time and size, or `None` when there is no file.
+
+    Both, not just the time: a second extraction into the same run folder can land inside
+    one filesystem timestamp tick, and the two packages are then told apart by their size.
+    """
+    try:
+        status = (run_dir / PACKAGE_FILE_NAME).stat()
+    except OSError:
+        return None
+    return status.st_mtime_ns, status.st_size
 
 
 def _load(run_dir: Path) -> tuple[LoadedPackage | None, str | None]:
@@ -223,8 +318,8 @@ def _load(run_dir: Path) -> tuple[LoadedPackage | None, str | None]:
     if not package_file.is_file():
         return None, (
             f"no {PACKAGE_FILE_NAME} in {run_dir}: this run folder holds no evidence package "
-            "yet; press Review or Dump IR in the SOLIDWORKS Task Pane first, then restart "
-            "this CLI"
+            "yet; press Review or Extract evidence in the SOLIDWORKS Task Pane and ask "
+            "again - this CLI picks the package up without being restarted"
         )
     try:
         return load_package(run_dir), None
@@ -268,7 +363,9 @@ def _resources(toolset: Toolset, run_dir: Path) -> list[types.Resource]:
     """The resources this run folder actually has, checked when they are asked for.
 
     The report is checked per request rather than at startup because a review running in
-    the Review tab writes one while the CLI is connected.
+    the Review tab writes one while the CLI is connected. The package behind it is
+    refreshed by the handler, not here: a reload parses a package, which is too much work
+    to do on the event loop and has to happen under the same lock a call holds.
     """
     offered: list[types.Resource] = []
     if toolset.package is not None:
@@ -293,7 +390,10 @@ def _resources(toolset: Toolset, run_dir: Path) -> list[types.Resource]:
 
 
 def _read_resource(toolset: Toolset, run_dir: Path, uri: str) -> types.TextResourceContents:
-    """One resource's text, or an MCP error naming what this run folder has not got."""
+    """One resource's text, or an MCP error naming what this run folder has not got.
+
+    Refreshed by the handler, for the reason `_resources` gives.
+    """
     if uri == PACKAGE_SUMMARY_URI and toolset.package is not None:
         body = query.package_summary(toolset.package.package)
         return types.TextResourceContents(
@@ -368,14 +468,24 @@ def create_server(
             result = await anyio.to_thread.run_sync(toolset.call, params.name, arguments)
         return _as_result(result)
 
+    async def reload() -> None:
+        # Under the same lock and on a worker thread, for the same two reasons as a call:
+        # the low-level server dispatches this request in its own task, so it really does
+        # overlap an in-flight `tools/call`, and a reload parses a package - which the
+        # event loop must not be doing while the CLI is waiting on its call.
+        async with calling:
+            await anyio.to_thread.run_sync(toolset.refresh)
+
     async def on_list_resources(
         context: ServerRequestContext[Any], params: types.PaginatedRequestParams | None
     ) -> types.ListResourcesResult:
+        await reload()
         return types.ListResourcesResult(resources=_resources(toolset, folder))
 
     async def on_read_resource(
         context: ServerRequestContext[Any], params: types.ReadResourceRequestParams
     ) -> types.ReadResourceResult:
+        await reload()
         return types.ReadResourceResult(
             contents=[_read_resource(toolset, folder, str(params.uri))]
         )

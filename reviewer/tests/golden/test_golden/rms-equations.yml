@@ -1,0 +1,232 @@
+result:
+  coverage:
+  - bucket: checked
+    check: rms.params.global_variables_present
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.params.dimensions_driven_by_equations
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.params.global_variables_present
+    error: null
+    reason: '2 document(s): doc:4: The equation manager of bracket.SLDPRT was not
+      read.; doc:5: equation 1 "D1@plate-Sketch1" = "pitch": is_global unreadable'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:4
+      - doc:5
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.params.dimensions_driven_by_equations
+    error: null
+    reason: '2 document(s): doc:4: The equation manager of bracket.SLDPRT was not
+      read.; doc:5: equation 1 "D1@plate-Sketch1" = "pitch": is_global unreadable'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:4
+      - doc:5
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.no_sibling_in_context_refs
+    error: null
+    reason: external references not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.positions_driven_by_globals
+    error: null
+    reason: assembly equations not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.mates_described
+    error: null
+    reason: mate descriptions not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.subassemblies
+    error: null
+    reason: subassembly mates not extracted; assembly rules evaluated for the root
+      document only
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: modeling.resilience
+    error: null
+    reason: 2 checked, 0 skipped, 4 unresolved rule result(s) over 3 document(s);
+      2 finding(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:4
+      - doc:5
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.drawing.model_items_preferred
+    error: null
+    reason: drawing-owned vs model dimensions not extracted; advisory by decision
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.structural_vs_cosmetic_fillets
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.core_shaping_cuts
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.description_quality
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.sketch_plane_choice
+    error: null
+    reason: judgement-only; sketch planes not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.avoid_multibody
+    error: null
+    reason: judgement-only; body intent not decidable
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  documents:
+  - doc:2
+  - doc:3
+  - doc:4
+  - doc:5
+  exceptions: []
+  findings:
+  - calculation: null
+    capture_ids: []
+    check: rms.params.global_variables_present
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-001
+    inputs: []
+    observed: the equation manager holds no equations
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/cover.SLDPRT
+      vault_version: 1
+    recommended_action: Name the part's driving values as global variables in the
+      equation manager, and drive the dimensions from them.
+    requirement: At least one global variable exists.
+    severity: medium
+    status: demonstrated
+    title: the equation manager holds no equations
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.params.dimensions_driven_by_equations
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-002
+    inputs: []
+    observed: the equation manager holds no equations
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/cover.SLDPRT
+      vault_version: 1
+    recommended_action: Drive the dimensions that carry the design intent from the
+      global variables.
+    requirement: At least one dimension is driven by an equation.
+    severity: low
+    status: suspected
+    title: the equation manager holds no equations
+    tool_result_ids:
+    - 0

@@ -72,7 +72,8 @@ event stream, using the token and origin from `init`. The host never proxies the
 
 | type | payload | host action |
 |------|---------|-------------|
-| `ready` | `{cols, rows}` | Reply `init {clis: [{name, found, version, path, minimum}], last_choice}`. |
+| `ready` | `{cols, rows}` | Reply `init {clis: [{name, found, version, path, minimum}], last_choice, evidence: {present, run_dir}}`. The evidence block describes the current session folder without creating one, so the page can say whether there is anything to ask about before Start. |
+| `evidence.extract` | `{}` | Run the same in-process dump the Review tab runs, into the terminal run folder (rule below, created when there is none yet); reply `evidence.extracted {run_dir, counts}` or `error`. The MCP server re-reads the evidence package lazily, so a CLI that is already running picks it up without being restarted. |
 | `terminal.start` | `{cli, cols, rows}` | Locate the CLI, regenerate profiles, start the ConPTY session in the terminal run folder (rule below); reply `terminal.started {pid, cwd, profile_paths}` or `error {install_steps}`. |
 | `terminal.input` | `{data}` (UTF-8 text) | Write to the pseudo-console. |
 | `terminal.resize` | `{cols, rows}` | `ResizePseudoConsole`. |

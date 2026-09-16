@@ -53,6 +53,7 @@ from swreview.ir.models import EvidencePackage, Feature
 __all__ = [
     "PartTree",
     "chamfers_before_fillets",
+    "document_gap",
     "evaluate_part",
     "every_feature_described",
     "folders_ordered",
@@ -72,6 +73,7 @@ __all__ = [
     "sketches_fully_defined",
     "sketches_not_over_defined",
     "transform_before_replicate",
+    "tree_not_read",
 ]
 
 SCOPE = "part"
@@ -1029,7 +1031,7 @@ def evaluate_part(
     nobody opened (`rules.md`, "Unresolved part documents").
     """
     tree = part_tree(document_id, features, table, assignment, package)
-    not_read = _tree_not_read(tree)
+    not_read = tree_not_read(document_id, tree.rows, package)
     if not_read is not None:
         return [
             unresolved(rule, document_id, not_read)
@@ -1047,7 +1049,9 @@ def evaluate_part(
     return results
 
 
-def _tree_not_read(tree: PartTree) -> str | None:
+def tree_not_read(
+    document_id: str, rows: Sequence[Feature], package: EvidencePackage
+) -> str | None:
     """Why this document's tree is unreadable, or `None` when it was read.
 
     The contract's condition is both halves at once: no rows *and* no resolved instance.
@@ -1060,36 +1064,37 @@ def _tree_not_read(tree: PartTree) -> str | None:
     reads no tree at all. Each of those records a `feature_tree_unavailable` gap, and
     without consulting it an empty `features[]` would be graded as an empty tree - six
     fail-severity rules passing over a tree nobody opened (constitution Principle I).
+
+    Public because `equations.py` asks the same question of the same document: "Unresolved
+    part documents" holds for every part-scope *and* every equation-scope rule, and one
+    reading of it is what keeps the two scopes from disagreeing about one document.
     """
-    if tree.rows:
+    if rows:
         return None
     instances = [
-        component
-        for component in tree.package.components
-        if component.document_id == tree.document_id
+        component for component in package.components if component.document_id == document_id
     ]
     if any(component.suppression == "resolved" for component in instances):
-        return _tree_gap(tree)
+        return document_gap(package, "feature_tree_unavailable", document_id)
     if not instances:
-        return f"no component instance for {tree.document_id}; tree not read"
+        return f"no component instance for {document_id}; tree not read"
     return "; ".join(
         f"component {component.full_path} {component.suppression}; tree not read"
         for component in instances
     )
 
 
-def _tree_gap(tree: PartTree) -> str | None:
-    """The reason a recorded gap gives for this document's tree being absent.
+def document_gap(package: EvidencePackage, entity_kind: str, document_id: str) -> str | None:
+    """The reason a recorded `entity_kind` gap gives for `document_id`'s data being absent.
 
-    The extractor names the document when the tree it dropped was this one, and names
-    nothing when no tree was read at all (`--features none`). A gap naming a *component*
-    is the per-instance state gap, which the caller has already ruled out by finding a
-    resolved instance, so it is not consulted here.
+    The extractor names the document when the data it dropped was this document's, and
+    names nothing when the phase read nothing at all (`--features none`, `--equations
+    off`). A gap naming some other entity - a component, a feature - speaks for that
+    entity and not for the document: `feature_tree_unavailable` naming a *component* is
+    the per-instance state gap, which `tree_not_read` has already ruled out by finding a
+    resolved instance.
     """
-    for gap in tree.package.gaps:
-        if gap.entity_kind == "feature_tree_unavailable" and gap.entity_id in (
-            None,
-            tree.document_id,
-        ):
+    for gap in package.gaps:
+        if gap.entity_kind == entity_kind and gap.entity_id in (None, document_id):
             return gap.reason
     return None

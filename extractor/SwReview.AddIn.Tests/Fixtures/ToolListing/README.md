@@ -29,15 +29,15 @@ starting the server, so they would pass a gate on a CLI whose MCP server never c
 
 | File | What it is |
 |------|------------|
-| `codex-startup-listing.json` | the 21 allowlisted tools and nothing else |
+| `codex-startup-listing.json` | the 22 allowlisted tools and nothing else |
 | `codex-startup-listing-missing-tool.json` | the same server with `list_mates` never registered |
 | `codex-startup-listing-extra-tool.json` | the same server plus a `write_file` tool, and an `enabled_tools` that admits it - a profile that was edited, or a server that grew a tool |
 
-The `list_features` and `get_feature` entries were **not** in the 2026-09-13 capture: the
-allowlist did not carry them yet (feature 003, T026). They were added by hand in the shape the
-other entries have, which for this trivial server is mechanical - one no-op tool per name - so
-the fixture still says what a re-capture would. Re-take the capture the next time Codex
-changes rather than hand-adding a third one.
+The `list_features`, `get_feature` and `list_equations` entries were **not** in the 2026-09-13
+capture: the allowlist did not carry them yet (feature 003, T026 and T042). They were added by
+hand in the shape the other entries have, which for this trivial server is mechanical - one
+no-op tool per name - so the fixture still says what a re-capture would. Re-take the capture
+the next time Codex changes rather than hand-adding a fourth one.
 
 Note what a Codex listing does **not** contain: Codex's own built-in tools. The intended
 built-in set is therefore permitted-if-present rather than required (see `ToolListingCheck`).
@@ -56,4 +56,4 @@ specific is asserted beyond parsing.
 Tool names carry the `mcp_<server>_` prefix the same document shows
 (`mcp_dockerizedServer_docker_deploy`), because that prefix is precisely the plan's
 "Gemini renames or truncates tool names" risk: a gate that compared prefixed names literally
-would report all twenty-one tools missing on a perfectly good session.
+would report all twenty-two tools missing on a perfectly good session.

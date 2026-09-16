@@ -1,0 +1,3 @@
+{
+  "callable": "swreview.checks.golden_rms:assembly_case"
+}

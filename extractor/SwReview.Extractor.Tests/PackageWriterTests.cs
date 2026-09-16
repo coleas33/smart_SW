@@ -409,6 +409,67 @@ public class PackageWriterTests : IDisposable
     }
 
     [Fact]
+    public void Build_CarriesTheEquationRowsThroughToThePackage()
+    {
+        // T038. The two parametric rules read equations[]; rows that never reach the
+        // package would leave both of them unresolved with nothing saying why.
+        EvidencePackage package = NewWriter().Build(Options());
+
+        Equation equation = Assert.Single(package.Equations);
+        Assert.Equal(package.Components[1].DocumentId, equation.DocumentId);
+        Assert.Equal("WallThickness", equation.Lhs);
+    }
+
+    [Fact]
+    public void Build_EquationsOff_SkipsTheEquationPhase()
+    {
+        var sources = new FakeSources();
+        DumpOptions options = Options();
+        options.Equations = EquationScope.Off;
+
+        EvidencePackage package = NewWriter(sources).Build(options);
+
+        Assert.Empty(package.Equations);
+        Assert.False(sources.EquationsWereDumped);
+    }
+
+    [Fact]
+    public void Build_EquationsOff_RecordsThatNoEquationsWereRead()
+    {
+        // Without this gap the package is indistinguishable from one whose parts have no
+        // equations at all, and rms.params.global_variables_present would report a finding
+        // against an equation manager nobody opened (constitution Principle I).
+        DumpOptions options = Options();
+        options.Equations = EquationScope.Off;
+
+        EvidencePackage package = NewWriter().Build(options);
+
+        Gap gap = Assert.Single(package.Gaps, g => g.EntityKind == "equations");
+        Assert.Equal(GapKind.NotExtracted, gap.Kind);
+        Assert.Null(gap.EntityId);
+        Assert.Contains("--equations off", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_EquationsOn_RecordsNoEquationsGapOfItsOwn()
+    {
+        EvidencePackage package = NewWriter().Build(Options());
+
+        Assert.DoesNotContain(package.Gaps, g => g.EntityKind == "equations");
+    }
+
+    [Fact]
+    public void Build_EquationsDefaultsToThePhaseRunning()
+    {
+        var sources = new FakeSources();
+
+        NewWriter(sources).Build(Options());
+
+        Assert.Equal(EquationScope.On, sources.SeenOptions!.Equations);
+        Assert.True(sources.EquationsWereDumped);
+    }
+
+    [Fact]
     public void Build_PassesTheOptionsThroughToTheSources()
     {
         var sources = new FakeSources();
@@ -526,10 +587,16 @@ public class PackageWriterTests : IDisposable
         var sources = new FakeSources();
 
         Assert.Throws<ArgumentNullException>(() => new PackageWriter(
-            null!, sources, sources, sources, sources, sources, sources, sources, sources, "2024 SP5"));
+            null!, sources, sources, sources, sources, sources, sources, sources, sources, sources,
+            "2024 SP5"));
 
         Assert.Throws<ArgumentNullException>(() => new PackageWriter(
-            sources, sources, sources, sources, null!, sources, sources, sources, sources, "2024 SP5"));
+            sources, sources, sources, sources, null!, sources, sources, sources, sources, sources,
+            "2024 SP5"));
+
+        Assert.Throws<ArgumentNullException>(() => new PackageWriter(
+            sources, sources, sources, sources, sources, null!, sources, sources, sources, sources,
+            "2024 SP5"));
     }
 
     private DumpOptions Options() => new DumpOptions
@@ -540,16 +607,16 @@ public class PackageWriterTests : IDisposable
     private static PackageWriter NewWriter(FakeSources? sources = null)
     {
         FakeSources s = sources ?? new FakeSources();
-        return new PackageWriter(s, s, s, s, s, s, s, s, s, "2024 SP5", "TEST-WORKSTATION");
+        return new PackageWriter(s, s, s, s, s, s, s, s, s, s, "2024 SP5", "TEST-WORKSTATION");
     }
 
     /// <summary>
-    /// One class standing in for all eight phases. It returns canned IR objects, so the
+    /// One class standing in for all nine phases. It returns canned IR objects, so the
     /// test exercises PackageWriter and nothing else.
     /// </summary>
     private sealed class FakeSources
         : IComponentTreeSource, IDocumentSource, IManifestSource, IMateSource, IFeatureSource,
-          IHoleSource, IFastenerSource, IFaceSource, IMeshSource
+          IEquationSource, IHoleSource, IFastenerSource, IFaceSource, IMeshSource
     {
         private const string AssemblyPath = @"C:\vault\bracket-assy\bracket-assy.SLDASM";
         private const string HousingPath = @"C:\vault\bracket-assy\housing.SLDPRT";
@@ -580,6 +647,8 @@ public class PackageWriterTests : IDisposable
         public bool MeshesWereDumped { get; private set; }
 
         public bool FeaturesWereDumped { get; private set; }
+
+        public bool EquationsWereDumped { get; private set; }
 
         public string? MeshDirectory { get; private set; }
 
@@ -733,6 +802,24 @@ public class PackageWriterTests : IDisposable
                     ErrorCode = 0,
                     ChildIds = new List<string>(),
                     ParentIds = new List<string>(),
+                },
+            };
+        }
+
+        IReadOnlyList<Equation> IEquationSource.Dump(DumpScope scope)
+        {
+            EquationsWereDumped = true;
+
+            return new List<Equation>
+            {
+                new Equation
+                {
+                    DocumentId = scope.DocumentId(HousingPath),
+                    Index = 0,
+                    Text = "\"WallThickness\" = 3",
+                    Lhs = "WallThickness",
+                    IsGlobal = true,
+                    Value = 3.0,
                 },
             };
         }

@@ -131,6 +131,34 @@ def get_feature(feature_id: str) -> ToolResult:
     return result
 
 
+def list_equations(document_id: str) -> list[dict[str, Any]] | ToolResult:
+    """One document's equation manager, row by row, in the order the manager holds them.
+
+    Every field of `Equation` and nothing derived: `text` as it was read, `lhs` (the text
+    left of the first `=`, unquoted) as evidence only, `is_global` as
+    `IEquationMgr.GlobalVariable(i)` answered, and `value`. A row whose global flag could
+    not be read carries `is_global: null`, which is not `false`: it is why
+    `check_rms_equations` leaves the document unresolved rather than reporting that it has
+    no global variables, and `list_gaps` gives the reason.
+
+    A document whose equation manager was not read - `--equations off`, an assembly, a
+    part nobody opened - has no rows here, which is also not "it has no equations".
+
+    Args:
+        document_id: Document id whose equations to list.
+    """
+    context = current_context()
+    if context.document(document_id) is None:
+        return unknown_id("document", document_id)
+    return [
+        as_json(row)
+        for row in sorted(
+            (row for row in context.ir.equations if row.document_id == document_id),
+            key=lambda row: row.index,
+        )
+    ]
+
+
 def _rows_of(package: EvidencePackage, document_id: str) -> list[Feature]:
     """One document's feature rows in `index` order, whatever order they arrive in."""
     return sorted(

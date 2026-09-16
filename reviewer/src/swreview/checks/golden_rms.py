@@ -1,4 +1,4 @@
-"""Golden-harness adapter for the Resilient Modeling part rules (T030).
+"""Golden-harness adapters for the RMS rules (T030; assembly T036, equations T043).
 
 `tests/golden/test_golden.py` calls `module:function(package, **kwargs)`, so it hands over
 a loaded `EvidencePackage` and nothing else - no directory, and therefore no way to find
@@ -7,17 +7,22 @@ as `golden_interference.interference_case` does: a directory (the CLI and the br
 one, and the file is read from it) or a package plus the exception records inline, which is
 what a fixture's `case.json` carries.
 
-It runs the real path rather than a parallel one: `tools.rms_checks.run_part_checks` over a
-`ToolContext` with a session, which is the same call `check_rms_part` and `swreview check
-rms` make. The baseline therefore pins what a reviewer would actually see - the finding
-bodies, their component ids and inputs, the aggregated coverage per rule per bucket, and
-the exception statuses after `refresh` - and a rule whose verdict, wording or bucket moves
-shows up as a diff instead of as a silently different report.
+Each adapter runs the real path rather than a parallel one: `run_part_checks`,
+`run_assembly_checks` or `run_equation_checks` over a `ToolContext` with a session, which
+is the same call the matching `check_rms_*` tool and `swreview check rms --scope <scope>`
+make. The baseline
+therefore pins what a reviewer would actually see - the finding bodies, their component
+ids and inputs, the aggregated coverage per rule per bucket, and the exception statuses
+after `refresh` - and a rule whose verdict, wording or bucket moves shows up as a diff
+instead of as a silently different report.
+
+The three differ in one line - which scope is dispatched - so `_graded` is that one line's
+argument and everything else is written once (constitution Principle V).
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -27,10 +32,15 @@ from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.session import CoverageBucket, ReviewSession
-from swreview.tools.context import context_for, use_context
-from swreview.tools.rms_checks import run_part_checks
+from swreview.tools.context import ToolContext, context_for, use_context
+from swreview.tools.query import ToolResult
+from swreview.tools.rms_checks import (
+    run_assembly_checks,
+    run_equation_checks,
+    run_part_checks,
+)
 
-__all__ = ["part_case"]
+__all__ = ["assembly_case", "equations_case", "part_case"]
 
 BUCKETS: tuple[CoverageBucket, ...] = (
     "checked",
@@ -50,6 +60,42 @@ def part_case(
     `package_or_dir` is a loaded package or the directory holding `package.json`; with a
     directory, `exceptions.json` is read from it and the `exceptions` argument is ignored.
     """
+    return _graded(run_part_checks, package_or_dir, exceptions)
+
+
+def assembly_case(
+    package_or_dir: EvidencePackage | Path | str,
+    exceptions: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Grade a package's root assembly document against the assembly-scope RMS rules.
+
+    The same two arguments as `part_case`, although this scope has no document selection:
+    only the root assembly's mates are extracted, so `design.root_assembly_document_id` is
+    the whole scope and the subassemblies arrive as the `rms.assembly.subassemblies`
+    coverage item.
+    """
+    return _graded(run_assembly_checks, package_or_dir, exceptions)
+
+
+def equations_case(
+    package_or_dir: EvidencePackage | Path | str,
+    exceptions: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Grade every part document of a package against the equation-scope RMS rules.
+
+    The same two arguments as `part_case`, for the same reason: the golden harness hands
+    over a package, and the CLI and the bridge have a directory with `exceptions.json`
+    beside it.
+    """
+    return _graded(run_equation_checks, package_or_dir, exceptions)
+
+
+def _graded(
+    run: Callable[[ToolContext], ToolResult],
+    package_or_dir: EvidencePackage | Path | str,
+    exceptions: Sequence[Mapping[str, Any]] | None,
+) -> dict[str, Any]:
+    """Run one scope's checks over the package and return what the session then holds."""
     if isinstance(package_or_dir, EvidencePackage):
         package = package_or_dir
         store = ExceptionStore.from_records([dict(record) for record in exceptions or ()])
@@ -62,7 +108,7 @@ def part_case(
     context = context_for(package)
     context.exceptions = store
     with use_context(context):
-        result = run_part_checks(context)
+        result = run(context)
     if "error" in result:  # pragma: no cover - every part document is dispatchable
         return {"error": result["error"]}
 

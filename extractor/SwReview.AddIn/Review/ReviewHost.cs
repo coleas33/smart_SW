@@ -669,7 +669,11 @@ public sealed class ReviewHost : IDisposable
         }
 
         DumpSummary summary;
-        PostStatus("extracting", $"Extracting {RunFolders.DocumentName(document.Path)}...");
+        // "evidence", not "IR" and not the bare document name: this is the first line the page
+        // shows after Review is pressed, and it is where an engineer learns what the pane
+        // writes before it reads anything (the Extract tab's button says the same word).
+        PostStatus(
+            "extracting", $"Extracting evidence from {RunFolders.DocumentName(document.Path)}...");
         try
         {
             summary = _options.Dump.Run(runDirectory, message => PostStatus("extracting", message));

@@ -106,7 +106,7 @@ Captures, measurements, interference runs, and Show in SOLIDWORKS requested by t
 
 **Task Pane**
 
-- **FR-001**: The add-in MUST present a Task Pane with a Review tab and a Terminal tab, and MUST keep the existing Dump IR, Interference, and Capture selection actions available.
+- **FR-001**: The add-in MUST present a Task Pane with a Review tab, an Ask tab (the CLI terminal) and an Extract tab, each carrying a one-line statement of what it is for; MUST show, above the tabs and at all times, the three steps (open a document, extract evidence, review or ask) with each one marked done or pending and the reason it is pending; and MUST keep the existing extract-evidence, Interference, and Capture selection actions available on the Extract tab.
 - **FR-002**: The Review tab MUST show, as they occur, the assistant's text, each tool call with its recorded step summary and status, each finding, each evidence request, and coverage changes.
 - **FR-003**: Each finding MUST be shown with its status, severity, title, affected components or drawing locations, and a Show in SOLIDWORKS action; expanding the card MUST reveal the full finding fields defined in feature 001.
 - **FR-004**: The pane MUST let the engineer record a disposition (accepted, rejected, deferred) with a note on any finding, and MUST persist it to the session file and re-render the report.

@@ -57,7 +57,16 @@
     /** True while a `terminal.start` is in flight, so Start cannot be pressed twice. */
     starting: false,
 
-    cwd: null
+    cwd: null,
+
+    /**
+     * What `init.evidence` said about this session's run folder, kept up to date by
+     * `evidence.extract`. `{present, run_dir}`; the host is the only thing that decides it.
+     */
+    evidence: { present: false, run_dir: null },
+
+    /** True while an `evidence.extract` is in flight. */
+    extracting: false
   };
 
   var ui = {};
@@ -187,6 +196,73 @@
       // The pane can be dragged narrower than one cell, and the addon measures a box that is
       // then zero. The old size stays; the next resize fixes it.
     }
+  }
+
+  // ---- the evidence package -------------------------------------------------------------------
+
+  /**
+   * What the footer of the header area says before Start: whether there is anything in this
+   * run folder for the CLI to read, and - when there is not - the button that writes it.
+   *
+   * The sentence is here rather than in the host because it is a sentence about this page's
+   * own buttons. What it is a sentence *about* - present or not, and which folder - is the
+   * host's answer, exactly like the CLI rows.
+   */
+  function renderEvidence() {
+    if (state.extracting) {
+      ui.evidenceText.textContent = 'Extracting evidence from the open document...';
+      ui.extract.hidden = false;
+      ui.extract.disabled = true;
+      return;
+    }
+
+    if (state.evidence.present) {
+      ui.evidenceText.textContent = 'This session folder holds an evidence package.';
+      ui.extract.hidden = true;
+      return;
+    }
+
+    ui.evidenceText.textContent =
+      'No evidence for this session yet, so the CLI has nothing to read about the model.';
+    ui.extract.hidden = false;
+    ui.extract.disabled = false;
+  }
+
+  /**
+   * Press Extract evidence: the host runs the same dump the Review tab runs, into this
+   * session's run folder. The CLI does not have to be restarted for it - the MCP server
+   * re-reads the package - so the terminal keeps whatever is on it and gets a line saying so.
+   */
+  function extractEvidence() {
+    if (state.extracting) {
+      return;
+    }
+
+    showBanner(null);
+    state.extracting = true;
+    renderEvidence();
+
+    request('evidence.extract', {})
+      .then(function (payload) {
+        state.extracting = false;
+        state.evidence = { present: true, run_dir: payload.run_dir || null };
+        renderEvidence();
+        note('[extracted ' + counted(payload.counts) + ' into ' + (payload.run_dir || 'the run folder') + ']');
+      })
+      .catch(function (error) {
+        state.extracting = false;
+        renderEvidence();
+        showBanner(error.message);
+      });
+  }
+
+  /** `evidence.extracted.counts` as a phrase, or nothing when the host sent none. */
+  function counted(counts) {
+    if (!counts || typeof counts.components !== 'number') {
+      return 'the evidence package';
+    }
+
+    return counts.components + ' components and ' + (counts.gaps || 0) + ' gaps';
   }
 
   // ---- the CLI list -------------------------------------------------------------------------
@@ -434,6 +510,7 @@
   function start() {
     buildTerminal();
     renderChatLog(0);
+    renderEvidence();
 
     // The size goes out with `ready` so the first CLI is started at the size it will be drawn
     // at: a CLI that lays its screen out at 80x24 and is then resized redraws, and the redraw
@@ -441,6 +518,8 @@
     request('ready', { cols: term.cols, rows: term.rows })
       .then(function (payload) {
         state.clis = payload.clis || [];
+        state.evidence = payload.evidence || { present: false, run_dir: null };
+        renderEvidence();
         renderClis(payload.last_choice || null);
       })
       .catch(function (error) {
@@ -453,6 +532,8 @@
     ui.start = document.getElementById('start');
     ui.stop = document.getElementById('stop');
     ui.banner = document.getElementById('banner');
+    ui.evidenceText = document.getElementById('evidence-text');
+    ui.extract = document.getElementById('extract');
     ui.install = document.getElementById('install');
     ui.installTitle = document.getElementById('install-title');
     ui.installMessage = document.getElementById('install-message');
@@ -463,6 +544,7 @@
 
     ui.cli.addEventListener('change', onCliChosen);
     ui.start.addEventListener('click', startSession);
+    ui.extract.addEventListener('click', extractEvidence);
     ui.stop.addEventListener('click', stopSession);
 
     // The pane is dragged wider and narrower all day. The fit addon recomputes the cell grid;

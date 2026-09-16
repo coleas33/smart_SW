@@ -53,6 +53,7 @@ public sealed class PackageWriter
     private readonly IManifestSource _manifest;
     private readonly IMateSource _mates;
     private readonly IFeatureSource _features;
+    private readonly IEquationSource _equations;
     private readonly IHoleSource _holes;
     private readonly IFastenerSource _fasteners;
     private readonly IFaceSource _faces;
@@ -66,6 +67,7 @@ public sealed class PackageWriter
         IManifestSource manifest,
         IMateSource mates,
         IFeatureSource features,
+        IEquationSource equations,
         IHoleSource holes,
         IFastenerSource fasteners,
         IFaceSource faces,
@@ -78,6 +80,7 @@ public sealed class PackageWriter
         _manifest = manifest ?? throw new ArgumentNullException(nameof(manifest));
         _mates = mates ?? throw new ArgumentNullException(nameof(mates));
         _features = features ?? throw new ArgumentNullException(nameof(features));
+        _equations = equations ?? throw new ArgumentNullException(nameof(equations));
         _holes = holes ?? throw new ArgumentNullException(nameof(holes));
         _fasteners = fasteners ?? throw new ArgumentNullException(nameof(fasteners));
         _faces = faces ?? throw new ArgumentNullException(nameof(faces));
@@ -173,6 +176,25 @@ public sealed class PackageWriter
         {
             aborted |= !RunPhase(gaps, "feature", "read the part feature trees", () =>
                 package.Features.AddRange(_features.Dump(scope)));
+        }
+
+        if (options.Equations == EquationScope.Off)
+        {
+            // Same reason as --features none: a package with no equations[] and nothing
+            // saying why reads as parts that have no global variables at all, and
+            // rms.params.global_variables_present would report a finding against an
+            // equation manager nobody opened (Principle I).
+            gaps.Add(
+                GapKind.NotExtracted,
+                "equations",
+                null,
+                "The part equations were not read: the dump was run with --equations off.",
+                null);
+        }
+        else if (!aborted)
+        {
+            aborted |= !RunPhase(gaps, "equation", "read the part equations", () =>
+                package.Equations.AddRange(_equations.Dump(scope)));
         }
 
         if (!aborted)

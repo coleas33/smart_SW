@@ -38,6 +38,7 @@ public static class SwDump
             new ManifestBuilder(),
             new MateDumper(session, refs),
             new FeatureDumper(session.Gate, new SwFeatureReader(session.Gate, refs)),
+            new EquationDumper(session.Gate, new SwEquationReader()),
             new HoleDumper(session, refs),
             new FastenerDumper(session, refs),
             new FaceDumper(session, refs, openDocument),
