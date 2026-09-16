@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using SwReview.Extractor.Capture;
 using SwReview.Extractor.Console;
 using SwReview.Extractor.Dump;
@@ -166,6 +166,48 @@ public class CommandLineOptionsTests
         // no-op that dumps the trees anyway.
         Assert.Throws<UsageError>(() =>
             CommandLine.Parse(new[] { "capture", "--features", "none" }, 1, CaptureOptions));
+    }
+
+    // ---- --equations -------------------------------------------------------------
+
+    [Theory]
+    [InlineData("on", EquationScope.On)]
+    [InlineData("off", EquationScope.Off)]
+    [InlineData("OFF", EquationScope.Off)]
+    public void EquationScope_ReadsEveryContractValue(string value, EquationScope expected)
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--equations", value, "--out", @"C:\out" }, 1, DumpOptions);
+
+        Assert.Equal(expected, parsed.EquationScope());
+    }
+
+    [Fact]
+    public void EquationScope_DefaultsToOn()
+    {
+        // The two parametric rules read equations[]; a dump that quietly stopped writing
+        // them would report "no global variables" about a manager nobody opened.
+        Assert.Equal(
+            EquationScope.On,
+            CommandLine.Parse(new[] { "dump", "--out", @"C:\out" }, 1, DumpOptions).EquationScope());
+    }
+
+    [Fact]
+    public void EquationScope_UnknownValue_Throws()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--equations", "none" }, 1, DumpOptions);
+
+        Assert.Throws<UsageError>(() => parsed.EquationScope());
+    }
+
+    [Fact]
+    public void EquationScope_IsOnlyAnOptionOfDump()
+    {
+        // A typo that lands --equations on another command is a usage error, not a silent
+        // no-op that reads the equations anyway.
+        Assert.Throws<UsageError>(() =>
+            CommandLine.Parse(new[] { "capture", "--equations", "off" }, 1, CaptureOptions));
     }
 
     // ---- probe rms ---------------------------------------------------------------

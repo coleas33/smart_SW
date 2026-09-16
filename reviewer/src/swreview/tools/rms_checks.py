@@ -4,27 +4,41 @@ One function per row of the check table in `specs/003-resilient-modeling/contrac
 A check tool here is deliberately thin, because everything it would otherwise do already
 has one home:
 
-- `checks/rms/part.py` decides what each rule concludes about one document;
+- `checks/rms/part.py`, `checks/rms/assembly.py` and `checks/rms/equations.py` decide what
+  each rule concludes about one document;
 - `checks/rms/report.py` turns those conclusions into findings, exceptions and aggregated
   coverage, identically for all three tools;
 - `checks/rms/groups.py` and `checks/rms_types.py` supply the derived answers, which is
   what keeps `list_features` and `check_rms_part` from disagreeing about the same tree.
 
 What is left - and what this module is - is the dispatch decision: *which* documents a
-call evaluates. Two rules govern it (constitution Principle I):
+call evaluates. Three rules govern it (constitution Principle I):
 
 - `document_id=null` is every part document of the package, in package order, **including
   the ones whose tree was never read**. A suppressed component's part is unresolved for
   every part- and equation-scope rule, which is a different statement from "not in the
   report" and is the one the report has to carry;
 - an id that names no document, or names an assembly, is an error result. A part check
-  dispatched over nothing would write an empty run that reads like a clean part.
+  dispatched over nothing would write an empty run that reads like a clean part;
+- the assembly check takes no argument at all, because it has no choice to offer: the
+  extractor reads the root assembly's mates and `Mate` carries no owning document, so
+  `design.root_assembly_document_id` is the only document the assembly rules can grade.
+  The subassembly documents are not graded and not dropped either - `report_results`
+  writes them as the `rms.assembly.subassemblies` item that names them. That id is
+  whatever document the dump was rooted at, so in a part-only package it names a *part*:
+  the mirror of the guard above is that the assembly rules are then unresolved for it by
+  name rather than graded over it, because "the root assembly has no mates" said of a part
+  is a claim about an assembly this package does not carry. It is not an error result -
+  there is no argument to have got wrong, and `--scope all` over a part-only dump is a
+  legitimate run.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
+from swreview.checks.rms.assembly import assembly_rules_unresolved, evaluate_assembly
+from swreview.checks.rms.equations import evaluate_equations
 from swreview.checks.rms.groups import assign_groups
 from swreview.checks.rms.part import evaluate_part
 from swreview.checks.rms.report import report_results
@@ -33,9 +47,27 @@ from swreview.checks.rms_types import load_table
 from swreview.tools.context import ToolContext, current_context, error_result, unknown_id
 from swreview.tools.query import ToolResult
 
-__all__ = ["check_rms_part", "part_documents", "run_part_checks"]
+__all__ = [
+    "check_rms_assembly",
+    "check_rms_equations",
+    "check_rms_part",
+    "part_documents",
+    "run_assembly_checks",
+    "run_equation_checks",
+    "run_part_checks",
+]
 
 PART_KIND = "part"
+ASSEMBLY_KIND = "assembly"
+
+NO_ROOT_ASSEMBLY = (
+    "{document_id} is a {kind} document; this package has no root assembly, so the "
+    "assembly rules were not evaluated"
+)
+NO_ROOT_DOCUMENT = (
+    "the package has no document {document_id}, which design.root_assembly_document_id "
+    "names, so the assembly rules were not evaluated"
+)
 
 
 def check_rms_part(document_id: str | None = None) -> ToolResult:
@@ -90,6 +122,116 @@ def run_part_checks(
         # so the rows are handed over as the package carries them.
         rows = [row for row in context.ir.features if row.document_id == part]
         results.extend(evaluate_part(part, rows, table, assign_groups(rows, table), context.ir))
+
+    reported = report_results(context, results)
+    if "error" in reported:
+        return reported
+    return {**reported, "documents": documents}
+
+
+def check_rms_assembly() -> ToolResult:
+    """Grade the root assembly's mates and components against the assembly-scope RMS rules.
+
+    Four rules: the mates reference planes, axes, points or coordinate systems rather than
+    faces, edges or vertices (`fail`); the first component is fixed or fully constrained
+    (`fail`); no component is more than three mates from the fixed root (`warn`); and
+    Toolbox hardware is inserted as parts rather than as configurations of one file
+    (`warn`). Each failing rule becomes one finding naming the mates and components it is
+    about, everything else becomes one aggregated coverage item per rule per bucket, and
+    the `modeling.resilience` summary is rewritten from everything the session holds.
+
+    There is no argument because there is no choice: only the root assembly document's
+    mates are extracted, so that is the one document these rules can grade. The
+    subassemblies are reported as unresolved by name rather than passed over.
+
+    A package with no assembly document - a part-only dump, where the root document id
+    names the part - grades nothing: `documents` comes back empty and all four rules are
+    unresolved, naming that document and its kind. Nothing is claimed about an assembly
+    this package does not carry.
+
+    A `fail` outcome consults the retained exceptions for the root assembly instance, this
+    configuration and this rule id; a `warn` outcome is advisory and never does. Calling
+    this twice replaces its coverage and appends a second copy of every finding, so call
+    it once.
+    """
+    return run_assembly_checks(current_context())
+
+
+def run_assembly_checks(context: ToolContext) -> ToolResult:
+    """Grade the root assembly document of `context` and write the results to it.
+
+    The CLI's counterpart to the tool above, and the same shape as `run_part_checks`
+    without the document selection: `swreview check rms --document` narrows the *part*
+    documents, and there is nothing here for it to narrow.
+
+    `design.root_assembly_document_id` is `DocumentIds.For(tree.RootDocumentPath)` -
+    whatever document the dump was rooted at - so it names a part in a part-only package.
+    There is no root assembly to grade then: every assembly rule is unresolved, naming that
+    document and its kind, and no document is reported as graded.
+    """
+    document_id = context.ir.design.root_assembly_document_id
+    document = context.document(document_id)
+    if document is None or document.kind != ASSEMBLY_KIND:
+        reason = (
+            NO_ROOT_DOCUMENT.format(document_id=document_id)
+            if document is None
+            else NO_ROOT_ASSEMBLY.format(document_id=document_id, kind=document.kind)
+        )
+        results = assembly_rules_unresolved(document_id, reason)
+        documents: list[str] = []
+    else:
+        results = evaluate_assembly(context.ir, load_table())
+        documents = [document_id]
+
+    reported = report_results(context, results)
+    if "error" in reported:
+        return reported
+    return {**reported, "documents": documents}
+
+
+def check_rms_equations(document_id: str | None = None) -> ToolResult:
+    """Grade one part's equation manager, or every part's, against the equation rules.
+
+    The same two rules for every part document: at least one global variable exists
+    (`fail`), and at least one dimension is driven by an equation (`warn`). A manager that
+    was read and holds nothing is an answer and becomes those two outcomes; a manager
+    nobody could read - the `equations` gap, or a row whose global flag threw - is
+    unresolved instead, because "this part has no global variables" is a claim about data
+    someone actually saw (constitution Principle I).
+
+    Dispatch, exceptions, coverage and the effect of calling it twice are `check_rms_part`'s
+    exactly: null grades every part document including the ones whose tree was never read,
+    a `fail` outcome consults the retained exceptions for this rule id, coverage is
+    replaced and findings are appended.
+
+    Args:
+        document_id: Part document whose equations to grade; null grades every part
+            document in the package.
+    """
+    return run_equation_checks(
+        current_context(), None if document_id is None else [document_id]
+    )
+
+
+def run_equation_checks(
+    context: ToolContext, document_ids: Sequence[str] | None = None
+) -> ToolResult:
+    """Grade `document_ids` (null = every part document) and write them to `context`.
+
+    The equation twin of `run_part_checks`, and deliberately its shape rather than a
+    parameter on it: the two scopes are two rows of `contracts/tools.md` and two tools,
+    so `swreview check rms --scope all` runs both and lands in two passes of
+    `report_results` - which accumulate, because the aggregated items of one scope's rules
+    are never the other's and the summary is read back off the session.
+    """
+    documents = part_documents(context, document_ids)
+    if isinstance(documents, dict):
+        return documents
+
+    results: list[RuleResult] = []
+    for part in documents:
+        rows = [row for row in context.ir.equations if row.document_id == part]
+        results.extend(evaluate_equations(part, rows, context.ir))
 
     reported = report_results(context, results)
     if "error" in reported:

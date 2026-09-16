@@ -85,6 +85,7 @@ def query_tools() -> tuple[Callable[..., Any], ...]:
         query.get_exceptions,
         rms_query.list_features,
         rms_query.get_feature,
+        rms_query.list_equations,
     )
 
 
@@ -107,6 +108,8 @@ def check_tools() -> tuple[Callable[..., Any], ...]:
         checks_fastener.check_hole_alignment,
         checks_interference.check_interference_group,
         rms_checks.check_rms_part,
+        rms_checks.check_rms_assembly,
+        rms_checks.check_rms_equations,
     )
 
 

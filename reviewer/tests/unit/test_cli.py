@@ -1300,19 +1300,39 @@ RMS_FRAME = "doc:2"
 """The compliant part of the `check rms` package."""
 
 RMS_COVER = "doc:3"
-"""The part that fails `rms.intent.every_feature_described`."""
+"""The part that fails `rms.intent.every_feature_described` and, with an equation manager
+that holds nothing, `rms.params.global_variables_present`."""
+
+RMS_GLOBALS_RULE = "rms.params.global_variables_present"
+
+RMS_ASSEMBLY = "doc:1"
+"""The root assembly document: the only document the assembly family grades."""
+
+RMS_SUBASSEMBLY = "doc:5"
+"""The subassembly the assembly family does not reach, named in its coverage item."""
 
 
 @pytest.fixture
 def rms_dir(tmp_path: Path) -> Path:
     """A written package with one compliant part, one failing part, and an assembly."""
-    from tests.support.features import AssemblySpec, PartSpec, feature, folder, rms_package
+    from tests.support.features import (
+        AssemblySpec,
+        PartSpec,
+        equation,
+        feature,
+        folder,
+        rms_package,
+    )
 
     package = rms_package(
         parts=[
             PartSpec(
                 document_id=RMS_FRAME,
                 name="frame",
+                equations=(
+                    equation('"thickness" = 3mm', is_global=True, value=0.003),
+                    equation('"D1@Sketch1" = "thickness" * 2', value=0.006),
+                ),
                 features=(
                     folder("1-Ref", feature("Plane1", "RefPlane")),
                     folder("2-Construction", feature("Surface1", "SurfaceExtrude")),
@@ -1331,9 +1351,55 @@ def rms_dir(tmp_path: Path) -> Path:
                 ),
             ),
         ],
-        assembly=AssemblySpec(document_id="doc:1", name="cover-assy"),
+        assembly=AssemblySpec(document_id=RMS_ASSEMBLY, name="cover-assy"),
     )
     directory = tmp_path / "rms-package"
+    save_package(package, directory)
+    return directory
+
+
+@pytest.fixture
+def rms_assembly_dir(tmp_path: Path) -> Path:
+    """A written package whose root assembly breaks two of the four assembly rules.
+
+    `frame-1` is the first child of the root instance and is neither fixed nor fully
+    constrained, and the one mate sits on faces. The parts carry no feature trees and no
+    equations on purpose: a part or equation rule that ran here would have nothing to
+    read, so its coverage showing up is proof that `--scope assembly` graded more than it
+    was asked to.
+    """
+    from tests.support.features import (
+        AssemblySpec,
+        InstanceSpec,
+        MateSpec,
+        PartSpec,
+        SubassemblySpec,
+        rms_package,
+    )
+
+    under_defined = 2  # swConstrainedStatus_e.swUnderConstrained
+    face = "swSelFACES"
+    package = rms_package(
+        parts=[
+            PartSpec(
+                document_id=RMS_FRAME,
+                name="frame",
+                instances=(InstanceSpec("frame-1", constrained_status_raw=under_defined),),
+            ),
+            PartSpec(
+                document_id=RMS_COVER,
+                name="cover",
+                instances=(InstanceSpec("cover-1", is_fixed=True),),
+            ),
+        ],
+        assembly=AssemblySpec(
+            document_id=RMS_ASSEMBLY,
+            name="cover-assy",
+            mates=(MateSpec(entities=(("frame-1", face), ("cover-1", face))),),
+            subassembly=SubassemblySpec(document_id=RMS_SUBASSEMBLY, name="gearbox"),
+        ),
+    )
+    directory = tmp_path / "rms-assembly-package"
     save_package(package, directory)
     return directory
 
@@ -1358,6 +1424,12 @@ def test_check_rms_document_limits_the_run_to_that_document(rms_dir: Path) -> No
 
 
 def test_check_rms_document_is_repeatable(rms_dir: Path) -> None:
+    """`--document` selects part documents, in the caller's order, and narrows only them.
+
+    The default scope still runs the assembly family, which has no document to narrow -
+    the root assembly document is the only one whose mates are extracted - so it is the
+    one other document the coverage names.
+    """
     body = payload(
         invoke(
             "check",
@@ -1373,9 +1445,10 @@ def test_check_rms_document_is_repeatable(rms_dir: Path) -> None:
     )
 
     assert body["documents"] == [RMS_COVER, RMS_FRAME]
+    assert body["assembly_document"] == RMS_ASSEMBLY
     assert {
         document for item in body["coverage"] for document in item["scope"]["document_ids"]
-    } == {RMS_FRAME, RMS_COVER}
+    } == {RMS_FRAME, RMS_COVER, RMS_ASSEMBLY}
 
 
 def test_check_rms_reports_coverage_as_well_as_findings(rms_dir: Path) -> None:
@@ -1405,43 +1478,183 @@ def test_check_rms_scope_part_runs_the_part_rules(rms_dir: Path) -> None:
     assert body["findings"]
 
 
-def test_check_rms_scope_assembly_reports_that_it_is_not_in_this_build(
-    rms_dir: Path,
+def test_check_rms_scope_assembly_runs_the_assembly_rules(
+    rms_assembly_dir: Path,
 ) -> None:
-    result = invoke("check", "rms", "--package", str(rms_dir), "--scope", "assembly")
     body = payload(
-        invoke("check", "rms", "--package", str(rms_dir), "--scope", "assembly", "--json")
+        invoke("check", "rms", "--package", str(rms_assembly_dir), "--scope", "assembly", "--json")
     )
 
-    assert result.exit_code == 0
-    assert [item["scope"] for item in body["unavailable_scopes"]] == ["assembly"]
-    assert "not yet available in this build" in body["unavailable_scopes"][0]["reason"]
-    assert "assembly: not yet available in this build" in result.stdout
-    assert body["findings"] == []
+    assert body["scope"] == "assembly"
+    assert body["unavailable_scopes"] == []
+    assert body["assembly_document"] == RMS_ASSEMBLY
+    assert {finding["check"] for finding in body["findings"]} == {
+        "rms.assembly.first_component_fixed",
+        "rms.assembly.mates_to_reference_geometry",
+    }
+
+
+def test_check_rms_scope_assembly_grades_no_part_document(rms_assembly_dir: Path) -> None:
+    """`--document` narrows the part families; the assembly family has one subject document.
+
+    So an assembly-only run reports no part document and writes no part-scope coverage -
+    the two families are separate, and a run that had quietly graded the trees as well
+    would make `--scope` mean nothing.
+    """
+    body = payload(
+        invoke("check", "rms", "--package", str(rms_assembly_dir), "--scope", "assembly", "--json")
+    )
+
     assert body["documents"] == []
+    checks = {item["check"] for item in body["coverage"]}
+    assert "rms.intent.every_feature_described" not in checks
+    assert "rms.assembly.mate_chain_depth" in checks
 
 
-def test_check_rms_scope_equations_reports_that_it_is_not_in_this_build(
-    rms_dir: Path,
+def test_check_rms_scope_assembly_human_output_names_the_root_assembly_document(
+    rms_assembly_dir: Path,
 ) -> None:
+    result = invoke("check", "rms", "--package", str(rms_assembly_dir), "--scope", "assembly")
+
+    assert result.exit_code == 0
+    assert f"root assembly document: {RMS_ASSEMBLY}" in result.stdout
+    assert "rms.assembly.first_component_fixed: demonstrated (medium)" in result.stdout
+    assert "not yet available in this build" not in result.stdout
+
+
+def test_check_rms_scope_assembly_names_the_subassembly_it_did_not_reach(
+    rms_assembly_dir: Path,
+) -> None:
+    body = payload(
+        invoke("check", "rms", "--package", str(rms_assembly_dir), "--scope", "assembly", "--json")
+    )
+
+    subassemblies = [
+        item for item in body["coverage"] if item["check"] == "rms.assembly.subassemblies"
+    ]
+    assert len(subassemblies) == 1
+    assert subassemblies[0]["bucket"] == "unresolved"
+    assert subassemblies[0]["scope"]["document_ids"] == [RMS_SUBASSEMBLY]
+
+
+@pytest.fixture
+def rms_part_only_dir(tmp_path: Path) -> Path:
+    """A written package with no assembly document at all.
+
+    `design.root_assembly_document_id` then names the part the dump was rooted at, which
+    is what a part-only dump writes. `--scope all` still runs the assembly family over it,
+    so this is what keeps the default scope from claiming a part is the root assembly.
+    """
+    from tests.support.features import PartSpec, feature, folder, rms_package
+
+    package = rms_package(
+        parts=[
+            PartSpec(
+                document_id=RMS_FRAME,
+                name="frame",
+                features=(folder("3-Core", feature("Boss-Extrude1", "Extrusion")),),
+            )
+        ]
+    )
+    directory = tmp_path / "rms-part-only-package"
+    save_package(package, directory)
+    return directory
+
+
+def test_check_rms_scope_all_on_a_part_only_package_names_no_root_assembly(
+    rms_part_only_dir: Path,
+) -> None:
+    body = payload(invoke("check", "rms", "--package", str(rms_part_only_dir), "--json"))
+
+    assert body["scope"] == "all"
+    assert body["assembly_document"] is None
+    assert body["documents"] == [RMS_FRAME]
+    unresolved = {
+        item["check"]
+        for item in body["coverage"]
+        if item["bucket"] == "unresolved"
+    }
+    assert "rms.assembly.mates_to_reference_geometry" in unresolved
+    assert "rms.assembly.first_component_fixed" in unresolved
+
+
+def test_check_rms_scope_all_on_a_part_only_package_still_exits_zero(
+    rms_part_only_dir: Path,
+) -> None:
+    """A part-only dump is a package, not a bad argument: the run reports what it could
+    not grade instead of failing."""
+    result = invoke("check", "rms", "--package", str(rms_part_only_dir))
+
+    assert result.exit_code == 0
+    assert "root assembly document:" not in result.stdout
+
+
+def test_check_rms_scope_equations_runs_the_equation_rules(rms_dir: Path) -> None:
     body = payload(
         invoke("check", "rms", "--package", str(rms_dir), "--scope", "equations", "--json")
     )
 
-    assert [item["scope"] for item in body["unavailable_scopes"]] == ["equations"]
+    assert body["scope"] == "equations"
+    assert body["unavailable_scopes"] == []
+    assert body["documents"] == [RMS_FRAME, RMS_COVER]
+    assert [finding["check"] for finding in body["findings"]] == [
+        RMS_GLOBALS_RULE,
+        "rms.params.dimensions_driven_by_equations",
+    ]
 
 
-def test_check_rms_scope_all_runs_the_part_rules_and_names_the_two_missing_scopes(
-    rms_dir: Path,
-) -> None:
+def test_check_rms_scope_equations_does_not_run_the_part_rules(rms_dir: Path) -> None:
+    """The scopes are separate: `--scope equations` grades the managers, not the trees."""
+    body = payload(
+        invoke("check", "rms", "--package", str(rms_dir), "--scope", "equations", "--json")
+    )
+
+    checks = {item["check"] for item in body["coverage"]}
+    assert "rms.intent.every_feature_described" not in checks
+    assert RMS_GLOBALS_RULE in checks
+
+
+def test_check_rms_scope_equations_honours_document(rms_dir: Path) -> None:
+    body = payload(
+        invoke(
+            "check",
+            "rms",
+            "--package",
+            str(rms_dir),
+            "--scope",
+            "equations",
+            "--document",
+            RMS_FRAME,
+            "--json",
+        )
+    )
+
+    assert body["documents"] == [RMS_FRAME]
+    assert body["findings"] == []
+
+
+def test_check_rms_scope_all_runs_every_family(rms_dir: Path) -> None:
     result = invoke("check", "rms", "--package", str(rms_dir))
     body = payload(invoke("check", "rms", "--package", str(rms_dir), "--json"))
 
     assert result.exit_code == 0
-    assert [item["scope"] for item in body["unavailable_scopes"]] == ["assembly", "equations"]
-    assert body["findings"]
-    assert "assembly: not yet available in this build" in result.stdout
-    assert "equations: not yet available in this build" in result.stdout
+    assert body["unavailable_scopes"] == []
+    assert body["documents"] == [RMS_FRAME, RMS_COVER]
+    assert body["assembly_document"] == RMS_ASSEMBLY
+    assert {"rms.intent.every_feature_described", RMS_GLOBALS_RULE} <= {
+        finding["check"] for finding in body["findings"]
+    }
+    assert "rms.assembly.mate_chain_depth" in {item["check"] for item in body["coverage"]}
+    assert "not yet available in this build" not in result.stdout
+
+
+def test_check_rms_scope_part_reports_no_assembly_document(rms_dir: Path) -> None:
+    """The key says what was graded, so a family that did not run leaves it null."""
+    body = payload(
+        invoke("check", "rms", "--package", str(rms_dir), "--scope", "part", "--json")
+    )
+
+    assert body["assembly_document"] is None
 
 
 def test_check_rms_reads_the_exceptions_file_beside_the_package(rms_dir: Path) -> None:

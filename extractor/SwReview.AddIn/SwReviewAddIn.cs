@@ -20,6 +20,11 @@ using SwReview.AddIn.Settings;
 using SwReview.AddIn.Terminal;
 using SwReview.AddIn.ToolService;
 
+// The load path is the part of this add-in no test can reach through its public surface:
+// AssemblyRedirect's install state, and the log folder AddInLog writes to (which a test must
+// be able to point somewhere else, or `dotnet test` writes into the engineer's real addin.log).
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("SwReview.AddIn.Tests")]
+
 namespace SwReview.AddIn;
 
 /// <summary>
@@ -27,26 +32,45 @@ namespace SwReview.AddIn;
 /// faster than out-of-process COM, and several many-parameter API members fail late-bound).
 ///
 /// It owns the ISldWorks pointer and the Task Pane: the Review tab (the chat page in
-/// WebView2, driven by <see cref="ReviewHost"/> over the loopback backend), the Terminal tab,
-/// and the Actions tab's three buttons, all acting on the active document: <b>Dump IR</b> runs
-/// <see cref="PackageWriter"/>, <b>Interference</b> runs <see cref="InterferenceRunner"/> and
-/// <b>Capture selection</b> runs <see cref="CaptureService"/>. The latter two append to the
-/// package.json that Dump IR wrote in the same folder, so their results can name its
-/// components.
+/// WebView2, driven by <see cref="ReviewHost"/> over the loopback backend), the Ask tab (the
+/// CLI terminal), and the Extract tab's three buttons, all acting on the active document:
+/// <b>Extract evidence</b> runs <see cref="PackageWriter"/>, <b>Interference</b> runs
+/// <see cref="InterferenceRunner"/> and <b>Capture selection</b> runs
+/// <see cref="CaptureService"/>. The latter two append to the package.json that Extract
+/// evidence wrote in the same folder, so their results can name its components.
 ///
-/// Everything the pane adds is behind a guard. SOLIDWORKS loads this add-in in-process, so an
-/// exception out of <see cref="ConnectToSW"/> is the session's problem rather than ours: a
-/// WebView2 runtime that is not installed leaves the Review tab showing the fallback panel and
-/// the Actions tab working, and a backend that will not start is reported in the pane instead
-/// of at load.
+/// It also answers the two questions the pane's step strip asks - is a document open, and does
+/// this session's run folder hold evidence - because the add-in is the only thing that can:
+/// one reads the active document on the application thread, the other looks in the folder the
+/// Review or Ask tab is working in.
 ///
-/// Registration (research R12, "Add-in hosting"). Both steps need an elevated x64 prompt;
-/// the registry keys are written by the [ComRegisterFunction] below, so step 1 does both:
+/// Everything the pane adds is behind a guard, and so is the attach itself. SOLIDWORKS loads
+/// this add-in in-process, so an exception out of <see cref="ConnectToSW"/> is the session's
+/// problem rather than ours: a WebView2 runtime that is not installed leaves the Review tab
+/// showing the fallback panel and the Extract tab working, and a backend that will not start
+/// is reported in the pane instead of at load. A failure that does reach the top of
+/// <see cref="ConnectToSW"/> is answered by SOLIDWORKS clearing the HKCU startup flag and
+/// leaves no log anywhere, so each load step reports itself into
+/// %LOCALAPPDATA%\SwReview\logs\addin.log instead (docs/addin-load-fix.md).
 ///
-///   1. "%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\regasm.exe" /codebase SwReview.AddIn.dll
-///   2. Enable it for the current user (SOLIDWORKS writes this itself the first time the
-///      add-in is ticked in Tools > Add-ins):
-///        HKCU\SOFTWARE\SOLIDWORKS\AddInsStartup\{5C4D2E7A-9B31-4A6E-8F0C-2D7B1E934A55} = 1
+/// Registration (research R12, "Add-in hosting") is one command, from an elevated x64 prompt:
+///
+///   extractor\tools\register-addin.ps1 [-Configuration Release] [-Unregister]
+///
+/// It stages SolidWorks.Interop.{sldworks,swconst,swpublished}.dll from the seat's api\redist
+/// into the add-in's output folder and then runs
+/// "%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\regasm.exe" /codebase SwReview.AddIn.dll.
+/// The staging is not optional: regasm loads swpublished to reflect over ISwAddin while
+/// registering, and this project deliberately does not copy the seat's interops
+/// (Private=false), so a plain regasm on a clean build fails with RA0000.
+///
+/// The [ComRegisterFunction] below writes both the HKLM AddIns keys and
+/// HKCU\SOFTWARE\SOLIDWORKS\AddInsStartup\{5C4D2E7A-9B31-4A6E-8F0C-2D7B1E934A55} = 1 for the
+/// account that ran it, so SwReview is already ticked in Tools > Add-ins the next time
+/// SOLIDWORKS starts. A check box that is clear there is a load failure, not a step still to
+/// do - read %LOCALAPPDATA%\SwReview\logs\addin.log. (The one exception: if the elevated
+/// prompt ran as a different account, the flag landed in that account's hive and this one
+/// does have to tick the box once.)
 ///
 /// Build x64 and reference the interops from the seat install
 /// (C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\api\redist) with Embed Interop Types
@@ -54,7 +78,7 @@ namespace SwReview.AddIn;
 /// </summary>
 [ComVisible(true)]
 [Guid(AddInGuid)]
-[ClassInterface(ClassInterfaceType.None)]
+[ClassInterface(ClassInterfaceType.AutoDispatch)]
 [ProgId("SwReview.AddIn.SwReviewAddIn")]
 public class SwReviewAddIn : ISwAddin
 {
@@ -115,24 +139,50 @@ public class SwReviewAddIn : ISwAddin
     public IToolServiceAccess? ToolService => _toolService;
 
     /// <summary>
+    /// Runs on COM activation, which is ahead of <see cref="ConnectToSW"/> and so ahead of the
+    /// first assembly bind the add-in's own code can provoke. That is the only window in which
+    /// <see cref="AssemblyRedirect"/> can be installed: the bind it exists to answer happens
+    /// inside <c>CreateTaskPane</c>.
+    /// </summary>
+    static SwReviewAddIn()
+    {
+        AssemblyRedirect.Install();
+        Log("AssemblyRedirect installed.");
+    }
+
+    /// <summary>
     /// Called by SOLIDWORKS when the add-in loads. Everything the extractor does runs on
     /// this thread, which is the application STA thread (constitution: all COM calls on one
     /// STA thread).
     /// </summary>
     public bool ConnectToSW(object ThisSW, int Cookie)
     {
-        _swApp = (ISldWorks)ThisSW;
-        _addInCookie = Cookie;
+        // Three guards rather than one: an add-in that cannot attach has not loaded and says
+        // so, a pane that cannot be created must not stop the add-in loading, and a review
+        // host that cannot be started must not take the pane's Actions tab with it. No
+        // failure may leave ConnectToSW: SOLIDWORKS answers an exception here by clearing the
+        // HKCU AddInsStartup flag, so an unguarded throw is a load that reverts its own check
+        // box and leaves no explanation anywhere (docs/addin-load-fix.md).
+        try
+        {
+            _swApp = (ISldWorks)ThisSW;
+            _addInCookie = Cookie;
 
-        // Required before any callback can be routed back to this add-in.
-        _swApp.SetAddinCallbackInfo2(0, this, _addInCookie);
+            // Required before any callback can be routed back to this add-in.
+            _swApp.SetAddinCallbackInfo2(0, this, _addInCookie);
 
-        // Two guards rather than one: a pane that cannot be created must not stop the add-in
-        // loading, and a review host that cannot be started must not take the pane's Actions
-        // tab with it. Neither failure may leave ConnectToSW.
+            Log("Attached to SOLIDWORKS.");
+        }
+        catch (Exception failure)
+        {
+            Report("The SwReview add-in could not attach to SOLIDWORKS.", failure);
+            return false;
+        }
+
         try
         {
             CreateTaskPane();
+            Log("Task Pane created.");
         }
         catch (Exception failure)
         {
@@ -142,6 +192,7 @@ public class SwReviewAddIn : ISwAddin
         try
         {
             StartReviewHost();
+            Log("Review host started.");
         }
         catch (Exception failure)
         {
@@ -244,10 +295,15 @@ public class SwReviewAddIn : ISwAddin
         _pane = new TaskPaneControl(new TaskPaneOptions(
             new WebViewEnvironmentFactory(), loaded.Settings.RunRoot)
         {
-            // The Terminal tab's run-folder rule (pane-host-messages.md): a terminal started
+            // The Ask tab's run-folder rule (pane-host-messages.md): a terminal started
             // after a review belongs in that review's folder, so the CLI's generated profile,
             // its working directory and the evidence it is being asked about are one place.
             CurrentSessionRunDirectory = () => _reviewHost?.LatestSession?.RunDirectory,
+
+            // The two facts the step strip renders. `_pane` is read through the field rather
+            // than captured, because these run long after the constructor that assigns it.
+            DocumentPresent = () => CurrentDocument() != null,
+            EvidencePresent = () => RunFolders.HasEvidence(_pane?.SessionRunDirectory),
         });
 
         _panel = _pane.Actions;
@@ -322,7 +378,13 @@ public class SwReviewAddIn : ISwAddin
         // drains it on a thread of its own - locating a CLI and probing its tool listing both
         // block for seconds, and this is the SOLIDWORKS UI thread.
         _terminalHost = TerminalHost.Attach(
-            _pane, _toolService, () => _reviewHost?.Settings ?? UserSettings.Defaults(), _job);
+            _pane,
+            _toolService,
+            () => _reviewHost?.Settings ?? UserSettings.Defaults(),
+            _job,
+            // The Ask tab's Extract evidence button runs the review's own extractor, into the
+            // run folder the CLI is working in (contracts/pane-host-messages.md).
+            reviewOptions.Dump);
 
         // The pane follows the engineer: the Review button and the document name track
         // whatever is active, so a review is never started against the document that was open
@@ -440,6 +502,10 @@ public class SwReviewAddIn : ISwAddin
         {
             _reviewHost?.DocumentChanged();
 
+            // Step 1 of the strip above the tabs has just changed answer, and this is the event
+            // that says so (pane-host-messages.md, `document.changed`).
+            _pane?.RefreshSteps();
+
             // The first document is what the tool service has been waiting for (T048). Once it
             // is running this is a no-op: one add-in instance, one tool service, one scope
             // (data-model.md).
@@ -477,6 +543,11 @@ public class SwReviewAddIn : ISwAddin
                     if (host != null)
                     {
                         host.Receive(json);
+
+                        // A `review.start` has just written a package into a new run folder,
+                        // which is both of the step strip's answers at once. Every other
+                        // message leaves them alone and costs one file-exists check.
+                        _pane?.RefreshSteps();
                     }
                 }
                 catch (Exception)
@@ -540,20 +611,29 @@ public class SwReviewAddIn : ISwAddin
         {
         }
 
-        try
-        {
-            string folder = ReviewHostOptions.DefaultLogFolder();
-            Directory.CreateDirectory(folder);
-            File.AppendAllText(
-                Path.Combine(folder, "addin.log"),
-                string.Format(
-                    "[{0:O}] {1} {2}{3}", DateTimeOffset.Now, what, detail, System.Environment.NewLine));
-        }
-        catch (Exception)
-        {
-            // There is nowhere left to report to.
-        }
+        Log(what + " " + detail);
     }
+
+    /// <summary>
+    /// Appends one timestamped line to <c>%LOCALAPPDATA%\SwReview\logs\addin.log</c> - the
+    /// only log this add-in writes, and where <see cref="Report"/> puts its failures.
+    ///
+    /// The load checkpoints in <see cref="ConnectToSW"/> and the type initializer go through
+    /// here too, rather than to a file of their own. A load failure is otherwise silent:
+    /// SOLIDWORKS clears the startup flag and the add-in simply is not there, so the reverting
+    /// check box is the whole error message. Four lines a session turn "it did not load" into
+    /// a named step.
+    ///
+    /// Static, so the first line can be written before there is an instance, and it never
+    /// throws: every caller is either a catch block that exists to keep SOLIDWORKS running or
+    /// the type initializer, where an exception would itself become the load failure.
+    ///
+    /// The file handling lives in <see cref="AddInLog"/>, which <see cref="AssemblyRedirect"/>
+    /// also writes through, so there is one mechanism and one file; it is a type of its own so
+    /// that a test can redirect the folder without first running this class's type
+    /// initializer, whose checkpoint is one of the lines being redirected.
+    /// </summary>
+    private static void Log(string line) => AddInLog.Write(line);
 
     /// <summary>
     /// Masks the configured key, through the host that knows what it is.
@@ -621,6 +701,10 @@ public class SwReviewAddIn : ISwAddin
         finally
         {
             _panel.SetBusy(false);
+
+            // Step 2 of the strip, whichever way the dump ended: a partial package is still a
+            // package, and a failure that left none must not leave the strip saying there is one.
+            _pane?.RefreshSteps();
         }
     }
 

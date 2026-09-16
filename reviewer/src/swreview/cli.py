@@ -789,7 +789,24 @@ RMS_SCOPE_NOT_BUILT = (
     "is claimed"
 )
 """What a scope this build cannot run reports. It is reported rather than skipped: a
-command that answered `--scope assembly` with silence would read like a clean assembly."""
+command that answered a scope it does not run with silence would read like a clean one."""
+
+RMS_SCOPE_CHECKS: dict[
+    RmsScope, Callable[[ToolContext, Sequence[str] | None], ToolResult]
+] = {
+    RmsScope.part: rms_checks.run_part_checks,
+    RmsScope.equations: rms_checks.run_equation_checks,
+}
+"""The *document-scoped* families, and what runs each of them over the selected documents.
+The assembly family is deliberately not here: it takes no document argument, because the
+root assembly document is the only document whose mates are extracted, so it is run on its
+own below and `--document` does not narrow it."""
+
+RMS_SCOPES_BUILT: frozenset[RmsScope] = frozenset(
+    {*RMS_SCOPE_CHECKS, RmsScope.assembly}
+)
+"""Every scope this build actually runs. A scope in `RmsScope` and not here is reported
+through `RMS_SCOPE_NOT_BUILT`."""
 
 RMS_SCOPE_RUNS: dict[RmsScope, tuple[RmsScope, ...]] = {
     RmsScope.part: (RmsScope.part,),
@@ -832,35 +849,53 @@ def check_rms_command(
 
     runs = RMS_SCOPE_RUNS[scope]
     findings: list[Any] = []
-    if RmsScope.part in runs:
+    graded: list[str] = []
+    for item in runs:
+        run = RMS_SCOPE_CHECKS.get(item)
+        if run is None:
+            continue
         with _errors_as_exit_1(), use_context(context):
-            result = rms_checks.run_part_checks(context, documents)
+            result = run(context, documents)
         if "error" in result:
             typer.echo(f"error: {result['error']}", err=True)
             raise typer.Exit(1)
-        findings = list(result["findings"])
-    else:
-        documents = []
+        findings.extend(result["findings"])
+        graded = documents
+
+    assembly_document: str | None = None
+    if RmsScope.assembly in runs:
+        with _errors_as_exit_1(), use_context(context):
+            result = rms_checks.run_assembly_checks(context)
+        if "error" in result:
+            typer.echo(f"error: {result['error']}", err=True)
+            raise typer.Exit(1)
+        findings.extend(result["findings"])
+        # Empty when the package has no assembly document at all: the rules are then
+        # unresolved coverage naming the document that is not one, and there is no root
+        # assembly to print.
+        assembly_document = next(iter(result["documents"]), None)
 
     unavailable = [
         {"scope": item.value, "reason": RMS_SCOPE_NOT_BUILT.format(scope=item.value)}
         for item in runs
-        if item is not RmsScope.part
+        if item not in RMS_SCOPES_BUILT
     ]
     coverage = _coverage_rows(context.require_session())
 
     payload = {
         "package": str(Path(package).resolve()),
         "scope": scope.value,
-        "documents": documents,
+        "documents": graded,
+        "assembly_document": assembly_document,
         "findings": findings,
         "coverage": coverage,
         "unavailable_scopes": unavailable,
     }
     lines = [
-        f"{len(documents)} part document(s)"
-        + (f": {', '.join(documents)}" if documents else "")
+        f"{len(graded)} part document(s)" + (f": {', '.join(graded)}" if graded else "")
     ]
+    if assembly_document is not None:
+        lines.append(f"root assembly document: {assembly_document}")
     for finding in findings:
         lines.append("")
         lines += _finding_lines(finding)

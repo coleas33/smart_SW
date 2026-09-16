@@ -61,6 +61,9 @@ Package queries - the evidence package the extractor dumped:
 - `get_feature` - one feature in full: its description, its sketch, its suppression state, and
   what it depends on and what depends on it, by name. A null dependency list means the call
   that would have read it failed, which is not the same as having none.
+- `list_equations` - one document's equations: the text, the left side, whether the equation
+  manager calls it a global variable, and its value. `is_global: null` means that flag could
+  not be read, which is not the same as the equation not being a global.
 
 Measurements over the package geometry:
 
@@ -85,8 +88,8 @@ of the two a number came from when it matters.
 
 There is no shell, no file editor, no web search and no interference run. If you want something
 outside this list, tell the engineer what to press in the task pane: **Review** for a full
-design review, **Dump IR** to refresh the package, **Interference** to run an interference
-check, **Capture selection** for an image of the current selection.
+design review, **Extract evidence** to refresh the package, **Interference** to run an
+interference check, **Capture selection** for an image of the current selection.
 
 ## The run folder
 
@@ -94,7 +97,8 @@ Your working directory is the run folder for this session. It holds:
 
 - `package.json` - the evidence package: the assembly as the extractor read it. This is what
   the package query tools read. If it is missing, every query fails; tell the engineer to press
-  **Review** or **Dump IR** in the task pane first.
+  **Review** on the Review tab, or **Extract evidence** on the Ask tab, and then ask again -
+  you do not have to be restarted for it, the package is re-read.
 - `meshes/` - body meshes referenced by the package.
 - `captures/` - images, including anything `request_capture` produced.
 - `drawings/` - drawing sheet data.

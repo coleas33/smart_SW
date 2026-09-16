@@ -1,0 +1,282 @@
+result:
+  coverage:
+  - bucket: unresolved
+    check: rms.assembly.mate_chain_depth
+    error: null
+    reason: '1 document(s): doc:1: cmp:0008 screw-1: not reachable from the fixed
+      root plate-1 through the mates that are known to be active; cmp:0009 screw-2:
+      not reachable from the fixed root plate-1 through the mates that are known to
+      be active; cmp:0010 washer-1: not reachable from the fixed root plate-1 through
+      the mates that are known to be active'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.toolbox_parts_not_configurations
+    error: null
+    reason: '1 document(s): doc:1: cmp:0010 washer-1: Toolbox identity not readable'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.no_sibling_in_context_refs
+    error: null
+    reason: external references not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.positions_driven_by_globals
+    error: null
+    reason: assembly equations not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.mates_described
+    error: null
+    reason: mate descriptions not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.subassemblies
+    error: null
+    reason: subassembly mates not extracted; assembly rules evaluated for the root
+      document only
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: modeling.resilience
+    error: null
+    reason: 0 checked, 0 skipped, 2 unresolved rule result(s) over 1 document(s);
+      4 finding(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.drawing.model_items_preferred
+    error: null
+    reason: drawing-owned vs model dimensions not extracted; advisory by decision
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.structural_vs_cosmetic_fillets
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.core_shaping_cuts
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.description_quality
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.sketch_plane_choice
+    error: null
+    reason: judgement-only; sketch planes not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.avoid_multibody
+    error: null
+    reason: judgement-only; body intent not decidable
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  documents:
+  - doc:1
+  exceptions: []
+  findings:
+  - calculation: null
+    capture_ids: []
+    check: rms.assembly.mates_to_reference_geometry
+    component_ids:
+    - cmp:0001
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-001
+    inputs:
+    - mate:0001 COINCIDENT [mate] persist_ref=bWF0ZTowMDAx scope=doc:1
+    - cmp:0002 base-1 [component] persist_ref=Y21wOjAwMDI= scope=doc:1
+    - cmp:0003 plate-1 [component] persist_ref=Y21wOjAwMDM= scope=doc:1
+    observed: mate:0001 (COINCIDENT) references swSelFACES on base-1, swSelFACES on
+      plate-1
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/rms-assembly.SLDASM
+      vault_version: 1
+    recommended_action: Re-mate to reference planes, axes, points or coordinate systems
+      so the mates survive a change to the faces and edges they sit on.
+    requirement: Mates reference planes, axes, points, or coordinate systems, not
+      faces, edges, or vertices.
+    severity: medium
+    status: demonstrated
+    title: mate:0001 (COINCIDENT) references swSelFACES on base-1, swSelFACES on plate-1
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.assembly.first_component_fixed
+    component_ids:
+    - cmp:0001
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-002
+    inputs:
+    - cmp:0002 base-1 [component] persist_ref=Y21wOjAwMDI= scope=doc:1
+    observed: the first component base-1 is not fixed and is under_defined
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/rms-assembly.SLDASM
+      vault_version: 1
+    recommended_action: Fix the first component, or fully constrain it against the
+      assembly's reference geometry, so the rest of the assembly has something to
+      build on.
+    requirement: The first component is fixed, or fully constrained.
+    severity: medium
+    status: demonstrated
+    title: the first component base-1 is not fixed and is under_defined
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.assembly.mate_chain_depth
+    component_ids:
+    - cmp:0001
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-003
+    inputs:
+    - cmp:0007 link-4 [component] persist_ref=Y21wOjAwMDc= scope=doc:1
+    observed: '1 component(s) are more than 3 mate(s) from the fixed root plate-1:
+      link-4 at 4'
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/rms-assembly.SLDASM
+      vault_version: 1
+    recommended_action: Mate these components to the fixed root or to a component
+      nearer it, so no chain is longer than 3 mate(s).
+    requirement: No component is more than limit mates from the fixed root (default
+      3).
+    severity: low
+    status: suspected
+    title: '1 component(s) are more than 3 mate(s) from the fixed root plate-1: link-4
+      at 4'
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.assembly.toolbox_parts_not_configurations
+    component_ids:
+    - cmp:0001
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-004
+    inputs:
+    - cmp:0008 screw-1 [component] persist_ref=Y21wOjAwMDg= scope=doc:1
+    - cmp:0009 screw-2 [component] persist_ref=Y21wOjAwMDk= scope=doc:1
+    observed: 'Toolbox document doc:6 is inserted as 2 configuration(s) (M4x10, M6x20)
+      across 2 instance(s): screw-1, screw-2'
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/rms-assembly.SLDASM
+      vault_version: 1
+    recommended_action: Insert each Toolbox size as its own part file rather than
+      as another configuration of one file, so a size change cannot follow every instance.
+    requirement: Toolbox hardware is inserted as parts, not as configurations of one
+      file.
+    severity: low
+    status: suspected
+    title: Toolbox document doc:6 is inserted as 2 configuration(s) (M4x10, M6x20)
+      across…
+    tool_result_ids:
+    - 0

@@ -281,6 +281,51 @@ public sealed class TerminalPageContractTests
                 + "that will work (decision 2026-09-13: the Gemini terminal is not in v1).");
     }
 
+    // ---- rule 4: the page and its markup agree on every id ---------------------------------------
+
+    /// <summary>
+    /// Every `document.getElementById('x')` in the page's scripts finds an `id="x"` in
+    /// `index.html`.
+    ///
+    /// A typo here is not a degraded page, it is a dead one: `start()` renders the evidence
+    /// line before it posts `ready`, so one null element throws inside `start`, `ready` is
+    /// never sent, the CLI dropdown stays empty and Start stays disabled with no banner - the
+    /// silent failure the install-steps view exists to avoid, arriving through the page
+    /// instead.
+    ///
+    /// Only this direction. An id that no script looks up is ordinary - `evidence` is styled
+    /// by `term.css` and named by nothing else - while a lookup with no element behind it can
+    /// only be a mistake.
+    /// </summary>
+    [Fact]
+    public void EveryElementThePageLooksUpExistsInTheMarkup()
+    {
+        string html = TerminalPageFiles.IndexHtml();
+        var missing = new List<string>();
+        var found = 0;
+
+        foreach (KeyValuePair<string, string> script in TerminalPageFiles.Scripts())
+        {
+            foreach (Match lookup in ElementLookup.Matches(Strip(script.Value)))
+            {
+                found++;
+                string id = lookup.Groups[1].Value;
+                if (!Regex.IsMatch(html, "\\bid=\"" + Regex.Escape(id) + "\""))
+                {
+                    missing.Add($"{script.Key} looks up `{id}`");
+                }
+            }
+        }
+
+        // A scan that matched nothing would pass whatever the page did.
+        Assert.True(found >= 10, $"Only {found} element lookups were found in the page's scripts.");
+
+        Assert.True(
+            missing.Count == 0,
+            "The Terminal page's script looks up elements index.html does not have:"
+                + Environment.NewLine + string.Join(Environment.NewLine, missing));
+    }
+
     // ---- the Terminal tab ----------------------------------------------------------------------
 
     [Fact]
@@ -357,6 +402,114 @@ public sealed class TerminalPageContractTests
     }
 
     /// <summary>
+    /// The invariant the Ask tab rests on: `terminal.start` and `evidence.extract` resolve to
+    /// one folder.
+    ///
+    /// Both go through `TerminalRunFolder`, and it used to create a folder per call - and
+    /// `RunFolders.Create` disambiguates a name that already exists, so a Start followed by an
+    /// Extract gave the CLI `<ts>-terminal` and the package `<ts>-terminal-2`. The MCP server
+    /// reads the folder it was launched over, so that is a package nothing ever reads, with a
+    /// page saying the extraction worked.
+    /// </summary>
+    [Fact]
+    public void TheTerminalRunFolderIsCreatedOnceAndThenRemembered()
+    {
+        string root = NewRunRoot();
+        try
+        {
+            var options = new TaskPaneOptions(new UnusedEnvironmentFactory(), root)
+            {
+                Now = () => new DateTime(2026, 9, 13, 14, 5, 6),
+            };
+
+            WithPane(options, pane =>
+            {
+                string first = pane.TerminalRunFolder();
+                string second = pane.TerminalRunFolder();
+
+                Assert.Equal(first, second);
+                Assert.Equal(new[] { first }, Directory.GetDirectories(root));
+
+                // And it is what the pane calls "this session" from then on: the step strip,
+                // `init.evidence` and the Extract tab's suggested folder all read this.
+                Assert.Equal(first, pane.SessionRunDirectory);
+                return 0;
+            });
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    /// <summary>
+    /// Until it is asked for, there is no session: the tab is looked at far more often than it
+    /// is started in, and a folder per glance would fill the run root with empty timestamps.
+    /// </summary>
+    [Fact]
+    public void TheSessionFolderIsNullUntilSomethingAsksForTheTerminalFolder()
+    {
+        string root = NewRunRoot();
+        try
+        {
+            var options = new TaskPaneOptions(new UnusedEnvironmentFactory(), root)
+            {
+                Now = () => new DateTime(2026, 9, 13, 14, 5, 6),
+            };
+
+            WithPane(options, pane =>
+            {
+                Assert.Null(pane.SessionRunDirectory);
+                Assert.Empty(Directory.GetDirectories(root));
+                return 0;
+            });
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    /// <summary>
+    /// The remembered folder gets the same treatment as a review's: one that has gone missing
+    /// underneath the pane is not this session's folder any more, and the next call creates a
+    /// new one rather than handing back a path with nothing behind it.
+    /// </summary>
+    [Fact]
+    public void ARememberedTerminalFolderThatVanishesIsReplacedRatherThanReturned()
+    {
+        string root = NewRunRoot();
+        var now = new DateTime(2026, 9, 13, 14, 5, 6);
+        try
+        {
+            var options = new TaskPaneOptions(new UnusedEnvironmentFactory(), root)
+            {
+                Now = () => now,
+            };
+
+            WithPane(options, pane =>
+            {
+                string first = pane.TerminalRunFolder();
+                Directory.Delete(first, recursive: true);
+
+                Assert.Null(pane.SessionRunDirectory);
+
+                now = now.AddMinutes(1);
+                string second = pane.TerminalRunFolder();
+
+                Assert.NotEqual(first, second);
+                Assert.True(Directory.Exists(second), second + " was named but never created.");
+                Assert.Equal(second, pane.SessionRunDirectory);
+                return 0;
+            });
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    /// <summary>
     /// A session folder that has been deleted underneath the pane - the engineer tidied up, or a
     /// network share went away - must not take the Terminal tab down with it. The fallback is the
     /// same folder the no-session case creates.
@@ -419,6 +572,10 @@ public sealed class TerminalPageContractTests
 
     private static readonly Regex TypeProperty = new Regex(
         @"\btype\s*:\s*['""]([a-z][a-z0-9_.]*)['""]", RegexOptions.Compiled);
+
+    /// <summary>`document.getElementById('x')`, in either quote.</summary>
+    private static readonly Regex ElementLookup = new Regex(
+        @"document\s*\.\s*getElementById\s*\(\s*['""]([^'""]+)['""]\s*\)", RegexOptions.Compiled);
 
     private static readonly Regex StringLiteral = new Regex(
         @"'([^'\\\r\n]*)'|""([^""\\\r\n]*)""", RegexOptions.Compiled);
@@ -616,7 +773,7 @@ public sealed class TerminalPageContractTests
 
             // A parser that quietly matched nothing would make every test above vacuous.
             Assert.True(
-                pageToHost.Count == 5 && unsolicited.Count == 3 && hostToPage.Count >= 6,
+                pageToHost.Count == 6 && unsolicited.Count == 3 && hostToPage.Count >= 7,
                 $"contracts/pane-host-messages.md did not parse: {pageToHost.Count} terminal "
                     + $"page-to-host rows, {unsolicited.Count} unsolicited, {hostToPage.Count} "
                     + "host-to-page types. Did the tables or the headings change shape?");

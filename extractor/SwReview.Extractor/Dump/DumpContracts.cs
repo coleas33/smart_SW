@@ -23,6 +23,16 @@ public enum FeatureScope
     None,
 }
 
+/// <summary>What <c>--equations</c> asked for.</summary>
+public enum EquationScope
+{
+    /// <summary>Read every resolved part document's equation manager into <c>equations[]</c>.</summary>
+    On,
+
+    /// <summary>Read none of them; the two parametric rules then have nothing to read.</summary>
+    Off,
+}
+
 /// <summary>What <c>--faces</c> asked for.</summary>
 public enum FaceScope
 {
@@ -47,6 +57,8 @@ public sealed class DumpOptions
     public FaceScope Faces { get; set; } = FaceScope.Needed;
 
     public FeatureScope Features { get; set; } = FeatureScope.Tree;
+
+    public EquationScope Equations { get; set; } = EquationScope.On;
 }
 
 /// <summary>
@@ -303,6 +315,12 @@ public interface IMateSource
 public interface IFeatureSource
 {
     IReadOnlyList<Feature> Dump(DumpScope scope);
+}
+
+/// <summary>Equation managers of every resolved part document (T038).</summary>
+public interface IEquationSource
+{
+    IReadOnlyList<Equation> Dump(DumpScope scope);
 }
 
 /// <summary>Hole Wizard features and cosmetic threads (T052).</summary>

@@ -37,6 +37,34 @@ public sealed class TerminalHostOptions
 
     public Func<string, CodexProfile> WriteProfile { get; }
 
+    /// <summary>
+    /// The current session's run folder without creating one, for `init.evidence`
+    /// (<c>TaskPaneControl.SessionRunDirectory</c>). Null when the pane has none yet.
+    ///
+    /// Separate from <see cref="RunFolder"/> because the two questions are different: `ready`
+    /// arrives every time the tab is looked at and must not leave a folder behind, while
+    /// `terminal.start` and `evidence.extract` need a folder to exist.
+    /// </summary>
+    public Func<string?> SessionFolder { get; set; } = () => null;
+
+    /// <summary>
+    /// The extractor `evidence.extract` runs: the same <see cref="IReviewDump"/> the Review tab
+    /// uses, so the Ask tab's evidence is the review's evidence and not a second kind of it.
+    ///
+    /// Null when the pane has no review host - the Task Pane exists before SOLIDWORKS has a
+    /// document - and the message is then refused with a reason rather than quietly ignored.
+    /// </summary>
+    public IReviewDump? Dump { get; set; }
+
+    /// <summary>
+    /// Called after `evidence.extract` has written a package: the pane repaints its step strip,
+    /// which has just stopped being true.
+    ///
+    /// Only on success, and never on the UI thread - this host runs on a pump thread of its
+    /// own, so the pane marshals for itself (<c>TaskPaneControl.RefreshSteps</c>).
+    /// </summary>
+    public Action Extracted { get; set; } = () => { };
+
     /// <summary>What the dropdown is built from. Blocks for up to 20 seconds per CLI, which is
     /// why nothing here may run on the SOLIDWORKS UI thread.</summary>
     public Func<IReadOnlyList<CliDiscovery>> LocateClis { get; set; } =
@@ -96,7 +124,7 @@ public sealed class TerminalHostOptions
 }
 
 /// <summary>
-/// The Terminal page's other half: the five `Terminal page -> host` rows of
+/// The Terminal page's other half: the six `Terminal page -> host` rows of
 /// `contracts/pane-host-messages.md`, and the three the host sends unasked.
 ///
 /// It is to the Terminal tab what <see cref="ReviewHost"/> is to the Review tab, and it exists
@@ -150,6 +178,7 @@ public sealed class TerminalHost : IDisposable
     private readonly object _gate = new object();
 
     private ITerminalSession? _session;
+    private string? _sessionRunDirectory;
     private string? _chatLogPath;
     private int _chatLogCount = -1;
     private Timer? _chatLogTimer;
@@ -180,6 +209,27 @@ public sealed class TerminalHost : IDisposable
     }
 
     /// <summary>
+    /// The folder the running CLI was started in, or null when nothing is running.
+    ///
+    /// Not the same question as <see cref="TerminalHostOptions.RunFolder"/>. The pane's answer
+    /// moves - it prefers the review's latest session folder - while the CLI's cannot: its
+    /// working directory and its MCP server were fixed when it started, and the server re-reads
+    /// `package.json` in that folder and nowhere else. So while a terminal is live, "this
+    /// session's run folder" is this one, and a package written anywhere else is a package that
+    /// CLI will never see.
+    /// </summary>
+    private string? StartedRunDirectory
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _session != null && !_session.HasExited ? _sessionRunDirectory : null;
+            }
+        }
+    }
+
+    /// <summary>
     /// Builds the host the pane uses and subscribes it to the Terminal page.
     ///
     /// One call, because this is the whole wiring: the add-in holds the result and disposes it.
@@ -193,11 +243,15 @@ public sealed class TerminalHost : IDisposable
     /// <param name="settings">The settings in force, read fresh at every start: the `python`
     /// field decides how `swreview mcp` is spelled and `terminal_cli` is the last choice.</param>
     /// <param name="job">The add-in's kill-on-close job.</param>
+    /// <param name="dump">The review's own extractor, for `evidence.extract`. The same
+    /// instance the Review tab runs: the Ask tab's evidence has to be the review's evidence.
+    /// Null before there is a review host, which is a refusal with a reason, not a crash.</param>
     public static TerminalHost Attach(
         TaskPaneControl pane,
         IToolServiceAccess toolService,
         Func<UserSettings> settings,
-        JobObject? job)
+        JobObject? job,
+        IReviewDump? dump)
     {
         if (pane == null)
         {
@@ -227,6 +281,11 @@ public sealed class TerminalHost : IDisposable
             LastChoice = () => settings().TerminalCli,
             Job = job,
             Secrets = () => new[] { toolService.GeneralChatBridge?.Secret },
+
+            // Asked, not created: `ready` arrives whenever the tab is looked at.
+            SessionFolder = () => pane.SessionRunDirectory,
+            Dump = dump,
+            Extracted = pane.RefreshSteps,
         };
 
         var host = new TerminalHost(options);
@@ -420,6 +479,10 @@ public sealed class TerminalHost : IDisposable
                 Ready(id, payload);
                 return;
 
+            case "evidence.extract":
+                Extract(id);
+                return;
+
             case "terminal.start":
                 Start(id, payload);
                 return;
@@ -470,6 +533,120 @@ public sealed class TerminalHost : IDisposable
         {
             { "clis", clis.Select(Row).ToArray() },
             { "last_choice", LastChoice() },
+            { "evidence", Evidence() },
+        });
+    }
+
+    /// <summary>
+    /// `init.evidence`: whether this session's run folder already holds a package, and which
+    /// folder that is.
+    ///
+    /// The page needs it before Start. A CLI started over a folder with no evidence in it can
+    /// answer nothing about the model - every tool call comes back as an error naming the
+    /// missing file - and the engineer's only clue used to be those errors, one per question.
+    ///
+    /// While a terminal is running the folder is the one it was started in
+    /// (<see cref="StartedRunDirectory"/>), because the sentence the page shows is about the
+    /// folder that CLI reads.
+    /// </summary>
+    private Dictionary<string, object?> Evidence()
+    {
+        string? folder = StartedRunDirectory;
+        try
+        {
+            folder = folder ?? _options.SessionFolder();
+        }
+        catch (Exception)
+        {
+            // A pane that cannot answer is the same as a session with no folder yet.
+            folder = null;
+        }
+
+        return new Dictionary<string, object?>
+        {
+            { "present", RunFolders.HasEvidence(folder) },
+            { "run_dir", folder },
+        };
+    }
+
+    // ---- evidence.extract ----------------------------------------------------------------------
+
+    /// <summary>
+    /// The Ask tab's Extract evidence button: run the review's own dump into this session's
+    /// run folder, and say what came out.
+    ///
+    /// A terminal that is already running gets its package written into the folder it was
+    /// started in (<see cref="StartedRunDirectory"/>), and one that has not started yet creates
+    /// the folder it will be started in, through the same
+    /// <see cref="TerminalHostOptions.RunFolder"/> callback `terminal.start` uses. Anywhere
+    /// else would be a package the CLI's MCP server never reads - and the page would still say
+    /// the extraction worked, which is a silent failure dressed as a success.
+    ///
+    /// The dump's progress is dropped rather than posted: the contract gives the Terminal page
+    /// no progress message, and inventing one here would be a message the page does not handle.
+    /// A dump of a document an engineer has open takes seconds, and the reply is the end of it.
+    /// </summary>
+    private void Extract(string? id)
+    {
+        IReviewDump? dump = _options.Dump;
+        if (dump == null)
+        {
+            SendError(
+                id,
+                "ExtractionUnavailable",
+                "this pane cannot extract evidence: it is not attached to a SOLIDWORKS document "
+                + "yet. Open a document, then try again.",
+                null);
+            return;
+        }
+
+        string? runDirectory = StartedRunDirectory;
+        if (runDirectory == null)
+        {
+            try
+            {
+                runDirectory = _options.RunFolder();
+            }
+            catch (Exception failure)
+            {
+                SendError(id, "RunFolderFailed", failure.Message, null);
+                return;
+            }
+        }
+
+        DumpSummary summary;
+        try
+        {
+            summary = dump.Run(runDirectory, message => { });
+        }
+        catch (Exception failure)
+        {
+            // The folder is left behind on purpose: whatever the dump did write is the evidence
+            // for why it stopped (constitution Principle I), exactly as on the Review side.
+            SendError(id, "ExtractionFailed", failure.Message, null);
+            return;
+        }
+
+        try
+        {
+            _options.Extracted();
+        }
+        catch (Exception)
+        {
+            // A pane that cannot repaint is not a reason to withhold the reply.
+        }
+
+        Send("evidence.extracted", id, new Dictionary<string, object?>
+        {
+            { "run_dir", runDirectory },
+            {
+                "counts",
+                new Dictionary<string, object?>
+                {
+                    { "components", summary.Components },
+                    { "gaps", summary.Gaps },
+                }
+            },
         });
     }
 
@@ -673,6 +850,7 @@ public sealed class TerminalHost : IDisposable
         lock (_gate)
         {
             _session = session;
+            _sessionRunDirectory = runDirectory;
         }
 
         Send("terminal.started", id, new Dictionary<string, object?>
@@ -788,6 +966,7 @@ public sealed class TerminalHost : IDisposable
         {
             session = _session;
             _session = null;
+            _sessionRunDirectory = null;
         }
 
         StopChatLog();

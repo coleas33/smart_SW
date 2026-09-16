@@ -35,6 +35,17 @@
 <p id="banner" class="banner" hidden></p>
 
 <!--
+  Whether this session's run folder holds an evidence package, and the button that writes one
+  (`evidence.extract`, contracts/pane-host-messages.md). It sits above the screen because it is
+  what to read before pressing Start: a CLI started over an empty folder can answer nothing
+  about the model, and used to say so one failed tool call at a time.
+-->
+<p id="evidence" class="evidence">
+  <span id="evidence-text"></span>
+  <button type="button" id="extract" hidden>Extract evidence</button>
+</p>
+
+<!--
   The install-steps view (FR-023, spec scenario 4). Shown instead of an empty terminal when the
   chosen CLI is missing, too old, unsupported or - for Gemini in this version - deferred. The
   steps are a <pre> because they are commands the engineer copies.

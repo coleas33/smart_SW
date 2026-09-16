@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
@@ -85,7 +86,7 @@ public sealed class TaskPaneOptions
     /// <summary>
     /// The run folder of the chat session the pane is showing, or null when there is none.
     ///
-    /// The Terminal tab asks before it creates one of its own (contracts/pane-host-messages.md):
+    /// The Ask tab asks before it creates one of its own (contracts/pane-host-messages.md):
     /// a terminal started after a review belongs in that review's folder, so the CLI's generated
     /// profile, its working directory and the evidence it is being asked about are one place.
     /// It is a callback rather than a value because the answer changes every time a review
@@ -97,25 +98,52 @@ public sealed class TaskPaneOptions
     /// <c>ReviewHostOptions.Now</c>.</summary>
     public Func<DateTime> Now { get; set; } = () => DateTime.Now;
 
+    /// <summary>
+    /// Whether a document is open in SOLIDWORKS - step 1 of <see cref="StepStrip"/>.
+    ///
+    /// A callback rather than a value for the same reason
+    /// <see cref="CurrentSessionRunDirectory"/> is one: the pane is built once and the answer
+    /// changes every time the engineer opens or closes a model. The add-in feeds it from the
+    /// same <c>CurrentDocument</c> the Review tab is refused by, so the strip and the Review
+    /// button can never disagree about whether there is anything to review.
+    /// </summary>
+    public Func<bool> DocumentPresent { get; set; } = () => false;
+
+    /// <summary>
+    /// Whether the current session's run folder already holds an evidence package - step 2.
+    ///
+    /// The add-in answers it with <see cref="RunFolders.HasEvidence"/> over
+    /// <see cref="TaskPaneControl.SessionRunDirectory"/>, which is the same folder the Terminal
+    /// tab starts a CLI in and the same one the Extract tab is opened on.
+    /// </summary>
+    public Func<bool> EvidencePresent { get; set; } = () => false;
+
     private static string DefaultWebFolder() =>
         Path.Combine(Path.GetDirectoryName(typeof(TaskPaneOptions).Assembly.Location) ?? ".", "web");
 }
 
 /// <summary>
-/// The Task Pane: <b>Review</b> (the chat page in WebView2), <b>Terminal</b> (US3) and
-/// <b>Actions</b> (the three buttons that write an evidence package by hand).
+/// The Task Pane: <b>Review</b> (the chat page in WebView2), <b>Ask</b> (the CLI terminal,
+/// US3) and <b>Extract</b> (the three buttons that write an evidence package by hand).
+///
+/// The tabs are named for what the engineer gets, not for what the code does, and each one
+/// carries the same sentence twice - as a banner across the top of the tab and as the tab's
+/// tooltip - because a pane whose three tabs are nouns tells a first-time user nothing about
+/// which of them to press. Above all three is the <see cref="StepStrip"/>: open a document,
+/// extract evidence, review or ask, each done or pending with the reason. None of this is
+/// decoration; every one of these sentences replaces a question the pane was being asked.
 ///
 /// Four rules live here because nowhere else can enforce them:
 ///
 /// <b>One environment for the process.</b> <see cref="EnvironmentAsync"/> creates it once and
-/// hands the same task to every caller, so the Review and Terminal tabs share one browser
+/// hands the same task to every caller, so the Review and Ask tabs share one browser
 /// process over one user data folder. Two environments over the same folder with different
 /// options fail at runtime (contracts/pane-host-messages.md).
 ///
 /// <b>Nothing thrown here reaches SOLIDWORKS.</b> <see cref="InitializeAsync"/> never throws.
 /// The add-in is loaded in-process and an exception out of a Task Pane control on the
 /// application thread is SOLIDWORKS' problem, not ours; a missing runtime ends as a panel that
-/// says what to install and where the run folder is, with the Actions tab still working.
+/// says what to install and where the run folder is, with the Extract tab still working.
 ///
 /// <b>The page stays on its own origin.</b> `NavigationStarting` and `NewWindowRequested`
 /// cancel anything that is not `https://swreview.invalid/`, so a link in text a model wrote
@@ -136,51 +164,85 @@ public sealed class TaskPaneControl : UserControl
     /// <summary>The Review page inside the mapped folder.</summary>
     public const string ReviewPageUrl = PageOrigin + "/Review/ReviewPage/index.html";
 
-    /// <summary>The Terminal page inside the same mapped folder (T060).</summary>
+    /// <summary>The Ask tab's terminal page inside the same mapped folder (T060).</summary>
     public const string TerminalPageUrl = PageOrigin + "/Terminal/TerminalPage/index.html";
 
     /// <summary>Where the Evergreen runtime comes from, shown when it is missing.</summary>
     public const string RuntimeDownloadUrl = "https://developer.microsoft.com/en-us/microsoft-edge/webview2/";
+
+    /// <summary>What the <b>Review</b> tab is for, as its banner and as its tooltip.</summary>
+    public const string ReviewPurpose =
+        "Automated design review of the open assembly: press Review to extract evidence, run "
+        + "the reviewer, and discuss its findings. Provider, model, and API key live under "
+        + "Settings.";
+
+    /// <summary>What the <b>Ask</b> tab is for. The read-only promise is the point of it.</summary>
+    public const string AskPurpose =
+        "Ask Codex anything about the open model. Read-only: it can query the extracted "
+        + "evidence, measure, and capture, but cannot change or save anything.";
+
+    /// <summary>What the <b>Extract</b> tab is for, and why most engineers never need it.</summary>
+    public const string ExtractPurpose =
+        "Manual extraction for the command line: write package.json, the evidence package "
+        + "describing the open document (components, mates, holes, fasteners, geometry), add "
+        + "interference results, capture the current selection. The Review tab does this for "
+        + "you automatically.";
 
     private readonly TaskPaneOptions _options;
     private readonly TabControl _tabs;
     private readonly TabPage _reviewTab;
     private readonly TabPage _terminalTab;
     private readonly ActionsPanel _actions;
+    private readonly StepStrip _steps;
 
     private Task<CoreWebView2Environment>? _environment;
     private WebView2? _reviewView;
     private WebView2? _terminalView;
     private bool _initializing;
 
+    /// <summary>The terminal-first run folder this pane created, once it has created one.</summary>
+    private string? _terminalRunFolder;
+
     public TaskPaneControl(TaskPaneOptions options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
 
-        _reviewTab = new TabPage("Review") { Padding = new Padding(0), UseVisualStyleBackColor = true };
-        _reviewTab.Controls.Add(Note("Starting the review page..."));
+        _reviewTab = NewTab("Review", ReviewPurpose, Note("Starting the review page..."));
+        _terminalTab = NewTab("Ask", AskPurpose, Note("Starting the Ask page..."));
 
-        _terminalTab = new TabPage("Terminal") { Padding = new Padding(0), UseVisualStyleBackColor = true };
-        _terminalTab.Controls.Add(Note("Starting the terminal page..."));
+        _actions = new ActionsPanel();
+        TabPage actionsTab = NewTab("Extract", ExtractPurpose, _actions);
+        actionsTab.Padding = new Padding(6);
 
-        _actions = new ActionsPanel { Dock = DockStyle.Fill };
-        var actionsTab = new TabPage("Actions") { Padding = new Padding(6), UseVisualStyleBackColor = true };
-        actionsTab.Controls.Add(_actions);
-
-        _tabs = new TabControl { Dock = DockStyle.Fill };
+        _tabs = new TabControl { Dock = DockStyle.Fill, ShowToolTips = true };
         _tabs.TabPages.Add(_reviewTab);
         _tabs.TabPages.Add(_terminalTab);
         _tabs.TabPages.Add(actionsTab);
 
+        _steps = new StepStrip { Dock = DockStyle.Top };
+
         MinimumSize = new Size(260, 320);
+
+        // The tabs first and the strip second: WinForms docks the last-added control first, so
+        // the strip added after the Fill takes its band off the top and the tabs get the rest.
         Controls.Add(_tabs);
+        Controls.Add(_steps);
+
+        // Switching tabs is the moment an engineer is looking at the strip, and it costs a
+        // file-exists check; the add-in refreshes it from the events that actually change it.
+        _tabs.SelectedIndexChanged += (sender, args) => RefreshSteps();
 
         ReviewChannel = new PageChannel(this, () => _reviewView);
         TerminalChannel = new PageChannel(this, () => _terminalView);
+
+        RefreshSteps();
     }
 
-    /// <summary>The three buttons: Dump IR, Interference, Capture selection.</summary>
+    /// <summary>The three buttons: Extract evidence, Interference, Capture selection.</summary>
     public ActionsPanel Actions => _actions;
+
+    /// <summary>The always-visible "1, 2, 3" above the tabs.</summary>
+    public StepStrip Steps => _steps;
 
     /// <summary>Posts host messages to the Review page, from any thread.</summary>
     public IPageChannel ReviewChannel { get; }
@@ -240,7 +302,7 @@ public sealed class TaskPaneControl : UserControl
 
     /// <summary>
     /// Creates the environment and loads the Review page. Never throws: a failure becomes the
-    /// fallback panel, and the Actions tab keeps working.
+    /// fallback panel, and the Extract tab keeps working.
     /// </summary>
     public async Task InitializeAsync()
     {
@@ -284,9 +346,8 @@ public sealed class TaskPaneControl : UserControl
         string url,
         EventHandler<CoreWebView2WebMessageReceivedEventArgs> onMessage)
     {
-        var view = new WebView2 { Dock = DockStyle.Fill };
-        tab.Controls.Clear();
-        tab.Controls.Add(view);
+        var view = new WebView2();
+        SetTabContent(tab, view);
 
         await view.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
 
@@ -306,25 +367,120 @@ public sealed class TaskPaneControl : UserControl
     }
 
     /// <summary>
-    /// Where the Terminal tab runs (contracts/pane-host-messages.md): the current chat session's
-    /// run folder when there is one, and otherwise a fresh
+    /// The folder this pane's session is working in, or null when there is none yet.
+    ///
+    /// Two sources, in order: the chat session the Review tab is showing, and - when there has
+    /// been no review - the terminal-first folder this pane created for the Ask tab. One or the
+    /// other is what `init.evidence` describes, what the Extract tab opens on, and what the
+    /// step strip means by "this session".
+    ///
+    /// Nothing is created here. It is asked on every repaint of the strip, and a run folder per
+    /// glance would fill the run root with empty timestamps.
+    /// </summary>
+    public string? SessionRunDirectory
+    {
+        get
+        {
+            string? session = _options.CurrentSessionRunDirectory();
+            if (!string.IsNullOrWhiteSpace(session) && Directory.Exists(session))
+            {
+                return session;
+            }
+
+            // A folder that has gone missing underneath the pane - tidied up, or on a share
+            // that went away - is not this session's folder any more.
+            string? terminal = _terminalRunFolder;
+            return !string.IsNullOrWhiteSpace(terminal) && Directory.Exists(terminal)
+                ? terminal
+                : null;
+        }
+    }
+
+    /// <summary>
+    /// Where the Ask tab runs (contracts/pane-host-messages.md): <see cref="SessionRunDirectory"/>
+    /// when there is one, and otherwise a fresh
     /// `&lt;run_root&gt;/&lt;yyyyMMdd-HHmmss&gt;-terminal` created through the same
     /// <see cref="RunFolders"/> helper <see cref="ReviewHost"/> names its own folders with.
     ///
     /// The tab is reachable with no review and no document open, so the folder is created rather
-    /// than assumed; and a session folder that has gone missing underneath the pane - tidied up,
-    /// or on a share that went away - falls back to a fresh one rather than handing a CLI a
-    /// working directory that is not there.
+    /// than assumed. The one it creates is remembered, because everything that follows - the
+    /// CLI's working directory, the package `evidence.extract` writes, the MCP server's own
+    /// run folder - has to be the same folder, and the next call must not make a second one.
     /// </summary>
     public string TerminalRunFolder()
     {
-        string? session = _options.CurrentSessionRunDirectory();
-        if (!string.IsNullOrWhiteSpace(session) && Directory.Exists(session))
+        string? session = SessionRunDirectory;
+        if (session != null)
         {
-            return session!;
+            return session;
         }
 
-        return RunFolders.CreateForTerminal(_options.RunRoot, _options.Now());
+        string created = RunFolders.CreateForTerminal(_options.RunRoot, _options.Now());
+        _terminalRunFolder = created;
+        return created;
+    }
+
+    /// <summary>
+    /// Repaints the step strip and re-suggests the Extract tab's output folder, from any thread.
+    ///
+    /// Called by the add-in whenever one of the two answers can have changed - the active
+    /// document, and the end of a dump - and by the pane itself when a tab is selected, which
+    /// is the moment an engineer is looking at it. Never throws: both callbacks reach into
+    /// SOLIDWORKS, and this runs on the application thread.
+    /// </summary>
+    public void RefreshSteps()
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        try
+        {
+            if (IsHandleCreated && InvokeRequired)
+            {
+                BeginInvoke(new Action(RefreshOnUiThread));
+                return;
+            }
+
+            RefreshOnUiThread();
+        }
+        catch (Exception)
+        {
+            // The pane closed between the check and the call. There is nobody left to tell.
+        }
+    }
+
+    private void RefreshOnUiThread()
+    {
+        bool document = Ask(_options.DocumentPresent);
+        bool evidence = Ask(_options.EvidencePresent);
+
+        _steps.Show(document, evidence);
+
+        try
+        {
+            _actions.SuggestOutputDirectory(SessionRunDirectory);
+        }
+        catch (Exception)
+        {
+            // The suggestion is a convenience; the engineer can always choose a folder.
+        }
+    }
+
+    /// <summary>One step callback, answered "no" when it cannot answer at all.</summary>
+    private static bool Ask(Func<bool> question)
+    {
+        try
+        {
+            return question();
+        }
+        catch (Exception)
+        {
+            // A SOLIDWORKS that will not answer is the same as nothing being open: the strip
+            // says the step is pending, which is the honest answer and the actionable one.
+            return false;
+        }
     }
 
     /// <summary>
@@ -393,15 +549,61 @@ public sealed class TaskPaneControl : UserControl
     {
         _reviewView = null;
         _terminalView = null;
-        Fill(_reviewTab, BuildFallback(failure));
-        Fill(_terminalTab, BuildFallback(failure));
+        SetTabContent(_reviewTab, BuildFallback(failure));
+        SetTabContent(_terminalTab, BuildFallback(failure));
     }
 
-    private static void Fill(TabPage page, Control content)
+    /// <summary>
+    /// One tab: its caption, the sentence that says what it is for, and what fills it.
+    ///
+    /// The sentence is held on the tab as its <see cref="TabPage.ToolTipText"/> and read back
+    /// from there by <see cref="SetTabContent"/> for the banner, so the two can never drift:
+    /// they are the same string in the same place, shown twice.
+    /// </summary>
+    private static TabPage NewTab(string caption, string purpose, Control content)
+    {
+        var tab = new TabPage(caption)
+        {
+            Padding = new Padding(0),
+            UseVisualStyleBackColor = true,
+            ToolTipText = purpose,
+        };
+
+        SetTabContent(tab, content);
+        return tab;
+    }
+
+    /// <summary>
+    /// Replaces what a tab is showing, keeping its purpose banner at the top.
+    ///
+    /// Every replacement goes through here - the page that loaded, the fallback panel that
+    /// replaced it - because a tab that lost its banner would lose it exactly when the engineer
+    /// most needs to know what the tab was for.
+    /// </summary>
+    private static void SetTabContent(TabPage page, Control content)
     {
         page.Controls.Clear();
+
+        // The content first and the banner second: WinForms docks the last-added control
+        // first, so the banner added after the Fill takes its band off the top.
+        content.Dock = DockStyle.Fill;
         page.Controls.Add(content);
+        page.Controls.Add(Banner(page.ToolTipText));
     }
+
+    /// <summary>
+    /// The purpose line across the top of a tab. `AutoSize` with `Dock = Top` is what makes it
+    /// grow to however many lines the sentence needs at the width the pane has been dragged to;
+    /// a fixed height would cut the sentence off on a narrow pane, which is the pane an
+    /// engineer docks beside a model.
+    /// </summary>
+    private static Label Banner(string text) => new Label
+    {
+        Dock = DockStyle.Top,
+        AutoSize = true,
+        Padding = new Padding(6, 6, 6, 6),
+        Text = text ?? string.Empty,
+    };
 
     private Control BuildFallback(Exception failure)
     {
@@ -414,8 +616,8 @@ public sealed class TaskPaneControl : UserControl
         panel.Controls.Add(Copyable(RuntimeDownloadUrl));
         panel.Controls.Add(Note("Install the Evergreen runtime from:"));
         panel.Controls.Add(Note(
-            "The Microsoft Edge WebView2 runtime is not available, so the Review and Terminal "
-            + "tabs cannot be shown. The Actions tab still works."));
+            "The Microsoft Edge WebView2 runtime is not available, so the Review and Ask "
+            + "tabs cannot be shown. The Extract tab still works."));
 
         return panel;
     }
@@ -520,8 +722,96 @@ public sealed class TaskPaneControl : UserControl
 }
 
 /// <summary>
-/// The Actions tab: a folder to write to, the three buttons contracts/cli.md names -
-/// <b>Dump IR</b>, <b>Interference</b> and <b>Capture selection</b> - and a status line.
+/// The three steps, above the tabs and always visible: open a document, extract evidence,
+/// then review or ask.
+///
+/// It exists because the pane had no order in it. Three tabs, all reachable, all of them
+/// answering "there is no document" or "there is no package" in their own words and in their
+/// own corner of the screen - so the engineer's question was never "what does this tab do" but
+/// "why did nothing happen". A step that is pending says why it is pending, in the same words
+/// everywhere, and a step that is done says so.
+///
+/// It decides nothing. The two facts it renders are answered by the add-in through
+/// <see cref="TaskPaneOptions.DocumentPresent"/> and
+/// <see cref="TaskPaneOptions.EvidencePresent"/>, which is what makes it testable with no
+/// SOLIDWORKS and no WebView2 at all.
+/// </summary>
+public sealed class StepStrip : UserControl
+{
+    /// <summary>Said of every step that is not blocked: the same word in all three rows.</summary>
+    public const string Ready = "ready";
+
+    /// <summary>Why step 1 - and everything after it - is pending.</summary>
+    public const string NoDocument = "no document open";
+
+    /// <summary>Why step 2 is pending. "This session" is the pane's current run folder.</summary>
+    public const string NoEvidence = "no evidence for this session yet";
+
+    private static readonly Color DoneColor = Color.FromArgb(0, 100, 0);
+
+    private readonly Label _document;
+    private readonly Label _evidence;
+    private readonly Label _work;
+
+    public StepStrip()
+    {
+        _work = Row();
+        _evidence = Row();
+        _document = Row();
+
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        Padding = new Padding(6, 4, 6, 4);
+
+        // Added last-to-first: DockStyle.Top stacks in reverse order of addition.
+        Controls.Add(_work);
+        Controls.Add(_evidence);
+        Controls.Add(_document);
+
+        Show(document: false, evidence: false);
+    }
+
+    /// <summary>The three lines as they read on screen, top to bottom. The tests' whole view.</summary>
+    public IReadOnlyList<string> Lines => new[] { _document.Text, _evidence.Text, _work.Text };
+
+    /// <summary>
+    /// Repaints the strip from the two facts it is given.
+    ///
+    /// Step 3 needs both of them. Evidence alone is not ready: `ReviewHost` refuses to start
+    /// without a document, so an engineer who extracted and then closed the model would be told
+    /// Review was ready and watch the button do nothing - which is the complaint this strip
+    /// exists to answer, printed by the strip itself.
+    ///
+    /// Its reason is the first thing in the way, because an engineer reading "Review or Ask -
+    /// pending" wants the blocker, not a pointer to another line of the strip.
+    /// </summary>
+    public void Show(bool document, bool evidence)
+    {
+        bool ready = document && evidence;
+
+        Set(_document, "1 Open a document", document, document ? Ready : NoDocument);
+        Set(_evidence, "2 Extract evidence", evidence, evidence ? Ready : NoEvidence);
+        Set(_work, "3 Review or Ask", ready, ready ? Ready : (document ? NoEvidence : NoDocument));
+    }
+
+    private static void Set(Label row, string step, bool done, string reason)
+    {
+        row.Text = step + " - " + (done ? "done" : "pending") + ": " + reason;
+        row.ForeColor = done ? DoneColor : SystemColors.GrayText;
+    }
+
+    private static Label Row() => new Label
+    {
+        Dock = DockStyle.Top,
+        AutoSize = true,
+        Padding = new Padding(0, 1, 0, 1),
+    };
+}
+
+/// <summary>
+/// The Extract tab: a folder to write to, the three buttons contracts/cli.md names -
+/// <b>Extract evidence</b>, <b>Interference</b> and <b>Capture selection</b> - and a status
+/// line.
 /// Deliberately plain WinForms with no designer file; the whole UI is seven controls, and a
 /// .Designer.cs would be more code than the panel.
 ///
@@ -531,8 +821,10 @@ public sealed class TaskPaneControl : UserControl
 /// line reports progress instead.
 ///
 /// All three buttons write into the same folder, because interference and capture append to
-/// the package.json that Dump IR wrote there: the results have to sit next to the components
-/// they name.
+/// the package.json that Extract evidence wrote there: the results have to sit next to the
+/// components they name. The folder is suggested rather than demanded: the pane opens it on
+/// the current session's run folder, which is where the Review and Ask tabs are already
+/// working, and an engineer who types another one keeps it.
 /// </summary>
 public sealed class ActionsPanel : UserControl
 {
@@ -542,6 +834,10 @@ public sealed class ActionsPanel : UserControl
     private readonly ComboBox _viewBox;
     private readonly TextBox _outputBox;
     private readonly Label _status;
+    private readonly ToolTip _tips = new ToolTip();
+
+    /// <summary>The last folder this panel put in the box itself, so an edit is never undone.</summary>
+    private string? _suggested;
 
     public ActionsPanel()
     {
@@ -564,10 +860,11 @@ public sealed class ActionsPanel : UserControl
         {
             Dock = DockStyle.Top,
             Height = 34,
-            Text = "Dump IR",
+            Text = "Extract evidence",
             Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold),
         };
         _dumpButton.Click += OnDump;
+        _tips.SetToolTip(_dumpButton, DumpToolTip);
 
         _interferenceButton = new Button
         {
@@ -576,6 +873,7 @@ public sealed class ActionsPanel : UserControl
             Text = "Interference",
         };
         _interferenceButton.Click += OnInterference;
+        _tips.SetToolTip(_interferenceButton, InterferenceToolTip);
 
         _viewBox = new ComboBox
         {
@@ -592,11 +890,12 @@ public sealed class ActionsPanel : UserControl
             Text = "Capture selection",
         };
         _captureButton.Click += OnCapture;
+        _tips.SetToolTip(_captureButton, CaptureToolTip);
 
         _status = new Label
         {
             Dock = DockStyle.Fill,
-            Text = "Open an assembly, choose a folder, then Dump IR.",
+            Text = "Open an assembly, choose an output folder, then Extract evidence.",
             AutoSize = false,
             Padding = new Padding(0, 8, 0, 0),
         };
@@ -613,6 +912,20 @@ public sealed class ActionsPanel : UserControl
         Controls.Add(browse);
         Controls.Add(_outputBox);
     }
+
+    /// <summary>What <b>Extract evidence</b> writes, in the words an engineer uses.</summary>
+    public const string DumpToolTip =
+        "Writes package.json, the evidence package describing the open document (components, "
+        + "mates, holes, fasteners, geometry). The reviewer and the Ask tab read this file "
+        + "instead of the live model.";
+
+    /// <summary>What <b>Interference</b> adds to that same file.</summary>
+    public const string InterferenceToolTip =
+        "Adds interference results to the evidence package.";
+
+    /// <summary>What <b>Capture selection</b> adds to it.</summary>
+    public const string CaptureToolTip =
+        "Adds a screenshot of the current selection to the evidence package.";
 
     /// <summary>Raised when the user asks for a dump. The add-in does the SOLIDWORKS work.</summary>
     public event EventHandler<string>? DumpRequested;
@@ -634,6 +947,37 @@ public sealed class ActionsPanel : UserControl
     {
         get => _outputBox.Text.Trim();
         set => _outputBox.Text = value;
+    }
+
+    /// <summary>The tooltip on one of this panel's controls, as the engineer sees it.</summary>
+    public string ToolTipFor(Control control) => _tips.GetToolTip(control);
+
+    /// <summary>
+    /// Offers <paramref name="folder"/> as the output folder, unless the engineer has chosen
+    /// one.
+    ///
+    /// The session's run folder is almost always the right answer - interference and capture
+    /// append to the package.json the Review or Ask tab already wrote there - but it is a
+    /// suggestion, not a setting: a box the engineer typed into, or browsed to, is left exactly
+    /// as it is, and so is one this panel has already suggested and had changed.
+    /// </summary>
+    public void SuggestOutputDirectory(string? folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder))
+        {
+            return;
+        }
+
+        string current = OutputDirectory;
+        bool ours = current.Length == 0
+            || string.Equals(current, _suggested, StringComparison.OrdinalIgnoreCase);
+        if (!ours)
+        {
+            return;
+        }
+
+        OutputDirectory = folder!;
+        _suggested = folder;
     }
 
     /// <summary>Shows one line of progress and repaints, since the STA thread is busy.</summary>

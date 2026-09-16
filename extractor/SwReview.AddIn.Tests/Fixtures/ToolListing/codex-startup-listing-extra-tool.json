@@ -486,6 +486,28 @@
             "type": "object",
             "title": "get_featureOutput"
           }
+        },
+        "list_equations": {
+          "name": "list_equations",
+          "description": "list_equations.",
+          "inputSchema": {
+            "properties": {},
+            "type": "object",
+            "title": "list_equationsArguments"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "title": "Result",
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object",
+            "title": "list_equationsOutput"
+          }
         }
       },
       "resources": [],

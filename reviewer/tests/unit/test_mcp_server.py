@@ -23,8 +23,11 @@ Four rules get the most attention, because each is a promise made somewhere else
 
 from __future__ import annotations
 
+import functools
 import json
 import re
+import threading
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -41,7 +44,8 @@ from pydantic import ValidationError
 from swreview.agent.providers.schema import tool_spec
 from swreview.exceptions import EXCEPTIONS_FILE_NAME
 from swreview.ir.loader import PACKAGE_FILE_NAME, save_package
-from swreview.ir.models import EvidencePackage
+from swreview.ir.models import Design, EvidencePackage
+from swreview.mcp import server as mcp_server
 from swreview.mcp.chat_log import CHAT_LOG_FILE_NAME
 from swreview.mcp.server import (
     MCP_BRIDGE_TOOL_FUNCTIONS,
@@ -77,6 +81,7 @@ QUERY_TOOLS: tuple[str, ...] = (
     "get_exceptions",
     "list_features",
     "get_feature",
+    "list_equations",
 )
 MEASUREMENT_TOOLS: tuple[str, ...] = (
     "measure_axis_distance",
@@ -529,6 +534,88 @@ def test_an_unreadable_exceptions_file_is_refused_at_startup(run_dir: Path) -> N
         create_server(run_dir)
 
 
+# --- a package that appears or changes while the CLI is running ---------------------------
+
+
+def test_a_package_written_after_the_cli_started_is_picked_up(
+    empty_run_dir: Path, make_package: Callable[..., EvidencePackage]
+) -> None:
+    """The Ask tab extracts evidence into the folder a CLI is already running in.
+
+    The toolset used to be bound once, at startup, so a `package.json` that appeared a
+    second later was never read and the only cure was to restart the CLI - which is exactly
+    what the Extract evidence button in the Task Pane asks the engineer not to do.
+    """
+    server = create_server(empty_run_dir)
+
+    async def scenario(
+        client: ClientSession,
+    ) -> tuple[types.CallToolResult, types.CallToolResult]:
+        before = await client.call_tool("get_package_summary", {})
+        save_package(make_package(), empty_run_dir)
+        after = await client.call_tool("get_package_summary", {})
+        return before, after
+
+    before, after = talk_to(server, scenario)
+
+    assert before.is_error is True
+    assert PACKAGE_FILE_NAME in payload_of(before)["error"]
+    assert after.is_error is False
+    assert payload_of(after)["design_name"] == "cover-assy"
+
+
+def test_a_package_rewritten_while_the_cli_runs_is_reloaded(
+    run_dir: Path, make_package: Callable[..., EvidencePackage]
+) -> None:
+    """A second extraction into the same run folder. The CLI keeps running; the evidence moves."""
+    rebuilt = make_package(
+        design=Design(
+            design_id="dsn:1",
+            name="cover-assy-rebuilt",
+            root_assembly_document_id="doc:1",
+            active_configuration="Default",
+            drawing_document_ids=[],
+        )
+    )
+    server = create_server(run_dir)
+
+    async def scenario(
+        client: ClientSession,
+    ) -> tuple[types.CallToolResult, types.CallToolResult]:
+        first = await client.call_tool("get_package_summary", {})
+        save_package(rebuilt, run_dir)
+        second = await client.call_tool("get_package_summary", {})
+        return first, second
+
+    first, second = talk_to(server, scenario)
+
+    assert payload_of(first)["design_name"] == "cover-assy"
+    assert payload_of(second)["design_name"] == "cover-assy-rebuilt"
+
+
+def test_an_unchanged_package_is_read_once_however_many_calls_are_made(
+    run_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lazily, not on every call: the package is parsed again only when the file moved."""
+    loads: list[Path] = []
+    real = mcp_server.load_package
+
+    def counting(directory: Path) -> Any:
+        loads.append(directory)
+        return real(directory)
+
+    monkeypatch.setattr(mcp_server, "load_package", counting)
+    server = create_server(run_dir)
+
+    async def scenario(client: ClientSession) -> None:
+        await client.call_tool("get_package_summary", {})
+        await client.call_tool("get_package_summary", {})
+
+    talk_to(server, scenario)
+
+    assert loads == [run_dir]
+
+
 # --- resources ---------------------------------------------------------------------------
 
 
@@ -681,3 +768,171 @@ def test_swreview_mcp_never_takes_the_secret_itself(monkeypatch: pytest.MonkeyPa
     output = re.sub(r"\[[0-9;]*m", "", runner.invoke(cli.app, ["mcp", "--help"]).output)
     assert "--bridge-secret-env" in output
     assert "--bridge-secret " not in output
+
+
+# --- a reload racing a call ----------------------------------------------------------------
+
+
+def test_a_refresh_racing_a_call_never_escapes_and_always_leaves_a_log_line(
+    run_dir: Path,
+) -> None:
+    """The reload is not serialized against the call by anything above `Toolset`.
+
+    `on_call_tool` runs `toolset.call` on a worker thread while the resource handlers call
+    `toolset.refresh()` from the event loop, and the low-level server dispatches every
+    request in its own task, so the two genuinely overlap. A call that came apart in that
+    overlap would raise past the sink and appear in no `chat-log.jsonl` line, which is the
+    one thing SC-003 forbids - so the toolset, not its callers, has to hold a lock.
+
+    The package is removed and restored under the refresher, because that is what makes
+    `dispatch` flip between a bound dispatch and `None`: an error result is a fine answer
+    here, an exception is not.
+    """
+    toolset = mcp_server.build_toolset(run_dir)
+    package_file = run_dir / PACKAGE_FILE_NAME
+    body = package_file.read_bytes()
+    stop = threading.Event()
+    escaped: list[BaseException] = []
+    calls = 200
+
+    def churn() -> None:
+        while not stop.is_set():
+            try:
+                package_file.unlink(missing_ok=True)
+                toolset.refresh()
+                package_file.write_bytes(body)
+                toolset.refresh()
+            except BaseException as exc:  # noqa: BLE001 - reported, not swallowed
+                escaped.append(exc)
+                return
+
+    refresher = threading.Thread(target=churn, name="refresh-churn", daemon=True)
+    refresher.start()
+    try:
+        for _ in range(calls):
+            try:
+                toolset.call("get_package_summary", {})
+            except BaseException as exc:  # noqa: BLE001 - the failure under test
+                escaped.append(exc)
+                break
+    finally:
+        stop.set()
+        refresher.join(timeout=10.0)
+
+    assert escaped == []
+    assert len(chat_log(run_dir)) == calls
+
+
+def test_two_refreshes_never_interleave(run_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`refresh` assigns `package`, `dispatch` and `unavailable` together or not at all.
+
+    Two threads inside `_bind` at once would leave a caller dispatching against one
+    package with the other's dispatch. The lock is held for the whole of `refresh`, so the
+    second thread waits and then sees the stamp the first one recorded.
+    """
+    inside = 0
+    overlapped = False
+    real_bind = mcp_server._bind
+
+    def slow_bind(*args: Any, **keywords: Any) -> Any:
+        nonlocal inside, overlapped
+        inside += 1
+        overlapped = overlapped or inside > 1
+        try:
+            time.sleep(0.05)
+            return real_bind(*args, **keywords)
+        finally:
+            inside -= 1
+
+    monkeypatch.setattr(mcp_server, "_bind", slow_bind)
+    toolset = mcp_server.build_toolset(run_dir)
+
+    def rebind() -> None:
+        # A stamp that is not the one on file, so `refresh` really re-binds rather than
+        # returning at its first line.
+        toolset.stamp = None
+        toolset.refresh()
+
+    threads = [threading.Thread(target=rebind, name=f"refresh-{index}") for index in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10.0)
+
+    assert overlapped is False
+    assert toolset.dispatch is not None
+
+
+def test_a_resource_request_waits_for_the_call_it_overlaps(
+    run_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`resources/list` arrives in its own task, and must not reload under a running call.
+
+    It also must not parse a package on the event loop: the refresh goes to a worker
+    thread, under the same lock `tools/call` holds, so the order below is the only one
+    possible.
+    """
+    timeline: list[str] = []
+    real_call = mcp_server.Toolset.call
+    real_resources = mcp_server._resources
+
+    def slow_call(self: Any, name: str, arguments: Any) -> Any:
+        timeline.append("call-start")
+        time.sleep(0.2)
+        try:
+            return real_call(self, name, arguments)
+        finally:
+            timeline.append("call-end")
+
+    def noted_resources(*args: Any, **keywords: Any) -> Any:
+        timeline.append("resources")
+        return real_resources(*args, **keywords)
+
+    monkeypatch.setattr(mcp_server.Toolset, "call", slow_call)
+    monkeypatch.setattr(mcp_server, "_resources", noted_resources)
+    server = create_server(run_dir)
+
+    async def scenario(client: ClientSession) -> None:
+        async with anyio.create_task_group() as group:
+            group.start_soon(functools.partial(client.call_tool, "get_package_summary", {}))
+            await anyio.sleep(0.05)
+            await client.list_resources()
+
+    talk_to(server, scenario)
+
+    assert timeline == ["call-start", "call-end", "resources"]
+
+
+def test_a_call_reads_the_dispatch_it_uses_exactly_once(
+    run_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The narrow window the stress test above can only sample: `call` used to read
+    `self.dispatch` twice - once to test it, once to call it - and a refresh that cleared it
+    in between raised `AttributeError` out of `call`, past the sink and into the CLI as a
+    protocol error rather than an error result.
+
+    The race is made deterministic by handing the attribute out once: what `call` found has
+    to be what `call` uses, which is what a local snapshot guarantees.
+    """
+
+    class Vanishing:
+        """A `dispatch` that is cleared by a concurrent refresh after its first read."""
+
+        def __init__(self, value: Any) -> None:
+            self.remaining = [value]
+
+        def __get__(self, instance: Any, owner: Any = None) -> Any:
+            return self.remaining.pop() if self.remaining else None
+
+        def __set__(self, instance: Any, value: Any) -> None:
+            self.remaining = [value]
+
+    toolset = mcp_server.build_toolset(run_dir)
+    monkeypatch.setattr(
+        mcp_server.Toolset, "dispatch", Vanishing(toolset.dispatch), raising=False
+    )
+
+    result = toolset.call("get_package_summary", {})
+
+    assert result.is_error is False
+    assert result.payload["design_name"] == "cover-assy"

@@ -440,6 +440,202 @@ public sealed class TerminalHostTests
         }
     }
 
+    // ---- evidence.extract ------------------------------------------------------------------
+
+    /// <summary>
+    /// `init.evidence`: whether this session folder already holds a package, and which folder
+    /// that is. The page needs it before Start, to decide whether to offer the Extract evidence
+    /// button - a CLI started over an empty folder can only answer questions about nothing.
+    ///
+    /// Asked without creating anything. `ready` arrives while the pane is being looked at, and
+    /// a run folder per glance would leave the run root full of empty timestamps.
+    /// </summary>
+    [Fact]
+    public void ReadySaysWhetherThisSessionFolderAlreadyHoldsEvidence()
+    {
+        using (var fixture = new Fixture())
+        {
+            fixture.Host.Receive(Message("ready", "m1"));
+
+            JsonElement before = Payload(Assert.Single(fixture.Channel.Replies("m1")))
+                .GetProperty("evidence");
+            Assert.False(before.GetProperty("present").GetBoolean());
+            Assert.Equal(fixture.RunDirectory, before.GetProperty("run_dir").GetString());
+
+            fixture.WriteEvidence();
+            fixture.Host.Receive(Message("ready", "m2"));
+
+            JsonElement after = Payload(Assert.Single(fixture.Channel.Replies("m2")))
+                .GetProperty("evidence");
+            Assert.True(after.GetProperty("present").GetBoolean());
+        }
+    }
+
+    /// <summary>
+    /// The Extract evidence button on the Terminal page: the same in-process dump the Review
+    /// tab runs, into the same run folder the CLI was started in.
+    ///
+    /// The folder matters more than the counts. A package written anywhere else is a package
+    /// the CLI's MCP server will never look at: the server is bound to the run folder it was
+    /// launched over, and re-reads `package.json` there and nowhere else.
+    /// </summary>
+    [Fact]
+    public void ExtractRunsTheReviewsOwnDumpIntoTheTerminalRunFolder()
+    {
+        using (var fixture = new Fixture())
+        {
+            fixture.Host.Receive(Message("evidence.extract", "m1"));
+
+            JsonElement reply = Assert.Single(fixture.Channel.Replies("m1"));
+            Assert.Equal("evidence.extracted", Type(reply));
+            Assert.Equal(fixture.RunDirectory, Payload(reply).GetProperty("run_dir").GetString());
+
+            JsonElement counts = Payload(reply).GetProperty("counts");
+            Assert.Equal(FakeDump.Components, counts.GetProperty("components").GetInt32());
+            Assert.Equal(FakeDump.Gaps, counts.GetProperty("gaps").GetInt32());
+
+            Assert.Equal(new[] { fixture.RunDirectory }, fixture.Dump.Folders.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// While a CLI is running, "this session's run folder" is the folder that CLI was started
+    /// in - not the folder the pane would pick if it were asked now.
+    ///
+    /// The pane's answer moves: `TerminalRunFolder` prefers the *review's* latest session
+    /// folder, so an engineer who starts Codex on the Ask tab, runs a review on the Review
+    /// tab, then comes back and presses Extract evidence used to write `package.json` into
+    /// the review's folder. The CLI's MCP server only ever re-reads the folder it was
+    /// launched over, so it kept answering "no package.json" while the page said the
+    /// extraction had worked - a silent failure reported as a success.
+    /// </summary>
+    [Fact]
+    public void ExtractRunsIntoTheFolderTheRunningTerminalWasStartedIn()
+    {
+        using (var fixture = new Fixture())
+        {
+            fixture.Host.Receive(Message("terminal.start", "m1", new { cli = "codex" }));
+            string started = Payload(Assert.Single(fixture.Channel.Replies("m1")))
+                .GetProperty("cwd").GetString()!;
+
+            // The engineer presses Review on the Review tab: from here on the pane answers
+            // with that review's folder.
+            string review = fixture.MovePaneToANewFolder();
+            Assert.NotEqual(started, review);
+
+            fixture.Host.Receive(Message("evidence.extract", "m2"));
+
+            JsonElement extracted = Payload(Assert.Single(fixture.Channel.Replies("m2")));
+            Assert.Equal(started, extracted.GetProperty("run_dir").GetString());
+            Assert.Equal(new[] { started }, fixture.Dump.Folders.ToArray());
+
+            // `init.evidence` names the same folder, because the sentence the page shows is
+            // about the folder the running CLI reads.
+            fixture.Host.Receive(Message("ready", "m3"));
+            Assert.Equal(
+                started,
+                Payload(Assert.Single(fixture.Channel.Replies("m3")))
+                    .GetProperty("evidence").GetProperty("run_dir").GetString());
+        }
+    }
+
+    /// <summary>
+    /// With nothing running there is no started folder to prefer, so both answers are the
+    /// pane's again - which is what makes an Extract before Start create the folder the next
+    /// Start will run in.
+    /// </summary>
+    [Fact]
+    public void WithNoTerminalRunningExtractUsesThePanesOwnFolder()
+    {
+        using (var fixture = new Fixture())
+        {
+            string moved = fixture.MovePaneToANewFolder();
+
+            fixture.Host.Receive(Message("evidence.extract", "m1"));
+
+            Assert.Equal(new[] { moved }, fixture.Dump.Folders.ToArray());
+            Assert.Equal(
+                moved,
+                Payload(Assert.Single(fixture.Channel.Replies("m1")))
+                    .GetProperty("run_dir").GetString());
+        }
+    }
+
+    /// <summary>
+    /// And once the CLI is stopped, the folder it was started in stops being the answer: the
+    /// next Start will create its own, and an Extract in between belongs where that one will be.
+    /// </summary>
+    [Fact]
+    public void AStoppedTerminalStopsDecidingWhereEvidenceGoes()
+    {
+        using (var fixture = new Fixture())
+        {
+            fixture.Host.Receive(Message("terminal.start", "m1", new { cli = "codex" }));
+            fixture.Host.Receive(Message("terminal.stop", "m2"));
+
+            string moved = fixture.MovePaneToANewFolder();
+            fixture.Host.Receive(Message("evidence.extract", "m3"));
+
+            Assert.Equal(new[] { moved }, fixture.Dump.Folders.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// The pane is told, so the step strip above the tabs stops saying there is no evidence the
+    /// moment there is. Only on success: a dump that failed wrote nothing to repaint for.
+    /// </summary>
+    [Fact]
+    public void AFinishedExtractionTellsThePaneToRepaint()
+    {
+        using (var fixture = new Fixture())
+        {
+            fixture.Host.Receive(Message("evidence.extract", "m1"));
+            Assert.Equal(1, fixture.Repaints);
+
+            fixture.Dump.Failure = new InvalidOperationException("no document");
+            fixture.Host.Receive(Message("evidence.extract", "m2"));
+
+            Assert.Equal(1, fixture.Repaints);
+        }
+    }
+
+    [Fact]
+    public void ExtractIsRefusedRatherThanSilentWhenThePaneHasNoExtractor()
+    {
+        using (var fixture = new Fixture())
+        {
+            // No SOLIDWORKS behind the pane: the Task Pane exists before the review host does.
+            fixture.Extractor = null;
+
+            fixture.Host.Receive(Message("evidence.extract", "m1"));
+
+            JsonElement error = Assert.Single(fixture.Channel.Replies("m1"));
+            Assert.Equal("error", Type(error));
+            Assert.Equal(
+                "ExtractionUnavailable", Payload(error).GetProperty("error_class").GetString());
+        }
+    }
+
+    [Fact]
+    public void AnExtractionThatFailsIsReportedWithItsOwnMessageAndNoSecret()
+    {
+        using (var fixture = new Fixture())
+        {
+            fixture.Dump.Failure = new InvalidOperationException(
+                "the dump saw " + Fixture.Secret + " and stopped");
+
+            fixture.Host.Receive(Message("evidence.extract", "m1"));
+
+            JsonElement error = Assert.Single(fixture.Channel.Replies("m1"));
+            Assert.Equal("error", Type(error));
+            Assert.Equal("ExtractionFailed", Payload(error).GetProperty("error_class").GetString());
+
+            string message = Payload(error).GetProperty("message").GetString()!;
+            Assert.Contains("the dump saw", message);
+            Assert.DoesNotContain(Fixture.Secret, message);
+        }
+    }
+
     // ---- FR-015 --------------------------------------------------------------------------------
 
     [Fact]
@@ -450,6 +646,7 @@ public sealed class TerminalHostTests
             fixture.Host.Receive(Message("ready", "m1", new { cols = 80, rows = 24 }));
             fixture.Host.Receive(Message("terminal.start", "m2", new { cli = "codex" }));
             fixture.Host.Receive(Message("terminal.stop", "m3"));
+            fixture.Host.Receive(Message("evidence.extract", "m4"));
 
             foreach (string json in fixture.Channel.Raw)
             {
@@ -513,7 +710,7 @@ public sealed class TerminalHostTests
             }
         }
 
-        Assert.Equal(5, rows.Count);
+        Assert.Equal(6, rows.Count);
         return rows;
     }
 
@@ -536,6 +733,7 @@ public sealed class TerminalHostTests
         private readonly string _authSource;
         private readonly List<FakeSession> _sessions = new List<FakeSession>();
         private readonly List<TerminalSessionOptions> _started = new List<TerminalSessionOptions>();
+        private readonly TerminalHostOptions _options;
 
         public Fixture()
         {
@@ -566,9 +764,11 @@ public sealed class TerminalHostTests
                 Discovery.Gemini(Path.Combine(_root, "gemini.cmd")),
             };
 
+            PaneFolder = RunDirectory;
+
             var options = new TerminalHostOptions(
                 Channel,
-                () => RunDirectory,
+                () => PaneFolder,
                 runDirectory =>
                 {
                     if (ProfileFailure != null)
@@ -603,13 +803,33 @@ public sealed class TerminalHostTests
                     _sessions.Add(session);
                     return session;
                 },
+
+                // The Ask tab's Extract evidence button (the Review tab's own extractor, which
+                // is faked here for the same reason the CLI is: there is no SOLIDWORKS).
+                SessionFolder = () => PaneFolder,
+                Dump = Dump,
+                Extracted = () => Repaints++,
             };
 
+            _options = options;
             Host = new TerminalHost(options);
             Listing = ListingWith();
         }
 
         public TerminalHost Host { get; }
+
+        /// <summary>The in-process extractor `evidence.extract` runs.</summary>
+        public FakeDump Dump { get; } = new FakeDump();
+
+        /// <summary>How many times the host asked the pane to repaint its step strip.</summary>
+        public int Repaints { get; private set; }
+
+        /// <summary>The extractor as the host sees it; null is a pane with no review host yet.</summary>
+        public IReviewDump? Extractor
+        {
+            get => _options.Dump;
+            set => _options.Dump = value;
+        }
 
         /// <summary>When set, the profile writer throws it: a start failure whose message the
         /// host must redact before it reaches the page.</summary>
@@ -618,6 +838,15 @@ public sealed class TerminalHostTests
         public RecordingChannel Channel { get; }
 
         public string RunDirectory { get; }
+
+        /// <summary>
+        /// What the pane answers for both of its folder callbacks - `TerminalRunFolder` and
+        /// `SessionRunDirectory`. It starts as <see cref="RunDirectory"/> and a test moves it,
+        /// because the pane really does move it: a review started after the terminal was
+        /// makes `SessionRunDirectory` the review's folder, and a fixture where the two can
+        /// never disagree cannot see a package written into the wrong one.
+        /// </summary>
+        public string PaneFolder { get; set; }
 
         public string ChatLogPath => Path.Combine(RunDirectory, "chat-log.jsonl");
 
@@ -657,6 +886,22 @@ public sealed class TerminalHostTests
                 + "\"tools\":{" + tools + "}}],\"nextCursor\":null}";
         }
 
+        /// <summary>
+        /// A review has started in a folder of its own, so the pane's folder callbacks now
+        /// answer with that one. Returns it.
+        /// </summary>
+        public string MovePaneToANewFolder()
+        {
+            string folder = Path.Combine(_root, "20260913-104500-bracket");
+            Directory.CreateDirectory(folder);
+            PaneFolder = folder;
+            return folder;
+        }
+
+        /// <summary>A `package.json` in the run folder, as a dump would have left one.</summary>
+        public void WriteEvidence() => File.WriteAllText(
+            Path.Combine(RunDirectory, "package.json"), "{}", new UTF8Encoding(false));
+
         public void DeleteAuth() => File.Delete(_authSource);
 
         public void WritePreviousProfile(string content)
@@ -691,6 +936,42 @@ public sealed class TerminalHostTests
             public BridgeConfig? GeneralChatBridge => _bridge;
 
             public string? DocumentPath => null;
+        }
+    }
+
+    /// <summary>
+    /// The extractor behind `evidence.extract`, counted and steerable.
+    ///
+    /// Faked for the reason <see cref="FakeSession"/> is: the real one is
+    /// <c>SwReviewDump</c> over a live <c>ISldWorks</c>, and the machines that build this
+    /// solution have no SOLIDWORKS. What the host decides - which folder, what is reported and
+    /// what happens to a failure - is all on this side of the seam.
+    /// </summary>
+    private sealed class FakeDump : IReviewDump
+    {
+        public const int Components = 7;
+
+        public const int Gaps = 2;
+
+        private readonly List<string> _folders = new List<string>();
+
+        /// <summary>Every folder the host asked for a dump into, in order.</summary>
+        public IReadOnlyList<string> Folders => _folders;
+
+        /// <summary>When set, the dump throws it instead of writing anything.</summary>
+        public Exception? Failure { get; set; }
+
+        public DumpSummary Run(string outputDirectory, Action<string> progress)
+        {
+            _folders.Add(outputDirectory);
+            if (Failure != null)
+            {
+                throw Failure;
+            }
+
+            progress("Walking the component tree...");
+            return new DumpSummary(
+                Path.Combine(outputDirectory, "package.json"), Components, Gaps);
         }
     }
 

@@ -1,0 +1,816 @@
+{
+  "schema_version": "1.1.0",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "created_at": "2026-09-12T12:00:00Z",
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "test"
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:1",
+        "vault_path": "/Designs/rms-assembly.SLDASM",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:2",
+        "vault_path": "/Designs/gearbox.SLDASM",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:3",
+        "vault_path": "/Designs/base.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:4",
+        "vault_path": "/Designs/plate.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:5",
+        "vault_path": "/Designs/link.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:6",
+        "vault_path": "/Designs/screw.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "M4x10",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:7",
+        "vault_path": "/Designs/washer.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:1",
+    "name": "rms-assembly",
+    "root_assembly_document_id": "doc:1",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:1",
+      "kind": "assembly",
+      "file_name": "rms-assembly.SLDASM",
+      "path": "native/rms-assembly.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:2",
+      "kind": "assembly",
+      "file_name": "gearbox.SLDASM",
+      "path": "native/gearbox.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:3",
+      "kind": "part",
+      "file_name": "base.SLDPRT",
+      "path": "native/base.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:4",
+      "kind": "part",
+      "file_name": "plate.SLDPRT",
+      "path": "native/plate.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:5",
+      "kind": "part",
+      "file_name": "link.SLDPRT",
+      "path": "native/link.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:6",
+      "kind": "part",
+      "file_name": "screw.SLDPRT",
+      "path": "native/screw.SLDPRT",
+      "configurations": [
+        "M4x10",
+        "M6x20"
+      ],
+      "active_configuration": "M4x10",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:7",
+      "kind": "part",
+      "file_name": "washer.SLDPRT",
+      "path": "native/washer.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:1",
+      "name": "rms-assembly",
+      "document_id": "doc:1",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "rms-assembly",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:1",
+      "name": "base-1",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "base-1",
+      "constrained_status_raw": 2
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:1",
+      "name": "plate-1",
+      "document_id": "doc:4",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "plate-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:1",
+      "name": "link-1",
+      "document_id": "doc:5",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "link-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0005",
+      "persist_ref": "Y21wOjAwMDU=",
+      "persist_ref_scope": "doc:1",
+      "name": "link-2",
+      "document_id": "doc:5",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "link-2",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0006",
+      "persist_ref": "Y21wOjAwMDY=",
+      "persist_ref_scope": "doc:1",
+      "name": "link-3",
+      "document_id": "doc:5",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "link-3",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0007",
+      "persist_ref": "Y21wOjAwMDc=",
+      "persist_ref_scope": "doc:1",
+      "name": "link-4",
+      "document_id": "doc:5",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "link-4",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0008",
+      "persist_ref": "Y21wOjAwMDg=",
+      "persist_ref_scope": "doc:1",
+      "name": "screw-1",
+      "document_id": "doc:6",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "M4x10",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": true,
+      "full_path": "screw-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0009",
+      "persist_ref": "Y21wOjAwMDk=",
+      "persist_ref_scope": "doc:1",
+      "name": "screw-2",
+      "document_id": "doc:6",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "M6x20",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": true,
+      "full_path": "screw-2",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0010",
+      "persist_ref": "Y21wOjAwMTA=",
+      "persist_ref_scope": "doc:1",
+      "name": "washer-1",
+      "document_id": "doc:7",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "washer-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0011",
+      "persist_ref": "Y21wOjAwMTE=",
+      "persist_ref_scope": "doc:1",
+      "name": "gearbox-1",
+      "document_id": "doc:2",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "gearbox-1",
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [
+    {
+      "id": "mate:0001",
+      "persist_ref": "bWF0ZTowMDAx",
+      "persist_ref_scope": "doc:1",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0002",
+          "persist_ref": "bWF0ZTowMDAxL2Jhc2UtMQ==",
+          "entity_kind": "swSelFACES"
+        },
+        {
+          "component_id": "cmp:0003",
+          "persist_ref": "bWF0ZTowMDAxL3BsYXRlLTE=",
+          "entity_kind": "swSelFACES"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    },
+    {
+      "id": "mate:0002",
+      "persist_ref": "bWF0ZTowMDAy",
+      "persist_ref_scope": "doc:1",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0003",
+          "persist_ref": "bWF0ZTowMDAyL3BsYXRlLTE=",
+          "entity_kind": "swSelDATUMPLANES"
+        },
+        {
+          "component_id": "cmp:0004",
+          "persist_ref": "bWF0ZTowMDAyL2xpbmstMQ==",
+          "entity_kind": "swSelDATUMPLANES"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    },
+    {
+      "id": "mate:0003",
+      "persist_ref": "bWF0ZTowMDAz",
+      "persist_ref_scope": "doc:1",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0004",
+          "persist_ref": "bWF0ZTowMDAzL2xpbmstMQ==",
+          "entity_kind": "swSelDATUMPLANES"
+        },
+        {
+          "component_id": "cmp:0005",
+          "persist_ref": "bWF0ZTowMDAzL2xpbmstMg==",
+          "entity_kind": "swSelDATUMPLANES"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    },
+    {
+      "id": "mate:0004",
+      "persist_ref": "bWF0ZTowMDA0",
+      "persist_ref_scope": "doc:1",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0005",
+          "persist_ref": "bWF0ZTowMDA0L2xpbmstMg==",
+          "entity_kind": "swSelDATUMPLANES"
+        },
+        {
+          "component_id": "cmp:0006",
+          "persist_ref": "bWF0ZTowMDA0L2xpbmstMw==",
+          "entity_kind": "swSelDATUMPLANES"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    },
+    {
+      "id": "mate:0005",
+      "persist_ref": "bWF0ZTowMDA1",
+      "persist_ref_scope": "doc:1",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0006",
+          "persist_ref": "bWF0ZTowMDA1L2xpbmstMw==",
+          "entity_kind": "swSelDATUMPLANES"
+        },
+        {
+          "component_id": "cmp:0007",
+          "persist_ref": "bWF0ZTowMDA1L2xpbmstNA==",
+          "entity_kind": "swSelDATUMPLANES"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    },
+    {
+      "id": "mate:0006",
+      "persist_ref": "bWF0ZTowMDA2",
+      "persist_ref_scope": "doc:1",
+      "type": "PARALLEL",
+      "entities": [
+        {
+          "component_id": "cmp:0003",
+          "persist_ref": "bWF0ZTowMDA2L3BsYXRlLTE=",
+          "entity_kind": "swSelDATUMPLANES"
+        },
+        {
+          "component_id": "cmp:0007",
+          "persist_ref": "bWF0ZTowMDA2L2xpbmstNA==",
+          "entity_kind": "swSelDATUMPLANES"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": true,
+      "distance": null,
+      "angle": null
+    },
+    {
+      "id": "mate:0007",
+      "persist_ref": "bWF0ZTowMDA3",
+      "persist_ref_scope": "doc:1",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0003",
+          "persist_ref": "bWF0ZTowMDA3L3BsYXRlLTE=",
+          "entity_kind": "swSelDATUMPLANES"
+        },
+        {
+          "component_id": "cmp:0011",
+          "persist_ref": "bWF0ZTowMDA3L2dlYXJib3gtMQ==",
+          "entity_kind": "swSelDATUMPLANES"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    }
+  ],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "features": [],
+  "equations": [],
+  "rms_suppress_test": null,
+  "gaps": [
+    {
+      "kind": "not_extracted",
+      "entity_kind": "component",
+      "entity_id": null,
+      "reason": "'washer-1' has no loaded model document, so Toolbox identity could not be read.",
+      "error": null
+    }
+  ]
+}

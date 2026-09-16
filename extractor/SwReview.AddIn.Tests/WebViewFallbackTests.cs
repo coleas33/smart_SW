@@ -19,7 +19,7 @@ namespace SwReview.AddIn.Tests;
 /// SOLIDWORKS' problem, not ours: it can take the add-in out of the session or the session out
 /// of the engineer's day. So the runtime being missing has to end as a panel that says what to
 /// install and where the run folder is - text the engineer can read off the screen - with the
-/// Actions tab, which needs no WebView2 at all, still doing its three jobs.
+/// Extract tab, which needs no WebView2 at all, still doing its three jobs.
 ///
 /// The environment is the other half. contracts/pane-host-messages.md requires exactly one
 /// <see cref="CoreWebView2Environment"/> per process over an explicit user data folder under
@@ -54,7 +54,7 @@ namespace SwReview.AddIn.Tests;
 ///   }
 /// </code>
 ///
-/// The tabs are found by their `Text` - Review, Terminal, Actions - and nothing else about the
+/// The tabs are found by their `Text` - Review, Ask, Extract - and nothing else about the
 /// control's shape is assumed, so T043 keeps a free hand over layout.
 /// </summary>
 public sealed class WebViewFallbackTests
@@ -82,24 +82,29 @@ public sealed class WebViewFallbackTests
                 "The Review tab shows no Evergreen WebView2 download URL when the runtime is "
                     + "missing. It showed:" + Environment.NewLine + review);
             Assert.Contains(RunRoot, review);
+
+            // The sentence names the tabs the engineer is actually looking at. "The Actions
+            // tab still works" was a pointer to a tab that no longer exists under that name.
+            Assert.Contains("Review and Ask tabs cannot be shown", review);
+            Assert.Contains("The Extract tab still works.", review);
         });
     }
 
     [Fact]
-    public void AMissingRuntimeLeavesTheActionsTabWorking()
+    public void AMissingRuntimeLeavesTheExtractTabWorking()
     {
         WithPane((control, factory) =>
         {
-            List<Button> buttons = Descendants(TabNamed(control, "Actions"))
+            List<Button> buttons = Descendants(TabNamed(control, "Extract"))
                 .OfType<Button>()
                 .ToList();
 
-            foreach (string caption in new[] { "Dump IR", "Interference", "Capture selection" })
+            foreach (string caption in new[] { "Extract evidence", "Interference", "Capture selection" })
             {
                 Button? button = buttons.FirstOrDefault(
                     candidate => string.Equals(candidate.Text, caption, StringComparison.Ordinal));
 
-                Assert.True(button != null, $"The Actions tab has no \"{caption}\" button.");
+                Assert.True(button != null, $"The Extract tab has no \"{caption}\" button.");
                 Assert.True(button!.Enabled, $"\"{caption}\" is disabled because WebView2 is missing.");
             }
         });
@@ -153,7 +158,7 @@ public sealed class WebViewFallbackTests
             // failed attempt is the whole story: two would mean two environments on a machine
             // where the runtime is present, over the same user data folder.
             Assert.NotNull(TabNamed(control, "Review"));
-            Assert.NotNull(TabNamed(control, "Terminal"));
+            Assert.NotNull(TabNamed(control, "Ask"));
             Assert.Equal(1, factory.Calls);
 
             // The failure is cached like a success: a workstation with no runtime must not

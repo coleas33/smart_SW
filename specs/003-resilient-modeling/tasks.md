@@ -74,23 +74,23 @@ description: "Task list for the Resilient Modeling checks"
 
 ## Phase 4: User Story 2 - Assembly Rules (Priority: P2)
 
-- [ ] T032 [P] [US2] Write `reviewer/tests/unit/test_rms_assembly_rules.py`: reference-geometry rule over entity kinds (reference passes, geometry incl. vertices fails, `unknown(<n>)` and sketch kinds unresolved, no mates skips); first component = first child of `cmp:0001` in package order (fixed passes; not fixed and fully constrained passes; not fixed and under/over constrained or solver error fails; not fixed and unknown/unavailable unresolved; no children skips); `MateGraph` over every instance with root-mate edges, breadth-first from the first fixed child with the configured limit, a second fixed child named, a disconnected component unresolved, a suppressed mate not an edge, a mate with a `mate_suppression` gap unresolved, no fixed child unresolved, no mates skips; Toolbox-as-configurations detection, and unresolved for a component with a Toolbox-identity gap; the evaluable rules run for the root document only and the subassembly document appears in `rms.assembly.subassemblies`; the data-gap rules are coverage-only (registry) and never dispatched
-- [ ] T033 [US2] Implement `reviewer/src/swreview/checks/rms/assembly.py` (`MateGraph`, `evaluate_assembly(package, table)`)
-- [ ] T034 [P] [US2] Write tests for `check_rms_assembly` (root only, subassemblies named, coverage written, step recording) in `test_tools_rms_checks.py` and for `--scope assembly` in `test_cli.py`
-- [ ] T035 [US2] Implement the tool in `tools/rms_checks.py`, its `agent-tools.md` row and count bump, and the CLI scope
-- [ ] T036 [US2] Golden fixture `reviewer/tests/golden/fixtures/rms-assembly/` from the builder (face mate; unfixed under-constrained first child with a later fixed component; four-deep chain from that root; a suppressed mate; Toolbox configurations; one component with a Toolbox-identity gap; one subassembly document) with adapter `assembly_case`
+- [x] T032 [P] [US2] Write `reviewer/tests/unit/test_rms_assembly_rules.py`: reference-geometry rule over entity kinds (reference passes, geometry incl. vertices fails, `unknown(<n>)` and sketch kinds unresolved, no mates skips); first component = first child of `cmp:0001` in package order (fixed passes; not fixed and fully constrained passes; not fixed and under/over constrained or solver error fails; not fixed and unknown/unavailable unresolved; no children skips); `MateGraph` over every instance with root-mate edges, breadth-first from the first fixed child with the configured limit, a second fixed child named, a disconnected component unresolved, a suppressed mate not an edge, a mate with a `mate_suppression` gap unresolved, no fixed child unresolved, no mates skips; Toolbox-as-configurations detection, and unresolved for a component with a Toolbox-identity gap; the evaluable rules run for the root document only and the subassembly document appears in `rms.assembly.subassemblies`; the data-gap rules are coverage-only (registry) and never dispatched
+- [x] T033 [US2] Implement `reviewer/src/swreview/checks/rms/assembly.py` (`MateGraph`, `evaluate_assembly(package, table)`)
+- [x] T034 [P] [US2] Write tests for `check_rms_assembly` (root only, subassemblies named, coverage written, step recording) in `test_tools_rms_checks.py` and for `--scope assembly` in `test_cli.py`
+- [x] T035 [US2] Implement the tool in `tools/rms_checks.py`, its `agent-tools.md` row and count bump, and the CLI scope
+- [x] T036 [US2] Golden fixture `reviewer/tests/golden/fixtures/rms-assembly/` from the builder (face mate; unfixed under-constrained first child with a later fixed component; four-deep chain from that root; a suppressed mate; Toolbox configurations; one component with a Toolbox-identity gap; one subassembly document) with adapter `assembly_case`
 
 ---
 
 ## Phase 5: User Story 3 - Equation Rules (Priority: P3)
 
-- [ ] T037 [P] [US3] Write `extractor/SwReview.Extractor.Tests/EquationDumperTests.cs` over an `IEquationSource` fake: text, lhs parsing (quotes stripped, first `=`), `IsGlobal` from the source's global flag (null plus `equations` gap when it throws), value or null, manager unavailable → empty list plus gap, once per document
-- [ ] T038 [US3] Implement `extractor/SwReview.Extractor/Dump/EquationDumper.cs` (`GetEquationMgr`, `GetCount`, `Equation(i)`, `GlobalVariable(i)`, `Value(i)`) wired into `PackageWriter` as the `equation` phase behind `--equations on|off`
-- [ ] T039 [P] [US3] Write `reviewer/tests/unit/test_rms_equation_rules.py`: globals present (fail when none, unresolved when the gap exists, any `is_global` is null, or the document is unresolved), dimensions driven (warn when none)
-- [ ] T040 [US3] Implement `reviewer/src/swreview/checks/rms/equations.py`
-- [ ] T041 [P] [US3] Write tests for `list_equations` (`test_tools_rms_query.py`), `check_rms_equations` (`test_tools_rms_checks.py`), and `--scope equations` (`test_cli.py`)
-- [ ] T042 [US3] Implement `list_equations` in `tools/rms_query.py` (in `query_tools()`, therefore in the MCP list and the profile: update `QUERY_TOOLS`, `mcp-toolset.md`, `EnabledTools`, `cli-profiles.md`, `CliProfileWriterTests` as in T026), `check_rms_equations` in `tools/rms_checks.py`, both `agent-tools.md` rows and the count bump, and the CLI scope
-- [ ] T043 [US3] Golden fixture `reviewer/tests/golden/fixtures/rms-equations/` from the builder with adapter `equations_case`
+- [x] T037 [P] [US3] Write `extractor/SwReview.Extractor.Tests/EquationDumperTests.cs` over an `IEquationSource` fake: text, lhs parsing (quotes stripped, first `=`), `IsGlobal` from the source's global flag (null plus `equations` gap when it throws), value or null, manager unavailable → empty list plus gap, once per document
+- [x] T038 [US3] Implement `extractor/SwReview.Extractor/Dump/EquationDumper.cs` (`GetEquationMgr`, `GetCount`, `Equation(i)`, `GlobalVariable(i)`, `Value(i)`) wired into `PackageWriter` as the `equation` phase behind `--equations on|off`
+- [x] T039 [P] [US3] Write `reviewer/tests/unit/test_rms_equation_rules.py`: globals present (fail when none, unresolved when the gap exists, any `is_global` is null, or the document is unresolved), dimensions driven (warn when none)
+- [x] T040 [US3] Implement `reviewer/src/swreview/checks/rms/equations.py`
+- [x] T041 [P] [US3] Write tests for `list_equations` (`test_tools_rms_query.py`), `check_rms_equations` (`test_tools_rms_checks.py`), and `--scope equations` (`test_cli.py`)
+- [x] T042 [US3] Implement `list_equations` in `tools/rms_query.py` (in `query_tools()`, therefore in the MCP list and the profile: update `QUERY_TOOLS`, `mcp-toolset.md`, `EnabledTools`, `cli-profiles.md`, `CliProfileWriterTests` as in T026), `check_rms_equations` in `tools/rms_checks.py`, both `agent-tools.md` rows and the count bump, and the CLI scope
+- [x] T043 [US3] Golden fixture `reviewer/tests/golden/fixtures/rms-equations/` from the builder with adapter `equations_case`
 
 ---
 
