@@ -1,285 +1,32 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://smart-sw.local/contracts/ir.schema.json",
-  "title": "EvidencePackage",
-  "description": "Intermediate representation of one SOLIDWORKS design dumped by the extractor and/or assembled from exported files. Field rules: specs/001-agentic-design-review/data-model.md section 2.",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schema_version",
-    "package_id",
-    "created_at",
-    "extractor",
-    "manifest",
-    "design",
-    "documents",
-    "components",
-    "gaps"
-  ],
-  "properties": {
-    "schema_version": {
-      "type": "string",
-      "pattern": "^1\\.[0-9]+\\.[0-9]+$",
-      "description": "Major 1. Consumers reject any other major."
-    },
-    "package_id": {
-      "type": "string",
-      "format": "uuid"
-    },
-    "created_at": {
-      "type": "string",
-      "format": "date-time"
-    },
-    "extractor": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "version",
-        "sw_version",
-        "machine"
-      ],
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "version": {
-          "type": "string"
-        },
-        "sw_version": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "e.g. '2024 SP3'; null for exported-file-only packages"
-        },
-        "machine": {
-          "type": "string"
-        }
-      }
-    },
-    "manifest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "entries",
-        "discrepancies"
-      ],
-      "properties": {
-        "entries": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ManifestEntry"
-          }
-        },
-        "discrepancies": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/Discrepancy"
-          }
-        }
-      }
-    },
-    "design": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "design_id",
-        "name",
-        "root_assembly_document_id",
-        "active_configuration",
-        "drawing_document_ids"
-      ],
-      "properties": {
-        "design_id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        },
-        "root_assembly_document_id": {
-          "type": "string"
-        },
-        "active_configuration": {
-          "type": "string"
-        },
-        "drawing_document_ids": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "documents": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/Document"
-      }
-    },
-    "components": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/ComponentInstance"
-      }
-    },
-    "mates": {
-      "type": "array",
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/Mate"
-      }
-    },
-    "holes": {
-      "type": "array",
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/Hole"
-      }
-    },
-    "threads": {
-      "type": "array",
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/CosmeticThread"
-      }
-    },
-    "fasteners": {
-      "type": "array",
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/Fastener"
-      }
-    },
-    "faces": {
-      "type": "array",
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/FaceGeometry"
-      }
-    },
-    "bodies": {
-      "type": "array",
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/BodyRef"
-      }
-    },
-    "interferences": {
-      "type": "array",
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/Interference"
-      }
-    },
-    "captures": {
-      "type": "array",
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/Capture"
-      }
-    },
-    "drawings": {
-      "type": "array",
-      "default": [],
-      "items": {
-        "$ref": "#/$defs/DrawingSheet"
-      }
-    },
-    "gaps": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/Gap"
-      }
-    }
-  },
   "$defs": {
-    "Quantity": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "value",
-        "unit"
-      ],
-      "properties": {
-        "value": {
-          "type": "number"
-        },
-        "unit": {
-          "enum": [
-            "mm",
-            "in",
-            "m"
-          ]
-        }
-      }
-    },
-    "Volume": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "value",
-        "unit"
-      ],
-      "properties": {
-        "value": {
-          "type": "number"
-        },
-        "unit": {
-          "enum": [
-            "mm3",
-            "in3",
-            "m3"
-          ]
-        }
-      }
-    },
     "Angle": {
-      "type": "object",
       "additionalProperties": false,
-      "required": [
-        "value",
-        "unit"
-      ],
       "properties": {
         "value": {
+          "title": "Value",
           "type": "number"
         },
         "unit": {
           "enum": [
             "deg",
             "rad"
-          ]
+          ],
+          "title": "Unit",
+          "type": "string"
         }
-      }
-    },
-    "Vec3": {
-      "type": "object",
-      "additionalProperties": false,
+      },
       "required": [
-        "x",
-        "y",
-        "z"
+        "value",
+        "unit"
       ],
-      "properties": {
-        "x": {
-          "type": "number"
-        },
-        "y": {
-          "type": "number"
-        },
-        "z": {
-          "type": "number"
-        }
-      }
+      "title": "Angle",
+      "type": "object"
     },
     "Axis": {
-      "type": "object",
       "additionalProperties": false,
-      "required": [
-        "origin",
-        "direction"
-      ],
       "properties": {
         "origin": {
           "$ref": "#/$defs/Vec3"
@@ -287,166 +34,378 @@
         "direction": {
           "$ref": "#/$defs/Vec3"
         }
-      }
+      },
+      "required": [
+        "origin",
+        "direction"
+      ],
+      "title": "Axis",
+      "type": "object"
     },
-    "Transform": {
-      "type": "array",
-      "minItems": 4,
-      "maxItems": 4,
-      "items": {
-        "type": "array",
-        "minItems": 4,
-        "maxItems": 4,
-        "items": {
-          "type": "number"
+    "BBox3D": {
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "$ref": "#/$defs/Vec3"
+        },
+        "max": {
+          "$ref": "#/$defs/Vec3"
         }
       },
-      "description": "Row-major 4x4, translation in meters"
-    },
-    "PersistRef": {
-      "type": "string",
-      "contentEncoding": "base64",
-      "minLength": 1,
-      "description": "IModelDocExtension.GetPersistReference3 bytes, base64"
-    },
-    "SourceRef": {
-      "type": "object",
-      "additionalProperties": false,
       "required": [
-        "document_id"
+        "min",
+        "max"
       ],
+      "title": "BBox3D",
+      "type": "object"
+    },
+    "BodyRef": {
+      "additionalProperties": false,
       "properties": {
-        "document_id": {
+        "id": {
+          "title": "Id",
           "type": "string"
         },
-        "sheet": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "persist_ref": {
+          "contentEncoding": "base64",
+          "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+          "minLength": 1,
+          "title": "Persist Ref",
+          "type": "string"
         },
-        "view": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "persist_ref_scope": {
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document",
+          "title": "Persist Ref Scope",
+          "type": "string"
         },
-        "annotation": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "component_id": {
+          "title": "Component Id",
+          "type": "string"
+        },
+        "mesh_file": {
+          "pattern": "\\.(glb|stl)$",
+          "title": "Mesh File",
+          "type": "string"
+        },
+        "triangle_count": {
+          "minimum": 0,
+          "title": "Triangle Count",
+          "type": "integer"
+        },
+        "is_solid": {
+          "title": "Is Solid",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "component_id",
+        "mesh_file",
+        "triangle_count",
+        "is_solid"
+      ],
+      "title": "BodyRef",
+      "type": "object"
+    },
+    "Capture": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
         },
         "persist_ref": {
           "anyOf": [
             {
-              "$ref": "#/$defs/PersistRef"
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
             },
             {
               "type": "null"
             }
-          ]
-        },
-        "page": {
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "bbox": {
-          "type": [
-            "array",
-            "null"
           ],
-          "minItems": 4,
-          "maxItems": 4,
+          "title": "Persist Ref"
+        },
+        "component_ids": {
           "items": {
-            "type": "number"
-          }
+            "type": "string"
+          },
+          "title": "Component Ids",
+          "type": "array"
+        },
+        "file": {
+          "pattern": "\\.png$",
+          "title": "File",
+          "type": "string"
+        },
+        "view": {
+          "title": "View",
+          "type": "string"
+        },
+        "note": {
+          "title": "Note",
+          "type": "string"
         }
       },
-      "anyOf": [
-        {
-          "required": [
-            "sheet"
-          ]
-        },
-        {
-          "required": [
-            "annotation"
-          ]
-        },
-        {
-          "required": [
-            "persist_ref"
-          ]
-        },
-        {
-          "required": [
-            "page"
-          ]
-        }
-      ]
-    },
-    "Tolerance": {
-      "type": "object",
-      "additionalProperties": false,
       "required": [
-        "kind",
-        "upper",
-        "lower",
-        "source"
+        "id",
+        "persist_ref",
+        "component_ids",
+        "file",
+        "view",
+        "note"
       ],
+      "title": "Capture",
+      "type": "object"
+    },
+    "ComponentInstance": {
+      "additionalProperties": false,
       "properties": {
-        "kind": {
+        "id": {
+          "pattern": "^cmp:[0-9]{4,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "persist_ref": {
+          "contentEncoding": "base64",
+          "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+          "minLength": 1,
+          "title": "Persist Ref",
+          "type": "string"
+        },
+        "persist_ref_scope": {
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document",
+          "title": "Persist Ref Scope",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Id"
+        },
+        "referenced_configuration": {
+          "title": "Referenced Configuration",
+          "type": "string"
+        },
+        "transform": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "type": "array"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "title": "Transform",
+          "type": "array"
+        },
+        "suppression": {
           "enum": [
-            "symmetric",
-            "bilateral",
-            "limits",
-            "basic",
-            "none"
-          ]
+            "resolved",
+            "lightweight",
+            "suppressed",
+            "unloaded"
+          ],
+          "title": "Suppression",
+          "type": "string"
         },
-        "upper": {
+        "is_fixed": {
+          "title": "Is Fixed",
+          "type": "boolean"
+        },
+        "pattern_id": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Quantity"
-            },
-            {
-              "$ref": "#/$defs/Angle"
+              "type": "string"
             },
             {
               "type": "null"
             }
-          ]
+          ],
+          "title": "Pattern Id"
         },
-        "lower": {
+        "is_toolbox": {
+          "title": "Is Toolbox",
+          "type": "boolean"
+        },
+        "full_path": {
+          "description": "IComponent2.Name2 full instance path, unique in the assembly",
+          "title": "Full Path",
+          "type": "string"
+        },
+        "constrained_status_raw": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Quantity"
-            },
-            {
-              "$ref": "#/$defs/Angle"
+              "type": "integer"
             },
             {
               "type": "null"
             }
-          ]
-        },
-        "source": {
-          "$ref": "#/$defs/SourceRef"
+          ],
+          "default": null,
+          "description": "IComponent2.GetConstrainedStatus verbatim; null (plus a component_constrained_status gap) when unreadable. Named in Python, not here.",
+          "title": "Constrained Status Raw"
         }
-      }
+      },
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "name",
+        "document_id",
+        "parent_id",
+        "referenced_configuration",
+        "transform",
+        "suppression",
+        "is_fixed",
+        "pattern_id",
+        "is_toolbox",
+        "full_path"
+      ],
+      "title": "ComponentInstance",
+      "type": "object"
+    },
+    "CosmeticThread": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "persist_ref": {
+          "contentEncoding": "base64",
+          "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+          "minLength": 1,
+          "title": "Persist Ref",
+          "type": "string"
+        },
+        "persist_ref_scope": {
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document",
+          "title": "Persist Ref Scope",
+          "type": "string"
+        },
+        "component_id": {
+          "title": "Component Id",
+          "type": "string"
+        },
+        "face_id": {
+          "title": "Face Id",
+          "type": "string"
+        },
+        "designation": {
+          "title": "Designation",
+          "type": "string"
+        },
+        "depth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "is_external": {
+          "title": "Is External",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "component_id",
+        "face_id",
+        "designation",
+        "depth",
+        "is_external"
+      ],
+      "title": "CosmeticThread",
+      "type": "object"
+    },
+    "CylinderFace": {
+      "additionalProperties": false,
+      "properties": {
+        "axis_origin": {
+          "$ref": "#/$defs/Vec3"
+        },
+        "axis_dir": {
+          "$ref": "#/$defs/Vec3"
+        },
+        "radius_m": {
+          "exclusiveMinimum": 0,
+          "title": "Radius M",
+          "type": "number"
+        }
+      },
+      "required": [
+        "axis_origin",
+        "axis_dir",
+        "radius_m"
+      ],
+      "title": "CylinderFace",
+      "type": "object"
+    },
+    "Design": {
+      "additionalProperties": false,
+      "properties": {
+        "design_id": {
+          "title": "Design Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "root_assembly_document_id": {
+          "title": "Root Assembly Document Id",
+          "type": "string"
+        },
+        "active_configuration": {
+          "title": "Active Configuration",
+          "type": "string"
+        },
+        "drawing_document_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Drawing Document Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "design_id",
+        "name",
+        "root_assembly_document_id",
+        "active_configuration",
+        "drawing_document_ids"
+      ],
+      "title": "Design",
+      "type": "object"
     },
     "Dimension": {
-      "type": "object",
       "additionalProperties": false,
-      "required": [
-        "nominal",
-        "tolerance",
-        "source",
-        "text_as_read"
-      ],
       "properties": {
         "nominal": {
           "anyOf": [
@@ -456,7 +415,8 @@
             {
               "$ref": "#/$defs/Angle"
             }
-          ]
+          ],
+          "title": "Nominal"
         },
         "tolerance": {
           "$ref": "#/$defs/Tolerance"
@@ -465,72 +425,24 @@
           "$ref": "#/$defs/SourceRef"
         },
         "text_as_read": {
+          "title": "Text As Read",
           "type": "string"
         }
-      }
-    },
-    "ManifestEntry": {
-      "type": "object",
-      "additionalProperties": false,
+      },
       "required": [
-        "document_id",
-        "vault_path",
-        "vault_version",
-        "revision",
-        "configuration",
-        "local_modified",
-        "export_method"
+        "nominal",
+        "tolerance",
+        "source",
+        "text_as_read"
       ],
-      "properties": {
-        "document_id": {
-          "type": "string"
-        },
-        "vault_path": {
-          "type": "string"
-        },
-        "vault_version": {
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "revision": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "configuration": {
-          "type": "string"
-        },
-        "local_modified": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "export_method": {
-          "enum": [
-            "native",
-            "pdf",
-            "step",
-            "manual"
-          ]
-        }
-      }
+      "title": "Dimension",
+      "type": "object"
     },
     "Discrepancy": {
-      "type": "object",
       "additionalProperties": false,
-      "required": [
-        "document_id",
-        "kind",
-        "expected",
-        "actual",
-        "note"
-      ],
       "properties": {
         "document_id": {
+          "title": "Document Id",
           "type": "string"
         },
         "kind": {
@@ -539,54 +451,127 @@
             "local_modification",
             "missing_document",
             "config_mismatch"
-          ]
+          ],
+          "title": "Kind",
+          "type": "string"
         },
         "expected": {
-          "type": [
-            "string",
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expected"
         },
         "actual": {
-          "type": [
-            "string",
-            "integer",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Actual"
         },
         "note": {
+          "title": "Note",
           "type": "string"
         }
-      }
-    },
-    "MassProperties": {
-      "type": "object",
-      "additionalProperties": false,
+      },
       "required": [
-        "mass_kg",
-        "volume_m3",
-        "center_of_mass",
-        "configuration"
+        "document_id",
+        "kind",
+        "expected",
+        "actual",
+        "note"
       ],
-      "properties": {
-        "mass_kg": {
-          "type": "number"
-        },
-        "volume_m3": {
-          "type": "number"
-        },
-        "center_of_mass": {
-          "$ref": "#/$defs/Vec3"
-        },
-        "configuration": {
-          "type": "string"
-        }
-      }
+      "title": "Discrepancy",
+      "type": "object"
     },
     "Document": {
-      "type": "object",
       "additionalProperties": false,
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "part",
+            "assembly",
+            "drawing"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "file_name": {
+          "title": "File Name",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "configurations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Configurations",
+          "type": "array"
+        },
+        "active_configuration": {
+          "title": "Active Configuration",
+          "type": "string"
+        },
+        "custom_properties": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Custom Properties",
+          "type": "object"
+        },
+        "config_properties": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "title": "Config Properties",
+          "type": "object"
+        },
+        "material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Material"
+        },
+        "mass": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MassProperties"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
       "required": [
         "document_id",
         "kind",
@@ -599,209 +584,336 @@
         "material",
         "mass"
       ],
+      "title": "Document",
+      "type": "object"
+    },
+    "DrawingSheet": {
+      "additionalProperties": false,
       "properties": {
         "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "sheet_name": {
+          "title": "Sheet Name",
+          "type": "string"
+        },
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "scale": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scale"
+        },
+        "units": {
+          "enum": [
+            "mm",
+            "in",
+            "unknown"
+          ],
+          "title": "Units",
+          "type": "string"
+        },
+        "general_notes": {
+          "items": {
+            "$ref": "#/$defs/Note"
+          },
+          "title": "General Notes",
+          "type": "array"
+        },
+        "dimensions": {
+          "items": {
+            "$ref": "#/$defs/Dimension"
+          },
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "views": {
+          "items": {
+            "$ref": "#/$defs/SheetView"
+          },
+          "title": "Views",
+          "type": "array"
+        },
+        "parse_status": {
+          "enum": [
+            "text",
+            "no_text",
+            "failed"
+          ],
+          "title": "Parse Status",
+          "type": "string"
+        },
+        "parser": {
+          "title": "Parser",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id",
+        "sheet_name",
+        "page",
+        "scale",
+        "units",
+        "general_notes",
+        "dimensions",
+        "views",
+        "parse_status",
+        "parser"
+      ],
+      "title": "DrawingSheet",
+      "type": "object"
+    },
+    "Equation": {
+      "additionalProperties": false,
+      "description": "One row of a document's equation manager (schema 1.1.0).",
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "index": {
+          "description": "Position in the equation manager",
+          "title": "Index",
+          "type": "integer"
+        },
+        "text": {
+          "description": "Full equation text as read",
+          "title": "Text",
+          "type": "string"
+        },
+        "lhs": {
+          "description": "Left of the first '=', quotes stripped; evidence only",
+          "title": "Lhs",
+          "type": "string"
+        },
+        "is_global": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "IEquationMgr.GlobalVariable(i); null plus an equations gap",
+          "title": "Is Global"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Value(i); null when unreadable",
+          "title": "Value"
+        }
+      },
+      "required": [
+        "document_id",
+        "index",
+        "text",
+        "lhs",
+        "is_global",
+        "value"
+      ],
+      "title": "Equation",
+      "type": "object"
+    },
+    "ExtractorInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "sw_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "e.g. '2024 SP3'; null for exported-file-only packages",
+          "title": "Sw Version"
+        },
+        "machine": {
+          "title": "Machine",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "sw_version",
+        "machine"
+      ],
+      "title": "ExtractorInfo",
+      "type": "object"
+    },
+    "FaceGeometry": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "persist_ref": {
+          "contentEncoding": "base64",
+          "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+          "minLength": 1,
+          "title": "Persist Ref",
+          "type": "string"
+        },
+        "persist_ref_scope": {
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document",
+          "title": "Persist Ref Scope",
+          "type": "string"
+        },
+        "component_id": {
+          "title": "Component Id",
+          "type": "string"
+        },
+        "body_id": {
+          "title": "Body Id",
           "type": "string"
         },
         "kind": {
           "enum": [
-            "part",
-            "assembly",
-            "drawing"
-          ]
-        },
-        "file_name": {
+            "cylinder",
+            "plane",
+            "cone",
+            "torus",
+            "other"
+          ],
+          "title": "Kind",
           "type": "string"
         },
-        "path": {
-          "type": "string"
-        },
-        "configurations": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "active_configuration": {
-          "type": "string"
-        },
-        "custom_properties": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "config_properties": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        },
-        "material": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "mass": {
+        "cylinder": {
           "anyOf": [
             {
-              "$ref": "#/$defs/MassProperties"
+              "$ref": "#/$defs/CylinderFace"
             },
             {
               "type": "null"
             }
           ]
-        }
-      }
-    },
-    "ComponentInstance": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "persist_ref",
-        "persist_ref_scope",
-        "name",
-        "full_path",
-        "document_id",
-        "parent_id",
-        "referenced_configuration",
-        "transform",
-        "suppression",
-        "is_fixed",
-        "pattern_id",
-        "is_toolbox"
-      ],
-      "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^cmp:[0-9]{4,}$"
         },
-        "persist_ref": {
-          "$ref": "#/$defs/PersistRef"
-        },
-        "persist_ref_scope": {
-          "type": "string",
-          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
-        },
-        "name": {
-          "type": "string"
-        },
-        "document_id": {
-          "type": "string"
-        },
-        "parent_id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "referenced_configuration": {
-          "type": "string"
-        },
-        "transform": {
-          "$ref": "#/$defs/Transform"
-        },
-        "suppression": {
-          "enum": [
-            "resolved",
-            "lightweight",
-            "suppressed",
-            "unloaded"
-          ]
-        },
-        "is_fixed": {
-          "type": "boolean"
-        },
-        "pattern_id": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "is_toolbox": {
-          "type": "boolean"
-        },
-        "full_path": {
-          "type": "string",
-          "description": "IComponent2.Name2 full instance path, unique in the assembly"
-        }
-      }
-    },
-    "Mate": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "persist_ref",
-        "persist_ref_scope",
-        "type",
-        "entities",
-        "alignment",
-        "suppressed",
-        "distance",
-        "angle"
-      ],
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "persist_ref": {
-          "$ref": "#/$defs/PersistRef"
-        },
-        "persist_ref_scope": {
-          "type": "string",
-          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
-        },
-        "type": {
-          "type": "string"
-        },
-        "entities": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "component_id",
-              "persist_ref",
-              "entity_kind"
-            ],
-            "properties": {
-              "component_id": {
-                "type": "string"
-              },
-              "persist_ref": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/PersistRef"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "entity_kind": {
-                "type": "string"
-              }
+        "plane": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaneFace"
+            },
+            {
+              "type": "null"
             }
-          }
-        },
-        "alignment": {
-          "enum": [
-            "aligned",
-            "anti_aligned",
-            "closest"
           ]
         },
-        "suppressed": {
-          "type": "boolean"
+        "bbox": {
+          "$ref": "#/$defs/BBox3D"
         },
-        "distance": {
+        "area_m2": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Area M2"
+        }
+      },
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "component_id",
+        "body_id",
+        "kind",
+        "cylinder",
+        "plane",
+        "bbox",
+        "area_m2"
+      ],
+      "title": "FaceGeometry",
+      "type": "object"
+    },
+    "Fastener": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "persist_ref": {
+          "contentEncoding": "base64",
+          "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+          "minLength": 1,
+          "title": "Persist Ref",
+          "type": "string"
+        },
+        "persist_ref_scope": {
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document",
+          "title": "Persist Ref Scope",
+          "type": "string"
+        },
+        "component_id": {
+          "title": "Component Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "screw",
+            "bolt",
+            "nut",
+            "washer",
+            "pin",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "identity_source": {
+          "enum": [
+            "toolbox",
+            "custom_property",
+            "name_parse",
+            "manual"
+          ],
+          "title": "Identity Source",
+          "type": "string"
+        },
+        "thread_designation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Thread Designation"
+        },
+        "length": {
           "anyOf": [
             {
               "$ref": "#/$defs/Quantity"
@@ -811,53 +923,355 @@
             }
           ]
         },
-        "angle": {
+        "head_type": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Angle"
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Head Type"
+        },
+        "head_diameter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
             },
             {
               "type": "null"
             }
           ]
+        },
+        "head_height": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "drive": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Drive"
+        },
+        "axis": {
+          "$ref": "#/$defs/Axis"
+        },
+        "material": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Material"
         }
-      }
-    },
-    "Hole": {
-      "type": "object",
-      "additionalProperties": false,
+      },
       "required": [
         "id",
         "persist_ref",
         "persist_ref_scope",
         "component_id",
-        "feature_name",
-        "hole_type",
-        "standard",
-        "size",
+        "kind",
+        "identity_source",
         "thread_designation",
-        "thread_depth",
-        "hole_depth",
-        "end_condition",
-        "diameter",
+        "length",
+        "head_type",
+        "head_diameter",
+        "head_height",
+        "drive",
         "axis",
-        "face_ids"
+        "material"
       ],
+      "title": "Fastener",
+      "type": "object"
+    },
+    "Feature": {
+      "additionalProperties": false,
+      "description": "One node of a part document's feature tree, in traversal order (schema 1.1.0).\n\nThe extractor decides nothing about folders, end tags, groups or classes: those are\nderived in Python from `type_name` and `name` against `checks/rms_types.yaml`.",
       "properties": {
         "id": {
+          "pattern": "^feat:[0-9]{4,}$",
+          "title": "Id",
           "type": "string"
         },
         "persist_ref": {
-          "$ref": "#/$defs/PersistRef"
+          "contentEncoding": "base64",
+          "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+          "minLength": 1,
+          "title": "Persist Ref",
+          "type": "string"
         },
         "persist_ref_scope": {
-          "type": "string",
-          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document",
+          "title": "Persist Ref Scope",
+          "type": "string"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "configuration": {
+          "description": "The configuration the tree was read in (the document's active one)",
+          "title": "Configuration",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type_name": {
+          "description": "GetTypeName2 verbatim; may be a name no table knows",
+          "title": "Type Name",
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "IFeature.Description; null when unreadable (gap), '' when blank",
+          "title": "Description"
+        },
+        "index": {
+          "description": "Flat order within the document's tree, folders inline",
+          "title": "Index",
+          "type": "integer"
+        },
+        "depth": {
+          "description": "0 top level, 1 inside a folder, from sub-features only",
+          "title": "Depth",
+          "type": "integer"
+        },
+        "folder_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "id of the nearest enclosing feature",
+          "title": "Folder Id"
+        },
+        "suppressed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "In `configuration`; null when unreadable",
+          "title": "Suppressed"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "GetErrorCode2; null when unreadable",
+          "title": "Error Code"
+        },
+        "child_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Dependents from GetChildren; null plus a feature_children gap",
+          "title": "Child Ids"
+        },
+        "parent_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Dependencies from GetParents; null plus a feature_parents gap",
+          "title": "Parent Ids"
+        },
+        "sketch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SketchInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present only for features GetSpecificFeature2 returns an ISketch for"
+        },
+        "fillet": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FilletInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Present only for features whose definition is a simple fillet"
+        }
+      },
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "document_id",
+        "configuration",
+        "name",
+        "type_name",
+        "description",
+        "index",
+        "depth",
+        "folder_id",
+        "suppressed",
+        "error_code",
+        "child_ids",
+        "parent_ids",
+        "sketch",
+        "fillet"
+      ],
+      "title": "Feature",
+      "type": "object"
+    },
+    "FilletInfo": {
+      "additionalProperties": false,
+      "description": "The default radius of a simple fillet feature (schema 1.1.0).",
+      "properties": {
+        "default_radius": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ISimpleFilletFeatureData2.DefaultRadius in meters; null plus a fillet_radius gap when unreadable or when the fillet is variable"
+        }
+      },
+      "required": [
+        "default_radius"
+      ],
+      "title": "FilletInfo",
+      "type": "object"
+    },
+    "Gap": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "not_extracted",
+            "unsupported",
+            "tool_error",
+            "no_text"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "entity_kind": {
+          "title": "Entity Kind",
+          "type": "string"
+        },
+        "entity_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Entity Id"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
+        }
+      },
+      "required": [
+        "kind",
+        "entity_kind",
+        "entity_id",
+        "reason",
+        "error"
+      ],
+      "title": "Gap",
+      "type": "object"
+    },
+    "Hole": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "persist_ref": {
+          "contentEncoding": "base64",
+          "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+          "minLength": 1,
+          "title": "Persist Ref",
+          "type": "string"
+        },
+        "persist_ref_scope": {
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document",
+          "title": "Persist Ref Scope",
+          "type": "string"
         },
         "component_id": {
+          "title": "Component Id",
           "type": "string"
         },
         "feature_name": {
+          "title": "Feature Name",
           "type": "string"
         },
         "hole_type": {
@@ -868,25 +1282,42 @@
             "countersink",
             "simple",
             "unknown"
-          ]
+          ],
+          "title": "Hole Type",
+          "type": "string"
         },
         "standard": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Standard"
         },
         "size": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Size"
         },
         "thread_designation": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Thread Designation"
         },
         "thread_depth": {
           "anyOf": [
@@ -914,7 +1345,9 @@
             "blind",
             "through",
             "unknown"
-          ]
+          ],
+          "title": "End Condition",
+          "type": "string"
         },
         "diameter": {
           "anyOf": [
@@ -930,355 +1363,52 @@
           "$ref": "#/$defs/Axis"
         },
         "face_ids": {
-          "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "title": "Face Ids",
+          "type": "array"
         }
-      }
-    },
-    "CosmeticThread": {
-      "type": "object",
-      "additionalProperties": false,
+      },
       "required": [
         "id",
         "persist_ref",
         "persist_ref_scope",
         "component_id",
-        "face_id",
-        "designation",
-        "depth",
-        "is_external"
-      ],
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "persist_ref": {
-          "$ref": "#/$defs/PersistRef"
-        },
-        "persist_ref_scope": {
-          "type": "string",
-          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
-        },
-        "component_id": {
-          "type": "string"
-        },
-        "face_id": {
-          "type": "string"
-        },
-        "designation": {
-          "type": "string"
-        },
-        "depth": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Quantity"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "is_external": {
-          "type": "boolean"
-        }
-      }
-    },
-    "Fastener": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "persist_ref",
-        "persist_ref_scope",
-        "component_id",
-        "kind",
-        "identity_source",
+        "feature_name",
+        "hole_type",
+        "standard",
+        "size",
         "thread_designation",
-        "length",
-        "head_type",
-        "head_diameter",
-        "head_height",
-        "drive",
+        "thread_depth",
+        "hole_depth",
+        "end_condition",
+        "diameter",
         "axis",
-        "material"
+        "face_ids"
       ],
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "persist_ref": {
-          "$ref": "#/$defs/PersistRef"
-        },
-        "persist_ref_scope": {
-          "type": "string",
-          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
-        },
-        "component_id": {
-          "type": "string"
-        },
-        "kind": {
-          "enum": [
-            "screw",
-            "bolt",
-            "nut",
-            "washer",
-            "pin",
-            "other"
-          ]
-        },
-        "identity_source": {
-          "enum": [
-            "toolbox",
-            "custom_property",
-            "name_parse",
-            "manual"
-          ]
-        },
-        "thread_designation": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "length": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Quantity"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "head_type": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "head_diameter": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Quantity"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "head_height": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Quantity"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "drive": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "axis": {
-          "$ref": "#/$defs/Axis"
-        },
-        "material": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      }
-    },
-    "FaceGeometry": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "persist_ref",
-        "persist_ref_scope",
-        "component_id",
-        "body_id",
-        "kind",
-        "cylinder",
-        "plane",
-        "bbox",
-        "area_m2"
-      ],
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "persist_ref": {
-          "$ref": "#/$defs/PersistRef"
-        },
-        "persist_ref_scope": {
-          "type": "string",
-          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
-        },
-        "component_id": {
-          "type": "string"
-        },
-        "body_id": {
-          "type": "string"
-        },
-        "kind": {
-          "enum": [
-            "cylinder",
-            "plane",
-            "cone",
-            "torus",
-            "other"
-          ]
-        },
-        "cylinder": {
-          "anyOf": [
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "axis_origin",
-                "axis_dir",
-                "radius_m"
-              ],
-              "properties": {
-                "axis_origin": {
-                  "$ref": "#/$defs/Vec3"
-                },
-                "axis_dir": {
-                  "$ref": "#/$defs/Vec3"
-                },
-                "radius_m": {
-                  "type": "number",
-                  "exclusiveMinimum": 0
-                }
-              }
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "plane": {
-          "anyOf": [
-            {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "origin",
-                "normal"
-              ],
-              "properties": {
-                "origin": {
-                  "$ref": "#/$defs/Vec3"
-                },
-                "normal": {
-                  "$ref": "#/$defs/Vec3"
-                }
-              }
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "bbox": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "min",
-            "max"
-          ],
-          "properties": {
-            "min": {
-              "$ref": "#/$defs/Vec3"
-            },
-            "max": {
-              "$ref": "#/$defs/Vec3"
-            }
-          }
-        },
-        "area_m2": {
-          "type": [
-            "number",
-            "null"
-          ]
-        }
-      }
-    },
-    "BodyRef": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "persist_ref",
-        "persist_ref_scope",
-        "component_id",
-        "mesh_file",
-        "triangle_count",
-        "is_solid"
-      ],
-      "properties": {
-        "id": {
-          "type": "string"
-        },
-        "persist_ref": {
-          "$ref": "#/$defs/PersistRef"
-        },
-        "persist_ref_scope": {
-          "type": "string",
-          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document"
-        },
-        "component_id": {
-          "type": "string"
-        },
-        "mesh_file": {
-          "type": "string",
-          "pattern": "\\.(glb|stl)$"
-        },
-        "triangle_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "is_solid": {
-          "type": "boolean"
-        }
-      }
+      "title": "Hole",
+      "type": "object"
     },
     "Interference": {
-      "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "configuration",
-        "component_ids",
-        "volume",
-        "settings",
-        "is_fastener",
-        "is_possible",
-        "status",
-        "error",
-        "group_key"
-      ],
       "properties": {
         "id": {
+          "title": "Id",
           "type": "string"
         },
         "configuration": {
+          "title": "Configuration",
           "type": "string"
         },
         "component_ids": {
-          "type": "array",
-          "minItems": 2,
-          "maxItems": 2,
           "items": {
             "type": "string"
-          }
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Component Ids",
+          "type": "array"
         },
         "volume": {
           "anyOf": [
@@ -1292,116 +1422,339 @@
           "description": "Unit as verified by the extractor on the workstation; IInterference.Volume units are undocumented"
         },
         "settings": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "treat_coincident_as_interference",
-            "treat_subassemblies_as_components",
-            "include_multibody",
-            "ignore_hidden",
-            "fastener_folder_treatment"
-          ],
-          "properties": {
-            "treat_coincident_as_interference": {
-              "type": "boolean"
-            },
-            "treat_subassemblies_as_components": {
-              "type": "boolean"
-            },
-            "include_multibody": {
-              "type": "boolean"
-            },
-            "ignore_hidden": {
-              "type": "boolean"
-            },
-            "fastener_folder_treatment": {
-              "enum": [
-                "include",
-                "exclude",
-                "only"
-              ]
-            }
-          }
+          "$ref": "#/$defs/InterferenceSettings"
         },
         "status": {
           "enum": [
             "computed",
             "truncated",
             "failed"
-          ]
+          ],
+          "title": "Status",
+          "type": "string"
         },
         "error": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
         },
         "group_key": {
+          "title": "Group Key",
           "type": "string"
         },
         "is_fastener": {
-          "type": "boolean",
-          "description": "IInterference.IsFastener"
+          "description": "IInterference.IsFastener",
+          "title": "Is Fastener",
+          "type": "boolean"
         },
         "is_possible": {
-          "type": "boolean",
-          "description": "IInterference.IsPossibleInterference (coincident/touching)"
+          "description": "IInterference.IsPossibleInterference (coincident/touching)",
+          "title": "Is Possible",
+          "type": "boolean"
         }
-      }
-    },
-    "Capture": {
-      "type": "object",
-      "additionalProperties": false,
+      },
       "required": [
         "id",
-        "persist_ref",
+        "configuration",
         "component_ids",
-        "file",
-        "view",
-        "note"
+        "volume",
+        "settings",
+        "status",
+        "error",
+        "group_key",
+        "is_fastener",
+        "is_possible"
       ],
+      "title": "Interference",
+      "type": "object"
+    },
+    "InterferenceSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "treat_coincident_as_interference": {
+          "title": "Treat Coincident As Interference",
+          "type": "boolean"
+        },
+        "treat_subassemblies_as_components": {
+          "title": "Treat Subassemblies As Components",
+          "type": "boolean"
+        },
+        "include_multibody": {
+          "title": "Include Multibody",
+          "type": "boolean"
+        },
+        "ignore_hidden": {
+          "title": "Ignore Hidden",
+          "type": "boolean"
+        },
+        "fastener_folder_treatment": {
+          "enum": [
+            "include",
+            "exclude",
+            "only"
+          ],
+          "title": "Fastener Folder Treatment",
+          "type": "string"
+        }
+      },
+      "required": [
+        "treat_coincident_as_interference",
+        "treat_subassemblies_as_components",
+        "include_multibody",
+        "ignore_hidden",
+        "fastener_folder_treatment"
+      ],
+      "title": "InterferenceSettings",
+      "type": "object"
+    },
+    "Manifest": {
+      "additionalProperties": false,
+      "properties": {
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/ManifestEntry"
+          },
+          "title": "Entries",
+          "type": "array"
+        },
+        "discrepancies": {
+          "items": {
+            "$ref": "#/$defs/Discrepancy"
+          },
+          "title": "Discrepancies",
+          "type": "array"
+        }
+      },
+      "required": [
+        "entries",
+        "discrepancies"
+      ],
+      "title": "Manifest",
+      "type": "object"
+    },
+    "ManifestEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "vault_path": {
+          "title": "Vault Path",
+          "type": "string"
+        },
+        "vault_version": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Vault Version"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Revision"
+        },
+        "configuration": {
+          "title": "Configuration",
+          "type": "string"
+        },
+        "local_modified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Local Modified"
+        },
+        "export_method": {
+          "enum": [
+            "native",
+            "pdf",
+            "step",
+            "manual"
+          ],
+          "title": "Export Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id",
+        "vault_path",
+        "vault_version",
+        "revision",
+        "configuration",
+        "local_modified",
+        "export_method"
+      ],
+      "title": "ManifestEntry",
+      "type": "object"
+    },
+    "MassProperties": {
+      "additionalProperties": false,
+      "properties": {
+        "mass_kg": {
+          "title": "Mass Kg",
+          "type": "number"
+        },
+        "volume_m3": {
+          "title": "Volume M3",
+          "type": "number"
+        },
+        "center_of_mass": {
+          "$ref": "#/$defs/Vec3"
+        },
+        "configuration": {
+          "title": "Configuration",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mass_kg",
+        "volume_m3",
+        "center_of_mass",
+        "configuration"
+      ],
+      "title": "MassProperties",
+      "type": "object"
+    },
+    "Mate": {
+      "additionalProperties": false,
       "properties": {
         "id": {
+          "title": "Id",
           "type": "string"
         },
         "persist_ref": {
+          "contentEncoding": "base64",
+          "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+          "minLength": 1,
+          "title": "Persist Ref",
+          "type": "string"
+        },
+        "persist_ref_scope": {
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document",
+          "title": "Persist Ref Scope",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "entities": {
+          "items": {
+            "$ref": "#/$defs/MateEntity"
+          },
+          "minItems": 1,
+          "title": "Entities",
+          "type": "array"
+        },
+        "alignment": {
+          "enum": [
+            "aligned",
+            "anti_aligned",
+            "closest"
+          ],
+          "title": "Alignment",
+          "type": "string"
+        },
+        "suppressed": {
+          "title": "Suppressed",
+          "type": "boolean"
+        },
+        "distance": {
           "anyOf": [
             {
-              "$ref": "#/$defs/PersistRef"
+              "$ref": "#/$defs/Quantity"
             },
             {
               "type": "null"
             }
           ]
         },
-        "component_ids": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "file": {
-          "type": "string",
-          "pattern": "\\.png$"
-        },
-        "view": {
+        "angle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Angle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "persist_ref",
+        "persist_ref_scope",
+        "type",
+        "entities",
+        "alignment",
+        "suppressed",
+        "distance",
+        "angle"
+      ],
+      "title": "Mate",
+      "type": "object"
+    },
+    "MateEntity": {
+      "additionalProperties": false,
+      "properties": {
+        "component_id": {
+          "title": "Component Id",
           "type": "string"
         },
-        "note": {
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Persist Ref"
+        },
+        "entity_kind": {
+          "title": "Entity Kind",
           "type": "string"
         }
-      }
+      },
+      "required": [
+        "component_id",
+        "persist_ref",
+        "entity_kind"
+      ],
+      "title": "MateEntity",
+      "type": "object"
     },
     "Note": {
-      "type": "object",
       "additionalProperties": false,
-      "required": [
-        "text",
-        "source",
-        "kind"
-      ],
       "properties": {
         "text": {
+          "title": "Text",
           "type": "string"
         },
         "source": {
@@ -1413,135 +1766,684 @@
             "material",
             "finish",
             "other"
-          ]
+          ],
+          "title": "Kind",
+          "type": "string"
         }
-      }
-    },
-    "DrawingSheet": {
-      "type": "object",
-      "additionalProperties": false,
+      },
       "required": [
-        "document_id",
-        "sheet_name",
-        "page",
-        "scale",
-        "units",
-        "general_notes",
-        "dimensions",
-        "views",
-        "parse_status",
-        "parser"
+        "text",
+        "source",
+        "kind"
       ],
+      "title": "Note",
+      "type": "object"
+    },
+    "PlaneFace": {
+      "additionalProperties": false,
       "properties": {
-        "document_id": {
-          "type": "string"
+        "origin": {
+          "$ref": "#/$defs/Vec3"
         },
-        "sheet_name": {
-          "type": "string"
+        "normal": {
+          "$ref": "#/$defs/Vec3"
+        }
+      },
+      "required": [
+        "origin",
+        "normal"
+      ],
+      "title": "PlaneFace",
+      "type": "object"
+    },
+    "Quantity": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "title": "Value",
+          "type": "number"
         },
-        "page": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "scale": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "units": {
+        "unit": {
           "enum": [
             "mm",
             "in",
-            "unknown"
-          ]
-        },
-        "general_notes": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/Note"
-          }
-        },
-        "dimensions": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/Dimension"
-          }
-        },
-        "views": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "name",
-              "bbox"
-            ],
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "bbox": {
-                "type": "array",
-                "minItems": 4,
-                "maxItems": 4,
-                "items": {
-                  "type": "number"
-                }
-              }
-            }
-          }
-        },
-        "parse_status": {
-          "enum": [
-            "text",
-            "no_text",
-            "failed"
-          ]
-        },
-        "parser": {
+            "m"
+          ],
+          "title": "Unit",
           "type": "string"
         }
-      }
-    },
-    "Gap": {
-      "type": "object",
-      "additionalProperties": false,
+      },
       "required": [
-        "kind",
-        "entity_kind",
-        "entity_id",
-        "reason",
-        "error"
+        "value",
+        "unit"
       ],
+      "title": "Quantity",
+      "type": "object"
+    },
+    "SheetView": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "bbox": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "title": "Bbox",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "bbox"
+      ],
+      "title": "SheetView",
+      "type": "object"
+    },
+    "SketchInfo": {
+      "additionalProperties": false,
+      "description": "What the extractor reads off a feature's sketch (schema 1.1.0).\n\n`raw_status` is `ISketch.GetConstrainedStatus` verbatim: the extractor classifies\nnothing, so the name behind the number is Python's job (`RmsTypeTable`).",
+      "properties": {
+        "raw_status": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ISketch.GetConstrainedStatus verbatim; null plus a sketch_status gap",
+          "title": "Raw Status"
+        },
+        "consumer_ids": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Feature ids that consume this sketch (GetChildren); null plus a feature_children gap when unavailable, [] when there are none",
+          "title": "Consumer Ids"
+        }
+      },
+      "required": [
+        "raw_status",
+        "consumer_ids"
+      ],
+      "title": "SketchInfo",
+      "type": "object"
+    },
+    "SourceRef": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "sheet"
+          ]
+        },
+        {
+          "required": [
+            "annotation"
+          ]
+        },
+        {
+          "required": [
+            "persist_ref"
+          ]
+        },
+        {
+          "required": [
+            "page"
+          ]
+        }
+      ],
+      "description": "Where a value came from. At least one locator must be set.",
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "sheet": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sheet"
+        },
+        "view": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "View"
+        },
+        "annotation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Annotation"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bbox"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "title": "SourceRef",
+      "type": "object"
+    },
+    "SuppressTestRow": {
+      "additionalProperties": false,
+      "description": "What one planned feature's suppression attempt produced (schema 1.1.0).",
+      "properties": {
+        "feature_id": {
+          "title": "Feature Id",
+          "type": "string"
+        },
+        "persist_ref": {
+          "contentEncoding": "base64",
+          "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+          "minLength": 1,
+          "title": "Persist Ref",
+          "type": "string"
+        },
+        "persist_ref_scope": {
+          "description": "document_id whose IModelDocExtension produced persist_ref; resolve against that document",
+          "title": "Persist Ref Scope",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "ok",
+            "rebuild_errors",
+            "already_suppressed",
+            "not_applied",
+            "truncated",
+            "aborted"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "whats_wrong_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Whats Wrong Count"
+        },
+        "messages": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Messages",
+          "type": "array"
+        },
+        "messages_truncated": {
+          "description": "Messages dropped beyond the 20 kept",
+          "minimum": 0,
+          "title": "Messages Truncated",
+          "type": "integer"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error"
+        },
+        "elapsed_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Elapsed Ms"
+        }
+      },
+      "required": [
+        "feature_id",
+        "persist_ref",
+        "persist_ref_scope",
+        "name",
+        "outcome",
+        "whats_wrong_count",
+        "messages",
+        "messages_truncated",
+        "error",
+        "elapsed_ms"
+      ],
+      "title": "SuppressTestRow",
+      "type": "object"
+    },
+    "SuppressTestRun": {
+      "additionalProperties": false,
+      "description": "One `suppress-test` run appended to the package (schema 1.1.0).\n\nWritten only by the console command through `PackageAppender`; a later `dump`\noverwrites the package and drops it, exactly as interference results are dropped.",
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "configuration": {
+          "title": "Configuration",
+          "type": "string"
+        },
+        "group": {
+          "description": "The Detail group name from the plan",
+          "title": "Group",
+          "type": "string"
+        },
+        "plan_file": {
+          "description": "Path of the plan consumed",
+          "title": "Plan File",
+          "type": "string"
+        },
+        "run_at": {
+          "format": "date-time",
+          "title": "Run At",
+          "type": "string"
+        },
+        "acknowledged": {
+          "description": "Always true; the command refuses otherwise",
+          "title": "Acknowledged",
+          "type": "boolean"
+        },
+        "baseline_whats_wrong_count": {
+          "description": "Read before the first suppression; the command refuses when non-zero, so this is 0 in every written run and is recorded for audit",
+          "title": "Baseline Whats Wrong Count",
+          "type": "integer"
+        },
+        "limit": {
+          "description": "--limit in effect",
+          "title": "Limit",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "description": "--timeout-seconds in effect",
+          "title": "Timeout Seconds",
+          "type": "integer"
+        },
+        "features_present": {
+          "description": "Planned features; equals len(rows)",
+          "title": "Features Present",
+          "type": "integer"
+        },
+        "restore_verified": {
+          "description": "The post-run tree matched the pre-run snapshot",
+          "title": "Restore Verified",
+          "type": "boolean"
+        },
+        "unrestored_feature_ids": {
+          "description": "Empty when restore_verified",
+          "items": {
+            "type": "string"
+          },
+          "title": "Unrestored Feature Ids",
+          "type": "array"
+        },
+        "rows": {
+          "description": "One per planned feature, in plan order; untested ones are truncated",
+          "items": {
+            "$ref": "#/$defs/SuppressTestRow"
+          },
+          "title": "Rows",
+          "type": "array"
+        }
+      },
+      "required": [
+        "document_id",
+        "configuration",
+        "group",
+        "plan_file",
+        "run_at",
+        "acknowledged",
+        "baseline_whats_wrong_count",
+        "limit",
+        "timeout_seconds",
+        "features_present",
+        "restore_verified",
+        "unrestored_feature_ids",
+        "rows"
+      ],
+      "title": "SuppressTestRun",
+      "type": "object"
+    },
+    "Tolerance": {
+      "additionalProperties": false,
       "properties": {
         "kind": {
           "enum": [
-            "not_extracted",
-            "unsupported",
-            "tool_error",
-            "no_text"
-          ]
-        },
-        "entity_kind": {
+            "symmetric",
+            "bilateral",
+            "limits",
+            "basic",
+            "none"
+          ],
+          "title": "Kind",
           "type": "string"
         },
-        "entity_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "upper": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "$ref": "#/$defs/Angle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Upper"
         },
-        "reason": {
-          "type": "string"
+        "lower": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "$ref": "#/$defs/Angle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lower"
         },
-        "error": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "source": {
+          "$ref": "#/$defs/SourceRef"
         }
-      }
+      },
+      "required": [
+        "kind",
+        "upper",
+        "lower",
+        "source"
+      ],
+      "title": "Tolerance",
+      "type": "object"
+    },
+    "Vec3": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "title": "Y",
+          "type": "number"
+        },
+        "z": {
+          "title": "Z",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "title": "Vec3",
+      "type": "object"
+    },
+    "Volume": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "unit": {
+          "enum": [
+            "mm3",
+            "in3",
+            "m3"
+          ],
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "title": "Volume",
+      "type": "object"
     }
-  }
+  },
+  "additionalProperties": false,
+  "description": "Intermediate representation of one SOLIDWORKS design dumped by the extractor and/or assembled from exported files. Field rules: specs/001-agentic-design-review/data-model.md section 2.",
+  "properties": {
+    "schema_version": {
+      "description": "Major 1. Consumers reject any other major.",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "package_id": {
+      "format": "uuid",
+      "title": "Package Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "extractor": {
+      "$ref": "#/$defs/ExtractorInfo"
+    },
+    "manifest": {
+      "$ref": "#/$defs/Manifest"
+    },
+    "design": {
+      "$ref": "#/$defs/Design"
+    },
+    "documents": {
+      "items": {
+        "$ref": "#/$defs/Document"
+      },
+      "title": "Documents",
+      "type": "array"
+    },
+    "components": {
+      "items": {
+        "$ref": "#/$defs/ComponentInstance"
+      },
+      "title": "Components",
+      "type": "array"
+    },
+    "mates": {
+      "items": {
+        "$ref": "#/$defs/Mate"
+      },
+      "title": "Mates",
+      "type": "array"
+    },
+    "holes": {
+      "items": {
+        "$ref": "#/$defs/Hole"
+      },
+      "title": "Holes",
+      "type": "array"
+    },
+    "threads": {
+      "items": {
+        "$ref": "#/$defs/CosmeticThread"
+      },
+      "title": "Threads",
+      "type": "array"
+    },
+    "fasteners": {
+      "items": {
+        "$ref": "#/$defs/Fastener"
+      },
+      "title": "Fasteners",
+      "type": "array"
+    },
+    "faces": {
+      "items": {
+        "$ref": "#/$defs/FaceGeometry"
+      },
+      "title": "Faces",
+      "type": "array"
+    },
+    "bodies": {
+      "items": {
+        "$ref": "#/$defs/BodyRef"
+      },
+      "title": "Bodies",
+      "type": "array"
+    },
+    "interferences": {
+      "items": {
+        "$ref": "#/$defs/Interference"
+      },
+      "title": "Interferences",
+      "type": "array"
+    },
+    "captures": {
+      "items": {
+        "$ref": "#/$defs/Capture"
+      },
+      "title": "Captures",
+      "type": "array"
+    },
+    "drawings": {
+      "items": {
+        "$ref": "#/$defs/DrawingSheet"
+      },
+      "title": "Drawings",
+      "type": "array"
+    },
+    "features": {
+      "items": {
+        "$ref": "#/$defs/Feature"
+      },
+      "title": "Features",
+      "type": "array"
+    },
+    "equations": {
+      "items": {
+        "$ref": "#/$defs/Equation"
+      },
+      "title": "Equations",
+      "type": "array"
+    },
+    "rms_suppress_test": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SuppressTestRun"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "gaps": {
+      "items": {
+        "$ref": "#/$defs/Gap"
+      },
+      "title": "Gaps",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "package_id",
+    "created_at",
+    "extractor",
+    "manifest",
+    "design",
+    "documents",
+    "components",
+    "gaps"
+  ],
+  "title": "EvidencePackage",
+  "type": "object"
 }

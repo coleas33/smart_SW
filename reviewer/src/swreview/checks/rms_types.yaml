@@ -1,5 +1,4 @@
-# DRAFT of reviewer/src/swreview/checks/rms_types.yaml. T001 moves this file there (git mv);
-# after that the shipped file is the single normative copy and this path no longer exists.
+# The single normative RMS type table (specs/003-resilient-modeling/contracts/README.md).
 #
 # Provenance: type-name sets from LifeDay/Solidworks-Resilient-Modeling-Skill (commit
 # df49e6d, rms_check.py), reused with the author's permission (NOTICE.md). Type names are

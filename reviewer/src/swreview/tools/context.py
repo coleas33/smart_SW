@@ -123,6 +123,22 @@ class ToolContext:
             raise ValueError("this tool writes to a review session and this context has none")
         return self.session
 
+    @property
+    def current_step_id(self) -> int:
+        """The index the next recorded `InvestigationStep` will take.
+
+        Read inside a tool call, that is the step of the call in flight: `SessionSink`
+        records the step *after* the tool function returns, with `index=len(steps)`
+        (`tools/registry.py`), so a tool that writes a finding while it runs cites the
+        step it is itself being recorded as. That is what `Finding.tool_result_ids` is
+        for, and it is the only evidence a check has when its verdict rests on what the
+        model was shown rather than on arithmetic.
+
+        Raises `ValueError` through `require_session` for a context with no session: a
+        step id is an index into a session's steps, and there are none to index.
+        """
+        return len(self.require_session().steps)
+
     # --- what the run writes, and what the pane is told about it (FR-013) -------------
 
     def emit_event(self, event_type: EventType, body: Mapping[str, Any]) -> None:
@@ -152,6 +168,23 @@ class ToolContext:
         self.emit_event(
             "coverage", {"bucket": bucket, "item": item.model_dump(mode="json")}
         )
+
+    def replace_coverage(self, check: str, bucket: CoverageBucket, item: CoverageItem) -> None:
+        """Rewrite `check`'s item in `bucket`: drop what is there, then record `item`.
+
+        An aggregated coverage item - one RMS rule over every document it was evaluated on
+        (data-model.md section 2) - is rebuilt from the whole run each time the check tool
+        runs, so calling the tool twice must leave one item, not two. Appending is what
+        `record_coverage` does and is right for an item that stands for one occurrence;
+        this is for the item that stands for the current state of a rule.
+
+        The append and the event still go through `record_coverage`, so the pane sees the
+        replacement exactly like any other coverage item and there is one path that writes
+        coverage rather than two that could drift.
+        """
+        items = getattr(self.require_session().coverage, bucket)
+        items[:] = [existing for existing in items if existing.check != check]
+        self.record_coverage(bucket, item)
 
     def record_evidence_request(self, request: EvidenceRequest) -> None:
         """Open an evidence request on the session and announce it."""

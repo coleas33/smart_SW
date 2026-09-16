@@ -1,0 +1,217 @@
+{
+  "package_id": "rms-part",
+  "known_defects": [
+    {
+      "id": "D-1",
+      "check": "rms.grouping.all_features_in_a_group",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Axis1 (RefAxis) sits above the 1-Ref folder, so a content feature belongs to no group."
+    },
+    {
+      "id": "D-2",
+      "check": "rms.groups.no_solids_in_ref_or_construction",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Boss-Extrude1 ('CON stray pad', Extrusion) is inside 2-Construction."
+    },
+    {
+      "id": "D-3",
+      "check": "rms.core.shell_last",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Boss-Extrude4 ('CORE rib') follows Shell1 inside 3-Core."
+    },
+    {
+      "id": "D-4",
+      "check": "rms.detail.holes_last",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Cut-Extrude5 ('DET relief') follows Hole1 inside 4-Detail, so the holes are not the trailing block."
+    },
+    {
+      "id": "D-5",
+      "check": "rms.modify.transform_before_replicate",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: LPattern1 ('MOD hole row') precedes Draft1 inside 5-Modify."
+    },
+    {
+      "id": "D-6",
+      "check": "rms.quarantine.chamfers_before_fillets",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Fillet1 (R2) precedes Chamfer1 inside 6-Quarantine."
+    },
+    {
+      "id": "D-7",
+      "check": "rms.quarantine.largest_fillet_first",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Quarantine fillet radii run 2, 5, 1 mm; the Fillet1 to Fillet2 step increases."
+    },
+    {
+      "id": "D-8",
+      "check": "rms.quarantine.only_fillets_and_chamfers",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Draft2 (Draft) is inside 6-Quarantine."
+    },
+    {
+      "id": "D-9",
+      "check": "rms.refs.quarantine_has_no_children",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Fillet3 rounds an edge created by Fillet1, so a Quarantine feature has a dependent."
+    },
+    {
+      "id": "D-10",
+      "check": "rms.detail.no_internal_references",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Cut-Extrude3 ('DET slot') is sketched on the floor created by Cut-Extrude2 ('DET pocket'), a Detail-to-Detail dependency that is neither the single-consumer sketch exception nor a coupled pair in one derived subfolder."
+    },
+    {
+      "id": "D-11",
+      "check": "rms.intent.every_feature_described",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Draft1 in 5-Modify has an empty description; every other content feature carries one."
+    },
+    {
+      "id": "D-12",
+      "check": "rms.sketches.fully_defined",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Sketch2 in 2-Construction (consumed by Surface-Extrude1) is under defined."
+    },
+    {
+      "id": "D-13",
+      "check": "rms.sketches.not_over_defined",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: the sketch of Cut-Extrude5 ('DET relief') carries a duplicate driving dimension, so it is over defined while still solving."
+    },
+    {
+      "id": "D-14",
+      "check": "rms.sketches.one_sketch_per_feature",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: Sketch3 in 3-Core is consumed by both Boss-Extrude2 and Boss-Extrude3 through contour selection."
+    },
+    {
+      "id": "D-15",
+      "check": "rms.detail.individually_suppressible",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: suppressing Cut-Extrude2 ('DET pocket') alone leaves Cut-Extrude3 ('DET slot') without its sketch plane and the rebuild errors. Reported only once a suppress-test run for this document is in the package; without one the rule is unresolved for every Detail feature."
+    },
+    {
+      "id": "D-16",
+      "check": "rms.params.global_variables_present",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A has no equations at all, so it declares no global variable."
+    },
+    {
+      "id": "D-17",
+      "check": "rms.params.dimensions_driven_by_equations",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A has no equations at all, so no dimension is driven by one."
+    },
+    {
+      "id": "D-18",
+      "check": "rms.folders.present",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B has no 5-Modify group folder."
+    },
+    {
+      "id": "D-19",
+      "check": "rms.folders.ordered",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: the 3-Core folder appears after the 4-Detail folder in tree order."
+    },
+    {
+      "id": "D-20",
+      "check": "rms.refs.direction",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: Boss-Extrude2 ('CORE rib') is sketched on a face of Boss-Extrude1, which the transposed folders place in the later 4-Detail group, so a dependent lives in an earlier group than what it depends on."
+    }
+  ],
+  "correct_conditions": [
+    {
+      "check": "rms.folders.present",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A carries all six group folders."
+    },
+    {
+      "check": "rms.folders.ordered",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A's six group folders appear once each, in method order."
+    },
+    {
+      "check": "rms.refs.direction",
+      "component_ids": ["cmp:0002"],
+      "description": "Part A: no feature depends on a feature in a later group."
+    },
+    {
+      "check": "rms.grouping.all_features_in_a_group",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: every content feature sits inside a group folder."
+    },
+    {
+      "check": "rms.groups.no_solids_in_ref_or_construction",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: 1-Ref holds only Plane1 and 2-Construction only a surface feature."
+    },
+    {
+      "check": "rms.intent.every_feature_described",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: every content feature carries a description."
+    },
+    {
+      "check": "rms.sketches.fully_defined",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: every sketch is fully defined."
+    },
+    {
+      "check": "rms.sketches.not_over_defined",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: no sketch is over defined or in solver error."
+    },
+    {
+      "check": "rms.sketches.one_sketch_per_feature",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: no sketch is shared between two features."
+    },
+    {
+      "check": "rms.quarantine.chamfers_before_fillets",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: Chamfer1 precedes Fillet1 and Fillet2 inside 6-Quarantine."
+    },
+    {
+      "check": "rms.quarantine.largest_fillet_first",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: Quarantine fillet radii run 6 then 3 mm, non-increasing with two readable radii."
+    },
+    {
+      "check": "rms.quarantine.only_fillets_and_chamfers",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: 6-Quarantine holds one chamfer and two fillets and nothing else."
+    },
+    {
+      "check": "rms.refs.quarantine_has_no_children",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B: nothing depends on a Quarantine feature; the chamfer and both fillets sit on edges none of them created."
+    },
+    {
+      "check": "rms.params.global_variables_present",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B declares the global variables \"Width\" and \"Thickness\"."
+    },
+    {
+      "check": "rms.params.dimensions_driven_by_equations",
+      "component_ids": ["cmp:0003"],
+      "description": "Part B drives the base plate's width and thickness dimensions from those globals."
+    },
+    {
+      "check": "rms.assembly.mates_to_reference_geometry",
+      "component_ids": ["cmp:0001", "cmp:0002", "cmp:0003"],
+      "description": "RMS-Fixture.SLDASM mates Part B to Part A through reference geometry only, never a face, edge, or vertex."
+    },
+    {
+      "check": "rms.assembly.first_component_fixed",
+      "component_ids": ["cmp:0001", "cmp:0002"],
+      "description": "Part A is the first component of the root assembly and is fixed."
+    },
+    {
+      "check": "rms.assembly.mate_chain_depth",
+      "component_ids": ["cmp:0001", "cmp:0002", "cmp:0003"],
+      "description": "Part B is one mate from the fixed root, within the default limit of 3."
+    }
+  ]
+}

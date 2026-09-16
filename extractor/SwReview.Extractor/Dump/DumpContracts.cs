@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using SwReview.Extractor.Ids;
 using SwReview.Extractor.Ir;
@@ -71,6 +71,19 @@ public sealed class ComponentNode
     public string? PatternId { get; set; }
 
     public bool IsToolbox { get; set; }
+
+    /// <summary>
+    /// IComponent2.GetConstrainedStatus verbatim; null when the read failed (a Gap). The
+    /// traversal records the number and names nothing.
+    /// </summary>
+    public int? ConstrainedStatusRaw { get; set; }
+
+    /// <summary>
+    /// What the <c>GetConstrainedStatus</c> read threw, or null when it did not throw. The
+    /// gap itself is written by <c>PackageWriter</c>, which is the first place the
+    /// component's <c>cmp:NNNN</c> exists for it to name (data-model section 1).
+    /// </summary>
+    public string? ConstrainedStatusError { get; set; }
 
     /// <summary>Base64 persistent reference, or null when SOLIDWORKS gave none (a Gap).</summary>
     public string? PersistRef { get; set; }

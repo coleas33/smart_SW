@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -232,6 +232,21 @@ public sealed class PackageWriter
         {
             ComponentNode node = scoped.Node;
 
+            // The traversal could not name the component - cmp:NNNN is allocated here - so
+            // a failed GetConstrainedStatus read waits on the node for its id. Recorded
+            // before the refusals below, because a component that never reaches the package
+            // still had its status read attempted (data-model section 1).
+            if (node.ConstrainedStatusError != null)
+            {
+                scope.Gaps.Add(
+                    GapKind.ToolError,
+                    "component_constrained_status",
+                    scoped.Id,
+                    $"GetConstrainedStatus failed for '{node.Key}', so whether it is fully "
+                    + "constrained is unknown and any check that needs it is unresolved.",
+                    node.ConstrainedStatusError);
+            }
+
             if (node.PersistRef == null)
             {
                 // Principle IV: an entity with no persistent reference cannot be navigated
@@ -275,6 +290,7 @@ public sealed class PackageWriter
                 IsFixed = node.IsFixed,
                 PatternId = node.PatternId,
                 IsToolbox = node.IsToolbox,
+                ConstrainedStatusRaw = node.ConstrainedStatusRaw,
             });
         }
     }

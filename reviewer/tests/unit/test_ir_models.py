@@ -11,6 +11,7 @@ import pytest
 from pydantic import ValidationError
 
 from swreview.ir.models import (
+    SCHEMA_VERSION,
     Angle,
     Axis,
     ComponentInstance,
@@ -65,7 +66,7 @@ def test_unsupported_schema_major_is_a_value_error_but_not_a_validation_error() 
 
 
 def test_unsupported_schema_major_raised_from_json_too() -> None:
-    payload = build_package().model_dump_json().replace('"1.0.0"', '"2.0.0"', 1)
+    payload = build_package().model_dump_json().replace(f'"{SCHEMA_VERSION}"', '"2.0.0"', 1)
 
     with pytest.raises(UnsupportedSchemaVersionError):
         EvidencePackage.model_validate_json(payload)

@@ -53,6 +53,62 @@ public class PackageWriterTests : IDisposable
     }
 
     [Fact]
+    public void Build_CarriesTheComponentsRawConstrainedStatusThroughToThePackage()
+    {
+        // T006. The first-component rule reads this number, so it has to survive the whole
+        // way from the traversal to package.json. An unread status stays null: the rule
+        // reports unresolved rather than treating "not read" as "not constrained".
+        var sources = new FakeSources();
+        sources.Nodes[1].ConstrainedStatusRaw = 2;
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.Equal(2, package.Components[1].ConstrainedStatusRaw);
+        Assert.Null(package.Components[2].ConstrainedStatusRaw);
+    }
+
+    [Fact]
+    public void Build_ConstrainedStatusThatCouldNotBeRead_IsAGapNamingTheComponent()
+    {
+        // data-model.md section 1: every added gap entity kind names one entity_id. The
+        // traversal cannot name one - cmp:NNNN is allocated here - so it carries the
+        // failure on the node and the gap is written where the id exists.
+        var sources = new FakeSources();
+        sources.Nodes[1].ConstrainedStatusError = "COMException: the component did not answer.";
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Gap gap = Assert.Single(package.Gaps, g => g.EntityKind == "component_constrained_status");
+        Assert.Equal("cmp:0002", gap.EntityId);
+        Assert.Equal(GapKind.ToolError, gap.Kind);
+        Assert.Equal("COMException: the component did not answer.", gap.Error);
+        Assert.Contains("housing-1", gap.Reason, StringComparison.Ordinal);
+        Assert.Null(package.Components[1].ConstrainedStatusRaw);
+    }
+
+    [Fact]
+    public void Build_ConstrainedStatusThatWasRead_RaisesNoGap()
+    {
+        EvidencePackage package = NewWriter().Build(Options());
+
+        Assert.DoesNotContain(package.Gaps, g => g.EntityKind == "component_constrained_status");
+    }
+
+    [Fact]
+    public void Build_CarriesMateSuppressionThroughToThePackage()
+    {
+        // The chain-depth rule must not walk a suppressed mate as an edge.
+        Assert.False(Assert.Single(NewWriter().Build(Options()).Mates).Suppressed);
+
+        var sources = new FakeSources();
+        sources.MateSuppressed = true;
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.True(Assert.Single(package.Mates).Suppressed);
+    }
+
+    [Fact]
     public void Build_GivesTheSameFileTheSameDocumentIdEveryDump()
     {
         EvidencePackage first = NewWriter().Build(Options());
@@ -454,6 +510,9 @@ public class PackageWriterTests : IDisposable
 
         public Exception? MateFailure { get; set; }
 
+        /// <summary>What the mate phase read off the mate feature's IsSuppressed2.</summary>
+        public bool MateSuppressed { get; set; }
+
         public bool MeshesWereDumped { get; private set; }
 
         public string? MeshDirectory { get; private set; }
@@ -565,6 +624,7 @@ public class PackageWriterTests : IDisposable
                     PersistRefScope = scope.DocumentId(AssemblyPath),
                     Type = "swMateCONCENTRIC",
                     Alignment = MateAlignment.Aligned,
+                    Suppressed = MateSuppressed,
                     Entities =
                     {
                         new MateEntityRef

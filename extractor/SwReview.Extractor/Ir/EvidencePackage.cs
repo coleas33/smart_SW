@@ -12,7 +12,7 @@ namespace SwReview.Extractor.Ir;
 public sealed class EvidencePackage
 {
     /// <summary>The schema version this package was written against.</summary>
-    public const string CurrentSchemaVersion = "1.0.0";
+    public const string CurrentSchemaVersion = "1.1.0";
 
     /// <summary>Semver; consumers reject any major other than 1 (FR-016).</summary>
     [JsonPropertyName("schema_version")]
@@ -67,6 +67,20 @@ public sealed class EvidencePackage
 
     [JsonPropertyName("drawings")]
     public List<DrawingSheet> Drawings { get; set; } = new List<DrawingSheet>();
+
+    /// <summary>Part feature trees, in traversal order; empty when --features none.</summary>
+    [JsonPropertyName("features")]
+    public List<Feature> Features { get; set; } = new List<Feature>();
+
+    [JsonPropertyName("equations")]
+    public List<Equation> Equations { get; set; } = new List<Equation>();
+
+    /// <summary>
+    /// The last suppress-test run appended to this package, or null. A dump overwrites the
+    /// package and drops it, exactly as it drops interference results.
+    /// </summary>
+    [JsonPropertyName("rms_suppress_test")]
+    public SuppressTestRun? RmsSuppressTest { get; set; }
 
     /// <summary>Everything that could not be extracted. Never empty by omission.</summary>
     [JsonPropertyName("gaps")]
