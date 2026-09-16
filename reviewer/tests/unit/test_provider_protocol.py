@@ -150,6 +150,23 @@ def valid_bodies() -> dict[str, dict[str, Any]]:
             },
         },
         "coverage": {"bucket": "checked", "item": coverage_item_body()},
+        # The worked example of contracts/usage.md section 5, written out rather than
+        # built through `usage_body`: this table's job is to say independently what the
+        # schema says, so a builder that drifted from the contract would pass.
+        "usage": {
+            "round_index": 0,
+            "provider": "openai",
+            "model": "gpt-5.6",
+            "input_tokens": 12043,
+            "cached_input_tokens": 10240,
+            "cache_write_tokens": 1803,
+            "output_tokens": 512,
+            "reasoning_tokens": 448,
+            "tool_result_input_tokens": None,
+            "total_tokens": 12555,
+            "latency_s": 4.31,
+            "cache_diagnostic": None,
+        },
         "turn.ended": {"reason": "end"},
         "session.ended": {"ended_at": "2026-09-13T12:10:00Z", "timing": timing_body()},
         "error": {

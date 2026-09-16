@@ -44,18 +44,24 @@ public sealed class NoSecretPolicy : ISecretPolicy
 }
 
 /// <summary>
-/// The in-process host's policy (specs/002-task-pane-assistant/contracts/README.md): two
-/// per-launch secrets naming two scopes.
+/// The in-process host's policy (specs/002-task-pane-assistant/contracts/README.md, and
+/// feature 004's contracts/bridge-remodel.md, "Authorization"): per-launch secrets naming
+/// separate scopes.
 ///
 ///   * the <b>review</b> secret, held by the add-in's own review session, authorizes
 ///     <c>ping | capture | measure | interference</c>;
 ///   * the <b>general-chat</b> secret, handed to the CLI through its generated profile,
-///     authorizes <c>ping | capture | measure</c> only.
+///     authorizes <c>ping | capture | measure</c> only;
+///   * the <b>remodel</b> secret, handed only to the remodel backend session, authorizes
+///     <c>ping</c> and the <c>remodel.*</c> family and nothing else - not <c>capture</c>, not
+///     <c>measure</c>, not <c>interference</c>.
 ///
-/// Scoping is what makes the read-only subset promised by FR-022 a boundary rather than a
-/// convention: the CLI can read the profile that lists its own tools, so leaving
-/// <c>interference</c> out of the MCP allowlist withholds nothing on its own. One shared
-/// secret would authenticate without bounding what it authorizes.
+/// The three scopes are disjoint where it matters, and that is the point: neither of the two
+/// read-only scopes can call anything that writes, and the one scope that can write cannot
+/// call the review vocabulary. Scoping is what makes the read-only subset promised by FR-022 a
+/// boundary rather than a convention: the CLI can read the profile that lists its own tools,
+/// so leaving <c>interference</c> out of the MCP allowlist withholds nothing on its own. One
+/// shared secret would authenticate without bounding what it authorizes.
 /// </summary>
 public sealed class ScopedSecretPolicy : ISecretPolicy
 {
@@ -76,10 +82,30 @@ public sealed class ScopedSecretPolicy : ISecretPolicy
         BridgeCommands.Measure,
     };
 
+    /// <summary>
+    /// What the remodel secret authorizes: <c>ping</c>, so the run can check the bridge is
+    /// alive, and the twelve <c>remodel.*</c> commands by name.
+    ///
+    /// By name, and not by the <c>remodel.</c> prefix: a prefix would authorize a thirteenth
+    /// command the moment somebody named one, which is exactly the accidental widening the
+    /// stage-1 allowlist exists to prevent one layer down.
+    /// </summary>
+    public static readonly IReadOnlyList<string> RemodelScopeCommands = BuildRemodelScope();
+
     private readonly string _reviewSecret;
     private readonly string _generalChatSecret;
 
-    public ScopedSecretPolicy(string reviewSecret, string generalChatSecret)
+    /// <summary>Null on a host that runs no re-modeler: then no secret authorizes any of it.</summary>
+    private readonly string? _remodelSecret;
+
+    /// <param name="remodelSecret">
+    /// Feature 004's third scope, handed only to the remodel backend session. Null - the
+    /// default - is a host that mints no remodel secret, and then <b>no</b> secret authorizes
+    /// a <c>remodel.*</c> command at all, which is the right answer for a host that answers
+    /// none of them.
+    /// </param>
+    public ScopedSecretPolicy(
+        string reviewSecret, string generalChatSecret, string? remodelSecret = null)
     {
         // An empty secret would be matched by a line that simply omits the field, which
         // would turn "required" into "optional" without anyone noticing.
@@ -94,8 +120,23 @@ public sealed class ScopedSecretPolicy : ISecretPolicy
                 nameof(generalChatSecret));
         }
 
+        if (remodelSecret != null)
+        {
+            Require(remodelSecret, nameof(remodelSecret));
+
+            if (string.Equals(remodelSecret, reviewSecret, StringComparison.Ordinal)
+                || string.Equals(remodelSecret, generalChatSecret, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    "The remodel secret must differ from the review and general-chat secrets; "
+                    + "sharing it would give a read-only scope the one scope that writes.",
+                    nameof(remodelSecret));
+            }
+        }
+
         _reviewSecret = reviewSecret;
         _generalChatSecret = generalChatSecret;
+        _remodelSecret = remodelSecret;
     }
 
     public bool IsAuthorized(string? secret, string command)
@@ -116,7 +157,20 @@ public sealed class ScopedSecretPolicy : ISecretPolicy
             return Allows(GeneralChatCommands, command);
         }
 
+        if (_remodelSecret != null
+            && string.Equals(secret, _remodelSecret, StringComparison.Ordinal))
+        {
+            return Allows(RemodelScopeCommands, command);
+        }
+
         return false;
+    }
+
+    private static IReadOnlyList<string> BuildRemodelScope()
+    {
+        var scope = new List<string>(RemodelCommands.All.Length + 1) { BridgeCommands.Ping };
+        scope.AddRange(RemodelCommands.All);
+        return scope;
     }
 
     private static bool Allows(IReadOnlyList<string> scope, string command)

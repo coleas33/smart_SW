@@ -1,9 +1,18 @@
 # Bridge protocol (`swreview-extract serve`)
 
-Protocol version **1.0**. This file is the contract the Python client in
+Protocol version **1.1**. This file is the contract the Python client in
 `reviewer/src/swreview/bridge/client.py` (T073) is written against; the agent-facing tool
 names and arguments are in
 `specs/001-agentic-design-review/contracts/agent-tools.md`.
+
+**1.1 is additive to 1.0** (feature 004, T073). The transport, the request and response
+envelopes, the `secret` rules, and the four commands `ping`, `capture`, `measure` and
+`interference` are unchanged in shape and in meaning, so a client written against 1.0 works
+against a 1.1 host without an edit. 1.1 adds one command family, `remodel.*`, one carve-out
+in the `result` field of an error response, and a third secret scope; all three are
+described under "The `remodel.*` family" below and specified in
+`specs/004-resilient-remodeler/contracts/bridge-remodel.md`. `ping` reports the host's own
+`SwBridgeDispatcher.ProtocolVersion`, which is what a client compares against.
 
 **Two hosts speak it** (T045). The command handling — `SwBridgeDispatcher`,
 `BridgeProtocol`, `BridgeServices` and the command result types — lives in
@@ -35,7 +44,7 @@ names and arguments are in
 | Field | Type | Rules |
 |-------|------|-------|
 | `id` | string | Required, non-empty. Echoed on the response so a client can match them up. |
-| `command` | string | Required. One of the four below. |
+| `command` | string | Required. One of the four below, or one of the twelve `remodel.*` commands of `specs/004-resilient-remodeler/contracts/bridge-remodel.md`. |
 | `params` | object | Command arguments. May be omitted for `ping`. |
 | `secret` | string or null | Optional on the wire. Ignored by the console host; **required** by the in-process host, where it also selects the command scope (below). |
 
@@ -87,7 +96,7 @@ boundary (`specs/002-task-pane-assistant/contracts/README.md`).
 |-------|------|-------|
 | `id` | string | The request's `id`. Empty when the line could not be parsed at all. |
 | `status` | string | `ok`, `error`, or `circuit_open`. |
-| `result` | object or null | The command's answer. Null on `circuit_open`; on `error` it is null except where noted (`capture` returns its `Gap`). |
+| `result` | object or null | The command's answer. Null on `circuit_open`; on `error` it is null except where noted (`capture` returns its `Gap`; every `remodel.*` command returns `{"error_code": "<stable token>", "detail": {}}`). |
 | `error` | string or null | A sentence an engineer can read. Null when `status` is `ok`. |
 | `elapsed_ms` | integer | Wall-clock milliseconds the worker spent on the command. |
 
@@ -105,7 +114,7 @@ an `Interference` that travels over the bridge is byte-identical to one written 
 ```
 
 ```json
-{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.0","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17},"error":null,"elapsed_ms":1}
+{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.1","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17},"error":null,"elapsed_ms":1}
 ```
 
 `document` and `component_count` are how a client checks that the component ids in its
@@ -204,12 +213,49 @@ never a number:
   sorted ordinally and joined with `|`. Rows that share a key collapse into one finding
   (FR-011).
 
+## The `remodel.*` family (1.1)
+
+Twelve commands — `remodel.probe_scope`, `open`, `snapshot`, `rename`, `reorder`, `folder`,
+`describe`, `equation`, `rebuild`, `geometry`, `save`, `close` — whose request and response
+shapes, sequences and error codes are **`specs/004-resilient-remodeler/contracts/bridge-remodel.md`**
+and are not restated here. What belongs to this file is what they change about the protocol,
+and it is three things:
+
+1. **`result` on an error carries a token.** A `remodel.*` failure answers
+   `result: {"error_code": "<stable token>", "detail": {}}` so a client maps a refusal to a
+   class without matching on prose; `error` still carries the sentence an engineer reads.
+   `detail` is always an object, `{}` when there is nothing to add, never null. This is the
+   same "except where noted" allowance 1.0 already grants `capture`, and it applies to no
+   other command.
+2. **A third secret scope.** `ScopedSecretPolicy` gains `remodel`, minted per launch by
+   `ToolServiceHost` and handed only to the remodel backend session:
+
+   | Secret | Authorizes | Refused |
+   |--------|------------|---------|
+   | review | `ping`, `capture`, `measure`, `interference` | every `remodel.*` |
+   | general-chat | `ping`, `capture`, `measure` | every `remodel.*` |
+   | remodel | `ping`, `remodel.*` | everything else, `interference` included |
+
+   The refusal is the same `error: "unauthorized"` line as every other scope failure, so a
+   caller still learns nothing from the difference.
+3. **No `remodel.*` command that writes names a document.** Exactly two name a path at all,
+   `remodel.probe_scope` and `remodel.open`, and both run before a document handle to the
+   copy exists; every command after `remodel.open` addresses the tree by persistent
+   reference and reaches the one document the run's scope holds. The Python end of this
+   family is `reviewer/src/swreview/bridge/remodel_client.py`, whose own command allowlist
+   is `ping` plus these twelve — `COMMANDS` in `client.py` is unchanged.
+
+These commands are refused by the read-only guard, as a mutating command must be: they run
+under the document-scoped allowlist guard of
+`specs/004-resilient-remodeler/contracts/guard-allowlist.md`, on a copy the run created, and
+on no other document.
+
 ## Errors that are not command failures
 
 | Situation | Response |
 |-----------|----------|
 | Line is not JSON, or has no `id`/`command` | `{"id":"","status":"error","error":"<what was wrong>","result":null,"elapsed_ms":0}` |
-| Unknown `command` | `status: "error"`, listing the four commands — but `error: "unauthorized"` on a host that requires a secret, which refuses an out-of-vocabulary command before looking it up. |
+| Unknown `command` | `status: "error"`, listing the commands the host speaks — but `error: "unauthorized"` on a host that requires a secret, which refuses an out-of-vocabulary command before looking it up. |
 | Wrong, missing, or out-of-scope `secret` | `status: "error"`, `error: "unauthorized"`, `result: null`. Only on a host that requires a secret. |
 | Missing or wrong-typed `params` field | `status: "error"` naming the field. |
 | Three consecutive SOLIDWORKS failures | `status: "circuit_open"` on this and every later request until the server is restarted. |

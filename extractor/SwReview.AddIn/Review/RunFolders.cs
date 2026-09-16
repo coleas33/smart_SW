@@ -44,6 +44,17 @@ public static class RunFolders
     /// </summary>
     public const string CheckSuffix = "-check";
 
+    /// <summary>
+    /// What marks a re-modeler's run folder (`contracts/run-artifacts.md`).
+    ///
+    /// A suffix, for the same reasons as <see cref="CheckSuffix"/>: the folder sorts beside the
+    /// review and the checks of the same document in the one listing the engineer reads in
+    /// Explorer, and is obviously the disposable one. The folder's own name is also the run id
+    /// written into `plan.json` and into the copy's `SwReviewRemodelRun` custom property, so it
+    /// is spelled here and nowhere else.
+    /// </summary>
+    public const string RemodelSuffix = "-remodel";
+
     private const string TimestampFormat = "yyyyMMdd-HHmmss";
 
     /// <summary>How much of `package.json` <see cref="ProfileOf"/> reads. `extractor` is the
@@ -70,6 +81,18 @@ public static class RunFolders
     /// </summary>
     public static string CreateForCheck(string runRoot, string? documentPath, DateTime timestamp) =>
         Create(runRoot, timestamp, DocumentName(documentPath) + CheckSuffix);
+
+    /// <summary>
+    /// Creates the run folder for one re-modeler run over <paramref name="documentPath"/>.
+    ///
+    /// Its own folder, every time, and the only place the `-remodel` convention is written. What
+    /// goes inside it - `copy/` and the `-RMS.SLDPRT` name - belongs to
+    /// <c>SwReview.Extractor.Rms.RemodelCopy</c>, so neither convention is spelled twice. The
+    /// copy lives <b>only</b> under this folder and never beside the source: one bad path join
+    /// beside a source inside an EPDM vault writes into the vault.
+    /// </summary>
+    public static string CreateForRemodel(string runRoot, string? documentPath, DateTime timestamp) =>
+        Create(runRoot, timestamp, DocumentName(documentPath) + RemodelSuffix);
 
     /// <summary>Creates the run folder for a terminal session started without a review.</summary>
     public static string CreateForTerminal(string runRoot, DateTime timestamp) =>

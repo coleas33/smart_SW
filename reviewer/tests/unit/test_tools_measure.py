@@ -351,7 +351,32 @@ def test_check_tool_envelope_is_unresolved_when_no_mesh_loads(
 
     assert result["status"] == "unresolved"
     assert result["hits"] == []
-    assert len(result["unresolved"]) == 2
+    assert result["bodies_swept"] == 0
+    # The two missing meshes, plus the sweep that therefore tested nothing.
+    assert len(result["unresolved"]) == 3
+
+
+def test_a_package_with_no_bodies_is_not_a_clear_envelope(
+    make_package: MakePackage, tmp_path: Path
+) -> None:
+    """`--meshes none` leaves nothing to sweep, and a sweep of nothing is not a check.
+
+    Principle I: a tool envelope that could not sweep a body has not established that the
+    body is out of the way, so `bodies_swept == 0` may never come back as `checked`.
+    """
+    package = make_package(
+        bodies=[],
+        fasteners=[screw("fst:m6", "cmp:0002", axis(vec(z=0.02), vec(z=-1.0)), "M6x1.0")],
+    )
+    with use_context(context_for(package, base_dir=tmp_path)):
+        result = measure.check_tool_envelope(
+            "fst:m6", "socket", Quantity(value=40.0, unit="mm")
+        )
+
+    assert result["status"] == "unresolved"
+    assert result["bodies_swept"] == 0
+    assert result["hits"] == []
+    assert [reason for reason in result["unresolved"] if "swept no body" in reason]
 
 
 def test_an_unreadable_thread_designation_leaves_the_envelope_unresolved(

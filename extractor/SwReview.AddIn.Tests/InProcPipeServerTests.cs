@@ -53,6 +53,9 @@ public sealed class InProcPipeServerTests
     private const string ReviewSecret = "review-secret-0123456789";
     private const string ChatSecret = "general-chat-secret-abcdefghij";
 
+    /// <summary>Feature 004's third scope: <c>ping</c> and <c>remodel.*</c>, and nothing else.</summary>
+    private const string RemodelSecret = "remodel-secret-klmnopqrstuv";
+
     // ---- the thread the work runs on ------------------------------------------------------
 
     [Fact]
@@ -231,6 +234,116 @@ public sealed class InProcPipeServerTests
             Assert.Equal(1, world.Interference.Opened);
         }
     }
+
+    // ---- the third scope: the remodel secret (T069) -----------------------------------------
+    //
+    // contracts/bridge-remodel.md, "Authorization": RemodelSecret may call `ping` and
+    // `remodel.*` and nothing else; neither of the other two secrets may call any `remodel.*`.
+    // One row per command in both directions, because a scope asserted only on the command
+    // somebody thought of is a scope nobody checked.
+
+    public static IEnumerable<object[]> RemodelCommandRows =>
+        RemodelCommands.All.Select(command => new object[] { command });
+
+    public static IEnumerable<object[]> NonRemodelCommandRows =>
+        new[] { BridgeCommands.Capture, BridgeCommands.Measure, BridgeCommands.Interference }
+            .Select(command => new object[] { command });
+
+    [Theory]
+    [MemberData(nameof(RemodelCommandRows))]
+    public void TheRemodelSecretAuthorizesEveryRemodelCommand(string command)
+    {
+        Assert.True(Scoped().IsAuthorized(RemodelSecret, command));
+    }
+
+    [Theory]
+    [MemberData(nameof(RemodelCommandRows))]
+    public void TheGeneralChatSecretIsRefusedForEveryRemodelCommand(string command)
+    {
+        Assert.False(Scoped().IsAuthorized(ChatSecret, command));
+    }
+
+    [Theory]
+    [MemberData(nameof(RemodelCommandRows))]
+    public void TheReviewSecretIsRefusedForEveryRemodelCommand(string command)
+    {
+        // The review session's secret is the whole review vocabulary and none of this one: a
+        // review that could call remodel.open would be a review that writes.
+        Assert.False(Scoped().IsAuthorized(ReviewSecret, command));
+    }
+
+    [Theory]
+    [MemberData(nameof(NonRemodelCommandRows))]
+    public void TheRemodelSecretIsRefusedForEveryCommandOutsideItsFamily(string command)
+    {
+        Assert.False(Scoped().IsAuthorized(RemodelSecret, command));
+    }
+
+    [Fact]
+    public void TheRemodelSecretAuthorizesPingAndNothingElseOutsideTheFamily()
+    {
+        ScopedSecretPolicy policy = Scoped();
+
+        Assert.True(policy.IsAuthorized(RemodelSecret, BridgeCommands.Ping));
+        Assert.False(policy.IsAuthorized(RemodelSecret, BridgeCommands.Interference));
+
+        // Named as its own row because contracts/bridge-remodel.md names it as its own row.
+        Assert.Equal(
+            new[] { BridgeCommands.Ping }.Concat(RemodelCommands.All).ToArray(),
+            ScopedSecretPolicy.RemodelScopeCommands.ToArray());
+    }
+
+    [Theory]
+    [InlineData("remodel.")]
+    [InlineData("remodel.dissolve")]
+    [InlineData("remodel.open2")]
+    public void ANameThatMerelyStartsWithRemodelIsAuthorizedByNoSecret(string command)
+    {
+        // The scope is the twelve commands listed, not a prefix: a thirteenth command has to be
+        // added to the table before any secret can reach it.
+        ScopedSecretPolicy policy = Scoped();
+
+        Assert.False(policy.IsAuthorized(RemodelSecret, command));
+        Assert.False(policy.IsAuthorized(ReviewSecret, command));
+        Assert.False(policy.IsAuthorized(ChatSecret, command));
+    }
+
+    [Fact]
+    public void TheThreeSecretsMustDifferFromEachOther()
+    {
+        // One secret for two scopes would authenticate without bounding what it authorizes.
+        Assert.Throws<ArgumentException>(
+            () => new ScopedSecretPolicy(ReviewSecret, ChatSecret, ReviewSecret));
+        Assert.Throws<ArgumentException>(
+            () => new ScopedSecretPolicy(ReviewSecret, ChatSecret, ChatSecret));
+    }
+
+    [Fact]
+    public void TheRemodelSecretReachesTheDispatcherAndTheOtherTwoDoNot()
+    {
+        var log = new StringWriter();
+        using (var world = new ScopedWorld(log))
+        {
+            // This bridge has no remodel seat, so the command is refused - but by the handler,
+            // naming the seat, rather than by the secret policy.
+            BridgeResponse allowed = world.Server.Answer(
+                Line("1", RemodelCommands.Snapshot, RemodelSecret));
+            Assert.NotEqual(SwBridgeDispatcher.UnauthorizedError, allowed.Error);
+
+            foreach (string refused in new[] { ChatSecret, ReviewSecret })
+            {
+                BridgeResponse response = world.Server.Answer(
+                    Line("2", RemodelCommands.Snapshot, refused));
+                Assert.Equal(SwBridgeDispatcher.UnauthorizedError, response.Error);
+                Assert.Null(response.Result);
+            }
+
+            Assert.DoesNotContain(RemodelSecret, log.ToString());
+        }
+    }
+
+    private static ScopedSecretPolicy Scoped() =>
+        new ScopedSecretPolicy(ReviewSecret, ChatSecret, RemodelSecret);
 
     // ---- the application thread stops answering --------------------------------------------
 
@@ -1156,7 +1269,7 @@ public sealed class InProcPipeServerTests
 
             Recorder = new SwGateRecorder();
             var dispatcher = new SwBridgeDispatcher(
-                services, new ScopedSecretPolicy(ReviewSecret, ChatSecret));
+                services, new ScopedSecretPolicy(ReviewSecret, ChatSecret, RemodelSecret));
             var logger = new ToolServiceRequestLogger(dispatcher, Recorder, log.Write);
 
             _app = new FakeAppThread();

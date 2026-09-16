@@ -364,7 +364,7 @@ def test_streamed_text_becomes_deltas_then_one_done_per_turn() -> None:
     )
     result, sink = run(adapter, [])
 
-    assert sink.types == ["text.delta", "text.delta", "text.done"]
+    assert sink.types == ["text.delta", "text.delta", "usage", "text.done"]
     assert [body["text"] for body in sink.bodies("text.delta")] == ["Checking ", "the joints"]
     assert sink.bodies("text.done") == [{"text": "Checking the joints"}]
     assert result.text == "Checking the joints"
@@ -400,9 +400,11 @@ def test_one_text_done_carries_every_round_of_a_multi_round_turn() -> None:
     assert result.text == "Checking the bracket. It interferes."
     assert sink.types == [
         "text.delta",
+        "usage",
         "tool.started",
         "tool.finished",
         "text.delta",
+        "usage",
         "text.done",
     ]
 
@@ -588,7 +590,14 @@ def test_a_function_call_runs_through_the_tool_and_is_answered_with_its_id() -> 
     result, sink = run(adapter, [tool])
 
     assert tool.calls == [({"configuration": "Default"}, "fc_1")]
-    assert sink.types == ["tool.started", "tool.finished", "text.delta", "text.done"]
+    assert sink.types == [
+        "usage",
+        "tool.started",
+        "tool.finished",
+        "text.delta",
+        "usage",
+        "text.done",
+    ]
     assert sink.bodies("tool.started") == [
         {"step_index": 0, "tool": "list_components", "arguments": {"configuration": "Default"}}
     ]
@@ -711,7 +720,8 @@ def test_max_steps_of_zero_runs_no_tool() -> None:
     assert result.steps == 0
     assert tool.calls == []
     assert len(models.calls) == 1
-    assert sink.types == []
+    # The round trip was made and paid for; what the budget stopped is the tool call.
+    assert sink.types == ["usage"]
 
 
 # --- history ---------------------------------------------------------------------------
@@ -890,7 +900,13 @@ def test_every_emitted_event_validates_against_the_contract() -> None:
         [chunk(text_part("one finding"), finish_reason=types.FinishReason.STOP)],
     )
     _, sink = run(adapter, tools)
-    assert set(sink.types) == {"tool.started", "tool.finished", "text.delta", "text.done"}
+    assert set(sink.types) == {
+        "usage",
+        "tool.started",
+        "tool.finished",
+        "text.delta",
+        "text.done",
+    }
     for event in sink.serialized():
         validator.validate(event)
 

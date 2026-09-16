@@ -15,6 +15,8 @@
     "model": { "type": "string" },
     "provider_info": { "anyOf": [{ "$ref": "#/$defs/ProviderInfo" }, { "type": "null" }] },
     "retry_of": { "type": ["string", "null"], "format": "uuid" },
+    "efficiency": { "anyOf": [{ "$ref": "#/$defs/EfficiencySettings" }, { "type": "null" }] },
+    "usage": { "anyOf": [{ "$ref": "#/$defs/SessionUsage" }, { "type": "null" }] },
     "steps": { "type": "array", "items": { "$ref": "#/$defs/InvestigationStep" } },
     "evidence_requests": { "type": "array", "items": { "$ref": "#/$defs/EvidenceRequest" } },
     "findings": { "type": "array", "items": { "$ref": "#/$defs/Finding" } },
@@ -46,6 +48,49 @@
         "model": { "type": "string" },
         "effort_mapping": { "$ref": "#/$defs/EffortMapping" },
         "key_source": { "enum": ["settings", "env", "none"] }
+      }
+    },
+    "TokenUsage": {
+      "description": "What one model round trip cost, in the fields the provider actually reported. Added in feature 005. Every count is nullable because a field the endpoint omitted is unknown, not zero (Principle I), and the two providers' sub-counts nest differently and are never summed across them: reasoning_tokens is inside output_tokens on OpenAI and a separate addend of the total on Gemini, and tool_result_input_tokens is inside input_tokens on OpenAI and outside it on Gemini. total_tokens is the only field a cross-provider comparison may use. Derived values (uncached_input_tokens, cached_input_share) are properties in code and are not stored here, so they cannot go stale.",
+      "type": "object", "additionalProperties": false,
+      "required": ["input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "tool_result_input_tokens", "total_tokens", "latency_s"],
+      "properties": {
+        "input_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "cached_input_tokens": { "type": ["integer", "null"], "minimum": 0, "description": "Contained inside input_tokens on both providers" },
+        "cache_write_tokens": { "type": ["integer", "null"], "minimum": 0, "description": "OpenAI only; null on Gemini and on an endpoint that does not report it" },
+        "output_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "reasoning_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "tool_result_input_tokens": { "type": ["integer", "null"], "minimum": 0, "description": "Gemini only; the same tokens are already inside input_tokens on OpenAI" },
+        "total_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "latency_s": { "type": "number", "minimum": 0, "description": "Wall clock measured by the adapter around its own request. Never null: if we made the call, we timed it" }
+      }
+    },
+    "SessionUsage": {
+      "description": "What this whole run cost, summed from the usage events of every model round trip. Added in feature 005; absent on sessions written before it, and null rather than an all-zero record when the adapter reported nothing. The summing rule is that any null in any round makes that total null, never a partial sum.",
+      "type": "object", "additionalProperties": false,
+      "required": ["rounds", "turns", "totals", "by_turn"],
+      "properties": {
+        "rounds": { "type": "integer", "minimum": 0, "description": "Model round trips, not tool calls" },
+        "turns": { "type": "integer", "minimum": 0, "description": "Turns that produced at least one round, delimited by the turn.ended events" },
+        "totals": { "$ref": "#/$defs/TokenUsage" },
+        "by_turn": { "type": "array", "items": { "$ref": "#/$defs/TokenUsage" } }
+      }
+    },
+    "EfficiencySettings": {
+      "description": "Which efficiency levers this run had on. Added in feature 005; absent on sessions written before it. Every lever defaults to off and no lever is a pane setting (FR-021).",
+      "type": "object", "additionalProperties": false,
+      "required": ["trim_tool_descriptions", "tool_tiers", "prompt_cache_key", "gemini_explicit_cache", "prerun_checks", "parallel_tool_calls", "coverage_stop", "package_reuse", "lazy_meshes", "carry_over_rms"],
+      "properties": {
+        "trim_tool_descriptions": { "type": "boolean" },
+        "tool_tiers": { "type": "boolean" },
+        "prompt_cache_key": { "type": "boolean" },
+        "gemini_explicit_cache": { "type": "boolean" },
+        "prerun_checks": { "type": "boolean" },
+        "parallel_tool_calls": { "type": "boolean" },
+        "coverage_stop": { "type": "boolean" },
+        "package_reuse": { "type": "boolean" },
+        "lazy_meshes": { "type": "boolean" },
+        "carry_over_rms": { "type": "boolean" }
       }
     },
     "InvestigationStep": {

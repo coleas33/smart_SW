@@ -6,13 +6,15 @@ an engineer must be able to reproduce any finding from what is printed here.
 
 Section order: title, manifest discrepancies, summary counts, findings grouped by
 severity (high to info), evidence requests, coverage (all five buckets, always), timing,
-investigation trace (collapsed past 50 steps).
+tokens (only when the session carries usage), investigation trace (collapsed past 50
+steps).
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
+from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
 from swreview.findings import Calculation, Disposition, Finding
 from swreview.ir.models import (
     Angle,
@@ -23,7 +25,13 @@ from swreview.ir.models import (
     Quantity,
     SourceRef,
 )
-from swreview.report.session import Coverage, CoverageItem, CoverageScope, ReviewSession
+from swreview.report.session import (
+    Coverage,
+    CoverageItem,
+    CoverageScope,
+    ReviewSession,
+    SessionUsage,
+)
 
 _SEVERITY_ORDER = ("high", "medium", "low", "info")
 _SEVERITY_HEADINGS = {
@@ -40,6 +48,9 @@ _COVERAGE_BUCKETS = (
     ("out_of_scope", "Out of Scope"),
 )
 _TRACE_COLLAPSE_LIMIT = 50
+_NOT_REPORTED = "not reported"
+"""What a count the provider never sent renders as. Not `0`, which is a measurement, and
+not a dash, which a reader can mistake for one (Principle I)."""
 
 
 def render_report(session: ReviewSession, package: EvidencePackage | None = None) -> str:
@@ -61,6 +72,9 @@ def render_report(session: ReviewSession, package: EvidencePackage | None = None
     lines.append("")
     lines.extend(_render_timing(session))
     lines.append("")
+    if session.usage is not None:
+        lines.extend(_render_tokens(session.usage, _provider_name(session)))
+        lines.append("")
     lines.extend(_render_trace(session))
 
     return "\n".join(lines).rstrip() + "\n"
@@ -458,6 +472,79 @@ def _render_timing(session: ReviewSession) -> list[str]:
         f"- False alarm handling minutes: {timing.false_alarm_handling_minutes}",
         f"- Unattended runtime minutes: {timing.unattended_runtime_minutes}",
         f"- Net saved minutes: {_fmt_minutes(timing.net_saved_minutes)}",
+    ]
+
+
+# --- tokens --------------------------------------------------------------------------
+
+
+def _fmt_count(value: int | None) -> str:
+    """A reported count, or `not reported`. Never `0` and never a dash (Principle I)."""
+    return str(value) if value is not None else _NOT_REPORTED
+
+
+def _provider_name(session: ReviewSession) -> str | None:
+    """Which provider ran this session, or `None` when it does not say."""
+    return session.provider_info.provider if session.provider_info is not None else None
+
+
+def _render_reasoning(usage: TokenUsage, provider: str | None) -> str:
+    """The one line the two providers must never share.
+
+    OpenAI's `reasoning_tokens` is a subset of `output_tokens`; Gemini's
+    `thoughts_token_count` is a separate addend of the total (VERIFIED,
+    contracts/usage.md section 3). One "output tokens" line would compare two different
+    quantities, so the line names the provider's own field and its own nesting - and when
+    the session names no provider, it claims neither.
+    """
+    count = _fmt_count(usage.reasoning_tokens)
+    if provider == "gemini":
+        return f"- Thoughts tokens (Gemini, a separate addend of the total): {count}"
+    if provider == "openai":
+        return f"- Reasoning tokens (OpenAI, inside the output tokens): {count}"
+    return f"- Reasoning tokens: {count}"
+
+
+def _render_cached_share(usage: TokenUsage) -> str:
+    """The share, or why it is not being shown.
+
+    Two different unknowns, said two different ways: `not reported` means the provider
+    gave us no counts to divide, and `unknown (probe L1 not recorded)` means we have the
+    counts but have not yet measured that the cached count is contained in the input
+    count, without which the ratio is not a share (FR-047).
+    """
+    if not CACHED_SHARE_PUBLISHABLE:
+        return "- Cached input share: unknown (probe L1 not recorded)"
+    share = usage.cached_input_share
+    if share is None:
+        return f"- Cached input share: {_NOT_REPORTED}"
+    return f"- Cached input share: {share:.1%}"
+
+
+def _render_tokens(usage: SessionUsage, provider: str | None) -> list[str]:
+    """What the run cost. The caller renders this only when the session carries usage.
+
+    A feature 001, 002 or 003 session was written before this feature and has none, so
+    its report is byte-identical to the one the renderer produced then (contracts/usage.md
+    section 8). Every count here is the session's own summed total, read and never
+    recomputed: `SessionUsage.summed` is the one place token counts are added.
+    """
+    totals = usage.totals
+    return [
+        "## Tokens",
+        "",
+        f"- Rounds: {usage.rounds}",
+        f"- Turns: {usage.turns}",
+        f"- Input tokens: {_fmt_count(totals.input_tokens)}",
+        f"- Cached input tokens: {_fmt_count(totals.cached_input_tokens)}",
+        f"- Uncached input tokens: {_fmt_count(totals.uncached_input_tokens)}",
+        f"- Cache write tokens: {_fmt_count(totals.cache_write_tokens)}",
+        f"- Output tokens: {_fmt_count(totals.output_tokens)}",
+        _render_reasoning(totals, provider),
+        f"- Tool-result input tokens: {_fmt_count(totals.tool_result_input_tokens)}",
+        f"- Total tokens: {_fmt_count(totals.total_tokens)}",
+        _render_cached_share(totals),
+        f"- Model latency: {totals.latency_s:.2f} s",
     ]
 
 

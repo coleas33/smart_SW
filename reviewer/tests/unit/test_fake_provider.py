@@ -121,7 +121,7 @@ def test_effort_mapping_is_recorded_for_every_level() -> None:
 def test_text_only_turn_streams_deltas_then_one_done() -> None:
     fake = provider(ScriptedTurn(text="Checking the joints now"))
     result, sink = run(fake, [])
-    assert sink.types == ["text.delta"] * 4 + ["text.done"]
+    assert sink.types == ["usage"] + ["text.delta"] * 4 + ["text.done"]
     assert "".join(body["text"] for body in sink.bodies("text.delta")) == "Checking the joints now"
     assert sink.bodies("text.done") == [{"text": "Checking the joints now"}]
     assert result.text == "Checking the joints now"
@@ -133,7 +133,7 @@ def test_a_turn_with_no_text_emits_no_text_events() -> None:
     tool = FakeTool(name="list_components")
     fake = provider(ScriptedTurn(text="", tool_calls=(ScriptedToolCall("list_components", {}),)))
     _, sink = run(fake, [tool])
-    assert sink.types == ["tool.started", "tool.finished"]
+    assert sink.types == ["usage", "tool.started", "tool.finished"]
 
 
 def test_scripted_tool_calls_run_through_the_tool_interface() -> None:
@@ -149,7 +149,7 @@ def test_scripted_tool_calls_run_through_the_tool_interface() -> None:
     assert tool.calls[0][0] == {"configuration": "Default"}
     call_id = tool.calls[0][1]
     assert call_id
-    assert sink.types[:2] == ["tool.started", "tool.finished"]
+    assert sink.types[:3] == ["usage", "tool.started", "tool.finished"]
     assert sink.bodies("tool.started") == [
         {"step_index": 0, "tool": "list_components", "arguments": {"configuration": "Default"}}
     ]
@@ -232,7 +232,9 @@ def test_max_steps_of_zero_runs_no_tool() -> None:
     assert result.reason == "max_steps"
     assert result.steps == 0
     assert tool.calls == []
-    assert sink.types == []
+    # The round was still played and still "cost" its scripted usage; what the budget
+    # stopped is the tool call, not the round trip that asked for it.
+    assert sink.types == ["usage"]
 
 
 def test_messages_extend_the_history_the_runner_passed_in() -> None:
@@ -306,6 +308,6 @@ def test_every_emitted_event_validates_against_the_contract() -> None:
         )
     )
     _, sink = run(fake, tools)
-    assert set(sink.types) == {"tool.started", "tool.finished", "text.delta", "text.done"}
+    assert set(sink.types) == {"usage", "tool.started", "tool.finished", "text.delta", "text.done"}
     for event in sink.serialized():
         validator.validate(event)

@@ -25,7 +25,29 @@ from pytest_regressions.data_regression import DataRegressionFixture
 from swreview.ir.loader import load_package
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
-FIXTURE_DIRS = sorted(path for path in FIXTURES_DIR.iterdir() if path.is_dir())
+
+
+def case_dirs(root: Path) -> list[Path]:
+    """Every fixture case under `root`: a directory holding a `case.json`.
+
+    A directory that holds no `case.json` is a **group** of cases and its own
+    subdirectories are read instead, so a feature that ships a dozen fixtures keeps them
+    together (`fixtures/remodel-plan/<case>/`) rather than putting a dozen entries at the
+    top of this directory. Case names stay unique across the whole tree, because the
+    baseline is written under the case's own name.
+    """
+    cases: list[Path] = []
+    for path in sorted(root.iterdir()):
+        if not path.is_dir() or path.name == "__pycache__":
+            continue
+        if (path / "case.json").is_file():
+            cases.append(path)
+        else:
+            cases.extend(case_dirs(path))
+    return cases
+
+
+FIXTURE_DIRS = case_dirs(FIXTURES_DIR)
 
 
 def resolve_callable(spec: str) -> Any:
@@ -51,6 +73,13 @@ def test_a_case_for_an_unwritten_module_is_skipped() -> None:
 def test_a_case_for_an_unwritten_function_is_skipped() -> None:
     with pytest.raises(pytest.skip.Exception):
         resolve_callable("swreview.ir.summary:not_written_yet")
+
+
+def test_every_case_name_is_unique_across_the_whole_fixture_tree() -> None:
+    """Two cases of one name would write one baseline and silently grade one package."""
+    names = [path.name for path in FIXTURE_DIRS]
+
+    assert sorted(names) == sorted(set(names))
 
 
 def test_a_case_callable_must_name_an_attribute() -> None:

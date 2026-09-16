@@ -219,6 +219,13 @@ class BridgeClient:
         self._next_id = 1
         self._consecutive_failures = 0
         self._last_error: str | None = None
+        self.commands: tuple[str, ...] = COMMANDS
+        """The vocabulary this client may write, checked in `call` before the line goes
+        out. It is an instance attribute rather than the module constant directly so a
+        subclass with its own secret scope - `bridge.remodel_client.RemodelClient`, which
+        holds `RemodelSecret` and may speak `ping` and `remodel.*` and nothing else - is
+        an allowlist of its own rather than a widening of this one. `COMMANDS` stays the
+        four coarse calls of feature 001."""
 
     # --- state ------------------------------------------------------------------
 
@@ -240,9 +247,10 @@ class BridgeClient:
         Raises `BridgeOpenError` when the circuit is already open (nothing is sent) and
         `BridgeError` for every other failure.
         """
-        if command not in COMMANDS:
+        if command not in self.commands:
             raise BridgeError(
-                f"{command!r} is not a bridge command; the bridge speaks {list(COMMANDS)}"
+                f"{command!r} is not a bridge command; the bridge speaks "
+                f"{list(self.commands)}"
             )
         if self.circuit_open:
             raise BridgeOpenError(

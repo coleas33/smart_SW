@@ -589,7 +589,9 @@ def test_a_turn_with_no_text_emits_no_text_events() -> None:
 
     _, sink = run(make_provider())
 
-    assert sink.types == []
+    # The round trip itself is always reported: it happened, and what it cost is a
+    # separate question from whether the model said anything.
+    assert sink.types == ["usage"]
 
 
 @respx.mock
@@ -605,7 +607,7 @@ def test_a_tool_call_emits_started_then_finished_with_a_bounded_summary() -> Non
 
     _, sink = run(make_provider(), tools=[FakeTool(name="get_component")])
 
-    assert sink.types[:2] == ["tool.started", "tool.finished"]
+    assert sink.types[:3] == ["usage", "tool.started", "tool.finished"]
     started = sink.one("tool.started")
     assert started == {
         "step_index": 0,

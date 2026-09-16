@@ -16,10 +16,14 @@ namespace SwReview.AddIn.ToolService;
 /// <summary>What one request asked of SOLIDWORKS, as the gate saw it.</summary>
 public sealed class SwGateActivity
 {
-    public SwGateActivity(IReadOnlyList<string> gatedMembers, IReadOnlyList<string> refusedMembers)
+    public SwGateActivity(
+        IReadOnlyList<string> gatedMembers,
+        IReadOnlyList<string> refusedMembers,
+        IReadOnlyList<string> targetPaths)
     {
         GatedMembers = gatedMembers ?? throw new ArgumentNullException(nameof(gatedMembers));
         RefusedMembers = refusedMembers ?? throw new ArgumentNullException(nameof(refusedMembers));
+        TargetPaths = targetPaths ?? throw new ArgumentNullException(nameof(targetPaths));
     }
 
     /// <summary>Distinct interop member names, in the order they were first seen.</summary>
@@ -27,6 +31,13 @@ public sealed class SwGateActivity
 
     /// <summary>Distinct members <see cref="ReadOnlyGuard"/> refused. Normally empty; SC-004 fails if it is not.</summary>
     public IReadOnlyList<string> RefusedMembers { get; }
+
+    /// <summary>
+    /// Feature 004: the distinct documents this request's mutating calls wrote to, in
+    /// first-seen order, empty for a request that wrote nothing. The run report states from
+    /// here, rather than from intent, that every write of the run went to the copy (FR-041).
+    /// </summary>
+    public IReadOnlyList<string> TargetPaths { get; }
 }
 
 /// <summary>
@@ -50,6 +61,8 @@ public sealed class SwGateRecorder : ISwGateObserver
     private readonly List<string> _gated = new List<string>();
     private readonly HashSet<string> _refusedSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _refused = new List<string>();
+    private readonly HashSet<string> _targetSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _targets = new List<string>();
 
     public void Gated(string interopMember)
     {
@@ -77,21 +90,93 @@ public sealed class SwGateRecorder : ISwGateObserver
         }
     }
 
+    /// <summary>
+    /// The document a mutating call wrote to, told by <see cref="RemodelGateRecorder"/> - the
+    /// one observer that can tell a write from a read, because it is the one that knows the
+    /// allowlist. Distinct, in first-seen order, for the same reason the members are.
+    /// </summary>
+    public void Wrote(string targetPath)
+    {
+        if (string.IsNullOrWhiteSpace(targetPath))
+        {
+            return;
+        }
+
+        if (_targetSeen.Add(targetPath))
+        {
+            _targets.Add(targetPath);
+        }
+    }
+
     /// <summary>Takes what has been collected and starts the next request empty.</summary>
     public SwGateActivity Drain()
     {
         if (_gated.Count == 0 && _refused.Count == 0)
         {
-            return new SwGateActivity(Nothing, Nothing);
+            return new SwGateActivity(Nothing, Nothing, Nothing);
         }
 
-        var activity = new SwGateActivity(_gated.ToArray(), _refused.ToArray());
+        var activity = new SwGateActivity(_gated.ToArray(), _refused.ToArray(), _targets.ToArray());
         _seen.Clear();
         _gated.Clear();
         _refusedSeen.Clear();
         _refused.Clear();
+        _targetSeen.Clear();
+        _targets.Clear();
         return activity;
     }
+}
+
+/// <summary>
+/// T058. The remodel gate's observer: everything <see cref="SwGateRecorder"/> records, plus the
+/// <b>target path of every mutating call</b> (contracts/guard-allowlist.md, FR-041).
+///
+/// It wraps the tool service's one recorder rather than replacing it, so a launch that runs a
+/// remodel keeps one log line per request covering both gates and one drain point.
+///
+/// Telling a write from a read is the whole of what it adds, and only the stage-1 allowlist can
+/// do that: <c>SwGate</c> hands an observer a string with no classification in it, and the
+/// remodel family deliberately spells writes as interface-qualified keys and reads as bare
+/// names. So a gated key on <see cref="RemodelGuard.IsAllowlisted"/> is a write, and its target
+/// is whatever document the run is open on at that instant.
+///
+/// <b>Unknown stays unknown.</b> A write made before <c>remodel.open</c> has built the scope -
+/// the three user-preference toggles and the modal-suppression flag, which name no document -
+/// records <see cref="NoTarget"/> rather than the copy path that does not exist yet.
+/// </summary>
+public sealed class RemodelGateRecorder : ISwGateObserver
+{
+    /// <summary>What a mutating call with no document behind it records. Never a path.</summary>
+    public const string NoTarget = "(none)";
+
+    private readonly SwGateRecorder _recorder;
+    private readonly Func<string?> _targetPath;
+
+    /// <param name="recorder">The tool service's recorder, which keeps the one drained set.</param>
+    /// <param name="targetPath">
+    /// The copy the open remodel run writes to, or null when no run has a scope yet. Asked per
+    /// mutating call rather than captured once: a run opens and closes inside one launch.
+    /// </param>
+    public RemodelGateRecorder(SwGateRecorder recorder, Func<string?> targetPath)
+    {
+        _recorder = recorder ?? throw new ArgumentNullException(nameof(recorder));
+        _targetPath = targetPath ?? throw new ArgumentNullException(nameof(targetPath));
+    }
+
+    public void Gated(string interopMember)
+    {
+        _recorder.Gated(interopMember);
+
+        if (!RemodelGuard.IsAllowlisted(interopMember))
+        {
+            return;
+        }
+
+        string? target = _targetPath();
+        _recorder.Wrote(string.IsNullOrWhiteSpace(target) ? NoTarget : target!);
+    }
+
+    public void Refused(MutatingCallError refusal) => _recorder.Refused(refusal);
 }
 
 /// <summary>
@@ -116,17 +201,28 @@ public sealed class ToolServiceRequestLogger : IBridgeDispatcher
     private readonly IBridgeDispatcher _inner;
     private readonly SwGateRecorder _recorder;
     private readonly Action<string> _write;
+    private readonly Action<string>? _writeRemodel;
     private readonly Func<DateTimeOffset> _now;
 
+    /// <param name="remodelLog">
+    /// T070. Where a <c>remodel.*</c> request's line goes <b>as well</b>: `remodel.log` in the
+    /// run folder (contracts/run-artifacts.md), so the run report has the record beside the
+    /// artifacts it describes rather than in a launch-wide log the run folder does not carry.
+    /// The same line, built once, so the two files cannot disagree - and redacted by the same
+    /// construction, since <see cref="BridgeResponse"/> has no secret field at all. Null on a
+    /// host that answers no remodel command.
+    /// </param>
     public ToolServiceRequestLogger(
         IBridgeDispatcher inner,
         SwGateRecorder recorder,
         Action<string> write,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        Action<string>? remodelLog = null)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _recorder = recorder ?? throw new ArgumentNullException(nameof(recorder));
         _write = write ?? throw new ArgumentNullException(nameof(write));
+        _writeRemodel = remodelLog;
         _now = now ?? (() => DateTimeOffset.Now);
     }
 
@@ -183,6 +279,13 @@ public sealed class ToolServiceRequestLogger : IBridgeDispatcher
         line.Append(" elapsed_ms=").Append(response.ElapsedMs.ToString(CultureInfo.InvariantCulture));
         line.Append(" gated=").Append(string.Join(",", activity.GatedMembers));
 
+        if (activity.TargetPaths.Count > 0)
+        {
+            // Absent, rather than empty, for a request that wrote nothing: an empty field
+            // would read like a write whose target could not be recorded.
+            line.Append(" target=").Append(string.Join(",", activity.TargetPaths));
+        }
+
         if (activity.RefusedMembers.Count > 0)
         {
             line.Append(" refused=").Append(string.Join(",", activity.RefusedMembers));
@@ -199,13 +302,29 @@ public sealed class ToolServiceRequestLogger : IBridgeDispatcher
     private void Write(BridgeRequest request, BridgeResponse response)
     {
         SwGateActivity activity = _recorder.Drain();
+        string line;
         try
         {
-            _write(Format(_now(), request, response, activity) + System.Environment.NewLine);
+            line = Format(_now(), request, response, activity) + System.Environment.NewLine;
+            _write(line);
         }
         catch (Exception)
         {
             // A log that cannot be written must not fail the review it is describing.
+            return;
+        }
+
+        if (_writeRemodel == null || !RemodelCommands.IsRemodelCommand(request.Command))
+        {
+            return;
+        }
+
+        try
+        {
+            _writeRemodel(line);
+        }
+        catch (Exception)
+        {
         }
     }
 
@@ -344,6 +463,64 @@ public sealed class ToolServiceLog
         + message + System.Environment.NewLine);
 }
 
+/// <summary>
+/// T070. `remodel.log`, the run folder's own record of what the bridge was asked to do
+/// (contracts/run-artifacts.md): one line per <c>remodel.*</c> request, with the command, the
+/// elapsed time, the gated members and the target path of every mutating call.
+///
+/// The run folder is not known when the host starts - it is the folder the run's copy lives
+/// under, and there is no copy until <c>remodel.open</c> has returned - so the path is asked
+/// for per write rather than fixed at construction. Before that, and on a launch that runs no
+/// remodel, there is nothing to write to and nothing is written; those requests are still in
+/// the tool-service log, which is the SC-004 artifact.
+/// </summary>
+public sealed class RemodelRunLog
+{
+    /// <summary>The file's name inside the run folder. One spelling, here.</summary>
+    public const string FileName = "remodel.log";
+
+    private readonly Func<string?> _runDirectory;
+    private ToolServiceLog? _log;
+
+    public RemodelRunLog(Func<string?> runDirectory)
+    {
+        _runDirectory = runDirectory ?? throw new ArgumentNullException(nameof(runDirectory));
+    }
+
+    /// <summary>Appends text exactly as given; the caller supplies its own line ending.</summary>
+    public void Write(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        string? directory = _runDirectory();
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return;
+        }
+
+        string path = System.IO.Path.Combine(directory!, FileName);
+        try
+        {
+            if (_log == null || !string.Equals(_log.Path, path, StringComparison.OrdinalIgnoreCase))
+            {
+                // One run, one file: re-made only when a later run opens a different folder.
+                _log = new ToolServiceLog(path);
+            }
+        }
+        catch (Exception)
+        {
+            // A run folder that cannot be written to must not fail the run it describes.
+            _log = null;
+            return;
+        }
+
+        _log.Write(text);
+    }
+}
+
 /// <summary>Everything <see cref="ToolServiceHost"/> is given.</summary>
 public sealed class ToolServiceOptions
 {
@@ -384,20 +561,25 @@ public sealed class ToolServiceOptions
 }
 
 /// <summary>
-/// T047. The in-process tool service: the SOLIDWORKS half wired up, the two scoped secrets
-/// minted, the pipe listening, and the log open.
+/// T047, T058, T070. The in-process tool service: the SOLIDWORKS half wired up, the scoped
+/// secrets minted, the pipe listening, and the log open.
 ///
-/// The composition is the whole job, and three parts of it are decisions rather than plumbing:
+/// The composition is the whole job, and four parts of it are decisions rather than plumbing:
 ///
 ///   * <b><see cref="SwScope.Open"/> runs on the application thread.</b> It walks the
 ///     component tree, which is hundreds of COM calls, and every pointer it keeps is bound to
 ///     the thread that made it. Attaching anywhere else would produce a scope that fails on
 ///     its first use.
-///   * <b>Two secrets, not one.</b> The review session gets one that authorizes
+///   * <b>Three secrets, not one.</b> The review session gets one that authorizes
 ///     <c>ping | capture | measure | interference</c>; the CLI's generated profile gets one
-///     that authorizes <c>ping | capture | measure</c>. A single shared secret would
-///     authenticate without bounding what it authorizes, and the CLI can read its own profile,
-///     so the MCP allowlist withholds nothing on its own (contracts/README.md).
+///     that authorizes <c>ping | capture | measure</c>; the remodel backend session gets one
+///     that authorizes <c>ping</c> and <c>remodel.*</c> and nothing else. A single shared
+///     secret would authenticate without bounding what it authorizes, and the CLI can read its
+///     own profile, so the MCP allowlist withholds nothing on its own (contracts/README.md).
+///   * <b>The remodel gate is its own gate.</b> It is built with <see cref="RemodelGuard"/>
+///     rather than the read-only guard, and its observer is the one that can tell a write from
+///     a read, so `remodel.log` records the target path of every mutating call (FR-041). It
+///     shares the one recorder, so a launch still writes one log line per request.
 ///   * <b>One host, one pipe name.</b> <c>swreview-&lt;guid&gt;</c>, because two Task Panes in
 ///     one SOLIDWORKS are two hosts in one process (see <see cref="PipeNames"/>).
 /// </summary>
@@ -415,6 +597,7 @@ public sealed class ToolServiceHost : IToolService
         ToolServiceLog log,
         string reviewSecret,
         string generalChatSecret,
+        string remodelSecret,
         ISwSession session,
         string documentPath,
         string captureDirectory)
@@ -423,6 +606,7 @@ public sealed class ToolServiceHost : IToolService
         _log = log;
         ReviewSecret = reviewSecret;
         GeneralChatSecret = generalChatSecret;
+        RemodelSecret = remodelSecret;
         Session = session;
         DocumentPath = documentPath;
         CaptureDirectory = captureDirectory;
@@ -436,6 +620,14 @@ public sealed class ToolServiceHost : IToolService
 
     /// <summary>Authorizes <c>ping | capture | measure</c>. Goes to the CLI profile (T048).</summary>
     public string GeneralChatSecret { get; }
+
+    /// <summary>
+    /// T070. Authorizes <c>ping</c> and <c>remodel.*</c>, and nothing else. Goes to the remodel
+    /// backend session and to nothing else - never to the review session, never to the CLI
+    /// profile, and never to the tool layer, which has no remodel command to call
+    /// (contracts/tools.md).
+    /// </summary>
+    public string RemodelSecret { get; }
 
     /// <summary>
     /// The attached scope, on the application thread.
@@ -462,6 +654,9 @@ public sealed class ToolServiceHost : IToolService
     /// <summary>What the CLI profile writer is given.</summary>
     public BridgeConfig GeneralChatBridge => new BridgeConfig(PipeName, GeneralChatSecret);
 
+    /// <summary>What the remodel backend session is given, and no one else (T070).</summary>
+    public BridgeConfig RemodelBridge => new BridgeConfig(PipeName, RemodelSecret);
+
     /// <summary>
     /// Attaches to SOLIDWORKS on the application thread, then starts listening. Throws if the
     /// attach fails or the application thread does not answer, so the add-in can report it.
@@ -480,24 +675,35 @@ public sealed class ToolServiceHost : IToolService
         var log = new ToolServiceLog(ToolServiceLog.PathFor(options.LogFolder, options.Now()));
         string reviewSecret = NewSecret();
         string generalChatSecret = NewSecret();
+        string remodelSecret = NewSecret();
 
         var recorder = new SwGateRecorder();
+
+        // The re-modeler's own gate: RemodelGuard rather than the read-only guard, which is
+        // the only reason a write can pass at all. Its observer is attached below, once there
+        // is a dispatcher to ask which document the open run is writing to.
+        var remodelGate = new SwGate(new CircuitBreaker(), new RemodelGuard());
 
         // On the application thread, because every pointer this produces belongs to it.
         Attached attached = OnApplicationThread(
             options.Invoker,
-            () => Attach(options, recorder, captureDirectory),
+            () => Attach(options, recorder, captureDirectory, remodelGate),
             options.AttachTimeout);
 
         var dispatcher = new SwBridgeDispatcher(
-            attached.Services, new ScopedSecretPolicy(reviewSecret, generalChatSecret));
+            attached.Services,
+            new ScopedSecretPolicy(reviewSecret, generalChatSecret, remodelSecret));
+
+        remodelGate.Observer = new RemodelGateRecorder(recorder, () => dispatcher.RemodelTargetPath);
 
         // Outermost first: the log describes the answer that actually goes out, including one
-        // rewritten because the document went away.
+        // rewritten because the document went away. A remodel request's line is written to the
+        // run folder's `remodel.log` as well, where the run report reads it.
         var chain = new ToolServiceRequestLogger(
             new DocumentPresenceDispatcher(dispatcher, attached.DocumentIsOpen),
             recorder,
-            log.Write);
+            log.Write,
+            remodelLog: new RemodelRunLog(() => dispatcher.RemodelRunDirectory).Write);
 
         var server = new InProcPipeServer(
             new InProcPipeServerOptions(pipeName, chain, options.Invoker)
@@ -525,6 +731,7 @@ public sealed class ToolServiceHost : IToolService
             log,
             reviewSecret,
             generalChatSecret,
+            remodelSecret,
             attached.Session,
             attached.DocumentPath,
             captureDirectory);
@@ -561,7 +768,10 @@ public sealed class ToolServiceHost : IToolService
 
     /// <summary>Runs ON the application thread. Every COM pointer below is created there.</summary>
     private static Attached Attach(
-        ToolServiceOptions options, SwGateRecorder recorder, string captureDirectory)
+        ToolServiceOptions options,
+        SwGateRecorder recorder,
+        string captureDirectory,
+        SwGate remodelGate)
     {
         var gate = new SwGate { Observer = recorder };
         SwSession session = SwSession.Attach(
@@ -579,6 +789,12 @@ public sealed class ToolServiceHost : IToolService
             SwVersion = session.SwVersion,
             DocumentPath = documentPath,
             Configuration = session.Configuration.Name,
+
+            // The gate the remodel.* commands call through. The seat itself is not wired here:
+            // this host attaches to the document the engineer has open, and the re-modeler
+            // reaches SOLIDWORKS through its own seat, so until one is handed over every
+            // remodel command answers "this bridge was not built with a remodel seat".
+            RemodelGate = remodelGate,
         };
 
         // The attach itself is not part of any request; the first request starts clean.

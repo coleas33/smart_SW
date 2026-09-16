@@ -1,10 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Threading;
 using SolidWorks.Interop.sldworks;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
 using SwReview.AddIn.ToolService;
+using SwReview.Extractor.Bridge;
+using SwReview.Extractor.Guard;
 using SwReview.Extractor.Sw;
 using Xunit;
 
@@ -245,6 +250,363 @@ public sealed class ToolServiceWiringTests
         Assert.True(done.Wait(TimeSpan.FromSeconds(10)), "the tool service start never ran.");
         Assert.NotEqual(caller, starter);
         gate.Dispose();
+    }
+
+    // ---- the remodel gate observer (T057) -----------------------------------------------------
+
+    /// <summary>This run's copy, as <c>RemodelScope.CopyPath</c> canonicalizes it.</summary>
+    private const string CopyPath =
+        @"C:\runs\20260916-142201-bracket-remodel\copy\bracket-RMS.SLDPRT";
+
+    /// <summary>The per-launch secret a remodel request carries, and that no line may repeat.</summary>
+    private const string RemodelRequestSecret = "remodel-secret-0123456789";
+
+    /// <summary>The reads a mutating remodel request makes before it writes anything.</summary>
+    private static readonly string[] RemodelReads =
+    {
+        "GetObjectByPersistReference3",
+        "get_Name",
+        "GetWhatsWrongCount",
+    };
+
+    /// <summary>
+    /// The writes, as interface-qualified keys. Five of the six needed the stage-1 allowlist to
+    /// pass: <c>InsertFeatureTreeFolder2</c> through <see cref="ReadOnlyGuard"/>'s
+    /// <c>InsertFeature</c> prefix, and <c>EditRollback</c>, <c>ForceRebuild3</c>,
+    /// <c>Delete2</c> and <c>Save3</c> by name.
+    /// </summary>
+    private static readonly string[] RemodelWrites =
+    {
+        "IFeature.set_Name",
+        "IFeatureManager.InsertFeatureTreeFolder2",
+        "IFeatureManager.EditRollback",
+        "IModelDoc2.ForceRebuild3",
+        "ICustomPropertyManager.Delete2",
+        "IModelDoc2.Save3",
+    };
+
+    /// <summary>
+    /// The SC-004 audit, extended to the re-modeler (contracts/guard-allowlist.md).
+    ///
+    /// The assertion is <b>not</b> "every gated key is allowlisted". <c>SwGate.Guard</c> calls
+    /// <c>observer.Gated</c> for every member <i>before</i> the guard judges it, so a mutating
+    /// remodel request gates its reads too and the log records strings with no read/write
+    /// classification in them. What is checkable, and what this asserts, is the intersection:
+    /// every gated key that <see cref="ReadOnlyGuard"/> would have denied - every key that
+    /// needed the allowlist to pass - is on the stage-1 allowlist.
+    /// </summary>
+    [Fact]
+    public void EveryGatedKeyThatNeededTheAllowlistToPassIsOnTheStageOneAllowlist()
+    {
+        string line = RemodelLine(RemodelReads, RemodelWrites);
+        string[] needed = GatedOf(line).Where(NeededTheAllowlist).ToArray();
+
+        Assert.Equal(
+            new[]
+            {
+                "IFeatureManager.InsertFeatureTreeFolder2",
+                "IFeatureManager.EditRollback",
+                "IModelDoc2.ForceRebuild3",
+                "ICustomPropertyManager.Delete2",
+                "IModelDoc2.Save3",
+            },
+            needed);
+
+        foreach (string key in needed)
+        {
+            Assert.Contains(key, RemodelGuard.AllowedKeys);
+        }
+
+        // Nothing was refused: a refusal here is the re-modeler reaching for a member stage 1
+        // does not have.
+        Assert.DoesNotContain("refused=", line, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The weaker property, pinned deliberately so a later change cannot tighten the assertion
+    /// above into one the log cannot support: the gated set holds reads that are on no
+    /// allowlist, because the gate records what was asked about rather than what was allowed.
+    /// </summary>
+    [Fact]
+    public void TheGatedSetHoldsReadsThatAreOnNoAllowlist()
+    {
+        string[] gated = GatedOf(RemodelLine(RemodelReads, RemodelWrites));
+
+        foreach (string read in RemodelReads)
+        {
+            Assert.Contains(read, gated);
+            Assert.DoesNotContain(read, RemodelGuard.AllowedKeys);
+            Assert.False(NeededTheAllowlist(read));
+        }
+    }
+
+    /// <summary>
+    /// FR-041: the run report states from the log, rather than from intent, that every write
+    /// went to the copy. So the target is recorded per mutating call, and a request whose
+    /// writes all went to one document records exactly that one path.
+    /// </summary>
+    [Fact]
+    public void EveryMutatingCallRecordsTheTargetPathItWroteTo()
+    {
+        string line = RemodelLine(RemodelReads, RemodelWrites);
+
+        Assert.Contains(" target=" + CopyPath, line, StringComparison.Ordinal);
+        Assert.Equal(1, Occurrences(line, CopyPath));
+        Assert.DoesNotContain(RemodelGateRecorder.NoTarget, line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AReadOnlyRemodelRequestRecordsNoTargetPathAtAll()
+    {
+        // remodel.probe_scope reads the engineer's open source and writes nothing, so there is
+        // no target to record - and an empty target field would read like one.
+        string line = RemodelLine(RemodelReads, new string[0]);
+
+        Assert.DoesNotContain(" target=", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AWriteMadeBeforeTheRunHasAScopeRecordsNoTargetRatherThanAGuessedOne()
+    {
+        // The three user-preference toggles and the modal-suppression flag are set by
+        // remodel.open before any scope exists, and they name no document. Unknown stays
+        // unknown: the line says so rather than naming a copy that does not exist yet.
+        string line = RemodelLine(
+            new string[0], new[] { "ISldWorks.SetUserPreferenceToggle" }, target: null);
+
+        Assert.Contains(" target=" + RemodelGateRecorder.NoTarget, line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AKeyOffTheStageOneAllowlistIsRefusedAndRecordedWithNoTarget()
+    {
+        // IModelDoc2.EditDelete is the owner's decision made visible in the audit artifact: v1
+        // refuses a mis-membered RMS-named folder rather than dissolving it, so the one call
+        // that deletes real features on a mis-selection is not on the list.
+        string line = RemodelLine(new string[0], new[] { "IModelDoc2.EditDelete" });
+
+        Assert.Contains("refused=IModelDoc2.EditDelete", line, StringComparison.Ordinal);
+        Assert.Contains("gated=IModelDoc2.EditDelete", line, StringComparison.Ordinal);
+        Assert.DoesNotContain(" target=", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheSecretNeverReachesTheLine()
+    {
+        Assert.DoesNotContain(
+            RemodelRequestSecret, RemodelLine(RemodelReads, RemodelWrites), StringComparison.Ordinal);
+    }
+
+    // ---- remodel.log (T070) ---------------------------------------------------------------------
+
+    [Fact]
+    public void EveryRemodelRequestGetsOneRedactedLineInTheRunFoldersRemodelLog()
+    {
+        using (var run = new TempRunFolder())
+        {
+            var service = new LoggedService(run.Path);
+
+            service.Dispatch(RemodelCommands.Rename, RemodelReads, RemodelWrites);
+
+            string written = File.ReadAllText(run.RemodelLogPath);
+            Assert.Equal(1, Occurrences(written, "\n"));
+            Assert.Contains("command=" + RemodelCommands.Rename, written, StringComparison.Ordinal);
+            Assert.Contains("elapsed_ms=", written, StringComparison.Ordinal);
+            Assert.Contains("gated=", written, StringComparison.Ordinal);
+            Assert.Contains(" target=" + CopyPath, written, StringComparison.Ordinal);
+            Assert.DoesNotContain(RemodelRequestSecret, written, StringComparison.Ordinal);
+
+            // The tool-service log is the SC-004 artifact and keeps its own copy of the line.
+            Assert.Contains(
+                "command=" + RemodelCommands.Rename, service.ToolServiceLog, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ARequestThatIsNotARemodelCommandNeverReachesTheRemodelLog()
+    {
+        using (var run = new TempRunFolder())
+        {
+            var service = new LoggedService(run.Path);
+
+            service.Dispatch(BridgeCommands.Capture, new[] { "ShowNamedView2" }, new string[0]);
+
+            Assert.False(File.Exists(run.RemodelLogPath));
+            Assert.Contains("command=capture", service.ToolServiceLog, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ARemodelRequestMadeBeforeARunFolderExistsWritesNoFileAndStillLogs()
+    {
+        // remodel.probe_scope runs before remodel.open has built a scope, so there is no run
+        // folder to write into yet. The tool-service log still records the request.
+        var service = new LoggedService(runDirectory: null);
+
+        service.Dispatch(RemodelCommands.ProbeScope, RemodelReads, new string[0]);
+
+        Assert.Contains(
+            "command=" + RemodelCommands.ProbeScope, service.ToolServiceLog, StringComparison.Ordinal);
+    }
+
+    // ---- the remodel observer's helpers ---------------------------------------------------------
+
+    /// <summary>
+    /// One formatted log line for a remodel request that gated <paramref name="reads"/> as bare
+    /// names and <paramref name="writes"/> as interface-qualified keys, through a real
+    /// <see cref="SwGate"/> built with the real <see cref="RemodelGuard"/>.
+    /// </summary>
+    private static string RemodelLine(string[] reads, string[] writes, string? target = CopyPath)
+    {
+        var recorder = new SwGateRecorder();
+        var gate = new SwGate(new CircuitBreaker(), new RemodelGuard())
+        {
+            Observer = new RemodelGateRecorder(recorder, () => target),
+        };
+
+        Gate(gate, reads, writes);
+
+        BridgeRequest request = BridgeCodec.ReadRequest(
+            "{\"id\":\"11\",\"command\":\"" + RemodelCommands.Rename
+            + "\",\"secret\":\"" + RemodelRequestSecret + "\"}");
+
+        return ToolServiceRequestLogger.Format(
+            DateTimeOffset.Parse("2026-09-16T14:22:01+00:00", CultureInfo.InvariantCulture),
+            request,
+            BridgeResponse.Ok(request.Id, null),
+            recorder.Drain());
+    }
+
+    /// <summary>The calls one request makes, a refusal left in the record rather than thrown on.</summary>
+    private static void Gate(SwGate gate, string[] reads, string[] writes)
+    {
+        foreach (string member in reads)
+        {
+            gate.Call(member, () => 0);
+        }
+
+        foreach (string key in writes)
+        {
+            try
+            {
+                gate.Call(key, () => 0);
+            }
+            catch (MutatingCallError)
+            {
+                // The refusal is the answer the caller gets; the audit wants it in the line.
+            }
+        }
+    }
+
+    /// <summary>The <c>gated=</c> field of a line, split back into keys.</summary>
+    private static string[] GatedOf(string line)
+    {
+        string field = line.Split(' ').Single(
+            part => part.StartsWith("gated=", StringComparison.Ordinal));
+        string value = field.Substring("gated=".Length);
+        return value.Length == 0 ? new string[0] : value.Split(',');
+    }
+
+    /// <summary>
+    /// True when <see cref="ReadOnlyGuard"/> would have refused this key's bare member name, so
+    /// only the stage-1 allowlist can have let it through.
+    /// </summary>
+    private static bool NeededTheAllowlist(string gatedKey)
+    {
+        string member = CallKey.BareName(gatedKey);
+        return ReadOnlyGuard.DeniedMembers.Contains(member, StringComparer.OrdinalIgnoreCase)
+            || ReadOnlyGuard.DeniedPrefixes.Any(
+                prefix => member.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static int Occurrences(string text, string value)
+    {
+        int count = 0;
+        for (int at = text.IndexOf(value, StringComparison.Ordinal);
+            at >= 0;
+            at = text.IndexOf(value, at + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    /// <summary>A run folder on disk, the way the host has one once `remodel.open` has returned.</summary>
+    private sealed class TempRunFolder : IDisposable
+    {
+        public TempRunFolder()
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), "swreview-remodel-log", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path);
+        }
+
+        public string Path { get; }
+
+        public string RemodelLogPath => System.IO.Path.Combine(Path, RemodelRunLog.FileName);
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The logging chain as <see cref="ToolServiceHost"/> composes it: one recorder, the remodel
+    /// gate's observer on top of it, the tool-service log, and `remodel.log` in the open run's
+    /// folder.
+    /// </summary>
+    private sealed class LoggedService
+    {
+        private readonly StringWriter _log = new StringWriter();
+        private readonly SwGateRecorder _recorder = new SwGateRecorder();
+        private readonly AnsweringDispatcher _dispatcher = new AnsweringDispatcher();
+        private readonly SwGate _gate;
+        private readonly ToolServiceRequestLogger _logger;
+
+        public LoggedService(string? runDirectory)
+        {
+            _gate = new SwGate(new CircuitBreaker(), new RemodelGuard())
+            {
+                Observer = new RemodelGateRecorder(_recorder, () => CopyPath),
+            };
+
+            _logger = new ToolServiceRequestLogger(
+                _dispatcher,
+                _recorder,
+                _log.Write,
+                remodelLog: new RemodelRunLog(() => runDirectory).Write);
+        }
+
+        public string ToolServiceLog => _log.ToString();
+
+        public void Dispatch(string command, string[] reads, string[] writes)
+        {
+            // Inside the dispatch, where a handler's calls happen: the logger drains first, so
+            // anything the gate saw between requests belongs to no request.
+            _dispatcher.Work = () => Gate(_gate, reads, writes);
+
+            _logger.Dispatch(BridgeCodec.ReadRequest(
+                "{\"id\":\"11\",\"command\":\"" + command
+                + "\",\"secret\":\"" + RemodelRequestSecret + "\"}"));
+        }
+    }
+
+    /// <summary>Answers every request `ok`; what it did to SOLIDWORKS is the gate's story.</summary>
+    private sealed class AnsweringDispatcher : IBridgeDispatcher
+    {
+        /// <summary>The interop calls this request makes, run on the way through.</summary>
+        public Action? Work { get; set; }
+
+        public BridgeResponse Dispatch(BridgeRequest request)
+        {
+            Work?.Invoke();
+            return BridgeResponse.Ok(request.Id, null);
+        }
     }
 
     // ---- fakes ---------------------------------------------------------------------------------

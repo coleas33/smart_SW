@@ -291,6 +291,14 @@ def check_tool_envelope(
             unresolved.append(reason)
         else:
             meshes.append((body.component_id, mesh))
+    if not meshes:
+        # Principle I: a sweep that tested no body has established nothing. Without this
+        # the result of a package carrying no body mesh - `dump --meshes none` - reads
+        # `status: "checked", bodies_swept: 0, hits: []`, which is a false clear.
+        unresolved.append(
+            f"the tool envelope for fastener {fastener_id} swept no body, so it has not "
+            f"established that anything is out of the way"
+        )
 
     try:
         result = envelope_raycast(

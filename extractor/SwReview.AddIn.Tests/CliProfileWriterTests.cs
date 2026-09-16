@@ -6,6 +6,7 @@ using System.Text;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Terminal;
 using SwReview.AddIn.ToolService;
+using SwReview.Extractor.Bridge;
 using Xunit;
 
 namespace SwReview.AddIn.Tests;
@@ -306,6 +307,45 @@ public sealed class CliProfileWriterTests
                 Assert.DoesNotContain(withheld, CliProfileWriter.EnabledTools);
                 Assert.DoesNotContain(withheld, config, StringComparison.Ordinal);
             }
+        }
+    }
+
+    /// <summary>
+    /// T069, the sibling of the test that pins the MCP function list and this profile's
+    /// `enabled_tools` as one list (`reviewer/tests/unit/test_mcp_server.py`,
+    /// <c>test_the_offered_tools_are_exactly_the_profile_allowlist</c>): every
+    /// <c>remodel.*</c> name is in <b>neither</b>.
+    ///
+    /// They are commands, not tools (contracts/tools.md). They carry no `remodel` context into
+    /// any review, general-chat or Model check session, they are not in
+    /// <c>MCP_TOOL_FUNCTIONS</c>, and the terminal's CLI could call anything it can see - so
+    /// the name never appearing in the generated profile is what keeps a remodel command out
+    /// of the terminal by construction rather than by the CLI's good behaviour. The Python
+    /// half asserts the two lists are equal, so asserting absence from this one asserts
+    /// absence from both.
+    /// </summary>
+    [Fact]
+    public void NoRemodelCommandIsATerminalToolOrAppearsInTheGeneratedProfile()
+    {
+        using (var fixture = new Fixture())
+        {
+            CodexProfile profile = fixture.Write();
+            string config = File.ReadAllText(profile.ConfigPath);
+            string persona = File.ReadAllText(profile.InstructionsPath);
+
+            foreach (string command in RemodelCommands.All)
+            {
+                Assert.DoesNotContain(command, CliProfileWriter.EnabledTools);
+                Assert.DoesNotContain(command, config, StringComparison.Ordinal);
+                Assert.DoesNotContain(command, persona, StringComparison.Ordinal);
+            }
+
+            // Not even the family name, so a tool called `remodel_plan` cannot be mistaken for
+            // one of these and a future `remodel.*` cannot arrive unnoticed.
+            Assert.DoesNotContain(RemodelCommands.Prefix, config, StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                CliProfileWriter.EnabledTools,
+                tool => tool.StartsWith(RemodelCommands.Prefix, StringComparison.Ordinal));
         }
     }
 

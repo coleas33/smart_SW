@@ -27,10 +27,12 @@ from swreview.ir.models import (
     UnsupportedSchemaVersionError,
 )
 from swreview.ir.schema import export_schema
+from tests.golden.test_golden import case_dirs
 from tests.support.contracts import load_contract
 from tests.support.packages import build_package
 
 GOLDEN_FIXTURES = Path(__file__).resolve().parents[1] / "golden" / "fixtures"
+GOLDEN_FIXTURE_DIRS = case_dirs(GOLDEN_FIXTURES)
 
 
 def build_extractor(**overrides: object) -> ExtractorInfo:
@@ -100,18 +102,23 @@ def test_a_one_one_zero_package_without_a_profile_loads_as_full() -> None:
     assert package.extractor.profile == "full"
 
 
-@pytest.mark.parametrize(
-    "fixture", sorted(path.name for path in GOLDEN_FIXTURES.iterdir() if path.is_dir())
-)
-def test_every_shipped_golden_fixture_predates_the_profile_and_loads_as_full(
-    fixture: str,
+@pytest.mark.parametrize("fixture", GOLDEN_FIXTURE_DIRS, ids=lambda path: path.name)
+def test_every_shipped_golden_fixture_loads_at_the_profile_it_declares(
+    fixture: Path,
 ) -> None:
-    text = (GOLDEN_FIXTURES / fixture / "package.json").read_text(encoding="utf-8")
+    """A fixture that names no profile loads as `full`; one that names a profile keeps it.
+
+    The pre-1.2.0 fixtures declare none, which is the back-compat case this test was
+    written for and still asserts. The re-modeler's fixtures declare `model_check`, because
+    that is what feature 003 US6 dumps for a part opened alone and what the planner is fed;
+    reading the declaration rather than assuming its absence keeps both true at once.
+    """
+    text = (fixture / "package.json").read_text(encoding="utf-8")
+    declared = json.loads(text)["extractor"].get("profile")
 
     package = EvidencePackage.model_validate_json(text)
 
-    assert "profile" not in json.loads(text)["extractor"]
-    assert package.extractor.profile == "full"
+    assert package.extractor.profile == (declared or "full")
 
 
 # --- the generated contract -------------------------------------------------------

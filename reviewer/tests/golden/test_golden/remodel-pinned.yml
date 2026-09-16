@@ -1,0 +1,430 @@
+result:
+  changes:
+  - expect:
+      rebuild_errors_delta: 0
+    kind: reorder
+    params:
+      anchor_persist_ref: ZG9jOjEvRmlsbGV0MQ==
+      feature_persist_ref: ZG9jOjEvU2hlbGwx
+      location: after
+    seq: 1
+    subject:
+      feature_id: feat:0009
+      name: Shell1
+      persist_ref: ZG9jOjEvU2hlbGwx
+    subject_kind: feature
+  - expect:
+      rebuild_errors_delta: 0
+    kind: reorder
+    params:
+      anchor_persist_ref: ZG9jOjEvQ3V0LUV4dHJ1ZGUx
+      feature_persist_ref: ZG9jOjEvQ2hhbWZlcjE=
+      location: after
+    seq: 2
+    subject:
+      feature_id: feat:0008
+      name: Chamfer1
+      persist_ref: ZG9jOjEvQ2hhbWZlcjE=
+    subject_kind: feature
+  configuration: Default
+  configuration_names:
+  - Default
+  copy_path: null
+  coverage:
+  - feature_ids: []
+    item: scope
+    reason: solid_body_count could not be read, so the multibody question is unresolved;
+      an unread signal is never a pass; is_weldment could not be read, so the weldment
+      question is unresolved; an unread signal is never a pass; sheet_metal_folder_present
+      could not be read, so the sheet_metal question is unresolved; an unread signal
+      is never a pass; mesh_body_present could not be read, so the mesh_or_graphics_body
+      question is unresolved; an unread signal is never a pass; graphics_body_present
+      could not be read, so the mesh_or_graphics_body question is unresolved; an unread
+      signal is never a pass; is_3d_interconnect could not be read, so the three_d_interconnect
+      question is unresolved; an unread signal is never a pass; rms_named_folders
+      could not be read, so the rms_named_folder_wrong_members question is unresolved;
+      an unread signal is never a pass
+  - feature_ids: []
+    item: target group
+    reason: 0 of 8 content feature(s) have no target group; the judgement phase has
+      not run, and an undecided feature is never moved
+  - feature_ids: []
+    item: feature descriptions
+    reason: 0 description(s) unreadable and 0 blank of 8 content feature(s); the planner
+      never invents description prose, so revision 1 proposes none, and an unreadable
+      one is refused as a change target because it has no recoverable inverse
+  - feature_ids:
+    - feat:0004
+    item: global variables
+    reason: 1 feature reading(s) could justify a global; revision 1 proposes none,
+      and a v1 global names a value and drives nothing
+  - feature_ids: []
+    item: equations
+    reason: '0 equation row(s): 0 global, 0 driving a dimension, 0 broken, 0 unjudgeable;
+      revision 1 repairs none and adds none'
+  - feature_ids: []
+    item: sketch dimensions
+    reason: not carried by IR 1.2.0, so this version can neither name a dimension,
+      rename one, nor drive one from a global (FR-030)
+  - feature_ids: []
+    item: folders
+    reason: 0 folder(s) to create, 0 already correct, 0 refused
+  - feature_ids: []
+    item: changes
+    reason: 2 change(s) planned, in the fixed order of section 1.11
+  - feature_ids:
+    - feat:0005
+    - feat:0006
+    item: 3-Core
+    reason: '3-Core cannot be folded: Sketch2, Cut-Extrude1 sit(s) inside its span
+      (Sketch1 .. Chamfer1) in the achievable order, and a folder wraps a contiguous
+      run'
+  - feature_ids:
+    - feat:0008
+    item: 4-Detail
+    reason: '4-Detail cannot be folded: Chamfer1 sit(s) inside its span (Sketch2 ..
+      Hole1) in the achievable order, and a folder wraps a contiguous run'
+  created_at: '2026-09-16T14:22:01Z'
+  descriptions: []
+  deviations:
+  - chosen: 3-Core
+    feature_id: feat:0004
+    kind: fillet_default_core
+    rationale: Fillet1 is a fillet and the type table sends every fillet to 3-Core;
+      no judgement phase has run, so nothing has looked at whether it is structural
+      or cosmetic
+    report_line: reviewed as structural; move to Quarantine if cosmetic
+  document_id: doc:1
+  folders:
+    actions: []
+    refusals: []
+  globals: []
+  limits:
+    max_changes: 250
+    max_minutes: 20
+    max_rebuild_seconds: 120
+  order:
+    achievable:
+    - feat:0002
+    - feat:0003
+    - feat:0004
+    - feat:0009
+    - feat:0005
+    - feat:0006
+    - feat:0008
+    - feat:0007
+    cycle: null
+    edit_script:
+    - anchor_feature_id: feat:0004
+      feature_id: feat:0009
+      location: after
+    - anchor_feature_id: feat:0006
+      feature_id: feat:0008
+      location: after
+    kept:
+    - feat:0002
+    - feat:0003
+    - feat:0004
+    - feat:0005
+    - feat:0006
+    - feat:0007
+    move_count: 2
+  package_before: package-before.json
+  pins:
+  - achievable_index: 6
+    blocking_edge:
+      child_id: feat:0008
+      parent_id: feat:0006
+    desired_index: 3
+    feature_id: feat:0008
+    reason: Chamfer1 must follow Cut-Extrude1 (4-Detail), which the method puts after
+      it
+  plan_revision: 1
+  plan_schema: '1.0'
+  ranks:
+  - feature_id: feat:0002
+    group_index: 3
+    intra_rank: 1
+    intra_rule_id: null
+    original_index: 1
+    rankable: true
+  - feature_id: feat:0003
+    group_index: 3
+    intra_rank: 1
+    intra_rule_id: null
+    original_index: 2
+    rankable: true
+  - feature_id: feat:0004
+    group_index: 3
+    intra_rank: 1
+    intra_rule_id: null
+    original_index: 3
+    rankable: true
+  - feature_id: feat:0005
+    group_index: 4
+    intra_rank: 1
+    intra_rule_id: null
+    original_index: 4
+    rankable: true
+  - feature_id: feat:0006
+    group_index: 4
+    intra_rank: 1
+    intra_rule_id: null
+    original_index: 5
+    rankable: true
+  - feature_id: feat:0007
+    group_index: 4
+    intra_rank: 2
+    intra_rule_id: rms.detail.holes_last
+    original_index: 6
+    rankable: true
+  - feature_id: feat:0008
+    group_index: 3
+    intra_rank: 1
+    intra_rule_id: null
+    original_index: 7
+    rankable: true
+  - feature_id: feat:0009
+    group_index: 3
+    intra_rank: 2
+    intra_rule_id: rms.core.shell_last
+    original_index: 8
+    rankable: true
+  rebuild:
+  - blocking_edge: null
+    detail: '3-Core cannot be made contiguous: Sketch2, Cut-Extrude1 sits inside its
+      span (Sketch1 .. Chamfer1)'
+    feature_id: feat:0002
+    name: Sketch1
+    reason: splits_group
+  - blocking_edge: null
+    detail: '3-Core cannot be made contiguous: Sketch2, Cut-Extrude1 sits inside its
+      span (Sketch1 .. Chamfer1)'
+    feature_id: feat:0003
+    name: Boss-Extrude1
+    reason: splits_group
+  - blocking_edge: null
+    detail: '3-Core cannot be made contiguous: Sketch2, Cut-Extrude1 sits inside its
+      span (Sketch1 .. Chamfer1)'
+    feature_id: feat:0004
+    name: Fillet1
+    reason: splits_group
+  - blocking_edge:
+      child_id: feat:0006
+      parent_id: feat:0005
+    detail: Sketch2 sits inside the 3-Core span (Sketch1 .. Chamfer1), so that group
+      cannot be folded
+    feature_id: feat:0005
+    name: Sketch2
+    reason: splits_group
+  - blocking_edge:
+      child_id: feat:0006
+      parent_id: feat:0005
+    detail: Cut-Extrude1 sits inside the 3-Core span (Sketch1 .. Chamfer1), so that
+      group cannot be folded
+    feature_id: feat:0006
+    name: Cut-Extrude1
+    reason: splits_group
+  - blocking_edge: null
+    detail: '4-Detail cannot be made contiguous: Chamfer1 sits inside its span (Sketch2
+      .. Hole1)'
+    feature_id: feat:0007
+    name: Hole1
+    reason: splits_group
+  - blocking_edge:
+      child_id: feat:0008
+      parent_id: feat:0006
+    detail: Chamfer1 belongs in 3-Core but depends on Cut-Extrude1 in 4-Detail, which
+      the method puts after it
+    feature_id: feat:0008
+    name: Chamfer1
+    reason: backward_reference
+  - blocking_edge: null
+    detail: '3-Core cannot be made contiguous: Sketch2, Cut-Extrude1 sits inside its
+      span (Sketch1 .. Chamfer1)'
+    feature_id: feat:0009
+    name: Shell1
+    reason: splits_group
+  rejected_proposals: []
+  renames: []
+  run_id: null
+  scope:
+    notes:
+    - sheet_body_count could not be read, so whether this part carries surface bodies
+      the mass-property gate cannot see is unresolved, not covered
+    - imported_file_names could not be read, so whether the reorganize stage is a
+      no-op over an imported dumb solid is unresolved
+    - the configuration names could not be read, so which_configs is unknown and no
+      equation may be added until it is
+    probe_id: null
+    refusals:
+    - code: signal_unresolved
+      message: solid_body_count could not be read, so the multibody question is unresolved;
+        an unread signal is never a pass
+      signal: solid_body_count
+    - code: signal_unresolved
+      message: is_weldment could not be read, so the weldment question is unresolved;
+        an unread signal is never a pass
+      signal: is_weldment
+    - code: signal_unresolved
+      message: sheet_metal_folder_present could not be read, so the sheet_metal question
+        is unresolved; an unread signal is never a pass
+      signal: sheet_metal_folder_present
+    - code: signal_unresolved
+      message: mesh_body_present could not be read, so the mesh_or_graphics_body question
+        is unresolved; an unread signal is never a pass
+      signal: mesh_body_present
+    - code: signal_unresolved
+      message: graphics_body_present could not be read, so the mesh_or_graphics_body
+        question is unresolved; an unread signal is never a pass
+      signal: graphics_body_present
+    - code: signal_unresolved
+      message: is_3d_interconnect could not be read, so the three_d_interconnect question
+        is unresolved; an unread signal is never a pass
+      signal: is_3d_interconnect
+    - code: signal_unresolved
+      message: rms_named_folders could not be read, so the rms_named_folder_wrong_members
+        question is unresolved; an unread signal is never a pass
+      signal: rms_named_folders
+    signals: null
+    signals_probe:
+      configuration_names: null
+      document_type: null
+      external_reference_count: null
+      graphics_body_present: null
+      imported_file_names: null
+      is_3d_interconnect: null
+      is_weldment: null
+      mesh_body_present: null
+      read_only: null
+      rebuild_error_count: null
+      rms_named_folders: null
+      save_flag_dirty: null
+      sheet_body_count: null
+      sheet_metal_folder_present: null
+      solid_body_count: null
+      vault: null
+    verdict: unresolved
+  source: null
+  state: planned
+  targets:
+  - basis: null
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: reference
+    feature_id: feat:0001
+    model: null
+    name: Front Plane
+    provider: null
+    rationale: null
+    state: not_content
+    target_group: null
+    type_name: RefPlane
+  - basis: sketch_follows_consumer
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: sketch
+    feature_id: feat:0002
+    model: null
+    name: Sketch1
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 3-Core
+    type_name: ProfileFeature
+  - basis: type_table
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: solid
+    feature_id: feat:0003
+    model: null
+    name: Boss-Extrude1
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 3-Core
+    type_name: Extrusion
+  - basis: type_table
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: fillet
+    feature_id: feat:0004
+    model: null
+    name: Fillet1
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 3-Core
+    type_name: Fillet
+  - basis: sketch_follows_consumer
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: sketch
+    feature_id: feat:0005
+    model: null
+    name: Sketch2
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 4-Detail
+    type_name: ProfileFeature
+  - basis: type_table
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: cut
+    feature_id: feat:0006
+    model: null
+    name: Cut-Extrude1
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 4-Detail
+    type_name: Cut
+  - basis: type_table
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: hole
+    feature_id: feat:0007
+    model: null
+    name: Hole1
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 4-Detail
+    type_name: HoleWzd
+  - basis: type_table
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: chamfer
+    feature_id: feat:0008
+    model: null
+    name: Chamfer1
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 3-Core
+    type_name: Chamfer
+  - basis: type_table
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: shell
+    feature_id: feat:0009
+    model: null
+    name: Shell1
+    provider: null
+    rationale: null
+    state: resolved
+    target_group: 3-Core
+    type_name: Shell
+  type_table_calibrated_version: 2026 SP1.1
+  type_table_version: '1'
+  updated_at: '2026-09-16T14:22:01Z'

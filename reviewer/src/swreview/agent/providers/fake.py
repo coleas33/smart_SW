@@ -31,6 +31,7 @@ from swreview.agent.providers import (
     EffortMapping,
     EventCallback,
     ProviderName,
+    TokenUsage,
     ToolCallRequest,
     ToolCallResult,
     ToolSet,
@@ -38,6 +39,7 @@ from swreview.agent.providers import (
     TurnResult,
     call_tool,
     register,
+    usage_body,
 )
 
 EFFORT_PARAM = "fake.effort"
@@ -45,6 +47,36 @@ EFFORT_PARAM = "fake.effort"
 
 _DELTA = re.compile(r"\S+\s*")
 """Text streams one word (with its trailing space) per `text.delta`."""
+
+SYNTHETIC_USAGE = TokenUsage(
+    input_tokens=1_337,
+    cached_input_tokens=419,
+    cache_write_tokens=None,
+    output_tokens=211,
+    reasoning_tokens=67,
+    tool_result_input_tokens=None,
+    total_tokens=1_548,
+    latency_s=0.37,
+)
+"""What one scripted round "costs". One constant, defined here and nowhere else.
+
+The fake pays for no tokens, but the runner, the usage ledger, the report and the
+scorecard all need a round that reports some, and a network is not available to any of
+them in CI. A constant keeps the fake's one guarantee - nothing is random - so two runs of
+one script record identical usage and a downstream test can assert an exact total.
+
+Three properties are deliberate:
+
+- **Nothing is round.** An accidental zero, a dropped field or a total built from the
+  wrong two addends shows up against 1,337 and hides against 1,000.
+- **The numbers nest the way a real provider's do.** Cached input is inside input,
+  reasoning is inside output, and the total is input plus output, so a reader that sums
+  the wrong pair of fields is caught by the fixture rather than excused by it.
+- **Two counts are `None`.** No provider reports every field - OpenAI has no
+  tool-result count and Gemini no cache-write count - so the
+  any-null-in-any-round-makes-the-total-null rule is exercised by the default script every
+  ledger test already uses, and not only by a test written specially for it.
+"""
 
 
 @dataclass(frozen=True)
@@ -67,6 +99,12 @@ class ScriptedTurn:
     text: str
     tool_calls: tuple[ScriptedToolCall, ...] = ()
     end_reason: TurnEndReason = "end"
+    usage: TokenUsage | None = field(default_factory=lambda: SYNTHETIC_USAGE)
+    """What this round "cost", defaulting to the one synthetic constant.
+
+    `None` scripts the case a real provider also produces: a round we made and paid for
+    whose cost the service did not report. It records no usage rather than a zero one.
+    """
 
 
 class FakeProvider:
@@ -87,6 +125,13 @@ class FakeProvider:
         self._turn_index = 0
         self._step_index = 0
         self._call_index = 0
+        self.round_usage: list[TokenUsage] = []
+        """This turn's round trips, one record each. Reset by `run()`.
+
+        A scripted turn is one round: the fake has no round loop, so its calls and its
+        closing text are one exchange, and the list has one entry unless the turn was
+        scripted with no usage at all.
+        """
 
     def effort_mapping(self, effort: EffortLevel) -> EffortMapping:
         """Every level is available: the fake does no thinking to budget."""
@@ -106,6 +151,17 @@ class FakeProvider:
         turn = self._next_turn()
         history = [dict(message) for message in messages]
         steps = 0
+        self.round_usage = [turn.usage] if turn.usage is not None else []
+        if turn.usage is not None:
+            # Before the scripted calls run, which is where a real adapter emits it: the
+            # response for the round is in hand and the tools it asked for have not been
+            # dispatched yet.
+            on_event(
+                "usage",
+                usage_body(
+                    turn.usage, round_index=0, provider=self.name, model=self.model
+                ),
+            )
 
         for scripted in turn.tool_calls:
             if steps >= max_steps:

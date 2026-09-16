@@ -31,8 +31,10 @@ import yaml
 from swreview.ir.models import Feature
 
 __all__ = [
+    "CLASSIFICATIONS",
     "DEFAULT_TYPES_PATH",
     "FEATURE_CLASSES",
+    "NEEDS_JUDGEMENT",
     "REQUIRED_KEYS",
     "AssemblyTable",
     "Classification",
@@ -68,6 +70,14 @@ FEATURE_CLASSES: tuple[FeatureClass, ...] = get_args(FeatureClass)
 Classification = FeatureClass | Literal["unknown", "ambiguous"]
 """What `classify` returns: one class, or one of the two non-answers."""
 
+CLASSIFICATIONS: tuple[Classification, ...] = (*FEATURE_CLASSES, "unknown", "ambiguous")
+"""`Classification` as a value: the eleven classes then the two non-answers. Every answer
+`classify` can give, which is what `default_group_by_class` must carry a target for."""
+
+NEEDS_JUDGEMENT = "needs_judgement"
+"""The `default_group_by_class` answer that is not a group: the table saying it cannot
+decide. The planner asks (or reports unresolved) rather than choosing a group itself."""
+
 ConstrainedStatus = Literal[
     "unknown",
     "under_defined",
@@ -90,6 +100,7 @@ REQUIRED_KEYS: tuple[str, ...] = (
     "end_tag_suffix",
     "classes",
     "ambiguous",
+    "default_group_by_class",
     "tolerated_loose",
     "default_names_excluded",
     "constrained_status",
@@ -127,9 +138,9 @@ class AssemblyTable:
 class RmsTypeTable:
     """The whole table. `classes` keeps the file's order and its sets are disjoint.
 
-    `classes` and `constrained_status_map` are read-only views: `load_table` is cached,
-    so every rule in one review shares this object and a rule that edited a mapping would
-    change what every later rule classifies.
+    `classes`, `default_group_by_class` and `constrained_status_map` are read-only
+    views: `load_table` is cached, so every rule in one review shares this object and a
+    rule that edited a mapping would change what every later rule classifies.
     """
 
     version: int
@@ -139,6 +150,7 @@ class RmsTypeTable:
     end_tag_suffix: str
     classes: Mapping[FeatureClass, frozenset[str]]
     ambiguous: frozenset[str]
+    default_group_by_class: Mapping[Classification, str]
     tolerated_loose: frozenset[str]
     default_names_excluded: frozenset[str]
     constrained_status_map: Mapping[int, ConstrainedStatus]
@@ -156,6 +168,17 @@ class RmsTypeTable:
         if type_name in self.ambiguous:
             return "ambiguous"
         return "unknown"
+
+    def default_group(self, classification: Classification) -> str:
+        """The group the method says a feature of this class belongs in, or
+        `NEEDS_JUDGEMENT`.
+
+        The planner's half of the table (feature 004): the checker grades the group a
+        feature is in, this names the group it should be in, and both read one file so
+        they cannot disagree about what "should" means. Total over `CLASSIFICATIONS`,
+        which is every answer `classify` can give, so no caller handles a missing key.
+        """
+        return self.default_group_by_class[classification]
 
     def is_folder(self, feature: Feature) -> bool:
         """A folder-typed feature that is not an end-tag marker (rules.md, "Group
@@ -231,6 +254,42 @@ def _parse_classes(
     return MappingProxyType(classes)
 
 
+def _parse_default_groups(
+    document: dict[str, object], path: Path, groups: tuple[str, ...]
+) -> Mapping[Classification, str]:
+    raw = document["default_group_by_class"]
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path}: default_group_by_class must be a mapping")
+
+    unexpected = sorted(set(raw) - set(CLASSIFICATIONS))
+    if unexpected:
+        raise ValueError(
+            f"{path}: default_group_by_class names {unexpected}, which "
+            f"{'are' if len(unexpected) > 1 else 'is'} not a classification; the "
+            f"vocabulary is {list(CLASSIFICATIONS)}"
+        )
+    missing = [name for name in CLASSIFICATIONS if name not in raw]
+    if missing:
+        raise ValueError(f"{path}: default_group_by_class has no target for {missing}")
+
+    targets: dict[Classification, str] = {}
+    for name in CLASSIFICATIONS:
+        target = raw[name]
+        if target != NEEDS_JUDGEMENT and target not in groups:
+            raise ValueError(
+                f"{path}: default_group_by_class[{name!r}] is {target!r}, which is "
+                f"neither {NEEDS_JUDGEMENT!r} nor one of the groups {list(groups)}"
+            )
+        if name in ("unknown", "ambiguous") and target != NEEDS_JUDGEMENT:
+            raise ValueError(
+                f"{path}: default_group_by_class[{name!r}] is {target!r}; a feature the "
+                f"table does not classify is never guessed into a group, so it must be "
+                f"{NEEDS_JUDGEMENT!r}"
+            )
+        targets[name] = str(target)
+    return MappingProxyType(targets)
+
+
 def _parse_constrained_status(
     document: dict[str, object], path: Path
 ) -> Mapping[int, ConstrainedStatus]:
@@ -282,6 +341,7 @@ def _parse(document: object, path: Path) -> RmsTypeTable:
     if not folder_type or not end_tag_suffix:
         raise ValueError(f"{path}: folder_type and end_tag_suffix must not be empty")
 
+    groups = tuple(document["groups"])
     classes = _parse_classes(document, path)
     ambiguous = frozenset(document["ambiguous"])
     for name, members in classes.items():
@@ -295,11 +355,12 @@ def _parse(document: object, path: Path) -> RmsTypeTable:
     return RmsTypeTable(
         version=int(document["version"]),
         calibrated_version=str(document["calibrated_version"]),
-        groups=tuple(document["groups"]),
+        groups=groups,
         folder_type=folder_type,
         end_tag_suffix=end_tag_suffix,
         classes=classes,
         ambiguous=ambiguous,
+        default_group_by_class=_parse_default_groups(document, path, groups),
         tolerated_loose=frozenset(document["tolerated_loose"]),
         default_names_excluded=frozenset(document["default_names_excluded"]),
         constrained_status_map=_parse_constrained_status(document, path),

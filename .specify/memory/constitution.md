@@ -1,18 +1,14 @@
 <!--
 Sync Impact Report
-- Version change: (template) → 1.0.0
-- Modified principles: none (initial ratification)
-- Added sections:
-  - Core Principles I–VI
-  - Technical Constraints
-  - Development Workflow
-  - Governance
+- Version change: 1.0.0 → 1.1.0
+- Modified principles: none
+- Added sections: Technical Constraints → "Documents are read, not written" (the read-only rule,
+  previously implicit in Principle II and enforced only in per-plan Constitution Checks, plus the
+  two bounded exceptions: 003 suppress-test, 004 re-modeler copy)
 - Removed sections: none
-- Templates: plan-template.md, spec-template.md, tasks-template.md read this file at
-  runtime; no template edits required.
-- Follow-up TODOs: none. Sources: CLAUDE.md (engineering preferences),
-  README-complete.md (review requirements and boundaries),
-  sw-review-architecture-proposal.md (ADR-001 gotchas).
+- Templates: no edits required
+- Migration: specs/003-resilient-modeling/plan.md's Complexity Tracking row for `suppress-test`
+  now cites this section rather than standing alone.
 -->
 
 # smart_SW Constitution
@@ -141,6 +137,52 @@ saved per design without degrading review quality.
   fine-grained traversal (10 to 100x faster than out-of-process COM). Out-of-process
   calls (Python plus pywin32, MCP servers) MUST be coarse (one call, one large operation)
   and MUST marshal every COM call onto a single STA thread.
+
+- **Documents are read, not written.** The reviewer, every check, every tool exposed to a
+  model, and every add-in command MUST treat every document SOLIDWORKS has open as read-only.
+  `ReadOnlyGuard` is the enforcement point, and its denylist grows the moment a phase touches
+  an API family that can write. There are exactly two exceptions, both bounded below; a third
+  requires an amendment to this file.
+
+  1. **The suppressibility test** (feature 003): console-only, behind an explicit flag, driven
+     by a reviewer-written plan, under a guard that exempts exactly `IFeature.SetSuppression2`
+     and `IModelDoc2.ForceRebuild3`, over a saved and not-rolled-back document with no
+     pre-existing rebuild errors, with a whole-tree snapshot and a verified restore. It never
+     saves.
+
+  2. **The re-modeler** (feature 004): the re-modeler MAY create and modify exactly one
+     document, a copy it created during this session, and no other.
+     - The copy is made by a filesystem copy that refuses to overwrite, into the run folder,
+       before any SOLIDWORKS document handle exists. The engineer's file is never opened for
+       writing, never saved, never renamed and never deleted. The run records the source file's
+       size, last-write time and content hash before it starts and re-checks all three before
+       it reports; a difference is a hard failure of the run.
+     - **The re-modeler MUST NOT save over a file that already existed.** Only
+       `IModelDoc2.Save3` is permitted, which takes no filename and therefore writes only to
+       the copy's own path, and only after the geometry comparison has passed. `SaveAs3` to any
+       path, and any write to any document that is not this run's copy, are refused by the
+       guard, not by convention.
+     - Writes go through a document-scoped guard that (a) **allowlists** the specific
+       interface-qualified interop members the run needs and refuses every other write, and
+       (b) re-verifies the target document's path, its session tag, and its COM identity
+       immediately before each write. No command in the bridge protocol, and no tool exposed to
+       the language model, names a document.
+     - Every applied change is recorded with its before state, its after state, and the inverse
+       operation that undoes it. A change that raises the rebuild-error count above the run's
+       baseline is undone and recorded as undone. The run is bounded by a change count and a
+       wall-clock limit, and a truncated run says so.
+     - The language model does not perform the mutation. It proposes intent (descriptions,
+       global-variable names, and the judgement calls the modeling method itself says to ask
+       about) into a plan; a deterministic executor applies the plan. Where a stage genuinely
+       requires generative modeling, the model's tools are the same guarded, document-scoped
+       commands, and each change is created, verified and rolled back individually.
+     - Geometric equivalence is reported as `pass`, `fail` or `unresolved`, never as a Boolean,
+       and never inferred from a successful rebuild.
+
+  A mutation exception is not an engineering result. A copy that rebuilds cleanly, has the same
+  volume, and grades better against the Resilient Modeling Strategy is a **proposal** the
+  engineer accepts or discards; Principle I applies to it unchanged.
+
 - **Reasoning-side code** is Python 3.11+ with a typed, versioned IR (pydantic). It MUST
   run without a SolidWorks license so reviews can run in parallel on cheap machines and
   in CI.
@@ -187,4 +229,4 @@ the runtime guidance for day-to-day agent behavior and MUST stay consistent with
   creation and at each review gate. Violations are either fixed or justified in the
   plan's Complexity Tracking table.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-12 | **Last Amended**: 2026-09-12
+**Version**: 1.1.0 | **Ratified**: 2026-09-12 | **Last Amended**: 2026-09-16

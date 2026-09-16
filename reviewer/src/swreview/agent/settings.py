@@ -53,20 +53,27 @@ from pydantic import (
 from swreview.agent.providers import EffortLevel, ProviderName
 
 __all__ = [
+    "ARMS",
     "DEFAULT_EFFORT",
     "DEFAULT_MODELS",
     "DEFAULT_PROVIDER",
     "ENTERPRISE_ENV",
+    "LEVER_NAMES",
     "MASK",
     "MODEL_OUTPUT_CEILINGS",
+    "NO_STUDY",
     "OUTPUT_CEILINGS",
+    "WORKSTATION_LEVERS",
+    "EfficiencySettings",
     "GeminiEnterprise",
     "KeySource",
     "LogRecordRedactor",
     "ProviderSettings",
     "RedactingFilter",
+    "check_study_arm",
     "configure_logging_redaction",
     "default_model",
+    "efficiency_from_levers",
     "output_ceiling",
     "redact",
 ]
@@ -382,6 +389,197 @@ def _enterprise_switch(env: Mapping[str, str]) -> str | None:
         if value is not None:
             return name if value.strip().lower() in _TRUE else None
     return None
+
+
+# --- the efficiency levers ------------------------------------------------------
+
+
+class EfficiencySettings(BaseModel):
+    """Which efficiency levers this run has on. Every field defaults to off.
+
+    One object for all ten flags rather than one plumbed argument per lever (OQ-1):
+    threaded as one keyword argument through `start_review`, `ReviewRun`, `run_benchmark`
+    and `cli._review_fn` exactly as `effort` and `max_steps` already are, and recorded
+    whole on `session.efficiency`. Without that record no results row can be attributed to
+    a configuration and the A/B table cannot be rebuilt from the run folder.
+
+    Frozen, because `session.efficiency` is a statement about the run that produced it,
+    and `extra="forbid"`, because a session carrying a flag a later build removed must
+    fail loudly rather than be silently ignored: a results row attributed to a
+    configuration nobody can reconstruct is worse than an error (data-model.md 7.3).
+
+    Every field is off here and stays off. A lever is adopted by becoming a default in
+    code with a ledger row behind it, never by flipping a default in this class quietly,
+    and never by a checkbox in the pane (data-model.md 7.2).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    trim_tool_descriptions: bool = False
+    """Lever 2: tool descriptions are the first paragraph only."""
+
+    tool_tiers: bool = False
+    """Lever 4: the package-decidable tool tiers are applied."""
+
+    prompt_cache_key: bool = False
+    """Lever 3, OpenAI: `prompt_cache_key` is sent on every request."""
+
+    gemini_explicit_cache: bool = False
+    """Lever 3, Gemini: an explicit `CachedContent` is created and referenced."""
+
+    prerun_checks: bool = False
+    """Lever 5: the self-enumerating deterministic checks run before the first turn."""
+
+    parallel_tool_calls: bool = False
+    """Lever 6, OpenAI: the request stops pinning `parallel_tool_calls: False`."""
+
+    coverage_stop: bool = False
+    """Lever 7: the stop predicate issues the next round with tool calls disabled."""
+
+    package_reuse: bool = False
+    """Lever 9, workstation: an unchanged package is reused instead of dumped."""
+
+    lazy_meshes: bool = False
+    """Lever 10a, workstation: meshes are fetched on demand over the bridge."""
+
+    carry_over_rms: bool = False
+    """Lever 11a, workstation: unchanged `rms.*` findings are carried over."""
+
+
+LEVER_NAMES: tuple[str, ...] = tuple(EfficiencySettings.model_fields)
+"""The ten lever names, taken from the model so nothing has to retype them.
+
+Every refusal message below, the `--lever` option and the pane guard iterate this, so a
+lever added to the model is covered by all of them without a second edit anywhere.
+"""
+
+WORKSTATION_LEVERS: tuple[str, ...] = ("package_reuse", "lazy_meshes", "carry_over_rms")
+"""The three levers `swreview benchmark run` cannot see.
+
+It iterates pre-built package directories and never dumps, so these three change nothing
+it does. They are measured by the workstation harness, which writes a run directory of
+the same shape (contracts/ab-harness.md section 2, FR-030).
+"""
+
+ARMS: tuple[str, ...] = ("off", "on", "baseline")
+"""What `--arm` may say about a run. `baseline` is the study with no lever under test."""
+
+NO_STUDY = "none"
+"""What `--study` says when a run is testing no lever at all."""
+
+
+def _levers_sentence() -> str:
+    return "the ten levers are " + ", ".join(LEVER_NAMES)
+
+
+def efficiency_from_levers(
+    levers: Iterable[str],
+    *,
+    provider: ProviderName | None = None,
+    allow_workstation_levers: bool = True,
+) -> EfficiencySettings:
+    """Resolve the `--lever` names typed on one command line into settings.
+
+    The refusals live here, where the lever is chosen, rather than on `benchmark compare`,
+    because a refusal after six paid runs is worthless (contracts/ab-harness.md section
+    2). Each names the rule it is enforcing.
+
+    Args:
+        levers: The `--lever` names, in the order they were typed. Repeats are harmless.
+        provider: The provider this run will use, when the caller knows it. Only lever 6
+            depends on it.
+        allow_workstation_levers: False for a caller that never dumps a package - the
+            benchmark runner - so the three dump levers are refused there rather than
+            producing an arm that measures nothing.
+
+    Raises:
+        ValueError: For an unknown name, or a combination the study protocol forbids.
+    """
+    chosen = list(levers)
+    unknown = sorted({name for name in chosen if name not in LEVER_NAMES})
+    if unknown:
+        raise ValueError(f"unknown lever(s) {', '.join(unknown)}: {_levers_sentence()}")
+
+    if "coverage_stop" in chosen and "prerun_checks" in chosen:
+        raise ValueError(
+            "--lever coverage_stop with --lever prerun_checks: levers 5 and 7 never share "
+            "an arm until each has been gated alone"
+        )
+
+    if "parallel_tool_calls" in chosen and provider is ProviderName.GEMINI:
+        raise ValueError(
+            "--lever parallel_tool_calls with --provider gemini: Gemini already makes "
+            "parallel tool calls and has no disable switch, so this arm would measure "
+            "nothing"
+        )
+
+    if not allow_workstation_levers:
+        refused = sorted({name for name in chosen if name in WORKSTATION_LEVERS})
+        if refused:
+            raise ValueError(
+                f"--lever {', '.join(refused)}: `swreview benchmark run` iterates "
+                f"pre-built package directories and never dumps, so these levers are "
+                f"invisible to it; measure them with the workstation harness, which "
+                f"writes a run directory of the same shape"
+            )
+
+    return EfficiencySettings(**{name: True for name in chosen})
+
+
+def check_study_arm(*, study: str, arm: str | None, efficiency: EfficiencySettings) -> None:
+    """Refuse a run whose `--study`, `--arm` and `--lever` contradict each other.
+
+    Which lever a run is testing and which arm it is are facts *about the study*, not
+    about the settings: they exist across two run folders, not inside one, which is why
+    they are typed rather than derived. A run mislabelled in its own provenance record is
+    worse than no run, because it renders without complaint in the wrong arm.
+
+    Args:
+        study: A lever name, or `none` for a run that is testing no lever.
+        arm: `off`, `on`, `baseline`, or None when the run claims no arm.
+        efficiency: The settings `--lever` resolved to.
+
+    Raises:
+        ValueError: For any of the four contradictions of contracts/ab-harness.md
+            section 2.
+    """
+    if study != NO_STUDY and study not in LEVER_NAMES:
+        raise ValueError(f"unknown --study {study!r}: {_levers_sentence()}, or none")
+    if arm is None:
+        return
+    if arm not in ARMS:
+        raise ValueError(f"unknown --arm {arm!r}: one of {', '.join(ARMS)}")
+
+    on_levers = sorted(name for name in LEVER_NAMES if getattr(efficiency, name))
+
+    if arm == "baseline":
+        if study != NO_STUDY:
+            raise ValueError(
+                f"--arm baseline with --study {study}: a baseline run is the study with "
+                f"no lever under test, so its study is none"
+            )
+        if on_levers:
+            raise ValueError(
+                f"--arm baseline with --lever {', '.join(on_levers)}: a baseline run has "
+                f"every lever off"
+            )
+        return
+
+    if study == NO_STUDY:
+        raise ValueError(
+            f"--study none with --arm {arm}: an off or on arm is an arm of some study, so "
+            f"name the lever under test"
+        )
+    if arm == "on" and not getattr(efficiency, study):
+        raise ValueError(
+            f"--arm on with {study} absent from --lever: the on arm of a study is the run "
+            f"with the studied lever on"
+        )
+    if arm == "off" and getattr(efficiency, study):
+        raise ValueError(
+            f"--arm off with --lever {study}: the off arm of a study is the run with the "
+            f"studied lever off"
+        )
 
 
 # --- redaction ------------------------------------------------------------------
