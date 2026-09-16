@@ -33,6 +33,17 @@ namespace SwReview.AddIn.Review;
 /// </summary>
 public sealed class SwEntityResolver : IEntityResolver
 {
+    /// <summary>
+    /// What `IFeature.GetTypeName2()` calls a feature-tree folder.
+    ///
+    /// The one SOLIDWORKS type name in the add-in, and it is here rather than in
+    /// <see cref="FeatureSelection"/> on purpose: this class is the interop layer, where an API
+    /// fact belongs, and the strategy stays a pure function of what it is told. No rule
+    /// decision reads it - the grouping rules are Python data (constitution, and plan.md key
+    /// point 1: "the C# indexer ... knows no names").
+    /// </summary>
+    private const string FolderTypeName = "FtrFolder";
+
     private readonly ISldWorks _swApp;
     private readonly IApplicationThread _thread;
     private readonly Func<ISwSession> _session;
@@ -106,6 +117,12 @@ public sealed class SwEntityResolver : IEntityResolver
 
             session.Gate.Call("ClearSelection2", () => { document.ClearSelection2(true); });
 
+            var feature = resolved.Entity as IFeature;
+            if (feature != null)
+            {
+                return ShowFeature(session, document, feature, scopePath, fullPath, (int)resolved.State);
+            }
+
             if (!Select(session, document, resolved.Entity!, fullPath))
             {
                 return EntityShowOutcome.NotShown(
@@ -117,6 +134,142 @@ public sealed class SwEntityResolver : IEntityResolver
             session.Gate.Call("ViewZoomToSelection", () => { document.ViewZoomToSelection(); });
             return EntityShowOutcome.Shown(fullPath);
         });
+    }
+
+    /// <summary>
+    /// Selecting a feature, through <see cref="FeatureSelection"/>.
+    ///
+    /// Defect D3: a feature resolved against a part that is open as a component of the active
+    /// assembly used to be selected on the active document, which put the selection in the
+    /// part's own selection manager and left the assembly window unchanged. The strategy
+    /// decides what to select; everything here is the interop it needs and the interop it
+    /// chose, and no branch of the decision lives in this method.
+    /// </summary>
+    private EntityShowOutcome ShowFeature(
+        ISwSession session,
+        IModelDoc2 document,
+        IFeature feature,
+        string? scopePath,
+        string? fullPath,
+        int state)
+    {
+        string activePath = session.Gate.Call("GetPathName", () => document.GetPathName());
+
+        // The component is selected first because it is both the fallback and where its own
+        // select-by-id string comes from: SOLIDWORKS composes that string, this code does not.
+        // Only when the reference is not the active document's own, so a part opened alone does
+        // not spend a round trip selecting a component that is not there.
+        string? componentSelectString = FeatureSelection.InActiveDocument(activePath, scopePath)
+            ? null
+            : SelectComponent(session, document, activePath, fullPath);
+
+        string? selectName = null;
+        string? selectType = null;
+        string? featureName = null;
+        bool isFolder = false;
+        try
+        {
+            featureName = session.Gate.Call("Feature.Name", () => feature.Name);
+            isFolder = string.Equals(
+                session.Gate.Call("GetTypeName2", () => feature.GetTypeName2()),
+                FolderTypeName,
+                StringComparison.Ordinal);
+            session.Gate.Call("GetNameForSelection", () =>
+            {
+                selectName = feature.GetNameForSelection(out string type);
+                selectType = type;
+            });
+        }
+        catch (Exception)
+        {
+            // A feature SOLIDWORKS will not name for selection is exactly what the component
+            // fallback exists for: the strategy decides with what was read, rather than the
+            // whole Show failing on the read (FR-027).
+        }
+
+        FeatureSelectionPlan plan = FeatureSelection.Plan(new FeatureSelectionRequest(
+            activePath, scopePath, componentSelectString, selectName, selectType, featureName, isFolder));
+
+        bool selected;
+        switch (plan.Kind)
+        {
+            case FeatureSelectionKind.Feature:
+                selected = session.Gate.Call("Feature.Select2", () => feature.Select2(false, 0));
+                break;
+
+            case FeatureSelectionKind.Qualified:
+                selected = session.Gate.Call(
+                    "SelectByID2",
+                    () => document.Extension.SelectByID2(
+                        plan.Name, plan.TypeName, 0, 0, 0, false, 0, null, 0));
+                break;
+
+            case FeatureSelectionKind.Component:
+                // Already selected above, and deliberately not a success: the engineer asked
+                // for a feature and got the component that holds it.
+                return EntityShowOutcome.NotShown(state, plan.Message, fullPath);
+
+            default:
+                return EntityShowOutcome.NotShown(state, plan.Message, fullPath);
+        }
+
+        if (!selected)
+        {
+            string named = string.IsNullOrWhiteSpace(featureName)
+                ? "the feature"
+                : "'" + featureName + "'";
+            return EntityShowOutcome.NotShown(
+                state,
+                componentSelectString == null
+                    ? $"SOLIDWORKS refused to select {named}."
+                    : $"SOLIDWORKS refused to select {named}; its component "
+                        + $"'{componentSelectString}' is selected instead.",
+                fullPath);
+        }
+
+        if (plan.Zoom)
+        {
+            session.Gate.Call("ViewZoomToSelection", () => { document.ViewZoomToSelection(); });
+        }
+
+        return EntityShowOutcome.Shown(fullPath, plan.Message);
+    }
+
+    /// <summary>
+    /// Selects the component named by <paramref name="fullPath"/> and hands back its own
+    /// select-by-id string, or null when there is no component or it could not be selected.
+    /// </summary>
+    private string? SelectComponent(
+        ISwSession session, IModelDoc2 document, string activePath, string? fullPath)
+    {
+        if (string.IsNullOrEmpty(fullPath))
+        {
+            return null;
+        }
+
+        // "<full instance path>@<top assembly name>" is how SOLIDWORKS names a component
+        // instance for selection; the IR's full_path is the left half of it.
+        string name = fullPath + "@" + Path.GetFileNameWithoutExtension(activePath);
+        bool picked = session.Gate.Call(
+            "SelectByID2",
+            () => document.Extension.SelectByID2(name, "COMPONENT", 0, 0, 0, false, 0, null, 0));
+        if (!picked)
+        {
+            return null;
+        }
+
+        var selection = session.Gate.Call(
+            "SelectionManager", () => document.SelectionManager) as ISelectionMgr;
+        if (selection == null)
+        {
+            return null;
+        }
+
+        var component = session.Gate.Call(
+            "GetSelectedObject6", () => selection.GetSelectedObject6(1, -1)) as IComponent2;
+        return component == null
+            ? null
+            : session.Gate.Call("GetSelectByIDString", () => component.GetSelectByIDString());
     }
 
     private bool Select(ISwSession session, IModelDoc2 document, object entity, string? fullPath)

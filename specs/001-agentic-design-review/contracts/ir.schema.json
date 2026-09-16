@@ -760,6 +760,16 @@
         "machine": {
           "title": "Machine",
           "type": "string"
+        },
+        "profile": {
+          "default": "full",
+          "description": "Which dump profile wrote this package (schema 1.2.0). 'model_check' skips the hole, fastener, face and body phases, so those arrays are empty by design rather than by failure. Absent in 1.0.0 and 1.1.0 packages, which were all 'full'.",
+          "enum": [
+            "full",
+            "model_check"
+          ],
+          "title": "Profile",
+          "type": "string"
         }
       },
       "required": [

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
+using SwReview.Extractor.Dump;
 
 namespace SwReview.Extractor.Ir;
 
@@ -18,6 +19,15 @@ public sealed class ExtractorInfo
 
     [JsonPropertyName("machine")]
     public string Machine { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Which dump profile wrote this package (schema 1.2.0). Optional in the contract and
+    /// defaulted to <see cref="DumpProfile.Full"/>, because every 1.0.0 and 1.1.0 package
+    /// predates the member and was a full dump. The vocabulary belongs to the dump command
+    /// (Dump/DumpContracts.cs); this DTO only records which one ran.
+    /// </summary>
+    [JsonPropertyName("profile")]
+    public DumpProfile Profile { get; set; } = DumpProfile.Full;
 }
 
 /// <summary>contracts/ir.schema.json #/$defs/ManifestEntry. One per document.</summary>

@@ -135,7 +135,7 @@ public sealed class PackageWriter
             SchemaVersion = EvidencePackage.CurrentSchemaVersion,
             PackageId = Guid.NewGuid(),
             CreatedAt = DateTimeOffset.Now,
-            Extractor = BuildExtractorInfo(),
+            Extractor = BuildExtractorInfo(options),
             Design = BuildDesign(tree),
         };
 
@@ -197,7 +197,15 @@ public sealed class PackageWriter
                 package.Equations.AddRange(_equations.Dump(scope)));
         }
 
-        if (!aborted)
+        // The four geometry phases, gated by the profile (plan key point 8). ModelCheck
+        // skips them and records NOTHING beyond extractor.profile: unlike --features none
+        // and --equations off, which are a dump that dropped evidence it normally carries
+        // and so owe the reader a sentence, a model-check package's shape is declared once
+        // on the extractor block. Four gaps on every check run would be noise an engineer
+        // learns to skip, which is how a real gap gets lost (Principle I).
+        bool geometry = options.Profile == DumpProfile.Full;
+
+        if (!aborted && geometry)
         {
             aborted |= !RunPhase(gaps, "hole", "read Hole Wizard features and cosmetic threads", () =>
             {
@@ -207,19 +215,19 @@ public sealed class PackageWriter
             });
         }
 
-        if (!aborted)
+        if (!aborted && geometry)
         {
             aborted |= !RunPhase(gaps, "fastener", "identify fasteners", () =>
                 package.Fasteners.AddRange(_fasteners.Dump(scope)));
         }
 
-        if (!aborted)
+        if (!aborted && geometry)
         {
             aborted |= !RunPhase(gaps, "face", "read face geometry", () =>
                 package.Faces.AddRange(_faces.Dump(scope)));
         }
 
-        if (!aborted && options.Meshes != MeshFormat.None)
+        if (!aborted && geometry && options.Meshes != MeshFormat.None)
         {
             string meshDirectory = Path.Combine(options.OutputDirectory, MeshDirectoryName);
             aborted |= !RunPhase(gaps, "body", "tessellate bodies and write meshes", () =>
@@ -401,12 +409,17 @@ public sealed class PackageWriter
         ActiveConfiguration = tree.ActiveConfiguration,
     };
 
-    private ExtractorInfo BuildExtractorInfo() => new ExtractorInfo
+    private ExtractorInfo BuildExtractorInfo(DumpOptions options) => new ExtractorInfo
     {
         Name = "SwReview.Extractor",
         Version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0",
         SwVersion = _swVersion,
         Machine = _machine,
+
+        // The profile is what tells a reader that holes[], fasteners[], faces[] and
+        // bodies[] are empty by design rather than because the dump lost them, which is
+        // why the skipped phases below record nothing else (schema 1.2.0, FR-022).
+        Profile = options.Profile,
     };
 
     /// <summary>

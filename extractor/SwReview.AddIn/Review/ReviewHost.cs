@@ -18,23 +18,83 @@ public sealed class PageDocument
     public string Path { get; }
 
     public string? Configuration { get; }
+
+    /// <summary>
+    /// `part`, `assembly`, `drawing`, or null when the path does not say.
+    ///
+    /// Read from the extension because the extension is what SOLIDWORKS requires of a saved
+    /// document, and the pane only ever sees saved ones - `CurrentDocument` reports no document
+    /// at all when `GetPathName` is empty. Null rather than a guess for anything else: the
+    /// Model check tab refuses what is not a part, and a wrong "part" here would run the RMS
+    /// rules against a document they were never written for.
+    /// </summary>
+    public string? Kind
+    {
+        get
+        {
+            string extension = System.IO.Path.GetExtension(Path);
+            if (string.Equals(extension, ".sldprt", StringComparison.OrdinalIgnoreCase))
+            {
+                return "part";
+            }
+
+            if (string.Equals(extension, ".sldasm", StringComparison.OrdinalIgnoreCase))
+            {
+                return "assembly";
+            }
+
+            if (string.Equals(extension, ".slddrw", StringComparison.OrdinalIgnoreCase))
+            {
+                return "drawing";
+            }
+
+            return null;
+        }
+    }
 }
 
 /// <summary>
-/// What the host knows about one chat: enough to answer `report.open` and `folder.open`
-/// without ever taking a path from the page (pane-host-messages.md).
+/// What the host knows about one run it started: enough to answer `report.open` and
+/// `folder.open` without ever taking a path from the page (pane-host-messages.md).
+///
+/// A record is either a chat - a review, with a `chat_id` the backend gave out - or a Model
+/// check, which has no chat at all because nothing about it goes to a language model. Both are
+/// tracked here because both are "the pane's latest run", which is what
+/// `CurrentSessionRunDirectory` and <see cref="RunPackageIndex"/> read; only one of them is a
+/// thing the backend can be asked about (FR-028).
 /// </summary>
 public sealed class SessionRecord
 {
-    public SessionRecord(string chatId, string runDirectory)
+    private SessionRecord(string? chatId, string runDirectory, bool isCheck)
     {
-        ChatId = chatId ?? throw new ArgumentNullException(nameof(chatId));
+        ChatId = chatId;
         RunDirectory = runDirectory ?? throw new ArgumentNullException(nameof(runDirectory));
+        IsCheck = isCheck;
     }
 
-    public string ChatId { get; }
+    public SessionRecord(string chatId, string runDirectory)
+        : this(chatId ?? throw new ArgumentNullException(nameof(chatId)), runDirectory, false)
+    {
+    }
+
+    /// <summary>The backend's chat id, or null for a check: there is no chat to name.</summary>
+    public string? ChatId { get; }
 
     public string RunDirectory { get; }
+
+    /// <summary>
+    /// Whether this run is a Model check.
+    ///
+    /// Stated rather than inferred from a null chat id, because what the any-turn-running scan
+    /// needs to know is "is there a turn this could be running", and a reader of that scan
+    /// should not have to work out that a missing id means no chat exists rather than that one
+    /// has not arrived yet.
+    /// </summary>
+    public bool IsCheck { get; }
+
+    /// <summary>A Model check's run folder: no chat id, because a check has no chat.</summary>
+    public static SessionRecord ForCheck(string runDirectory) =>
+        new SessionRecord(null, runDirectory, true);
 }
 
 /// <summary>Everything <see cref="ReviewHost"/> is given; injected so it is testable headless.</summary>
@@ -98,13 +158,15 @@ public sealed class ReviewHostOptions
 /// on the same channel.
 ///
 /// This class holds the whole page-to-host table: the Settings half (`ready`/`init`,
-/// `settings.get`, `settings.save`, `models.list`) and the review flow (`review.start`,
-/// `entity.show`, `report.open`, `folder.open`, `log.open`), on one dispatch over one set of
-/// session records. SOLIDWORKS, the extractor, the shell and the backend each reach it
-/// through an interface, so all of it is testable with no SOLIDWORKS, no WebView2 and no
-/// Python.
+/// `settings.get`, `settings.save`, `models.list`) and the review flow (`review.start`), on
+/// one dispatch over one set of session records. The four rows every pane host shares -
+/// `entity.show`, `report.open`, `folder.open`, `log.open` - live in <see cref="PaneActions"/>
+/// and are delegated, because the Model check tab serves the same four and a second copy of
+/// them would be a second copy of the run-root containment rule. SOLIDWORKS, the extractor,
+/// the shell and the backend each reach it through an interface, so all of it is testable with
+/// no SOLIDWORKS, no WebView2 and no Python.
 ///
-/// Six rules are enforced here because nowhere else can:
+/// Six rules are enforced here or in <see cref="PaneActions"/> because nowhere else can:
 ///
 /// <b>The key goes out to the page in no form at all.</b> Every settings payload is built from
 /// an explicit allow-list of fields (<see cref="View"/>) rather than by serializing
@@ -146,13 +208,9 @@ public sealed class ReviewHost : IDisposable
     private static readonly string[] ReleaseProviders = { "openai", "gemini" };
     private static readonly string[] Efforts = { "low", "medium", "high", "xhigh" };
 
-    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
-    {
-        WriteIndented = false,
-    };
-
     private readonly ReviewHostOptions _options;
     private readonly List<SessionRecord> _sessions = new List<SessionRecord>();
+    private readonly PaneActions _actions;
     private UserSettings _settings;
     private string? _settingsError;
 
@@ -162,6 +220,22 @@ public sealed class ReviewHost : IDisposable
         SettingsLoadResult loaded = UserSettings.Load(options.SettingsPath, options.BuildMode);
         _settings = loaded.Settings;
         _settingsError = loaded.Error;
+
+        _actions = new PaneActions(new PaneActionsOptions(
+            options.Channel,
+            () => _settings.RunRoot,
+            new PaneRunLookup(
+                "chat_id",
+                "UnknownChat",
+                chatId => $"this pane did not start a chat called '{chatId}', so it does not "
+                    + "know which folder to open.",
+                chatId => FindSession(chatId)?.RunDirectory))
+        {
+            LogFolder = () => _options.LogFolder,
+            EntityResolver = () => _options.EntityResolver,
+            Opener = () => _options.Opener,
+            Secrets = () => new[] { _settings.ResolveApiKey(_options.Environment).Key },
+        });
     }
 
     /// <summary>The settings in force. Replaced by a successful `settings.save`.</summary>
@@ -197,6 +271,24 @@ public sealed class ReviewHost : IDisposable
         LatestSession = record;
     }
 
+    /// <summary>
+    /// Records a Model check's run folder as the pane's latest run.
+    ///
+    /// The check tab has its own host, but there is one answer to "which folder is the pane
+    /// looking at": `CurrentSessionRunDirectory` and <see cref="RunPackageIndex"/> both read
+    /// <see cref="LatestSession"/>, and `entity.show` resolves `document_id` to a path through
+    /// the package in that folder. A check that registered somewhere else would silently
+    /// degrade Show to "no full path" for every finding and open the Ask tab in an unrelated
+    /// folder (FR-028, `contracts/model-check.md` section 4).
+    /// </summary>
+    public SessionRecord TrackCheck(string runDirectory)
+    {
+        var record = SessionRecord.ForCheck(runDirectory);
+        _sessions.Add(record);
+        LatestSession = record;
+        return record;
+    }
+
     /// <summary>The record for <paramref name="chatId"/>, or null.</summary>
     public SessionRecord? FindSession(string chatId) =>
         _sessions.FirstOrDefault(session => session.ChatId == chatId);
@@ -206,6 +298,14 @@ public sealed class ReviewHost : IDisposable
     {
         foreach (SessionRecord session in _sessions)
         {
+            // A check has no chat, so there is no chat id to ask the backend about. Skipped
+            // explicitly rather than left to the catch below: a fabricated id would appear to
+            // work, at the cost of one HTTP round trip per settings save and a record that lies.
+            if (session.IsCheck || session.ChatId == null)
+            {
+                continue;
+            }
+
             try
             {
                 if (_options.Backend.IsTurnRunning(session.ChatId))
@@ -282,6 +382,13 @@ public sealed class ReviewHost : IDisposable
 
     private void Dispatch(string type, string? id, JsonElement payload)
     {
+        // The four rows this host shares with every other pane host, answered by the one copy
+        // of them (contracts/model-check.md section 2).
+        if (_actions.TryHandle(type, id, payload))
+        {
+            return;
+        }
+
         switch (type)
         {
             case "ready":
@@ -302,22 +409,6 @@ public sealed class ReviewHost : IDisposable
 
             case "review.start":
                 StartReview(id, payload);
-                return;
-
-            case "entity.show":
-                ShowEntity(id, payload);
-                return;
-
-            case "report.open":
-                OpenReport(id, payload);
-                return;
-
-            case "folder.open":
-                OpenRunFolder(id, payload);
-                return;
-
-            case "log.open":
-                OpenLogFolder(id);
                 return;
 
             default:
@@ -725,243 +816,6 @@ public sealed class ReviewHost : IDisposable
         });
     }
 
-    // ---- entity.show --------------------------------------------------------------------
-
-    /// <summary>
-    /// Show in SOLIDWORKS. The answer is always an `entity.shown`, never an exception and -
-    /// except for a malformed message - never a bare `error`: a reference that no longer
-    /// resolves is an expected outcome that belongs on the finding card, with the state code
-    /// and the component's full path, not in an error banner (spec Edge Cases, SC-007).
-    /// </summary>
-    private void ShowEntity(string? id, JsonElement payload)
-    {
-        string persistRef = (Text(payload, "persist_ref") ?? string.Empty).Trim();
-        if (persistRef.Length == 0)
-        {
-            SendError(
-                id,
-                "InvalidRequest",
-                "entity.show needs the finding's persist_ref.",
-                retryable: false);
-            return;
-        }
-
-        if (_options.EntityResolver == null)
-        {
-            SendError(
-                id,
-                "NotAttached",
-                "the add-in is not attached to a SOLIDWORKS session, so nothing can be selected.",
-                retryable: true);
-            return;
-        }
-
-        EntityShowOutcome outcome;
-        try
-        {
-            outcome = _options.EntityResolver.Show(new EntityShowRequest(
-                persistRef,
-                Blank(Text(payload, "persist_ref_scope")),
-                Blank(Text(payload, "component_id"))));
-        }
-        catch (Exception failure)
-        {
-            // -1 is not a swPersistReferencedObjectStates_e value: SOLIDWORKS never answered
-            // at all (a modal dialog on the application thread, a closed document, an open
-            // circuit), which is a different thing from a reference that resolved to nothing.
-            outcome = EntityShowOutcome.NotShown(-1, failure.Message, null);
-        }
-
-        Send("entity.shown", id, new Dictionary<string, object?>
-        {
-            { "ok", outcome.Ok },
-            { "state_code", outcome.StateCode },
-            { "message", outcome.Message == null ? null : Redact(outcome.Message) },
-            { "full_path", outcome.FullPath },
-        });
-    }
-
-    // ---- report.open / folder.open / log.open -------------------------------------------
-
-    private void OpenReport(string? id, JsonElement payload)
-    {
-        if (!TryRunDirectory(id, payload, out string runDirectory))
-        {
-            return;
-        }
-
-        string report;
-        try
-        {
-            report = System.IO.Path.Combine(runDirectory, "report.md");
-        }
-        catch (ArgumentException)
-        {
-            SendError(id, "PathRefused", "that path cannot be opened.", retryable: false);
-            return;
-        }
-
-        // Containment before existence: a path outside the run root is refused as such, and
-        // is not probed for what happens to be on disk there.
-        if (!TrySafePath(id, report, _settings.RunRoot, out string full))
-        {
-            return;
-        }
-
-        if (!System.IO.File.Exists(full))
-        {
-            SendError(
-                id,
-                "NotFound",
-                "report.md has not been written yet; it appears once the review reports its "
-                + "first finding.",
-                retryable: true);
-            return;
-        }
-
-        Open(id, full);
-    }
-
-    private void OpenRunFolder(string? id, JsonElement payload)
-    {
-        if (!TryRunDirectory(id, payload, out string runDirectory))
-        {
-            return;
-        }
-
-        Shell(id, runDirectory, _settings.RunRoot);
-    }
-
-    private void OpenLogFolder(string? id)
-    {
-        string folder = _options.LogFolder;
-        try
-        {
-            // The host's own folder: an engineer pressing View log before anything has been
-            // logged should get an empty folder, not "the path does not exist".
-            System.IO.Directory.CreateDirectory(folder);
-        }
-        catch (Exception failure)
-        {
-            SendError(id, "OpenFailed", failure.Message, retryable: false);
-            return;
-        }
-
-        Shell(id, folder, folder);
-    }
-
-    /// <summary>
-    /// The run folder for the `chat_id` in <paramref name="payload"/>, from the host's own
-    /// session records.
-    ///
-    /// The page supplies a chat id and nothing else. Any path it sent is ignored: a page that
-    /// could name the path to open could open anything on the workstation with one crafted
-    /// message, and the page is the least trusted thing in the process - it renders text the
-    /// model and reviewed documents wrote.
-    /// </summary>
-    private bool TryRunDirectory(string? id, JsonElement payload, out string runDirectory)
-    {
-        runDirectory = string.Empty;
-
-        string chatId = (Text(payload, "chat_id") ?? string.Empty).Trim();
-        if (chatId.Length == 0)
-        {
-            SendError(id, "InvalidRequest", "the message needs a chat_id.", retryable: false);
-            return false;
-        }
-
-        SessionRecord? record = FindSession(chatId);
-        if (record == null)
-        {
-            SendError(
-                id,
-                "UnknownChat",
-                $"this pane did not start a chat called '{chatId}', so it does not know which "
-                + "folder to open.",
-                retryable: false);
-            return false;
-        }
-
-        runDirectory = record.RunDirectory;
-        return true;
-    }
-
-    /// <summary>
-    /// Canonicalizes <paramref name="path"/>, refuses anything that is not inside
-    /// <paramref name="root"/>, and opens what is left (pane-host-messages.md: "Every resolved
-    /// path is canonicalized and must be a descendant of `run_root` (or the log folder) before
-    /// it reaches `ShellExecute`").
-    /// </summary>
-    private void Shell(string? id, string path, string root)
-    {
-        if (TrySafePath(id, path, root, out string full))
-        {
-            Open(id, full);
-        }
-    }
-
-    /// <summary>Canonicalizes and refuses anything that is not inside <paramref name="root"/>.</summary>
-    private bool TrySafePath(string? id, string path, string root, out string full)
-    {
-        full = string.Empty;
-
-        string fullRoot;
-        try
-        {
-            full = System.IO.Path.GetFullPath(path);
-            fullRoot = System.IO.Path.GetFullPath(root);
-        }
-        catch (Exception)
-        {
-            SendError(id, "PathRefused", "that path cannot be opened.", retryable: false);
-            return false;
-        }
-
-        // UNC and Win32 device paths are refused by name as well as by containment: a run root
-        // that is itself a share would otherwise make `\\server\share\...` a descendant.
-        if (full.StartsWith(@"\\", StringComparison.Ordinal) || !Contains(fullRoot, full))
-        {
-            SendError(
-                id,
-                "PathRefused",
-                "that folder is outside the run root, so the pane will not open it.",
-                retryable: false);
-            return false;
-        }
-
-        return true;
-    }
-
-    private void Open(string? id, string path)
-    {
-        try
-        {
-            _options.Opener.Open(path);
-        }
-        catch (Exception failure)
-        {
-            SendError(id, "OpenFailed", failure.Message, retryable: false);
-            return;
-        }
-
-        Send("ok", id, new Dictionary<string, object?>());
-    }
-
-    /// <summary>Whether <paramref name="candidate"/> is <paramref name="root"/> or below it.</summary>
-    private static bool Contains(string root, string candidate)
-    {
-        string trimmed = root.TrimEnd(System.IO.Path.DirectorySeparatorChar);
-        if (string.Equals(trimmed, candidate.TrimEnd(System.IO.Path.DirectorySeparatorChar),
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        return candidate.StartsWith(
-            trimmed + System.IO.Path.DirectorySeparatorChar,
-            StringComparison.OrdinalIgnoreCase);
-    }
-
     // ---- plumbing -----------------------------------------------------------------------
 
     /// <summary>
@@ -974,11 +828,7 @@ public sealed class ReviewHost : IDisposable
     /// settings, and therefore the secret, live here. One choke point rather than a rule every
     /// call site has to remember (FR-015).
     /// </summary>
-    public void PostStatus(string stage, string message) => Post("status", new Dictionary<string, object?>
-    {
-        { "stage", stage },
-        { "message", Redact(message) },
-    });
+    public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
 
     private static Dictionary<string, object?>? DocumentPayload(PageDocument? document) =>
         document == null
@@ -1048,48 +898,16 @@ public sealed class ReviewHost : IDisposable
         return new GeminiEnterpriseSettings { Project = project.Trim(), Location = location.Trim() };
     }
 
-    private static string? Text(JsonElement element, string name)
-    {
-        if (element.ValueKind != JsonValueKind.Object
-            || !element.TryGetProperty(name, out JsonElement value))
-        {
-            return null;
-        }
+    private static string? Text(JsonElement element, string name) =>
+        PagePayload.Text(element, name);
 
-        return value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-    }
+    private static string? Blank(string? value) => PagePayload.Blank(value);
 
-    private static string? Blank(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
+    private void SendError(string? id, string errorClass, string message, bool retryable) =>
+        _actions.SendError(id, errorClass, message, retryable);
 
-    private void SendError(string? id, string errorClass, string message, bool retryable)
-    {
-        Send("error", id, new Dictionary<string, object?>
-        {
-            { "error_class", errorClass },
-            { "message", Redact(message) },
-            { "retryable", retryable },
-        });
-    }
-
-    private void Send(string type, string? id, object? payload)
-    {
-        var envelope = new Dictionary<string, object?>
-        {
-            { "type", type },
-            { "id", id },
-            { "payload", payload },
-        };
-
-        try
-        {
-            _options.Channel.PostMessage(JsonSerializer.Serialize(envelope, JsonOptions));
-        }
-        catch (Exception)
-        {
-            // The page is gone (the pane closed mid-handler). There is nobody left to tell.
-        }
-    }
+    private void Send(string type, string? id, object? payload) =>
+        _actions.Send(type, id, payload);
 
     /// <summary>
     /// Masks the configured key in anything headed for the page or the log (FR-015).
@@ -1099,18 +917,5 @@ public sealed class ReviewHost : IDisposable
     /// carries every inner exception's message - and the inner exception is exactly where the
     /// unredacted launcher failure sits, because `BackendProcess` masks only the outer one.
     /// </summary>
-    public string Redact(string text)
-    {
-        var secrets = new List<string?>();
-        try
-        {
-            secrets.Add(_settings.ResolveApiKey(_options.Environment).Key);
-        }
-        catch (Exception)
-        {
-            // Resolving the key must never be the reason an error message cannot be sent.
-        }
-
-        return Redaction.Redact(text, secrets);
-    }
+    public string Redact(string text) => _actions.Redact(text);
 }

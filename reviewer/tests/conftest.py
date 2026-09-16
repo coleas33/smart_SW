@@ -6,6 +6,9 @@ workstation. They are skipped, not failed, when it is absent (plan.md, Testing).
 `live` tests call a real provider API and are skipped, not failed, when that provider's
 key is absent from the environment - the same convention, so a checkout with neither a
 native package nor a key runs the whole suite green.
+
+`perf` tests are the exception to that convention: they are not collected at all unless
+the run asks for them by marker. See `pytest_ignore_collect` below.
 """
 
 from __future__ import annotations
@@ -31,6 +34,35 @@ all?". Which *particular* key a live module needs is that module's own business,
 one skips itself when its provider's key is the one that is missing, so a seat holding
 only an OpenAI key does not turn the Gemini live test red and vice versa.
 """
+
+
+PERF_DIR = (Path(__file__).parent / "perf").resolve()
+"""Collected only on request; see `pytest_ignore_collect`.
+
+Resolved, and compared against a resolved `collection_path`, because the comparison fails
+*open*: a symlinked checkout or a rootdir pytest never resolved would hand the hook a path
+that names this directory without being `==` to it, and the budgets would quietly rejoin
+the default run. `tests/unit/test_perf_collection_gate.py` pins that case.
+"""
+
+
+def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool | None:
+    """Keep `tests/perf/` out of every run whose `-m` expression does not name `perf`.
+
+    A perf test asserts a wall-clock budget, so it measures the machine as much as the
+    code: on a loaded laptop or a shared runner it goes red with no commit at fault. It
+    is therefore out of the default run (`uv run pytest -m "not live"`) and out of CI.
+
+    Not *collected*, rather than skipped the way `integration` and `live` are: those two
+    skip because this checkout is missing an input, and the skip line is the useful
+    report that it is. A budget reported as "skipped" on every run would instead read as
+    a measurement that was considered, which it was not. Run them deliberately:
+
+        uv run pytest -m perf -s
+    """
+    if collection_path.resolve() == PERF_DIR and "perf" not in config.getoption("markexpr"):
+        return True
+    return None
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:

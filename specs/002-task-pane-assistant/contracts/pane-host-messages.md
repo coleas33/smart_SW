@@ -1,6 +1,6 @@
 # Page ↔ Host Messages
 
-Both WebView2 pages talk to the add-in with `window.chrome.webview.postMessage(json)` and
+The WebView2 pages talk to the add-in with `window.chrome.webview.postMessage(json)` and
 receive `WebMessageReceived` replies as JSON. Every message is `{ "type": string, "id":
 string, "payload": object }`; replies echo `id`. Unknown types are answered with
 `{type: "error", payload: {message}}`. Pages are loaded from the add-in's content folder
@@ -10,32 +10,36 @@ CoreWebView2HostResourceAccessKind.Allow)`, never from the run folder. The page 
 therefore `https://swreview.invalid`, and that exact string is what the backend is started
 with as its allowed origin (`chat-api.md`).
 
-## WebView2 environment (both tabs)
+## WebView2 environment (every page)
 
 The add-in creates **one** `CoreWebView2Environment` for the process with an explicit user
-data folder `%LOCALAPPDATA%\SwReview\WebView2\<add-in instance>`, and both tabs share it.
-The default folder is derived from `SLDWORKS.exe`, which is shared with SOLIDWORKS' own
-WebView2 usage and every other add-in in the process, and its directory under
-`C:\Program Files\...` is not writable. A second environment created over a user data folder
-already opened with different options fails at runtime. Environment or `EnsureCoreWebView2`
+data folder `%LOCALAPPDATA%\SwReview\WebView2\<add-in instance>`, and all three pages -
+Review, Terminal and Model check - share it. The default folder is derived from
+`SLDWORKS.exe`, which is shared with SOLIDWORKS' own WebView2 usage and every other add-in in
+the process, and its directory under `C:\Program Files\...` is not writable. A second
+environment created over a user data folder already opened with different options fails at
+runtime. The Model check tab's WebView2 is created on its **first activation** rather than at
+add-in load, on that same environment: a page loaded into every SOLIDWORKS session that never
+presses Model check is a renderer process nobody asked for. Environment or `EnsureCoreWebView2`
 failure surfaces as the documented "WebView2 runtime missing" fallback panel (download link
 plus the run folder path in plain text), never as an exception escaping into SOLIDWORKS, and
-the Actions tab keeps working.
+the Extract tab keeps working. A failure on the Model check tab lands in that tab only; the
+other pages keep working.
 
-## Rendering untrusted text (both pages)
+## Rendering untrusted text (every page)
 
 Assistant text deltas, tool `result_summary`, finding `title` and `recommended_action`,
 drawing `text_as_read`, evidence text and error `message` are authored by the model or by
-reviewed documents. Both pages MUST insert every such string with `textContent` /
+reviewed documents. Every page MUST insert every such string with `textContent` /
 `createTextNode`, never `innerHTML`, and never through an inline event handler. If Markdown
-is ever rendered, the renderer is vendored with HTML disabled and escaping on. Both pages
-ship a strict CSP meta tag:
+is ever rendered, the renderer is vendored with HTML disabled and escaping on. Every page
+ships the same strict CSP meta tag:
 
 ```html
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
 ```
 
-The host handles `NavigationStarting` and `NewWindowRequested` on both WebView2 controls and
+The host handles `NavigationStarting` and `NewWindowRequested` on every WebView2 control and
 cancels any URL outside `https://swreview.invalid/`.
 
 ## Review page → host
@@ -97,3 +101,63 @@ created rather than assumed.
 message per ~16 ms, or immediately when the buffer exceeds 32 KB, whichever comes first, and
 drops nothing. `PostWebMessageAsJson` has UI-thread affinity, so the background read loop
 marshals the post onto the pane control like every other UI call.
+
+## Model check page → host
+
+Tab 4, the Model check page (`specs/003-resilient-modeling/contracts/model-check.md`, which
+is the full contract; these are the rows as this pane serves them). The tab runs the rules
+with no provider, no key and no network call beyond the loopback backend.
+
+| type | payload | host action |
+|------|---------|-------------|
+| `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, run_root, document: {path, configuration, kind} \| null, latest_check: {run_dir, at} \| null}`. |
+| `check.start` | `{scope: "part"}` | Refuse with `error {error_class: "NoDocument"}`, `"NotAttached"` or `"NotAPart"` as applicable. Otherwise create the check run folder, run the `ModelCheck` profile dump in process, register that folder as the pane's latest run, and reply `check.extracted {run_dir, document, configuration, counts, gaps}`. Progress via `status`. The host stops there: the page calls `POST /checks/rms` itself, with the token and origin from `init`. |
+| `entity.show` | `{persist_ref, persist_ref_scope, component_id}` | **The Review page's row, unchanged**: both hosts delegate it to the one `PaneActions`; reply `entity.shown {ok, state_code, message, full_path \| null}`. |
+| `report.open` | `{run_id}` | Delegated to `PaneActions`; the path comes from the host's own record, never from the page. |
+| `folder.open` | `{run_id}` | Delegated to `PaneActions`. |
+| `log.open` | `{}` | Delegated to `PaneActions`. |
+
+The last four rows are the same code as the Review page's, under the same rule: the resolved
+path is canonicalized and must be a descendant of `run_root` (or the log folder) before it
+reaches `ShellExecute`, and the page never supplies a path.
+
+The check run folder is `<run_root>/<yyyyMMdd-HHmmss>-<doc>-check`, named through the same
+`RunFolders` helper as a review's, and it is the pane's current session folder afterwards.
+
+## Host → Model check page (unsolicited)
+
+| type | payload |
+|------|---------|
+| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
+| `document.changed` | `{path, configuration, kind} \| null` when the active document changes |
+| `backend.stopped` | `{exit_code, log_path}` |
+
+`kind` is on this page's row and not on the Review page's because this page decides with it:
+the Model check reads a part's feature tree, so the tab says whether a check can run at all
+rather than letting the engineer press a button the host will refuse. The Review page's
+`document.changed` carries the path and the configuration only, which is what `ReviewHost`
+sends.
+
+The backend's lifecycle reaches this page as well as the Review page, because this page calls
+the check routes itself with the endpoint and token its `init` carried: a tab opened while the
+backend was still starting holds a null endpoint, and `status {stage: "ready"}` is what tells
+it to re-send `ready` and take the endpoint from the fresh `init`.
+
+## The step strip (all four tabs)
+
+Above the tabs, the strip renders three steps - open a document, extract evidence, review or
+ask - each done or pending with the reason it is pending, from two facts the add-in answers:
+whether a document is open, and whether the session's run folder holds `package.json`.
+
+It also reads `extractor.profile` out of that `package.json`. A package written by the
+`model_check` profile carries features and equations and none of the geometry phases, so the
+strip adds one line, **"Evidence: model check only (features and equations)"**, and an
+**Extract full evidence** action that opens the Extract tab; the three steps read exactly as
+they do for a full package, because partial evidence is still evidence. A `model_check`
+folder is never suggested as the Extract tab's output folder: a full dump into it would
+overwrite the package that check's own `session.json` and `report.md` describe. A `full`
+package adds nothing to the strip.
+
+Only the head of `package.json` is read - `extractor` is the fourth property of the file -
+because the strip repaints on the SOLIDWORKS application thread every time a tab is selected
+and a full review package is tens of megabytes. A file that cannot be read is not a check.

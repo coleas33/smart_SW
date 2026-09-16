@@ -65,6 +65,19 @@
       <Link>web\Terminal\TerminalPage\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Model\ModelCheckPage\**\*">
+      <Link>web\Model\ModelCheckPage\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!--
+      `web/shared/` is authored where it is served from, because it belongs to no one page:
+      both pages load `shared/dom.js` from the same virtual host so the "insert every
+      untrusted string with createTextNode" rule has one copy (T080). No Link element, so the
+      source layout is the published layout.
+    -->
+    <Content Include="web\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

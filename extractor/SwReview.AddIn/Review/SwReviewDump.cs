@@ -31,7 +31,8 @@ public sealed class SwReviewDump : IReviewDump
         _thread = thread ?? throw new ArgumentNullException(nameof(thread));
     }
 
-    public DumpSummary Run(string outputDirectory, Action<string> progress)
+    public DumpSummary Run(
+        string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)
     {
         if (outputDirectory == null)
         {
@@ -62,6 +63,11 @@ public sealed class SwReviewDump : IReviewDump
                 Configuration = session.Configuration.Name,
                 Meshes = MeshFormat.Glb,
                 Faces = FaceScope.Needed,
+
+                // The caller's profile, not this class's opinion: the Review tab asks for
+                // Full and a Model check asks for ModelCheck, and PackageWriter records
+                // which one ran on the package it writes.
+                Profile = profile,
             };
 
             DumpResult result = SwDump.CreateWriter(_swApp, session).Write(options);
@@ -69,7 +75,10 @@ public sealed class SwReviewDump : IReviewDump
             return new DumpSummary(
                 result.PackageFilePath,
                 result.Package.Components.Count,
-                result.Gaps.Count);
+                result.Gaps.Count,
+                result.Package.Documents.Count,
+                result.Package.Features.Count,
+                result.Package.Equations.Count);
         });
     }
 }

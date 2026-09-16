@@ -60,7 +60,10 @@ extractor/**/obj/
 # Task Pane assistant (see specs/002-task-pane-assistant/plan.md)
 # Built page bundle: MSBuild copies Review/ReviewPage and Terminal/TerminalPage here from
 # the tracked sources, so the copy is build output even though it is not under bin/.
-extractor/SwReview.AddIn/web/
+# `web/shared/` is the one exception and is tracked: it is authored where it is served from,
+# because it belongs to no single page - both pages load `shared/dom.js` from it (T080).
+extractor/SwReview.AddIn/web/*
+!extractor/SwReview.AddIn/web/shared/
 # Generated per-launch CLI restriction profiles (contracts/cli-profiles.md). They name
 # absolute run folders and are rewritten on every terminal launch.
 **/.swreview-cli/

@@ -76,6 +76,7 @@ from swreview.chat import DEFAULT_ALLOW_ORIGIN, DEFAULT_RUN_ROOT
 from swreview.checks.golden_interference import interference_case
 from swreview.checks.rms.plan import PLAN_FILE_NAME, build_plan
 from swreview.checks.rms.registry import RULES
+from swreview.checks.rms.run import RmsScope, run_rms_check
 from swreview.checks.rms_types import load_table, unknown_types
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
 from swreview.findings import Finding
@@ -86,7 +87,7 @@ from swreview.ir.summary import summarize
 from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition, find_finding
 from swreview.report.markdown import render_report
 from swreview.report.session import CoverageBucket, ReviewSession, load_session, save_session
-from swreview.tools import checks_fastener, checks_fit, rms_checks
+from swreview.tools import checks_fastener, checks_fit
 from swreview.tools.context import ToolContext, build_context, use_context
 from swreview.tools.query import ToolResult
 
@@ -788,48 +789,6 @@ def check_interference_command(
 # --- check rms -------------------------------------------------------------------
 
 
-class RmsScope(StrEnum):
-    """Which family of Resilient Modeling rules `check rms` runs (contracts/cli.md)."""
-
-    part = "part"
-    assembly = "assembly"
-    equations = "equations"
-    all = "all"
-
-
-RMS_SCOPE_NOT_BUILT = (
-    "not yet available in this build: the {scope}-scope rules are in the catalogue but "
-    "no check runs them yet, so nothing was evaluated for them and nothing about them "
-    "is claimed"
-)
-"""What a scope this build cannot run reports. It is reported rather than skipped: a
-command that answered a scope it does not run with silence would read like a clean one."""
-
-RMS_SCOPE_CHECKS: dict[
-    RmsScope, Callable[[ToolContext, Sequence[str] | None], ToolResult]
-] = {
-    RmsScope.part: rms_checks.run_part_checks,
-    RmsScope.equations: rms_checks.run_equation_checks,
-}
-"""The *document-scoped* families, and what runs each of them over the selected documents.
-The assembly family is deliberately not here: it takes no document argument, because the
-root assembly document is the only document whose mates are extracted, so it is run on its
-own below and `--document` does not narrow it."""
-
-RMS_SCOPES_BUILT: frozenset[RmsScope] = frozenset(
-    {*RMS_SCOPE_CHECKS, RmsScope.assembly}
-)
-"""Every scope this build actually runs. A scope in `RmsScope` and not here is reported
-through `RMS_SCOPE_NOT_BUILT`."""
-
-RMS_SCOPE_RUNS: dict[RmsScope, tuple[RmsScope, ...]] = {
-    RmsScope.part: (RmsScope.part,),
-    RmsScope.assembly: (RmsScope.assembly,),
-    RmsScope.equations: (RmsScope.equations,),
-    RmsScope.all: (RmsScope.part, RmsScope.assembly, RmsScope.equations),
-}
-
-
 @check_app.command("rms")
 def check_rms_command(
     package: PackageOption,
@@ -844,88 +803,55 @@ def check_rms_command(
 ) -> None:
     """Grade a package against the Resilient Modeling rules, without the agent.
 
-    The same tools the model runs, over the same session: the findings and the aggregated
-    coverage printed here are what a review would record. `exceptions.json` beside the
-    package is read and refreshed in memory, so a waiver whose feature tree has moved
-    reads `needs_review` and silences nothing; nothing is written back.
+    A thin shell around `checks/rms/run.py::run_rms_check`, which is the same entry point
+    the Model check tab's `POST /checks/rms` calls (FR-024), so the findings and the
+    aggregated coverage printed here are what the tab shows and what a review would
+    record - not a second evaluation that could drift from either.
+
+    That entry point writes `session.json` and `report.md` into the package directory and,
+    before the rules run, carries forward the newest `exceptions.json` under the run root
+    whose package carries the same `design_id` (`contracts/cli.md`). The run root this
+    command names is the package directory's own parent, so `--package` names a run
+    folder: pointed at a loose directory, the folders beside it are what is read as
+    earlier runs of this design. `exceptions.json` beside the package is read and
+    refreshed in memory, so a waiver whose feature tree has moved reads `needs_review` and
+    silences nothing; the file itself is never rewritten.
 
     Violations are output, not an exit code: this exits 1 only when the package cannot be
-    read or an argument names something the package does not carry.
+    read, its feature array is empty, an argument names something the package does not
+    carry, or a carried-forward exception store cannot be parsed.
     """
     document_ids = list(document) if document else None
     with _errors_as_exit_1():
-        context = _context_for(package, exceptions=True)
-
-    documents = rms_checks.part_documents(context, document_ids)
-    if isinstance(documents, dict):
-        typer.echo(f"error: {documents['error']}", err=True)
-        raise typer.Exit(1)
-
-    runs = RMS_SCOPE_RUNS[scope]
-    findings: list[Any] = []
-    graded: list[str] = []
-    for item in runs:
-        run = RMS_SCOPE_CHECKS.get(item)
-        if run is None:
-            continue
-        with _errors_as_exit_1(), use_context(context):
-            result = run(context, documents)
-        if "error" in result:
-            typer.echo(f"error: {result['error']}", err=True)
-            raise typer.Exit(1)
-        findings.extend(result["findings"])
-        graded = documents
-
-    assembly_document: str | None = None
-    if RmsScope.assembly in runs:
-        with _errors_as_exit_1(), use_context(context):
-            result = rms_checks.run_assembly_checks(context)
-        if "error" in result:
-            typer.echo(f"error: {result['error']}", err=True)
-            raise typer.Exit(1)
-        findings.extend(result["findings"])
-        # Empty when the package has no assembly document at all: the rules are then
-        # unresolved coverage naming the document that is not one, and there is no root
-        # assembly to print.
-        assembly_document = next(iter(result["documents"]), None)
-
-    unavailable = [
-        {"scope": item.value, "reason": RMS_SCOPE_NOT_BUILT.format(scope=item.value)}
-        for item in runs
-        if item not in RMS_SCOPES_BUILT
-    ]
-    coverage = _coverage_rows(context.require_session())
+        run = run_rms_check(
+            package,
+            scope=scope,
+            document_id=document_ids,
+            run_root=Path(package).resolve().parent,
+        )
 
     payload = {
         "package": str(Path(package).resolve()),
         "scope": scope.value,
-        "documents": graded,
-        "assembly_document": assembly_document,
-        "findings": findings,
-        "coverage": coverage,
-        "unavailable_scopes": unavailable,
+        "documents": run.documents,
+        "assembly_document": run.assembly_document,
+        "findings": run.findings,
+        "coverage": run.coverage,
+        "unavailable_scopes": run.unavailable_scopes,
     }
     lines = [
-        f"{len(graded)} part document(s)" + (f": {', '.join(graded)}" if graded else "")
+        f"{len(run.documents)} part document(s)"
+        + (f": {', '.join(run.documents)}" if run.documents else "")
     ]
-    if assembly_document is not None:
-        lines.append(f"root assembly document: {assembly_document}")
-    for finding in findings:
+    if run.assembly_document is not None:
+        lines.append(f"root assembly document: {run.assembly_document}")
+    for finding in run.findings:
         lines.append("")
         lines += _finding_lines(finding)
     lines.append("")
-    lines.append(f"coverage: {_counts_line(_coverage_counts(coverage))}")
-    lines += [f"scope {item['scope']}: {item['reason']}" for item in unavailable]
+    lines.append(f"coverage: {_counts_line(_coverage_counts(run.coverage))}")
+    lines += [f"scope {item['scope']}: {item['reason']}" for item in run.unavailable_scopes]
     _emit(payload, lines, json_output)
-
-
-def _coverage_rows(session: ReviewSession) -> list[dict[str, Any]]:
-    """Every coverage item of `session` as one flat row, bucket included."""
-    return [
-        {"bucket": bucket, **to_jsonable_python(item)}
-        for bucket in get_args(CoverageBucket)
-        for item in getattr(session.coverage, bucket)
-    ]
 
 
 def _coverage_counts(rows: list[dict[str, Any]]) -> dict[str, int]:

@@ -29,21 +29,22 @@ What it does, in the order it does it:
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import replace
 
 from swreview.checks.result import CheckResult
+from swreview.checks.rms.groups import assign_groups
 from swreview.checks.rms.registry import RULES, coverage_only
 from swreview.checks.rms.results import RuleResult
-from swreview.checks.rms_types import unknown_types
+from swreview.checks.rms_types import load_table, unknown_types
 from swreview.exceptions import ReviewException
-from swreview.ir.models import EvidencePackage
+from swreview.ir.models import EvidencePackage, SourceRef
 from swreview.report.session import CoverageBucket, CoverageItem, CoverageScope, ReviewSession
 from swreview.tools.context import ToolContext
 from swreview.tools.query import ToolResult
 from swreview.tools.recording import record_result
 
-__all__ = ["SUMMARY_CHECK", "UNKNOWN_TYPES_CHECK", "report_results"]
+__all__ = ["NO_PERSIST_REF", "SUMMARY_CHECK", "UNKNOWN_TYPES_CHECK", "report_results"]
 
 SUMMARY_CHECK = "modeling.resilience"
 """The checklist item these rules answer; its coverage item is the one-line verdict on
@@ -55,6 +56,15 @@ is how a recalibration finds out what it is missing (`contracts/rules.md`, "Cont
 features")."""
 
 CONFIGURATION_GAP = "feature_tree_configuration"
+
+NO_PERSIST_REF = (
+    "no persistent reference was read for this subject, so it cannot be selected in "
+    "SOLIDWORKS"
+)
+"""Why a subject has no `SourceRef` and no reference in its entry. Said once, on the
+subject it is about: a Show button that reported success while selecting nothing is the
+failure D3 exists to remove, and a silently missing subject would be the same failure one
+layer earlier."""
 
 _BUCKET_BY_OUTCOME: dict[str, CoverageBucket] = {
     "pass": "checked",
@@ -77,14 +87,18 @@ def report_results(context: ToolContext, results: Sequence[RuleResult]) -> ToolR
     """
     session = context.require_session()
     findings: list[dict[str, object]] = []
+    subjects: dict[str, list[dict[str, object]]] = {}
     coverage: list[dict[str, str]] = []
 
     reportable, unreportable = _split_by_reportability(context, results)
+    groups = _groups_by_document(context.ir, [result.document_id for result, _ in reportable])
     for result, check_result in reportable:
-        recorded = _record(context, result, check_result)
+        recorded = _record(context, result, check_result, groups)
         if "error" in recorded:
             return recorded
-        findings.append(recorded["finding"])  # type: ignore[arg-type]
+        finding = recorded["finding"]
+        findings.append(finding)  # type: ignore[arg-type]
+        subjects[finding["id"]] = recorded["subjects"]  # type: ignore[index, assignment]
 
     configuration = context.ir.design.active_configuration
     for bucket, item in _aggregate([*results, *unreportable], configuration):
@@ -94,7 +108,12 @@ def report_results(context: ToolContext, results: Sequence[RuleResult]) -> ToolR
     coverage.extend(_write_unknown_types(context, results))
     coverage.extend(_write_undispatched(context, session))
     coverage.append(_write_summary(context, session))
-    return {"status": "recorded", "findings": findings, "coverage": coverage}
+    return {
+        "status": "recorded",
+        "findings": findings,
+        "subjects": subjects,
+        "coverage": coverage,
+    }
 
 
 # --- 1. findings ------------------------------------------------------------------
@@ -126,14 +145,26 @@ def _split_by_reportability(
                     document_id=result.document_id,
                     outcome="unresolved",
                     subjects=list(result.subjects),
+                    subject_rows=tuple(result.subject_rows),
                     reason=f"no component instance for {result.document_id}",
                 )
             )
     return reportable, unreportable
 
 
-def _record(context: ToolContext, result: RuleResult, body: CheckResult) -> ToolResult:
-    """One finding-shaped result as a session finding, exceptions applied."""
+def _record(
+    context: ToolContext,
+    result: RuleResult,
+    body: CheckResult,
+    groups: Mapping[tuple[str, str], str | None],
+) -> ToolResult:
+    """One finding-shaped result as a session finding, exceptions applied.
+
+    The subjects the rule named are emitted twice here (D2): as one `SourceRef` each on
+    the finding, which is what both pages build their Show payload from, and as the
+    structured entries returned beside the finding for the route's response. One builder,
+    two consumers, and neither of them parses the display string in `inputs`.
+    """
     package = context.ir
     component_ids = _component_ids(package, result.document_id)
     check_result = _with_configuration_limit(package, result.document_id, body)
@@ -144,13 +175,88 @@ def _record(context: ToolContext, result: RuleResult, body: CheckResult) -> Tool
     elif exception is not None:
         check_result = _needs_review(check_result, exception)
 
-    return record_result(
+    recorded = record_result(
         context,
         check_result,
         component_ids=component_ids,
+        drawing_locations=_source_refs(result),
         exception_id=None if exception is None else exception.id,
         tool_result_ids=[context.current_step_id],
     )
+    if "error" in recorded:
+        return recorded
+    return {**recorded, "subjects": _subjects(result, component_ids, groups)}
+
+
+def _source_refs(result: RuleResult) -> list[SourceRef]:
+    """One source reference per subject that has one, in the order the rule named them.
+
+    `document_id` is the subject's persist-ref scope - the document the reference resolves
+    against, which for a part feature reached through an assembly is the part - because
+    that is what `SwEntityResolver` needs to open the right document before selecting. A
+    reference the extractor could not read produces nothing: an invented locator would
+    make Show report success and select the wrong thing (Principle I).
+    """
+    return [
+        SourceRef(document_id=row.persist_ref_scope, persist_ref=row.persist_ref)
+        for row in result.subject_rows
+        if row.persist_ref and row.persist_ref_scope
+    ]
+
+
+def _subjects(
+    result: RuleResult,
+    component_ids: Sequence[str],
+    groups: Mapping[tuple[str, str], str | None],
+) -> list[dict[str, object]]:
+    """The structured subjects of one finding (`contracts/model-check.md`, `CheckResult`).
+
+    Deliberately *not* a field on `Finding`: the feature 001 finding contract does not
+    move for User Story 6 (FR-026), so this travels beside the finding, keyed by its id,
+    and a consumer that only knows feature 001 sees exactly what it always saw.
+
+    `group` is null for a subject that is not a feature of a graded part document - a mate
+    and a component instance are subjects too, and neither is in a group. `component_ids`
+    is the finding's own: an exception binds to a part's instances, so a subject is shown
+    through the same instances the rule was graded on.
+    """
+    entries: list[dict[str, object]] = []
+    for row in result.subject_rows:
+        readable = bool(row.persist_ref and row.persist_ref_scope)
+        entries.append(
+            {
+                "feature_id": row.id,
+                "name": row.name,
+                "type_name": row.type_name,
+                "group": groups.get((result.document_id, row.id)),
+                "persist_ref": row.persist_ref if readable else None,
+                "persist_ref_scope": row.persist_ref_scope if readable else None,
+                "component_ids": list(component_ids),
+                "reason": None if readable else NO_PERSIST_REF,
+            }
+        )
+    return entries
+
+
+def _groups_by_document(
+    package: EvidencePackage, document_ids: Iterable[str]
+) -> dict[tuple[str, str], str | None]:
+    """Which group each feature of `document_ids` is in, keyed by (document, feature).
+
+    `checks/rms/groups.py` is the one place group membership is decided, so this asks it
+    rather than re-deriving anything; it is asked once per document per call rather than
+    once per finding. Keyed by the pair because a feature id is unique within a document's
+    tree, not across a package.
+    """
+    table = load_table()
+    assigned: dict[tuple[str, str], str | None] = {}
+    for document_id in dict.fromkeys(document_ids):
+        rows = [row for row in package.features if row.document_id == document_id]
+        if not rows:
+            continue
+        for feature_id, group in assign_groups(rows, table).by_feature_id.items():
+            assigned[(document_id, feature_id)] = group
+    return assigned
 
 
 def _with_configuration_limit(

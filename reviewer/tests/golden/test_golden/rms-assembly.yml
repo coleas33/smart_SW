@@ -152,7 +152,28 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: bWF0ZTowMDAx
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: Y21wOjAwMDI=
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: Y21wOjAwMDM=
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-001
@@ -187,7 +208,14 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: Y21wOjAwMDI=
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-002
@@ -219,7 +247,14 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: Y21wOjAwMDc=
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-003
@@ -253,7 +288,21 @@ result:
     configuration: Default
     coverage_limits: []
     disposition: null
-    drawing_locations: []
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: Y21wOjAwMDg=
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: Y21wOjAwMDk=
+      sheet: null
+      view: null
     exception_id: null
     group: null
     id: F-004

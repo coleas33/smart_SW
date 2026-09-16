@@ -6,6 +6,8 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using SwReview.AddIn.Terminal;
+using SwReview.Extractor.Dump;
+using SwReview.Extractor.Ir;
 using Xunit;
 
 namespace SwReview.AddIn.Tests;
@@ -49,6 +51,10 @@ public sealed class TaskPaneGuidanceTests
         + "interference results, capture the current selection. The Review tab does this for "
         + "you automatically.";
 
+    private const string ModelCheckPurpose =
+        "Grade the open document against the Resilient Modeling Strategy rules in seconds. "
+        + "No AI, no key; read-only.";
+
     // ---- the tabs ------------------------------------------------------------------------
 
     [Fact]
@@ -58,7 +64,8 @@ public sealed class TaskPaneGuidanceTests
         {
             string[] captions = Tabs(pane).Select(tab => tab.Text).ToArray();
 
-            Assert.Equal(new[] { "Review", "Ask", "Extract" }, captions);
+            // Model check is tab 4 (contracts/model-check.md); feature 004's Remodel is tab 5.
+            Assert.Equal(new[] { "Review", "Ask", "Extract", "Model check" }, captions);
         });
     }
 
@@ -76,6 +83,7 @@ public sealed class TaskPaneGuidanceTests
                 { "Review", ReviewPurpose },
                 { "Ask", AskPurpose },
                 { "Extract", ExtractPurpose },
+                { "Model check", ModelCheckPurpose },
             };
 
             foreach (TabPage tab in Tabs(pane))
@@ -216,6 +224,177 @@ public sealed class TaskPaneGuidanceTests
             Assert.True(escaped == null, "A failing step callback reached SOLIDWORKS: " + escaped);
             Assert.Equal(3, pane.Steps.Lines.Count);
         });
+    }
+
+    // ---- the partial-evidence affordance (T084) ---------------------------------------------
+
+    /// <summary>
+    /// A Model check dumps features and equations and skips the hole, fastener, face and
+    /// body or mesh phases (FR-022), so the package in a check folder describes a fraction
+    /// of the design. The strip says so before the engineer presses Review, because a review
+    /// of that package reports "no holes" and "no fasteners" as facts about the model.
+    ///
+    /// The three step lines are untouched: evidence is there, and it is evidence. What the
+    /// strip adds is the sentence about which evidence, and the way to get the rest.
+    /// </summary>
+    [Fact]
+    public void ModelCheckEvidenceSaysWhatItLeavesOutAndOffersTheFullExtract()
+    {
+        string session = NewFolderWithPackage(DumpProfile.ModelCheck);
+        try
+        {
+            WithPane(
+                (pane, options) =>
+                {
+                    options.DocumentPresent = () => true;
+                    options.EvidencePresent = () => true;
+                    pane.RefreshSteps();
+
+                    Assert.Equal(
+                        "Evidence: model check only (features and equations)", pane.Steps.Notice);
+                    Assert.True(
+                        ButtonNamed(pane.Steps, "Extract full evidence").Visible,
+                        "The Extract full evidence action is hidden on a model check package.");
+
+                    Assert.Equal(
+                        new[]
+                        {
+                            "1 Open a document - done: ready",
+                            "2 Extract evidence - done: ready",
+                            "3 Review or Ask - done: ready",
+                        },
+                        pane.Steps.Lines.ToArray());
+                },
+                options => options.CurrentSessionRunDirectory = () => session);
+        }
+        finally
+        {
+            Delete(session);
+        }
+    }
+
+    /// <summary>The unchanged half of FR-022: a full dump is not annotated as a partial one.</summary>
+    [Fact]
+    public void FullEvidenceAddsNothingToTheStrip()
+    {
+        string session = NewFolderWithPackage(DumpProfile.Full);
+        try
+        {
+            WithPane(
+                (pane, options) =>
+                {
+                    options.DocumentPresent = () => true;
+                    options.EvidencePresent = () => true;
+                    pane.RefreshSteps();
+
+                    Assert.Equal(string.Empty, pane.Steps.Notice);
+                    Assert.False(
+                        ButtonNamed(pane.Steps, "Extract full evidence").Visible,
+                        "A full package is being offered a full extract it does not need.");
+                },
+                options => options.CurrentSessionRunDirectory = () => session);
+        }
+        finally
+        {
+            Delete(session);
+        }
+    }
+
+    /// <summary>
+    /// The affordance is the Extract tab, which extracts every phase by default
+    /// (<c>IReviewDump.Run</c>'s profile defaults to <see cref="DumpProfile.Full"/>): the
+    /// strip takes the engineer there rather than starting a second kind of dump of its own.
+    /// </summary>
+    [Fact]
+    public void ExtractFullEvidenceOpensTheExtractTab()
+    {
+        string session = NewFolderWithPackage(DumpProfile.ModelCheck);
+        try
+        {
+            WithPane(
+                (pane, options) =>
+                {
+                    options.DocumentPresent = () => true;
+                    options.EvidencePresent = () => true;
+                    pane.RefreshSteps();
+
+                    ButtonNamed(pane.Steps, "Extract full evidence").PerformClick();
+
+                    Assert.Equal(
+                        "Extract",
+                        Descendants(pane).OfType<TabControl>().Single().SelectedTab.Text);
+                },
+                options => options.CurrentSessionRunDirectory = () => session);
+        }
+        finally
+        {
+            Delete(session);
+        }
+    }
+
+    /// <summary>
+    /// The Extract tab opens on the session folder - unless that folder is a check, whose
+    /// `package.json` a full extract would overwrite. The check's `session.json` and
+    /// `report.md` name the features in exactly that package, and the accept command reads
+    /// them back out of the folder, so the full dump goes somewhere the engineer chooses.
+    /// </summary>
+    [Fact]
+    public void AFullExtractIsNeverSuggestedIntoTheCheckFolderItWouldOverwrite()
+    {
+        string session = NewFolderWithPackage(DumpProfile.ModelCheck);
+        try
+        {
+            WithPane(
+                (pane, options) =>
+                {
+                    options.DocumentPresent = () => true;
+                    options.EvidencePresent = () => true;
+                    pane.RefreshSteps();
+
+                    Assert.Equal(string.Empty, pane.Actions.OutputDirectory);
+                },
+                options => options.CurrentSessionRunDirectory = () => session);
+        }
+        finally
+        {
+            Delete(session);
+        }
+    }
+
+    /// <summary>
+    /// A package that cannot be read is not a partial one. The strip repaints on every tab
+    /// change and on the SOLIDWORKS application thread, so a half-written or truncated file -
+    /// a dump that is still running, a share that went away - answers "not a check" and
+    /// leaves the strip as it was.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("{ not json at all")]
+    [InlineData("{\"schema_version\": \"1.2.0\", \"extractor\": {\"name\": \"x\"")]
+    public void APackageThatCannotBeReadIsNotReportedAsAModelCheck(string body)
+    {
+        string session = NewFolder();
+        File.WriteAllText(Path.Combine(session, "package.json"), body);
+        try
+        {
+            WithPane(
+                (pane, options) =>
+                {
+                    options.DocumentPresent = () => true;
+                    options.EvidencePresent = () => true;
+
+                    Exception? escaped = Record.Exception(() => pane.RefreshSteps());
+
+                    Assert.True(escaped == null, "An unreadable package reached the pane: " + escaped);
+                    Assert.Equal(string.Empty, pane.Steps.Notice);
+                    Assert.Equal(session, pane.Actions.OutputDirectory);
+                },
+                options => options.CurrentSessionRunDirectory = () => session);
+        }
+        finally
+        {
+            Delete(session);
+        }
     }
 
     // ---- the Extract tab -------------------------------------------------------------------
@@ -488,6 +667,27 @@ public sealed class TaskPaneGuidanceTests
                 yield return descendant;
             }
         }
+    }
+
+    /// <summary>
+    /// A run folder holding a `package.json` written by <paramref name="profile"/>.
+    ///
+    /// Written through the product's own serializer rather than as literal JSON: the strip
+    /// reads `extractor.profile` out of the file the extractor really writes, and a literal
+    /// here would keep passing after the contract moved.
+    /// </summary>
+    private static string NewFolderWithPackage(DumpProfile profile)
+    {
+        string folder = NewFolder();
+        var package = new EvidencePackage();
+        package.Extractor.Name = "SwReview.Extractor";
+        package.Extractor.Version = "0.1.0";
+        package.Extractor.Machine = "test";
+        package.Extractor.Profile = profile;
+
+        File.WriteAllText(
+            Path.Combine(folder, "package.json"), PackageSerializer.Serialize(package));
+        return folder;
     }
 
     private static string NewFolder()

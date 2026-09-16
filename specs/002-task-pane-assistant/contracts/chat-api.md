@@ -1,4 +1,12 @@
-# Chat Backend API
+# Reviewer Backend API
+
+One loopback service, not one per tab: `swreview chat serve` is the **reviewer backend**,
+and it serves **checks as well as chats**. The `/sessions/*` routes run a review turn
+through a provider; the `/checks/*` routes (feature 003, User Story 6) grade a model
+against the Resilient Modeling rules and construct no provider, read no key and make no
+network call at all. Everything below - the handshake, the token, the origin rules, the
+error body and the `run_dir` path rule - holds for both families, which is why they share
+one process and one door rather than a second server with a second copy of all of it.
 
 `swreview chat serve --port 0 [--run-root <dir>]` starts a loopback HTTP server. The first
 stdout line is `{"port": 51234, "token": "<32 bytes base64url>"}`; nothing else is ever
@@ -26,6 +34,9 @@ the settings file.
 | POST | `/sessions/{chat_id}/findings/{finding_id}/disposition` | `{decision, note, by}` | 200 with the `Finding`; 409 on an illegal transition. Re-renders `report.md`. |
 | POST | `/sessions/{chat_id}/stop` | | 202; ends the turn at the next tool boundary, emits `turn.ended {reason: "stopped"}`, then writes `session.ended`. Idempotent: on a session that already has an `ended_at` it is 202 with the current state and no second terminal event pair. |
 | GET | `/sessions/{chat_id}/report` | | `text/markdown` of `report.md` |
+| POST | `/checks/rms` | `{run_dir, scope: "part" \| "equations" \| "all", document_id: str \| null}` | `201 CheckResult` (feature 003 `contracts/model-check.md`). Runs synchronously: no provider, no network call, no turn, and no chat is registered for the folder. 400 when `run_dir` fails the path rule, when `run_dir/package.json` is missing or invalid (`InvalidPackage`), when the package carries no feature rows (`EmptyFeatureTree`), when the carry-forward candidate cannot be parsed (`UnreadableExceptions`), or when `scope` is `"assembly"` (`ScopeNotAvailable`) |
+| GET | `/checks/{check_id}` | | `200 CheckResult` re-read from that check run folder - the recorded `session.json` and `check.json`, with nothing evaluated and nothing written, so a refresh cannot overwrite a recorded disposition; `404 UnknownCheck` when the run root holds no such folder, no check ran in it, or its session is no longer the one its record names |
+| POST | `/checks/{check_id}/exceptions/{finding_id}` | `{note, by}` | `200 {finding, exception_id}` with the finding re-rendered as checked within scope; `400 EmptyNote` on a blank note; `404 UnknownCheck` / `UnknownFinding`; `409 RuleNotAcceptable` for a `warn` rule (FR-016); `409 AlreadyAccepted` when an active exception already covers the condition. Re-renders `report.md` |
 | OPTIONS | any path | | 204 preflight, **answered without a token** (see Origin and CORS) |
 
 Errors: JSON `{error_class, message, retryable}` with the message redacted of any
@@ -42,6 +53,11 @@ and Win32 device paths, and requires the result to be a descendant of the config
 `--run-root` (the pane passes the settings `run_root`). Anything else is 400 with
 `error_class: "InvalidRunDir"`. The same rule applies to every host-side path action in
 `pane-host-messages.md`.
+
+`check_id` is the check run folder's *name*, so a check is addressable after a restart
+without any server-side registry. It is caller-supplied too and goes through the same
+rule, resolved under the run root; a path the rule refuses is answered `404 UnknownCheck`
+rather than `400`, so the route cannot be used to probe the workstation.
 
 ## Origin and CORS
 

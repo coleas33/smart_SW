@@ -217,6 +217,74 @@ public class CommandLineOptionsTests
             CommandLine.Parse(new[] { "capture", "--equations", "off" }, 1, CaptureOptions));
     }
 
+    // ---- --profile ---------------------------------------------------------------
+
+    [Theory]
+    [InlineData("full", DumpProfile.Full)]
+    [InlineData("model-check", DumpProfile.ModelCheck)]
+    [InlineData("MODEL-CHECK", DumpProfile.ModelCheck)]
+    public void DumpProfile_ReadsEveryContractValue(string value, DumpProfile expected)
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--profile", value, "--out", @"C:\out" }, 1, DumpOptions);
+
+        Assert.Equal(expected, parsed.DumpProfile());
+    }
+
+    [Fact]
+    public void DumpProfile_DefaultsToFull()
+    {
+        // The design review reads holes, fasteners, faces and meshes. A dump that quietly
+        // fell back to the reduced profile would report a model with no holes at all, which
+        // reads as a bad design rather than as a partial extract (FR-022).
+        Assert.Equal(
+            DumpProfile.Full,
+            CommandLine.Parse(new[] { "dump", "--out", @"C:\out" }, 1, DumpOptions).DumpProfile());
+    }
+
+    [Fact]
+    public void DumpProfile_UnknownValue_Throws()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--profile", "quick" }, 1, DumpOptions);
+
+        Assert.Throws<UsageError>(() => parsed.DumpProfile());
+    }
+
+    [Fact]
+    public void DumpProfile_IsOnlyAnOptionOfDump()
+    {
+        // A typo that lands --profile on another command is a usage error, not a silent
+        // no-op that runs every phase anyway.
+        Assert.Throws<UsageError>(() =>
+            CommandLine.Parse(new[] { "capture", "--profile", "model-check" }, 1, CaptureOptions));
+    }
+
+    [Theory]
+    [InlineData("full")]
+    [InlineData("model-check")]
+    public void DumpProfile_CliName_RoundTripsEveryContractValue(string value)
+    {
+        // extract.log reconstructs the command that ran, so the spelling it prints has to be
+        // the spelling this parser takes back. One mapping, used by the parser and by the
+        // log line, is what keeps the two from drifting.
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "dump", "--profile", value, "--out", @"C:\out" }, 1, DumpOptions);
+
+        Assert.Equal(value, CommandLine.CliName(parsed.DumpProfile()));
+    }
+
+    [Fact]
+    public void DumpProfile_CliName_IsNotTheIrSpelling()
+    {
+        // The trap this mapping exists for: the IR records model_check and the command line
+        // takes model-check, so a log line written through the IR spelling records a command
+        // that does not parse.
+        Assert.Equal("model_check", PackageSerializer.EnumToJsonName(DumpProfile.ModelCheck));
+        Assert.Equal("model-check", CommandLine.CliName(DumpProfile.ModelCheck));
+        Assert.Equal("full", CommandLine.CliName(DumpProfile.Full));
+    }
+
     // ---- probe rms ---------------------------------------------------------------
 
     [Fact]

@@ -469,6 +469,155 @@ public class PackageWriterTests : IDisposable
         Assert.True(sources.EquationsWereDumped);
     }
 
+    // ---- --profile ---------------------------------------------------------------
+
+    [Fact]
+    public void Build_ProfileDefaultsToFullAndEveryPhaseRuns()
+    {
+        var sources = new FakeSources();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.Equal(DumpProfile.Full, sources.SeenOptions!.Profile);
+        Assert.True(sources.DocumentsWereDumped);
+        Assert.True(sources.ManifestWasBuilt);
+        Assert.True(sources.MatesWereDumped);
+        Assert.True(sources.FeaturesWereDumped);
+        Assert.True(sources.EquationsWereDumped);
+        Assert.True(sources.HolesWereDumped);
+        Assert.True(sources.FastenersWereDumped);
+        Assert.True(sources.FacesWereDumped);
+        Assert.True(sources.MeshesWereDumped);
+        Assert.Equal(DumpProfile.Full, package.Extractor.Profile);
+    }
+
+    [Fact]
+    public void Build_ModelCheckProfile_RunsTheDocumentManifestMateFeatureAndEquationPhases()
+    {
+        // FR-022. The Model check tab grades the feature tree and the equations, so those
+        // five phases are exactly what it needs; a profile that skipped one of them would
+        // leave rules unresolved on a part that is fine.
+        var sources = new FakeSources();
+
+        EvidencePackage package = NewWriter(sources).Build(ModelCheckOptions());
+
+        Assert.True(sources.DocumentsWereDumped);
+        Assert.True(sources.ManifestWasBuilt);
+        Assert.True(sources.MatesWereDumped);
+        Assert.True(sources.FeaturesWereDumped);
+        Assert.True(sources.EquationsWereDumped);
+
+        Assert.NotEmpty(package.Documents);
+        Assert.NotEmpty(package.Manifest.Entries);
+        Assert.NotEmpty(package.Mates);
+        Assert.NotEmpty(package.Features);
+        Assert.NotEmpty(package.Equations);
+    }
+
+    [Fact]
+    public void Build_ModelCheckProfile_NeverCallsTheHoleFastenerFaceOrMeshSources()
+    {
+        // Not "returns nothing": the saving is the reads themselves, because the skipped
+        // phases tessellate every body, write GLB files and read face geometry (plan key
+        // point 8). Asserting on the empty arrays alone would pass with the full cost paid.
+        var sources = new FakeSources();
+
+        EvidencePackage package = NewWriter(sources).Build(ModelCheckOptions());
+
+        Assert.False(sources.HolesWereDumped);
+        Assert.False(sources.FastenersWereDumped);
+        Assert.False(sources.FacesWereDumped);
+        Assert.False(sources.MeshesWereDumped);
+
+        Assert.Empty(package.Holes);
+        Assert.Empty(package.Threads);
+        Assert.Empty(package.Fasteners);
+        Assert.Empty(package.Faces);
+        Assert.Empty(package.Bodies);
+    }
+
+    [Fact]
+    public void Build_ModelCheckProfile_RecordsNothingButTheProfile()
+    {
+        // The four skipped phases add no gap of their own, unlike --features none and
+        // --equations off. Those two are a dump that dropped evidence it normally carries,
+        // so the absence needs a sentence; model-check is a package whose shape is declared
+        // by extractor.profile, and four gaps on every check run would be noise an engineer
+        // learns to skip - which is how a real gap gets lost (Principle I).
+        EvidencePackage full = NewWriter().Build(Options());
+        EvidencePackage thin = NewWriter().Build(ModelCheckOptions());
+
+        Assert.Equal(DumpProfile.ModelCheck, thin.Extractor.Profile);
+        Assert.Equal(
+            full.Gaps.Select(g => $"{g.EntityKind}|{g.Reason}"),
+            thin.Gaps.Select(g => $"{g.EntityKind}|{g.Reason}"));
+    }
+
+    [Fact]
+    public void Build_ModelCheckProfile_ProducesAPackageThatValidatesAgainstTheContract()
+    {
+        IrContract.AssertValid(PackageSerializer.Serialize(NewWriter().Build(ModelCheckOptions())));
+    }
+
+    // ---- the part-root node ------------------------------------------------------
+
+    [Fact]
+    public void Build_PartRootTree_YieldsOneComponentInstanceForTheDocumentItself()
+    {
+        // T064, RK-15. GetRootComponent3(false) is expected to return nothing for a part
+        // opened alone, so ComponentTreeDumper synthesizes one node for the document. This
+        // pins the end of that path: without the node the component list is empty, the
+        // feature phase iterates nothing, and all 34 rules come back unresolved.
+        var sources = new FakeSources();
+        sources.UsePartRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(ModelCheckOptions());
+
+        ComponentInstance instance = Assert.Single(package.Components);
+        Assert.Equal("cmp:0001", instance.Id);
+        Assert.Equal("housing", instance.FullPath);
+        Assert.Null(instance.ParentId);
+        Assert.True(instance.IsFixed);
+        Assert.False(instance.IsToolbox);
+        Assert.Equal(SuppressionState.Resolved, instance.Suppression);
+        Assert.Equal(package.Design.RootAssemblyDocumentId, instance.DocumentId);
+        Assert.Equal(instance.DocumentId, instance.PersistRefScope);
+    }
+
+    [Fact]
+    public void Build_PartRootTree_CarriesThatDocumentsFeaturesAndEquations()
+    {
+        var sources = new FakeSources();
+        sources.UsePartRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(ModelCheckOptions());
+
+        string documentId = Assert.Single(package.Components).DocumentId;
+        Assert.Equal(documentId, Assert.Single(package.Features).DocumentId);
+        Assert.Equal(documentId, Assert.Single(package.Equations).DocumentId);
+    }
+
+    [Fact]
+    public void Build_PartRootTree_ProducesAPackageThatValidatesAgainstTheContract()
+    {
+        var sources = new FakeSources();
+        sources.UsePartRootTree();
+
+        IrContract.AssertValid(PackageSerializer.Serialize(NewWriter(sources).Build(ModelCheckOptions())));
+    }
+
+    [Fact]
+    public void ComponentTreeResult_RootDocumentKind_HasNoDefault()
+    {
+        // T064. The kind of the open document is engineering data, so the tree carries no
+        // default for it: when the read fails, ComponentTreeDumper leaves this null, records
+        // the gap and writes no root node at all. A field initialized to Assembly would
+        // stamp "assembly" on a document whose kind nobody read, and FeatureDumper and
+        // EquationDumper skip every node that is not a Part - so that document's whole
+        // feature tree and equation list would be dropped in silence.
+        Assert.Null(new ComponentTreeResult().RootDocumentKind);
+    }
+
     [Fact]
     public void Build_PassesTheOptionsThroughToTheSources()
     {
@@ -604,6 +753,13 @@ public class PackageWriterTests : IDisposable
         OutputDirectory = Path.Combine(_outputDirectory, "native"),
     };
 
+    private DumpOptions ModelCheckOptions()
+    {
+        DumpOptions options = Options();
+        options.Profile = DumpProfile.ModelCheck;
+        return options;
+    }
+
     private static PackageWriter NewWriter(FakeSources? sources = null)
     {
         FakeSources s = sources ?? new FakeSources();
@@ -635,6 +791,10 @@ public class PackageWriterTests : IDisposable
 
         public string RootDocumentPath { get; set; } = AssemblyPath;
 
+        public DocumentKind RootDocumentKind { get; set; } = DocumentKind.Assembly;
+
+        public string DesignName { get; set; } = "bracket-assy";
+
         public string? TraversalGap { get; set; }
 
         public string? HoleGap { get; set; }
@@ -643,6 +803,18 @@ public class PackageWriterTests : IDisposable
 
         /// <summary>What the mate phase read off the mate feature's IsSuppressed2.</summary>
         public bool MateSuppressed { get; set; }
+
+        public bool DocumentsWereDumped { get; private set; }
+
+        public bool ManifestWasBuilt { get; private set; }
+
+        public bool MatesWereDumped { get; private set; }
+
+        public bool HolesWereDumped { get; private set; }
+
+        public bool FastenersWereDumped { get; private set; }
+
+        public bool FacesWereDumped { get; private set; }
 
         public bool MeshesWereDumped { get; private set; }
 
@@ -653,6 +825,26 @@ public class PackageWriterTests : IDisposable
         public string? MeshDirectory { get; private set; }
 
         public DumpOptions? SeenOptions { get; private set; }
+
+        /// <summary>
+        /// The tree <see cref="ComponentTreeDumper"/> synthesizes for a part opened alone
+        /// (T064): one fixed, resolved root node for the document itself, with no parent and
+        /// no children. The canned feature and equation rows already describe the housing
+        /// part, so the single node and those rows name the same document.
+        /// </summary>
+        public void UsePartRootTree()
+        {
+            RootDocumentPath = HousingPath;
+            RootDocumentKind = DocumentKind.Part;
+            DesignName = "housing";
+
+            ComponentNode root = NewNode("housing", null, HousingPath, DocumentKind.Part);
+            root.IsFixed = true;
+            root.PersistRefScopePath = HousingPath;
+
+            Nodes.Clear();
+            Nodes.Add(root);
+        }
 
         /// <summary>
         /// The feature type names the hole phase will report having walked over the housing
@@ -690,8 +882,8 @@ public class PackageWriterTests : IDisposable
             var tree = new ComponentTreeResult
             {
                 RootDocumentPath = RootDocumentPath,
-                RootDocumentKind = DocumentKind.Assembly,
-                DesignName = "bracket-assy",
+                RootDocumentKind = RootDocumentKind,
+                DesignName = DesignName,
                 ActiveConfiguration = "Default",
             };
 
@@ -708,8 +900,11 @@ public class PackageWriterTests : IDisposable
             return tree;
         }
 
-        public IReadOnlyList<Document> Dump(DumpScope scope, IReadOnlyList<string> documentPaths) =>
-            documentPaths.Select(path => new Document
+        public IReadOnlyList<Document> Dump(DumpScope scope, IReadOnlyList<string> documentPaths)
+        {
+            DocumentsWereDumped = true;
+
+            return documentPaths.Select(path => new Document
             {
                 DocumentId = scope.DocumentId(path),
                 Kind = path.EndsWith(".SLDASM", StringComparison.OrdinalIgnoreCase)
@@ -722,9 +917,12 @@ public class PackageWriterTests : IDisposable
                 Material = null,
                 Mass = null,
             }).ToList();
+        }
 
         public Manifest Build(DumpScope scope, IReadOnlyList<Document> documents)
         {
+            ManifestWasBuilt = true;
+
             var manifest = new Manifest();
             foreach (Document document in documents)
             {
@@ -745,9 +943,18 @@ public class PackageWriterTests : IDisposable
 
         IReadOnlyList<Mate> IMateSource.Dump(DumpScope scope)
         {
+            MatesWereDumped = true;
+
             if (MateFailure != null)
             {
                 throw MateFailure;
+            }
+
+            // A part opened alone has no assembly mates, and the canned mate below names two
+            // child components a one-node part-root tree does not have.
+            if (scope.Components.Count < 3)
+            {
+                return new List<Mate>();
             }
 
             return new List<Mate>
@@ -826,6 +1033,8 @@ public class PackageWriterTests : IDisposable
 
         HoleDumpResult IHoleSource.Dump(DumpScope scope)
         {
+            HolesWereDumped = true;
+
             if (HoleGap != null)
             {
                 scope.Gaps.Add(GapKind.NotExtracted, "hole", null, HoleGap, null);
@@ -853,39 +1062,49 @@ public class PackageWriterTests : IDisposable
             return result;
         }
 
-        IReadOnlyList<Fastener> IFastenerSource.Dump(DumpScope scope) => new List<Fastener>
+        IReadOnlyList<Fastener> IFastenerSource.Dump(DumpScope scope)
         {
-            new Fastener
-            {
-                Id = scope.FastenerIds.Next(),
-                PersistRef = "RmFzdA==",
-                PersistRefScope = scope.DocumentId(AssemblyPath),
-                ComponentId = scope.Components[2].Id,
-                Kind = FastenerKind.Screw,
-                IdentitySource = IdentitySource.NameParse,
-                ThreadDesignation = "M6",
-                Length = new Quantity(0.02, LengthUnit.M),
-            },
-        };
+            FastenersWereDumped = true;
 
-        IReadOnlyList<FaceGeometry> IFaceSource.Dump(DumpScope scope) => new List<FaceGeometry>
-        {
-            new FaceGeometry
+            return new List<Fastener>
             {
-                Id = scope.FaceIds.Next(),
-                PersistRef = "RmFjZQ==",
-                PersistRefScope = scope.DocumentId(HousingPath),
-                ComponentId = scope.Components[1].Id,
-                BodyId = "bod:0001",
-                Kind = FaceKind.Cylinder,
-                Cylinder = new CylinderSurface
+                new Fastener
                 {
-                    AxisOrigin = new Vec3(0, 0, 0),
-                    AxisDir = new Vec3(0, 0, 1),
-                    RadiusM = 0.003,
+                    Id = scope.FastenerIds.Next(),
+                    PersistRef = "RmFzdA==",
+                    PersistRefScope = scope.DocumentId(AssemblyPath),
+                    ComponentId = scope.Components[2].Id,
+                    Kind = FastenerKind.Screw,
+                    IdentitySource = IdentitySource.NameParse,
+                    ThreadDesignation = "M6",
+                    Length = new Quantity(0.02, LengthUnit.M),
                 },
-            },
-        };
+            };
+        }
+
+        IReadOnlyList<FaceGeometry> IFaceSource.Dump(DumpScope scope)
+        {
+            FacesWereDumped = true;
+
+            return new List<FaceGeometry>
+            {
+                new FaceGeometry
+                {
+                    Id = scope.FaceIds.Next(),
+                    PersistRef = "RmFjZQ==",
+                    PersistRefScope = scope.DocumentId(HousingPath),
+                    ComponentId = scope.Components[1].Id,
+                    BodyId = "bod:0001",
+                    Kind = FaceKind.Cylinder,
+                    Cylinder = new CylinderSurface
+                    {
+                        AxisOrigin = new Vec3(0, 0, 0),
+                        AxisDir = new Vec3(0, 0, 1),
+                        RadiusM = 0.003,
+                    },
+                },
+            };
+        }
 
         IReadOnlyList<BodyRef> IMeshSource.Dump(DumpScope scope, string meshDirectory)
         {

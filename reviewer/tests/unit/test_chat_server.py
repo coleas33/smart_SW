@@ -47,10 +47,13 @@ from starlette.testclient import TestClient
 
 from swreview.agent.providers import AgentProvider, ProviderName
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.agent.runner import PROFILE_CHECK
 from swreview.agent.settings import MASK, ProviderSettings
 from swreview.chat.server import create_app
 from swreview.chat.sessions import ChatState
+from swreview.ir.loader import save_package
 from swreview.report.session import load_session
+from tests.support.packages import build_package
 
 ORIGIN = "https://swreview.invalid"
 OTHER_ORIGIN = "https://evil.example"
@@ -756,6 +759,72 @@ def test_a_package_that_does_not_parse_is_refused(client: TestClient, run_root: 
 
     assert response.status_code == 400
     assert response.json()["error_class"] == "InvalidPackage"
+
+
+def model_check_run_dir(run_root: Path, name: str = "20260913-150000-bracket-check") -> Path:
+    """A run folder holding the package the `ModelCheck` dump profile writes (IR 1.2.0)."""
+    package = build_package()
+    directory = run_root / name
+    save_package(
+        package.model_copy(
+            update={"extractor": package.extractor.model_copy(update={"profile": "model_check"})}
+        ),
+        directory,
+    )
+    return directory
+
+
+def test_a_model_check_package_is_reviewed_with_its_missing_phases_as_coverage(
+    client: TestClient, run_root: Path
+) -> None:
+    """A check package handed to a review says it is partial; it does not read as clean.
+
+    The Model check tab dumps documents, mates, features and equations and skips the
+    hole, fastener, face and body or mesh phases (FR-022), so `holes`, `fasteners`,
+    `faces` and `bodies` come back empty. A review of that package would otherwise
+    report "no holes" and "no fasteners" as facts about the design, which is the one
+    reading of a partial extract that is worse than no reading at all - so the run
+    records what was never extracted before the first turn.
+    """
+    partial = model_check_run_dir(run_root)
+
+    started = start_session(client, partial)
+    settle(client, started["chat_id"])
+
+    session = load_session(partial / "session.json")
+    items = [item for item in session.coverage.skipped if item.check == PROFILE_CHECK]
+    assert len(items) == 1, f"one partial-evidence coverage item expected, got {items}"
+    item = items[0]
+
+    assert "model_check" in item.reason
+    for phase in ("hole", "fastener", "face", "body or mesh"):
+        assert phase in item.reason, f"the coverage item does not name {phase}: {item.reason}"
+    assert item.error is None
+
+
+def test_a_full_package_records_nothing_about_the_dump_profile(
+    client: TestClient, run_dir: Path
+) -> None:
+    """The unchanged half of FR-022: a full dump is not annotated as a partial one."""
+    started = start_session(client, run_dir)
+    settle(client, started["chat_id"])
+
+    session = load_session(run_dir / "session.json")
+    coverage = session.coverage
+    written = [
+        item
+        for bucket in (
+            coverage.checked,
+            coverage.skipped,
+            coverage.unresolved,
+            coverage.failed,
+            coverage.out_of_scope,
+        )
+        for item in bucket
+        if item.check == PROFILE_CHECK
+    ]
+
+    assert written == []
 
 
 # --- the event stream ----------------------------------------------------------------

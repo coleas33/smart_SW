@@ -1,10 +1,11 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
+using SwReview.Extractor.Dump;
 using Xunit;
 
 namespace SwReview.AddIn.Tests;
@@ -84,6 +85,12 @@ public sealed class ReviewHostTests
             Assert.True(Directory.Exists(expected), $"the host did not create {expected}");
             Assert.Equal(expected, world.Dump.LastDirectory);
             Assert.Equal(1, world.Dump.Runs);
+
+            // T064. The review reasons over faces, holes, fasteners and meshes, so it asks
+            // for every phase. A review that quietly took the Model check profile would
+            // report a design with no holes in it, which reads as a bad design rather than
+            // as a partial extract (FR-022, RK-19).
+            Assert.Equal(DumpProfile.Full, world.Dump.LastProfile);
 
             NewSessionRequest posted = Assert.Single(world.Backend.Created);
             Assert.Equal(expected, posted.RunDirectory);
@@ -283,6 +290,103 @@ public sealed class ReviewHostTests
 
             Assert.Equal(Path.Combine(world.Settings.RunRoot, "20260913-142530-terminal"), created);
             Assert.True(Directory.Exists(created));
+        }
+    }
+
+    // ---- check records (T076) -----------------------------------------------------------
+
+    /// <summary>
+    /// A Model check writes a run folder, and that folder has to become the pane's latest run:
+    /// `CurrentSessionRunDirectory` and `RunPackageIndex` both read
+    /// <see cref="ReviewHost.LatestSession"/>, and `entity.show` resolves `document_id` to a
+    /// path through the package in that folder. A check that wrote somewhere else would
+    /// silently degrade Show to "no full path" for every finding and open the Ask tab in an
+    /// unrelated folder (`contracts/model-check.md` section 4, FR-028).
+    /// </summary>
+    [Fact]
+    public void TrackingACheckMakesItsFolderTheLatestRunAndTheRecordCarriesNoChatId()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string review = world.TrackedRun("chat-1");
+            string check = world.TrackedRun("bracket-check");
+            world.WritePackage(check, "doc-check", @"C:\parts\bracket.sldprt");
+            world.Host.TrackSession("chat-1", review);
+
+            SessionRecord record = world.Host.TrackCheck(check);
+
+            Assert.True(record.IsCheck);
+            Assert.Null(record.ChatId);
+            Assert.Equal(check, record.RunDirectory);
+            Assert.Same(record, world.Host.LatestSession);
+
+            // `TaskPaneOptions.CurrentSessionRunDirectory` and the `RunPackageIndex` the entity
+            // resolver looks ids up through are both wired to `LatestSession` in
+            // SwReviewAddIn, so both follow the check with no second registration to keep in
+            // step. Spelled the way SwReviewAddIn spells it, and read through the index itself:
+            // this is what makes Show resolve `document_id` against the check's own package
+            // rather than against the last review's.
+            var packages = new RunPackageIndex(() => world.Host.LatestSession?.RunDirectory);
+            Assert.Equal(check, world.Host.LatestSession!.RunDirectory);
+            Assert.Equal(@"C:\parts\bracket.sldprt", packages.DocumentPath("doc-check"));
+
+            // The chat is still tracked: `folder.open` on the review's card must keep working
+            // after a check has been pressed.
+            Assert.Equal(review, world.Host.FindSession("chat-1")!.RunDirectory);
+        }
+    }
+
+    /// <summary>
+    /// A check has no chat, so the backend must never be asked about one. Today's scan
+    /// swallows every exception, which means a fabricated id would appear to work - at the cost
+    /// of one HTTP round trip per settings save and a record that lies. The skip is explicit
+    /// instead (FR-028).
+    /// </summary>
+    [Fact]
+    public void TheAnyTurnRunningScanSkipsCheckRecordsWithoutAskingTheBackend()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Backend.TurnRunningFailure = new InvalidOperationException(
+                "the backend was asked about a chat that does not exist");
+            world.Open();
+            world.Host.TrackCheck(world.TrackedRun("bracket-check"));
+
+            Assert.False(world.Host.AnyTurnRunning());
+            Assert.Empty(world.Backend.TurnQuestions);
+        }
+    }
+
+    [Fact]
+    public void ACheckRecordDoesNotHideARunningTurnOnAChatTheHostAlsoTracks()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            world.Host.TrackSession("chat-1", world.TrackedRun("chat-1"));
+            world.Host.TrackCheck(world.TrackedRun("bracket-check"));
+            world.Backend.Running.Add("chat-1");
+
+            Assert.True(world.Host.AnyTurnRunning());
+            Assert.Equal(new[] { "chat-1" }, world.Backend.TurnQuestions.ToArray());
+        }
+    }
+
+    /// <summary>A check folder is never openable as a chat: the page has no id for it.</summary>
+    [Fact]
+    public void ACheckRecordIsNotReachableThroughAChatIdAndDoesNotAnswerFolderOpen()
+    {
+        using (var world = new ReviewWorld())
+        {
+            string check = world.TrackedRun("bracket-check");
+            world.Open();
+            world.Host.TrackCheck(check);
+
+            world.Receive("folder.open", "o1", new { chat_id = Path.GetFileName(check) });
+
+            Assert.Equal("UnknownChat", world.Reply("error", "o1").GetProperty("error_class").GetString());
+            Assert.Empty(world.Opener.Opened);
         }
     }
 
@@ -713,6 +817,24 @@ public sealed class ReviewHostTests
             return directory;
         }
 
+        /// <summary>A one-document `package.json` in <paramref name="runDirectory"/> (T076).</summary>
+        public void WritePackage(string runDirectory, string documentId, string documentPath)
+        {
+            var package = new SwReview.Extractor.Ir.EvidencePackage();
+            package.Documents.Add(new SwReview.Extractor.Ir.Document
+            {
+                DocumentId = documentId,
+                Kind = SwReview.Extractor.Ir.DocumentKind.Part,
+                FileName = Path.GetFileName(documentPath),
+                Path = documentPath,
+                ActiveConfiguration = "Default",
+            });
+
+            File.WriteAllText(
+                Path.Combine(runDirectory, "package.json"),
+                SwReview.Extractor.Ir.PackageSerializer.Serialize(package));
+        }
+
         public string[] RunFolders() =>
             Directory.Exists(Settings.RunRoot) ? Directory.GetDirectories(Settings.RunRoot) : new string[0];
 
@@ -802,10 +924,15 @@ public sealed class ReviewHostTests
 
         public Exception? Failure { get; set; }
 
-        public DumpSummary Run(string outputDirectory, Action<string> progress)
+        /// <summary>The profile the host asked for; the review path must stay on Full.</summary>
+        public DumpProfile? LastProfile { get; private set; }
+
+        public DumpSummary Run(
+            string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)
         {
             Runs++;
             LastDirectory = outputDirectory;
+            LastProfile = profile;
             foreach (string message in Progress)
             {
                 progress(message);
@@ -869,9 +996,26 @@ public sealed class ReviewHostTests
 
         public BackendRequestException? CreateFailure { get; set; }
 
+        /// <summary>Every chat id the host asked about, so a skipped record can be proven skipped.</summary>
+        public List<string> TurnQuestions { get; } = new List<string>();
+
+        public HashSet<string> Running { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>Thrown for a chat this fake was never told about (T076).</summary>
+        public Exception? TurnRunningFailure { get; set; }
+
         public IReadOnlyList<ModelChoice> ListModels(string provider) => new ModelChoice[0];
 
-        public bool IsTurnRunning(string chatId) => false;
+        public bool IsTurnRunning(string chatId)
+        {
+            TurnQuestions.Add(chatId);
+            if (TurnRunningFailure != null)
+            {
+                throw TurnRunningFailure;
+            }
+
+            return Running.Contains(chatId);
+        }
 
         public void Restart(UserSettings settings, ResolvedApiKey key)
         {

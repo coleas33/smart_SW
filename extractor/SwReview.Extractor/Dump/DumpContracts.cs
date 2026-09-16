@@ -33,6 +33,25 @@ public enum EquationScope
     Off,
 }
 
+/// <summary>
+/// What <c>--profile</c> asked for: how much of the design the dump reads. Recorded on
+/// <see cref="ExtractorInfo.Profile"/> as "full" or "model_check" (schema 1.2.0), so a
+/// reader can tell a deliberately thin package from a dump that lost half its evidence.
+/// Named here, with the other <c>dump</c> options, because it is a dump decision; the IR
+/// DTO carries the value but does not own the vocabulary.
+/// </summary>
+public enum DumpProfile
+{
+    /// <summary>Every phase: the design review dump (feature 001).</summary>
+    Full,
+
+    /// <summary>
+    /// Document, manifest, mate, feature and equation phases only. The hole, fastener,
+    /// face and body or mesh phases are skipped, so those arrays are empty by design.
+    /// </summary>
+    ModelCheck,
+}
+
 /// <summary>What <c>--faces</c> asked for.</summary>
 public enum FaceScope
 {
@@ -59,6 +78,13 @@ public sealed class DumpOptions
     public FeatureScope Features { get; set; } = FeatureScope.Tree;
 
     public EquationScope Equations { get; set; } = EquationScope.On;
+
+    /// <summary>
+    /// How much of the design to read. <see cref="DumpProfile.Full"/> by default, because a
+    /// caller that did not ask for a reduced dump is doing a design review and needs every
+    /// phase; the reduced profile is opted into, never fallen back to.
+    /// </summary>
+    public DumpProfile Profile { get; set; } = DumpProfile.Full;
 }
 
 /// <summary>
@@ -127,7 +153,15 @@ public sealed class ComponentTreeResult
 {
     public string RootDocumentPath { get; set; } = string.Empty;
 
-    public DocumentKind RootDocumentKind { get; set; } = DocumentKind.Assembly;
+    /// <summary>
+    /// The kind of the open document, or null when it could not be read (T064). No
+    /// initializer on purpose: the kind is engineering data, and a tree that answered
+    /// "assembly" for a document nobody read would hand <see cref="FeatureDumper"/> and
+    /// <see cref="EquationDumper"/> a node they skip, dropping that document's whole feature
+    /// tree and equation list in silence. A null here means no node was recorded and a gap
+    /// says why.
+    /// </summary>
+    public DocumentKind? RootDocumentKind { get; set; }
 
     /// <summary>File name without extension; the design's name in the report.</summary>
     public string DesignName { get; set; } = string.Empty;
