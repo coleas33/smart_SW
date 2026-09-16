@@ -100,7 +100,12 @@ def record_result(
     """Append the finding for `result` to the session and return it."""
     try:
         finding = result_to_finding(
-            context, result, component_ids, drawing_locations, exception_id, tool_result_ids
+            context,
+            result,
+            component_ids,
+            drawing_locations,
+            exception_id=exception_id,
+            tool_result_ids=tool_result_ids,
         )
     except ValueError as exc:
         return error_result(str(exc))

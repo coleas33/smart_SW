@@ -1,0 +1,21 @@
+{
+  "exceptions": [
+    {
+      "id": "EX-001",
+      "check": "rms.quarantine.only_fillets_and_chamfers",
+      "component_persist_refs": [
+        "Y21wOjAwMDM="
+      ],
+      "persist_ref_scopes": [
+        "doc:1"
+      ],
+      "configuration": "Default",
+      "geometry_fingerprint": "5bdb638b0676b499464a023ed8c9550774718d5b2dc9d67dc600b37e312a0cae",
+      "fingerprint_kind": "feature_tree",
+      "accepted_by": "engineer",
+      "accepted_at": "2026-09-15T09:15:00Z",
+      "note": "legacy bracket; the Quarantine draft is scheduled for removal at the next revision",
+      "status": "active"
+    }
+  ]
+}

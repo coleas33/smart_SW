@@ -44,7 +44,7 @@ perf test; workstation probes per quickstart.
 
 **Constraints**: read-only dump; the only mutation path is the console `suppress-test`
 command under its own guard; unknown types never pass or fail a class-dependent rule;
-goldens of 001 and 002 byte-identical; the feature 001 finding contract unchanged; no code
+goldens of 001 and 002 byte-identical (except the checklist block `cover-blind-tap.yml` snapshots, which gains the new item); the feature 001 finding contract unchanged; no code
 copied from the source repo's pywin32 files (semantics reused with permission,
 implementation ours).
 

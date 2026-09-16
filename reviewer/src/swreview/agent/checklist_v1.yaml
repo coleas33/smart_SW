@@ -46,6 +46,15 @@ items:
     description: >
       Review grouped interferences and exceptions; truncated or failed pairs are
       unresolved. State the positions checked for mechanisms.
+  - id: modeling.resilience
+    title: Resilient Modeling Strategy
+    check_prefix: rms.
+    description: >
+      Part feature trees follow the six-group discipline with one-directional references,
+      fully defined sketches and described features; the root assembly mates to reference
+      geometry with a fixed or fully constrained first component and shallow chains; parts
+      carry global variables. Run check_rms_part, check_rms_assembly and check_rms_equations.
+      Drawing and judgement-only rules are recorded as out of scope with the reason.
   - id: coverage.closeout
     title: Coverage close-out
     check_prefix: coverage.

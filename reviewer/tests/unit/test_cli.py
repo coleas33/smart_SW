@@ -1294,6 +1294,275 @@ def test_check_interference_with_a_corrupt_exceptions_file_exits_1(
     assert result.stdout == ""
 
 
+# --- check rms -------------------------------------------------------------------
+
+RMS_FRAME = "doc:2"
+"""The compliant part of the `check rms` package."""
+
+RMS_COVER = "doc:3"
+"""The part that fails `rms.intent.every_feature_described`."""
+
+
+@pytest.fixture
+def rms_dir(tmp_path: Path) -> Path:
+    """A written package with one compliant part, one failing part, and an assembly."""
+    from tests.support.features import AssemblySpec, PartSpec, feature, folder, rms_package
+
+    package = rms_package(
+        parts=[
+            PartSpec(
+                document_id=RMS_FRAME,
+                name="frame",
+                features=(
+                    folder("1-Ref", feature("Plane1", "RefPlane")),
+                    folder("2-Construction", feature("Surface1", "SurfaceExtrude")),
+                    folder("3-Core", feature("Boss-Extrude1", "Extrusion")),
+                    folder("4-Detail", feature("Hole1", "HoleWzd")),
+                    folder("5-Modify", feature("Draft1", "Draft")),
+                    folder("6-Quarantine", feature("Chamfer1", "Chamfer")),
+                ),
+            ),
+            PartSpec(
+                document_id=RMS_COVER,
+                name="cover",
+                features=(
+                    folder("3-Core", feature("Boss-Extrude2", "Extrusion", description="")),
+                    folder("4-Detail", feature("Hole2", "HoleWzd")),
+                ),
+            ),
+        ],
+        assembly=AssemblySpec(document_id="doc:1", name="cover-assy"),
+    )
+    directory = tmp_path / "rms-package"
+    save_package(package, directory)
+    return directory
+
+
+def test_check_rms_grades_every_part_document_by_default(rms_dir: Path) -> None:
+    body = payload(invoke("check", "rms", "--package", str(rms_dir), "--json"))
+
+    assert body["scope"] == "all"
+    assert body["documents"] == [RMS_FRAME, RMS_COVER]
+    assert "rms.intent.every_feature_described" in [
+        finding["check"] for finding in body["findings"]
+    ]
+
+
+def test_check_rms_document_limits_the_run_to_that_document(rms_dir: Path) -> None:
+    body = payload(
+        invoke("check", "rms", "--package", str(rms_dir), "--document", RMS_FRAME, "--json")
+    )
+
+    assert body["documents"] == [RMS_FRAME]
+    assert body["findings"] == []
+
+
+def test_check_rms_document_is_repeatable(rms_dir: Path) -> None:
+    body = payload(
+        invoke(
+            "check",
+            "rms",
+            "--package",
+            str(rms_dir),
+            "--document",
+            RMS_COVER,
+            "--document",
+            RMS_FRAME,
+            "--json",
+        )
+    )
+
+    assert body["documents"] == [RMS_COVER, RMS_FRAME]
+    assert {
+        document for item in body["coverage"] for document in item["scope"]["document_ids"]
+    } == {RMS_FRAME, RMS_COVER}
+
+
+def test_check_rms_reports_coverage_as_well_as_findings(rms_dir: Path) -> None:
+    body = payload(invoke("check", "rms", "--package", str(rms_dir), "--json"))
+
+    buckets = {item["bucket"] for item in body["coverage"]}
+    assert {"checked", "unresolved", "out_of_scope"} <= buckets
+    assert "modeling.resilience" in [item["check"] for item in body["coverage"]]
+
+
+def test_check_rms_human_output_names_the_findings_and_the_coverage(rms_dir: Path) -> None:
+    result = invoke("check", "rms", "--package", str(rms_dir))
+
+    assert result.exit_code == 0
+    assert "2 part document(s)" in result.stdout
+    assert "rms.intent.every_feature_described: demonstrated (medium)" in result.stdout
+    assert "coverage: " in result.stdout
+
+
+def test_check_rms_scope_part_runs_the_part_rules(rms_dir: Path) -> None:
+    body = payload(
+        invoke("check", "rms", "--package", str(rms_dir), "--scope", "part", "--json")
+    )
+
+    assert body["scope"] == "part"
+    assert body["unavailable_scopes"] == []
+    assert body["findings"]
+
+
+def test_check_rms_scope_assembly_reports_that_it_is_not_in_this_build(
+    rms_dir: Path,
+) -> None:
+    result = invoke("check", "rms", "--package", str(rms_dir), "--scope", "assembly")
+    body = payload(
+        invoke("check", "rms", "--package", str(rms_dir), "--scope", "assembly", "--json")
+    )
+
+    assert result.exit_code == 0
+    assert [item["scope"] for item in body["unavailable_scopes"]] == ["assembly"]
+    assert "not yet available in this build" in body["unavailable_scopes"][0]["reason"]
+    assert "assembly: not yet available in this build" in result.stdout
+    assert body["findings"] == []
+    assert body["documents"] == []
+
+
+def test_check_rms_scope_equations_reports_that_it_is_not_in_this_build(
+    rms_dir: Path,
+) -> None:
+    body = payload(
+        invoke("check", "rms", "--package", str(rms_dir), "--scope", "equations", "--json")
+    )
+
+    assert [item["scope"] for item in body["unavailable_scopes"]] == ["equations"]
+
+
+def test_check_rms_scope_all_runs_the_part_rules_and_names_the_two_missing_scopes(
+    rms_dir: Path,
+) -> None:
+    result = invoke("check", "rms", "--package", str(rms_dir))
+    body = payload(invoke("check", "rms", "--package", str(rms_dir), "--json"))
+
+    assert result.exit_code == 0
+    assert [item["scope"] for item in body["unavailable_scopes"]] == ["assembly", "equations"]
+    assert body["findings"]
+    assert "assembly: not yet available in this build" in result.stdout
+    assert "equations: not yet available in this build" in result.stdout
+
+
+def test_check_rms_reads_the_exceptions_file_beside_the_package(rms_dir: Path) -> None:
+    """An accepted exception waives the failing rule, exactly as it does for the tool."""
+    from datetime import UTC, datetime
+
+    from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
+    from swreview.ir.loader import load_package
+    from tests.unit.test_tools_rms_checks import AcceptedFinding
+
+    package = load_package(rms_dir).package
+    store = ExceptionStore(rms_dir / EXCEPTIONS_FILE_NAME)
+    store.accept(
+        AcceptedFinding(
+            check="rms.intent.every_feature_described",
+            component_ids=["cmp:0003"],
+            configuration=package.design.active_configuration,
+        ),
+        package,
+        by="owner",
+        note="legacy tree, accepted by the owner",
+        at=datetime(2026, 9, 15, tzinfo=UTC),
+    )
+    store.save()
+
+    body = payload(invoke("check", "rms", "--package", str(rms_dir), "--json"))
+
+    described = next(
+        finding
+        for finding in body["findings"]
+        if finding["check"] == "rms.intent.every_feature_described"
+    )
+    assert described["status"] == "checked_within_scope"
+    assert described["exception_id"] == "EX-001"
+
+
+def test_check_rms_leaves_the_exceptions_file_byte_for_byte(rms_dir: Path) -> None:
+    exceptions_file = rms_dir / "exceptions.json"
+    exceptions_file.write_text('{"exceptions": []}\n', encoding="utf-8")
+    before = exceptions_file.read_bytes()
+
+    assert invoke("check", "rms", "--package", str(rms_dir)).exit_code == 0
+    assert exceptions_file.read_bytes() == before
+
+
+def test_check_rms_with_an_unknown_document_exits_1(rms_dir: Path) -> None:
+    result = invoke("check", "rms", "--package", str(rms_dir), "--document", "doc:99")
+
+    assert result.exit_code == 1
+    assert "doc:99" in result.stderr
+    assert result.stdout == ""
+
+
+def test_check_rms_with_an_assembly_document_exits_1(rms_dir: Path) -> None:
+    result = invoke("check", "rms", "--package", str(rms_dir), "--document", "doc:1")
+
+    assert result.exit_code == 1
+    assert "doc:1" in result.stderr
+
+
+def test_check_rms_with_an_unknown_scope_is_a_usage_error(rms_dir: Path) -> None:
+    assert invoke("check", "rms", "--package", str(rms_dir), "--scope", "drawing").exit_code == 2
+
+
+def test_check_rms_on_a_missing_package_exits_1(tmp_path: Path) -> None:
+    result = invoke("check", "rms", "--package", str(tmp_path / "nowhere"))
+
+    assert result.exit_code == 1
+    assert result.stderr.startswith("error: ")
+
+
+def test_check_rms_reports_a_rule_that_cannot_grade_as_an_error_not_a_traceback(
+    tmp_path: Path,
+) -> None:
+    """Grading raises for input the rules cannot grade yet; that is exit 1, not a crash.
+
+    `run_part_checks` sits outside `_context_for`, so it needs its own guard: everything
+    the rule layer raises for input it can describe is in `HANDLED_ERRORS`, and a package
+    that reaches one of those paths must leave the same one-line `error: ...` on stderr
+    as an unreadable package does. A `suppress-test` run naming the document being graded
+    is the path this build has (`rms.detail.individually_suppressible` is T057).
+    """
+    from tests.support.features import (
+        AssemblySpec,
+        PartSpec,
+        feature,
+        folder,
+        rms_package,
+        suppress_row,
+        suppress_run,
+    )
+
+    parts = [
+        PartSpec(
+            document_id=RMS_FRAME,
+            name="frame",
+            features=(
+                folder("3-Core", feature("Boss-Extrude1", "Extrusion")),
+                folder("4-Detail", feature("Hole1", "HoleWzd")),
+            ),
+        )
+    ]
+    assembly = AssemblySpec(document_id="doc:1", name="cover-assy")
+    hole = next(
+        row for row in rms_package(parts=parts, assembly=assembly).features if row.name == "Hole1"
+    )
+    package = rms_package(
+        parts=parts,
+        assembly=assembly,
+        suppress_test=suppress_run(document_id=RMS_FRAME, rows=[suppress_row(hole, "ok")]),
+    )
+    directory = tmp_path / "rms-suppress-test"
+    save_package(package, directory)
+
+    result = invoke("check", "rms", "--package", str(directory))
+
+    assert result.exit_code == 1
+    assert result.stderr.startswith("error: ")
+    assert "Traceback" not in result.stderr
+
+
 # --- exceptions accept | list ----------------------------------------------------
 
 

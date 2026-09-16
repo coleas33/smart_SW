@@ -102,7 +102,14 @@ public static class FeatureTreeIndexer
         {
             if (node == null)
             {
-                continue;
+                // Skipping it would shift every later index and, in Python, re-group every
+                // feature after it: a walk with a hole in it is a walk that lost a feature,
+                // and the caller turns this into a gap rather than a quietly shorter tree.
+                throw new ArgumentException(
+                    $"The feature walk holds nothing at position {rows.Count}"
+                    + (folderId == null ? string.Empty : $" under {folderId}")
+                    + "; a feature tree cannot be indexed with a feature missing from it.",
+                    nameof(features));
             }
 
             string id = ids.Next();

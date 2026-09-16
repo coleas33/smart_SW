@@ -198,6 +198,11 @@ def _feature_row(feature: Feature) -> list[object]:
     `sketch.consumer_ids` contributes its length, which is what the rules ask of it, and
     `None` when the extractor could not read the children at all - an unknown count and a
     count of zero are different facts.
+
+    `sketch` and `fillet` each contribute a presence flag ahead of their fields, for the
+    same reason: a feature that has no sketch and a sketch whose status and consumers were
+    both unreadable would otherwise hash to the same nulls, and they are not the same fact
+    - the second is evidence a rule went unresolved on and must re-check.
     """
     sketch = feature.sketch
     fillet = feature.fillet
@@ -210,8 +215,10 @@ def _feature_row(feature: Feature) -> list[object]:
         feature.folder_id,
         feature.suppressed,
         None if feature.description is None else feature.description != "",
+        sketch is not None,
         None if sketch is None else sketch.raw_status,
         None if sketch is None or sketch.consumer_ids is None else len(sketch.consumer_ids),
+        fillet is not None,
         None if radius is None else [_number(radius.value), radius.unit],
         feature.child_ids,
     ]

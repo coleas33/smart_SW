@@ -180,6 +180,21 @@ public sealed class CommandLine
         }
     }
 
+    /// <summary><c>--features tree|none</c>, defaulting to tree (contracts/cli.md).</summary>
+    public FeatureScope FeatureScope()
+    {
+        string value = Value("features") ?? "tree";
+        switch (value.ToLowerInvariant())
+        {
+            case "tree":
+                return Dump.FeatureScope.Tree;
+            case "none":
+                return Dump.FeatureScope.None;
+            default:
+                throw new UsageError($"--features must be tree or none; got '{value}'.");
+        }
+    }
+
     /// <summary>
     /// <c>--fasteners include|exclude|only</c>, defaulting to include (contracts/cli.md).
     /// </summary>

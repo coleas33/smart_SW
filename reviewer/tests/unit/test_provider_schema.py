@@ -145,7 +145,7 @@ CONTRACT_CURATED_TOOLS = {
 
 def test_the_contract_tables_parse() -> None:
     """Guard the parser itself: a silently empty golden would assert nothing below."""
-    assert len(CONTRACT_CURATED_TOOLS) == 26
+    assert len(CONTRACT_CURATED_TOOLS) == 29
     assert CONTRACT_CURATED_TOOLS["list_components"] == ("parent_id", "include_suppressed")
     assert CONTRACT_CURATED_TOOLS["get_package_summary"] == ()
     assert CONTRACT_BRIDGE_TOOLS["bridge_interference"] == (

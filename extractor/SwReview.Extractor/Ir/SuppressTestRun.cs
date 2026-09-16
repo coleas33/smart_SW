@@ -24,8 +24,15 @@ public sealed class SuppressTestRow
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Defaults to <see cref="SuppressTestOutcome.Aborted"/>, which the rule reads as
+    /// unresolved. A row that was never filled in is a feature nobody tested, and the two
+    /// honest-looking alternatives are both wrong: <c>truncated</c> means "planned and
+    /// deliberately not attempted", which the rule treats as a skip, and <c>ok</c> would turn
+    /// a run that died into a clean review (data-model section 2, Principle I).
+    /// </summary>
     [JsonPropertyName("outcome")]
-    public SuppressTestOutcome Outcome { get; set; } = SuppressTestOutcome.Truncated;
+    public SuppressTestOutcome Outcome { get; set; } = SuppressTestOutcome.Aborted;
 
     /// <summary>GetWhatsWrongCount after the rebuild; null when it was never reached.</summary>
     [JsonPropertyName("whats_wrong_count")]

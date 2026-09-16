@@ -72,7 +72,7 @@ command = "<mcp-command>"
 args = [<mcp-args-prefix>, "--run-dir", "<run_dir>", "--bridge-pipe", "<pipe>", "--bridge-secret-env", "SWREVIEW_BRIDGE_SECRET"]
 startup_timeout_sec = 30
 tool_timeout_sec = 120
-enabled_tools = ["get_package_summary", "list_components", "get_component", "find_components", "list_mates", "list_holes", "list_fasteners", "list_interferences", "get_drawing_sheet", "find_dimensions", "list_gaps", "get_exceptions", "measure_axis_distance", "measure_face_gap", "check_tool_envelope", "bounding_box", "request_capture", "bridge_capture", "bridge_measure"]
+enabled_tools = ["get_package_summary", "list_components", "get_component", "find_components", "list_mates", "list_holes", "list_fasteners", "list_interferences", "get_drawing_sheet", "find_dimensions", "list_gaps", "get_exceptions", "list_features", "get_feature", "measure_axis_distance", "measure_face_gap", "check_tool_envelope", "bounding_box", "request_capture", "bridge_capture", "bridge_measure"]
 
 [mcp_servers.swreview.env]
 SWREVIEW_BRIDGE_SECRET = "<secret>"
@@ -133,7 +133,7 @@ deny-all-plus-`mcpName`-allow policy shape and `--approval-mode plan` come from 
       "env": { "SWREVIEW_BRIDGE_SECRET": "<secret>" },
       "timeout": 120000,
       "trust": false,
-      "includeTools": ["get_package_summary", "list_components", "get_component", "find_components", "list_mates", "list_holes", "list_fasteners", "list_interferences", "get_drawing_sheet", "find_dimensions", "list_gaps", "get_exceptions", "measure_axis_distance", "measure_face_gap", "check_tool_envelope", "bounding_box", "request_capture", "bridge_capture", "bridge_measure"]
+      "includeTools": ["get_package_summary", "list_components", "get_component", "find_components", "list_mates", "list_holes", "list_fasteners", "list_interferences", "get_drawing_sheet", "find_dimensions", "list_gaps", "get_exceptions", "list_features", "get_feature", "measure_axis_distance", "measure_face_gap", "check_tool_envelope", "bounding_box", "request_capture", "bridge_capture", "bridge_measure"]
     }
   },
   "mcp": { "allowed": ["swreview"] },
