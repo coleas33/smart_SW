@@ -126,11 +126,78 @@ public sealed class RunPackageIndexTests : IDisposable
         Assert.Equal(@"C:\parts\bracket.sldprt", index.DocumentPath("doc-2"));
     }
 
-    private string WriteRun(string name, string componentFullPath = "bracket-1")
+    /// <summary>
+    /// T134g: a remodel run folder holds no `package.json`, and it is a folder Show is asked
+    /// about.
+    ///
+    /// The add-in's before-dump is written by the extractor under its own name and then renamed
+    /// to `package-before.json` (`contracts/run-artifacts.md` rows 27-28), so the folder a
+    /// `remodel.plan` creates never holds the name this index was written to read. That folder
+    /// is also what the remodel host registers as the pane's latest run through
+    /// `ReviewHost.TrackCheck`, and the latest run is the folder
+    /// <see cref="SwEntityResolver"/> resolves every `document_id` through - so without this
+    /// fallback, pressing Remodel would silently degrade Show to "no full path" on the Review
+    /// and Model check tabs for as long as the remodel stayed the latest run.
+    /// </summary>
+    [Fact]
+    public void ARemodelRunResolvesIdsThroughItsBeforeDump()
+    {
+        string run = WriteRun("run-remodel", packageName: "package-before.json");
+
+        var index = new RunPackageIndex(() => run);
+
+        Assert.Equal(@"C:\parts\bracket.sldprt", index.DocumentPath("doc-2"));
+        Assert.Equal("bracket-1", index.ComponentFullPath("cmp-1"));
+    }
+
+    /// <summary>
+    /// A review's own package is the reading of the folder, and a run folder that somehow holds
+    /// both names is read through it rather than through the remodel fallback: the order is
+    /// fixed rather than "whichever is newer", because Show must resolve the same way on every
+    /// press.
+    /// </summary>
+    [Fact]
+    public void AFolderHoldingBothPackagesIsReadThroughTheReviewsOwnPackage()
+    {
+        string run = WriteRun("run-both");
+        WriteInto(run, "package-before.json", "housing-4");
+
+        var index = new RunPackageIndex(() => run);
+
+        Assert.Equal("bracket-1", index.ComponentFullPath("cmp-1"));
+    }
+
+    /// <summary>
+    /// A `package.json` that cannot be parsed - a dump killed halfway, a build that cannot read
+    /// that schema - is not the end of the search. The next name is tried, because the folder
+    /// may still hold a package that answers, and an id answered is better than an id not
+    /// answered (constitution Principle I: unknown stays unknown only when it really is).
+    /// </summary>
+    [Fact]
+    public void AnUnreadablePackageFallsThroughToTheNextName()
+    {
+        string run = WriteRun("run-broken", packageName: "package-before.json");
+        File.WriteAllText(Path.Combine(run, "package.json"), "{ \"schema_version\": ");
+
+        var index = new RunPackageIndex(() => run);
+
+        Assert.Equal("bracket-1", index.ComponentFullPath("cmp-1"));
+    }
+
+    private string WriteRun(
+        string name,
+        string componentFullPath = "bracket-1",
+        string packageName = "package.json")
     {
         string run = Path.Combine(_root, name);
         Directory.CreateDirectory(run);
+        WriteInto(run, packageName, componentFullPath);
+        return run;
+    }
 
+    /// <summary>One package, under one of the names a run folder can hold it under.</summary>
+    private static void WriteInto(string run, string packageName, string componentFullPath)
+    {
         var package = new EvidencePackage();
         package.Documents.Add(new Document
         {
@@ -159,8 +226,7 @@ public sealed class RunPackageIndexTests : IDisposable
             ReferencedConfiguration = "Default",
         });
 
-        File.WriteAllText(Path.Combine(run, "package.json"), PackageSerializer.Serialize(package));
-        return run;
+        File.WriteAllText(Path.Combine(run, packageName), PackageSerializer.Serialize(package));
     }
 
     public void Dispose()

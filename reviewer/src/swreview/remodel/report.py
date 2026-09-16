@@ -47,6 +47,7 @@ from swreview.remodel.plan import RemodelPlan, SourceAttestation
 from swreview.report.dispositions import REPORT_FILE_NAME
 
 __all__ = [
+    "ENGINEER_STOP",
     "GEOMETRY_NOT_READ",
     "LOG_FILE_NAME",
     "REPORT_FILE_NAME",
@@ -114,6 +115,26 @@ REORGANIZED = "this run reorganized the copy"
 TRUNCATED = (
     "the run was truncated by one of its limits before every planned change was applied"
 )
+
+STOPPED = "the engineer stopped this run before every planned change was applied"
+"""The other way a run finalizes `truncated`, and it is not a limit.
+
+`truncated` is one state reached two ways - the three bounds of `Limits`, and a person
+pressing Stop - so the state alone cannot say why the run ended short and the headline is
+where the difference has to be visible. Printing the limit sentence over a stop would
+assert a cause the evidence does not support (Principle I), and `data-model.md` section 11
+requires a truncated run to carry a distinct headline rather than a generic one."""
+
+SAVE = "save"
+"""`apply_log.RecordKind`'s one kind the plan never proposes (the copy is saved once, at
+the end). Named because the "planned changes applied" arithmetic has to leave it out."""
+
+ENGINEER_STOP = "stopped"
+"""`apply.StopReason`'s engineer stop, as `render_report` is handed it.
+
+Named here because this module selects the headline on it and imports nothing from
+`apply.py` - `apply.py` imports this module. A test asserts the two spellings are one
+token, so a rename cannot quietly take the headline back to the limit sentence."""
 
 WRITES_WENT_TO_THE_COPY = (
     "Every write of this run went to `{copy}`. That is read from evidence rather than "
@@ -205,6 +226,7 @@ def render_report(
     geometry: GeometryArtifact | None,
     attestation: SourceAttestation,
     log_targets: Sequence[str],
+    stop_reason: str | None = None,
 ) -> str:
     """The whole report, in the nine-section order of `contracts/run-artifacts.md`.
 
@@ -223,6 +245,11 @@ def render_report(
             say that the file changed.
         log_targets: The target path of every mutating bridge request, from
             `read_log_targets`.
+        stop_reason: `ApplyResult.stop.reason` (`apply.StopReason`), or `None` where the
+            apply phase ran to the end of the plan. It is handed in rather than read off
+            the plan because `plan.state` records *that* a run ended short and not *why*:
+            the engineer's stop and the three bounds all finalize `truncated`, and the
+            headline is the one place the difference is visible.
     """
     terminal, pending = _by_change(changes)
     bodies = (
@@ -235,7 +262,7 @@ def render_report(
         _attestation(attestation),
         _credit(),
     )
-    headline = _headline(plan, terminal, geometry, attestation)
+    headline = _headline(plan, terminal, geometry, attestation, stop_reason)
     sections = [f"# {headline}"]
     sections.extend(
         f"## {title}\n\n{body}" for title, body in zip(SECTIONS[1:], bodies, strict=True)
@@ -252,6 +279,7 @@ def write_report(
     geometry: GeometryArtifact | None,
     attestation: SourceAttestation,
     log_targets: Sequence[str],
+    stop_reason: str | None = None,
 ) -> Path:
     """Render the report into `run_dir/report.md` and return the file."""
     target = Path(run_dir) / REPORT_FILE_NAME
@@ -263,6 +291,7 @@ def write_report(
             geometry=geometry,
             attestation=attestation,
             log_targets=log_targets,
+            stop_reason=stop_reason,
         ),
         encoding="utf-8",
     )
@@ -277,6 +306,7 @@ def _headline(
     terminal: Sequence[ChangeRecord],
     geometry: GeometryArtifact | None,
     attestation: SourceAttestation,
+    stop_reason: str | None,
 ) -> str:
     """One sentence, and never the word success.
 
@@ -287,7 +317,7 @@ def _headline(
     if attestation.matches is False:
         return ATTESTATION_CHANGED.format(path=attestation.path)
 
-    applied = [row for row in terminal if row.status == "applied"]
+    applied = _landed(terminal)
     moved = len([row for row in applied if row.kind == "reorder"])
     planned = len(plan.changes) or len(terminal)
     if geometry is None or geometry.gate.verdict != "pass":
@@ -304,7 +334,7 @@ def _headline(
         f"{len(applied)} of {planned} planned changes were applied",
     ]
     if plan.state == "truncated":
-        clauses.append(TRUNCATED)
+        clauses.append(STOPPED if stop_reason == ENGINEER_STOP else TRUNCATED)
     clauses.append(
         "and the geometry gate could not be read"
         if geometry is None
@@ -330,6 +360,18 @@ def _by_change(
     return terminal, [] if pending is None else [pending]
 
 
+def _landed(rows: Sequence[ChangeRecord]) -> list[ChangeRecord]:
+    """The records of planned changes that were applied, which is never the `save`.
+
+    The copy is saved once, at the end, and the run records that write as a change record
+    like any other - with the next free `seq` in the log, which is not a plan index. So a
+    reader counting "planned changes applied" that took the save for one would report a
+    stopped run as having applied one more change than it did, and would name the planned
+    change of that number as applied when it is exactly the change the stop prevented.
+    """
+    return [row for row in rows if row.status == "applied" and row.kind != SAVE]
+
+
 def _change_list(
     plan: RemodelPlan,
     terminal: Sequence[ChangeRecord],
@@ -338,7 +380,7 @@ def _change_list(
     log_targets: Sequence[str],
 ) -> str:
     """Every attempted change with its outcome, then where every write went."""
-    applied = [row for row in terminal if row.status == "applied"]
+    applied = _landed(terminal)
     counted = ", ".join(
         f"{len([row for row in terminal if row.status == status])} {status}"
         for status in _TERMINAL

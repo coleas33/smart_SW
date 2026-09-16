@@ -95,6 +95,39 @@ public sealed class PackageReuseTests : IDisposable
     }
 
     [Fact]
+    public void TheCopiedPackage_SaysNoDumpPhaseRanInThisRun()
+    {
+        // Nothing was dumped here, so the timing rows say so. Carrying the original dump's
+        // wall clock forward would have this package claim milliseconds nobody spent in it
+        // (Principle I), and `extractor.phases` is the one member lever 9's own A/B harness
+        // reads (T085a/T093).
+        EvidencePackage timed = ReuseFixture.Dumped(Options());
+        timed.Extractor.Phases.Add(
+            new DumpPhase { Name = "document", ElapsedMs = 41, Status = DumpPhaseStatus.Ok });
+        timed.Extractor.Phases.Add(
+            new DumpPhase { Name = "body", ElapsedMs = 900, Status = DumpPhaseStatus.Ok });
+        WriteSource("20260912-120000-cover-assy", timed);
+
+        Reuse();
+
+        EvidencePackage written = PackageSerializer.Deserialize(
+            File.ReadAllText(Path.Combine(_out, PackageWriter.PackageFileName)));
+
+        Assert.Equal(
+            new[]
+            {
+                "document", "manifest", "mate", "feature", "equation", "hole", "fastener",
+                "face", "body",
+            },
+            written.Extractor.Phases.Select(phase => phase.Name));
+        Assert.All(written.Extractor.Phases, phase =>
+        {
+            Assert.Null(phase.ElapsedMs);
+            Assert.Equal(DumpPhaseStatus.Skipped, phase.Status);
+        });
+    }
+
+    [Fact]
     public void TheStatusLine_NamesTheFolderAndItsAge()
     {
         // "Reusing the extraction from <folder> (<age>)" instead of "Extracting evidence
@@ -303,10 +336,18 @@ public sealed class PackageReuseTests : IDisposable
         return directory;
     }
 
-    /// <summary>The package text without the two members a reuse is allowed to change.</summary>
-    private static string Strip(string json) =>
-        string.Join(
-            "\n",
-            json.Split('\n').Where(line =>
-                !line.Contains("\"reused_from\"") && !line.Contains("\"reused_at\"")));
+    /// <summary>
+    /// The package text without the members a reuse is allowed to change: the provenance it
+    /// stamps on, and <c>extractor.phases</c>, which a reused package rewrites to "no phase
+    /// ran here" rather than repeating timings from a dump that happened in another run.
+    /// Everything else still has to survive the copy byte for byte.
+    /// </summary>
+    private static string Strip(string json)
+    {
+        EvidencePackage package = PackageSerializer.Deserialize(json);
+        package.ReusedFrom = null;
+        package.ReusedAt = null;
+        package.Extractor.Phases.Clear();
+        return PackageSerializer.Serialize(package);
+    }
 }

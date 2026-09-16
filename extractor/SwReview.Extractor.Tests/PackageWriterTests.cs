@@ -559,6 +559,162 @@ public class PackageWriterTests : IDisposable
         IrContract.AssertValid(PackageSerializer.Serialize(NewWriter().Build(ModelCheckOptions())));
     }
 
+    // ---- dump phase timing (feature 005, T033) -----------------------------------
+
+    /// <summary>
+    /// One row per phase, in the order the dump runs them, every row timed. Before this
+    /// there was no <c>Stopwatch</c> and no elapsed field anywhere in the dump, so "which
+    /// phase actually costs the time" was guessed rather than answered - and levers 9
+    /// (package reuse) and 10 (lazy meshes) had no metric at all.
+    /// </summary>
+    [Fact]
+    public void Build_TimesEveryPhaseItRan_InTheOrderItRanThem()
+    {
+        EvidencePackage package = NewWriter().Build(Options());
+
+        Assert.Equal(
+            new[]
+            {
+                "document:ok", "manifest:ok", "mate:ok", "feature:ok", "equation:ok",
+                "hole:ok", "fastener:ok", "face:ok", "body:ok",
+            },
+            Rows(package));
+        Assert.All(package.Extractor.Phases, phase =>
+        {
+            Assert.NotNull(phase.ElapsedMs);
+            Assert.True(phase.ElapsedMs >= 0, $"{phase.Name} reported {phase.ElapsedMs} ms");
+        });
+    }
+
+    /// <summary>
+    /// The four phases the Model check profile does not run are recorded as skipped with
+    /// <b>no</b> elapsed time. Zero would read as a phase that ran and cost nothing, which
+    /// is the one thing it did not do (Principle I), and it is exactly the number a reader
+    /// comparing mesh cost across the two arms would average in.
+    /// </summary>
+    [Fact]
+    public void Build_ModelCheckProfile_RecordsTheFourSkippedPhasesWithNoElapsedTime()
+    {
+        EvidencePackage package = NewWriter().Build(ModelCheckOptions());
+
+        Assert.Equal(
+            new[]
+            {
+                "document:ok", "manifest:ok", "mate:ok", "feature:ok", "equation:ok",
+                "hole:skipped", "fastener:skipped", "face:skipped", "body:skipped",
+            },
+            Rows(package));
+        Assert.All(
+            package.Extractor.Phases.Where(phase => phase.Status == DumpPhaseStatus.Skipped),
+            phase => Assert.Null(phase.ElapsedMs));
+    }
+
+    [Fact]
+    public void Build_FeaturesNoneAndEquationsOff_RecordThoseTwoPhasesAsSkipped()
+    {
+        DumpOptions options = Options();
+        options.Features = FeatureScope.None;
+        options.Equations = EquationScope.Off;
+
+        EvidencePackage package = NewWriter().Build(options);
+
+        Assert.Equal(
+            new[]
+            {
+                "document:ok", "manifest:ok", "mate:ok", "feature:skipped", "equation:skipped",
+                "hole:ok", "fastener:ok", "face:ok", "body:ok",
+            },
+            Rows(package));
+    }
+
+    [Fact]
+    public void Build_MeshesNone_RecordsTheMeshPhaseAsSkipped()
+    {
+        DumpOptions options = Options();
+        options.Meshes = MeshFormat.None;
+
+        EvidencePackage package = NewWriter().Build(options);
+
+        Assert.Equal(
+            DumpPhaseStatus.Skipped,
+            Assert.Single(package.Extractor.Phases, phase => phase.Name == "body").Status);
+    }
+
+    /// <summary>
+    /// A phase that threw still spent the time it spent, and the dump went on. Recording it
+    /// as skipped would lose both facts at once.
+    /// </summary>
+    [Fact]
+    public void Build_PhaseThatThrew_IsRecordedAsFailedAndStillCarriesItsElapsedTime()
+    {
+        var sources = new FakeSources();
+        sources.MateFailure = new InvalidOperationException("GetMates blew up");
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        DumpPhase mate = Assert.Single(package.Extractor.Phases, phase => phase.Name == "mate");
+        Assert.Equal(DumpPhaseStatus.Failed, mate.Status);
+        Assert.NotNull(mate.ElapsedMs);
+        Assert.Equal(
+            new[]
+            {
+                "document:ok", "manifest:ok", "mate:failed", "feature:ok", "equation:ok",
+                "hole:ok", "fastener:ok", "face:ok", "body:ok",
+            },
+            Rows(package));
+    }
+
+    /// <summary>
+    /// The open circuit is its own status: the phase that met it is <c>aborted</c> and every
+    /// phase behind it is <c>skipped</c>. "The session died here" and "these never ran" are
+    /// different facts, and a reader diagnosing a short dump needs both.
+    /// </summary>
+    [Fact]
+    public void Build_OpenCircuit_RecordsTheAbortedPhaseAndEveryPhaseItStopped()
+    {
+        var sources = new FakeSources();
+        sources.MateFailure = new CircuitOpenError("the circuit is open");
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.Equal(
+            new[]
+            {
+                "document:ok", "manifest:ok", "mate:aborted", "feature:skipped",
+                "equation:skipped", "hole:skipped", "fastener:skipped", "face:skipped",
+                "body:skipped",
+            },
+            Rows(package));
+        Assert.All(
+            package.Extractor.Phases.Where(phase => phase.Status == DumpPhaseStatus.Skipped),
+            phase => Assert.Null(phase.ElapsedMs));
+    }
+
+    /// <summary>
+    /// The reuse probe runs two phases and stops (feature 005 lever 9). Its rows say so, so
+    /// a probe package is never mistaken for a dump whose remaining phases cost nothing.
+    /// </summary>
+    [Fact]
+    public void BuildReuseProbe_RecordsTheTwoPhasesItRanAndSkipsTheRest()
+    {
+        EvidencePackage package = NewWriter().BuildReuseProbe(Options());
+
+        Assert.Equal(
+            new[]
+            {
+                "document:ok", "manifest:ok", "mate:skipped", "feature:skipped",
+                "equation:skipped", "hole:skipped", "fastener:skipped", "face:skipped",
+                "body:skipped",
+            },
+            Rows(package));
+    }
+
+    /// <summary><c>&lt;name&gt;:&lt;status&gt;</c> per row, in order: one assertion says both
+    /// which phases were recorded and what happened to each.</summary>
+    private static string[] Rows(EvidencePackage package) => package.Extractor.Phases
+        .Select(phase => phase.Name + ":" + PackageSerializer.EnumToJsonName(phase.Status))
+        .ToArray();
+
     // ---- the part-root node ------------------------------------------------------
 
     [Fact]

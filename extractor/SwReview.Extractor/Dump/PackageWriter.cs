@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -47,6 +48,25 @@ public sealed class PackageWriter
 
     /// <summary>Subdirectory of the output directory that holds per-body meshes.</summary>
     public const string MeshDirectoryName = "meshes";
+
+    /// <summary>
+    /// The phases of a dump, in the order <see cref="Build"/> runs them, and the order the
+    /// timing rows come out in (feature 005 T033). One list: a phase that runs and is not
+    /// named here would be timed and then dropped.
+    /// </summary>
+    private static readonly string[] PhaseOrder =
+    {
+        "document", "manifest", "mate", "feature", "equation", "hole", "fastener", "face", "body",
+    };
+
+    /// <summary>
+    /// The phase rows for a package no dump phase ran in: every name in
+    /// <see cref="PhaseOrder"/>, <c>skipped</c>, with no elapsed time. The reuse path
+    /// (Dump/PackageReuse.cs) copies an earlier package rather than dumping, so it stamps
+    /// these over the rows it copied - repeating the original dump's wall clock would have
+    /// the new package claim milliseconds nobody spent in it (Principle I).
+    /// </summary>
+    internal static IEnumerable<DumpPhase> NoPhaseRan() => new PhaseLog().Rows();
 
     private readonly IComponentTreeSource _components;
     private readonly IDocumentSource _documents;
@@ -129,6 +149,7 @@ public sealed class PackageWriter
     private EvidencePackage Build(DumpOptions options, bool keyOnly)
     {
         var gaps = new GapCollector();
+        var phases = new PhaseLog();
 
         ComponentTreeResult tree = _components.Traverse(gaps, options);
 
@@ -156,7 +177,7 @@ public sealed class PackageWriter
         bool aborted = false;
         IReadOnlyList<Document> documents = Array.Empty<Document>();
 
-        aborted |= !RunPhase(gaps, "document", "read document properties, material and mass", () =>
+        aborted |= !RunPhase(gaps, phases, "document", "read document properties, material and mass", () =>
         {
             documents = _documents.Dump(scope, DocumentPaths(tree));
             package.Documents.AddRange(documents);
@@ -164,18 +185,18 @@ public sealed class PackageWriter
 
         if (!aborted)
         {
-            aborted |= !RunPhase(gaps, "manifest", "build the document manifest", () =>
+            aborted |= !RunPhase(gaps, phases, "manifest", "build the document manifest", () =>
                 package.Manifest = _manifest.Build(scope, documents));
         }
 
         if (keyOnly)
         {
-            return Finish(package, scope, gaps, options);
+            return Finish(package, scope, gaps, phases, options);
         }
 
         if (!aborted)
         {
-            aborted |= !RunPhase(gaps, "mate", "read the assembly mates", () =>
+            aborted |= !RunPhase(gaps, phases, "mate", "read the assembly mates", () =>
                 package.Mates.AddRange(_mates.Dump(scope)));
         }
 
@@ -193,7 +214,7 @@ public sealed class PackageWriter
         }
         else if (!aborted)
         {
-            aborted |= !RunPhase(gaps, "feature", "read the part feature trees", () =>
+            aborted |= !RunPhase(gaps, phases, "feature", "read the part feature trees", () =>
                 package.Features.AddRange(_features.Dump(scope)));
         }
 
@@ -212,7 +233,7 @@ public sealed class PackageWriter
         }
         else if (!aborted)
         {
-            aborted |= !RunPhase(gaps, "equation", "read the part equations", () =>
+            aborted |= !RunPhase(gaps, phases, "equation", "read the part equations", () =>
                 package.Equations.AddRange(_equations.Dump(scope)));
         }
 
@@ -226,7 +247,7 @@ public sealed class PackageWriter
 
         if (!aborted && geometry)
         {
-            aborted |= !RunPhase(gaps, "hole", "read Hole Wizard features and cosmetic threads", () =>
+            aborted |= !RunPhase(gaps, phases, "hole", "read Hole Wizard features and cosmetic threads", () =>
             {
                 HoleDumpResult result = _holes.Dump(scope);
                 package.Holes.AddRange(result.Holes);
@@ -236,39 +257,48 @@ public sealed class PackageWriter
 
         if (!aborted && geometry)
         {
-            aborted |= !RunPhase(gaps, "fastener", "identify fasteners", () =>
+            aborted |= !RunPhase(gaps, phases, "fastener", "identify fasteners", () =>
                 package.Fasteners.AddRange(_fasteners.Dump(scope)));
         }
 
         if (!aborted && geometry)
         {
-            aborted |= !RunPhase(gaps, "face", "read face geometry", () =>
+            aborted |= !RunPhase(gaps, phases, "face", "read face geometry", () =>
                 package.Faces.AddRange(_faces.Dump(scope)));
         }
 
         if (!aborted && geometry && options.Meshes != MeshFormat.None)
         {
             string meshDirectory = Path.Combine(options.OutputDirectory, MeshDirectoryName);
-            aborted |= !RunPhase(gaps, "body", "tessellate bodies and write meshes", () =>
+            aborted |= !RunPhase(gaps, phases, "body", "tessellate bodies and write meshes", () =>
                 package.Bodies.AddRange(_meshes.Dump(scope, meshDirectory)));
         }
 
-        return Finish(package, scope, gaps, options);
+        return Finish(package, scope, gaps, phases, options);
     }
 
     /// <summary>
     /// The tail every build shares: the component instances, the feature types the sweep did
-    /// not read, the drawing gap, the reuse key and the gaps themselves.
+    /// not read, the drawing gap, the phase timings, the reuse key and the gaps themselves.
     ///
     /// Shared with the reuse probe rather than repeated for it, so the probe's key is taken
     /// over the same package the dump would have hashed - a second copy of these five steps is
     /// a second chance for the two to disagree about what a package is.
     /// </summary>
     private static EvidencePackage Finish(
-        EvidencePackage package, DumpScope scope, GapCollector gaps, DumpOptions options)
+        EvidencePackage package,
+        DumpScope scope,
+        GapCollector gaps,
+        PhaseLog phases,
+        DumpOptions options)
     {
         AddComponentInstances(package, scope);
         AddSkippedFeatureTypes(scope);
+
+        // Every phase, in run order, whether it ran or not: a phase that never started is
+        // the fact a reader needs most when a package comes back thin, and without the row
+        // it could only be inferred by guessing from which arrays came back empty.
+        package.Extractor.Phases.AddRange(phases.Rows());
 
         // Native drawing extraction is not part of this build; drawing sheets come from the
         // Python PDF ingest (US1). Recording it keeps the absence visible.
@@ -462,11 +492,18 @@ public sealed class PackageWriter
     };
 
     /// <summary>
-    /// Runs one phase. Returns false when the session is gone and the remaining phases
-    /// must be skipped; any other failure is recorded and the dump continues.
+    /// Runs one phase, timed. Returns false when the session is gone and the remaining
+    /// phases must be skipped; any other failure is recorded and the dump continues.
+    ///
+    /// The clock is read in a <c>finally</c>, so a phase that threw still reports the time
+    /// it spent before it did: the dump spent that time either way, and a failed phase with
+    /// no elapsed time would read exactly like one that never ran.
     /// </summary>
-    private static bool RunPhase(GapCollector gaps, string entityKind, string description, Action phase)
+    private static bool RunPhase(
+        GapCollector gaps, PhaseLog phases, string entityKind, string description, Action phase)
     {
+        Stopwatch clock = Stopwatch.StartNew();
+        DumpPhaseStatus status = DumpPhaseStatus.Ok;
         try
         {
             phase();
@@ -474,6 +511,7 @@ public sealed class PackageWriter
         }
         catch (CircuitOpenError ex)
         {
+            status = DumpPhaseStatus.Aborted;
             gaps.Add(
                 GapKind.ToolError,
                 entityKind,
@@ -484,8 +522,51 @@ public sealed class PackageWriter
         }
         catch (Exception ex)
         {
+            status = DumpPhaseStatus.Failed;
             gaps.Record(entityKind, null, $"Failed to {description}.", ex);
             return true;
         }
+        finally
+        {
+            clock.Stop();
+            phases.Record(entityKind, clock.ElapsedMilliseconds, status);
+        }
+    }
+
+    /// <summary>
+    /// What each phase cost and what became of it (feature 005 T033).
+    ///
+    /// Rows come out in <see cref="PhaseOrder"/> rather than in the order they were
+    /// recorded, and every phase in that list gets one: a phase the dump never reached -
+    /// switched off by the profile or the options, or behind one that aborted - is
+    /// <c>skipped</c> with no elapsed time rather than absent, because "it ran and the row
+    /// was lost" and "it never ran" are not the same package.
+    ///
+    /// It lives for one <see cref="Build"/> call and is passed down rather than held on the
+    /// writer, so two dumps through one writer cannot pour their timings into each other.
+    /// </summary>
+    private sealed class PhaseLog
+    {
+        private readonly Dictionary<string, DumpPhase> _rows =
+            new Dictionary<string, DumpPhase>(StringComparer.Ordinal);
+
+        public void Record(string name, long elapsedMilliseconds, DumpPhaseStatus status)
+        {
+            _rows[name] = new DumpPhase
+            {
+                Name = name,
+
+                // Clamped rather than cast unchecked: int.MaxValue milliseconds is 24 days,
+                // so this is only reachable by a clock that went wrong, and a wrapped
+                // negative would be refused by every reader of the contract.
+                ElapsedMs = (int)Math.Min(Math.Max(elapsedMilliseconds, 0L), int.MaxValue),
+                Status = status,
+            };
+        }
+
+        public IEnumerable<DumpPhase> Rows() => PhaseOrder.Select(
+            name => _rows.TryGetValue(name, out DumpPhase row)
+                ? row
+                : new DumpPhase { Name = name, ElapsedMs = null, Status = DumpPhaseStatus.Skipped });
     }
 }

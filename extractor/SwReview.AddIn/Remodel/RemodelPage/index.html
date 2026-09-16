@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
+<title>SwReview Remodel</title>
+<link rel="stylesheet" href="remodel.css">
+</head>
+<body>
+<!--
+  The Remodel tab, tab 5 (T133, contracts/pane-remodel-messages.md). Served from the virtual
+  host https://swreview.invalid, so the CSP above - byte-for-byte the other four pages', which
+  is byte-for-byte feature 002 contracts/pane-host-messages.md's - is what the page actually
+  runs under: no inline script, no inline style, no remote anything, and connections only to
+  the loopback backend.
+
+  Every handler is attached in remodel.js with addEventListener; there is no event-handler
+  attribute anywhere in this file. Every node that carries a string from outside this file is
+  built through shared/dom.js, which is the one place the "insert every untrusted string with
+  createTextNode" rule is written down (T080). On this page that is nearly everything: a
+  feature name is whatever an engineer typed into the SOLIDWORKS feature tree, a rebuild
+  reason's detail is assembled out of those names, and a description or a rationale was written
+  by a language model.
+
+  Three stacked regions, in the contract's order: the run header, the result (grade, geometry),
+  and the lists (changes, rebuild, judgement). The page closes with the credit and with the
+  sentence that keeps a clean rebuild from reading as an approval (FR-056).
+-->
+<header class="bar">
+  <span id="document-name" class="document">No document open</span>
+  <span id="backend-state" class="badge">Backend starting</span>
+</header>
+
+<p id="banner" class="banner" hidden></p>
+
+<!-- 1. The run header: what is being remodelled, where, in what state, and whether the
+     engineer's own file is still exactly as they left it. -->
+<section id="run-header" class="run-header">
+  <div class="row">
+    <button type="button" id="plan-run" disabled>Remodel a copy</button>
+    <button type="button" id="start-run" disabled>Start</button>
+    <button type="button" id="stop-run" disabled>Stop</button>
+  </div>
+  <div class="row">
+    <button type="button" id="open-copy" disabled>Open copy</button>
+    <button type="button" id="discard-copy" disabled>Discard copy</button>
+  </div>
+  <p id="discard-note" class="note">Delete the copy. The plan, the change list and the report stay in the run folder.</p>
+  <div class="row">
+    <button type="button" id="open-report" disabled>Open report</button>
+    <button type="button" id="open-folder" disabled>Open run folder</button>
+    <button type="button" id="open-log">View log</button>
+  </div>
+  <p class="note">The copy lives only in the run folder. It leaves through a Save As you perform in SOLIDWORKS; this tab never writes to your part.</p>
+  <p class="note"><span class="label">Source:</span> <span id="source-path"></span></p>
+  <p class="note"><span class="label">Run folder:</span> <span id="run-dir"></span></p>
+  <span id="limits" class="note"></span>
+  <span id="run-state" class="note" role="status"></span>
+  <span id="attestation" class="note"></span>
+  <span id="run-status" class="note" role="status"></span>
+  <span id="progress" class="note"></span>
+</section>
+
+<!-- 2. The result: both grades as counts with the unresolved rules named, then the geometry
+     verdict with the statement of what tier 1 cannot detect. -->
+<section id="grade" class="grade" aria-live="polite"></section>
+<section id="geometry" class="geometry"></section>
+
+<!-- 3. The lists: the change list as it grows, then what could not be reorganized and why,
+     then what the model proposed and what the rules did with it. -->
+<main id="changes" class="changes">
+  <h2 id="changes-heading" class="changes-heading">Changes</h2>
+  <!-- FR-041 on the screen and not only in the report: every write of the run went to the one
+       path in the run folder, and the change list is where that is checkable per change. -->
+  <p id="wrote-to" class="note"></p>
+  <ul id="change-list" class="change-list"></ul>
+  <p id="changes-empty" class="missing"></p>
+</main>
+<section id="rebuild" class="rebuild"></section>
+<section id="judgement" class="judgement"></section>
+
+<footer id="credit" class="credit">
+  <p>The rules and the group vocabulary come from the Resilient Modeling Strategy.</p>
+  <p>This copy is a proposal the engineer accepts or discards, not an engineering acceptance result.</p>
+</footer>
+
+<script src="../../shared/dom.js"></script>
+<script src="remodel.js"></script>
+</body>
+</html>

@@ -55,6 +55,15 @@ public sealed class TaskPaneGuidanceTests
         "Grade the open document against the Resilient Modeling Strategy rules in seconds. "
         + "No AI, no key; read-only.";
 
+    /// <summary>
+    /// Tab 5 (T121). The last sentence is the one an engineer needs before pressing anything
+    /// on this tab, so it is on the banner rather than in a dialog they would dismiss.
+    /// </summary>
+    private const string RemodelPurpose =
+        "Copy the open part and reorganize the copy under the Resilient Modeling Strategy, "
+        + "then review the change list, the grade, and the geometry comparison. The original "
+        + "file is never touched.";
+
     // ---- the tabs ------------------------------------------------------------------------
 
     [Fact]
@@ -64,8 +73,10 @@ public sealed class TaskPaneGuidanceTests
         {
             string[] captions = Tabs(pane).Select(tab => tab.Text).ToArray();
 
-            // Model check is tab 4 (contracts/model-check.md); feature 004's Remodel is tab 5.
-            Assert.Equal(new[] { "Review", "Ask", "Extract", "Model check" }, captions);
+            // Model check is tab 4 (contracts/model-check.md); Remodel is tab 5
+            // (contracts/pane-remodel-messages.md).
+            Assert.Equal(
+                new[] { "Review", "Ask", "Extract", "Model check", "Remodel" }, captions);
         });
     }
 
@@ -84,6 +95,7 @@ public sealed class TaskPaneGuidanceTests
                 { "Ask", AskPurpose },
                 { "Extract", ExtractPurpose },
                 { "Model check", ModelCheckPurpose },
+                { "Remodel", RemodelPurpose },
             };
 
             foreach (TabPage tab in Tabs(pane))

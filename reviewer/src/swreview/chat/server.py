@@ -1633,6 +1633,7 @@ def create_app(
     provider_factory: Callable[[ProviderSettings], AgentProvider] | None = None,
     list_models: Callable[[ProviderName], list[dict[str, str]]] | None = None,
     bridge_factory: Callable[[str, str | None], Any] | None = None,
+    remodel_bridge_factory: Callable[[str, str | None], Any] | None = None,
     development: bool = False,
     secrets: Sequence[str] | None = None,
 ) -> Starlette:
@@ -1648,6 +1649,10 @@ def create_app(
         bridge_factory: Builds the live SOLIDWORKS bridge client for a session that asked
             for one, from the `{pipe, secret}` that session posted. `None` uses the real
             named pipe; `--fail-bridge` passes a forced-failure one.
+        remodel_bridge_factory: The same, for the Remodel tab's `remodel.*` client
+            (`contracts/backend-remodel.md`). A separate factory because it is a separate
+            client over a separate secret: `RemodelSecret` authorizes the twelve `remodel.*`
+            commands and nothing else, and a review's bridge authorizes none of them.
         development: List the scripted provider in `GET /health` (FR-027).
         secrets: What error text is masked of; the process environment otherwise.
     """
@@ -1662,9 +1667,23 @@ def create_app(
         secrets=secrets,
     )
 
+    # Imported here rather than at module scope so `chat/remodel.py` may import this
+    # module's door - `ChatError`, `resolve_run_dir`, `PACKAGE_ERRORS` - without the two
+    # importing each other. The Remodel routes are a separate module because a re-model is
+    # not a chat: no turn, no evidence request, no disposition (`backend-remodel.md`).
+    from swreview.chat.remodel import RemodelServer, remodel_routes
+
+    remodel = RemodelServer(
+        run_root=Path(run_root),
+        redact=server.redact,
+        settings=server._settings,
+        bridge_factory=remodel_bridge_factory,
+    )
+
     @contextlib.asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncIterator[None]:
         yield
+        await run_in_threadpool(remodel.shutdown)
         await run_in_threadpool(server.shutdown)
 
     async def on_chat_error(request: Request, exc: Exception) -> Response:
@@ -1701,6 +1720,9 @@ def create_app(
             server.accept_check_exception,
             methods=["POST"],
         ),
+        # The Remodel tab (`contracts/backend-remodel.md`), whose nine routes are the
+        # pipeline's whole surface.
+        *remodel_routes(remodel),
     ]
     app = Starlette(
         routes=routes,
@@ -1711,4 +1733,5 @@ def create_app(
         ],
     )
     app.state.server = server
+    app.state.remodel = remodel
     return app

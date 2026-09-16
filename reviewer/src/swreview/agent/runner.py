@@ -12,7 +12,12 @@ business:
   turn spent the budget. The cumulative count is kept separately, on the run;
 - the event stream: one `EventSink` stamps `seq` and `at`, appends every event to
   `events.jsonl` and fans it out to listeners, so the pane, the CLI and the file all see
-  the same ordered stream (`contracts/chat-events.schema.json`);
+  the same ordered stream (`contracts/chat-events.schema.json`). The sink, its usage
+  ledger, the step-budget default, the redactor hand-off and how a turn that raised is
+  reported live in `agent/events.py` because the re-modeler's own loop shares them; they
+  are imported here and re-exported, so every caller that predates the move still reads
+  them off this module. The sentence a turn cut short is closed out with is shared the same
+  way, from `report/session.py`, beside the predicate that reads it back;
 - multi-turn. `ReviewRun.continue_session` appends an engineer turn and runs it, even on a
   session that already ended, and `ReviewRun.answer_evidence` answers an open request and
   resumes. A check re-run after its request is answered replaces the earlier verdict
@@ -41,19 +46,24 @@ from typing import Any
 from uuid import UUID
 
 from swreview.agent.checklist import FINDING_BUCKET, Checklist, load_checklist
+from swreview.agent.events import (
+    DEFAULT_MAX_STEPS,
+    EVENTS_FILE_NAME,
+    EventListener,
+    EventSink,
+    UsageLedger,
+    emit_turn_failed,
+    no_redaction,
+    utc_now,
+)
 from swreview.agent.providers import (
-    AgentEvent,
     AgentProvider,
     EffortLevel,
-    EventType,
     PromptCacheAware,
     ProviderTool,
-    TokenUsage,
     ToolCallResult,
     ToolSet,
     TurnResult,
-    error_body,
-    usage_from_body,
 )
 from swreview.agent.providers.schema import ToolSpec
 from swreview.agent.settings import EfficiencySettings, ExtractionSettings
@@ -66,15 +76,13 @@ from swreview.ir.models import EvidencePackage
 from swreview.prerun import prerun_checks
 from swreview.report.session import (
     CLOSEOUT_CHECK,
-    MAX_STEPS_CLOSEOUT,
-    TRUNCATED_CLOSEOUT,
     CoverageItem,
     CoverageScope,
     EvidenceRequest,
     KeySource,
     ProviderInfo,
     ReviewSession,
-    SessionUsage,
+    cut_short_reason,
     save_session,
 )
 from swreview.tools.context import ToolContext, build_context
@@ -83,10 +91,6 @@ from swreview.tools.registry import ToolRegistry
 
 SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_v1.md"
 SESSION_FILE_NAME = "session.json"
-EVENTS_FILE_NAME = "events.jsonl"
-
-DEFAULT_MAX_STEPS = 200
-"""Tool calls one turn may make. A session of many turns may make many times this."""
 
 EVIDENCE_CHECK = "coverage.evidence_request"
 PROFILE_CHECK = "coverage.extractor_profile"
@@ -121,16 +125,6 @@ TOOL_NOTES_LEAD = (
     "everything else it used to say is here, once, rather than on every tool of every "
     "request. Read a tool's notes before calling it for the first time."
 )
-
-def no_redaction(text: str) -> str:
-    """What a run with no secret to hide masks with: nothing.
-
-    A run is given a redactor rather than a list of secrets, so the runner never holds a
-    key at all, and a keyless run takes the same code path as a real one instead of a
-    branch nobody exercises.
-    """
-    return text
-
 
 def build_system_prompt(
     checklist: Checklist,
@@ -440,113 +434,6 @@ class CoverageStopTools:
         )
 
 
-# --- the event stream -------------------------------------------------------------------
-
-
-EventListener = Callable[[AgentEvent], None]
-"""A live consumer of the stream: the chat server's SSE fan-out, a CLI trace, a test."""
-
-
-class EventSink:
-    """The one place an event gets its `seq` and its timestamp, and the only writer.
-
-    Adapters call `emit(type, body)` without a sequence number, because an adapter sees
-    one turn and `seq` is monotonic per *session* (`agent/providers` docstring). The sink
-    stamps it, appends the event to `events.jsonl` as one JSON line, and hands it to every
-    listener. The file is opened per event and appended to: the stream is append-only and
-    has to survive the process dying mid-review, which is exactly when the pane needs to
-    replay it.
-    """
-
-    def __init__(
-        self,
-        path: Path | str | None = None,
-        *,
-        listeners: Iterable[EventListener] = (),
-        clock: Callable[[], datetime] | None = None,
-    ) -> None:
-        self.path = Path(path) if path is not None else None
-        if self.path is not None:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._listeners = list(listeners)
-        self._clock = clock if clock is not None else _now
-        self._seq = 0
-
-    @property
-    def seq(self) -> int:
-        """The sequence number of the last event emitted; 0 before the first."""
-        return self._seq
-
-    def emit(self, event_type: EventType, body: Mapping[str, Any]) -> AgentEvent:
-        """Stamp, write and fan out one event. Its shape is the contract's, not ours."""
-        self._seq += 1
-        event = AgentEvent(
-            seq=self._seq,
-            at=self._clock(),
-            type=event_type,
-            body=dict(body),
-        )
-        if self.path is not None:
-            with self.path.open("a", encoding="utf-8") as handle:
-                handle.write(event.model_dump_json() + "\n")
-        for listener in self._listeners:
-            listener(event)
-        return event
-
-    def add_listener(self, listener: EventListener) -> None:
-        """Attach a consumer after the sink was built.
-
-        `ReviewRun` is handed a sink it did not construct - `start_review` builds it with
-        the caller's callbacks - and it has to put its usage ledger on that same stream.
-        Registering here rather than threading the ledger through `start_review` means a
-        `ReviewRun` built any other way (a test, a future caller) still accumulates, and
-        there is no second construction site to keep in step.
-        """
-        self._listeners.append(listener)
-
-
-class UsageLedger:
-    """The one accumulator of what a session cost: an `EventSink` listener.
-
-    It reads the stream rather than the adapters, and that is the whole point. Both
-    adapters raise out of their round loop on a provider error and `ReviewRun._run_turn`'s
-    `except Exception` branch finalizes and re-raises with **no `TurnResult` to read**, so
-    usage carried home on the turn's result would report zero cost for the turn that cost
-    the most - five paid rounds and a rate limit on the sixth. `EventSink.emit` appends and
-    closes per event, so by the time the exception arrives those five rounds are on disk
-    and this ledger has already counted them.
-
-    It owns no arithmetic: `SessionUsage.summed` is the one summing rule and this calls it.
-    `turn.ended` delimits a turn, which is why no adapter has to carry a turn number.
-    """
-
-    def __init__(self) -> None:
-        self._rounds: list[TokenUsage] = []
-        self._turn_boundaries: list[int] = []
-        """How many rounds had been recorded when each turn ended, one entry per
-        `turn.ended`. Rounds after the last entry are a turn that never ended."""
-
-    def __call__(self, event: AgentEvent) -> None:
-        if event.type == "usage":
-            self._rounds.append(usage_from_body(event.body))
-        elif event.type == "turn.ended":
-            self._turn_boundaries.append(len(self._rounds))
-
-    def usage(self) -> SessionUsage | None:
-        """What the session has cost so far, or `None` if no round reported anything.
-
-        `None` and not an all-zero record: a run whose provider reported nothing cost
-        something we did not measure, which is not zero (Principle I).
-        """
-        if not self._rounds:
-            return None
-        return SessionUsage.summed(self._rounds, self._turn_boundaries)
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
-
-
 # --- one verdict per check --------------------------------------------------------------
 
 
@@ -732,7 +619,7 @@ class ReviewRun:
 
         request.status = "answered"
         request.answer = answer
-        request.answered_at = _now()
+        request.answered_at = utc_now()
         self.sink.emit("evidence.answered", {"request_id": request_id, "answer": answer})
 
         before = len(self.session.findings)
@@ -801,31 +688,18 @@ class ReviewRun:
                 on_event=self.sink.emit,
             )
         except Exception as exc:
-            self.sink.emit(
-                "error",
-                error_body(
-                    error_class=type(exc).__name__,
-                    # Whatever raised - an adapter's own mapped error, an SDK class it
-                    # does not map, a transport failure - the run folder must not receive
-                    # the key the request carried (FR-015). The adapters redact what they
-                    # wrap; this is the one place that covers what none of them did.
-                    message=self.redact(str(exc)),
-                    # The runner cannot tell a dropped connection from a bug, and the
-                    # engineer, not this module, decides whether to spend another run
-                    # (FR-028). An adapter that does know emits its own `error` first.
-                    retryable=True,
-                ),
-            )
-            self.sink.emit("turn.ended", {"reason": "error"})
+            # The redaction, the `error_body` shape and the `turn.ended` that closes the
+            # turn are `agent/events.py`'s, shared with the re-model run (004 T106); what
+            # is this run's own is what follows - finalize, then re-raise.
+            emit_turn_failed(self.sink, exc, self.redact)
             self.finalize()
             raise
 
         self.messages = [dict(message) for message in result.messages]
         self.total_steps += result.steps
-        if result.reason == "max_steps":
-            self._closeout(MAX_STEPS_CLOSEOUT.format(max_steps=self.max_steps))
-        elif result.reason == "truncated":
-            self._closeout(TRUNCATED_CLOSEOUT)
+        cut_short = cut_short_reason(result.reason, self.max_steps)
+        if cut_short is not None:
+            self._closeout(cut_short)
         self.sink.emit("turn.ended", {"reason": result.reason})
         return result
 

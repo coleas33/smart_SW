@@ -158,10 +158,19 @@ def run(
     limits: Limits | None = None,
     step_seconds: float = 0.31,
     baseline: int = 0,
+    stop_after: int | None = None,
 ) -> tuple[ApplyResult, FakeRemodelBridge, Path]:
-    """One executor run over one fake seat, with everything the run folder needs."""
+    """One executor run over one fake seat, with everything the run folder needs.
+
+    `stop_after` is the engineer's stop, expressed the way the pane raises it: the flag goes
+    up while the run is under way - here, once the seat has taken `stop_after` mutating
+    calls - and the executor reads it when it reads it.
+    """
     run_dir = tmp_path / "20260916-142201-bracket-remodel"
     bridge = FakeRemodelBridge(part(), baseline=baseline, script=script)
+    kwargs: dict[str, Any] = {}
+    if stop_after is not None:
+        kwargs["stop_requested"] = lambda: bridge.mutations >= stop_after
     result = apply_changes(
         client=bridge,
         log=open_log(run_dir),
@@ -170,6 +179,7 @@ def run(
         baseline=baseline,
         limits=limits or Limits(),
         now=StepClock(START, step_seconds),
+        **kwargs,
     )
     return result, bridge, run_dir
 
@@ -696,7 +706,13 @@ def test_the_documented_limits_are_the_defaults() -> None:
         20,
         120,
     )
-    assert TRUNCATING == frozenset({"max_changes", "max_minutes", "max_rebuild_seconds"})
+    # The three bounds and the engineer's stop are the four reasons that finalize a run as
+    # `truncated`. `stopped` is not a limit - it is the one of the four a person raises -
+    # and it is here because `remodel.stop` reports the run as `truncated`
+    # (`contracts/pane-remodel-messages.md`).
+    assert TRUNCATING == frozenset(
+        {"max_changes", "max_minutes", "max_rebuild_seconds", "stopped"}
+    )
 
 
 def test_max_changes_truncates_and_names_what_was_not_applied(tmp_path: Path) -> None:
@@ -777,3 +793,69 @@ def test_the_limits_are_neither_readable_nor_settable_by_the_model() -> None:
         text = path.read_text(encoding="utf-8")
         for name in ("max_changes", "max_minutes", "max_rebuild_seconds"):
             assert name not in text, f"{path} names {name}"
+
+
+# --- T134c the engineer's stop ---------------------------------------------------------
+
+
+def test_the_stop_flag_is_read_between_changes_and_truncates_the_run(
+    tmp_path: Path,
+) -> None:
+    """A stop raised before change 3 leaves changes 1 and 2 and attempts nothing after.
+
+    The flag goes up after the second mutating call, which is inside change 2's window, and
+    change 2 still closes: the executor reads the flag between changes, so the change in
+    flight is finished, recorded and only then is the run ended.
+    """
+    result, bridge, _ = run(tmp_path, stop_after=2)
+
+    assert result.status == "truncated"
+    assert result.stop is not None and result.stop.reason == "stopped"
+    assert result.applied == (1, 2)
+    assert result.not_attempted == (3, 4, 5, 6)
+    assert result.in_flight is None
+    assert bridge.mutations == 2
+
+
+def test_a_stopped_run_leaves_the_changes_before_it_and_no_line_in_flight(
+    tmp_path: Path,
+) -> None:
+    """N-1 changes on disk when the stop lands before change N, each one closed out."""
+    _, _, run_dir = run(tmp_path, stop_after=2)
+
+    written = records(run_dir)
+    assert [row.status for row in written] == ["attempting", "applied"] * 2
+    assert len(terminal(run_dir)) == 2
+    assert [row.seq for row in written] == [1, 1, 2, 2]
+
+
+def test_the_changes_applied_a_stopped_run_reports_are_read_from_the_folder(
+    tmp_path: Path,
+) -> None:
+    """`remodel.stopped {changes_applied}` is answered from `changes.jsonl`, not from a
+    process that may be gone: the count is the terminal `applied` lines on disk."""
+    result, _, run_dir = run(tmp_path, stop_after=2)
+
+    applied = [row.seq for row in records(run_dir) if row.status == "applied"]
+    assert applied == [1, 2] == list(result.applied)
+
+
+def test_a_stop_that_lands_after_the_last_change_completes_the_run(
+    tmp_path: Path,
+) -> None:
+    """Nothing was left to do, so there is nothing to truncate and no stop to record."""
+    result, _, _ = run(tmp_path, stop_after=len(changes()))
+
+    assert result.status == "complete"
+    assert result.stop is None
+    assert result.applied == tuple(change.seq for change in changes())
+
+
+def test_a_run_nobody_stopped_never_reads_a_stop(tmp_path: Path) -> None:
+    """The default is a flag that is never up, so every existing caller is unaffected."""
+    default = inspect.signature(apply_changes).parameters["stop_requested"].default
+    assert default() is False
+
+    result, _, _ = run(tmp_path)
+    assert result.status == "complete"
+    assert result.stop is None

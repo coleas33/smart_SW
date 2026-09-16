@@ -64,7 +64,7 @@ Principle VI every refusal is recorded as a reported coverage gap, never a silen
 
 | type | payload |
 |------|---------|
-| `status` | `{stage: "copying" \| "dumping" \| "planning" \| "judging" \| "applying" \| "verifying" \| "saving" \| "ready" \| "error", message}` |
+| `status` | `{stage: "copying" \| "dumping" \| "planning" \| "judging" \| "applying" \| "verifying" \| "saving" \| "backend_starting" \| "ready" \| "error", message}`. `backend_starting`, `ready` and `error` are also the backend-lifecycle stages the add-in fans out to every page (feature 002 `pane-host-messages.md`); the page writes the message into its run status line and treats none of them as a run phase |
 | `remodel.progress` | `{applied, total, current: {seq, kind, subject_name}}` |
 | `remodel.change` | one `ChangeRecord` as it is written, so the change list grows live (`run-artifacts.md`) |
 | `document.changed` | `{path, configuration} \| null`. If the **copy** goes away mid-run, the run aborts with the change log intact |

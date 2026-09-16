@@ -1,0 +1,264 @@
+/*
+  The Remodel tab's styles (T133).
+
+  A stylesheet file rather than a style attribute or a style element, because the page's CSP is
+  `style-src 'self'`: the same policy the other four pages run under, and the reason no rule
+  here is ever assembled in JavaScript. Nothing in this file positions anything absolutely; the
+  Task Pane is a narrow column whose width the engineer drags, so every region is a stacked
+  block that reflows.
+*/
+
+body {
+  margin: 0;
+  padding: 0 10px 16px 10px;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-size: 12px;
+  color: #1b1b1b;
+  background: #ffffff;
+}
+
+h2 {
+  font-size: 13px;
+  margin: 14px 0 4px 0;
+}
+
+h3 {
+  font-size: 12px;
+  margin: 10px 0 3px 0;
+  color: #333333;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #e2e2e2;
+}
+
+.document {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  border: 1px solid #cccccc;
+  border-radius: 9px;
+  padding: 1px 7px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.badge.warn {
+  border-color: #b34700;
+  color: #b34700;
+}
+
+.banner {
+  margin: 8px 0;
+  padding: 6px 8px;
+  border: 1px solid #b34700;
+  border-left-width: 4px;
+  background: #fff6ef;
+  overflow-wrap: anywhere;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+button {
+  font: inherit;
+  padding: 3px 9px;
+  border: 1px solid #b6b6b6;
+  border-radius: 3px;
+  background: #f6f6f6;
+  cursor: pointer;
+}
+
+button:disabled {
+  color: #8a8a8a;
+  cursor: default;
+}
+
+.note,
+.missing {
+  display: block;
+  margin: 3px 0;
+  color: #444444;
+  overflow-wrap: anywhere;
+}
+
+.missing {
+  color: #6a6a6a;
+  font-style: italic;
+}
+
+.label {
+  color: #6a6a6a;
+}
+
+ul {
+  list-style: none;
+  margin: 4px 0;
+  padding: 0;
+}
+
+/* ---- the grade ------------------------------------------------------------------------- */
+
+.grade-side {
+  border-left: 3px solid #d8d8d8;
+  padding-left: 8px;
+  margin: 6px 0;
+}
+
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.count {
+  border: 1px solid #dddddd;
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+.count[data-bucket="failed"] {
+  border-color: #b30000;
+  color: #b30000;
+}
+
+.count[data-bucket="warned"] {
+  border-color: #b34700;
+  color: #b34700;
+}
+
+.fraction,
+.unresolved-rules {
+  margin: 3px 0;
+  color: #444444;
+  overflow-wrap: anywhere;
+}
+
+/* ---- the geometry ---------------------------------------------------------------------- */
+
+.verdict {
+  font-weight: 600;
+  margin: 3px 0;
+}
+
+.verdict[data-verdict="fail"] {
+  color: #b30000;
+}
+
+.verdict[data-verdict="unresolved"] {
+  color: #b34700;
+}
+
+.delta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 1px 0;
+}
+
+.quantity {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.coverage-limit {
+  padding: 1px 0 1px 12px;
+  color: #444444;
+}
+
+/* ---- the change list, the rebuild list and the judgement -------------------------------- */
+
+.change,
+.entry,
+.proposal,
+.rejected,
+.deviation {
+  border: 1px solid #e4e4e4;
+  border-radius: 3px;
+  padding: 5px 7px;
+  margin: 4px 0;
+}
+
+.change-head,
+.entry-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.change[data-status="failed"],
+.change[data-status="rollback_failed"] {
+  border-left: 3px solid #b30000;
+}
+
+.change[data-status="rolled_back"],
+.change[data-status="attempting"] {
+  border-left: 3px solid #b34700;
+}
+
+.change[data-status="applied"] {
+  border-left: 3px solid #2e7d32;
+}
+
+.subject-name,
+.entry-name,
+.proposal-subject {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.subject-meta,
+.entry-meta,
+.by {
+  color: #6a6a6a;
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.error,
+.detail,
+.edge,
+.rationale,
+.arguments,
+.reason,
+.deviation-line {
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  color: #b30000;
+}
+
+.rejected {
+  border-left: 3px solid #b34700;
+}
+
+.rule,
+.tool {
+  font-family: Consolas, "Courier New", monospace;
+  color: #444444;
+}
+
+/* ---- the closing statement ------------------------------------------------------------- */
+
+.credit {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid #e2e2e2;
+  color: #444444;
+}
+
+.credit p {
+  margin: 4px 0;
+}

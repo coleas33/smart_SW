@@ -16,6 +16,7 @@ using SwReview.Extractor.PersistRefs;
 using SwReview.Extractor.Sw;
 using SwReview.AddIn.Model;
 using SwReview.AddIn.Native;
+using SwReview.AddIn.Remodel;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
 using SwReview.AddIn.Terminal;
@@ -108,6 +109,7 @@ public class SwReviewAddIn : ISwAddin
     private ReviewHost? _reviewHost;
     private TerminalHost? _terminalHost;
     private ModelCheckHost? _modelCheckHost;
+    private RemodelHost? _remodelHost;
     private ToolServiceGate? _toolService;
 
     /// <summary>
@@ -134,6 +136,20 @@ public class SwReviewAddIn : ISwAddin
     private readonly BlockingCollection<string> _modelCheckMessages = new BlockingCollection<string>();
 
     private Thread? _modelCheckPump;
+
+    /// <summary>
+    /// The Remodel page's messages, on a queue and a thread of their own.
+    ///
+    /// Separate for the same reason the Model check page's are, only more so: a
+    /// `remodel.start` runs phases B to D to completion, which the feature bounds at twenty
+    /// minutes. Queued behind a review's messages it would be twenty minutes in which no other
+    /// tab answered; and `remodel.stop` is delivered on this queue, so a run that occupied its
+    /// own pump would be a run that cannot be stopped - which is why <see cref="RemodelHost"/>
+    /// schedules the run itself off this thread again.
+    /// </summary>
+    private readonly BlockingCollection<string> _remodelMessages = new BlockingCollection<string>();
+
+    private Thread? _remodelPump;
 
     /// <summary>The running SOLIDWORKS session, or null while disconnected.</summary>
     public ISldWorks? SwApp => _swApp;
@@ -229,6 +245,7 @@ public class SwReviewAddIn : ISwAddin
         {
             _pane.PageMessageReceived -= OnPageMessage;
             _pane.ModelCheckPageMessageReceived -= OnModelCheckPageMessage;
+            _pane.RemodelPageMessageReceived -= OnRemodelPageMessage;
         }
 
         if (_events != null)
@@ -239,6 +256,7 @@ public class SwReviewAddIn : ISwAddin
 
         StopPageMessagePump();
         StopModelCheckPump();
+        StopRemodelPump();
 
         // Before the review host, because the tool service is what still holds SOLIDWORKS
         // pointers: the pipe stops listening and the scope is let go while the add-in is still
@@ -256,6 +274,11 @@ public class SwReviewAddIn : ISwAddin
         // stop answering in.
         _modelCheckHost?.Dispose();
         _modelCheckHost = null;
+
+        // With the Model check host and for its reason: a remodel run registers its folder on
+        // the review host, so the two stop answering in this order.
+        _remodelHost?.Dispose();
+        _remodelHost = null;
 
         _reviewHost?.Dispose();
         _reviewHost = null;
@@ -409,6 +432,7 @@ public class SwReviewAddIn : ISwAddin
             reviewOptions.Dump);
 
         StartModelCheckHost(reviewOptions);
+        StartRemodelHost(reviewOptions);
 
         // The pane follows the engineer: the Review button and the document name track
         // whatever is active, so a review is never started against the document that was open
@@ -540,6 +564,142 @@ public class SwReviewAddIn : ISwAddin
     }
 
     /// <summary>
+    /// The Remodel tab's host (T134f, contracts/pane-remodel-messages.md).
+    ///
+    /// It shares with the other two tabs exactly what the Model check tab shares - the same
+    /// in-process extractor, the same entity resolver, the same answer to "which folder is the
+    /// pane looking at" - and adds one thing neither of them has: a pipeline. Everything the
+    /// run does to SOLIDWORKS goes through <see cref="BackendRemodelPipeline"/>, which makes
+    /// loopback calls to the backend's `/remodel/*` routes, runs the two ModelCheck dumps in
+    /// process, and puts the copy on screen through <see cref="SwRemodelSeat"/>. This method
+    /// names those pieces; it decides nothing.
+    ///
+    /// <b>The remodel secret is read fresh per call</b>, off <see cref="ToolServiceGate"/>
+    /// rather than captured: the tool service does not exist until the first document is open,
+    /// and a pipeline holding the value it saw at add-in load would hold null forever.
+    ///
+    /// Started even when the tool service is not listening yet. The pane really has that state,
+    /// and the refusal the engineer then reads - `BridgeUnavailable`, by name - is a better
+    /// answer than a tab that never came up.
+    /// </summary>
+    private void StartRemodelHost(ReviewHostOptions reviewOptions)
+    {
+        IReviewDump? dump = reviewOptions.Dump;
+        if (_pane == null || _swApp == null || _applicationThread == null || dump == null)
+        {
+            return;
+        }
+
+        // Named once: the page, the pipeline and the pipeline's HTTP client all ask the same
+        // question, and three spellings of it would be three chances for one of them to go on
+        // calling a port `settings.save` has already restarted the child off.
+        Func<BackendEndpoint?> endpoint = () => _backend?.Endpoint;
+
+        _remodelHost = new RemodelHost(new RemodelHostOptions(
+            _pane.RemodelChannel,
+            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+        {
+            Backend = endpoint,
+            CurrentDocument = CurrentDocument,
+            Pipeline = new BackendRemodelPipeline(
+                endpoint,
+                () => _toolService?.RemodelBridge,
+                CurrentDocument,
+                dump,
+                new SwRemodelSeat(_swApp, _applicationThread),
+                new RemodelBackendClient(endpoint)),
+            EntityResolver = () => reviewOptions.EntityResolver,
+
+            // The same one answer the Model check tab registers through: `remodel.show_change`
+            // resolves against the copy on screen, but the Ask tab's working folder and the
+            // step strip both read the pane's latest run, and a remodel that registered
+            // somewhere else would open the terminal in an unrelated folder.
+            //
+            // Registering it also points `RunPackageIndex` at this folder, which is how the
+            // Review and Model check tabs resolve a `document_id` to a path. A remodel folder
+            // holds its reading of the tree as `package-before.json`, so the index reads that
+            // name too (`RunPackageIndex.PackageNames`); without it, pressing Remodel would
+            // cost those tabs the full path on every Show.
+            RegisterLatestRun = runDirectory =>
+            {
+                _reviewHost?.TrackCheck(runDirectory);
+                _pane?.RefreshSteps();
+            },
+
+            // The configured key, and the remodel secret as well: this host relays the
+            // backend's own sentences to the page, and a `/remodel/*` failure is exactly the
+            // kind of message that could quote the credential it was called with (FR-015).
+            Secrets = () => new[]
+            {
+                (_reviewHost?.Settings ?? UserSettings.Defaults()).ResolveApiKey().Key,
+                _toolService?.RemodelBridge?.Secret,
+            },
+        });
+
+        StartRemodelPump();
+        _pane.RemodelPageMessageReceived += OnRemodelPageMessage;
+    }
+
+    private void OnRemodelPageMessage(object sender, string json)
+    {
+        try
+        {
+            _remodelMessages.Add(json);
+        }
+        catch (Exception)
+        {
+            // The pump is shutting down; the page is about to go with it.
+        }
+    }
+
+    private void StartRemodelPump()
+    {
+        _remodelPump = new Thread(() =>
+        {
+            foreach (string json in _remodelMessages.GetConsumingEnumerable())
+            {
+                try
+                {
+                    _remodelHost?.Receive(json);
+                }
+                catch (Exception)
+                {
+                    // RemodelHost.Receive answers its own failures; an exception escaping onto
+                    // this background thread would take SOLIDWORKS down with it.
+                }
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "swreview-remodel-messages",
+        };
+
+        _remodelPump.Start();
+    }
+
+    private void StopRemodelPump()
+    {
+        if (_remodelPump == null)
+        {
+            return;
+        }
+
+        try
+        {
+            _remodelMessages.CompleteAdding();
+        }
+        catch (Exception)
+        {
+        }
+
+        // Bounded, like the other two pumps. This one is the most likely to still be busy - a
+        // run is bounded at twenty minutes - and SOLIDWORKS is still not made to wait for it:
+        // the run's own artifacts are on disk and the change log is what the engineer reads.
+        _remodelPump.Join(TimeSpan.FromSeconds(2));
+        _remodelPump = null;
+    }
+
+    /// <summary>
     /// T048. The tool service's lifetime, as three delegates: when it may start, how, and what
     /// happens to the two secrets it mints.
     ///
@@ -594,6 +754,10 @@ public class SwReviewAddIn : ISwAddin
     /// <summary>
     /// One backend lifecycle `status` to every page that has a backend of its own to track.
     ///
+    /// To every page, but not every stage: the Remodel page's contract closes its `status`
+    /// stages to the run's own phases plus `ready` and `error`, so that page's share is
+    /// filtered through <see cref="RemodelHost.IsStatusStage"/>.
+    ///
     /// Each host masks the configured key out of the message itself (FR-015), which is why this
     /// hands both of them the raw text rather than redacting once here: the masking belongs to
     /// the thing that posts to a page, and a caller that remembered to redact would be the one
@@ -603,6 +767,16 @@ public class SwReviewAddIn : ISwAddin
     {
         _reviewHost?.PostStatus(stage, message);
         _modelCheckHost?.PostStatus(stage, message);
+
+        // The Remodel page's `status` stages are a closed list that names the three
+        // backend-lifecycle stages posted here, so today every one of them goes through; the
+        // gate is what keeps a stage another page grows later from being written into tab 5's
+        // run line unannounced. `ready` is also what tells a Remodel tab opened during the
+        // boot to ask for its `init` again.
+        if (RemodelHost.IsStatusStage(stage))
+        {
+            _remodelHost?.PostStatus(stage, message);
+        }
     }
 
     /// <summary>
@@ -654,6 +828,10 @@ public class SwReviewAddIn : ISwAddin
         {
             _reviewHost?.DocumentChanged();
             _modelCheckHost?.DocumentChanged();
+
+            // Tab 5 needs this for more than its header: a `document.changed` whose copy has
+            // gone away aborts the run in flight, leaving the change log intact (RK-14).
+            _remodelHost?.DocumentChanged();
 
             // Step 1 of the strip above the tabs has just changed answer, and this is the event
             // that says so (pane-host-messages.md, `document.changed`).

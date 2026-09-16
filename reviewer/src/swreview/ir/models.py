@@ -659,6 +659,40 @@ class Gap(IRModel):
     error: str | None
 
 
+class DumpPhase(IRModel):
+    """What one phase of the dump cost and what became of it (schema 1.3.0, feature 005 T033).
+
+    The same shape `SuppressTestRow.elapsed_ms` set as the package's only elapsed
+    precedent. `status` is recorded rather than inferred from which arrays came back
+    empty: an empty `holes[]` beside an `ok` row is a part with no holes, beside a
+    `failed` one it is evidence the dump lost, and beside a `skipped` one it is a phase
+    nobody ran.
+    """
+
+    name: str = Field(
+        description=(
+            "The phase as `PackageWriter` names it in its gaps: document, manifest, mate, "
+            "feature, equation, hole, fastener, face, body"
+        )
+    )
+    elapsed_ms: int | None = Field(
+        ge=0,
+        description=(
+            "Wall clock across the phase, whole milliseconds. Null when the phase never "
+            "ran - never 0, which is a phase that ran and came back inside the clock's "
+            "resolution."
+        ),
+    )
+    status: Literal["ok", "failed", "aborted", "skipped"] = Field(
+        description=(
+            "'ok' ran and returned; 'failed' threw, was recorded as a gap and the dump "
+            "carried on; 'aborted' met an open circuit and the phases behind it were "
+            "skipped; 'skipped' never ran - switched off by the profile or the options, "
+            "or behind a phase that aborted."
+        )
+    )
+
+
 class ExtractorInfo(IRModel):
     name: str
     version: str
@@ -675,6 +709,33 @@ class ExtractorInfo(IRModel):
             "were all 'full'."
         ),
     )
+    phases: list[DumpPhase] = Field(
+        default_factory=list,
+        description=(
+            "One row per phase of the dump, in the order it ran them (schema 1.3.0, "
+            "feature 005 T033 - the same minor the reuse fields arrived in). Empty in a "
+            "package written by a build that timed nothing and in one assembled from "
+            "exported files rather than dumped. In a package with `reused_from` set every "
+            "row is 'skipped' with no elapsed time: no phase ran in that run, and the "
+            "original dump's wall clock is not this run's. This is the only dump metric a "
+            "package carries."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_phases(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Leave `phases` out when nothing was timed, so a package written before the
+        member existed round-trips to the bytes that build wrote and the feature 001/002/003
+        goldens stay byte-identical (SC-007).
+
+        Empty rather than null is what is dropped here, which is why this is not
+        `omit_when_null`: the member is a list of rows and "no rows" is the absence, so a
+        `None` would be a second way to say the same thing.
+        """
+        data = handler(self)
+        if not data.get("phases"):
+            data.pop("phases", None)
+        return data
 
 
 class EvidencePackage(IRModel):

@@ -139,6 +139,105 @@ public sealed class WebViewFallbackTests
         });
     }
 
+    /// <summary>
+    /// T120: the fifth tab (feature 004) is created on first activation too, and for a harder
+    /// reason than tab 4's. Five tabs loaded at add-in load would cost <b>four</b> renderer
+    /// processes inside the SOLIDWORKS process before the engineer has pressed anything
+    /// (RK-11); two of the five are now lazy, so a session that never opens either pays for
+    /// neither.
+    /// </summary>
+    [Fact]
+    public void TheRemodelTabIsLoadedOnFirstActivationAndFailsIntoTheSameFallback()
+    {
+        WithPane(async (control, factory) =>
+        {
+            TabPage tab = TabNamed(control, "Remodel");
+
+            string before = TextOf(tab);
+            Assert.False(
+                EvergreenDownload.IsMatch(before),
+                "The Remodel tab loaded its page at add-in load; it is created on first "
+                    + "activation (T121). It showed:" + Environment.NewLine + before);
+            Assert.Contains(TaskPaneControl.RemodelPending, before);
+
+            Exception? escaped = await Record.ExceptionAsync(() => control.ActivateRemodelAsync());
+            Assert.True(
+                escaped == null,
+                "Opening the Remodel tab with no WebView2 runtime threw: " + escaped);
+
+            string after = TextOf(tab);
+            Assert.True(
+                EvergreenDownload.IsMatch(after),
+                "The Remodel tab shows no Evergreen WebView2 download URL when the runtime is "
+                    + "missing. It showed:" + Environment.NewLine + after);
+            Assert.Contains(RunRoot, after);
+
+            // The fallback message is the one the other tabs already render, word for word: a
+            // second sentence about the same missing runtime would be a second thing to keep
+            // in step with the download URL.
+            Assert.Contains("Review, Ask and Model check tabs cannot be shown", after);
+            Assert.Contains("The Extract tab still works.", after);
+        });
+    }
+
+    /// <summary>
+    /// Activating twice creates one WebView. The activation task is cached - failure included -
+    /// so the second selection of the tab is not a second page load, and the count of
+    /// environment requests stays at one.
+    /// </summary>
+    [Fact]
+    public void ActivatingTheRemodelTabTwiceLoadsItOnce()
+    {
+        WithPane(async (control, factory) =>
+        {
+            Task first = control.ActivateRemodelAsync();
+            await first;
+
+            Task second = control.ActivateRemodelAsync();
+            Assert.Same(first, second);
+            await second;
+
+            Assert.Equal(1, factory.Calls);
+        });
+    }
+
+    /// <summary>
+    /// The two lazy tabs share the one environment with the two eager ones. Opening both is
+    /// still one `CreateAsync`, which is the rule that matters: a second environment over the
+    /// same user data folder fails at runtime.
+    /// </summary>
+    [Fact]
+    public void OpeningBothLazyTabsStillAsksForOneEnvironment()
+    {
+        WithPane(async (control, factory) =>
+        {
+            await control.ActivateModelCheckAsync();
+            await control.ActivateRemodelAsync();
+
+            Assert.Equal(1, factory.Calls);
+            Assert.Same(control.EnvironmentAsync(), control.EnvironmentAsync());
+        });
+    }
+
+    /// <summary>
+    /// The order the engineer reads left to right, and the order both contracts name:
+    /// Review, Ask, Extract, Model check, Remodel.
+    /// </summary>
+    [Fact]
+    public void TheFiveTabsAreInTheOrderTheContractsName()
+    {
+        WithPane((control, factory) =>
+        {
+            string[] captions = Descendants(control)
+                .OfType<TabPage>()
+                .Select(tab => tab.Text)
+                .ToArray();
+
+            Assert.Equal(
+                new[] { "Review", "Ask", "Extract", "Model check", "Remodel" }, captions);
+        });
+    }
+
     [Fact]
     public void AMissingRuntimeLeavesTheExtractTabWorking()
     {
@@ -209,6 +308,7 @@ public sealed class WebViewFallbackTests
             Assert.NotNull(TabNamed(control, "Review"));
             Assert.NotNull(TabNamed(control, "Ask"));
             Assert.NotNull(TabNamed(control, "Model check"));
+            Assert.NotNull(TabNamed(control, "Remodel"));
             Assert.Equal(1, factory.Calls);
 
             // The failure is cached like a success: a workstation with no runtime must not

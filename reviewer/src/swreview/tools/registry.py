@@ -65,6 +65,7 @@ from swreview.tools import (
     checks_interference,
     measure,
     query,
+    remodel_plan,
     rms_checks,
     rms_query,
     session,
@@ -145,6 +146,27 @@ def bridge_tools() -> tuple[Callable[..., Any], ...]:
     )
 
 
+def remodel_tools() -> tuple[Callable[..., Any], ...]:
+    """The re-modeler's judgement tools: a remodel run only, and only its judgement phase.
+
+    Deliberately outside `REGISTRATIONS`, exactly as `bridge_tools` is: these five are added
+    by `ToolRegistry._offered` when the context carries a remodel plan, which only
+    `remodel/runner.py` arranges. A review, a general-chat session and the Model check tab
+    carry no plan to propose into, so none of them can see these at all
+    (`specs/004-resilient-remodeler/contracts/tools.md`).
+
+    They are not query tools and not check tools, so they are in neither `MCP_TOOL_FUNCTIONS`
+    nor the terminal profile's `enabled_tools`, and a test asserts both.
+    """
+    return (
+        remodel_plan.propose_description,
+        remodel_plan.propose_global,
+        remodel_plan.decide_fillet,
+        remodel_plan.classify_unknown,
+        remodel_plan.get_remodel_plan,
+    )
+
+
 REGISTRATIONS: tuple[Registration, ...] = (
     query_tools,
     measurement_tools,
@@ -167,6 +189,9 @@ There is no code-execution tool, no file tool and no SOLIDWORKS call outside thi
 
 BRIDGE_TOOL_FUNCTIONS: tuple[Callable[..., Any], ...] = bridge_tools()
 """The tools a `--bridge` run adds on top of `TOOL_FUNCTIONS`."""
+
+REMODEL_TOOL_FUNCTIONS: tuple[Callable[..., Any], ...] = remodel_tools()
+"""The tools a remodel run's judgement phase adds on top of `TOOL_FUNCTIONS`."""
 
 RESULT_KEY = "result"
 """Where a non-object tool result goes, so a tool result is always a JSON object.
@@ -671,6 +696,7 @@ class ToolRegistry:
 
     functions: tuple[Callable[..., Any], ...] = TOOL_FUNCTIONS
     bridge_functions: tuple[Callable[..., Any], ...] = BRIDGE_TOOL_FUNCTIONS
+    remodel_functions: tuple[Callable[..., Any], ...] = REMODEL_TOOL_FUNCTIONS
 
     @property
     def names(self) -> tuple[str, ...]:
@@ -683,19 +709,26 @@ class ToolRegistry:
         efficiency: EfficiencySettings | None = None,
     ) -> tuple[Callable[..., Any], ...]:
         """The tools this run gets: the curated list, less any tier it withholds, plus the
-        bridge when one is wired."""
+        bridge when one is wired and the remodel tools when a plan is being judged."""
         return self._offered(context, withheld_tier(context, efficiency))
 
     def _offered(
         self, context: ToolContext, tier: ToolTier | None
     ) -> tuple[Callable[..., Any], ...]:
-        """`functions_for` with the tier already decided, so `dispatch` decides it once."""
+        """`functions_for` with the tier already decided, so `dispatch` decides it once.
+
+        The two conditional groups are appended in the order they were added to the product
+        and neither is subject to a tier: a tier withholds a *review* tool on the evidence
+        the package carries, and neither a bridge call nor a proposal into a plan is one.
+        """
         functions = self.functions
         if tier is not None:
             functions = tuple(fn for fn in functions if fn.__name__ not in tier.tools)
-        if context.bridge is None:
-            return functions
-        return (*functions, *self.bridge_functions)
+        if context.bridge is not None:
+            functions = (*functions, *self.bridge_functions)
+        if context.remodel is not None:
+            functions = (*functions, *self.remodel_functions)
+        return functions
 
     def dispatch(
         self,

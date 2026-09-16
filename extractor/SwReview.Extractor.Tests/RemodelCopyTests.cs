@@ -1,8 +1,12 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Ids;
+using SwReview.Extractor.Ir;
 using SwReview.Extractor.Rms;
 using Xunit;
 
@@ -384,6 +388,67 @@ public class RemodelCopyTests : IDisposable
 
         Assert.Null(attestation.VaultPath);
         Assert.Null(attestation.VaultRevision);
+    }
+
+    /// <summary>
+    /// The attestation crosses the bridge as JSON, and the names on the wire are the whole
+    /// agreement: <c>remodel/attestation.py</c>'s <c>RECORDED_FIELDS</c> is exhaustive in
+    /// both directions - it refuses a <c>source_attestation</c> block missing one of these
+    /// nine keys, and refuses one that carries a key it does not know - so a PascalCase
+    /// block is nine missing fields and nine unexpected ones at once, on every run.
+    ///
+    /// Nothing renames these properties for us: <see cref="PackageSerializer"/> sets
+    /// <c>PropertyNamingPolicy = null</c> on purpose, so every name in the contract is
+    /// spelled by a <c>JsonPropertyName</c> attribute or it is not spelled at all, and
+    /// <see cref="BridgeCodec"/> inherits those options unchanged.
+    ///
+    /// The order is asserted too, because it is free: data-model.md section 5 lists the
+    /// recorded half in this order and <c>RECORDED_FIELDS</c> repeats it, so a property
+    /// inserted in the middle of the C# type shows up here rather than in a review.
+    /// </summary>
+    [Fact]
+    public void TheAttestationSerializesTheSnakeCaseNamesThePythonReaderRequires()
+    {
+        string source = WriteSource();
+        string copy = RemodelCopy.CopyPathFor(RunDirectory, source);
+        SourceAttestation attestation = RemodelCopy.RecordSource(
+            source, copy, new DateTime(2026, 9, 16, 14, 22, 1, DateTimeKind.Utc), null, null);
+
+        using (JsonDocument written = JsonDocument.Parse(
+            JsonSerializer.Serialize(attestation, BridgeCodec.Options)))
+        {
+            Assert.Equal(
+                new[]
+                {
+                    "path",
+                    "length_bytes",
+                    "last_write_utc",
+                    "sha256",
+                    "source_design_id",
+                    "recorded_at",
+                    "copy_path",
+                    "vault_path",
+                    "vault_revision",
+                },
+                written.RootElement.EnumerateObject().Select(member => member.Name).ToArray());
+
+            // Unknown stays unknown across the wire: a source that is not in a vault sends
+            // null for both, and the reader distinguishes that from an empty string.
+            Assert.Equal(JsonValueKind.Null, written.RootElement.GetProperty("vault_path").ValueKind);
+            Assert.Equal(
+                JsonValueKind.Null, written.RootElement.GetProperty("vault_revision").ValueKind);
+
+            // Both timestamps name a time zone. The reader refuses one that does not - the
+            // attestation records UTC - and DateTimeKind.Utc is what puts the Z there.
+            Assert.EndsWith(
+                "Z",
+                written.RootElement.GetProperty("recorded_at").GetString(),
+                StringComparison.Ordinal);
+            Assert.EndsWith(
+                "Z",
+                written.RootElement.GetProperty("last_write_utc").GetString(),
+                StringComparison.Ordinal);
+        }
     }
 
     // --------------------------------------------------- option composition, as integers

@@ -435,6 +435,67 @@
     return group;
   }
 
+  // ---- the running usage line (feature 005 T016a) --------------------------------------
+
+  /**
+   * What this review has cost so far: the tokens, the cached share, the round trips and the
+   * latency of the last round, from the `usage` events the page has already received
+   * (specs/005-llm-efficiency/contracts/usage.md section 5).
+   *
+   * Pure, and it does the summing as well as the rendering, so the one rule that matters here
+   * is testable inside the real page: **any null in a field makes that total null**, never a
+   * partial sum, which is the arithmetic `SessionUsage.summed` defines rather than a second
+   * rule (section 1). A field the endpoint omitted is unknown, not zero: "0 cached tokens" and
+   * "the endpoint did not say" send an engineer to different places, and the cached share is
+   * the second of those until the provider reports one (FR-047).
+   *
+   * It is fed the event bodies as they arrive rather than the session's own total, so the line
+   * moves while the turn is still running - which is the whole point of it - and
+   * `GET /sessions/{chat_id}` is left alone.
+   */
+  function usageLine(rounds) {
+    var list = rounds || [];
+    var line = el('span', 'usage');
+
+    if (!list.length) {
+      write(line, 'No model round trips yet.');
+      return line;
+    }
+
+    var tokens = totalOf(list, function (round) { return round.total_tokens; });
+    var input = totalOf(list, function (round) { return round.input_tokens; });
+    var cached = totalOf(list, function (round) { return round.cached_input_tokens; });
+    var round = list[list.length - 1] || {};
+    var latency = seconds(round.latency_s);
+
+    write(line, tokens === null ? 'tokens unknown' : tokens + ' tokens');
+    write(line, ' - cached ' + (share(cached, input) === null ? 'unknown' : share(cached, input) + '%'));
+    write(line, ' - ' + list.length + ' round trip' + (list.length === 1 ? '' : 's'));
+    write(line, ' - last round ' + (latency === '' ? 'unknown' : latency));
+    return line;
+  }
+
+  /** The sum of one field over every round, or null if any round did not report it. */
+  function totalOf(rounds, read) {
+    var sum = 0;
+    for (var index = 0; index < rounds.length; index++) {
+      var value = read(rounds[index] || {});
+      if (typeof value !== 'number' || !isFinite(value)) {
+        return null;
+      }
+      sum += value;
+    }
+    return sum;
+  }
+
+  /** The cached percentage, or null when either side is unknown or there is nothing to divide. */
+  function share(cached, input) {
+    if (cached === null || input === null || input <= 0) {
+      return null;
+    }
+    return Math.round((cached / input) * 100);
+  }
+
   window.SwReviewRender = {
     el: el,
     write: write,
@@ -449,6 +510,7 @@
     evidenceCard: evidenceCard,
     errorCard: errorCard,
     coverageSummary: coverageSummary,
-    entityRequest: entityRequest
+    entityRequest: entityRequest,
+    usageLine: usageLine
   };
 })();

@@ -68,6 +68,11 @@
     lastSeq: 0,
     events: [],
     coverage: [],
+
+    // One entry per model round trip, as the `usage` events carry them. The running usage
+    // line is summed from this array rather than read off the session, so it moves while the
+    // turn is still running (feature 005 T016a, contracts/usage.md section 6).
+    usage: [],
     findings: Object.create(null),
     evidence: Object.create(null),
     tools: Object.create(null),
@@ -403,6 +408,10 @@
         state.coverage.push(body);
         renderCoverage();
         return;
+      case 'usage':
+        state.usage.push(body);
+        renderUsage();
+        return;
       case 'turn.ended':
         endTurn(body);
         return;
@@ -544,6 +553,16 @@
     ui.coverage.hidden = false;
   }
 
+  /**
+   * The running usage line, repainted on every `usage` event so it moves during the turn
+   * rather than at `session.ended`. The summing is `render.usageLine`'s, in one place, with
+   * one null rule (feature 005 T016a).
+   */
+  function renderUsage() {
+    render.clear(ui.usage);
+    ui.usage.appendChild(render.usageLine(state.usage));
+  }
+
   function endTurn(body) {
     setTurnRunning(false);
     state.textBlock = null;
@@ -616,6 +635,8 @@
     ui.coverage.hidden = true;
     state.events = [];
     state.coverage = [];
+    state.usage = [];
+    renderUsage();
     state.findings = Object.create(null);
     state.evidence = Object.create(null);
     state.tools = Object.create(null);
@@ -1109,6 +1130,7 @@
     ui.openLog = document.getElementById('open-log');
     ui.runDir = document.getElementById('run-dir');
     ui.streamState = document.getElementById('stream-state');
+    ui.usage = document.getElementById('usage-line');
     ui.transcript = document.getElementById('transcript');
     ui.coverage = document.getElementById('coverage-panel');
     ui.followup = document.getElementById('followup');

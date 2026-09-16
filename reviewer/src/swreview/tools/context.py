@@ -137,6 +137,13 @@ class ToolContext:
     fixture and a golden case carry the exceptions inline; `exception_store()` is how a
     tool gets the store either way.
 
+    `remodel` is feature 004's hook: the re-modeler's plan object
+    (`tools/remodel_plan.RemodelToolContext`), set only for a remodel run's judgement
+    phase. It is typed loosely for the same reason `bridge` is - the tool layer must not
+    import the feature that fills it - and when it is `None` the four proposal tools and
+    the plan read-back are not registered at all, so a review, a general-chat session and
+    the Model check tab cannot see them.
+
     `extraction` says where this run's evidence comes from, and `eager` - the default -
     is what every run before lever 10a did: the meshes are in the package. `lazy` has a
     check fetch a body's mesh over the bridge when it needs one, and `lazy_bodies_fetched`
@@ -149,6 +156,7 @@ class ToolContext:
     checklist: Checklist
     exceptions: ExceptionStore | list[Any] | None = None
     bridge: Any | None = None
+    remodel: Any | None = None
     emit: EventCallback | None = None
     extraction: ExtractionSettings = field(default_factory=ExtractionSettings)
     lazy_bodies_fetched: int = 0
