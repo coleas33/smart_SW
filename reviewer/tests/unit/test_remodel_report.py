@@ -38,13 +38,15 @@ import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 from pytest_regressions.file_regression import FileRegressionFixture
 
+from swreview.remodel.apply import TRUNCATING, StopReason
 from swreview.remodel.apply_log import (
     CHANGES_FILE_NAME,
+    RECORD_KINDS,
     ChangeRecord,
     changes_path,
     read_changes,
@@ -53,6 +55,7 @@ from swreview.remodel.artifacts import GradedRun, grade_remodel_run
 from swreview.remodel.feasibility import Edge, Pin, RebuildEntry
 from swreview.remodel.geometry import GeometryArtifact, GeometryReading, evaluate
 from swreview.remodel.plan import (
+    CHANGE_ORDER,
     DescriptionProposal,
     Deviation,
     GlobalEvidence,
@@ -63,8 +66,10 @@ from swreview.remodel.plan import (
     plan_reorganize,
 )
 from swreview.remodel.report import (
+    ENGINEER_STOP,
     LOG_FILE_NAME,
     REPORT_FILE_NAME,
+    SAVE,
     SECTIONS,
     read_log_targets,
     render_report,
@@ -421,6 +426,62 @@ class TestHeadline:
         first = report(graded, plan=plan).splitlines()[0]
 
         assert "truncated" in first
+
+    def test_a_run_a_bound_stopped_names_the_limit(self, graded: GradedRun) -> None:
+        plan = judged(plan_of(features()), state="truncated")
+
+        first = report(graded, plan=plan, stop_reason="max_changes").splitlines()[0]
+
+        assert "truncated by one of its limits" in first
+
+    def test_a_run_the_engineer_stopped_names_the_stop_and_no_limit(
+        self, graded: GradedRun
+    ) -> None:
+        """`truncated` is one state reached two ways, and the report says which.
+
+        A run a person ended after one change and a run that ran out of room are different
+        runs, and a headline that told the first it had hit a limit would assert a cause
+        the evidence does not support (Principle I).
+        """
+        plan = judged(plan_of(features()), state="truncated")
+
+        first = report(graded, plan=plan, stop_reason=ENGINEER_STOP).splitlines()[0]
+
+        assert "the engineer stopped this run" in first
+        assert "limit" not in first
+
+    def test_the_save_is_never_counted_as_one_of_the_planned_changes(
+        self, graded: GradedRun
+    ) -> None:
+        """A run that passed the gate writes a `save` line whose `seq` is the next free one
+        in the log, not a plan index. Counting it would say a stopped run applied one more
+        change than it did and would name the planned change of that number as applied,
+        which is the change the stop prevented (Principle I)."""
+        plan = judged(plan_of(features()), state="truncated")
+        stopped = [
+            change(1, "rename", "Fillet1", "applied"),
+            change(2, "save", "", "applied", subject=None),
+        ]
+        missing = ", ".join(f"#{item.seq}" for item in plan.changes if item.seq != 1)
+
+        text = report(graded, plan=plan, changes=stopped, stop_reason=ENGINEER_STOP)
+
+        assert f"1 of {len(plan.changes)} planned changes were applied" in text
+        assert "of which 1 were applied" in text
+        assert f"Planned changes that were not applied: {missing}." in text
+
+    def test_the_stop_the_headline_selects_on_is_the_executors_own_token(self) -> None:
+        """One spelling of the engineer's stop, checked rather than kept in step by hand:
+        the report reads the token `apply_changes` writes, and a rename of one that left
+        the other behind would silently take the headline back to the limit sentence."""
+        assert ENGINEER_STOP in get_args(StopReason)
+        assert ENGINEER_STOP in TRUNCATING
+
+    def test_the_save_kind_the_arithmetic_leaves_out_is_the_logs_own(self) -> None:
+        """`save` is a record the run writes and never a change the plan proposes, which
+        is why the "planned changes applied" count leaves it out."""
+        assert SAVE in RECORD_KINDS
+        assert SAVE not in CHANGE_ORDER
 
     def test_a_changed_source_attestation_says_so_ahead_of_everything_else(
         self, graded: GradedRun

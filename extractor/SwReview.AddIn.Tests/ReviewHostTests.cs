@@ -338,6 +338,41 @@ public sealed class ReviewHostTests
     }
 
     /// <summary>
+    /// T134g: the same registration, made by the Remodel tab, over the folder a remodel run
+    /// leaves behind.
+    ///
+    /// `SwReviewAddIn` hands `RemodelHostOptions.RegisterLatestRun` straight to
+    /// <see cref="ReviewHost.TrackCheck"/>, so a remodel folder becomes the pane's latest run
+    /// exactly as a check's does - and that folder holds no `package.json`: the add-in's
+    /// before-dump is renamed to `package-before.json` (`contracts/run-artifacts.md`). This is
+    /// the test that pressing Remodel does not silently cost the Review and Model check tabs
+    /// their Show: the same assertion as
+    /// <see cref="TrackingACheckMakesItsFolderTheLatestRunAndTheRecordCarriesNoChatId"/>,
+    /// through the same index, over the names a remodel folder really holds.
+    /// </summary>
+    [Fact]
+    public void TrackingARemodelRunResolvesShowThroughItsBeforeDump()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string review = world.TrackedRun("chat-1");
+            world.WritePackage(review, "doc-review", @"C:\parts\housing.sldprt");
+            world.Host.TrackSession("chat-1", review);
+
+            string remodel = world.TrackedRun("bracket-remodel");
+            string copy = Path.Combine(remodel, "copy", "bracket-RMS.SLDPRT");
+            world.WritePackage(remodel, "doc-copy", copy, packageName: "package-before.json");
+
+            world.Host.TrackCheck(remodel);
+
+            var packages = new RunPackageIndex(() => world.Host.LatestSession?.RunDirectory);
+            Assert.Equal(remodel, world.Host.LatestSession!.RunDirectory);
+            Assert.Equal(copy, packages.DocumentPath("doc-copy"));
+        }
+    }
+
+    /// <summary>
     /// A check has no chat, so the backend must never be asked about one. Today's scan
     /// swallows every exception, which means a fabricated id would appear to work - at the cost
     /// of one HTTP round trip per settings save and a record that lies. The skip is explicit
@@ -817,8 +852,15 @@ public sealed class ReviewHostTests
             return directory;
         }
 
-        /// <summary>A one-document `package.json` in <paramref name="runDirectory"/> (T076).</summary>
-        public void WritePackage(string runDirectory, string documentId, string documentPath)
+        /// <summary>
+        /// A one-document package in <paramref name="runDirectory"/> (T076), under the name a
+        /// review writes or, for a remodel run folder, the name the before-dump is renamed to.
+        /// </summary>
+        public void WritePackage(
+            string runDirectory,
+            string documentId,
+            string documentPath,
+            string packageName = "package.json")
         {
             var package = new SwReview.Extractor.Ir.EvidencePackage();
             package.Documents.Add(new SwReview.Extractor.Ir.Document
@@ -831,7 +873,7 @@ public sealed class ReviewHostTests
             });
 
             File.WriteAllText(
-                Path.Combine(runDirectory, "package.json"),
+                Path.Combine(runDirectory, packageName),
                 SwReview.Extractor.Ir.PackageSerializer.Serialize(package));
         }
 

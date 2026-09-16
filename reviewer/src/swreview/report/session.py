@@ -20,7 +20,7 @@ from uuid import UUID
 from annotated_types import Len
 from pydantic import Field, StringConstraints, model_validator
 
-from swreview.agent.providers import EffortMapping, TokenUsage
+from swreview.agent.providers import EffortMapping, TokenUsage, TurnEndReason
 from swreview.agent.settings import EfficiencySettings
 from swreview.findings import Finding, ReviewModel
 from swreview.ids import SequentialIdAllocator
@@ -124,6 +124,26 @@ TRUNCATED_CLOSEOUT = (
     "the provider ended the turn on its output ceiling; the answer was cut short and "
     "whatever it was still working on was not investigated"
 )
+
+
+def cut_short_reason(reason: TurnEndReason, max_steps: int) -> str | None:
+    """Why a turn that ended on `reason` stopped short, or `None` if it did not.
+
+    The one reading of a `TurnEndReason` both runs share (004 T106). A review records the
+    sentence as an `unresolved` closeout item and a re-model as a `PlanCoverage` row - two
+    different places, one rule about which ends were cut short and how each is worded - and
+    a run that read the reason itself would be a second rule, free to word a truncation
+    differently or to drop one of the two ends the way a copy of this branch already did.
+
+    `error` and `stopped` are not cut short in this sense: an error is reported as an
+    `error` event by whoever caught it, and a cancelled turn was ended deliberately by the
+    engineer who cancelled it.
+    """
+    if reason == "max_steps":
+        return MAX_STEPS_CLOSEOUT.format(max_steps=max_steps)
+    if reason == "truncated":
+        return TRUNCATED_CLOSEOUT
+    return None
 
 
 CoverageBucket = Literal["checked", "skipped", "unresolved", "failed", "out_of_scope"]

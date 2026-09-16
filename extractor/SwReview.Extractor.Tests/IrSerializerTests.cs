@@ -374,6 +374,68 @@ public class IrSerializerTests
         Assert.True(results.IsValid, DescribeFailures(results, without));
     }
 
+    /// <summary>
+    /// Feature 005 T033. The per-phase dump timing travels on the extractor block. It is
+    /// optional and additive, so a package written before it existed still reads - and a
+    /// phase that never ran carries <c>null</c>, never 0, because 0 is a phase that ran and
+    /// cost nothing.
+    /// </summary>
+    [Fact]
+    public void PhaseRows_AreWrittenAsNameElapsedAndStatusAndValidateAgainstTheContract()
+    {
+        EvidencePackage package = BuildSamplePackage();
+        package.Extractor.Phases.Add(
+            new DumpPhase { Name = "manifest", ElapsedMs = 7, Status = DumpPhaseStatus.Ok });
+        package.Extractor.Phases.Add(
+            new DumpPhase { Name = "body", ElapsedMs = null, Status = DumpPhaseStatus.Skipped });
+
+        string json = PackageSerializer.Serialize(package);
+
+        Assert.Contains("\"name\": \"manifest\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"elapsed_ms\": 7", json, StringComparison.Ordinal);
+        Assert.Contains("\"status\": \"skipped\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"elapsed_ms\": null", json, StringComparison.Ordinal);
+
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+
+        ExtractorInfo restored = PackageSerializer.Deserialize(json).Extractor;
+        Assert.Equal(new[] { "manifest", "body" }, restored.Phases.Select(phase => phase.Name));
+        Assert.Equal(7, restored.Phases[0].ElapsedMs);
+        Assert.Null(restored.Phases[1].ElapsedMs);
+        Assert.Equal(DumpPhaseStatus.Skipped, restored.Phases[1].Status);
+    }
+
+    [Fact]
+    public void PackageWithoutThePhasesMember_StillLoadsAndStillValidates()
+    {
+        // Every package written before T033 predates the member, and the Python writer
+        // leaves it out entirely when nothing was timed. It is optional in the contract and
+        // optional here, so such a package is read, not rejected.
+        string json = PackageSerializer.Serialize(BuildSamplePackage());
+
+        string without = Regex.Replace(json, ",\\s*\"phases\": \\[\\]", string.Empty);
+
+        Assert.DoesNotContain("\"phases\"", without, StringComparison.Ordinal);
+        Assert.Empty(PackageSerializer.Deserialize(without).Extractor.Phases);
+        EvaluationResults results = Evaluate(without);
+        Assert.True(results.IsValid, DescribeFailures(results, without));
+    }
+
+    [Fact]
+    public void UnknownPhaseStatus_IsRejectedByTheReaderAndByTheContract()
+    {
+        EvidencePackage package = BuildSamplePackage();
+        package.Extractor.Phases.Add(
+            new DumpPhase { Name = "mate", ElapsedMs = 3, Status = DumpPhaseStatus.Aborted });
+
+        string json = PackageSerializer.Serialize(package)
+            .Replace("\"status\": \"aborted\"", "\"status\": \"gave_up\"");
+
+        Assert.Throws<JsonException>(() => PackageSerializer.Deserialize(json));
+        Assert.False(Evaluate(json).IsValid);
+    }
+
     [Fact]
     public void UnknownProfile_IsRejectedByTheReaderAndByTheContract()
     {

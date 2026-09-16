@@ -99,6 +99,20 @@
     <Content Include="..\..\specs\003-resilient-modeling\contracts\model-check.md" Link="model-check.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!--
+      And for ReviewPageUsageLineTests (feature 005 T016a), which reads the `usage` event's own
+      field list out of the contract rather than restating it beside the page.
+    -->
+    <Content Include="..\..\specs\005-llm-efficiency\contracts\usage.md" Link="usage.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!--
+      And for RemodelPageContractTests (T132), which reads the tab-5 message tables - and the
+      sentence Discard must say - out of the feature 004 contract the same way.
+    -->
+    <Content Include="..\..\specs\004-resilient-remodeler\contracts\pane-remodel-messages.md" Link="pane-remodel-messages.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

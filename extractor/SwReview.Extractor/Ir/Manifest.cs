@@ -29,6 +29,48 @@ public sealed class ExtractorInfo
     /// </summary>
     [JsonPropertyName("profile")]
     public DumpProfile Profile { get; set; } = DumpProfile.Full;
+
+    /// <summary>
+    /// One row per phase of the dump, in the order it ran them (schema 1.3.0, feature 005
+    /// T033 - the same minor the reuse fields arrived in). Empty in a package written by a
+    /// build that timed nothing, and in one assembled from exported files rather than
+    /// dumped. In a package with <c>reused_from</c> set every row is
+    /// <see cref="DumpPhaseStatus.Skipped"/> with no elapsed time: no phase ran in that run
+    /// (Dump/PackageReuse.cs).
+    ///
+    /// This is the only dump metric a package carries, and levers 9 and 10 have no other:
+    /// "which phase actually costs the time" is answered here or it is guessed.
+    /// </summary>
+    [JsonPropertyName("phases")]
+    public List<DumpPhase> Phases { get; set; } = new List<DumpPhase>();
+}
+
+/// <summary>
+/// contracts/ir.schema.json #/$defs/DumpPhase. What one phase of the dump cost and what
+/// became of it (schema 1.3.0, feature 005 T033), in the shape
+/// <c>SuppressTestRow.elapsed_ms</c> already set as the package's only elapsed precedent.
+/// </summary>
+public sealed class DumpPhase
+{
+    /// <summary>The phase, named as <c>PackageWriter</c> names it in its gaps: "document",
+    /// "manifest", "mate", "feature", "equation", "hole", "fastener", "face", "body".</summary>
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Wall clock across the phase, in whole milliseconds. Null when the phase never ran -
+    /// never 0, which is a phase that ran and came back inside the clock's resolution.
+    /// </summary>
+    [JsonPropertyName("elapsed_ms")]
+    public int? ElapsedMs { get; set; }
+
+    /// <summary>
+    /// Defaults to <see cref="DumpPhaseStatus.Skipped"/>, which is what a row nobody filled
+    /// in means: the phase did not run. <c>Ok</c> as a default would claim a phase ran and
+    /// succeeded because a writer forgot to say otherwise (Principle I).
+    /// </summary>
+    [JsonPropertyName("status")]
+    public DumpPhaseStatus Status { get; set; } = DumpPhaseStatus.Skipped;
 }
 
 /// <summary>contracts/ir.schema.json #/$defs/ManifestEntry. One per document.</summary>

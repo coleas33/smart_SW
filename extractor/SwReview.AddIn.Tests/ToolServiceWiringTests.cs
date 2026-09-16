@@ -115,6 +115,29 @@ public sealed class ToolServiceWiringTests
         Assert.NotEqual(world.Published.Secret, access.GeneralChatBridge.Secret);
     }
 
+    /// <summary>
+    /// T134e. The Remodel tab's pipeline is handed a third half, and it is a third secret:
+    /// `remodel.*` authorizes every write the run makes to the copy, so it is neither the review
+    /// secret nor the one the CLI profile carries. Null before the service is listening, which
+    /// is what makes the pane refuse a run rather than start one it cannot execute.
+    /// </summary>
+    [Fact]
+    public void TheRemodelBridgeIsAThirdSecretAndIsNullBeforeTheServiceIsListening()
+    {
+        var world = new GateWorld();
+        ToolServiceGate gate = world.Gate();
+        Assert.Null(gate.RemodelBridge);
+
+        gate.EnsureStarted();
+
+        FakeToolService service = world.Services[0];
+        Assert.NotNull(gate.RemodelBridge);
+        Assert.Equal(service.PipeName, gate.RemodelBridge!.Pipe);
+        Assert.Equal(service.RemodelBridge.Secret, gate.RemodelBridge.Secret);
+        Assert.NotEqual(service.ReviewBridge.Secret, gate.RemodelBridge.Secret);
+        Assert.NotEqual(service.GeneralChatBridge.Secret, gate.RemodelBridge.Secret);
+    }
+
     [Fact]
     public void TheReviewBridgeIsWhatTheReviewHostPassesToPostSessions()
     {
@@ -678,6 +701,7 @@ public sealed class ToolServiceWiringTests
             PipeName = "swreview-fake-" + ordinal;
             ReviewBridge = new BridgeConfig(PipeName, "review-secret-" + ordinal);
             GeneralChatBridge = new BridgeConfig(PipeName, "chat-secret-" + ordinal);
+            RemodelBridge = new BridgeConfig(PipeName, "remodel-secret-" + ordinal);
             DocumentPath = @"C:\models\bracket-" + ordinal + ".sldasm";
             Session = new FakeSession();
         }
@@ -689,6 +713,8 @@ public sealed class ToolServiceWiringTests
         public BridgeConfig ReviewBridge { get; }
 
         public BridgeConfig GeneralChatBridge { get; }
+
+        public BridgeConfig RemodelBridge { get; }
 
         public ISwSession Session { get; }
 

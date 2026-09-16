@@ -186,6 +186,33 @@ public enum GapKind
     NoText,
 }
 
+/// <summary>
+/// DumpPhase.status (feature 005 T033): what became of one phase of the dump.
+///
+/// Four outcomes, because the three ways a phase can end and the one way it can never
+/// start are different facts about the package beside them: an empty <c>holes[]</c> under
+/// <see cref="Ok"/> is a part with no holes, under <see cref="Failed"/> it is evidence the
+/// dump lost, and under <see cref="Skipped"/> it is a phase nobody ran.
+/// </summary>
+public enum DumpPhaseStatus
+{
+    /// <summary>It ran and returned.</summary>
+    Ok,
+
+    /// <summary>It threw; the failure is a gap and the dump carried on.</summary>
+    Failed,
+
+    /// <summary>SOLIDWORKS stopped answering inside it, and the phases behind it were skipped.</summary>
+    Aborted,
+
+    /// <summary>
+    /// It was never run: switched off by the profile or the options, or behind a phase that
+    /// aborted. Its <c>elapsed_ms</c> is null - a phase that never ran has no elapsed time,
+    /// and 0 would read as one that ran and cost nothing.
+    /// </summary>
+    Skipped,
+}
+
 /// <summary>SuppressTestRow.outcome (schema 1.1.0).</summary>
 public enum SuppressTestOutcome
 {

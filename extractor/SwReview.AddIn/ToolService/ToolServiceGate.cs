@@ -27,6 +27,14 @@ public interface IToolService : IDisposable
     /// <summary>Pipe plus the general-chat secret; goes to the generated CLI profile.</summary>
     BridgeConfig GeneralChatBridge { get; }
 
+    /// <summary>
+    /// Pipe plus the remodel secret; goes to the backend's remodel routes (T070, T134e) and to
+    /// nothing else. It authorizes <c>remodel.*</c>, which is every write the run makes to the
+    /// copy, so it is deliberately absent from <see cref="IToolServiceAccess"/>: the terminal
+    /// can read its own generated profile.
+    /// </summary>
+    BridgeConfig RemodelBridge { get; }
+
     /// <summary>The attached scope, so <c>entity.show</c> resolves against the same one.</summary>
     ISwSession Session { get; }
 }
@@ -127,6 +135,17 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     }
 
     public BridgeConfig? GeneralChatBridge => Service?.GeneralChatBridge;
+
+    /// <summary>
+    /// The remodel half, for the Remodel tab's pipeline (T134e). Read fresh per call like the
+    /// others - the tool service restarts with the document - and null before it is listening,
+    /// which is what makes the pane refuse a run rather than start one it cannot execute.
+    ///
+    /// On the gate and on <see cref="IToolService"/>, never on <see cref="IToolServiceAccess"/>:
+    /// that interface is the terminal's view, and this secret authorizes every write the
+    /// re-modeler makes to the copy.
+    /// </summary>
+    public BridgeConfig? RemodelBridge => Service?.RemodelBridge;
 
     public string? DocumentPath => Service?.DocumentPath;
 

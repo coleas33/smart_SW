@@ -800,8 +800,17 @@ module compares the rebuild reading against, `folder_location` by `_unmet` below
 `equation_count_delta` and `equation_value` by `_landed` and `_re_read` above. A key nobody
 asserts is an expectation nobody checks, so it is refused at the door rather than carried."""
 
-TRUNCATING: frozenset[str] = frozenset({"max_changes", "max_minutes", "max_rebuild_seconds"})
-"""The three bounds, and the only stop reasons that finalize a run as `truncated`."""
+TRUNCATING: frozenset[str] = frozenset(
+    {"max_changes", "max_minutes", "max_rebuild_seconds", "stopped"}
+)
+"""The three bounds and the engineer's stop: the only stop reasons that finalize `truncated`.
+
+`stopped` is not a fourth bound. The three are the executor's own and are reached by the run
+itself; `stopped` is a person pressing Stop, and it is finalized the same way because
+`contracts/pane-remodel-messages.md` says so in as many words: `remodel.stop` "finishes the
+change in flight, inverts it if it failed, finalizes the artifacts, and reports the run as
+`truncated`". A stopped run is a partial run that says which changes it applied, which is
+exactly what `truncated` means and not what `aborted` means."""
 
 EXPECT_UNMET = "expect_unmet"
 """The one code in `changes.jsonl` that is not a bridge token, because the bridge cannot
@@ -837,6 +846,7 @@ StopReason = Literal[
     "max_changes",
     "max_minutes",
     "max_rebuild_seconds",
+    "stopped",
     "rollback_failed",
     "not_addressable",
     "target_mismatch",
@@ -844,8 +854,9 @@ StopReason = Literal[
     "circuit_open",
     "bridge_failed",
 ]
-"""Why the loop ended early. The first three are bounds and finalize `truncated`; the rest
-are aborts, and every one of them leaves the change log intact up to its last line."""
+"""Why the loop ended early. The first three are bounds and the fourth is the engineer's
+stop; all four finalize `truncated`. The rest are aborts, and every one of them leaves the
+change log intact up to its last line."""
 
 
 class ResumeRefused(RuntimeError):
@@ -955,6 +966,7 @@ def apply_changes(
     target_path: str,
     baseline: int,
     limits: Limits,
+    stop_requested: Callable[[], bool] = lambda: False,
     now: Callable[[], datetime] = utc_now,
 ) -> ApplyResult:
     """Apply every planned change to the copy, in the plan's order, to completion.
@@ -976,6 +988,10 @@ def apply_changes(
         target_path: The copy's path, as `VerifyTarget` confirms it per write (FR-041).
         baseline: The run's rebuild-error count, read at open before any change.
         limits: The three bounds. Enforced here, and nowhere the model can reach.
+        stop_requested: The engineer's stop flag, read **between** changes: the change in
+            flight lands or is inverted and is recorded, and only then does the loop end.
+            It is a callable rather than a flag because the pane raises it in another
+            thread while this loop is inside a bridge call, and the default never stops.
         now: The clock, injected so the wall-clock bound and `elapsed_ms` are readings of
             one clock and a test drives both without sleeping.
     """
@@ -993,6 +1009,18 @@ def apply_changes(
 
     for taken, change in enumerate(changes):
         at = now()
+        # The engineer's stop is read first and here, at the top of the iteration, which is
+        # the one moment nothing is in flight: the previous change has landed or been
+        # inverted and both its lines are on disk. It outranks the bounds because a run a
+        # person stopped is reported as stopped, not as one that ran out of room.
+        if stop_requested():
+            stop = Stop(
+                "stopped",
+                None,
+                f"the engineer stopped this run after {taken} change(s); the change in "
+                "flight was finished and recorded before the run ended",
+            )
+            break
         stop = _bound_reached(taken, at, started_at, limits)
         if stop is not None:
             break
@@ -1675,7 +1703,9 @@ def verify(
         feature_errors=feature_errors,
         gate=gate,
         geometry_path=geometry_path,
-        report_path=_report(folder, plan, log, geometry_path, graded, check.attestation),
+        report_path=_report(
+            folder, plan, log, geometry_path, graded, check.attestation, applied.stop
+        ),
         plan=plan,
         saved=saved,
         copy_discarded=discarded,
@@ -1891,6 +1921,7 @@ def _report(
     geometry_path: Path | None,
     graded: GradedRun,
     attestation: SourceAttestation,
+    stop: Stop | None,
 ) -> Path:
     """`report.md`, written for every terminal state, from the run folder's own files.
 
@@ -1902,6 +1933,10 @@ def _report(
     report is written anyway with that section saying so: section 11 lists `report.md`
     among the artifacts of a failed run without exception, and an engineer left with a
     discarded copy and no account of why is what the report exists to prevent.
+
+    `stop` is the one input that is not on disk anywhere: `plan.state` records that a run
+    ended short and the three bounds and the engineer's Stop all finalize `truncated`, so
+    the reason travels from the apply phase that reached it to the headline that names it.
     """
     artifact = (
         None
@@ -1918,4 +1953,5 @@ def _report(
         geometry=artifact,
         attestation=attestation,
         log_targets=read_log_targets(run_dir),
+        stop_reason=None if stop is None else stop.reason,
     )

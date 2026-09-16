@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using SwReview.Extractor.Dump;
 using SwReview.Extractor.Ir;
 
 namespace SwReview.AddIn.Review;
 
 /// <summary>
-/// The two id lookups <see cref="SwEntityResolver"/> needs, read out of the run's own
-/// `package.json`.
+/// The two id lookups <see cref="SwEntityResolver"/> needs, read out of the run folder's own
+/// package - `package.json`, or the `package-before.json` a remodel run holds instead.
 ///
 /// A finding names entities the way the package names them: `persist_ref_scope` is a
 /// `document_id` and the affected component is a `component_id`. SOLIDWORKS knows neither. It
@@ -20,8 +21,8 @@ namespace SwReview.AddIn.Review;
 /// megabytes, Show is pressed once per finding, and the parse happens on the SOLIDWORKS
 /// application thread with the engineer waiting on it.
 ///
-/// <b>Nothing here throws.</b> No run yet, no `package.json`, a half-written one, an id that is
-/// not in it - all of them answer null, and Show then falls back to selecting the resolved
+/// <b>Nothing here throws.</b> No run yet, no package under either name, a half-written one, an
+/// id that is not in it - all of them answer null, and Show then falls back to selecting the resolved
 /// entity by type and reports no full path. That is a worse answer than the right one and a far
 /// better one than an exception out of the application thread.
 /// </summary>
@@ -29,6 +30,26 @@ public sealed class RunPackageIndex
 {
     private static readonly IReadOnlyDictionary<string, string> Empty =
         new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The names a run folder can hold its package under, in the order they are tried.
+    ///
+    /// A review's folder holds `package.json`. A remodel's holds no such file: the add-in's
+    /// before-dump is written by the extractor under that name and then renamed to
+    /// `package-before.json` (`contracts/run-artifacts.md` rows 27-28). That folder becomes the
+    /// pane's latest run the moment a plan is made - `RemodelHostOptions.RegisterLatestRun`
+    /// goes to <see cref="ReviewHost.TrackCheck"/>, exactly as a Model check's does - so
+    /// without the second name, pressing Remodel would silently cost the Review and Model check
+    /// tabs the full path on every Show for as long as the remodel stayed the latest run.
+    ///
+    /// The order is fixed rather than "whichever is newer", so Show resolves the same way on
+    /// every press.
+    /// </summary>
+    private static readonly string[] PackageNames =
+    {
+        PackageWriter.PackageFileName,
+        RunFolders.PackageBeforeName,
+    };
 
     private readonly Func<string?> _runDirectory;
     private readonly object _gate = new object();
@@ -83,17 +104,12 @@ public sealed class RunPackageIndex
             return;
         }
 
-        EvidencePackage package;
-        try
+        EvidencePackage? package = FirstPackageIn(runDirectory!);
+        if (package == null)
         {
-            package = PackageSerializer.Deserialize(
-                File.ReadAllText(Path.Combine(runDirectory!, "package.json")));
-        }
-        catch (Exception)
-        {
-            // No package, a package still being written, or one this build cannot parse. The
-            // run folder is left to speak for itself; Show degrades rather than failing loudly
-            // in the middle of an unrelated action.
+            // No package under either name, one still being written, or one this build cannot
+            // parse. The run folder is left to speak for itself; Show degrades rather than
+            // failing loudly in the middle of an unrelated action.
             _loadedFrom = null;
             return;
         }
@@ -118,5 +134,31 @@ public sealed class RunPackageIndex
 
         _documentPaths = documents;
         _componentFullPaths = components;
+    }
+
+    /// <summary>
+    /// The first of <see cref="PackageNames"/> this folder holds and this build can parse, or
+    /// null when it holds none.
+    ///
+    /// A name that is missing and a name that is there but unreadable are treated the same way
+    /// and both fall through to the next one: a dump killed halfway leaves a file that is not a
+    /// package, and the folder may still hold one that answers.
+    /// </summary>
+    private static EvidencePackage? FirstPackageIn(string runDirectory)
+    {
+        foreach (string name in PackageNames)
+        {
+            try
+            {
+                return PackageSerializer.Deserialize(
+                    File.ReadAllText(Path.Combine(runDirectory, name)));
+            }
+            catch (Exception)
+            {
+                // Missing, half-written, or written to a schema this build cannot read.
+            }
+        }
+
+        return null;
     }
 }

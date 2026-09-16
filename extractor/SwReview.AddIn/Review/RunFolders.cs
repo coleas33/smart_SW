@@ -53,6 +53,18 @@ public static class RunFolders
     /// </summary>
     public const string RemodelSuffix = "-remodel";
 
+    /// <summary>
+    /// What a remodel run folder holds its reading of the copy under
+    /// (`contracts/run-artifacts.md`).
+    ///
+    /// The extractor writes `package.json` and the add-in renames it, so a remodel folder never
+    /// holds the name a review's folder does - and that folder becomes the pane's latest run,
+    /// which is the folder <see cref="RunPackageIndex"/> resolves every `document_id` through.
+    /// Spelled here because two places need it and a run artifact with two spellings is a run
+    /// artifact one of them will stop finding.
+    /// </summary>
+    public const string PackageBeforeName = "package-before.json";
+
     private const string TimestampFormat = "yyyyMMdd-HHmmss";
 
     /// <summary>Creates the run folder for a review of <paramref name="documentPath"/>.</summary>

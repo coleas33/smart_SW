@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
 using SolidWorks.Interop.swconst;
 using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Guard;
@@ -69,6 +70,12 @@ public interface IRemodelCopyTarget : IRemodelTarget
 /// The record is handed back rather than written here: `remodel.open` returns it as
 /// <c>source_attestation</c> and the Python runner writes <c>source-attestation.json</c>, so
 /// the artifact has one writer and one schema owner.
+///
+/// Every property carries its <c>JsonPropertyName</c>, because
+/// <see cref="Ir.PackageSerializer"/> - whose options <c>BridgeCodec</c> inherits - sets
+/// <c>PropertyNamingPolicy = null</c>: a name without an attribute is written PascalCase, and
+/// <c>remodel/attestation.py</c>'s <c>RECORDED_FIELDS</c> is exhaustive in both directions, so
+/// it would refuse the block for nine missing keys and nine unexpected ones at once.
 /// </summary>
 public sealed class SourceAttestation
 {
@@ -95,12 +102,16 @@ public sealed class SourceAttestation
     }
 
     /// <summary>The engineer's file. Never opened for writing, saved, renamed or deleted.</summary>
+    [JsonPropertyName("path")]
     public string Path { get; }
 
+    [JsonPropertyName("length_bytes")]
     public long LengthBytes { get; }
 
+    [JsonPropertyName("last_write_utc")]
     public DateTime LastWriteUtc { get; }
 
+    [JsonPropertyName("sha256")]
     public string Sha256 { get; }
 
     /// <summary>
@@ -109,11 +120,14 @@ public sealed class SourceAttestation
     /// to the run, so matching on those would select no candidate, ever
     /// (contracts/run-artifacts.md, "Exceptions carry-forward").
     /// </summary>
+    [JsonPropertyName("source_design_id")]
     public string SourceDesignId { get; }
 
     /// <summary>Before the copy is made.</summary>
+    [JsonPropertyName("recorded_at")]
     public DateTime RecordedAt { get; }
 
+    [JsonPropertyName("copy_path")]
     public string CopyPath { get; }
 
     /// <summary>
@@ -121,9 +135,11 @@ public sealed class SourceAttestation
     /// an empty string: "not in a vault" and "in a vault whose revision could not be read" are
     /// different answers and the report says which.
     /// </summary>
+    [JsonPropertyName("vault_path")]
     public string? VaultPath { get; }
 
     /// <inheritdoc cref="VaultPath" />
+    [JsonPropertyName("vault_revision")]
     public string? VaultRevision { get; }
 }
 

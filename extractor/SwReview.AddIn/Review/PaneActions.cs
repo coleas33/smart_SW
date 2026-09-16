@@ -206,16 +206,45 @@ public sealed class PaneActions
             return;
         }
 
+        ShowPersistRef(id, new EntityShowRequest(
+            persistRef,
+            PagePayload.Blank(PagePayload.Text(payload, "persist_ref_scope")),
+
+            // The page decides which instance of a part to show and sends that component's
+            // id; the host passes it through and never picks one for the engineer.
+            PagePayload.Blank(PagePayload.Text(payload, "component_id"))));
+    }
+
+    /// <summary>
+    /// Shows what <paramref name="request"/> names and answers `entity.shown`, for a host that
+    /// resolved the reference from its own records rather than from the page's message.
+    ///
+    /// Feature 004's `remodel.show_change` carries a change's sequence number, not a reference:
+    /// the host reads the persistent reference out of `changes.jsonl` and hands it here, so one
+    /// resolver, one failure vocabulary and one payload shape serve three tabs (T130).
+    /// </summary>
+    public void ShowPersistRef(string? id, EntityShowRequest request)
+    {
+        if (request == null)
+        {
+            throw new ArgumentNullException(nameof(request));
+        }
+
+        IEntityResolver? resolver = _options.EntityResolver();
+        if (resolver == null)
+        {
+            SendError(
+                id,
+                "NotAttached",
+                "the add-in is not attached to a SOLIDWORKS session, so nothing can be selected.",
+                retryable: true);
+            return;
+        }
+
         EntityShowOutcome outcome;
         try
         {
-            outcome = resolver.Show(new EntityShowRequest(
-                persistRef,
-                PagePayload.Blank(PagePayload.Text(payload, "persist_ref_scope")),
-
-                // The page decides which instance of a part to show and sends that component's
-                // id; the host passes it through and never picks one for the engineer.
-                PagePayload.Blank(PagePayload.Text(payload, "component_id"))));
+            outcome = resolver.Show(request);
         }
         catch (Exception failure)
         {
@@ -223,6 +252,24 @@ public sealed class PaneActions
             // at all (a modal dialog on the application thread, a closed document, an open
             // circuit), which is a different thing from a reference that resolved to nothing.
             outcome = EntityShowOutcome.NotShown(-1, failure.Message, null);
+        }
+
+        SendEntityShown(id, outcome);
+    }
+
+    /// <summary>
+    /// Sends one `entity.shown` for an outcome that is already known.
+    ///
+    /// Public because a host can know the answer without asking SOLIDWORKS - a change whose
+    /// sequence number is not in the change list, or which recorded no persistent reference -
+    /// and that answer belongs on the card in the same shape as every other one, not in an
+    /// error banner.
+    /// </summary>
+    public void SendEntityShown(string? id, EntityShowOutcome outcome)
+    {
+        if (outcome == null)
+        {
+            throw new ArgumentNullException(nameof(outcome));
         }
 
         Send("entity.shown", id, new Dictionary<string, object?>

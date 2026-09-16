@@ -200,9 +200,13 @@ public static class PackageReuse
     /// Copies <c>package.json</c> and <c>meshes/</c> into this run's folder, stamping the
     /// provenance onto the package as it goes.
     ///
-    /// The package is rewritten rather than copied byte for byte because two members have to
+    /// The package is rewritten rather than copied byte for byte because the provenance has to
     /// change; everything else is the object the source file deserialized to, through the one
     /// serializer both sides use, so the result is the source package plus its provenance.
+    ///
+    /// The one exception is <c>extractor.phases</c>, which is re-stamped rather than carried:
+    /// those rows are wall clock from a dump that ran in another run, and no dump phase runs
+    /// here at all.
     /// </summary>
     private static DumpResult Copy(
         string source,
@@ -213,6 +217,13 @@ public static class PackageReuse
     {
         candidate.ReusedFrom = folder;
         candidate.ReusedAt = now;
+
+        // "No phase ran here", said out loud, rather than the timings of the dump this
+        // package was copied from. A reader of a reused package - and lever 9's own A/B
+        // harness, whose only dump metric this is - would otherwise read measurements of a
+        // run that did not happen.
+        candidate.Extractor.Phases.Clear();
+        candidate.Extractor.Phases.AddRange(PackageWriter.NoPhaseRan());
 
         Directory.CreateDirectory(options.OutputDirectory);
         string path = Path.Combine(options.OutputDirectory, PackageWriter.PackageFileName);

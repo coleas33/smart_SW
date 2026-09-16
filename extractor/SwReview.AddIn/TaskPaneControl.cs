@@ -125,8 +125,9 @@ public sealed class TaskPaneOptions
 
 /// <summary>
 /// The Task Pane: <b>Review</b> (the chat page in WebView2), <b>Ask</b> (the CLI terminal,
-/// US3), <b>Extract</b> (the three buttons that write an evidence package by hand) and
-/// <b>Model check</b> (the rule grade, tab 4, with no provider and no key).
+/// US3), <b>Extract</b> (the three buttons that write an evidence package by hand),
+/// <b>Model check</b> (the rule grade, tab 4, with no provider and no key) and
+/// <b>Remodel</b> (tab 5: reorganize a copy of the open part, feature 004).
 ///
 /// The tabs are named for what the engineer gets, not for what the code does, and each one
 /// carries the same sentence twice - as a banner across the top of the tab and as the tab's
@@ -138,13 +139,15 @@ public sealed class TaskPaneOptions
 /// Five rules live here because nowhere else can enforce them:
 ///
 /// <b>One environment for the process.</b> <see cref="EnvironmentAsync"/> creates it once and
-/// hands the same task to every caller, so all three WebView2 tabs share one browser
+/// hands the same task to every caller, so all four WebView2 tabs share one browser
 /// process over one user data folder. Two environments over the same folder with different
 /// options fail at runtime (contracts/pane-host-messages.md).
 ///
-/// <b>The fourth tab is loaded when it is opened.</b> <see cref="ActivateModelCheckAsync"/>
-/// runs on the first selection of the Model check tab rather than at add-in load, and its
-/// failure ends as the same fallback panel the other two get (T083).
+/// <b>The fourth and fifth tabs are loaded when they are opened.</b>
+/// <see cref="ActivateModelCheckAsync"/> and <see cref="ActivateRemodelAsync"/> run on the
+/// first selection of their tab rather than at add-in load, and a failure ends as the same
+/// fallback panel the eager tabs get (T083, T121). Five tabs loaded up front would cost four
+/// renderer processes inside the SOLIDWORKS process before anything was pressed (RK-11).
 ///
 /// <b>Nothing thrown here reaches SOLIDWORKS.</b> <see cref="InitializeAsync"/> never throws.
 /// The add-in is loaded in-process and an exception out of a Task Pane control on the
@@ -175,6 +178,9 @@ public sealed class TaskPaneControl : UserControl
 
     /// <summary>The Model check tab's page, tab 4 (T083, contracts/model-check.md).</summary>
     public const string ModelCheckPageUrl = PageOrigin + "/Model/ModelCheckPage/index.html";
+
+    /// <summary>The Remodel tab's page, tab 5 (T121, contracts/pane-remodel-messages.md).</summary>
+    public const string RemodelPageUrl = PageOrigin + "/Remodel/RemodelPage/index.html";
 
     /// <summary>Where the Evergreen runtime comes from, shown when it is missing.</summary>
     public const string RuntimeDownloadUrl = "https://developer.microsoft.com/en-us/microsoft-edge/webview2/";
@@ -215,12 +221,35 @@ public sealed class TaskPaneControl : UserControl
     /// </summary>
     public const string ModelCheckPending = "The Model check page opens when you select this tab.";
 
+    /// <summary>
+    /// What the <b>Remodel</b> tab is for (tab 5, contracts/pane-remodel-messages.md).
+    ///
+    /// The last sentence is the one an engineer needs before pressing anything on this tab,
+    /// and it is the literal truth of the design rather than a reassurance: the run works on a
+    /// copy it made in the run folder, and the source is never opened for writing at all.
+    /// </summary>
+    public const string RemodelPurpose =
+        "Copy the open part and reorganize the copy under the Resilient Modeling Strategy, "
+        + "then review the change list, the grade, and the geometry comparison. The original "
+        + "file is never touched.";
+
+    /// <summary>
+    /// What the Remodel tab holds before anyone opens it.
+    ///
+    /// Tab 5 is lazy for a harder reason than tab 4 is (RK-11): five tabs loaded at add-in load
+    /// would cost <b>four</b> renderer processes inside the SOLIDWORKS process before the
+    /// engineer has pressed anything. Two of the five are created on first activation, so a
+    /// session that opens neither pays for neither.
+    /// </summary>
+    public const string RemodelPending = "The Remodel page opens when you select this tab.";
+
     private readonly TaskPaneOptions _options;
     private readonly TabControl _tabs;
     private readonly TabPage _reviewTab;
     private readonly TabPage _terminalTab;
     private readonly TabPage _actionsTab;
     private readonly TabPage _modelCheckTab;
+    private readonly TabPage _remodelTab;
     private readonly ActionsPanel _actions;
     private readonly StepStrip _steps;
 
@@ -228,7 +257,9 @@ public sealed class TaskPaneControl : UserControl
     private WebView2? _reviewView;
     private WebView2? _terminalView;
     private WebView2? _modelCheckView;
+    private WebView2? _remodelView;
     private Task? _modelCheckActivation;
+    private Task? _remodelActivation;
     private bool _initializing;
 
     /// <summary>The terminal-first run folder this pane created, once it has created one.</summary>
@@ -245,15 +276,17 @@ public sealed class TaskPaneControl : UserControl
         _actionsTab = NewTab("Extract", ExtractPurpose, _actions);
         _actionsTab.Padding = new Padding(6);
 
-        // Tab 4, and it holds a placeholder until it is selected (contracts/model-check.md;
-        // feature 004's Remodel tab is tab 5).
+        // Tabs 4 and 5, each holding a placeholder until it is selected
+        // (contracts/model-check.md, contracts/pane-remodel-messages.md).
         _modelCheckTab = NewTab("Model check", ModelCheckPurpose, Note(ModelCheckPending));
+        _remodelTab = NewTab("Remodel", RemodelPurpose, Note(RemodelPending));
 
         _tabs = new TabControl { Dock = DockStyle.Fill, ShowToolTips = true };
         _tabs.TabPages.Add(_reviewTab);
         _tabs.TabPages.Add(_terminalTab);
         _tabs.TabPages.Add(_actionsTab);
         _tabs.TabPages.Add(_modelCheckTab);
+        _tabs.TabPages.Add(_remodelTab);
 
         _steps = new StepStrip { Dock = DockStyle.Top };
 
@@ -275,6 +308,7 @@ public sealed class TaskPaneControl : UserControl
         ReviewChannel = new PageChannel(this, () => _reviewView);
         TerminalChannel = new PageChannel(this, () => _terminalView);
         ModelCheckChannel = new PageChannel(this, () => _modelCheckView);
+        RemodelChannel = new PageChannel(this, () => _remodelView);
 
         RefreshSteps();
     }
@@ -304,6 +338,14 @@ public sealed class TaskPaneControl : UserControl
     public IPageChannel ModelCheckChannel { get; }
 
     /// <summary>
+    /// Posts host messages to the Remodel page, from any thread. The fourth channel, and the
+    /// one that carries the most traffic while a run is going: `status`,
+    /// `remodel.progress` and one `remodel.change` per change, all raised off the UI thread by
+    /// the executor and marshalled here.
+    /// </summary>
+    public IPageChannel RemodelChannel { get; }
+
+    /// <summary>
     /// One `{type, id, payload}` document from the Review page, raised on the UI thread. The
     /// add-in hands it to <see cref="ReviewHost"/> off this thread and one at a time.
     /// </summary>
@@ -325,6 +367,14 @@ public sealed class TaskPaneControl : UserControl
     /// </summary>
     public event EventHandler<string>? ModelCheckPageMessageReceived;
 
+    /// <summary>
+    /// One `{type, id, payload}` document from the Remodel page, raised on the UI thread. Kept
+    /// apart from the other three for the reason they are kept apart from each other: four
+    /// pages, four vocabularies, and a `remodel.start` answered by the review host would be
+    /// answered `error` while the tab waited.
+    /// </summary>
+    public event EventHandler<string>? RemodelPageMessageReceived;
+
     /// <summary>Whether the Review page is loaded (false on a workstation with no runtime).</summary>
     public bool ReviewPageReady => _reviewView != null && _reviewView.CoreWebView2 != null;
 
@@ -333,6 +383,9 @@ public sealed class TaskPaneControl : UserControl
 
     /// <summary>Whether the Model check page is loaded; false until the tab is first opened.</summary>
     public bool ModelCheckPageReady => _modelCheckView != null && _modelCheckView.CoreWebView2 != null;
+
+    /// <summary>Whether the Remodel page is loaded; false until the tab is first opened.</summary>
+    public bool RemodelPageReady => _remodelView != null && _remodelView.CoreWebView2 != null;
 
     /// <summary>
     /// The process's one WebView2 environment. Created on the first call and shared by every
@@ -439,6 +492,49 @@ public sealed class TaskPaneControl : UserControl
     }
 
     /// <summary>
+    /// Loads the Remodel page, once, on the first activation of its tab (T121).
+    ///
+    /// The same rule as tab 4 and for a harder reason: five tabs loaded at add-in load would
+    /// cost four renderer processes inside the SOLIDWORKS process before the engineer has
+    /// pressed anything, and this is the tab most sessions never open at all. It shares the one
+    /// environment, so the "one per process" rule is untouched, and when that environment
+    /// failed this tab shows the documented fallback panel exactly as the others do.
+    ///
+    /// Never throws: it runs on the SOLIDWORKS UI thread, from a tab click. The task is cached
+    /// including its failure, so activating the tab twice loads the page once.
+    /// </summary>
+    public Task ActivateRemodelAsync()
+    {
+        if (IsDisposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _remodelActivation ??= LoadRemodelAsync();
+    }
+
+    private async Task LoadRemodelAsync()
+    {
+        try
+        {
+            CoreWebView2Environment environment = await EnvironmentAsync().ConfigureAwait(true);
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            _remodelView = await AttachPageAsync(
+                environment, _remodelTab, RemodelPageUrl, OnRemodelMessageReceived)
+                .ConfigureAwait(true);
+        }
+        catch (Exception failure)
+        {
+            _remodelView = null;
+            SetTabContent(_remodelTab, BuildFallback(failure));
+        }
+    }
+
+    /// <summary>
     /// Switching tabs is the moment an engineer is looking at the step strip, and it is also
     /// the moment the Model check page is wanted for the first time.
     /// </summary>
@@ -451,6 +547,10 @@ public sealed class TaskPaneControl : UserControl
             // Not awaited: the page load must not block the tab from being drawn, and
             // ActivateModelCheckAsync answers its own failures.
             _ = ActivateModelCheckAsync();
+        }
+        else if (ReferenceEquals(_tabs.SelectedTab, _remodelTab))
+        {
+            _ = ActivateRemodelAsync();
         }
     }
 
@@ -638,6 +738,9 @@ public sealed class TaskPaneControl : UserControl
 
     private void OnModelCheckMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e) =>
         Raise(e, ModelCheckPageMessageReceived);
+
+    private void OnRemodelMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e) =>
+        Raise(e, RemodelPageMessageReceived);
 
     private void OnTerminalMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e) =>
         Raise(e, TerminalPageMessageReceived);
