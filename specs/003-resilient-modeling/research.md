@@ -270,3 +270,68 @@ orchestration over a fake target. A perf test over a synthetic 100-part package,
 excluded from CI by default. Workstation: `probe rms`, a timed dump with and without the
 new phases, `swreview check rms`, `swreview rms suppress-plan`, and `suppress-test` on the
 fixture parts.
+
+## R10. The Model check tab (User Story 6)
+
+Phase 0 input for User Story 6 is the design brief at `C:\Users\Cole\AppData\Local\Temp\claude\C--Users-Cole-source-repos-smart-SW\ffaad261-c3fe-41db-902a-57b83fd7414b\scratchpad\research-004\design-brief.md`, Part B (sections B1 to B9) together with its cross-cutting
+section 1 and its API ledger in sections D1 and D2. Six points the story rests on, each with
+the section that argues it:
+
+1. **A part opened alone dumps nothing today** (brief section 1, and B3 row 2).
+   `ComponentTreeDumper.Traverse` takes the tree from
+   `IConfiguration.GetRootComponent3(false)`, which is expected to return null for a part
+   opened alone, so `scope.Components` is empty, `FeatureDumper.Dump` iterates nothing,
+   `features[]` comes out empty, and all 34 rules report unresolved on exactly the document
+   type the family was written for. The dumper synthesizes a part-root node from the document
+   itself (FR-023, T064). The behavior on 2024 is recorded by PROBE-15 (brief D2), not
+   assumed; without the fix feature 004 has no input at all.
+2. **The `ModelCheck` dump profile** (brief B2 and B3 row 1). One `DumpProfile { Full,
+   ModelCheck }` gates four phases in `PackageWriter.Build`: hole, fastener, face and body or
+   mesh. That is most of a dump's cost, because the full dump also tessellates every body,
+   writes GLB files and reads face geometry. The profile is recorded as
+   `ExtractorInfo.profile`, optional with default `"full"`, so the IR step is minor (1.1.0 to
+   1.2.0) and 1.1.0 packages still load (FR-022, T064 and T065). The arithmetic behind the
+   "under 2 seconds on a 150-feature part" claim, and the 8 to 40 second estimate for a
+   200-component assembly, are in brief B2 and are unverified until PROBE-14.
+3. **One no-language-model evaluation entry point** (brief B3, "Where the rules run", and
+   section 2.9 for the grade). `checks/rms/run.py::run_rms_check(package_dir, *, scope,
+   document_id)` is the single path; `swreview check rms` (T029, refactored) and
+   `POST /checks/rms` are its two callers. A `swreview check rms --json` subprocess launched
+   by the add-in was weighed and rejected: `uv run` re-resolves the environment and imports
+   `swreview`, pydantic, typer and PyYAML, 1 to 3 seconds of cold start on a path whose work
+   is tens of milliseconds, and it would add a second transport exercised only when something
+   is already broken (FR-024, T067). The grade is counts per bucket with the unresolved rule
+   ids named, the fraction `checked / (checked + failed + warned)` secondary, and no letter
+   (FR-025, T069).
+4. **Exceptions must be carried forward** (brief B6.1). `ExceptionStore`'s path is always
+   `<package dir>/exceptions.json` and every run creates a new folder, so User Story 5's
+   promise that an acceptance survives the next review does not hold unless the engineer
+   copies the file by hand, and a tab pressed after every edit makes that urgent. The newest
+   `exceptions.json` under the run root whose package carries the same `design_id` is copied
+   byte-identically into the new folder before the rules run, in Python inside `run_rms_check`
+   so the command line gets it too. The four-case matrix (copied and byte-identical, different
+   `design_id` not copied, no candidate is not an error, unreadable candidate refuses the run)
+   is the test (FR-029, T066 and T067).
+5. **Three defects the story fixes rather than works around** (brief B3.1), carried into the
+   plan as D1 to D3: `tool_result_ids` names a step that was never recorded, because
+   `ToolContext.current_step_id` is the index the next step will take and only
+   `RecordedTool.call` makes that true; Show is dead for every RMS finding in the Review page
+   today, because the page reads `finding.drawing_locations[].persist_ref` and RMS findings
+   leave that array empty; and Show selects nothing when the part is reached through a
+   component, because the resolver resolves against the scope document and then selects on the
+   active one. The fixes are the registry dispatch with a session sink, a source reference per
+   subject plus a structured `subjects` array beside the finding, and a pure `FeatureSelection`
+   strategy (FR-024, FR-026, FR-027; T067, T071, T079). `IFeature.GetNameForSelection` and
+   `IComponent2.GetSelectByIDString` are verified present on the 2024 SP5 interop (brief D1);
+   whether their concatenation is the right composition on 2024 is PROBE-16 (brief D2).
+6. **The partial-evidence trap** (brief B6.2). A model-check package has no faces, no holes,
+   no fasteners and no meshes, so a step strip that lets the engineer press Review next would
+   have the agent review a model it cannot see and read as a bad model rather than a missing
+   extract. The recorded profile is what prevents it: the evidence step says "model check only
+   (features and equations)" and offers Extract full evidence, `POST /sessions` records a
+   coverage item naming the skipped phases, and `swreview check rms` refuses a package whose
+   `features` array is empty (FR-022, T065 and T084).
+
+The run folder, route, message and Accept contracts that follow from all of this are in
+`contracts/model-check.md`; the brief's own statements of them are B7 (messages), B6 (run
+artifacts) and B8 (the page and the Accept label).

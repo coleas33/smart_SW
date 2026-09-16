@@ -7,7 +7,8 @@
 | Type tables | `reviewer/src/swreview/checks/rms_types.yaml` (the single normative file; this directory keeps no copy) | Data → `RmsTypeTable` |
 | Exceptions (waivers) | feature 001 `exceptions.json` via `ReviewException.fingerprint_kind`; the checker's flat waiver file is an import input described in `cli.md` | Engineer → `ExceptionStore` → Python rules |
 | Tools | `tools.md` | Python tool layer → model; query tools → MCP and the terminal profile |
-| Command lines | `cli.md` | Engineer → `swreview check rms`, `swreview rms types`, `swreview exceptions accept-rms`, `swreview-extract dump --features/--equations`, `probe rms`, `suppress-test` |
+| Command lines | `cli.md` | Engineer → `swreview check rms`, `swreview rms types`, `swreview exceptions accept-rms`, `swreview-extract dump --features/--equations/--profile`, `probe rms`, `suppress-test` |
+| Model check routes, page and host messages, check run folder, Accept semantics | `model-check.md` | Model check page and `ModelCheckHost` → `chat/server.py` and `checks/rms/run.py` |
 
 Versioning: the IR bump is minor (1.0.0 → 1.1.0) because every addition is optional with a
 default, so 1.0.0 packages load in 1.1.0 builds. Both serializers forbid unknown members
@@ -18,3 +19,12 @@ together. The review-session schema is unchanged. Feature 001's `contracts/agent
 gains six tool rows, and feature 002's `contracts/mcp-toolset.md` and
 `contracts/cli-profiles.md` gain the three query tools, each in the task that registers the
 tool.
+
+The IR bump for User Story 6 is a second minor step, 1.1.0 → 1.2.0, because
+`ExtractorInfo.profile` is optional with the default `"full"`, so 1.1.0 packages load in
+1.2.0 builds; both serializers still forbid unknown members, so a 1.2.0 package is readable
+only by 1.2.0 or later builds. The Model check tab registers no tool, so neither feature 001's
+`contracts/agent-tools.md` nor feature 002's `contracts/mcp-toolset.md` and
+`contracts/cli-profiles.md` move for it; the three check routes are added to feature 002's
+`contracts/chat-api.md` and the tab-4 message rows to its `contracts/pane-host-messages.md`,
+with `model-check.md` normative for both.

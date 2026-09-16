@@ -55,3 +55,14 @@ exceptions.
     carry global variables. Run check_rms_part, check_rms_assembly and check_rms_equations.
     Drawing and judgement-only rules are recorded as out of scope with the reason.
 ```
+
+## No tool is added by User Story 6
+
+The Model check tab registers no tool: it calls `POST /checks/rms`, which calls
+`checks/rms/run.py::run_rms_check`, which dispatches `check_rms_part` (and, when the scope
+asks for them, `check_rms_equations` and `check_rms_assembly`) through the same
+`ToolRegistry` with a session sink, so the tab's findings carry the same recorded steps as a
+review's (FR-024, FR-031). The MCP function list and the terminal profile's `enabled_tools`
+therefore do not move for User Story 6, and `test_mcp_server.py`, `ToolListingCheckTests` and
+`CliProfileWriterTests` must pass unedited; if any of them needs an edit, something has been
+registered that should not have been.

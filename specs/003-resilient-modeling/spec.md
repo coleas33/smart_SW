@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-15
 
-**Status**: Draft (revision 3, after two adversarial spec review rounds on 2026-09-15)
+**Status**: Draft (revision 4, after two adversarial spec review rounds on 2026-09-15; User Story 6, the Model check tab, was added on 2026-09-16)
 
 **Input**: User description: "Resilient Modeling checks: dump part feature trees and equations into the IR and evaluate the Resilient Modeling Strategy rules (part, assembly, equation, drawing) as deterministic review findings, with an engineer-run suppressibility test." Design approved in conversation on 2026-09-15. Rule semantics come from the Resilient Modeling Strategy (Richard Gebhard, 2013) and from the checker in `LifeDay/Solidworks-Resilient-Modeling-Skill` (commit `df49e6d`), reused with its author's permission; the normative rule list is `contracts/rules.md`.
 
@@ -101,6 +101,33 @@ An engineer can accept a failing RMS finding as an exception with a reason, thro
 
 ---
 
+### User Story 6 - Model Check Tab (Priority: P6)
+
+An engineer with a part open in SOLIDWORKS presses **Model check** in the task pane and gets that part graded against the Resilient Modeling Strategy rules in seconds, with no language model, no API key, and no network. The tab extracts the open document with a reduced dump profile (features and equations only, no faces, holes, fasteners or meshes), runs the same rule evaluation the review and the command line run, and shows three stacked regions: a grade header (document, configuration, extraction timestamp, and the counts per bucket: failed, warned, checked, skipped, unresolved, out of scope, with the fraction secondary and the unresolved rule ids always named), a rule list grouped by bucket carrying each rule's id, its statement, the observed condition and the reason for a skip or an unresolved, and a per-subject line naming the feature with a **Show in SOLIDWORKS** button and its exception state. Accepting a rule records an exception with a required note, and that acceptance survives the next run even though the next run writes into a new folder. The tab is read-only: it is not a constitution exception and it adds no mutating call.
+
+**Why this priority**: It is the fastest feedback loop the family can offer, it is the only surface where an engineer sees the rules while they are still modeling rather than at review time, and it is a hard prerequisite for feature 004, whose subject is always a part opened alone. A part opened alone currently dumps zero features, so without this story the whole family reports 34 unresolved rules on exactly the document type it was written for.
+
+**Independent Test**: Open one part alone in SOLIDWORKS, press Model check, and confirm the package has a non-empty `features` array and every rule resolves to a real bucket; press Show on a failing rule's subject and confirm the feature is selected in the tree; accept one failing rule with a note; edit the part, press Model check again, and confirm the acceptance still applies and the new run wrote a new folder.
+
+**Acceptance Scenarios**:
+
+1. **Given** a part opened alone (no assembly), **When** the engineer presses Model check, **Then** the dump yields one component instance for the part root and that document's feature rows, and the part-scope and equation-scope rules are evaluated rather than reported unresolved for a missing tree.
+2. **Given** a Model check run, **When** the dump runs, **Then** the document, manifest, mate, feature and equation phases run and the hole, fastener, face and body or mesh phases do not, and the package records `extractor.profile: "model_check"`.
+3. **Given** a completed run, **When** the page renders, **Then** the grade header shows the count in every bucket and names every unresolved rule id, and no single letter and no single percentage stands alone as the headline.
+4. **Given** the provider factories are unavailable (no API key, or monkeypatched to raise), **When** the check runs, **Then** it completes and produces the same result: no provider is ever constructed on this path.
+5. **Given** a failing rule with feature subjects, **When** the engineer presses Show on a subject, **Then** that feature is selected in SOLIDWORKS and the view zooms to it; **Given** the subject resolves to a folder, **Then** it is selected in the feature tree, the view does not zoom, and the message says so.
+6. **Given** the part is open inside an active assembly rather than alone, **When** the engineer presses Show, **Then** the selection is made in the active document through the component, and if the composition fails the component alone is selected and the reply is `ok: false` naming the feature that could not be reached; nothing silently selects nothing.
+7. **Given** a part reached through more than one component instance, **When** the page renders a subject, **Then** the button reads "Show (instance 1 of N)" and clicking the label cycles to the next instance.
+8. **Given** a failing rule of severity `fail`, **When** the engineer presses Accept, **Then** the button reads "Accept this rule for this part", a note is required, an empty note is refused, and the recorded exception is bound to the part's component instances, its configuration and its feature-tree fingerprint; **Given** a rule of severity `warn`, **Then** no Accept button is rendered at all.
+9. **Given** a previous check or review run under the same run root whose package has the same `design_id`, **When** a new check run folder is created, **Then** that run's `exceptions.json` is copied into the new folder byte-identically before the rules run, so an acceptance made yesterday still silences the same rule today; **Given** no candidate exists, **Then** the run proceeds with no exceptions and says so; **Given** the newest candidate cannot be read, **Then** the run is refused rather than proceeding with an empty store.
+10. **Given** a completed run, **When** `session.json` is written, **Then** every finding's `tool_result_ids` names a step that is actually in the file, and `report.md` cites no step that does not exist.
+11. **Given** a `model_check` package, **When** it is handed to a review, **Then** the review records a coverage item naming the phases the profile skipped, the pane's evidence step reads "Evidence: model check only (features and equations)" and offers **Extract full evidence**, and `swreview check rms` refuses a package whose `features` array is empty rather than reporting 34 unresolved rules that read as a broken part.
+12. **Given** no document is open, a document that is not a part, or a document the add-in is not attached to, **When** the engineer presses Model check, **Then** the tab refuses with the reason named and writes no run folder.
+13. **Given** a feature named `<img src=x onerror=alert(1)>` or an observed string containing `</script>`, **When** the page renders it, **Then** it appears as text and executes nothing.
+14. **Given** a check run folder, **When** it is created, **Then** it is registered as the pane's latest run so `entity.show` resolves `document_id` to a full path and the Ask (Terminal) tab opens in the same folder, and the host does not ask the backend about a chat id for a check record.
+
+---
+
 ### Edge Cases
 
 - A part with no group folders at all: every content feature is loose; one `rms.grouping.all_features_in_a_group` finding lists them; `rms.folders.present` warns; the per-group rules (shell last, holes last, drafts before patterns, the four Quarantine rules) are skipped with the reason "no <group> group".
@@ -130,6 +157,20 @@ An engineer can accept a failing RMS finding as an exception with a reason, thro
 - Suppressing a feature suppresses its dependents: the restore compares the whole tree against the snapshot, not just the tested feature.
 - A part that already has rebuild errors before the suppressibility test: refused, naming the errors, because a rebuild-error row could not be attributed to the suppression.
 - A plan whose feature is no longer a Detail content feature in the package the review reads: the row is ignored and reported as unused.
+
+**Model check tab**
+
+- A part opened alone: the component tree has exactly one node, the part root, and it carries that document's features. This is the tab's headline case and the case that is broken today.
+- A genuinely empty part (a new document with no features): reported as an empty tree with that reason, never as 34 unresolved rules.
+- Assembly scope in the tab: the first increment is part-only. An assembly open when Model check is pressed is reported as out of scope for the tab with the reason, and the assembly rules stay reachable through a review; the tab's assembly section is added when the assembly rules of User Story 2 have landed and been calibrated.
+- A part with several component instances in the loaded assembly: the finding names every instance, and the Show button acts on one at a time and says which.
+- A check run folder becoming the pane's latest run while the engineer also has a review open: the profile recorded in the package is what tells the review its evidence is partial, and the evidence step offers the full extract rather than silently reviewing a thin package.
+- No `exceptions.json` candidate anywhere under the run root: not an error; the run says "no exceptions carried forward".
+- A candidate `exceptions.json` that exists but cannot be parsed: the run is refused, because a silently empty store turns a waived rule back into a finding and, worse, turns a real finding into a waived one the next time the file is written.
+- A candidate whose package has a different `design_id`: not copied, and the run says so.
+- Folder proliferation: one folder per check, and a check is pressed after every edit. No automatic sweep of old check folders is built in this version; the run root grows and the engineer deletes folders by hand.
+- The backend is not running (Python missing, port refused): the tab reports it and offers the log, the same way every other pane surface does. There is no second transport.
+- A rule whose subjects include an end-tag marker or a folder: end-tag markers are never subjects, and a folder subject is selected without a zoom.
 
 ## Requirements *(mandatory)*
 
@@ -174,6 +215,21 @@ An engineer can accept a failing RMS finding as an exception with a reason, thro
 
 - **FR-021**: The project MUST credit the Resilient Modeling Strategy and record the reuse of the checker's semantics with its author's permission before any reused semantics ship.
 
+**Model check tab**
+
+- **FR-022**: The extractor MUST support a reduced dump profile that runs the document, manifest, mate, feature and equation phases and skips the hole, fastener, face and body or mesh phases, selectable from the console command line and from the add-in, and the package MUST record which profile produced it (`extractor.profile`, optional with default `"full"`, IR 1.2.0, so 1.1.0 packages still load).
+- **FR-023**: The component-tree dump MUST yield a root node for a part document opened alone, so that the part's feature rows are dumped. `IConfiguration.GetRootComponent3(false)` (verified present on the 2024 SP5 interop) is expected to return null for a part; the dumper MUST synthesize the part root from the document itself rather than emitting an empty tree, and the behavior on 2024 is recorded by the workstation probe rather than assumed.
+- **FR-024**: There MUST be exactly one no-language-model evaluation entry point for the RMS rules, used by the command line and by the backend route alike. It MUST dispatch the check tools through the tool registry with a session sink, so every finding's recorded tool step exists in the session it cites, and it MUST NOT construct a provider, read an API key, or make a network call on any path.
+- **FR-025**: The grade MUST be reported as counts per bucket with the unresolved rule ids named beside them; a fraction MAY be shown as a secondary number; a single letter grade MUST NOT be produced, and neither the fraction nor any other single number may stand alone as the result.
+- **FR-026**: Every RMS finding MUST carry, for each subject, a structured reference the pane can act on without parsing a display string: a source reference carrying the subject's persistent reference and its scope on the finding, and a structured subject array beside the finding in the route's response carrying the feature id, name, type name, group, persistent reference and scope. The feature 001 finding contract MUST NOT change.
+- **FR-027**: Selecting an entity MUST work when the feature's scope document is not the active document. The selection strategy MUST be a pure function of the scope document, the active document, the component and the resolved object, MUST select through the component when they differ, MUST select a folder without zooming, and MUST fall back to selecting the component alone and reporting `ok: false` naming the feature rather than selecting nothing silently.
+- **FR-028**: Each check MUST write its own run folder with a `-check` suffix through the same run-folder helper the review and the terminal use, and that folder MUST be registered as the pane's latest run so entity resolution and the Ask tab read the same evidence. A check record MUST be distinguishable from a chat record so the host never asks the backend about a chat id that does not exist.
+- **FR-029**: Accepted exceptions MUST survive the next run without the engineer copying a file: at run-folder creation the newest `exceptions.json` under the run root whose package carries the same `design_id` MUST be copied byte-identically into the new folder before the rules run. A missing candidate is not an error; an unreadable candidate MUST refuse the run.
+- **FR-030**: The Accept control MUST state the granularity it has: an accepted exception waives a rule for a part, not for one feature. The label MUST say so, the note MUST be required, and the control MUST be absent (not disabled) for warning-level rules, which FR-016 already makes unacceptable.
+- **FR-031**: The tab MUST NOT write to any document, MUST NOT register any tool, and MUST NOT change the MCP function list or the terminal profile's `enabled_tools`; the existing tests that pin those two lists MUST pass unedited.
+- **FR-032**: The backend MUST expose the check as routes the page calls directly with the token and origin it already holds: start a check over a run directory, read a check's result, and accept an exception for one finding. The route set MUST obey the existing token, origin, run-root path and error-shape rules of the chat backend.
+- **FR-033**: Both pages MUST render every untrusted string through one shared set of DOM helpers that insert text with `textContent`, served from the same virtual host, so the security rule exists in exactly one place.
+
 ### Key Entities
 
 - **Feature**: One node of a part's feature tree with identity (id, persistent reference, document, configuration), raw classification inputs (type name, name, description), structure (index, depth, enclosing folder, dependents, dependencies), state (suppressed, error code), and rule data (raw sketch status and consumers, fillet radius).
@@ -195,6 +251,11 @@ An engineer can accept a failing RMS finding as an exception with a reason, thro
 - **SC-004**: Every unknown type name encountered is reported once per review with its count; no rule that needs a class passes or fails a feature whose class is unknown.
 - **SC-005**: An engineer can accept a failing rule on a part, or import a waiver file, and see it reflected in the next review without any other change.
 - **SC-006**: Feature 001 and 002 golden baselines remain byte-identical, except that `cover-blind-tap.yml` snapshots the review checklist and therefore gains exactly the new `modeling.resilience` checklist block and nothing else; the IR bump adds optional arrays and fields only.
+- **SC-007**: A part opened alone and checked yields a package with a non-empty feature array, and no rule is unresolved for the reason "no features"; on the fixture part every part-scope and equation-scope rule lands in a bucket that reflects the part rather than the dump.
+- **SC-008**: On the pilot workstation the Model check of a 150-feature part (extraction plus rule evaluation) completes in under 2 seconds, measured; the same measurement on the 200-component pilot assembly is recorded against the existing 20 second budget of SC-002, and the tab's speed claim in the user interface is scoped to parts.
+- **SC-009**: Every subject of every finding on the fixture part has a Show button that either selects the entity or reports `ok: false` naming what it could not reach; no button reports success while selecting nothing.
+- **SC-010**: An engineer accepts a failing rule with a note, edits the part, presses Model check again, and the rule is reported as checked within scope carrying the exception id, with no file copied by hand.
+- **SC-011**: Zero providers are constructed and zero mutating interop members pass the gate during a check, asserted by the provider factories raising in the test and by the gate log of the check's dump.
 
 ## Assumptions
 
@@ -202,5 +263,5 @@ An engineer can accept a failing RMS finding as an exception with a reason, thro
 - The checker was calibrated on SOLIDWORKS 2026 SP1.1. The interop member names and enum values the family relies on were verified on the 2024 SP5 interop on 2026-09-15 (`research.md` R5); their runtime behavior (folder traversal shape, `GetChildren` and `GetParents` content, type names of weldment and sheet-metal folders) is re-verified by the workstation probe before any rule is trusted on a real part.
 - Group folder names default to `1-Ref`, `2-Construction`, `3-Core`, `4-Detail`, `5-Modify`, `6-Quarantine` and are configurable in the type table.
 - The mate-chain depth limit defaults to 3 and is configurable in the type table.
-- External references, assembly equations, mate descriptions, subassembly mates, drawing-owned versus model dimensions, and rollback state are not extracted by the dump in this version; the rules that need them stay unresolved or out of scope. The suppressibility command reads rollback state and the rebuild-error count itself to refuse unsuitable parts.
+- External references, assembly equations, mate descriptions, subassembly mates, drawing-owned versus model dimensions, and rollback state are not extracted by the dump in this version; the rules that need them stay unresolved or out of scope. The suppressibility command reads rollback state and the rebuild-error count itself to refuse unsuitable parts. A package produced by the reduced model-check profile also carries no faces, holes, fasteners, or meshes, and the profile it was produced with is recorded in the package so that a consumer can tell a partial extract from a complete one.
 - The suppressibility command is run by an engineer on a saved part they choose, typically a copy; it never saves, and it leaves the document modified in memory.
