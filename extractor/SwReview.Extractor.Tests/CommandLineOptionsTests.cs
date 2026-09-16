@@ -1,9 +1,13 @@
 ﻿using System;
+using System.IO;
+using System.Linq;
 using SwReview.Extractor.Capture;
 using SwReview.Extractor.Console;
 using SwReview.Extractor.Dump;
 using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ir;
+using SwReview.Extractor.Rms;
+using SwReview.Extractor.Sw;
 using Xunit;
 
 namespace SwReview.Extractor.Tests;
@@ -36,6 +40,9 @@ public class CommandLineOptionsTests
     private static readonly string[] ServeOptions = Program.KnownOptions(Program.ServeOptionNames);
 
     private static readonly string[] ProbeOptions = Program.KnownOptions(Program.ProbeOptionNames);
+
+    private static readonly string[] SuppressTestOptions =
+        Program.KnownOptions(Program.SuppressTestOptionNames);
 
     // ---- switches ----------------------------------------------------------------
 
@@ -271,6 +278,153 @@ public class CommandLineOptionsTests
         }
     }
 
+    // ---- suppress-test -----------------------------------------------------------
+
+    [Fact]
+    public void SuppressTest_AcceptsExactlyTheContractsOptions()
+    {
+        // contracts/cli.md row 20. An option the command does not have is a usage error,
+        // never a silent no-op: --limit misspelled must not run all 400 features.
+        Assert.Equal(
+            new[] { "doc", "plan", "acknowledge-rebuild", "out", "limit", "timeout-seconds" },
+            Program.SuppressTestOptionNames);
+
+        Assert.Throws<UsageError>(() =>
+            CommandLine.Parse(new[] { "suppress-test", "--faces", "all" }, 1, SuppressTestOptions));
+    }
+
+    [Fact]
+    public void SuppressTest_PlanIsRequired()
+    {
+        // The plan is the only place this command learns what to suppress; without one there
+        // is nothing to run and nothing to default to (research R7).
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "suppress-test", "--doc", @"C:\p.SLDPRT", "--out", @"C:\out" },
+            1,
+            SuppressTestOptions);
+
+        Assert.Throws<UsageError>(() => Program.SuppressTestSettingsFrom(parsed));
+    }
+
+    [Fact]
+    public void SuppressTest_AcknowledgementIsOffUnlessTheFlagIsGiven()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "suppress-test", "--doc", @"C:\p.SLDPRT", "--plan", @"C:\plan.json", "--out", @"C:\out" },
+            1,
+            SuppressTestOptions);
+
+        Assert.False(Program.SuppressTestSettingsFrom(parsed).Acknowledged);
+    }
+
+    [Fact]
+    public void SuppressTest_ReadsThePlanTheFlagAndTheBounds()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[]
+            {
+                "suppress-test",
+                "--doc", @"C:\vault\housing.SLDPRT",
+                "--plan", @"C:\out\suppress-plan.json",
+                "--acknowledge-rebuild",
+                "--out", @"C:\out",
+                "--limit", "5",
+                "--timeout-seconds", "60",
+            },
+            1,
+            SuppressTestOptions);
+
+        SuppressTestSettings settings = Program.SuppressTestSettingsFrom(parsed);
+
+        Assert.Equal(@"C:\vault\housing.SLDPRT", parsed.Value("doc"));
+        Assert.Equal(@"C:\out", parsed.Value("out"));
+        Assert.Equal(@"C:\out\suppress-plan.json", settings.PlanFile);
+        Assert.True(settings.Acknowledged);
+        Assert.Equal(5, settings.Limit);
+        Assert.Equal(60, settings.TimeoutSeconds);
+    }
+
+    [Fact]
+    public void SuppressTest_BoundsDefaultToTheContractsValues()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "suppress-test", "--doc", @"C:\p.SLDPRT", "--plan", @"C:\plan.json", "--out", @"C:\out" },
+            1,
+            SuppressTestOptions);
+
+        SuppressTestSettings settings = Program.SuppressTestSettingsFrom(parsed);
+
+        Assert.Equal(50, settings.Limit);
+        Assert.Equal(900, settings.TimeoutSeconds);
+    }
+
+    [Theory]
+    [InlineData("limit")]
+    [InlineData("timeout-seconds")]
+    public void SuppressTest_ABoundOfZeroIsAUsageError(string option)
+    {
+        // Zero would run nothing and report a table of truncated rows as though the engineer
+        // had asked for it.
+        CommandLine parsed = CommandLine.Parse(
+            new[]
+            {
+                "suppress-test", "--doc", @"C:\p.SLDPRT", "--plan", @"C:\plan.json",
+                "--out", @"C:\out", "--" + option, "0",
+            },
+            1,
+            SuppressTestOptions);
+
+        Assert.Throws<UsageError>(() => Program.SuppressTestSettingsFrom(parsed));
+    }
+
+    [Fact]
+    public void SuppressTest_WithoutTheFlag_RefusesBeforeTheSessionIsTouched()
+    {
+        // contracts/cli.md row 20: "Refuses, before touching anything: without the flag".
+        // The library invariant in SuppressTest.Run refuses too, but only after the command
+        // has attached to (or started) SOLIDWORKS and opened the engineer's part. The proof
+        // that nothing was touched is the --out directory: ExecuteSuppressTest opens
+        // suppress-test.log there as its first act, and the log creates the directory.
+        string directory = Path.Combine(
+            Path.GetTempPath(), "swreview-tests", Guid.NewGuid().ToString("N"));
+
+        int exit = Program.RunSuppressTest(new[]
+        {
+            "suppress-test",
+            "--doc", Path.Combine(directory, "housing.SLDPRT"),
+            "--plan", Path.Combine(directory, "suppress-plan.json"),
+            "--out", directory,
+        });
+
+        Assert.Equal(1, exit);
+        Assert.False(Directory.Exists(directory));
+        Assert.Contains(
+            "--acknowledge-rebuild",
+            SuppressTest.AcknowledgementRequiredMessage,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SuppressTest_BuildsItsGateWithTheSuppressTestGuard()
+    {
+        // The exemption exists in exactly one gate in the product. If this ever came back as
+        // an ordinary gate the command would refuse its own suppression; if any other command
+        // built one like it, the read-only promise would be gone.
+        var observer = new RecordingGateObserver();
+        SwGate gate = Program.SuppressTestGate(observer);
+
+        Assert.True(gate.Call("SetSuppression2", () => true));
+        Assert.True(gate.Call("ForceRebuild3", () => true));
+        Assert.Throws<MutatingCallError>(() => gate.Call("Save3", () => true));
+        Assert.Throws<MutatingCallError>(() => gate.Call("SetSaveFlag", () => true));
+        Assert.Throws<MutatingCallError>(() => gate.Call("ForceRebuildAll", () => true));
+
+        Assert.Equal(
+            new[] { "SetSuppression2", "ForceRebuild3", "Save3", "SetSaveFlag", "ForceRebuildAll" },
+            observer.Members.ToArray());
+        Assert.Equal(3, observer.Refusals.Count);
+    }
+
     // ---- --fasteners -------------------------------------------------------------
 
     [Theory]
@@ -429,6 +583,7 @@ public class CommandLineOptionsTests
     [InlineData("capture")]
     [InlineData("serve")]
     [InlineData("probe")]
+    [InlineData("suppress-test")]
     public void AllowStart_IsAcceptedByEveryCommandThatAttaches(string command)
     {
         // Program.cs calls SwAttach.Connect from every command, so every one must accept the
@@ -456,6 +611,8 @@ public class CommandLineOptionsTests
                 return ServeOptions;
             case "probe":
                 return ProbeOptions;
+            case "suppress-test":
+                return SuppressTestOptions;
             default:
                 throw new ArgumentOutOfRangeException(nameof(command), command, "No such command.");
         }

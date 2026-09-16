@@ -1,0 +1,424 @@
+result:
+  coverage:
+  - bucket: checked
+    check: rms.folders.present
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.folders.ordered
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.grouping.all_features_in_a_group
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.groups.no_solids_in_ref_or_construction
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.detail.holes_last
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.modify.transform_before_replicate
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.quarantine.chamfers_before_fillets
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.quarantine.largest_fillet_first
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.quarantine.only_fillets_and_chamfers
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.refs.direction
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.refs.quarantine_has_no_children
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.detail.no_internal_references
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.intent.every_feature_described
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.sketches.fully_defined
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.sketches.not_over_defined
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.sketches.one_sketch_per_feature
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: rms.core.shell_last
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: skipped
+    check: rms.quarantine.largest_fillet_first
+    error: null
+    reason: '1 document(s): doc:3: fewer than two readable fillet radii in Quarantine'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.detail.individually_suppressible
+    error: null
+    reason: '2 document(s): doc:2: no suppress-test run; doc:3: no suppress-test run'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.no_sibling_in_context_refs
+    error: null
+    reason: external references not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.positions_driven_by_globals
+    error: null
+    reason: assembly equations not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.mates_described
+    error: null
+    reason: mate descriptions not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: rms.assembly.subassemblies
+    error: null
+    reason: subassembly mates not extracted; assembly rules evaluated for the root
+      document only
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: modeling.resilience
+    error: null
+    reason: 31 checked, 1 skipped, 2 unresolved rule result(s) over 2 document(s);
+      2 finding(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.drawing.model_items_preferred
+    error: null
+    reason: drawing-owned vs model dimensions not extracted; advisory by decision
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.structural_vs_cosmetic_fillets
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.core_shaping_cuts
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.description_quality
+    error: null
+    reason: judgement-only; not decidable from extracted data
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.sketch_plane_choice
+    error: null
+    reason: judgement-only; sketch planes not extracted
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: rms.advisory.avoid_multibody
+    error: null
+    reason: judgement-only; body intent not decidable
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids: []
+      pairs: []
+      positions: []
+  documents:
+  - doc:2
+  - doc:3
+  exceptions:
+  - check: rms.core.shell_last
+    id: EX-001
+    status: active
+  - check: rms.quarantine.chamfers_before_fillets
+    id: EX-002
+    status: needs_review
+  findings:
+  - calculation: null
+    capture_ids: []
+    check: rms.core.shell_last
+    component_ids:
+    - cmp:0002
+    configuration: Default
+    coverage_limits:
+    - 'exception:EX-001: the boss after the shell is a moulding pad the tool needs;
+      accepted as modelled'
+    disposition: null
+    drawing_locations: []
+    exception_id: EX-001
+    group: null
+    id: F-001
+    inputs:
+    - feat:0009 Shell1 [Shell] persist_ref=ZG9jOjIvU2hlbGwx scope=doc:2
+    - feat:0010 Boss-Extrude2 [Extrusion] persist_ref=ZG9jOjIvQm9zcy1FeHRydWRlMg==
+      scope=doc:2
+    observed: 'Shell1 is not the last feature in Core; 1 feature(s) follow it: Boss-Extrude2.
+      Excepted by EX-001, accepted by engineer on 2026-09-15 09:15:00+00:00 for this
+      feature tree and configuration: the boss after the shell is a moulding pad the
+      tool needs; accepted as modelled'
+    provenance:
+    - configuration: Default
+      document_id: doc:2
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/housing.SLDPRT
+      vault_version: 1
+    recommended_action: None while the feature tree is unchanged. Re-review EX-001
+      if these features change.
+    requirement: The shell is the last feature in Core.
+    severity: info
+    status: checked_within_scope
+    title: 'Shell1 is not the last feature in Core; 1 feature(s) follow it: Boss-Extrude2'
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: rms.quarantine.chamfers_before_fillets
+    component_ids:
+    - cmp:0003
+    configuration: Default
+    coverage_limits: []
+    disposition: null
+    drawing_locations: []
+    exception_id: EX-002
+    group: null
+    id: F-002
+    inputs:
+    - feat:0040 Fillet1 [Fillet] persist_ref=ZG9jOjMvRmlsbGV0MQ== scope=doc:3
+    - feat:0041 Chamfer1 [Chamfer] persist_ref=ZG9jOjMvQ2hhbWZlcjE= scope=doc:3
+    observed: 'the fillet Fillet1 precedes the chamfer Chamfer1 in Quarantine. Exception
+      EX-002 was accepted for this condition but the feature tree it was bound to
+      has changed, so it does not clear this finding - needs re-review: EX-002'
+    provenance:
+    - configuration: Default
+      document_id: doc:3
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /Designs/cover.SLDPRT
+      vault_version: 1
+    recommended_action: 'Re-review exception EX-002: confirm the changed condition
+      is still intended and re-accept it, or retire it and fix the tree. Move the
+      chamfers ahead of the fillets in Quarantine.'
+    requirement: Chamfers precede fillets in Quarantine.
+    severity: medium
+    status: demonstrated
+    title: the fillet Fillet1 precedes the chamfer Chamfer1 in Quarantine
+    tool_result_ids:
+    - 0

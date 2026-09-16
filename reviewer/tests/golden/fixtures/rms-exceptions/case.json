@@ -1,0 +1,41 @@
+{
+  "callable": "swreview.checks.golden_rms:part_case",
+  "kwargs": {
+    "exceptions": [
+      {
+        "id": "EX-001",
+        "check": "rms.core.shell_last",
+        "component_persist_refs": [
+          "Y21wOjAwMDI="
+        ],
+        "persist_ref_scopes": [
+          "doc:1"
+        ],
+        "configuration": "Default",
+        "geometry_fingerprint": "b5cfe3dea84a7bf81e507a6ebb9739faea9e9b412478cce7d7e64e81886b0b75",
+        "fingerprint_kind": "feature_tree",
+        "accepted_by": "engineer",
+        "accepted_at": "2026-09-15T09:15:00Z",
+        "note": "the boss after the shell is a moulding pad the tool needs; accepted as modelled",
+        "status": "active"
+      },
+      {
+        "id": "EX-002",
+        "check": "rms.quarantine.chamfers_before_fillets",
+        "component_persist_refs": [
+          "Y21wOjAwMDM="
+        ],
+        "persist_ref_scopes": [
+          "doc:1"
+        ],
+        "configuration": "Default",
+        "geometry_fingerprint": "f53ad5deafe6d49df49848861c17029bf722f346b5abedf0814b1e23b22f37fc",
+        "fingerprint_kind": "feature_tree",
+        "accepted_by": "engineer",
+        "accepted_at": "2026-09-15T09:15:00Z",
+        "note": "cosmetic fillet kept ahead of the chamfer to match the legacy tool",
+        "status": "active"
+      }
+    ]
+  }
+}

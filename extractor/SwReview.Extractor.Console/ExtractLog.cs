@@ -19,11 +19,26 @@ public sealed class ExtractLog : IDisposable
 
     /// <summary>Opens a log in <paramref name="directory"/>; a null directory logs to the console only.</summary>
     public ExtractLog(string? directory)
+        : this(directory, FileName)
     {
+    }
+
+    /// <summary>
+    /// The same log under another name. <c>suppress-test</c> writes
+    /// <c>suppress-test.log</c> (contracts/cli.md): it is the SC-003 audit artifact for the
+    /// one mutating command and must not be mixed into the dumps' <c>extract.log</c>.
+    /// </summary>
+    public ExtractLog(string? directory, string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            throw new ArgumentException("A log file name is required.", nameof(fileName));
+        }
+
         if (!string.IsNullOrWhiteSpace(directory))
         {
             Directory.CreateDirectory(directory!);
-            _path = System.IO.Path.Combine(directory!, FileName);
+            _path = System.IO.Path.Combine(directory!, fileName);
         }
     }
 

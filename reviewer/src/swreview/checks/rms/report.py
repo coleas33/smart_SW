@@ -35,7 +35,7 @@ from dataclasses import replace
 from swreview.checks.result import CheckResult
 from swreview.checks.rms.registry import RULES, coverage_only
 from swreview.checks.rms.results import RuleResult
-from swreview.checks.rms_types import load_table
+from swreview.checks.rms_types import unknown_types
 from swreview.exceptions import ReviewException
 from swreview.ir.models import EvidencePackage
 from swreview.report.session import CoverageBucket, CoverageItem, CoverageScope, ReviewSession
@@ -296,29 +296,28 @@ def _write_unknown_types(
 ) -> list[dict[str, str]]:
     """The `rms.types.unknown` item over the documents this call evaluated, or nothing.
 
-    Only content features count: a folder and an end tag are structure, and the table
-    classifies neither (`contracts/rules.md`, "Content features").
+    What counts as unclassified is `checks/rms_types.unknown_types`, which `swreview rms
+    types` asks for the whole package and this item asks for the documents one check
+    evaluated: only content features, and only `unknown` rather than `ambiguous` (a
+    folder and an end tag are structure, and the table classifies neither -
+    `contracts/rules.md`, "Content features"). The census here is that answer rendered,
+    and the scope is the documents it came back naming.
     """
     document_ids = []
     for result in results:
         if result.document_id not in document_ids:
             document_ids.append(result.document_id)
 
-    table = load_table()
-    counts: dict[str, int] = {}
-    documents: list[str] = []
-    for row in context.ir.features:
-        if row.document_id not in document_ids:
-            continue
-        if not table.is_content(row) or table.classify(row.type_name) != "unknown":
-            continue
-        counts[row.type_name] = counts.get(row.type_name, 0) + 1
-        if row.document_id not in documents:
-            documents.append(row.document_id)
-    if not counts:
+    rows = unknown_types(row for row in context.ir.features if row.document_id in document_ids)
+    if not rows:
         return []
 
-    census = ", ".join(f"{name} x{count}" for name, count in counts.items())
+    documents: list[str] = []
+    for row in rows:
+        for document_id in row.document_ids:
+            if document_id not in documents:
+                documents.append(document_id)
+    census = ", ".join(f"{row.type_name} x{row.count}" for row in rows)
     context.replace_coverage(
         UNKNOWN_TYPES_CHECK,
         "unresolved",

@@ -9,10 +9,12 @@ using SwReview.Extractor.Bridge;
 using SwReview.Extractor.Capture;
 using SwReview.Extractor.Console.Serve;
 using SwReview.Extractor.Dump;
+using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ids;
 using SwReview.Extractor.Interference;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.PersistRefs;
+using SwReview.Extractor.Rms;
 using SwReview.Extractor.Sw;
 using static System.Console;
 using IrCapture = SwReview.Extractor.Ir.Capture;
@@ -60,6 +62,23 @@ public static class Program
     /// <c>--out</c> and none of the dump options (contracts/cli.md).
     /// </summary>
     internal static readonly string[] ProbeOptionNames = { "doc" };
+
+    /// <summary>
+    /// T055. The one mutating command (contracts/cli.md). <c>--doc</c> is required rather
+    /// than defaulting to the active document: this command suppresses features, and
+    /// "whatever happens to be on screen" is not a model anyone chose to have modified.
+    /// </summary>
+    internal static readonly string[] SuppressTestOptionNames =
+    {
+        "doc", "plan", "acknowledge-rebuild", "out", "limit", "timeout-seconds",
+    };
+
+    /// <summary>
+    /// The suppress-test's own log (contracts/cli.md). Separate from <c>extract.log</c>: it
+    /// is the artifact SC-003 is audited against - the distinct interop members the one
+    /// mutating command touched - and burying that in a dump log would lose it.
+    /// </summary>
+    internal const string SuppressTestLogFileName = "suppress-test.log";
 
     /// <summary>The only subject <c>probe</c> accepts today.</summary>
     private const string RmsProbe = "rms";
@@ -176,6 +195,9 @@ public static class Program
 
             case "probe":
                 return RunProbe(args);
+
+            case "suppress-test":
+                return RunSuppressTest(args);
 
             default:
                 Error.WriteLine($"swreview-extract: unknown command '{command}'.");
@@ -947,6 +969,160 @@ public static class Program
         }
     }
 
+    /// <summary>
+    /// T055. The engineer-run suppressibility test: the only command in the product that
+    /// changes the model (contracts/cli.md, research R6). Not reachable from the add-in, the
+    /// bridge or the MCP toolset - this method is the whole surface.
+    /// </summary>
+    internal static int RunSuppressTest(string[] args)
+    {
+        CommandLine parsed;
+        SuppressTestSettings settings;
+        string documentPath;
+        string outputDirectory;
+        bool allowStart;
+
+        try
+        {
+            parsed = CommandLine.Parse(args, 1, KnownOptions(SuppressTestOptionNames));
+            allowStart = parsed.Flag("allow-start");
+            documentPath = parsed.Required("doc");
+            outputDirectory = parsed.Required("out");
+            settings = SuppressTestSettingsFrom(parsed);
+        }
+        catch (UsageError error)
+        {
+            Error.WriteLine($"swreview-extract suppress-test: {error.Message}");
+            return ExitError;
+        }
+
+        // The first refusal contracts/cli.md lists, and the only one that can be made without
+        // SOLIDWORKS - so it is made here, before Connect attaches to (or starts) the
+        // engineer's session. SuppressTest.Run refuses with the same sentence for any other
+        // caller; this is what keeps "refuses, before touching anything" literally true.
+        if (!settings.Acknowledged)
+        {
+            Error.WriteLine($"swreview-extract suppress-test: {SuppressTest.AcknowledgementRequiredMessage}");
+            return ExitError;
+        }
+
+        return ExecuteSuppressTest(documentPath, outputDirectory, settings, allowStart);
+    }
+
+    /// <summary>
+    /// The command line as the run settings, defaults included. Shared with the option tests,
+    /// which assert against THIS method rather than a copy of the defaults.
+    /// </summary>
+    internal static SuppressTestSettings SuppressTestSettingsFrom(CommandLine parsed)
+    {
+        if (parsed == null)
+        {
+            throw new ArgumentNullException(nameof(parsed));
+        }
+
+        var settings = new SuppressTestSettings
+        {
+            PlanFile = parsed.Required("plan"),
+            Acknowledged = parsed.Flag("acknowledge-rebuild"),
+            Limit = parsed.Int("limit") ?? SuppressTestSettings.DefaultLimit,
+            TimeoutSeconds = parsed.Int("timeout-seconds") ?? SuppressTestSettings.DefaultTimeoutSeconds,
+        };
+
+        if (settings.Limit < 1)
+        {
+            throw new UsageError("--limit must be at least 1.");
+        }
+
+        if (settings.TimeoutSeconds < 1)
+        {
+            throw new UsageError("--timeout-seconds must be at least 1.");
+        }
+
+        return settings;
+    }
+
+    /// <summary>
+    /// The one gate in the product built with <see cref="SuppressTestGuard"/>: the read-only
+    /// guard minus <c>SetSuppression2</c> and <c>ForceRebuild3</c>, watched by a recorder so
+    /// the distinct member names reach <c>suppress-test.log</c> (SC-003, research R6).
+    /// </summary>
+    internal static SwGate SuppressTestGate(RecordingGateObserver observer) =>
+        new SwGate(new CircuitBreaker(), new SuppressTestGuard()) { Observer = observer };
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static int ExecuteSuppressTest(
+        string documentPath,
+        string outputDirectory,
+        SuppressTestSettings settings,
+        bool allowStart)
+    {
+        var observer = new RecordingGateObserver();
+
+        using (var log = new ExtractLog(outputDirectory, SuppressTestLogFileName))
+        {
+            try
+            {
+                log.Write($"suppress-test --doc \"{documentPath}\" --plan \"{settings.PlanFile}\" "
+                    + $"--out \"{outputDirectory}\" --limit {settings.Limit} "
+                    + $"--timeout-seconds {settings.TimeoutSeconds}");
+
+                // Both are read before SOLIDWORKS is touched: a missing plan or package is a
+                // usage mistake, and learning that after a two-second attach helps nobody.
+                SuppressPlan plan = SuppressPlan.Load(settings.PlanFile);
+                EvidencePackage package = PackageAppender.Load(outputDirectory);
+
+                ISldWorks swApp = Connect(allowStart, log);
+                SwGate gate = SuppressTestGate(observer);
+
+                // The document must ALREADY be open. SwSession.Attach would otherwise open it
+                // through the extractor's one open path, which is read-only and silent - and a
+                // read-only document answers false to every SetSuppression2, so the run would
+                // record not_applied for every planned feature and prove nothing, having
+                // opened the engineer's part to do it.
+                if (!(gate.Call("GetOpenDocumentByName", () => swApp.GetOpenDocumentByName(documentPath))
+                        is IModelDoc2))
+                {
+                    throw new SuppressTestRefusedError(SuppressTest.DocumentNotOpenMessage(documentPath));
+                }
+
+                // The configuration is NOT asked for here: SuppressTest compares the active
+                // one with the plan's and refuses with the message the contract names.
+                SwSession session = SwSession.Attach(swApp, documentPath, null, gate);
+                log.Write($"Document: {session.DocumentPath} [{session.Configuration.Name}]");
+
+                var target = new SwSuppressTarget(gate, session.Document, new PersistRefService(gate));
+                SuppressTestResult result = new SuppressTest(gate, target).Run(
+                    plan, package.Features, settings);
+
+                string path = PackageAppender.AppendSuppressTest(outputDirectory, result.Run);
+
+                foreach (string line in SuppressTest.LogLines(result, observer.Members))
+                {
+                    log.Write(line);
+                }
+
+                log.Write($"Wrote {path}");
+                Out.WriteLine(path);
+                Out.WriteLine(SuppressTest.ModifiedInMemoryMessage);
+                return result.Succeeded ? ExitSuccess : ExitError;
+            }
+            catch (SuppressTestRefusedError refusal)
+            {
+                // A refusal happens before the first mutation, so the document is untouched
+                // and there is nothing to tell the engineer to close.
+                log.WriteError("suppress-test refused, and nothing was changed.", refusal);
+                return ExitError;
+            }
+            catch (Exception error)
+            {
+                log.WriteError("suppress-test failed.", error);
+                log.Write("Interop members seen: " + string.Join(", ", observer.Members));
+                Out.WriteLine(SuppressTest.ModifiedInMemoryMessage);
+                return ExitError;
+            }
+        }
+    }
+
     /// <summary>A pipe name is user input and ends up in a path; strip anything a path cannot hold.</summary>
     private static string SafeName(string pipeName)
     {
@@ -1030,6 +1206,13 @@ public static class Program
         writer.WriteLine("                equations and fillet data for one document, and for an");
         writer.WriteLine("                assembly its component constrained status and mate");
         writer.WriteLine("                suppression. Writes nothing.");
+        writer.WriteLine("  suppress-test --doc <part> --plan <suppress-plan.json> --acknowledge-rebuild");
+        writer.WriteLine("                --out <package dir> [--limit <n>] [--timeout-seconds <n>]");
+        writer.WriteLine("                Suppress each planned Detail feature in turn, rebuild, record");
+        writer.WriteLine("                what breaks, and restore the tree. THIS MODIFIES THE OPEN");
+        writer.WriteLine("                DOCUMENT IN MEMORY; it never saves, and you close it without");
+        writer.WriteLine("                saving afterwards. Run it on a part you chose, not on work in");
+        writer.WriteLine("                progress. Write the plan with 'swreview rms suppress-plan'.");
         writer.WriteLine("  serve         --pipe <name> [--doc <path>] [--config <name>] [--out <dir>]");
         writer.WriteLine("                Run the read-only bridge: one JSON request per line.");
         writer.WriteLine("                Wire format: Serve/PROTOCOL.md.");

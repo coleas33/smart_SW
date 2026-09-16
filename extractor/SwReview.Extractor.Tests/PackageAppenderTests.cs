@@ -177,6 +177,76 @@ public class PackageAppenderTests : IDisposable
             () => PackageAppender.Merge(null!, "Default", new IrInterference[0], new Gap[0]));
         Assert.Throws<ArgumentNullException>(() => PackageAppender.CaptureIds(null!));
         Assert.Throws<ArgumentException>(() => PackageAppender.PathIn("  "));
+        Assert.Throws<ArgumentNullException>(() => PackageAppender.Merge(null!, SuppressRun(1)));
+        Assert.Throws<ArgumentNullException>(
+            () => PackageAppender.Merge(NewPackage(), (SuppressTestRun)null!));
+    }
+
+    [Fact]
+    public void AppendSuppressTest_WritesTheRunBackAndReplacesAnEarlierOne()
+    {
+        // T055. A package holds one run, and a second suppress-test is a complete re-test of
+        // the same document: keeping the first alongside it would leave the reviewer reading
+        // rows about a model that has since been tested again.
+        PackageAppender.Save(_directory, NewPackage());
+
+        PackageAppender.AppendSuppressTest(_directory, SuppressRun(1));
+        string path = PackageAppender.AppendSuppressTest(_directory, SuppressRun(2));
+
+        Assert.Equal(PackageAppender.PathIn(_directory), path);
+        SuppressTestRun stored = PackageAppender.Load(_directory).RmsSuppressTest!;
+        Assert.Equal(2, stored.FeaturesPresent);
+        Assert.Equal(2, stored.Rows.Count);
+        Assert.Equal(new[] { "feat:0001", "feat:0002" }, stored.Rows.Select(row => row.FeatureId).ToArray());
+    }
+
+    [Fact]
+    public void AppendSuppressTest_LeavesTheRestOfThePackageAlone()
+    {
+        var package = NewPackage();
+        package.Interferences.Add(Interference("int:0001", "Default"));
+        PackageAppender.Save(_directory, package);
+
+        PackageAppender.AppendSuppressTest(_directory, SuppressRun(1));
+
+        EvidencePackage reloaded = PackageAppender.Load(_directory);
+        Assert.Single(reloaded.Interferences);
+        Assert.NotNull(reloaded.RmsSuppressTest);
+    }
+
+    /// <summary>A run over <paramref name="features"/> planned features, all clean.</summary>
+    private static SuppressTestRun SuppressRun(int features)
+    {
+        var run = new SuppressTestRun
+        {
+            DocumentId = "doc:0002",
+            Configuration = "Default",
+            Group = "01_Detail",
+            PlanFile = @"C:\out\suppress-plan.json",
+            RunAt = DateTimeOffset.Now,
+            Acknowledged = true,
+            BaselineWhatsWrongCount = 0,
+            Limit = 50,
+            TimeoutSeconds = 900,
+            FeaturesPresent = features,
+            RestoreVerified = true,
+        };
+
+        for (int i = 1; i <= features; i++)
+        {
+            run.Rows.Add(new SuppressTestRow
+            {
+                FeatureId = "feat:000" + i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                PersistRef = "cmVm",
+                PersistRefScope = "doc:0002",
+                Name = "Fillet" + i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                Outcome = SuppressTestOutcome.Ok,
+                WhatsWrongCount = 0,
+                ElapsedMs = 12,
+            });
+        }
+
+        return run;
     }
 
     private static EvidencePackage NewPackage() => new EvidencePackage

@@ -26,9 +26,11 @@ client, and it is the reason `--provider`/`--model`/`--effort` mean the same thi
 `ProviderSettings.from_env`, so the model default is the per-provider one from
 `agent/settings.py` and the key comes from the same place with the same precedence.
 
-Sub-apps (`check`, `benchmark`, `exceptions`) are the extension points: one command per
-deterministic check under `check_app`, and the two retained-exception commands under
-`exceptions_app`.
+Sub-apps (`check`, `benchmark`, `exceptions`, `rms`) are the extension points: one command
+per deterministic check under `check_app`, the retained-exception commands under
+`exceptions_app`, and under `rms_app` the Resilient Modeling commands that grade nothing -
+they report what the shipped type table does not know, so an engineer can calibrate it,
+and they write the plan the extractor's `suppress-test` is allowed to act on.
 """
 
 from __future__ import annotations
@@ -37,8 +39,9 @@ import inspect
 import json
 import os
 import re
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, get_args
@@ -71,10 +74,14 @@ from swreview.benchmark.sets import BenchmarkSet, load_set
 from swreview.benchmark.timing import record_timing
 from swreview.chat import DEFAULT_ALLOW_ORIGIN, DEFAULT_RUN_ROOT
 from swreview.checks.golden_interference import interference_case
-from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
+from swreview.checks.rms.plan import PLAN_FILE_NAME, build_plan
+from swreview.checks.rms.registry import RULES
+from swreview.checks.rms_types import load_table, unknown_types
+from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
+from swreview.findings import Finding
 from swreview.ingest.package_builder import build_package
 from swreview.ir.loader import AnswerKeyAccessError, load_package
-from swreview.ir.models import UnsupportedSchemaVersionError
+from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
 from swreview.ir.summary import summarize
 from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition, find_finding
 from swreview.report.markdown import render_report
@@ -98,16 +105,21 @@ benchmark_app = typer.Typer(
 )
 exceptions_app = typer.Typer(
     no_args_is_help=True,
-    help="Retained exceptions: accept a finding, list what is active.",
+    help="Retained exceptions: accept a finding, import an RMS waiver file, list them.",
 )
 chat_app = typer.Typer(
     no_args_is_help=True,
     help="The loopback chat backend the SOLIDWORKS Task Pane talks to.",
 )
+rms_app = typer.Typer(
+    no_args_is_help=True,
+    help="Resilient Modeling helpers that grade nothing: calibration and plans.",
+)
 app.add_typer(check_app, name="check")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(exceptions_app, name="exceptions")
 app.add_typer(chat_app, name="chat")
+app.add_typer(rms_app, name="rms")
 
 FAKE_REVIEW_SCRIPT: tuple[ScriptedTurn, ...] = (
     ScriptedTurn(
@@ -135,14 +147,16 @@ HANDLED_ERRORS = (
     UnsupportedSchemaVersionError,
     AnswerKeyAccessError,
     ValidationError,
-    FileNotFoundError,
+    OSError,
     NotImplementedError,
     KeyError,
     ValueError,
     LookupError,
 )
 """Everything the library raises for input it can describe. Each becomes exit 1 and one
-line on stderr; anything else is a bug and keeps its traceback."""
+line on stderr; anything else is a bug and keeps its traceback. `OSError` covers every
+path the filesystem refuses - missing, denied, or a directory where a file was named -
+because a path is input to these commands and its refusal is an answer, not a crash."""
 
 MESSAGE_LENGTH = 400
 
@@ -922,7 +936,101 @@ def _coverage_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
-# --- exceptions accept | list ----------------------------------------------------
+# --- rms types -------------------------------------------------------------------
+
+
+@rms_app.command("types")
+def rms_types_command(
+    package: PackageOption,
+    json_output: JsonFlag = False,
+) -> None:
+    """Name the feature type names in a package that the RMS table does not classify.
+
+    Calibration, not grading: `GetTypeName2` returns a string SOLIDWORKS promises nothing
+    about, so a name the shipped `rms_types.yaml` does not carry is neither a pass nor a
+    fail - it is a hole in the table an engineer closes with evidence. This command is
+    that evidence: every unclassified name, how many content features carry it, and which
+    documents they are in. It reads the package and writes nothing.
+    """
+    with _errors_as_exit_1():
+        package_ir = load_package(package).package
+        rows = unknown_types(package_ir.features)
+
+    payload = {
+        "package": str(Path(package).resolve()),
+        "types": [
+            {
+                "type_name": row.type_name,
+                "count": row.count,
+                "documents": list(row.document_ids),
+            }
+            for row in rows
+        ],
+    }
+    lines = [f"{len(rows)} type name(s) the table does not classify"]
+    lines += [
+        f"  {row.type_name} x{row.count}: {', '.join(row.document_ids)}" for row in rows
+    ]
+    _emit(payload, lines, json_output)
+
+
+# --- rms suppress-plan -----------------------------------------------------------
+
+
+@rms_app.command("suppress-plan")
+def rms_suppress_plan_command(
+    package: PackageOption,
+    document: Annotated[
+        str, typer.Option("--document", help="Part document id to plan the test for.")
+    ],
+    out: Annotated[
+        Path | None,
+        typer.Option("--out", help=f"Where to write the plan; default <package>/{PLAN_FILE_NAME}."),
+    ] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Write the suppress-test plan for one part document: what `suppress-test` may touch.
+
+    The plan is the reviewer's half of the one mutation path in this product. It names
+    the review configuration, the Detail group, and the Detail content features in tree
+    order with the persistent reference the extractor resolves each one by, derived from
+    `features[]` through the group assigner and the type table - so `swreview-extract
+    suppress-test` decides nothing about folders, groups or content, and the rule grades
+    exactly the set that was planned.
+
+    Exits 1 when the document has no `features[]` rows (its tree was never dumped, or the
+    id names an assembly) or its tree has no Detail group: an empty plan would read as
+    "nothing to suppress" rather than "we never looked". A Detail group that holds no
+    content feature is a different answer and does write an empty plan.
+
+    It reads the package and writes only the plan file.
+    """
+    with _errors_as_exit_1():
+        package_ir = load_package(package).package
+        plan = build_plan(package_ir, document, load_table())
+        plan_file = (Path(package) / PLAN_FILE_NAME if out is None else Path(out)).resolve()
+        body = plan.as_dict()
+        try:
+            plan_file.parent.mkdir(parents=True, exist_ok=True)
+            plan_file.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
+        except OSError as exc:
+            # The path the engineer typed is the thing they can fix, and `strerror` alone
+            # does not name it.
+            raise OSError(f"cannot write the plan to {plan_file}: {exc}") from exc
+
+    payload = {"package": str(Path(package).resolve()), "out": str(plan_file), **body}
+    lines = [
+        f"wrote {plan_file}",
+        f"{len(plan.features)} {plan.group} feature(s) of {plan.document_id} "
+        f"in configuration {plan.configuration}",
+    ]
+    lines += [
+        f"  {item.feature_id} {item.name} [{item.type_name}]" for item in plan.features
+    ]
+    _emit(payload, lines, json_output)
+
+
+# --- exceptions accept | list | accept-rms ---------------------------------------
 
 
 def _store_for(package_dir: Path) -> tuple[ExceptionStore, Any]:
@@ -930,6 +1038,20 @@ def _store_for(package_dir: Path) -> tuple[ExceptionStore, Any]:
     loaded = load_package(package_dir)
     store = ExceptionStore(Path(loaded.base_dir) / EXCEPTIONS_FILE_NAME).load()
     return store, loaded.package
+
+
+def _save_run(run_dir: Path, session: ReviewSession, evidence: EvidencePackage) -> Path:
+    """Write `session` back to its run directory, re-render its report, and name the file.
+
+    Both acceptance commands end here. An exception recorded on a finding but not written
+    back to `session.json`, or written back without the report being re-rendered, leaves
+    one run saying two different things about the same finding.
+    """
+    resolved = Path(run_dir).resolve()
+    save_session(session, resolved / SESSION_FILE_NAME)
+    report_file = resolved / REPORT_FILE_NAME
+    report_file.write_text(render_report(session, evidence), encoding="utf-8")
+    return report_file
 
 
 @exceptions_app.command("accept")
@@ -963,9 +1085,7 @@ def exceptions_accept(
         exception = store.accept(finding, evidence, by=accepted_by, note=note)
         store.save()
         finding.exception_id = exception.id
-        save_session(session, session_file)
-        report_file = Path(run_dir).resolve() / REPORT_FILE_NAME
-        report_file.write_text(render_report(session, evidence), encoding="utf-8")
+        report_file = _save_run(run_dir, session, evidence)
 
     payload = {
         "run_dir": str(Path(run_dir).resolve()),
@@ -983,6 +1103,262 @@ def exceptions_accept(
         f"wrote {store.path}",
     ]
     _emit(payload, lines, json_output)
+
+
+# --- exceptions accept-rms: the checker's flat file as an import ------------------
+
+RMS_WAIVER_UNKNOWN = "invalid (unknown rule)"
+"""A listed id that is not a rule of `contracts/rules.md` at all."""
+
+RMS_WAIVER_INVALID: dict[str, str] = {
+    "warn": "invalid (warn rule)",
+    "unresolved": "invalid (data-gap rule)",
+    "out_of_scope": "invalid (out-of-scope rule)",
+}
+"""Why a known rule cannot be waived, keyed by the rule's own severity when it has one
+and by its coverage bucket when it has not.
+
+`contracts/rules.md` ("Waivable rules") names exactly these three kinds - "a waiver naming
+a `warn`, data-gap, or out-of-scope rule is reported invalid and changes nothing" - and
+each is reported as itself rather than folded into the `warn` label `contracts/cli.md`
+abbreviates them to: a waiver for `rms.assembly.mates_described` is refused because the
+data is not extracted, and telling an engineer it is a `warn` rule would send them looking
+for a severity to argue with."""
+
+_ACCEPTABLE_STATUS = "demonstrated"
+"""The one finding status an import accepts. A `suspected` finding is a `warn` rule's and
+is not waivable; a `checked_within_scope` one is already waived by an exception, and
+accepting it again would write a second exception for one condition.
+
+The status is necessary and not sufficient: a `demonstrated` finding can also be one an
+exception already covers - one this command wrote itself on an earlier run, which re-reads
+the session it wrote back and finds it still `demonstrated` because only a fresh
+`check rms` reclassifies a finding, or one the store holds as `needs_review`. `_uncovered`
+is what decides between them."""
+
+
+def _rms_waiver_invalidity(rule_id: str) -> str | None:
+    """Why `rule_id` cannot be waived, or `None` when it is a waivable `fail` rule."""
+    rule = RULES.get(rule_id)
+    if rule is None:
+        return RMS_WAIVER_UNKNOWN
+    if rule.severity == "fail":
+        return None
+    key = rule.severity if rule.coverage is None else rule.coverage[0]
+    return RMS_WAIVER_INVALID[key]
+
+
+def _flat_waivers(path: Path) -> dict[str, str]:
+    """The checker's `{ "<rule_id>": "<reason>" }` file, refusing every other shape.
+
+    A waiver with no reason is refused rather than accepted with an empty note: an
+    unexplained exception is the blanket exclusion the constitution (Principle VI) does
+    not allow, and a note is the one thing the file carries that the run cannot derive.
+    """
+    document = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(document, dict):
+        raise ValueError(
+            f"{path}: the waiver file is a JSON object of rule id to reason, not a "
+            f"{type(document).__name__}"
+        )
+    unexplained = sorted(
+        key
+        for key, value in document.items()
+        if not isinstance(value, str) or not value.strip()
+    )
+    if unexplained:
+        raise ValueError(
+            f"{path}: every waiver states why it is accepted; "
+            f"{', '.join(unexplained)} state(s) nothing"
+        )
+    return document
+
+
+def _uncovered(
+    store: ExceptionStore, evidence: EvidencePackage, findings: Iterable[Finding]
+) -> list[tuple[Finding, ReviewException | None]]:
+    """The findings this import still has something to do about, each with the retained
+    exception for its condition when there is one.
+
+    A finding an `active` exception already covers is dropped rather than accepted again:
+    the store was refreshed against this package, so `active` means that record still
+    binds, and a second record for one condition would be unreachable as well as untrue -
+    `ExceptionStore.match` returns the first non-retired match, so everything written
+    after it is dead. A `needs_review` one is kept, because that is the exception whose
+    finding the run reports as standing: re-binding it is the only thing that clears it.
+    """
+    pending: list[tuple[Finding, ReviewException | None]] = []
+    for finding in findings:
+        retained = store.match(
+            evidence, finding.component_ids, finding.configuration, check=finding.check
+        )
+        if retained is not None and retained.status == "active":
+            continue
+        pending.append((finding, retained))
+    return pending
+
+
+def _accept_or_reaccept(
+    store: ExceptionStore,
+    evidence: EvidencePackage,
+    finding: Finding,
+    retained: ReviewException | None,
+    *,
+    by: str,
+    note: str,
+) -> ReviewException:
+    """The exception covering `finding` after the import: a new one, or `retained` re-bound.
+
+    Re-accepting rewrites the acceptor, the date and the note as well as the digest. The
+    tree the flagged record was accepted for is not the tree that is here, so the person
+    running this import is accepting something the original acceptor never saw, and a
+    fresh fingerprint under their name and their reason would say otherwise.
+    """
+    if retained is None:
+        return store.accept(finding, evidence, by=by, note=note)
+    exception = store.reaccept(retained.id, evidence)
+    exception.accepted_by = by
+    exception.accepted_at = datetime.now(UTC)
+    exception.note = note
+    return exception
+
+
+@exceptions_app.command("accept-rms")
+def exceptions_accept_rms(
+    run_dir: Annotated[Path, typer.Argument(help="Directory holding session.json.")],
+    package: Annotated[
+        Path,
+        typer.Option("--package", help="Package directory the run was graded from."),
+    ],
+    file: Annotated[
+        Path,
+        typer.Option("--file", help="The checker's flat waiver file: rule id to reason."),
+    ],
+    by: Annotated[
+        str | None, typer.Option("--by", help="Who accepted them; defaults to the current user.")
+    ] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Import the checker's flat waiver file against one `check rms` run.
+
+    The file is an import and never a store: `{ "<rule_id>": "<reason>" }` says nothing
+    about which condition was accepted, and keeping it would silence its rules on every
+    document forever. Read against a run it says enough - every `demonstrated` finding of
+    a listed `fail` rule becomes one exception bound to that finding's components, its
+    configuration and a feature-tree fingerprint, with the reason as the note - and the
+    exceptions are what is kept.
+
+    A condition one exception already covers never gets a second. The store is refreshed
+    against the package first, exactly as the run that produced the session was graded, so
+    an `active` exception means the condition is covered and its finding is reported
+    `unused`; a `needs_review` one - the tree it was accepted for has moved, which is why
+    its finding still stands - is re-bound to the tree that is here rather than duplicated,
+    and counts as accepted, because that is what clears the finding. An import that writes
+    writes that refreshed store, as `exceptions list` does: a waiver the package has
+    outgrown is recorded `needs_review` rather than left reading `active` on disk.
+
+    Per listed id one status is reported, in the file's order: `accepted <n>`,
+    `unused` (the rule left this import nothing to do - it passed, it never ran, or every
+    finding it reported is already covered), or invalid. An invalid id refuses the whole
+    import: the statuses are printed, exit is 1, and nothing is written, so the ids that
+    would have been accepted read `would accept <n>` rather than claiming an acceptance
+    that did not happen. A half-applied import is worse than a refused one.
+    """
+    accepted_by = by if by else _default_user()
+    with _errors_as_exit_1():
+        waivers = _flat_waivers(file)
+        session = load_session(Path(run_dir).resolve() / SESSION_FILE_NAME)
+        store, evidence = _store_for(package)
+        store.refresh(evidence)
+
+    plan: list[tuple[str, str, str | None, list[tuple[Finding, ReviewException | None]]]] = []
+    for rule_id, reason in waivers.items():
+        invalidity = _rms_waiver_invalidity(rule_id)
+        pending = (
+            []
+            if invalidity is not None
+            else _uncovered(
+                store,
+                evidence,
+                [
+                    finding
+                    for finding in session.findings
+                    if finding.check == rule_id and finding.status == _ACCEPTABLE_STATUS
+                ],
+            )
+        )
+        plan.append((rule_id, reason, invalidity, pending))
+
+    refused = [
+        (rule_id, invalidity)
+        for rule_id, _, invalidity, _ in plan
+        if invalidity is not None
+    ]
+    accepted: dict[str, list[ReviewException]] = {rule_id: [] for rule_id, *_ in plan}
+    report_file: Path | None = None
+    if not refused:
+        with _errors_as_exit_1():
+            for rule_id, reason, _, findings in plan:
+                for finding, retained in findings:
+                    exception = _accept_or_reaccept(
+                        store, evidence, finding, retained, by=accepted_by, note=reason
+                    )
+                    finding.exception_id = exception.id
+                    accepted[rule_id].append(exception)
+            if any(accepted.values()):
+                store.save()
+                report_file = _save_run(run_dir, session, evidence)
+
+    rules = [
+        {
+            "rule_id": rule_id,
+            "reason": reason,
+            "status": _rms_waiver_status(invalidity, len(findings), refused=bool(refused)),
+            "count": len(findings),
+            "finding_ids": [finding.id for finding, _ in findings],
+            "exception_ids": [exception.id for exception in accepted[rule_id]],
+        }
+        for rule_id, reason, invalidity, findings in plan
+    ]
+    payload = {
+        "run_dir": str(Path(run_dir).resolve()),
+        "package_dir": str(Path(package).resolve()),
+        "waiver_file": str(Path(file).resolve()),
+        "accepted_by": accepted_by,
+        "exceptions_file": str(store.path),
+        "report_file": None if report_file is None else str(report_file),
+        "rules": rules,
+        "exceptions": [
+            to_jsonable_python(exception)
+            for exceptions in accepted.values()
+            for exception in exceptions
+        ],
+    }
+    lines = [f"{row['rule_id']}: {row['status']}" for row in rules]
+    if refused:
+        lines.append(f"nothing written: {len(refused)} invalid rule id(s)")
+    elif report_file is None:
+        lines.append("nothing written: no listed rule left this import a finding to accept")
+    else:
+        lines.append(f"wrote {store.path}")
+    _emit(payload, lines, json_output)
+
+    if refused:
+        typer.echo(
+            "error: nothing was written; "
+            + ", ".join(f"{rule_id} is {why}" for rule_id, why in refused),
+            err=True,
+        )
+        raise typer.Exit(1)
+
+
+def _rms_waiver_status(invalidity: str | None, count: int, *, refused: bool) -> str:
+    """One listed id's status: why it is invalid, or what happened to its findings."""
+    if invalidity is not None:
+        return invalidity
+    if count == 0:
+        return "unused"
+    return f"would accept {count}" if refused else f"accepted {count}"
 
 
 @exceptions_app.command("list")
