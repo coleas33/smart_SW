@@ -14,7 +14,9 @@ four things that keep it from widening the product's tool surface:
 - it dispatches all sixteen checks over every graded document and writes findings and
   aggregated coverage to the session, replacing its own coverage on a second call;
 - a check this build does not run yet is **reported** - one unresolved row naming it, and
-  one `unavailable_checks` entry - rather than silently absent.
+  one `unavailable_checks` entry - rather than silently absent. This build runs all sixteen
+  (T066 bound the drawing scope), so what is pinned below is the **mechanism** over a scope
+  taken out of the dispatch, plus that the list is empty as things stand.
 
 The evaluators themselves are `test_standards_{assembly,part,document}_rules.py`'s subject,
 and the finding and coverage shapes are `test_standards_report.py`'s; what is asserted here
@@ -44,6 +46,7 @@ from swreview.tools.registry import (
 from swreview.tools.standards_checks import (
     NO_STANDARDS_RUN,
     NOT_BUILT,
+    SCOPE_EVALUATORS,
     StandardsRun,
     attach_standards_run,
     check_standards,
@@ -296,15 +299,35 @@ def test_a_passing_or_skipped_check_never_consults_the_exceptions() -> None:
 # --- 4. what this build does not run yet --------------------------------------------------
 
 
-def test_a_check_with_no_evaluator_is_reported_rather_than_silently_absent() -> None:
-    """The four drawing checks until `checks/standards/drawing.py` lands (T066)."""
+def test_this_build_runs_every_check_in_the_catalogue() -> None:
+    """All sixteen since T066: nothing is reported as not built (T069a, T070)."""
+    assert unavailable_checks() == []
+    assert set(SCOPE_EVALUATORS) == {rule.scope for rule in RULES.values()}
+
+
+def test_a_check_with_no_evaluator_is_reported_rather_than_silently_absent(
+    monkeypatch: Any,
+) -> None:
+    """The mechanism, asked of a scope taken back out of the dispatch.
+
+    The report is **derived** from the catalogue - a check whose scope has no entry point -
+    rather than maintained as a list, which is what let it empty itself when the drawing
+    evaluators landed. Removing the entry point again is the only way left to ask whether
+    it would refill, and a check that silently stopped being dispatched is exactly the
+    failure this measures.
+    """
+    monkeypatch.delitem(SCOPE_EVALUATORS, "drawing")
+
     assert [row["check"] for row in unavailable_checks()] == list(DRAWING_CHECKS)
     assert all(
         NOT_BUILT.format(check=row["check"]) == row["reason"] for row in unavailable_checks()
     )
 
 
-def test_an_unavailable_check_is_unresolved_over_the_documents_it_would_have_graded() -> None:
+def test_an_unavailable_check_is_unresolved_over_the_documents_it_would_have_graded(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.delitem(SCOPE_EVALUATORS, "drawing")
     context = context_with_run(drawing_package())
     dispatch(context)
 

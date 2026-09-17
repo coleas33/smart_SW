@@ -313,9 +313,7 @@ def test_the_check_record_carries_what_the_session_does_not(tmp_path: Path) -> N
     assert record["verdict"]["counts"]["error"] == 1
     assert set(record["subjects"]) == {finding["id"] for finding in run.findings}
     assert record["exceptions_carried_forward"]["from_run"] is None
-    assert [row["check"] for row in record["unavailable_checks"]] == [
-        rule.id for rule in RULES.values() if rule.scope == "drawing"
-    ]
+    assert record["unavailable_checks"] == run.unavailable_checks == []
 
 
 def test_the_result_lists_all_sixteen_checks_with_a_worst_bucket(tmp_path: Path) -> None:

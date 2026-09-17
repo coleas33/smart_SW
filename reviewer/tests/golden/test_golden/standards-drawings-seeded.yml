@@ -1,0 +1,901 @@
+result:
+  checks:
+  - buckets:
+    - bucket: checked
+      document_ids:
+      - doc:2
+      reason: 1 document(s)
+    - bucket: out_of_scope
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      reason: '3 document(s): doc:1 is a drawing document and this check grades a
+        assembly one; doc:3 is a part document and this check grades a assembly one;
+        doc:4 is a part document and this check grades a assembly one'
+    check: standards.assembly.not_exploded
+    severity: error
+    statement: An assembly is not left in an exploded state.
+    worst_bucket: checked
+  - buckets:
+    - bucket: checked
+      document_ids:
+      - doc:2
+      reason: 1 document(s)
+    - bucket: out_of_scope
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      reason: '3 document(s): doc:1 is a drawing document and this check grades a
+        assembly one; doc:3 is a part document and this check grades a assembly one;
+        doc:4 is a part document and this check grades a assembly one'
+    check: standards.assembly.rebuild_errors
+    severity: error
+    statement: An assembly carries no rebuild errors.
+    worst_bucket: checked
+  - buckets:
+    - bucket: checked
+      document_ids:
+      - doc:2
+      reason: 1 document(s)
+    - bucket: out_of_scope
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      reason: '3 document(s): doc:1 is a drawing document and this check grades a
+        assembly one; doc:3 is a part document and this check grades a assembly one;
+        doc:4 is a part document and this check grades a assembly one'
+    check: standards.assembly.mate_references
+    severity: error
+    statement: No mate has lost a reference.
+    worst_bucket: checked
+  - buckets:
+    - bucket: checked
+      document_ids:
+      - doc:2
+      reason: 1 document(s)
+    - bucket: out_of_scope
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      reason: '3 document(s): doc:1 is a drawing document and this check grades a
+        assembly one; doc:3 is a part document and this check grades a assembly one;
+        doc:4 is a part document and this check grades a assembly one'
+    check: standards.assembly.one_fixed
+    severity: error
+    statement: At most one component of an assembly is fixed.
+    worst_bucket: checked
+  - buckets:
+    - bucket: checked
+      document_ids:
+      - doc:2
+      reason: 1 document(s)
+    - bucket: out_of_scope
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      reason: '3 document(s): doc:1 is a drawing document and this check grades a
+        assembly one; doc:3 is a part document and this check grades a assembly one;
+        doc:4 is a part document and this check grades a assembly one'
+    check: standards.assembly.fully_mated
+    severity: error
+    statement: Every under-constrained component is fully mated, or carries the minimum
+      mates its library class requires.
+    worst_bucket: checked
+  - buckets:
+    - bucket: unresolved
+      document_ids:
+      - doc:2
+      reason: '1 document(s): doc:2: cmp:0003 MR-10101-1: the transparency polarity
+        is unsettled: PROBE-2 has not settled which recorded value means transparent
+        on this build, so no component of any assembly can be graded against this
+        check and none is reported as compliant; cmp:0004 MR-10102-1: the transparency
+        polarity is unsettled: PROBE-2 has not settled which recorded value means
+        transparent on this build, so no component of any assembly can be graded against
+        this check and none is reported as compliant'
+    - bucket: out_of_scope
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      reason: '3 document(s): doc:1 is a drawing document and this check grades a
+        assembly one; doc:3 is a part document and this check grades a assembly one;
+        doc:4 is a part document and this check grades a assembly one'
+    check: standards.assembly.not_transparent
+    severity: error
+    statement: No component is left in a transparent state.
+    worst_bucket: unresolved
+  - buckets:
+    - bucket: checked
+      document_ids:
+      - doc:2
+      reason: 1 document(s)
+    - bucket: out_of_scope
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      reason: '3 document(s): doc:1 is a drawing document and this check grades a
+        assembly one; doc:3 is a part document and this check grades a assembly one;
+        doc:4 is a part document and this check grades a assembly one'
+    check: standards.assembly.not_hidden
+    severity: error
+    statement: No component is left hidden.
+    worst_bucket: checked
+  - buckets:
+    - bucket: checked
+      document_ids:
+      - doc:3
+      - doc:4
+      reason: 2 document(s)
+    - bucket: out_of_scope
+      document_ids:
+      - doc:1
+      - doc:2
+      reason: '2 document(s): doc:1 is a drawing document and this check grades a
+        part one; doc:2 is a assembly document and this check grades a part one'
+    check: standards.part.sketches_fully_defined
+    severity: error
+    statement: Every sketch is fully defined.
+    worst_bucket: checked
+  - buckets:
+    - bucket: checked
+      document_ids:
+      - doc:3
+      - doc:4
+      reason: 2 document(s)
+    - bucket: out_of_scope
+      document_ids:
+      - doc:1
+      - doc:2
+      reason: '2 document(s): doc:1 is a drawing document and this check grades a
+        part one; doc:2 is a assembly document and this check grades a part one'
+    check: standards.part.rebuild_errors
+    severity: error
+    statement: A part carries no rebuild errors.
+    worst_bucket: checked
+  - buckets:
+    - bucket: checked
+      document_ids:
+      - doc:3
+      - doc:4
+      reason: 2 document(s)
+    - bucket: out_of_scope
+      document_ids:
+      - doc:1
+      - doc:2
+      reason: '2 document(s): doc:1 is a drawing document and this check grades a
+        part one; doc:2 is a assembly document and this check grades a part one'
+    check: standards.part.material_assigned
+    severity: error
+    statement: A part has a material assigned, or a deliberately overridden mass -
+      and not both.
+    worst_bucket: checked
+  - buckets:
+    - bucket: skipped
+      document_ids:
+      - doc:3
+      - doc:4
+      reason: '2 document(s): doc:3: the part records no cut-list items, which is
+        not the same as every item being excluded (difference aa); doc:4: the part
+        records no cut-list items, which is not the same as every item being excluded
+        (difference aa)'
+    - bucket: out_of_scope
+      document_ids:
+      - doc:1
+      - doc:2
+      reason: '2 document(s): doc:1 is a drawing document and this check grades a
+        part one; doc:2 is a assembly document and this check grades a part one'
+    check: standards.part.cut_list_excluded
+    severity: error
+    statement: Every cut-list item is excluded from the cut list.
+    worst_bucket: skipped
+  - buckets:
+    - bucket: failed
+      document_ids:
+      - doc:1
+      reason: 'doc:1: F-001'
+    - bucket: out_of_scope
+      document_ids:
+      - doc:2
+      - doc:3
+      - doc:4
+      reason: '3 document(s): doc:2 is a assembly document and this check grades a
+        drawing one; doc:3 is a part document and this check grades a drawing one;
+        doc:4 is a part document and this check grades a drawing one'
+    check: standards.drawing.dimensions_not_overridden
+    severity: error
+    statement: No display dimension carries a manual override.
+    worst_bucket: failed
+  - buckets:
+    - bucket: failed
+      document_ids:
+      - doc:1
+      reason: 'doc:1: F-002'
+    - bucket: out_of_scope
+      document_ids:
+      - doc:2
+      - doc:3
+      - doc:4
+      reason: '3 document(s): doc:2 is a assembly document and this check grades a
+        drawing one; doc:3 is a part document and this check grades a drawing one;
+        doc:4 is a part document and this check grades a drawing one'
+    check: standards.drawing.annotations_not_dangling
+    severity: error
+    statement: No annotation is dangling.
+    worst_bucket: failed
+  - buckets:
+    - bucket: warned
+      document_ids:
+      - doc:1
+      reason: 'doc:1: F-003'
+    - bucket: out_of_scope
+      document_ids:
+      - doc:2
+      - doc:3
+      - doc:4
+      reason: '3 document(s): doc:2 is a assembly document and this check grades a
+        drawing one; doc:3 is a part document and this check grades a drawing one;
+        doc:4 is a part document and this check grades a drawing one'
+    check: standards.drawing.revision_matches
+    severity: warning
+    statement: The revision table, the drawing's revision property and every referenced
+      model's revision property agree.
+    worst_bucket: warned
+  - buckets:
+    - bucket: warned
+      document_ids:
+      - doc:1
+      reason: 'doc:1: F-004'
+    - bucket: out_of_scope
+      document_ids:
+      - doc:2
+      - doc:3
+      - doc:4
+      reason: '3 document(s): doc:2 is a assembly document and this check grades a
+        drawing one; doc:3 is a part document and this check grades a drawing one;
+        doc:4 is a part document and this check grades a drawing one'
+    check: standards.drawing.no_itar_statement
+    severity: warning
+    statement: No export-control statement appears in the drawing's notes.
+    worst_bucket: warned
+  - buckets:
+    - bucket: checked
+      document_ids:
+      - doc:1
+      - doc:2
+      - doc:3
+      - doc:4
+      reason: 4 document(s)
+    check: standards.document.data_card_complete
+    severity: error
+    statement: The data card is complete on every document whose file name follows
+      the part-number convention.
+    worst_bucket: checked
+  coverage:
+  - bucket: checked
+    check: standards.document.data_card_complete
+    error: null
+    reason: 4 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:2
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.assembly.not_exploded
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.assembly.rebuild_errors
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.assembly.mate_references
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.assembly.one_fixed
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.assembly.fully_mated
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.assembly.not_hidden
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.part.sketches_fully_defined
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.part.rebuild_errors
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.part.material_assigned
+    error: null
+    reason: 2 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: skipped
+    check: standards.part.cut_list_excluded
+    error: null
+    reason: '2 document(s): doc:3: the part records no cut-list items, which is not
+      the same as every item being excluded (difference aa); doc:4: the part records
+      no cut-list items, which is not the same as every item being excluded (difference
+      aa)'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: standards.assembly.not_transparent
+    error: null
+    reason: '1 document(s): doc:2: cmp:0003 MR-10101-1: the transparency polarity
+      is unsettled: PROBE-2 has not settled which recorded value means transparent
+      on this build, so no component of any assembly can be graded against this check
+      and none is reported as compliant; cmp:0004 MR-10102-1: the transparency polarity
+      is unsettled: PROBE-2 has not settled which recorded value means transparent
+      on this build, so no component of any assembly can be graded against this check
+      and none is reported as compliant'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: unresolved
+    check: standards.release
+    error: null
+    reason: 'not_ready; 2 error, 2 warning and 0 waived finding(s); 16 checked, 2
+      skipped, 1 unresolved and 41 out-of-scope (check, document) pair(s); unresolved:
+      standards.assembly.not_transparent'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:2
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.assembly.not_exploded
+    error: null
+    reason: '3 document(s): doc:1 is a drawing document and this check grades a assembly
+      one; doc:3 is a part document and this check grades a assembly one; doc:4 is
+      a part document and this check grades a assembly one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.assembly.rebuild_errors
+    error: null
+    reason: '3 document(s): doc:1 is a drawing document and this check grades a assembly
+      one; doc:3 is a part document and this check grades a assembly one; doc:4 is
+      a part document and this check grades a assembly one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.assembly.mate_references
+    error: null
+    reason: '3 document(s): doc:1 is a drawing document and this check grades a assembly
+      one; doc:3 is a part document and this check grades a assembly one; doc:4 is
+      a part document and this check grades a assembly one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.assembly.one_fixed
+    error: null
+    reason: '3 document(s): doc:1 is a drawing document and this check grades a assembly
+      one; doc:3 is a part document and this check grades a assembly one; doc:4 is
+      a part document and this check grades a assembly one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.assembly.fully_mated
+    error: null
+    reason: '3 document(s): doc:1 is a drawing document and this check grades a assembly
+      one; doc:3 is a part document and this check grades a assembly one; doc:4 is
+      a part document and this check grades a assembly one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.assembly.not_transparent
+    error: null
+    reason: '3 document(s): doc:1 is a drawing document and this check grades a assembly
+      one; doc:3 is a part document and this check grades a assembly one; doc:4 is
+      a part document and this check grades a assembly one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.assembly.not_hidden
+    error: null
+    reason: '3 document(s): doc:1 is a drawing document and this check grades a assembly
+      one; doc:3 is a part document and this check grades a assembly one; doc:4 is
+      a part document and this check grades a assembly one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.part.sketches_fully_defined
+    error: null
+    reason: '2 document(s): doc:1 is a drawing document and this check grades a part
+      one; doc:2 is a assembly document and this check grades a part one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.part.rebuild_errors
+    error: null
+    reason: '2 document(s): doc:1 is a drawing document and this check grades a part
+      one; doc:2 is a assembly document and this check grades a part one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.part.material_assigned
+    error: null
+    reason: '2 document(s): doc:1 is a drawing document and this check grades a part
+      one; doc:2 is a assembly document and this check grades a part one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.part.cut_list_excluded
+    error: null
+    reason: '2 document(s): doc:1 is a drawing document and this check grades a part
+      one; doc:2 is a assembly document and this check grades a part one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      - doc:2
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.drawing.dimensions_not_overridden
+    error: null
+    reason: '3 document(s): doc:2 is a assembly document and this check grades a drawing
+      one; doc:3 is a part document and this check grades a drawing one; doc:4 is
+      a part document and this check grades a drawing one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.drawing.annotations_not_dangling
+    error: null
+    reason: '3 document(s): doc:2 is a assembly document and this check grades a drawing
+      one; doc:3 is a part document and this check grades a drawing one; doc:4 is
+      a part document and this check grades a drawing one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.drawing.revision_matches
+    error: null
+    reason: '3 document(s): doc:2 is a assembly document and this check grades a drawing
+      one; doc:3 is a part document and this check grades a drawing one; doc:4 is
+      a part document and this check grades a drawing one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  - bucket: out_of_scope
+    check: standards.drawing.no_itar_statement
+    error: null
+    reason: '3 document(s): doc:2 is a assembly document and this check grades a drawing
+      one; doc:3 is a part document and this check grades a drawing one; doc:4 is
+      a part document and this check grades a drawing one'
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:2
+      - doc:3
+      - doc:4
+      pairs: []
+      positions: []
+  document_kinds:
+    doc:1: drawing
+    doc:2: assembly
+    doc:3: part
+    doc:4: part
+  documents:
+  - doc:1
+  - doc:2
+  - doc:3
+  - doc:4
+  exceptions_carried_forward:
+    count: 0
+    from_run: null
+    reason: no run root was named for this run, so no earlier run was looked at and
+      nothing was carried forward; the directory above a package is a run root only
+      when a caller says it is
+  findings:
+  - calculation: null
+    capture_ids: []
+    check: standards.drawing.dimensions_not_overridden
+    component_ids: []
+    configuration: Default
+    coverage_limits:
+    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - configuration Default
+    disposition: null
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: ZGRtOjAwMDE=
+      sheet: null
+      view: null
+    exception_id: null
+    group: null
+    id: F-001
+    inputs:
+    - dimension ddm:0001 Sheet1/Drawing View1/D1@Drawing View1 persist_ref=ZGRtOjAwMDE=
+      scope=doc:1
+    observed: '1 display dimension(s) of MR-90101.SLDDRW carry a manual override,
+      so the drawing states a value the geometry does not: D1@Drawing View1 (sheet
+      ''Sheet1'', view ''Drawing View1'') is overridden to 99.5 mm, where the model
+      computes 12.5 mm'
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /srv/meridian-vault/jobs/drawings/MR-90101.SLDDRW
+      vault_version: 1
+    recommended_action: Remove the manual override in SOLIDWORKS so the dimension
+      reports the modelled value, or change the model.
+    requirement: No display dimension carries a manual override.
+    severity: high
+    status: demonstrated
+    title: 1 display dimension(s) of MR-90101.SLDDRW carry a manual override, so the
+      drawi…
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: standards.drawing.annotations_not_dangling
+    component_ids: []
+    configuration: Default
+    coverage_limits:
+    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - configuration Default
+    disposition: null
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: ZGFuOjAwMDI=
+      sheet: null
+      view: null
+    exception_id: null
+    group: null
+    id: F-002
+    inputs:
+    - annotation dan:0002 Sheet2/Drawing View2/Datum1 persist_ref=ZGFuOjAwMDI= scope=doc:1
+    observed: '1 annotation(s) of MR-90101.SLDDRW are dangling, so they no longer
+      attach to the geometry they describe: Datum1 (type 5, sheet ''Sheet2'', view
+      ''Drawing View2'') is dangling'
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /srv/meridian-vault/jobs/drawings/MR-90101.SLDDRW
+      vault_version: 1
+    recommended_action: Reattach each dangling annotation in SOLIDWORKS, or delete
+      it if what it described is gone.
+    requirement: No annotation is dangling.
+    severity: medium
+    status: demonstrated
+    title: 1 annotation(s) of MR-90101.SLDDRW are dangling, so they no longer attach
+      to th…
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: standards.drawing.revision_matches
+    component_ids: []
+    configuration: Default
+    coverage_limits:
+    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - configuration Default
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-003
+    inputs:
+    - document doc:1 MR-90101.SLDDRW persist_ref=none scope=doc:1
+    observed: 'the revision MR-90101.SLDDRW shows does not agree everywhere: the revision
+      table drv:0001 on sheet ''Sheet2'' states ''AC'' in the cell revision.cell names
+      (row 0 from the end, column 1), and the MeridianRev property of MR-90101.SLDDRW
+      states ''AB'''
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /srv/meridian-vault/jobs/drawings/MR-90101.SLDDRW
+      vault_version: 1
+    recommended_action: Bring the revision table, the drawing's revision property
+      and the revision property of every model it references into agreement.
+    requirement: The revision table, the drawing's revision property and every referenced
+      model's revision property agree.
+    severity: low
+    status: suspected
+    title: 'the revision MR-90101.SLDDRW shows does not agree everywhere: the revision
+      tabl…'
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: standards.drawing.no_itar_statement
+    component_ids: []
+    configuration: Default
+    coverage_limits:
+    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - configuration Default
+    disposition: null
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: ZG50OjAwMDM=
+      sheet: null
+      view: null
+    exception_id: null
+    group: null
+    id: F-004
+    inputs:
+    - note dnt:0003 Sheet3/Sheet Format Sheet3/dnt:0003 persist_ref=ZG50OjAwMDM= scope=doc:1
+    observed: '1 note(s) of MR-90101.SLDDRW carry the export-control phrase the profile''s
+      export_control.phrase names: note dnt:0003 (sheet ''Sheet3'', view ''Sheet Format
+      Sheet3'')'
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /srv/meridian-vault/jobs/drawings/MR-90101.SLDDRW
+      vault_version: 1
+    recommended_action: Remove the export-control statement from the drawing's notes,
+      or confirm with the release process that this drawing should carry it.
+    requirement: No export-control statement appears in the drawing's notes.
+    severity: low
+    status: suspected
+    title: 1 note(s) of MR-90101.SLDDRW carry the export-control phrase the profile's
+      expo…
+    tool_result_ids:
+    - 0
+  profile:
+    path: <profile-a.yaml>
+    sha256: <sha256 of profile-a.yaml>
+  subjects:
+    F-001:
+    - component_ids: []
+      id: ddm:0001
+      kind: dimension
+      name: Sheet1/Drawing View1/D1@Drawing View1
+      parent_chain: []
+      persist_ref: ZGRtOjAwMDE=
+      persist_ref_scope: doc:1
+      reason: null
+      showable: false
+    F-002:
+    - component_ids: []
+      id: dan:0002
+      kind: annotation
+      name: Sheet2/Drawing View2/Datum1
+      parent_chain: []
+      persist_ref: ZGFuOjAwMDI=
+      persist_ref_scope: doc:1
+      reason: null
+      showable: false
+    F-003:
+    - component_ids: []
+      id: doc:1
+      kind: document
+      name: MR-90101.SLDDRW
+      parent_chain: []
+      persist_ref: null
+      persist_ref_scope: null
+      reason: no persistent reference was read for this subject, so it cannot be selected
+        in SOLIDWORKS
+      showable: false
+    F-004:
+    - component_ids: []
+      id: dnt:0003
+      kind: note
+      name: Sheet3/Sheet Format Sheet3/dnt:0003
+      parent_chain: []
+      persist_ref: ZG50OjAwMDM=
+      persist_ref_scope: doc:1
+      reason: null
+      showable: false
+  unavailable_checks: []
+  verdict:
+    counts:
+      checked: 16
+      error: 2
+      out_of_scope: 41
+      skipped: 2
+      unresolved: 1
+      warning: 2
+    notes: []
+    state: not_ready
+    unresolved_check_ids:
+    - standards.assembly.not_transparent
+    waived: 0

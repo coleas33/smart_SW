@@ -28,10 +28,10 @@ each graded document gets - and it is three rules:
   gate must not have (FR-004, FR-029);
 - **a check this build does not run yet** is `unresolved` over the documents it would have
   graded, naming that nothing about it is claimed, and is listed in `unavailable_checks`.
-  Today that is the four drawing checks, until `checks/standards/drawing.py` lands (T066).
-  It is derived from the catalogue - a check with no evaluator bound, or one whose scope
-  has no entry point - so it empties itself when the evaluators arrive rather than needing
-  a list to be remembered.
+  That list is **empty** now that `checks/standards/drawing.py` has landed (T066). It is
+  derived from the catalogue - a check with no evaluator bound, or one whose scope has no
+  entry point - so it emptied itself when the evaluators arrived rather than needing a list
+  to be remembered, and it refills itself if a check ever falls out of the dispatch.
 
 No provider is constructed, no key is read and no network call is made on any path
 (FR-045).
@@ -44,6 +44,7 @@ from dataclasses import dataclass
 
 from swreview.checks.standards.assembly import evaluate_assembly
 from swreview.checks.standards.document import evaluate_document
+from swreview.checks.standards.drawing import evaluate_drawing
 from swreview.checks.standards.part import evaluate_part
 from swreview.checks.standards.profile import StandardsProfile
 from swreview.checks.standards.registry import RULES, StandardsRule
@@ -75,14 +76,14 @@ ScopeEvaluator = Callable[
 SCOPE_EVALUATORS: dict[str, ScopeEvaluator] = {
     "assembly": evaluate_assembly,
     "part": evaluate_part,
+    "drawing": evaluate_drawing,
     "document": evaluate_document,
 }
-"""The scope entry points this build has.
+"""The scope entry points this build has: all four since `checks/standards/drawing.py`
+landed (T066), so `unavailable_checks` is empty and every one of the sixteen is dispatched.
 
-The `drawing` scope joins this map when `checks/standards/drawing.py` lands (T066); until
-then its four checks have no evaluator and `unavailable_checks` reports them. A scope is
-in this map exactly when its checks can be run, which is what makes that report derived
-rather than maintained.
+A scope is in this map exactly when its checks can be run, which is what makes that report
+derived rather than maintained.
 """
 
 NO_STANDARDS_RUN = (

@@ -93,6 +93,35 @@ def test_sheet_metadata(tmp_path: Path) -> None:
     assert sheet.views == []
 
 
+def test_every_sheet_the_ingest_writes_is_stamped_pdf_ingest(tmp_path: Path) -> None:
+    """FR-024: a sheet says which path produced it, so the drawing checks can tell.
+
+    All three of the parser's exits are stamped - the sheet it read, the flattened page it
+    could not read, and the file it could not open - because a sheet with no source is read
+    as PDF-ingested anyway and a consumer must not have to infer that from `parser`.
+    """
+    text = build_pdf(tmp_path / "text.pdf", [title_block(), (100.0, 200.0, "12.5")])
+    flat = flatten(build_pdf(tmp_path / "src.pdf", [title_block()]), tmp_path / "flat.pdf")
+    broken = tmp_path / "broken.pdf"
+    broken.write_text("this is not a PDF", encoding="utf-8")
+
+    sheets = [
+        *parse_drawing_pdf(text, "DRW-2001", gaps=[]),
+        *parse_drawing_pdf(flat, "DRW-2002", gaps=[]),
+        *parse_drawing_pdf(broken, "DRW-2003", gaps=[]),
+    ]
+
+    assert [sheet.parse_status for sheet in sheets] == ["text", "no_text", "failed"]
+    assert {sheet.source for sheet in sheets} == {"pdf_ingest"}
+
+
+def test_the_stamp_is_the_only_source_the_ingest_writes(tmp_path: Path) -> None:
+    """`native` is the native dumper's word for its own records and is never written here."""
+    path = build_pdf(tmp_path / "d.pdf", [title_block(), (100.0, 200.0, "12.5")], [title_block()])
+
+    assert [sheet.source for sheet in parse_drawing_pdf(path, "D")] == ["pdf_ingest"] * 2
+
+
 def test_units_from_the_title_block(tmp_path: Path) -> None:
     millimetres = build_pdf(tmp_path / "mm.pdf", [title_block("MILLIMETERS")])
     inches = build_pdf(tmp_path / "in.pdf", [title_block("INCHES")])

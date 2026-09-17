@@ -231,6 +231,41 @@ def test_drawings_named_by_the_manifest_are_parsed(tmp_path: Path) -> None:
     assert [d.nominal.value for d in sheet.dimensions] == [40.0]
 
 
+def test_every_sheet_the_ingest_writes_carries_the_pdf_ingest_source(tmp_path: Path) -> None:
+    """FR-024: the per-sheet half of the evidence-source rule, on the path that writes it.
+
+    The drawing checks grade native sheets only, so a sheet this builder produced has to
+    say so about itself rather than being inferred from which array it landed in.
+    """
+    package = build(tmp_path / "pkg")
+
+    assert [sheet.source for sheet in package.drawings] == ["pdf_ingest"]
+
+
+def test_a_sheet_written_before_the_stamp_existed_loads_with_no_source(tmp_path: Path) -> None:
+    """`contracts/ir-additions.md` section 4: the field is additive and absent means null.
+
+    The five feature 001/002/003 golden fixtures that carry PDF-ingested sheets are static
+    input files nothing rewrites, so the stamp must not have reached them - and they must
+    still load. Asserted over the files themselves, because "the goldens did not move" is
+    exactly what this stamp risks.
+    """
+    fixtures = sorted(
+        (Path(__file__).resolve().parents[1] / "golden" / "fixtures").glob("*/package.json")
+    )
+    assert fixtures, "the golden fixtures are the subject of this assertion"
+
+    with_sheets = 0
+    for path in fixtures:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        sheets = raw.get("drawings", [])
+        with_sheets += bool(sheets)
+        assert all("source" not in sheet for sheet in sheets), path
+        loaded = load_package(path.parent).package
+        assert all(sheet.source is None for sheet in loaded.drawings), path
+    assert with_sheets >= 5
+
+
 def test_a_flattened_drawing_page_becomes_a_no_text_gap(tmp_path: Path) -> None:
     directory = tmp_path / "pkg"
     manifest_path, bom_path = make_inputs(directory)
