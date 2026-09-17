@@ -1359,11 +1359,15 @@ public static class Program
         writer.WriteLine("  dump          --doc <path> --config <name> --out <dir>");
         writer.WriteLine("                --meshes glb|stl|none --faces needed|all");
         writer.WriteLine("                --features tree|none --equations on|off");
-        writer.WriteLine("                --profile full|model-check");
+        writer.WriteLine("                --profile full|model-check|standards");
         writer.WriteLine("                Write package.json and meshes/ for the active or named document.");
         writer.WriteLine("                --profile model-check reads documents, mates, features and");
-        writer.WriteLine("                equations only: no holes, fasteners, faces or meshes. The");
-        writer.WriteLine("                package records which profile wrote it as extractor.profile.");
+        writer.WriteLine("                equations only: no holes, fasteners, faces or meshes.");
+        writer.WriteLine("                --profile standards reads those five plus the cut list, and the");
+        writer.WriteLine("                drawing sheets when the document is a drawing. The package");
+        writer.WriteLine("                records which profile wrote it as extractor.profile, and every");
+        writer.WriteLine("                phase as extractor.phases whether it ran or not - which is what");
+        writer.WriteLine("                a consumer decides a partial extract from, not the name.");
         writer.WriteLine("  interference  --config <name> --pairs all|<id,id>... --out <dir>");
         writer.WriteLine("                --coincident-as-interference --subassemblies-as-components");
         writer.WriteLine("                --include-multibody --ignore-hidden");

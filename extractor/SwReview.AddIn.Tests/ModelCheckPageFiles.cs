@@ -23,7 +23,7 @@ internal static class ModelCheckPageFiles
         Path.Combine(ReviewPageFiles.WebFolder, "Model", "ModelCheckPage");
 
     /// <summary>The shared helpers both pages load (T080).</summary>
-    public static string SharedFolder => Path.Combine(ReviewPageFiles.WebFolder, "shared");
+    public static string SharedFolder => PageScripts.SharedFolder;
 
     /// <summary>The URL the add-in navigates the Model check tab to.</summary>
     public const string PageUrl = "https://swreview.invalid/Model/ModelCheckPage/index.html";
@@ -43,21 +43,20 @@ internal static class ModelCheckPageFiles
     /// <summary>
     /// Every script the page runs: its own, and the shared helpers it loads from the same
     /// virtual host. `shared/dom.js` is in here because the page's rules are its rules -
-    /// it is where this page's text reaches the DOM (T080).
+    /// it is where this page's text reaches the DOM (T080) - and so is
+    /// `shared/check-page.js`, which is the larger half of this page since feature 006.
+    ///
+    /// Which shared scripts those are is <see cref="PageScripts"/>'s answer, the one every page
+    /// helper uses: the ones this page's own `index.html` loads. Sweeping the folder whole was
+    /// the same set while `dom.js` was alone in it, and stopped being when a shared file arrived
+    /// that only some pages load.
     /// </summary>
     public static IReadOnlyList<KeyValuePair<string, string>> Scripts()
     {
         AssertPresent();
 
-        List<KeyValuePair<string, string>> scripts = new[] { Folder, SharedFolder }
-            .Where(Directory.Exists)
-            .SelectMany(folder => Directory.GetFiles(folder, "*.js", SearchOption.AllDirectories))
-            .Where(path => !path.Split(Path.DirectorySeparatorChar).Contains("vendor"))
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-            .Select(path => new KeyValuePair<string, string>(
-                path.Substring(ReviewPageFiles.WebFolder.Length).TrimStart(Path.DirectorySeparatorChar),
-                File.ReadAllText(path)))
-            .ToList();
+        IReadOnlyList<KeyValuePair<string, string>> scripts =
+            PageScripts.Collect(Folder, IndexHtml());
 
         Assert.True(
             scripts.Count >= 2,

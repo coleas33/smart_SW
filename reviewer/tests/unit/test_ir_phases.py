@@ -48,6 +48,33 @@ TIMED = [
     DumpPhase(name="body", elapsed_ms=None, status="skipped"),
 ]
 
+PHASE_ORDER = [
+    "document",
+    "manifest",
+    "mate",
+    "feature",
+    "equation",
+    "cutlist",
+    "drawing",
+    "hole",
+    "fastener",
+    "face",
+    "body",
+]
+"""Every phase of a dump, in the order `PackageWriter.PhaseOrder` runs them (schema 1.4.0,
+006 `contracts/ir-additions.md` section 6).
+
+Pinned on this side as well as in `PackageWriterTests` because the two sides have to
+describe the same phase vocabulary: `DumpPhase.name`'s field description feeds the
+generated contract, and a stale description makes the 1.4.0 schema describe a dump that no
+longer exists.
+"""
+
+
+def described_phases(description: str) -> list[str]:
+    """The phase names out of `DumpPhase.name`'s description, which lists them verbatim."""
+    return [name.strip() for name in description.split(":", 1)[1].split(",")]
+
 
 def build_extractor(**overrides: object) -> ExtractorInfo:
     fields: dict[str, object] = {
@@ -76,10 +103,71 @@ def test_a_package_that_was_not_timed_carries_no_rows() -> None:
 
 
 def test_the_phases_member_needs_no_new_schema_version() -> None:
-    """1.3.0 is where the reuse fields arrived; this member is additive beside them, so
-    the minor number does not move again."""
-    assert SCHEMA_VERSION == "1.3.0"
-    assert build_package().schema_version == "1.3.0"
+    """1.3.0 is where the reuse fields and this member arrived; the minor has moved again
+    since (1.4.0, the standards evidence) and this member was not what moved it."""
+    assert SCHEMA_VERSION == "1.4.0"
+    assert build_package().schema_version == "1.4.0"
+
+
+def test_the_field_description_names_every_phase_the_dump_runs_in_order() -> None:
+    """`cutlist` and `drawing` joined the dump in 1.4.0, and this description is where the
+    generated contract learns the vocabulary. Leaving it stale would ship a schema that
+    describes nine phases while `PackageWriter.PhaseOrder` runs eleven - and, because the
+    description is generated rather than hand-written into the contract, nothing else would
+    notice."""
+    description = DumpPhase.model_fields["name"].description
+
+    assert description is not None
+    assert described_phases(description) == PHASE_ORDER
+
+
+def test_the_committed_contract_names_the_same_phases() -> None:
+    """The committed contract is what the C# extractor validates against, so a vocabulary
+    the models know and the committed file does not is a dump the extractor cannot
+    describe."""
+    described = load_contract("ir.schema.json")["$defs"]["DumpPhase"]["properties"]["name"]
+
+    assert described_phases(described["description"]) == PHASE_ORDER
+
+
+def test_the_generated_schema_names_the_same_phases() -> None:
+    generated = export_schema()["$defs"]["DumpPhase"]["properties"]["name"]
+
+    assert described_phases(generated["description"]) == PHASE_ORDER
+
+
+def test_the_two_new_phases_are_named_after_the_five_a_model_check_runs() -> None:
+    """Order is not decoration: `standards` extends `model_check`, and a consumer reading
+    the rows top-down sees the five shared phases, then the two this feature adds, then the
+    four geometry phases no standards check reads."""
+    assert PHASE_ORDER[:5] == ["document", "manifest", "mate", "feature", "equation"]
+    assert PHASE_ORDER[5:7] == ["cutlist", "drawing"]
+    assert PHASE_ORDER[7:] == ["hole", "fastener", "face", "body"]
+
+
+def test_a_phase_that_never_started_is_recorded_skipped_with_no_elapsed_time() -> None:
+    """The fact a reader needs most when a package comes back thin, and the one FR-043
+    refuses a standards run on: `swreview check standards` reads the `cutlist` row rather
+    than the profile name, so a phase that never started has to be a row and not an
+    absence. Every phase is present; the two this feature adds carry no elapsed time
+    because a `model_check` dump never ran them, and 0 would say they ran and cost
+    nothing."""
+    rows = [
+        DumpPhase(name=name, elapsed_ms=3, status="ok")
+        if name in {"document", "manifest", "mate", "feature", "equation"}
+        else DumpPhase(name=name, elapsed_ms=None, status="skipped")
+        for name in PHASE_ORDER
+    ]
+
+    restored = EvidencePackage.model_validate_json(
+        build_package(extractor=build_extractor(phases=rows)).model_dump_json()
+    )
+
+    assert [phase.name for phase in restored.extractor.phases] == PHASE_ORDER
+    skipped = {phase.name: phase for phase in restored.extractor.phases
+               if phase.status == "skipped"}
+    assert set(skipped) == {"cutlist", "drawing", "hole", "fastener", "face", "body"}
+    assert all(phase.elapsed_ms is None for phase in skipped.values())
 
 
 def test_a_phase_that_never_ran_has_no_elapsed_time() -> None:

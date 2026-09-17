@@ -1,38 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Text.Json;
 using SwReview.AddIn.Review;
 using SwReview.Extractor.Dump;
 
 namespace SwReview.AddIn.Model;
-
-/// <summary>
-/// One Model check this host ran: enough to answer `report.open` and `folder.open` without
-/// ever taking a path from the page.
-///
-/// <see cref="CheckId"/> is the run folder's own name, which is also how the backend addresses
-/// a check (`GET /checks/{check_id}`). One id, so a page holding a check's result can ask this
-/// host to open the folder it came from without a second identifier to keep in step.
-/// </summary>
-public sealed class CheckRecord
-{
-    internal CheckRecord(string checkId, string runDirectory, DateTime at)
-    {
-        CheckId = checkId ?? throw new ArgumentNullException(nameof(checkId));
-        RunDirectory = runDirectory ?? throw new ArgumentNullException(nameof(runDirectory));
-        At = at;
-    }
-
-    /// <summary>The run folder's name, `&lt;yyyyMMdd-HHmmss&gt;-&lt;doc&gt;-check`.</summary>
-    public string CheckId { get; }
-
-    public string RunDirectory { get; }
-
-    /// <summary>When the check was started, as `init.latest_check.at` carries it.</summary>
-    public DateTime At { get; }
-}
 
 /// <summary>Everything <see cref="ModelCheckHost"/> is given; injected so it is testable headless.</summary>
 public sealed class ModelCheckHostOptions
@@ -91,6 +62,16 @@ public sealed class ModelCheckHostOptions
 /// The Model check page's other half: `ready`, `check.start`, and the four rows every pane host
 /// shares, delegated to <see cref="PaneActions"/> (`contracts/model-check.md` sections 2 and 3).
 ///
+/// Everything except `check.start` is <see cref="CheckPaneHost"/>'s - the envelope, `ready` and
+/// its `init`, the check records, the unsolicited messages and the four shared rows - because
+/// the Standards check tab needs the same plumbing and copying it would be the second largest
+/// copy this codebase could make. The collaborator is <b>held, not inherited</b> (plan.md
+/// Structure Decision 3, feature 006): a base class over the pane hosts would drag backend chat
+/// state into a host that has none, and this host keeps its own start verb, its own refusals and
+/// its own options either way. What it no longer keeps is a record type of its own:
+/// <see cref="CheckRecord"/> is now <see cref="CheckPaneHost"/>'s and both check hosts share it,
+/// which is a deviation from that decision's wording and is written down there.
+///
 /// What it does not do is most of the design:
 ///
 /// <b>It evaluates nothing.</b> The page calls `POST /checks/rms` itself, with the token and
@@ -101,20 +82,16 @@ public sealed class ModelCheckHostOptions
 ///
 /// <b>It registers no tool and writes to no document</b> (FR-031).
 ///
-/// <b>It does not own "the pane's latest run".</b> It creates the check folder and hands it to
-/// <see cref="ModelCheckHostOptions.RegisterLatestRun"/>, so `entity.show` resolves
-/// `document_id` through the package that was just written and the Ask tab opens in the same
-/// place (FR-028).
+/// <b>It does not own "the pane's latest run".</b> It creates the check folder and the
+/// collaborator hands it to <see cref="ModelCheckHostOptions.RegisterLatestRun"/>, so
+/// `entity.show` resolves `document_id` through the package that was just written and the Ask
+/// tab opens in the same place (FR-028).
 ///
 /// What it does own is the order of one `check.start`, and it is not negotiable. The refusals
 /// come first because a dump is SOLIDWORKS time. The run folder is created before the dump
 /// because the dump writes into it. The folder is registered before the reply, so a
 /// `POST /checks/rms` the page sends the instant it sees `check.extracted` resolves ids
 /// through the right folder.
-///
-/// No abstract base class shared with <see cref="ReviewHost"/>: inheritance would drag settings
-/// and backend state into a host that has neither (plan.md, Structure decision). The four
-/// common rows are composed in instead, and their tests are parameterized over both hosts.
 ///
 /// Threading: <see cref="Receive"/> is not re-entrant, and must not run on the SOLIDWORKS UI
 /// thread - a dump occupies the application thread for as long as it takes. The caller
@@ -125,180 +102,58 @@ public sealed class ModelCheckHost : IDisposable
     /// <summary>The only scope this increment evaluates (`contracts/model-check.md`).</summary>
     private const string PartKind = "part";
 
+    /// <summary>The one message type this host answers itself.</summary>
+    private const string StartType = "check.start";
+
     private readonly ModelCheckHostOptions _options;
-    private readonly PaneActions _actions;
-    private readonly List<CheckRecord> _checks = new List<CheckRecord>();
+    private readonly CheckPaneHost _pane;
 
     public ModelCheckHost(ModelCheckHostOptions options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
-        _actions = new PaneActions(new PaneActionsOptions(
-            options.Channel,
-            options.RunRoot,
-            new PaneRunLookup(
-                "run_id",
-                "UnknownCheck",
-                runId => $"this pane did not run a check called '{runId}', so it does not "
-                    + "know which folder to open.",
-                runId => FindCheck(runId)?.RunDirectory))
+
+        // Every accessor is wrapped rather than handed over, so a caller that replaces one
+        // after construction still has it read fresh - which is what "a settings save moves
+        // the run root" and "the backend started after the pane opened" both depend on.
+        _pane = new CheckPaneHost(new CheckPaneHostOptions(
+            options.Channel, () => options.RunRoot(), StartType, StartCheck)
         {
-            LogFolder = options.LogFolder,
-            EntityResolver = options.EntityResolver,
-            Opener = options.Opener,
-            Secrets = options.Secrets,
+            Backend = () => options.Backend(),
+            CurrentDocument = () => options.CurrentDocument(),
+            RegisterLatestRun = directory => options.RegisterLatestRun(directory),
+            EntityResolver = () => options.EntityResolver(),
+            Opener = () => options.Opener(),
+            LogFolder = () => options.LogFolder(),
+            Now = () => options.Now(),
+            Secrets = () => options.Secrets(),
         });
     }
 
     /// <summary>The checks this host ran, oldest first.</summary>
-    public IReadOnlyList<CheckRecord> Checks => _checks;
+    public IReadOnlyList<CheckRecord> Checks => _pane.Checks;
 
     /// <summary>The newest check, or null before the first one.</summary>
-    public CheckRecord? LatestCheck { get; private set; }
+    public CheckRecord? LatestCheck => _pane.LatestCheck;
 
     /// <summary>Records a check's folder and makes it the pane's latest run.</summary>
-    public CheckRecord TrackCheck(string runDirectory)
-    {
-        if (runDirectory == null)
-        {
-            throw new ArgumentNullException(nameof(runDirectory));
-        }
-
-        var record = new CheckRecord(
-            System.IO.Path.GetFileName(runDirectory.TrimEnd(
-                System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)),
-            runDirectory,
-            _options.Now());
-
-        _checks.RemoveAll(check => check.CheckId == record.CheckId);
-        _checks.Add(record);
-        LatestCheck = record;
-        _options.RegisterLatestRun(runDirectory);
-        return record;
-    }
+    public CheckRecord TrackCheck(string runDirectory) => _pane.TrackCheck(runDirectory);
 
     /// <summary>The record for <paramref name="checkId"/>, or null.</summary>
-    public CheckRecord? FindCheck(string checkId) =>
-        _checks.FirstOrDefault(check => check.CheckId == checkId);
+    public CheckRecord? FindCheck(string checkId) => _pane.FindCheck(checkId);
 
     /// <summary>Handles one message from the page. Never throws.</summary>
-    public void Receive(string json)
-    {
-        string? id = null;
-        try
-        {
-            using (JsonDocument document = JsonDocument.Parse(json))
-            {
-                JsonElement root = document.RootElement;
-                if (root.ValueKind != JsonValueKind.Object)
-                {
-                    throw new FormatException("a page message must be a JSON object");
-                }
-
-                id = PagePayload.Text(root, "id");
-                string? type = PagePayload.Text(root, "type");
-                if (string.IsNullOrEmpty(type))
-                {
-                    throw new FormatException("a page message must carry a 'type'");
-                }
-
-                JsonElement payload = root.TryGetProperty("payload", out JsonElement value)
-                    ? value
-                    : default;
-                Dispatch(type!, id, payload);
-            }
-        }
-        catch (Exception failure)
-        {
-            // An exception escaping into the `WebMessageReceived` handler would surface inside
-            // SOLIDWORKS.
-            _actions.SendError(id, "HostError", failure.Message, retryable: false);
-        }
-    }
+    public void Receive(string json) => _pane.Receive(json);
 
     /// <summary>Sends an unsolicited message (`status`, `document.changed`, `backend.stopped`).</summary>
-    public void Post(string type, object? payload) => _actions.Send(type, null, payload);
+    public void Post(string type, object? payload) => _pane.Post(type, payload);
 
     /// <summary>Posts one `status`, with every secret masked out of it (FR-015).</summary>
-    public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
+    public void PostStatus(string stage, string message) => _pane.PostStatus(stage, message);
 
     /// <summary>Tells the page which document the pane is looking at now, or that there is none.</summary>
-    public void DocumentChanged() =>
-        Post("document.changed", DocumentPayload(_options.CurrentDocument()));
+    public void DocumentChanged() => _pane.DocumentChanged();
 
-    public void Dispose()
-    {
-        _checks.Clear();
-        LatestCheck = null;
-    }
-
-    private void Dispatch(string type, string? id, JsonElement payload)
-    {
-        // The four rows this host shares with every other pane host, answered by the one copy
-        // of them.
-        if (_actions.TryHandle(type, id, payload))
-        {
-            return;
-        }
-
-        switch (type)
-        {
-            case "ready":
-                SendInit(id);
-                return;
-
-            case "check.start":
-                StartCheck(id);
-                return;
-
-            default:
-                _actions.SendError(
-                    id,
-                    "UnknownMessage",
-                    $"the host does not handle a '{type}' message",
-                    retryable: false);
-                return;
-        }
-    }
-
-    // ---- ready / init -------------------------------------------------------------------
-
-    private void SendInit(string? id)
-    {
-        BackendEndpoint? endpoint = _options.Backend();
-        CheckRecord? latest = LatestCheck;
-
-        _actions.Send("init", id, new Dictionary<string, object?>
-        {
-            {
-                "backend",
-                endpoint == null
-                    ? null
-                    : new Dictionary<string, object?>
-                    {
-                        { "port", endpoint.Port },
-
-                        // The page's OWN origin under `/__backend`, as `ReviewHost` sends: the
-                        // check page calls `POST /checks/rms` and reads the result back, and it
-                        // does both through the host rather than over loopback
-                        // (docs/pane-backend-proxy.md). The port stays for diagnostics.
-                        { "origin", BackendProxy.PageOrigin },
-                    }
-            },
-            { "token", endpoint?.Token },
-            { "run_root", _options.RunRoot() },
-            { "document", DocumentPayload(_options.CurrentDocument()) },
-            {
-                "latest_check",
-                latest == null
-                    ? null
-                    : new Dictionary<string, object?>
-                    {
-                        { "run_dir", latest.RunDirectory },
-                        { "at", latest.At.ToString("o", CultureInfo.InvariantCulture) },
-                    }
-            },
-        });
-    }
+    public void Dispose() => _pane.Dispose();
 
     // ---- check.start --------------------------------------------------------------------
 
@@ -309,10 +164,12 @@ public sealed class ModelCheckHost : IDisposable
     /// </summary>
     private void StartCheck(string? id)
     {
+        PaneActions actions = _pane.Actions;
+
         PageDocument? document = _options.CurrentDocument();
         if (document == null)
         {
-            _actions.SendError(
+            actions.SendError(
                 id,
                 "NoDocument",
                 "open the part you want checked in SOLIDWORKS first: the feature tree is read "
@@ -323,7 +180,7 @@ public sealed class ModelCheckHost : IDisposable
 
         if (_options.Dump == null)
         {
-            _actions.SendError(
+            actions.SendError(
                 id,
                 "NotAttached",
                 "the add-in is not attached to a SOLIDWORKS session, so nothing can be extracted.",
@@ -336,7 +193,7 @@ public sealed class ModelCheckHost : IDisposable
             // The rule family is written about a part's feature tree. An assembly answered with
             // 34 unresolved rules would read as a bad design rather than as a scope this
             // increment does not cover, so the refusal names the scope instead.
-            _actions.SendError(
+            actions.SendError(
                 id,
                 "NotAPart",
                 "the Model check reads a part's feature tree, and the active document is "
@@ -355,7 +212,7 @@ public sealed class ModelCheckHost : IDisposable
         catch (Exception failure)
         {
             PostStatus("error", failure.Message);
-            _actions.SendError(
+            actions.SendError(
                 id,
                 "RunFolderFailed",
                 $"the check folder could not be created under '{_options.RunRoot()}': "
@@ -385,7 +242,7 @@ public sealed class ModelCheckHost : IDisposable
             // for why it stopped (constitution Principle I). It is not registered, because a
             // half-written package must not become the folder Show and the Ask tab read from.
             PostStatus("error", failure.Message);
-            _actions.SendError(id, "ExtractionFailed", failure.Message, retryable: true);
+            actions.SendError(id, "ExtractionFailed", failure.Message, retryable: true);
             return;
         }
 
@@ -397,7 +254,7 @@ public sealed class ModelCheckHost : IDisposable
                 ? "Extracted. Checking the model..."
                 : $"Extracted with {summary.Gaps} gaps. Checking the model...");
 
-        _actions.Send("check.extracted", id, new Dictionary<string, object?>
+        actions.Send("check.extracted", id, new Dictionary<string, object?>
         {
             { "run_dir", runDirectory },
             { "document", document.Path },
@@ -414,14 +271,4 @@ public sealed class ModelCheckHost : IDisposable
             { "gaps", summary.Gaps },
         });
     }
-
-    private static Dictionary<string, object?>? DocumentPayload(PageDocument? document) =>
-        document == null
-            ? null
-            : new Dictionary<string, object?>
-            {
-                { "path", document.Path },
-                { "configuration", document.Configuration },
-                { "kind", document.Kind },
-            };
 }

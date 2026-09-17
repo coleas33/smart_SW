@@ -1,0 +1,78 @@
+# standards.yaml - the company's release checklist configuration.
+# Every value below is FICTIONAL placeholder data. Replace all of it.
+version: 1
+
+# Absolute path to the vault or project root. Library prefixes below may be written
+# relative to it; an absolute prefix is matched as written. A root that does not exist
+# on this machine is accepted - a package can come from another machine, and the prefix
+# match is textual.
+vault_root: "D:/ExampleVault"
+
+library:
+  # Part documents under these prefixes get the four part checks and the data-card
+  # check as SKIPPED coverage naming the matched prefix. Assembly documents under the
+  # same prefixes are graded normally.
+  skip_prefixes:
+    - "_library/bonding/"
+    - "_library/wiring/"
+    - "_library/inserts/"
+
+  # Part documents under these prefixes are exempt from the sketch check only.
+  sketch_exempt_prefixes:
+    - "_library/"
+
+  # An under-constrained component under these prefixes needs at least ONE
+  # unsuppressed mate.
+  one_mate_prefixes:
+    - "_library/fasteners/flathead/"
+
+  # An under-constrained component under these prefixes needs at least TWO
+  # unsuppressed mates. A prefix is a prefix whether or not it ends in a separator,
+  # so an entry may name a single file.
+  two_mate_prefixes:
+    - "_library/fasteners/"
+    - "_library/washers/"
+    - "_library/nuts/"
+    - "_library/seals/"
+    - "projects/_shared/EX-00001.SLDPRT"
+
+data_card:
+  # Custom property names that must be present and non-blank on every document whose
+  # file name matches part_number.pattern. Read from the configuration-independent
+  # property set.
+  properties:
+    - "Item Code"
+    - "Summary"
+    - "Coating"
+    - "Stock"
+
+part_number:
+  # '#' is one digit, '?' is one character, every other character is literal.
+  # Matched case-insensitively, whole-string, against the FILE NAME INCLUDING ITS
+  # EXTENSION.
+  pattern: "EX-####-??.SLD???"
+
+revision:
+  # The custom property holding the revision, on the drawing and on its referenced
+  # models. Written into the file by the vault; no vault API is used.
+  property: "DocRev"
+  # What a revision table holding only its header row means.
+  initial: "NEW"
+  # The text in the header row's identifying cell.
+  header_text: "REVISION"
+  # Which cell holds the current revision. row_from_end 0 is the LAST row, 1 the row
+  # above it; column is a zero-based index. The values below are placeholders, not
+  # defaults - most templates want row_from_end 0, and this example deliberately does
+  # not use it so that no field of this example is a real-world value.
+  cell:
+    row_from_end: 1
+    column: 2
+
+material:
+  # The configuration whose material standards.part.material_assigned compares.
+  configuration: "AsBuilt"
+
+export_control:
+  # Presence of this phrase anywhere in a drawing's note text is the defect.
+  # Matched case-insensitively as a substring.
+  phrase: "EXAMPLE-RESTRICTED"

@@ -73,7 +73,7 @@ def write_run(
     directory = run_root / folder
     directory.mkdir(parents=True, exist_ok=True)
     payload: dict[str, object] = {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "package_id": "11111111-2222-4333-8444-555555555555",
         "created_at": "2026-09-12T12:00:00Z",
     }

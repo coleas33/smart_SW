@@ -1,0 +1,46 @@
+# Fictional standards profile B. Every value is invented for the test suite and differs
+# from profile A, from config/standards.example.yaml and from every value the macro
+# carried (research.md R5), field by field. Its two-mate prefix "parts/hardware/dowels/"
+# is LONGER than the one-mate prefix "parts/hardware/" it overlaps, so the reversed case
+# of contracts/profile.md prefix semantics rule 6 is exercised rather than assumed.
+version: 1
+
+vault_root: "K:/kestrel-store"
+
+library:
+  skip_prefixes:
+    - "stock/foams/"
+    - "stock/cabling/"
+    - "stock/bushings/"
+  sketch_exempt_prefixes:
+    - "stock/"
+  one_mate_prefixes:
+    - "parts/hardware/"
+  two_mate_prefixes:
+    - "parts/hardware/dowels/"
+    - "parts/clips/"
+    - "builds/shared/KS-7.SLDPRT"
+
+data_card:
+  properties:
+    - "Kestrel Catalog Ref"
+    - "Long Title"
+    - "Surface Treatment"
+    - "Blank Material"
+
+part_number:
+  pattern: "??#####-KS.SLD???"
+
+revision:
+  property: "KestrelRevision"
+  initial: "-"
+  header_text: "REVISIONS TABLE"
+  cell:
+    row_from_end: 2
+    column: 0
+
+material:
+  configuration: "Machined"
+
+export_control:
+  phrase: "KESTREL-CONTROLLED"

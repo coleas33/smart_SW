@@ -1,0 +1,46 @@
+# Fictional standards profile A. Every value is invented for the test suite and differs
+# from profile B, from config/standards.example.yaml and from every value the macro
+# carried (research.md R5), field by field. Its one-mate prefix is LONGER than the
+# two-mate prefix it overlaps, which is the ordinary case; profile B carries the
+# reversed one (contracts/profile.md prefix semantics rule 6).
+version: 1
+
+vault_root: "/srv/meridian-vault"
+
+library:
+  skip_prefixes:
+    - "catalog/gaskets/"
+    - "catalog/looms/"
+    - "catalog/rivets/"
+  sketch_exempt_prefixes:
+    - "catalog/"
+  one_mate_prefixes:
+    - "catalog/screws/hex/"
+  two_mate_prefixes:
+    - "catalog/screws/"
+    - "catalog/spacers/"
+    - "jobs/common/MR-4242.SLDPRT"
+
+data_card:
+  properties:
+    - "Meridian Item Id"
+    - "Short Note"
+    - "Plating Spec"
+    - "Raw Stock Code"
+
+part_number:
+  pattern: "MR-#####.SLD???"
+
+revision:
+  property: "MeridianRev"
+  initial: "AA"
+  header_text: "REV HISTORY"
+  cell:
+    row_from_end: 0
+    column: 1
+
+material:
+  configuration: "Fabricated"
+
+export_control:
+  phrase: "MERIDIAN-EMBARGO"

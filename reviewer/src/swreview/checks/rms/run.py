@@ -52,35 +52,44 @@ that `new_session` stamps on the session it writes.
 
 from __future__ import annotations
 
-import json
-import shutil
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from time import perf_counter
-from typing import Any, get_args
+from typing import Any
 
-from pydantic_core import to_jsonable_python
-
-from swreview.agent.runner import load_exceptions
 from swreview.checks.rms.grade import RmsGrade, grade
-from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
-from swreview.ir.loader import PACKAGE_FILE_NAME, LoadedPackage, load_package
+from swreview.checks.rms.registry import RMS_FAMILY
+from swreview.checks.rules.run import (
+    CHECK_FILE_NAME,
+    EMPTY_FEATURE_TREE,
+    SUPPLIED_STORE,
+    UNREADABLE_RECORD,
+    CarriedForward,
+    CheckRunError,
+    EmptyFeatureTreeError,
+    NotACheckError,
+    UnreadableExceptionsError,
+    carry_forward,
+    check_record,
+    close_session,
+    coverage_rows,
+    recorded_call,
+    recorded_session,
+    store_to_grade_against,
+    write_check_record,
+    write_report,
+)
+from swreview.exceptions import ExceptionStore
+from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.dispositions import REPORT_FILE_NAME, SESSION_FILE_NAME
-from swreview.report.markdown import render_report
-from swreview.report.session import (
-    CoverageBucket,
-    ReviewSession,
-    load_session,
-    save_session,
-)
+from swreview.report.session import ReviewSession, save_session
 from swreview.tools import rms_checks
-from swreview.tools.context import ToolContext, build_context, use_context
+from swreview.tools.context import ToolContext, build_context
 from swreview.tools.query import ToolResult
-from swreview.tools.registry import RecordingSink, SessionSink, ToolRegistry, record_call
+from swreview.tools.registry import RecordingSink, SessionSink, ToolRegistry
 
 __all__ = [
     "CHECK_FILE_NAME",
@@ -98,14 +107,26 @@ __all__ = [
     "RmsScope",
     "UnreadableExceptionsError",
     "carry_forward",
+    "coverage_rows",
     "is_check_folder",
     "read_rms_check",
     "run_rms_check",
 ]
 
+RmsRunError = CheckRunError
+"""A check that cannot run, described so a caller can report it without a traceback.
+
+The family-neutral `CheckRunError` under the name this family's callers already catch: a
+`ValueError`, so `swreview check rms` turns it into one line on stderr through the
+handled-error list it already has, and `error_class` is what the backend route puts in the
+error body of `contracts/model-check.md`. `EmptyFeatureTreeError`,
+`UnreadableExceptionsError` and `NotACheckError` are its subclasses, so a caller that
+catches this one catches every refusal a run can make.
+"""
+
 
 class RmsScope(StrEnum):
-    """Which family of Resilient Modeling rules a check runs (contracts/cli.md)."""
+    """Which scope of Resilient Modeling rules a check runs (contracts/cli.md)."""
 
     part = "part"
     assembly = "assembly"
@@ -122,13 +143,17 @@ RMS_SCOPE_NOT_BUILT = (
 command that answered a scope it does not run with silence would read like a clean one."""
 
 RMS_SCOPE_TOOLS: dict[RmsScope, str] = {
-    RmsScope.part: "check_rms_part",
-    RmsScope.assembly: "check_rms_assembly",
-    RmsScope.equations: "check_rms_equations",
+    RmsScope(scope): tool for scope, tool in RMS_FAMILY.tools.items()
 }
 """The curated tool each scope is dispatched as (`contracts/tools.md`). The tool is the
 unit of dispatch, not the function, because the step recorded for it is what every finding
-of that scope cites (D1)."""
+of that scope cites (D1). "Scope" throughout this module is what `RmsScope` and
+`RULES.scope` have always called it; `family` here means the rms rules as against the
+standards checks (`specs/006-standards-check/research.md` R7).
+
+Read off `RMS_FAMILY.tools`, which is where the family's facts live, rather than typed out
+a second time: a scope this build dispatches is one fact, and the run folder's record and
+the family descriptor must not be able to disagree about it."""
 
 RMS_SCOPE_CHECKS: dict[
     RmsScope, Callable[[ToolContext, Sequence[str] | None], ToolResult]
@@ -137,14 +162,14 @@ RMS_SCOPE_CHECKS: dict[
     RmsScope.equations: rms_checks.run_equation_checks,
 }
 """The runner behind each *document-scoped* tool, for the one selection no single tool
-call expresses: several named documents (see `_dispatch`). The assembly family is
+call expresses: several named documents (see `_dispatch`). The assembly scope is
 deliberately absent - it takes no document argument, because only the root assembly's
 mates are extracted."""
 
 RMS_DOCUMENT_SCOPES: frozenset[RmsScope] = frozenset(RMS_SCOPE_CHECKS)
-"""The families that grade a part document, and so read the feature tree: every family but
+"""The scopes that grade a part document, and so read the feature tree: every scope but
 the assembly one, whose rules read the mates and the component instances instead. Derived
-from `RMS_SCOPE_CHECKS` rather than listed again, so "which families are document-scoped"
+from `RMS_SCOPE_CHECKS` rather than listed again, so "which scopes are document-scoped"
 has one answer. An empty `features[]` is refused for exactly these (FR-022)."""
 
 RMS_SCOPES_BUILT: frozenset[RmsScope] = frozenset(RMS_SCOPE_TOOLS)
@@ -158,113 +183,6 @@ RMS_SCOPE_RUNS: dict[RmsScope, tuple[RmsScope, ...]] = {
     RmsScope.all: (RmsScope.part, RmsScope.assembly, RmsScope.equations),
 }
 
-CHECK_FILE_NAME = "check.json"
-"""What a check records beside its session, and why the folder needs a second file.
-
-`session.json` holds the findings and the coverage, and so the grade; it does not hold
-which scope ran, which documents were selected, the structured subjects that sit beside
-each finding, or what the carry-forward did. Those four are written here, so that reading
-a check back is a read rather than a second evaluation (`contracts/model-check.md`
-section 1)."""
-
-EMPTY_FEATURE_TREE = (
-    "{directory} carries no feature rows: its package was written by the {profile!r} dump "
-    "profile and its features array is empty, so there is no feature tree to grade. "
-    "Extract the model again before checking it; grading it would report every rule as "
-    "unresolved, which reads as a broken part rather than as a missing extract"
-)
-
-NO_CANDIDATE = (
-    "no earlier run under {run_root} carries an {file} for design {design_id}, so no "
-    "accepted exception was carried forward"
-)
-
-ALREADY_PRESENT = (
-    "{directory} already carries an {file}, which is this run's own evidence; nothing was "
-    "carried forward over it"
-)
-
-NO_RUN_ROOT = (
-    "no run root was named for this run, so no earlier run was looked at and nothing was "
-    "carried forward; the directory above a package is a run root only when a caller says "
-    "it is"
-)
-
-SUPPLIED_STORE = (
-    "the caller supplied the exception store this check was graded against, so nothing "
-    "was looked for under a run root and nothing was copied into {directory}"
-)
-"""What a check reports when its store was handed in. Feature 004 grades two dumps of one
-copy against **one** store it refreshed once, so this is the honest reading of what its
-carry-forward did: it happened, once, in the run that owns both grades."""
-
-NOT_A_CHECK = "{directory} holds no {file}, so no check has run in it"
-
-UNREADABLE_RECORD = (
-    "{path} cannot be read as a check record ({error}), so this folder cannot be read "
-    "back as the check it holds"
-)
-
-SESSION_IS_NOT_THE_RECORDED_ONE = (
-    "{directory} holds a {session} that its {file} does not name: the record describes "
-    "session {recorded} and the folder holds {found}, so the folder is no longer that "
-    "check - a review has claimed it, or a later run replaced the session"
-)
-
-UNREADABLE_CANDIDATE = (
-    "{path} cannot be read as an exception store ({error}); the run is refused rather "
-    "than carried forward as an empty store, because an exception nobody can read is one "
-    "an engineer accepted and would silently be raised again"
-)
-
-
-class RmsRunError(ValueError):
-    """A check that cannot run, described so a caller can report it without a traceback.
-
-    A `ValueError`, so `swreview check rms` turns it into one line on stderr through the
-    handled-error list it already has; `error_class` is what the backend route puts in the
-    error body of `contracts/model-check.md`.
-    """
-
-    error_class = "RmsRunError"
-
-
-class EmptyFeatureTreeError(RmsRunError):
-    """The package carries no feature rows, so there is no tree to grade (FR-022)."""
-
-    error_class = "EmptyFeatureTree"
-
-
-class UnreadableExceptionsError(RmsRunError):
-    """The carry-forward candidate exists and cannot be parsed (FR-029)."""
-
-    error_class = "UnreadableExceptions"
-
-
-class NotACheckError(RmsRunError):
-    """The folder holds no check of its own to read back (`contracts/model-check.md`)."""
-
-    error_class = "UnknownCheck"
-
-
-@dataclass(frozen=True)
-class CarriedForward:
-    """What the carry-forward did, including when it did nothing.
-
-    Reported rather than silent in every case: "no exception was carried forward" and
-    "two were" are different statements about what silenced what, and an engineer looking
-    at a rule that did not fire needs to know which one they are reading.
-    """
-
-    from_run: str | None
-    """The run folder the file was copied from, or `None` when nothing was copied."""
-
-    count: int
-    """How many exceptions the copied file holds; zero when nothing was copied."""
-
-    reason: str | None
-    """Why nothing was copied; `None` when something was."""
-
 
 @dataclass(frozen=True)
 class RmsCheckRun:
@@ -276,8 +194,8 @@ class RmsCheckRun:
     """The part documents graded, in the order they were selected."""
 
     assembly_document: str | None
-    """The root assembly document graded, or `None` - the scope did not include the
-    assembly family, or the package has no assembly document."""
+    """The root assembly document graded, or `None` - the run did not include the
+    assembly scope, or the package has no assembly document."""
 
     findings: list[dict[str, Any]]
     subjects: dict[str, list[dict[str, Any]]]
@@ -304,7 +222,7 @@ def run_rms_check(
     out_dir: Path | str | None = None,
     scope: RmsScope = RmsScope.all,
     document_id: str | Sequence[str] | None = None,
-    families: Sequence[RmsScope] | None = None,
+    scopes: Sequence[RmsScope] | None = None,
     run_root: Path | str | None = None,
     exceptions: ExceptionStore | None = None,
 ) -> RmsCheckRun:
@@ -319,15 +237,15 @@ def run_rms_check(
             relies on: a check run folder *is* its own package directory, and the route
             reads the folder it passed back as the check. `swreview check rms --out <dir>`
             names one, because it is pointed at a package it must not edit.
-        scope: Which rule families to run.
+        scope: Which rule scopes to run.
         document_id: One part document id, several, or `None` for every part document in
             the package. Several is the command line's repeatable `--document`; the tab
             sends one or none (`contracts/model-check.md`).
-        families: The families to actually run, for a caller that offers fewer than
-            `scope` names. `POST /checks/rms` runs `all` as the part and equation families
+        scopes: The rule scopes to actually run, for a caller that offers fewer than
+            `scope` names. `POST /checks/rms` runs `all` as the part and equation scopes
             because the assembly rules are not calibrated and the route refuses them by
             name; running them under an alias would fold the verdict it refuses to give
-            into the grade. Defaults to the families `scope` names.
+            into the grade. Defaults to the scopes `scope` names.
         run_root: The run root whose earlier run folders the carry-forward may copy an
             `exceptions.json` from (FR-029). Named rather than inferred from
             `package_dir.parent`, because a package is not always a run folder: `None`
@@ -363,7 +281,7 @@ def run_rms_check(
     directory = Path(package_dir).resolve()
     loaded = load_package(directory)
     package = loaded.package
-    runs = tuple(families) if families is not None else RMS_SCOPE_RUNS[scope]
+    runs = tuple(scopes) if scopes is not None else RMS_SCOPE_RUNS[scope]
     _refuse_empty_feature_tree(directory, package, runs)
 
     context = build_context(loaded)
@@ -376,7 +294,7 @@ def run_rms_check(
 
     if exceptions is None:
         carried = _carry_forward(out, package, run_root)
-        store = _store_to_grade_against(loaded, out)
+        store = store_to_grade_against(loaded, out)
         if store is not None:
             store.refresh(package)
     else:
@@ -396,22 +314,22 @@ def run_rms_check(
     graded: list[str] = []
     assembly_document: str | None = None
 
-    for family in runs:
-        if family not in RMS_SCOPES_BUILT:
+    for run_scope in runs:
+        if run_scope not in RMS_SCOPES_BUILT:
             continue
-        payload = _dispatch(dispatch, context, sink, family, documents)
+        payload = _dispatch(dispatch, context, sink, run_scope, documents)
         if "error" in payload:
             raise RmsRunError(str(payload["error"]))
         findings.extend(payload["findings"])
         subjects.update(payload["subjects"])
-        if family == RmsScope.assembly:
+        if run_scope == RmsScope.assembly:
             # Empty when the package has no assembly document at all: the four rules are
             # then unresolved coverage naming the document that is not one.
             assembly_document = next(iter(payload["documents"]), None)
         else:
             graded = documents
 
-    session = _close(context, started)
+    session = close_session(context, started)
     run = RmsCheckRun(
         package_dir=directory,
         scope=scope,
@@ -423,26 +341,20 @@ def run_rms_check(
         grade=grade(session),
         exceptions_carried_forward=carried,
         unavailable_scopes=[
-            {"scope": family.value, "reason": RMS_SCOPE_NOT_BUILT.format(scope=family.value)}
-            for family in runs
-            if family not in RMS_SCOPES_BUILT
+            {
+                "scope": run_scope.value,
+                "reason": RMS_SCOPE_NOT_BUILT.format(scope=run_scope.value),
+            }
+            for run_scope in runs
+            if run_scope not in RMS_SCOPES_BUILT
         ],
         session=session,
         session_file=save_session(session, out / SESSION_FILE_NAME),
-        report_file=_write_report(out, session, package),
+        report_file=write_report(out, session, package),
         check_file=out / CHECK_FILE_NAME,
     )
     _write_check_record(run)
     return run
-
-
-def coverage_rows(session: ReviewSession) -> list[dict[str, Any]]:
-    """Every coverage item of `session` as one flat row, bucket included."""
-    return [
-        {"bucket": bucket, **to_jsonable_python(item)}
-        for bucket in get_args(CoverageBucket)
-        for item in getattr(session.coverage, bucket)
-    ]
 
 
 # --- 1. what is graded ------------------------------------------------------------
@@ -454,19 +366,19 @@ def _refuse_empty_feature_tree(
     """Refuse a package with no feature rows, naming the profile that wrote it (FR-022).
 
     Asked of every run that grades a part document (`RMS_DOCUMENT_SCOPES`), because both
-    families that do read the tree that is not there. The part rules report 34 unresolved
+    scopes that do read the tree that is not there. The part rules report 34 unresolved
     rules; the equation rules are worse, because they never skip - both `rms.params.*`
     rules come back as an affirmative "the equation manager holds no equations" over a
     document the extract may never have opened (constitution Principle I). The route of
     `contracts/model-check.md` qualifies its `EmptyFeatureTree` row by no scope, and the
     three scopes it offers - `part`, `equations`, `all` - are all document-scoped.
 
-    The assembly family is the one exception, and it is not a scope the route offers: its
+    The assembly scope is the one exception, and it is not a scope the route offers: its
     four rules read the mates and the component instances and never `features[]`, so a
     package of assembly evidence with no part trees in it is a legitimate thing to grade
     rather than a failed extract.
     """
-    if not any(family in RMS_DOCUMENT_SCOPES for family in runs):
+    if not any(run_scope in RMS_DOCUMENT_SCOPES for run_scope in runs):
         return
     if package.features:
         return
@@ -500,12 +412,16 @@ def _dispatch(
     dispatch: Any,
     context: ToolContext,
     sink: RecordingSink,
-    family: RmsScope,
+    scope: RmsScope,
     documents: Sequence[str],
 ) -> dict[str, Any]:
-    """Run one rule family as one recorded call, and return its payload.
+    """Run one rule scope as one recorded call, and return its payload.
 
-    One call per family and not one per document: `report.py` writes aggregated coverage
+    The parameter is the rule **scope** - what `RmsScope` and `RULES.scope` have always
+    called it - and not a "family", which now means the rms rules as against the standards
+    checks (`specs/006-standards-check/research.md` R7).
+
+    One call per scope and not one per document: `report.py` writes aggregated coverage
     through `replace_coverage`, so grading two documents as two calls would leave the
     second one's coverage and drop the first one's.
 
@@ -516,91 +432,18 @@ def _dispatch(
     recorded through the same sink with the same never-raise rule, rather than becoming
     several calls that each replace the coverage of the one before.
     """
-    name = RMS_SCOPE_TOOLS[family]
-    if family == RmsScope.assembly:
+    name = RMS_SCOPE_TOOLS[scope]
+    if scope == RmsScope.assembly:
         return dict(dispatch.call(name, {}).payload)
     every_part = rms_checks.part_documents(context, None)
     if list(documents) == every_part:
         return dict(dispatch.call(name, {"document_id": None}).payload)
     if len(documents) == 1:
         return dict(dispatch.call(name, {"document_id": documents[0]}).payload)
-    return _recorded(context, sink, name, RMS_SCOPE_CHECKS[family], documents)
-
-
-def _recorded(
-    context: ToolContext,
-    sink: RecordingSink,
-    name: str,
-    run: Callable[[ToolContext, Sequence[str] | None], ToolResult],
-    documents: Sequence[str],
-) -> dict[str, Any]:
-    """`run` over several named documents, recorded as the step its findings will cite.
-
-    The same three things `RecordedTool.call` does for the tool: bind the context, record
-    the call through the sink after the function returns - which is what makes
-    `ToolContext.current_step_id` the step this call is being recorded as - and turn a
-    raise into an error result rather than letting it out.
-    """
-    started = perf_counter()
-    try:
-        with use_context(context):
-            payload = dict(to_jsonable_python(run(context, list(documents))))
-    except Exception as exc:  # noqa: BLE001 - every failure becomes a result, as in the registry
-        payload = {"error": f"{type(exc).__name__}: {exc}"}
-    error = str(payload["error"]) if "error" in payload else None
-    record_call(
-        sink,
-        tool=name,
-        arguments={"document_ids": list(documents)},
-        payload=payload,
-        elapsed_s=perf_counter() - started,
-        error=error,
-    )
-    return payload
-
-
-def _close(context: ToolContext, started: float) -> ReviewSession:
-    """End the session honestly: when it ended, and how long it ran.
-
-    Deliberately *not* `agent/runner.finalize_session`: that closes out a review's
-    checklist, and a check answers one checklist item. Recording the other items as
-    "the review ended without a finding for it" would be a claim about a review that never
-    started.
-    """
-    session = context.require_session()
-    session.ended_at = datetime.now(UTC)
-    session.timing = session.timing.replace(
-        unattended_runtime_minutes=(perf_counter() - started) / 60.0
-    )
-    return session
-
-
-def _write_report(directory: Path, session: ReviewSession, package: EvidencePackage) -> Path:
-    """Render `session` into the run folder and return the file."""
-    report_file = directory / REPORT_FILE_NAME
-    report_file.write_text(render_report(session, package), encoding="utf-8")
-    return report_file
+    return recorded_call(context, sink, name, RMS_SCOPE_CHECKS[scope], documents)
 
 
 # --- 2. the carry-forward (FR-029) ------------------------------------------------
-
-
-def _store_to_grade_against(loaded: LoadedPackage, out: Path) -> ExceptionStore | None:
-    """The `exceptions.json` this run grades against: the run folder's, else the package's.
-
-    The run folder first, because that is where the carry-forward just wrote (FR-029) and
-    a copy nothing graded against would silence nothing - the acceptance would quietly
-    not survive the next check. The package's own store is the fallback, because a package
-    the command line is pointed at is read where it is: its waivers are evidence about it,
-    and a run folder somewhere else does not make them disappear.
-
-    The two are the same file whenever `out_dir` was not named, which is every caller but
-    `swreview check rms --out <dir>`, so this is one rule and not a branch on the caller.
-    """
-    carried = out / EXCEPTIONS_FILE_NAME
-    if carried.is_file():
-        return ExceptionStore(carried).load()
-    return load_exceptions(loaded)
 
 
 def _carry_forward(
@@ -612,127 +455,35 @@ def _carry_forward(
     )
 
 
-def carry_forward(
-    directory: Path,
-    *,
-    design_id: str,
-    run_root: Path | str | None,
-    design_id_of: Callable[[Path], str | None] | None = None,
-) -> CarriedForward:
-    """Copy the newest same-design `exceptions.json` under `run_root` into `directory`.
-
-    A candidate is a folder directly under the run root that holds both a package naming
-    the same `design_id` and an `exceptions.json`. Newest is by the file's own
-    modification time, with the folder name as the tie-break so two files written in the
-    same second still order the same way on every run.
-
-    The run root is the caller's and has no default. `POST /checks/rms` knows its own
-    (`--run-root`, and the check folder is created under it), while `swreview check rms
-    --package <dir>` is pointed at any directory at all - so inferring the root from the
-    package's parent is how a store the engineer never asked about is copied into their
-    directory, and how an unrelated folder's truncated file refuses a run that has nothing
-    to do with it. A caller that names no run root carries nothing forward, and is told so.
-
-    The copy is a byte copy, not a load and a re-save: a store that round-tripped through
-    this build would silently rewrite what an engineer accepted under an older one.
-
-    `design_id_of` is how a candidate folder's design is read, and it is a parameter
-    because feature 004's candidates are read two ways: a `-check` folder from its
-    `package.json`, a `-remodel` folder from its `source-attestation.json`, whose packages
-    are dumps of a copy and carry that copy's path-derived id. The default is this
-    module's: `package.json`, `design.design_id`.
-    """
-    read_design_id = _design_id_of if design_id_of is None else design_id_of
-    target = directory / EXCEPTIONS_FILE_NAME
-    if target.exists():
-        return CarriedForward(
-            from_run=None,
-            count=0,
-            reason=ALREADY_PRESENT.format(directory=directory, file=EXCEPTIONS_FILE_NAME),
-        )
-
-    if run_root is None:
-        return CarriedForward(from_run=None, count=0, reason=NO_RUN_ROOT)
-
-    root = Path(run_root).resolve()
-    candidates = [
-        candidate / EXCEPTIONS_FILE_NAME
-        for candidate in sorted(root.iterdir() if root.is_dir() else [])
-        if candidate.is_dir()
-        and candidate.resolve() != directory
-        and (candidate / EXCEPTIONS_FILE_NAME).is_file()
-        and read_design_id(candidate) == design_id
-    ]
-    if not candidates:
-        return CarriedForward(
-            from_run=None,
-            count=0,
-            reason=NO_CANDIDATE.format(
-                run_root=root,
-                file=EXCEPTIONS_FILE_NAME,
-                design_id=design_id,
-            ),
-        )
-
-    newest = max(candidates, key=lambda path: (path.stat().st_mtime, path.parent.name))
-    try:
-        store = ExceptionStore(newest).load()
-    except (OSError, ValueError) as exc:
-        raise UnreadableExceptionsError(
-            UNREADABLE_CANDIDATE.format(path=newest, error=exc)
-        ) from exc
-    shutil.copyfile(newest, target)
-    return CarriedForward(from_run=newest.parent.name, count=len(store.exceptions), reason=None)
-
-
-def _design_id_of(directory: Path) -> str | None:
-    """The `design.design_id` of the package in `directory`, or `None`.
-
-    Read as JSON rather than as an `EvidencePackage`: this asks one question of every
-    sibling run folder, and validating each of their packages to answer it would make the
-    cost of a check grow with the number of runs the engineer has kept. A folder whose
-    package cannot be read this way is not a candidate - it is not refused either, because
-    it is not this run's evidence and may be a folder no check ever wrote.
-    """
-    try:
-        body = json.loads((directory / PACKAGE_FILE_NAME).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    design = body.get("design")
-    if not isinstance(design, dict):
-        return None
-    found = design.get("design_id")
-    return found if isinstance(found, str) else None
-
-
 # --- 3. the check record: what makes a read a read (T072) -------------------------
 
 
 def _write_check_record(run: RmsCheckRun) -> Path:
     """Write `check.json` for `run`, and return the file.
 
-    `session_id` is what ties the two halves of a check together. A folder whose
-    `session.json` is no longer the one this record describes - a review claimed the
-    folder and rotated the check's session aside, or a later run replaced it - is no
-    longer this check, and reading it must say so rather than answer with somebody else's
-    session.
+    What is written here is what a reader of the folder needs and `session.json` does not
+    hold; the family stamp and the file itself are `checks/rules/run.py`'s, because a
+    backend handed a run directory has to know whose check it is holding before it can
+    answer a read of it.
     """
     carried = run.exceptions_carried_forward
-    body = {
-        "session_id": str(run.session.session_id),
-        "scope": run.scope.value,
-        "documents": run.documents,
-        "assembly_document": run.assembly_document,
-        "subjects": run.subjects,
-        "exceptions_carried_forward": {
-            "from_run": carried.from_run,
-            "count": carried.count,
-            "reason": carried.reason,
+    return write_check_record(
+        run.check_file,
+        RMS_FAMILY,
+        {
+            "session_id": str(run.session.session_id),
+            "scope": run.scope.value,
+            "documents": run.documents,
+            "assembly_document": run.assembly_document,
+            "subjects": run.subjects,
+            "exceptions_carried_forward": {
+                "from_run": carried.from_run,
+                "count": carried.count,
+                "reason": carried.reason,
+            },
+            "unavailable_scopes": run.unavailable_scopes,
         },
-        "unavailable_scopes": run.unavailable_scopes,
-    }
-    run.check_file.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
-    return run.check_file
+    )
 
 
 def read_rms_check(check_dir: Path | str) -> RmsCheckRun:
@@ -750,8 +501,8 @@ def read_rms_check(check_dir: Path | str) -> RmsCheckRun:
             or holds a session that its record does not name.
     """
     directory = Path(check_dir).resolve()
-    record = _check_record(directory)
-    session = _recorded_session(directory, record)
+    record = check_record(directory)
+    session = recorded_session(directory, record)
     try:
         return RmsCheckRun(
             package_dir=directory,
@@ -792,45 +543,3 @@ def is_check_folder(directory: Path | str) -> bool:
     except NotACheckError:
         return False
     return True
-
-
-def _check_record(directory: Path) -> Mapping[str, Any]:
-    """`check.json` as a mapping, or `NotACheckError` naming what is wrong with it."""
-    file = directory / CHECK_FILE_NAME
-    try:
-        body = json.loads(file.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise NotACheckError(
-            NOT_A_CHECK.format(directory=directory, file=CHECK_FILE_NAME)
-        ) from exc
-    except ValueError as exc:
-        raise NotACheckError(UNREADABLE_RECORD.format(path=file, error=exc)) from exc
-    if not isinstance(body, dict):
-        raise NotACheckError(
-            UNREADABLE_RECORD.format(path=file, error="it is not a JSON object")
-        )
-    return body
-
-
-def _recorded_session(directory: Path, record: Mapping[str, Any]) -> ReviewSession:
-    """The session `record` describes, or `NotACheckError` naming what the folder holds."""
-    file = directory / SESSION_FILE_NAME
-    try:
-        session = load_session(file)
-    except OSError as exc:
-        raise NotACheckError(
-            NOT_A_CHECK.format(directory=directory, file=SESSION_FILE_NAME)
-        ) from exc
-    except ValueError as exc:  # a ValidationError is one
-        raise NotACheckError(UNREADABLE_RECORD.format(path=file, error=exc)) from exc
-    if str(session.session_id) != str(record.get("session_id")):
-        raise NotACheckError(
-            SESSION_IS_NOT_THE_RECORDED_ONE.format(
-                directory=directory,
-                session=SESSION_FILE_NAME,
-                file=CHECK_FILE_NAME,
-                recorded=record.get("session_id"),
-                found=session.session_id,
-            )
-        )
-    return session

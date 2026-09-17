@@ -12,7 +12,7 @@ namespace SwReview.Extractor.Ir;
 public sealed class EvidencePackage
 {
     /// <summary>The schema version this package was written against.</summary>
-    public const string CurrentSchemaVersion = "1.3.0";
+    public const string CurrentSchemaVersion = "1.4.0";
 
     /// <summary>Semver; consumers reject any major other than 1 (FR-016).</summary>
     [JsonPropertyName("schema_version")]
@@ -89,8 +89,28 @@ public sealed class EvidencePackage
     [JsonPropertyName("captures")]
     public List<Capture> Captures { get; set; } = new List<Capture>();
 
+    /// <summary>
+    /// PDF-ingested sheets. Always written, empty included: it has been in the contract since
+    /// feature 001 and five shipped golden fixtures carry rows in it, so making it
+    /// null-when-empty would move every package on disk.
+    /// </summary>
     [JsonPropertyName("drawings")]
     public List<DrawingSheet> Drawings { get; set; } = new List<DrawingSheet>();
+
+    /// <summary>
+    /// Natively dumped drawing documents (schema 1.4.0), one per drawing, written by the
+    /// <c>drawing</c> phase. Beside <see cref="Drawings"/> rather than inside it: that member
+    /// is the PDF ingest's <see cref="DrawingSheet"/>, whose page, parse_status and parser a
+    /// native sheet has no honest value for (006 research R9).
+    ///
+    /// Null rather than empty when the phase ran nothing, and omitted from the JSON, so a
+    /// package that ran no drawing phase serializes exactly as it did before 1.4.0.
+    /// <c>WhenWritingDefault</c> would not do it - it omits a null List, never an empty one -
+    /// so <see cref="OmitEmptyAdditiveArrays"/> resolves the emptiness before serialization.
+    /// </summary>
+    [JsonPropertyName("drawing_records")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<DrawingRecord>? DrawingRecords { get; set; }
 
     /// <summary>Part feature trees, in traversal order; empty when --features none.</summary>
     [JsonPropertyName("features")]
@@ -98,6 +118,15 @@ public sealed class EvidencePackage
 
     [JsonPropertyName("equations")]
     public List<Equation> Equations { get; set; } = new List<Equation>();
+
+    /// <summary>
+    /// Cut-list items of the package's part documents (schema 1.4.0), written by the
+    /// <c>cutlist</c> phase. Null and omitted when the phase recorded none, for the reason
+    /// <see cref="DrawingRecords"/> gives.
+    /// </summary>
+    [JsonPropertyName("cut_list_items")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<CutListItem>? CutListItems { get; set; }
 
     /// <summary>
     /// The last suppress-test run appended to this package, or null. A dump overwrites the
@@ -109,4 +138,27 @@ public sealed class EvidencePackage
     /// <summary>Everything that could not be extracted. Never empty by omission.</summary>
     [JsonPropertyName("gaps")]
     public List<Gap> Gaps { get; set; } = new List<Gap>();
+
+    /// <summary>
+    /// Nulls the two schema 1.4.0 arrays when they carry no rows, so they are omitted rather
+    /// than written as <c>[]</c> (contracts/ir-additions.md, additivity rule point 3).
+    ///
+    /// Done here, once, on the way into <see cref="PackageSerializer.Serialize"/>, rather
+    /// than in every caller that builds a package: a caller that forgot would write an empty
+    /// array that is contract-valid, passes every schema check, and still moves every golden
+    /// package on disk. Only these two are touched; every array feature 001 shipped keeps
+    /// its <c>[]</c>.
+    /// </summary>
+    internal void OmitEmptyAdditiveArrays()
+    {
+        if (DrawingRecords != null && DrawingRecords.Count == 0)
+        {
+            DrawingRecords = null;
+        }
+
+        if (CutListItems != null && CutListItems.Count == 0)
+        {
+            CutListItems = null;
+        }
+    }
 }

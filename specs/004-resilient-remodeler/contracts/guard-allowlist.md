@@ -23,6 +23,40 @@ wide open.
 `ISldWorks.SetUserPreferenceToggle`, `IModelDoc2.EditUndo2`, `IModelDoc2.SetSaveFlag`) are feature
 003's, and narrowing is not widening.
 
+### Denials added after stage 1
+
+This file's set assertions read `ReadOnlyGuard`'s denied surface as data, so a denial another
+feature adds lands here rather than in a silent drift. Recorded, so that a reader can check the
+table against `RemodelGuardTests.ExpectedDeniedMembers` and against the guard itself.
+
+**Feature 006 (the Standards check tab)** adds the members below with its cut-list and drawing
+phases - the mutating and view-changing members that sit beside the reads those phases perform.
+`006-standards-check/research.md` R8 is the table that fixes the membership, and therefore the
+count; this list is that table's bare names, `SetText` counted once because
+`ReadOnlyGuard.DeniedMemberSet` stores unqualified names.
+
+| Members | The family they guard |
+|---|---|
+| `ActivateSheet`, `ActivateView` | sheet and view activation |
+| `ShowExploded`, `ShowExploded2`, `CreateExplodedView`, `AutoExplode` | exploded-state writes |
+| `SetVisibility`, `SetVisibilityInAsmDisplayStates`, `set_Visible` | visibility writes |
+| `SetMaterialPropertyValues2`, `RemoveMaterialProperty`, `RemoveMaterialProperty2` | appearance writes |
+| `set_Text`, `set_Text2` | table-cell writes |
+| `AddRevision`, `DeleteRevision` | revision writes |
+| `InsertRevisionTable`, `InsertRevisionTable2` | revision-table creation |
+| `SetAutomaticCutList`, `UpdateCutList`, `SortCutList`, `SetAutomaticUpdate` | cut-list writes |
+| `set_OverrideMass`, `SetOverrideMassValue` | mass-override writes |
+| `SetOverride`, `SetText` | display-dimension writes (`SetText` also covers `INote.SetText`) |
+| `SetSystemValue3`, `set_SystemValue`, `set_Value` | dimension-value writes |
+| `SetName` | annotation-identity writes |
+| `set_ExcludeFromCutList` | cut-list exclusion writes |
+
+**None of them widens this allowlist.** No stage-1 key's bare name is on the list, so
+`Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive` still finds the same five
+(`IFeature.set_Name` and `SetName` are different names, and `ISldWorks.SetUserPreferenceToggle`
+is untouched), and no member of `RemodelGuard.ExcludedMembers` became redundant. A denial is a
+narrowing, so none of this is a constitution exception.
+
 004 makes exactly one **visibility-only** change to that file: `DeniedMembers` and
 `DeniedPrefixes` become `public static readonly IReadOnlyCollection<string>` instead of
 `private static readonly`, with no member added, removed or reworded. The tests below read the

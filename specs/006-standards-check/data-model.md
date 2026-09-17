@@ -110,7 +110,9 @@ A folder whose `body_count` is `0` is **not displayed by SOLIDWORKS** and is the
 subject of any check; it is still recorded, so the coverage reason can say how many folders
 were seen and how many were displayable.
 
-### 2.3 The drawing models (`EvidencePackage.drawings[]`, omitted when empty)
+### 2.3 The drawing models (`EvidencePackage.drawing_records[]`, omitted when empty)
+
+Named `drawing_records` because `drawings[]` is the PDF ingest's `DrawingSheet` array, which shipped goldens carry and which stays always-written (`contracts/ir-additions.md` section 3).
 
 `DrawingRecord` is one drawing document, produced by the **native** phase. The existing
 `DrawingSheet` model (PDF ingest) is untouched; R9 in `research.md` records why they are two

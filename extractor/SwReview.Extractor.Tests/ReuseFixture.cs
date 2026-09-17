@@ -29,7 +29,7 @@ internal static class ReuseFixture
     {
         return new EvidencePackage
         {
-            SchemaVersion = "1.3.0",
+            SchemaVersion = "1.4.0",
             PackageId = new Guid("11111111-2222-4333-8444-555555555555"),
             CreatedAt = new DateTimeOffset(2026, 9, 12, 12, 0, 0, TimeSpan.Zero),
             Extractor = new ExtractorInfo

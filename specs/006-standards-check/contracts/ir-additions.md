@@ -25,7 +25,7 @@ Applied to **every** row in this file, with no exceptions (FR-023):
      one of these fields re-states its own absence as a `Gap`, so omitting the null loses
      nothing a reader needs, whereas omitting an existing null would.
    - **C# arrays**: `WhenWritingDefault` does **not** omit an empty `List<T>` - only a null
-     one - so `CutListItems` and `Drawings` are `List<T>?` defaulting to null, nulled when
+     one - so `CutListItems` and `DrawingRecords` are `List<T>?` defaulting to null, nulled when
      empty before serialization, and carry `WhenWritingNull`. `ExtractorInfo._omit_empty_phases`
      is **not** a cross-language precedent for this: it is a Python `@model_serializer` only,
      and the C# `ExtractorInfo.Phases` is a plain `List<DumpPhase>` that writes `"phases": []`.
@@ -103,7 +103,9 @@ Phase: **`cutlist`** (new). One row per cut-list item of a part document, identi
 
 ---
 
-## 3. The drawing models (`EvidencePackage.drawings[]`, omitted when empty)
+## 3. The drawing models (`EvidencePackage.drawing_records[]`, omitted when empty)
+
+> Named `drawing_records`, not `drawings`: `EvidencePackage.drawings[]` has held the PDF ingest's `DrawingSheet` rows since feature 001 and five shipped goldens carry rows in it, so the native records need their own member (decided 2026-09-17 when the models landed; mirrors `cut_list_items` / `CutListItem`). The existing `drawings` member stays an always-written array.
 
 Phase: **`drawing`** (new), which runs only when the root document is a drawing, under the
 `standards` and `full` profiles.

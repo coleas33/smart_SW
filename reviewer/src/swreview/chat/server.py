@@ -587,23 +587,23 @@ returned an uncalibrated assembly verdict would be read as a clean one.
 """
 
 
-def _offered_families(scope: RmsScope) -> tuple[RmsScope, ...]:
-    """The families this route runs for `scope`: the scope's own, minus the uncalibrated.
+def _offered_scopes(scope: RmsScope) -> tuple[RmsScope, ...]:
+    """The rule scopes this route runs for `scope`: the scope's own, minus the uncalibrated.
 
     `RMS_SCOPE_RUNS` says what a scope means, here as everywhere else, and this subtracts
-    the one family the tab does not offer - so `all` cannot run by alias the rules
+    the one scope the tab does not offer - so `all` cannot run by alias the rules
     `assembly` is refused by name for. Derived rather than listed again: a second table
     would be a second answer to "what does `all` mean".
     """
-    families = tuple(
-        family for family in RMS_SCOPE_RUNS[scope] if family is not RmsScope.assembly
+    offered = tuple(
+        run_scope for run_scope in RMS_SCOPE_RUNS[scope] if run_scope is not RmsScope.assembly
     )
-    if not families:
+    if not offered:
         raise ScopeNotAvailable(
             f"the {scope.value} rules are not offered by the Model check until they have "
             "been calibrated"
         )
-    return families
+    return offered
 
 
 def _check_scope(raw: Any) -> RmsScope:
@@ -1155,18 +1155,18 @@ class ChatServer:
         the same part, so this route adds no rule and no finding of its own. Blocking, so
         every caller runs it off the event loop.
 
-        Two things this route states rather than inherits: the families it runs (the
+        Two things this route states rather than inherits: the rule scopes it runs (the
         uncalibrated assembly rules are refused by name, so they are not run under the
         `all` alias either), and the run root the carry-forward may copy an earlier
         `exceptions.json` from, which is this server's own `--run-root`.
         """
-        families = _offered_families(scope)
+        offered = _offered_scopes(scope)
         try:
             run = run_rms_check(
                 package_dir,
                 scope=scope,
                 document_id=document_id,
-                families=families,
+                scopes=offered,
                 run_root=self.run_root,
             )
         except RmsRunError as exc:

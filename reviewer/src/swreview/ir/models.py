@@ -18,7 +18,7 @@ import base64
 import binascii
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -35,7 +35,7 @@ from pydantic import (
     model_validator,
 )
 
-SCHEMA_VERSION = "1.3.0"
+SCHEMA_VERSION = "1.4.0"
 SUPPORTED_SCHEMA_MAJOR = 1
 SCHEMA_VERSION_PATTERN = r"^1\.[0-9]+\.[0-9]+$"
 
@@ -89,6 +89,34 @@ PersistRef = Annotated[
     ),
 ]
 
+def omit_additive(
+    handler: SerializerFunctionWrapHandler,
+    model: BaseModel,
+    *,
+    nulls: Sequence[str] = (),
+    empties: Sequence[str] = (),
+) -> dict[str, Any]:
+    """Serialize `model`, dropping the named additive fields when they say nothing.
+
+    The IR's additivity rule (feature 006 `contracts/ir-additions.md`): a field added
+    after the model shipped is optional, absent from `required`, and **omitted when it is
+    null** - or, for a list, when it carries no rows - because an absent key and a null are
+    then the same fact, and the absent key is the one that keeps a package written by the
+    older build byte-identical to what that build wrote.
+
+    `nulls` names scalars, `empties` names lists: "no rows" is a list's absence, so a list
+    is never written as `null` beside its own empty spelling.
+    """
+    data = handler(model)
+    for name in nulls:
+        if data.get(name) is None:
+            data.pop(name, None)
+    for name in empties:
+        if not data.get(name):
+            data.pop(name, None)
+    return data
+
+
 def omit_when_null(
     handler: SerializerFunctionWrapHandler, model: BaseModel, *names: str
 ) -> dict[str, Any]:
@@ -106,11 +134,7 @@ def omit_when_null(
     session already carried keeps its null, because dropping those would change the shape
     feature 001's readers were written against.
     """
-    data = handler(model)
-    for name in names:
-        if data.get(name) is None:
-            data.pop(name, None)
-    return data
+    return omit_additive(handler, model, nulls=names)
 
 
 Transform = Annotated[list[Annotated[list[float], Len(4, 4)]], Len(4, 4)]
@@ -122,6 +146,12 @@ BBox2D = Annotated[list[float], Len(4, 4)]
 LengthUnit = Literal["mm", "in", "m"]
 AngleUnit = Literal["deg", "rad"]
 VolumeUnit = Literal["mm3", "in3", "m3"]
+
+MateEntityResolution = Literal["resolved", "unresolved", "unknown"]
+"""What `IMateEntity2.Reference` said about one mate entity (schema 1.4.0)."""
+
+DrawingEvidenceSource = Literal["native", "pdf_ingest"]
+"""Which path produced a drawing sheet: the native dump phase or the PDF ingest (1.4.0)."""
 
 
 class IRModel(BaseModel):
@@ -283,6 +313,54 @@ class Document(IRModel):
     config_properties: dict[str, dict[str, str]]
     material: str | None
     mass: MassProperties | None
+    is_exploded: bool | None = Field(
+        default=None,
+        description=(
+            "IModelDoc2.IsExploded() for an assembly document (schema 1.4.0); null plus an "
+            "assembly_exploded gap when unreadable. Always null for a part or a drawing, "
+            "where the question does not apply and the absence is not a gap."
+        ),
+    )
+    rebuild_error_count: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "IModelDocExtension.GetWhatsWrongCount read as the document stands - nothing is "
+            "rebuilt (schema 1.4.0); null plus a rebuild_error_count gap when unreadable."
+        ),
+    )
+    mass_overridden: bool | None = Field(
+        default=None,
+        description=(
+            "IMassProperty.OverrideMass, read before the volume gates so a surface-only part "
+            "still answers (schema 1.4.0); null plus a mass_override gap when the object, the "
+            "cast or the read fails."
+        ),
+    )
+    material_configuration: str | None = Field(
+        default=None,
+        description=(
+            "The configuration `material` was read in (schema 1.4.0). Null for an assembly or "
+            "a drawing, and present whenever the read was attempted - including when "
+            "`material` came back null, because 'no material in configuration X' and 'no "
+            "material, configuration unknown' are different facts."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_null_1_4_0_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Leave the 1.4.0 additions out when they are null, so a 1.3.0 document round-trips
+        to the bytes a 1.3.0 build wrote (`omit_additive`)."""
+        return omit_additive(
+            handler,
+            self,
+            nulls=(
+                "is_exploded",
+                "rebuild_error_count",
+                "mass_overridden",
+                "material_configuration",
+            ),
+        )
 
 
 class ComponentInstance(IRModel):
@@ -311,6 +389,54 @@ class ComponentInstance(IRModel):
         description="IComponent2.GetConstrainedStatus verbatim; null (plus a "
         "component_constrained_status gap) when unreadable. Named in Python, not here.",
     )
+    transparency_raw: float | None = Field(
+        default=None,
+        description=(
+            "Slot 7 of IComponent2.GetMaterialPropertyValues2(1, null) verbatim (schema "
+            "1.4.0); null plus a component_transparency gap when unreadable, and null "
+            "without a gap when has_appearance_override is false - there is nothing to read."
+        ),
+    )
+    has_appearance_override: bool | None = Field(
+        default=None,
+        description=(
+            "IComponent2.HasMaterialPropertyValues() (schema 1.4.0); null plus a "
+            "component_transparency gap when unreadable. Replaces the -1 sentinel that "
+            "conflated 'no override' with a real value."
+        ),
+    )
+    visibility_raw: int | None = Field(
+        default=None,
+        description=(
+            "IComponent2.Visible verbatim, in swComponentVisibilityState_e - hidden 0, "
+            "visible 1, unknown -1 (schema 1.4.0); null plus a component_visibility gap when "
+            "unreadable. The extractor records the number; Python names it."
+        ),
+    )
+    is_pattern_instance: bool | None = Field(
+        default=None,
+        description=(
+            "IComponent2.IsPatternInstance() (schema 1.4.0); null plus a component_pattern "
+            "gap when unreadable. `pattern_id` keeps the pattern's name and cannot replace "
+            "this: a null pattern_id conflates 'not in a pattern' with 'the pattern map was "
+            "never built'."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_null_1_4_0_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Leave the 1.4.0 additions out when they are null; `constrained_status_raw` and
+        every earlier member keep their null (`omit_additive`)."""
+        return omit_additive(
+            handler,
+            self,
+            nulls=(
+                "transparency_raw",
+                "has_appearance_override",
+                "visibility_raw",
+                "is_pattern_instance",
+            ),
+        )
 
 
 class SketchInfo(IRModel):
@@ -327,6 +453,19 @@ class SketchInfo(IRModel):
         description="Feature ids that consume this sketch (GetChildren); "
         "null plus a feature_children gap when unavailable, [] when there are none"
     )
+    text_segment_count: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "len(ISketch.GetSketchTextSegments()), 0 for an empty or null array (schema "
+            "1.4.0); null plus a sketch_text gap when unreadable, which leaves the sketch "
+            "unresolved because the text exemption can then neither be applied nor ruled out."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_null_1_4_0_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(handler, self, nulls=("text_segment_count",))
 
 
 class FilletInfo(IRModel):
@@ -400,6 +539,20 @@ class MateEntity(IRModel):
     component_id: str
     persist_ref: PersistRef | None
     entity_kind: str
+    resolution_status: MateEntityResolution | None = Field(
+        default=None,
+        description=(
+            "What IMateEntity2.Reference gave, with no new interop call (schema 1.4.0): "
+            "'resolved' when the reference was non-null, 'unresolved' when it was null, "
+            "'unknown' plus a mate_entity_reference gap when the read threw. Null only in a "
+            "package written before 1.4.0. Without it both outcomes are a null persist_ref "
+            "and indistinguishable."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_null_1_4_0_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(handler, self, nulls=("resolution_status",))
 
 
 class Mate(IRModel):
@@ -649,6 +802,378 @@ class DrawingSheet(IRModel):
     views: list[SheetView]
     parse_status: Literal["text", "no_text", "failed"]
     parser: str
+    source: DrawingEvidenceSource | None = Field(
+        default=None,
+        description=(
+            "Which path wrote this sheet (schema 1.4.0); the PDF ingest stamps 'pdf_ingest'. "
+            "Null in a sheet written before the stamp existed, which a consumer reads as "
+            "'source not recorded' and the drawing checks treat exactly as 'pdf_ingest'."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_null_1_4_0_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(handler, self, nulls=("source",))
+
+
+# --- 2b. Native drawing evidence (schema 1.4.0, feature 006) ----------------------
+#
+# These are new models, not an extension of `DrawingSheet`: the PDF ingest's sheet requires
+# `page`, `parse_status` and `parser`, none of which a natively dumped sheet has, and
+# filling them in would be a fiction (006 research R9). They live in their own
+# `EvidencePackage.drawing_records[]` beside the untouched `drawings[]` for the same
+# reason. Every record carries a package id allocated in traversal order, plus
+# `persist_ref`/`persist_ref_scope` when SOLIDWORKS gave one - a **null** persist_ref is
+# the statement FR-026 requires: the id is a within-dump identity, so a consumer never
+# presents it as a persistent one.
+
+
+class RevisionTableRow(IRModel):
+    """One row of a revision table, keyed by its index inside that table (schema 1.4.0).
+
+    Which row is the revision row, and whether a row is the header, are profile questions
+    answered in Python; the extractor records cells and classifies nothing.
+    """
+
+    index: int = Field(ge=0, description="Position in the table, from 0")
+    cells: list[str | None] = Field(
+        default_factory=list,
+        description=(
+            "One per column, from ITableAnnotation.Text[row, col]. An empty cell is the "
+            "empty string - a null cell is one that could not be read, and the two must not "
+            "be confused: an empty revision cell is a real mismatch."
+        ),
+    )
+    is_header: bool | None = Field(
+        default=None,
+        description=(
+            "The extractor's reading of the table's own title-row structure (TotalRowCount "
+            "versus RowCount); may be null, and no check relies on it alone."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(handler, self, nulls=("is_header",), empties=("cells",))
+
+
+class RevisionTable(IRModel):
+    """One revision table on one sheet (schema 1.4.0). Every table is read, not just the
+    one `ISheet.RevisionTable` returns, so a second table is visible rather than silently
+    missing from the one check whose purpose is coverage."""
+
+    id: Annotated[str, StringConstraints(pattern=r"^drv:[0-9]{4,}$")]
+    sheet_id: str
+    current_revision_raw: str | None = Field(
+        default=None,
+        description=(
+            "IRevisionTableAnnotation.CurrentRevision verbatim, including the empty string. "
+            "Recorded alongside the rows because it comes back empty under some vaults; the "
+            "check names both readings with their source rather than letting the dumper "
+            "choose."
+        ),
+    )
+    row_count: int | None = Field(
+        default=None,
+        ge=0,
+        description="ITableAnnotation.RowCount; null plus a revision_table_read gap",
+    )
+    column_count: int | None = Field(
+        default=None,
+        ge=0,
+        description="ITableAnnotation.ColumnCount; null plus a revision_table_read gap",
+    )
+    rows: list[RevisionTableRow] = Field(
+        default_factory=list, description="Empty when the COM cast failed; the gap says so"
+    )
+    persist_ref: PersistRef | None = None
+    persist_ref_scope: str | None = Field(
+        default=None,
+        description="document_id whose IModelDocExtension produced persist_ref; null when "
+        "SOLIDWORKS gave none, and `id` is then the identity",
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler,
+            self,
+            nulls=("current_revision_raw", "row_count", "column_count", "persist_ref",
+                   "persist_ref_scope"),
+            empties=("rows",),
+        )
+
+
+class DrawingNote(IRModel):
+    """One note read off a drawing view (schema 1.4.0). Notes are reachable only through a
+    view, and the export-control statement lives on the sheet-format pseudo-view."""
+
+    id: Annotated[str, StringConstraints(pattern=r"^dnt:[0-9]{4,}$")]
+    owner_id: str = Field(description="The DrawingView.id it was read from")
+    text: str | None = Field(
+        default=None,
+        description=(
+            "INote.GetText(); null plus a note_text gap, which leaves the export-control "
+            "check unresolved because an unread note cannot be shown not to carry the phrase."
+        ),
+    )
+    persist_ref: PersistRef | None = None
+    persist_ref_scope: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler, self, nulls=("text", "persist_ref", "persist_ref_scope")
+        )
+
+
+class DrawingAnnotation(IRModel):
+    """One annotation of any type on a drawing view (schema 1.4.0)."""
+
+    id: Annotated[str, StringConstraints(pattern=r"^dan:[0-9]{4,}$")]
+    owner_id: str = Field(
+        description="The DrawingView.id it was read from; a sheet-format annotation's owner "
+        "is the type-1 pseudo-view"
+    )
+    name: str | None = Field(
+        default=None,
+        description="IAnnotation.GetName(); null plus an annotation_identity gap. The "
+        "annotation is still a subject, identified by `id`, its sheet and its view",
+    )
+    type_raw: int | None = Field(
+        default=None,
+        description="IAnnotation.GetType() verbatim, in swAnnotationType_e; Python names it",
+    )
+    is_dangling: bool | None = Field(
+        default=None,
+        description="IAnnotation.IsDangling(); null plus an annotation_dangling gap, and "
+        "that annotation is then unresolved",
+    )
+    persist_ref: PersistRef | None = None
+    persist_ref_scope: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler,
+            self,
+            nulls=("name", "type_raw", "is_dangling", "persist_ref", "persist_ref_scope"),
+        )
+
+
+class DisplayDimensionRecord(IRModel):
+    """One display dimension on a drawing view (schema 1.4.0).
+
+    Both value members are a `Quantity | Angle` union, following the existing IR precedent
+    `Tolerance.upper` / `.lower`: `Quantity` carries a `LengthUnit` only, so an angular
+    dimension cannot be represented by one and `dimension_type_raw` is what decides which
+    of the two a record carries.
+    """
+
+    id: Annotated[str, StringConstraints(pattern=r"^ddm:[0-9]{4,}$")]
+    view_id: str
+    name: str | None = Field(
+        default=None,
+        description="IDimension.FullName, falling back to Name; null plus a "
+        "dimension_override gap",
+    )
+    dimension_type_raw: int | None = Field(
+        default=None,
+        description="IDisplayDimension.Type2 verbatim; what decides whether the value is a "
+        "length or an angle, and therefore its unit. Python names it",
+    )
+    is_overridden: bool | None = Field(
+        default=None,
+        description="IDisplayDimension.GetOverride(); null plus a dimension_override gap, "
+        "and the dimension is then unresolved",
+    )
+    override_value: Quantity | Angle | None = Field(
+        default=None,
+        description=(
+            "IDisplayDimension.GetOverrideValue() in the unit dimension_type_raw implies; "
+            "null plus a dimension_unit gap when the unit could not be determined even "
+            "though a number was read, because a number with a guessed unit is worse than "
+            "no number."
+        ),
+    )
+    value: Quantity | Angle | None = Field(
+        default=None,
+        description="IDimension.GetSystemValue3(1, null), the computed value, for the "
+        "finding's observed text; same union and same null rule",
+    )
+    persist_ref: PersistRef | None = None
+    persist_ref_scope: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler,
+            self,
+            nulls=("name", "dimension_type_raw", "is_overridden", "override_value", "value",
+                   "persist_ref", "persist_ref_scope"),
+        )
+
+
+class DrawingView(IRModel):
+    """One view on one sheet, including the sheet-format pseudo-view (schema 1.4.0)."""
+
+    id: Annotated[str, StringConstraints(pattern=r"^dvw:[0-9]{4,}$")]
+    sheet_id: str
+    name: str | None = Field(
+        default=None, description="IView.GetName2(); null plus a drawing_view gap"
+    )
+    view_type_raw: int | None = Field(
+        default=None,
+        description="IView.Type verbatim, in swDrawingViewTypes_e; 1 is the sheet-format "
+        "pseudo-view. Python names the number",
+    )
+    referenced_document_id: str | None = Field(
+        default=None,
+        description="IView.ReferencedDocument resolved to a Document in this package; null "
+        "when the view references nothing, or when the referenced model is not loaded - a "
+        "drawing_referenced_document gap names the second case",
+    )
+    referenced_model_path: str | None = Field(
+        default=None,
+        description="IView.GetReferencedModelName(), recorded even when "
+        "referenced_document_id is null, because it is what lets the gap name the model "
+        "that was not loaded",
+    )
+    display_dimensions: list[DisplayDimensionRecord] = Field(default_factory=list)
+    annotations: list[DrawingAnnotation] = Field(default_factory=list)
+    notes: list[DrawingNote] = Field(default_factory=list)
+    persist_ref: PersistRef | None = None
+    persist_ref_scope: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler,
+            self,
+            nulls=("name", "view_type_raw", "referenced_document_id", "referenced_model_path",
+                   "persist_ref", "persist_ref_scope"),
+            empties=("display_dimensions", "annotations", "notes"),
+        )
+
+
+class DrawingSheetRecord(IRModel):
+    """One natively dumped sheet of a drawing document (schema 1.4.0).
+
+    `was_active` is load-bearing: nothing activates a sheet, so if only the active sheet's
+    contents come back this is how a consumer knows which rows to trust.
+    """
+
+    id: Annotated[str, StringConstraints(pattern=r"^dsh:[0-9]{4,}$")]
+    source: Literal["native"] = Field(
+        default="native",
+        description="Constant for this model: the per-sheet half of FR-024, so a sheet from "
+        "either path says which produced it",
+    )
+    name: str = Field(description="ISheet.GetName()")
+    index: int = Field(ge=0, description="Position in GetSheetNames(), from 0")
+    sheet_format_name: str | None = Field(
+        default=None,
+        description="ISheet.GetSheetFormatName(); null plus a drawing_sheet gap",
+    )
+    was_active: bool = Field(
+        description="Whether this sheet was the active one when it was read; nothing "
+        "activates a sheet"
+    )
+    views: list[DrawingView] = Field(
+        default_factory=list,
+        description="ISheet.GetViews() order. Empty plus a drawing_sheet_views gap when the "
+        "enumeration failed or came back empty on a non-active sheet",
+    )
+    revision_tables: list[RevisionTable] = Field(
+        default_factory=list, description="Every revision table on the sheet, not just one"
+    )
+    persist_ref: PersistRef | None = None
+    persist_ref_scope: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler,
+            self,
+            nulls=("sheet_format_name", "persist_ref", "persist_ref_scope"),
+            empties=("views", "revision_tables"),
+        )
+
+
+class DrawingRecord(IRModel):
+    """One natively dumped drawing document, keyed by its `document_id` (schema 1.4.0).
+
+    Keyed rather than identified: there is one record per drawing document, so it carries
+    neither a package id nor a persistent reference of its own.
+    """
+
+    document_id: str
+    source: Literal["native"] = Field(
+        default="native", description="Constant for this model (FR-024)"
+    )
+    active_sheet_name: str | None = Field(
+        default=None,
+        description="IDrawingDoc.GetCurrentSheet().GetName(), recorded read-only so the "
+        "coverage reason can say which sheet was active while the others were read",
+    )
+    sheets: list[DrawingSheetRecord] = Field(
+        default_factory=list,
+        description="GetSheetNames() order; empty plus a drawing_sheet gap when the "
+        "enumeration failed",
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler, self, nulls=("active_sheet_name",), empties=("sheets",)
+        )
+
+
+class CutListItem(IRModel):
+    """One cut-list item of one part document (schema 1.4.0).
+
+    Identified structurally from the body-folder tree, never by matching a feature name:
+    a renamed item is not a waiver.
+    """
+
+    id: Annotated[str, StringConstraints(pattern=r"^cut:[0-9]{4,}$")]
+    document_id: str
+    configuration: str = Field(description="The configuration the tree was read in")
+    folder_name: str = Field(description="IFeature.Name of the enclosing cut-list folder")
+    folder_type_name: str = Field(
+        description="IFeature.GetTypeName2 of the enclosing folder, verbatim, so an unknown "
+        "folder type is visible rather than silently dropped"
+    )
+    name: str = Field(description="IFeature.Name of the item")
+    body_count: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "IBodyFolder.GetBodyCount(); null plus a cut_list_body_count gap. A folder whose "
+            "count is 0 is not displayed by SOLIDWORKS and is not a subject of any check; it "
+            "is still recorded so a coverage reason can say how many folders were seen and "
+            "how many were displayable."
+        ),
+    )
+    excluded_from_cut_list: bool | None = Field(
+        default=None,
+        description="IFeature.ExcludeFromCutList(); null plus a cut_list_exclusion gap, and "
+        "that item is then unresolved",
+    )
+    persist_ref: PersistRef | None = None
+    persist_ref_scope: str | None = Field(
+        default=None,
+        description="document_id whose IModelDocExtension produced persist_ref; null when "
+        "SOLIDWORKS gave none, and `id` is then the identity",
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler,
+            self,
+            nulls=("body_count", "excluded_from_cut_list", "persist_ref", "persist_ref_scope"),
+        )
 
 
 class Gap(IRModel):
@@ -672,7 +1197,7 @@ class DumpPhase(IRModel):
     name: str = Field(
         description=(
             "The phase as `PackageWriter` names it in its gaps: document, manifest, mate, "
-            "feature, equation, hole, fastener, face, body"
+            "feature, equation, cutlist, drawing, hole, fastener, face, body"
         )
     )
     elapsed_ms: int | None = Field(
@@ -700,12 +1225,15 @@ class ExtractorInfo(IRModel):
         description="e.g. '2024 SP3'; null for exported-file-only packages"
     )
     machine: str
-    profile: Literal["full", "model_check"] = Field(
+    profile: Literal["full", "model_check", "standards"] = Field(
         default="full",
         description=(
             "Which dump profile wrote this package (schema 1.2.0). 'model_check' skips "
             "the hole, fastener, face and body phases, so those arrays are empty by "
-            "design rather than by failure. Absent in 1.0.0 and 1.1.0 packages, which "
+            "design rather than by failure. 'standards' (schema 1.4.0) extends it with the "
+            "cutlist phase, and the drawing phase for a drawing root. A closed enumeration "
+            "in both serializers, so a pre-1.4.0 reader refuses a 'standards' package "
+            "outright rather than reading it. Absent in 1.0.0 and 1.1.0 packages, which "
             "were all 'full'."
         ),
     )
@@ -798,10 +1326,42 @@ class EvidencePackage(IRModel):
     interferences: list[Interference] = Field(default_factory=list)
     captures: list[Capture] = Field(default_factory=list)
     drawings: list[DrawingSheet] = Field(default_factory=list)
+    drawing_records: list[DrawingRecord] = Field(
+        default_factory=list,
+        description=(
+            "Natively dumped drawing documents (schema 1.4.0), one per drawing, written by "
+            "the `drawing` phase. Beside `drawings` rather than inside it: that member is "
+            "the PDF ingest's `DrawingSheet`, whose `page`, `parse_status` and `parser` a "
+            "native sheet has no honest value for (006 research R9). Omitted when empty, so "
+            "a package that ran no drawing phase serializes as it did before 1.4.0."
+        ),
+    )
     features: list[Feature] = Field(default_factory=list)
     equations: list[Equation] = Field(default_factory=list)
+    cut_list_items: list[CutListItem] = Field(
+        default_factory=list,
+        description=(
+            "Cut-list items of the package's part documents (schema 1.4.0), written by the "
+            "`cutlist` phase. Omitted when empty."
+        ),
+    )
     rms_suppress_test: SuppressTestRun | None = None
     gaps: list[Gap]
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_1_4_0_arrays(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        """Leave the two 1.4.0 arrays out when they carry no rows, so a package that ran
+        neither new phase round-trips to the bytes the 1.3.0 build wrote and the feature
+        001, 002 and 003 goldens stay byte-identical (SC-004).
+
+        Only these two are dropped: every array feature 001 shipped keeps its `[]`, because
+        dropping those would change the shape its readers were written against.
+        """
+        return omit_additive(
+            handler, self, empties=("drawing_records", "cut_list_items")
+        )
 
     # The three entry points below gate the schema major before pydantic runs, so an
     # unreadable major surfaces as UnsupportedSchemaVersionError instead of being

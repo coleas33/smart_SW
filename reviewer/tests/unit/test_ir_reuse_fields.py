@@ -77,9 +77,11 @@ def contract_validator() -> Draft202012Validator:
 # --- the version bump -------------------------------------------------------------
 
 
-def test_schema_version_is_one_three_zero() -> None:
-    assert SCHEMA_VERSION == "1.3.0"
-    assert build_package().schema_version == "1.3.0"
+def test_schema_version_is_one_four_zero() -> None:
+    """1.3.0 is where these members arrived; 006 T013 bumped the minor again beside them
+    and left them exactly as they were."""
+    assert SCHEMA_VERSION == "1.4.0"
+    assert build_package().schema_version == "1.4.0"
 
 
 def test_the_schema_major_gate_is_unchanged() -> None:

@@ -28,7 +28,7 @@ public sealed class ReuseKeyTests
     /// </summary>
     private const string PythonCanonicalForm =
         "{\"extractor_name\":\"SwReview.Extractor\",\"extractor_version\":\"0.1.0\","
-        + "\"schema_version\":\"1.3.0\",\"profile\":\"full\",\"meshes\":\"glb\","
+        + "\"schema_version\":\"1.4.0\",\"profile\":\"full\",\"meshes\":\"glb\","
         + "\"faces\":\"needed\",\"features\":\"tree\",\"equations\":\"on\","
         + "\"root_assembly_document_id\":\"doc:1\",\"active_configuration\":\"Default\","
         + "\"documents\":[{\"document_id\":\"doc:1\",\"configuration\":\"Default\","
@@ -41,7 +41,7 @@ public sealed class ReuseKeyTests
 
     /// <summary>`package_reuse_key(reuse_package(), DumpOptions())`, verbatim.</summary>
     private const string PythonDigest =
-        "35753b68428470782750128ffbfa09db185497d00cc320ddb297752b18d2a845";
+        "588e0b74b84b3acd0ca9b3d02e5e7f72715c2170e88b830df5e9dd8cb6373091";
 
     [Fact]
     public void TheCanonicalForm_IsTheTextPythonHashes()

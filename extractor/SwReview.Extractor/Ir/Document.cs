@@ -59,4 +59,47 @@ public sealed class Document
     /// <summary>Null for surface-only models; a Gap records why (research R12).</summary>
     [JsonPropertyName("mass")]
     public MassProperties? Mass { get; set; }
+
+    // The four schema 1.4.0 additions below are optional, absent from the contract's
+    // `required` set, and omitted when null. WhenWritingNull overrides PackageSerializer's
+    // global "nulls are evidence" setting, which is safe exactly here: each of them
+    // re-states its own absence as a Gap, so omitting the null loses nothing a reader needs
+    // - and writing it would move every package on disk (contracts/ir-additions.md,
+    // additivity rule point 3).
+
+    /// <summary>
+    /// IModelDoc2.IsExploded() for an assembly document (schema 1.4.0); null plus an
+    /// assembly_exploded gap when unreadable. Always null for a part or a drawing, where the
+    /// question does not apply and the absence is not a gap.
+    /// </summary>
+    [JsonPropertyName("is_exploded")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsExploded { get; set; }
+
+    /// <summary>
+    /// IModelDocExtension.GetWhatsWrongCount read <b>as the document stands</b> - nothing is
+    /// rebuilt (schema 1.4.0); null plus a rebuild_error_count gap when unreadable.
+    /// </summary>
+    [JsonPropertyName("rebuild_error_count")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? RebuildErrorCount { get; set; }
+
+    /// <summary>
+    /// IMassProperty.OverrideMass, read off the object CreateMassProperty2 returned and
+    /// <b>before</b> the volume gates, so a surface-only part still answers (schema 1.4.0);
+    /// null plus a mass_override gap when the object, the cast or the read fails.
+    /// </summary>
+    [JsonPropertyName("mass_overridden")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? MassOverridden { get; set; }
+
+    /// <summary>
+    /// The configuration <see cref="Material"/> was read in (schema 1.4.0). Null for an
+    /// assembly or a drawing, and present whenever the read was attempted - including when
+    /// the material came back null, because "no material in configuration X" and "no
+    /// material, configuration unknown" are different facts.
+    /// </summary>
+    [JsonPropertyName("material_configuration")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MaterialConfiguration { get; set; }
 }

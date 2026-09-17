@@ -216,8 +216,11 @@ public sealed class CommandLine
     /// <summary>The <c>--profile</c> spelling of <c>DumpProfile.ModelCheck</c>.</summary>
     private const string ProfileModelCheckName = "model-check";
 
+    /// <summary>The <c>--profile</c> spelling of <c>DumpProfile.Standards</c>.</summary>
+    private const string ProfileStandardsName = "standards";
+
     /// <summary>
-    /// <c>--profile full|model-check</c>, defaulting to full (contracts/cli.md).
+    /// <c>--profile full|model-check|standards</c>, defaulting to full (contracts/cli.md).
     ///
     /// The spelling differs on purpose either side of the package: the option is hyphenated
     /// the way every other option on this command line is, and <c>extractor.profile</c>
@@ -234,9 +237,12 @@ public sealed class CommandLine
                 return Dump.DumpProfile.Full;
             case ProfileModelCheckName:
                 return Dump.DumpProfile.ModelCheck;
+            case ProfileStandardsName:
+                return Dump.DumpProfile.Standards;
             default:
                 throw new UsageError(
-                    $"--profile must be {ProfileFullName} or {ProfileModelCheckName}; got '{value}'.");
+                    $"--profile must be {ProfileFullName}, {ProfileModelCheckName} or "
+                    + $"{ProfileStandardsName}; got '{value}'.");
         }
     }
 
@@ -258,6 +264,8 @@ public sealed class CommandLine
                 return ProfileFullName;
             case Dump.DumpProfile.ModelCheck:
                 return ProfileModelCheckName;
+            case Dump.DumpProfile.Standards:
+                return ProfileStandardsName;
             default:
                 throw new ArgumentOutOfRangeException(
                     nameof(profile), profile, "Unknown dump profile.");

@@ -64,4 +64,45 @@ public sealed class ComponentInstance
     /// </summary>
     [JsonPropertyName("constrained_status_raw")]
     public int? ConstrainedStatusRaw { get; set; }
+
+    // The four schema 1.4.0 additions below are omitted when null, unlike
+    // ConstrainedStatusRaw above and every earlier member, which keep their nulls: dropping
+    // those would change the shape feature 001's readers were written against
+    // (contracts/ir-additions.md, additivity rule point 3).
+
+    /// <summary>
+    /// Slot 7 of IComponent2.GetMaterialPropertyValues2(1, null) verbatim (schema 1.4.0);
+    /// null plus a component_transparency gap when unreadable, and null <b>without</b> a gap
+    /// when <see cref="HasAppearanceOverride"/> is false - there is nothing to read.
+    /// </summary>
+    [JsonPropertyName("transparency_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? TransparencyRaw { get; set; }
+
+    /// <summary>
+    /// IComponent2.HasMaterialPropertyValues() (schema 1.4.0); null plus a
+    /// component_transparency gap when unreadable. Replaces the macro's -1 sentinel, which
+    /// conflated "no override" with a real value.
+    /// </summary>
+    [JsonPropertyName("has_appearance_override")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? HasAppearanceOverride { get; set; }
+
+    /// <summary>
+    /// IComponent2.Visible verbatim, in swComponentVisibilityState_e - hidden 0, visible 1,
+    /// unknown -1 (schema 1.4.0); null plus a component_visibility gap when unreadable. The
+    /// extractor records the number; Python names it.
+    /// </summary>
+    [JsonPropertyName("visibility_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? VisibilityRaw { get; set; }
+
+    /// <summary>
+    /// IComponent2.IsPatternInstance() (schema 1.4.0); null plus a component_pattern gap when
+    /// unreadable. <see cref="PatternId"/> keeps the pattern's name and cannot replace this: a
+    /// null PatternId conflates "not in a pattern" with "the pattern map was never built".
+    /// </summary>
+    [JsonPropertyName("is_pattern_instance")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsPatternInstance { get; set; }
 }

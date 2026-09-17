@@ -11,6 +11,9 @@ using SwReview.Extractor.Ir;
 using Xunit;
 // SwReview.Extractor.Interference is a namespace (T069), so the IR type is named explicitly.
 using IrInterference = SwReview.Extractor.Ir.Interference;
+// SwReview.Extractor.Measure is a namespace too (the remodel geometry), so the IR union
+// type is named explicitly the same way.
+using IrMeasure = SwReview.Extractor.Ir.Measure;
 
 namespace SwReview.Extractor.Tests;
 
@@ -145,7 +148,7 @@ public class IrSerializerTests
         string json = PackageSerializer.Serialize(original);
         EvidencePackage restored = PackageSerializer.Deserialize(json);
 
-        Assert.Equal("1.3.0", restored.SchemaVersion);
+        Assert.Equal("1.4.0", restored.SchemaVersion);
         Assert.Equal(SampleReuseKey, restored.ReuseKey);
         Assert.Equal(
             new DateTimeOffset(2026, 9, 10, 8, 30, 0, TimeSpan.Zero),
@@ -212,7 +215,7 @@ public class IrSerializerTests
 
         EvidencePackage restored = PackageSerializer.Deserialize(PackageSerializer.Serialize(original));
 
-        Assert.Equal("1.3.0", restored.SchemaVersion);
+        Assert.Equal("1.4.0", restored.SchemaVersion);
         Assert.Equal(EvidencePackage.CurrentSchemaVersion, restored.SchemaVersion);
 
         Assert.Equal(6, restored.Features.Count);
@@ -320,7 +323,7 @@ public class IrSerializerTests
     {
         string json = PackageSerializer.Serialize(BuildSamplePackage());
 
-        Assert.Contains("\"schema_version\": \"1.3.0\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"schema_version\": \"1.4.0\"", json, StringComparison.Ordinal);
         Assert.Contains("\"folder_id\": null", json, StringComparison.Ordinal);
         Assert.Contains("\"raw_status\": null", json, StringComparison.Ordinal);
         Assert.Contains("\"consumer_ids\": null", json, StringComparison.Ordinal);
@@ -518,6 +521,656 @@ public class IrSerializerTests
             .Replace("\"package_id\"", "\"package_identifier\"");
 
         Assert.ThrowsAny<Exception>(() => PackageSerializer.Deserialize(json));
+    }
+
+    // ---- schema 1.4.0: the standards evidence (T014) ------------------------------
+
+    /// <summary>
+    /// Every addition contracts/ir-additions.md makes, in one package: the ten section 1
+    /// fields, the PDF ingest's new <c>source</c> stamp, the widened profile, two
+    /// <see cref="CutListItem"/> rows and one <see cref="DrawingRecord"/> carrying one of
+    /// each of the seven drawing models. If a DTO and the regenerated contract disagree
+    /// about any member name, type or nullability, this is where it shows.
+    /// </summary>
+    [Fact]
+    public void StandardsPackage_SerializesToJsonThatValidatesAgainstTheContract()
+    {
+        string json = PackageSerializer.Serialize(BuildStandardsPackage());
+
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+    }
+
+    [Fact]
+    public void StandardsPackage_RoundTripsTheSchema140Members()
+    {
+        // A member that survives serialization in one direction only is evidence the reader
+        // silently does not have: every one of these answers a standards check, and a null
+        // that arrived by losing the value reads exactly like a null the dump recorded.
+        EvidencePackage restored =
+            PackageSerializer.Deserialize(PackageSerializer.Serialize(BuildStandardsPackage()));
+
+        Assert.Equal("1.4.0", restored.SchemaVersion);
+        Assert.Equal(DumpProfile.Standards, restored.Extractor.Profile);
+
+        Document assembly = restored.Documents[0];
+        Assert.True(assembly.IsExploded);
+        Assert.Equal(2, assembly.RebuildErrorCount);
+        Assert.Null(assembly.MassOverridden);
+        Assert.Null(assembly.MaterialConfiguration);
+
+        Document part = restored.Documents[1];
+        Assert.Null(part.IsExploded);
+        Assert.Equal(0, part.RebuildErrorCount);
+        Assert.True(part.MassOverridden);
+        Assert.Equal("Default", part.MaterialConfiguration);
+
+        ComponentInstance housing = restored.Components[0];
+        Assert.Equal(0.75, housing.TransparencyRaw);
+        Assert.True(housing.HasAppearanceOverride);
+        Assert.Equal(1, housing.VisibilityRaw);
+        Assert.False(housing.IsPatternInstance);
+
+        // The second component was never read: unknown stays unknown on every member.
+        ComponentInstance screw = restored.Components[1];
+        Assert.Null(screw.TransparencyRaw);
+        Assert.Null(screw.HasAppearanceOverride);
+        Assert.Null(screw.VisibilityRaw);
+        Assert.Null(screw.IsPatternInstance);
+
+        Assert.Equal(
+            new MateEntityResolution?[]
+            {
+                MateEntityResolution.Resolved,
+                MateEntityResolution.Unresolved,
+                MateEntityResolution.Unknown,
+            },
+            Assert.Single(restored.Mates).Entities.Select(entity => entity.ResolutionStatus));
+
+        Assert.Equal(0, restored.Features[0].Sketch!.TextSegmentCount);
+        Assert.Null(restored.Features[5].Sketch!.TextSegmentCount);
+
+        Assert.Equal(DrawingEvidenceSource.PdfIngest, Assert.Single(restored.Drawings).Source);
+    }
+
+    [Fact]
+    public void StandardsPackage_RoundTripsTheCutListItems()
+    {
+        EvidencePackage restored =
+            PackageSerializer.Deserialize(PackageSerializer.Serialize(BuildStandardsPackage()));
+
+        Assert.NotNull(restored.CutListItems);
+        Assert.Equal(new[] { "cut:0001", "cut:0002" }, restored.CutListItems!.Select(i => i.Id));
+
+        CutListItem first = restored.CutListItems[0];
+        Assert.Equal("doc:housing", first.DocumentId);
+        Assert.Equal("Default", first.Configuration);
+        Assert.Equal("Cut-List-Item1", first.Name);
+        Assert.Equal("Cut list", first.FolderName);
+        Assert.Equal("CutListFolder", first.FolderTypeName);
+        Assert.Equal(2, first.BodyCount);
+        Assert.False(first.ExcludedFromCutList);
+        Assert.NotEmpty(Convert.FromBase64String(first.PersistRef!));
+        Assert.Equal("doc:housing", first.PersistRefScope);
+
+        // The second folder answered neither question, and SOLIDWORKS gave no persistent
+        // reference for it: `id` is then the whole identity (FR-026).
+        CutListItem second = restored.CutListItems[1];
+        Assert.Null(second.BodyCount);
+        Assert.Null(second.ExcludedFromCutList);
+        Assert.Null(second.PersistRef);
+        Assert.Null(second.PersistRefScope);
+    }
+
+    [Fact]
+    public void StandardsPackage_RoundTripsTheDrawingRecord()
+    {
+        EvidencePackage restored =
+            PackageSerializer.Deserialize(PackageSerializer.Serialize(BuildStandardsPackage()));
+
+        Assert.NotNull(restored.DrawingRecords);
+        DrawingRecord drawing = Assert.Single(restored.DrawingRecords!);
+        Assert.Equal("doc:drawing", drawing.DocumentId);
+        Assert.Equal(DrawingEvidenceSource.Native, drawing.Source);
+        Assert.Equal("Sheet1", drawing.ActiveSheetName);
+        Assert.Equal(new[] { "dsh:0001", "dsh:0002" }, drawing.Sheets.Select(s => s.Id));
+
+        DrawingSheetRecord active = drawing.Sheets[0];
+        Assert.Equal(DrawingEvidenceSource.Native, active.Source);
+        Assert.Equal("Sheet1", active.Name);
+        Assert.Equal(0, active.Index);
+        Assert.Equal("A2-Landscape", active.SheetFormatName);
+        Assert.True(active.WasActive);
+        Assert.Equal(new[] { "dvw:0001", "dvw:0002" }, active.Views.Select(v => v.Id));
+
+        // The sheet-format pseudo-view: type 1, no referenced model, and the notes live on it.
+        DrawingView format = active.Views[0];
+        Assert.Equal(1, format.ViewTypeRaw);
+        Assert.Null(format.ReferencedDocumentId);
+        Assert.Null(format.ReferencedModelPath);
+        DrawingNote note = Assert.Single(format.Notes);
+        Assert.Equal("dnt:0001", note.Id);
+        Assert.Equal("dvw:0001", note.OwnerId);
+        Assert.Equal("PLACEHOLDER HANDLING STATEMENT", note.Text);
+
+        DrawingView front = active.Views[1];
+        Assert.Equal("Drawing View1", front.Name);
+        Assert.Equal("doc:housing", front.ReferencedDocumentId);
+        Assert.Equal(SampleModelPath, front.ReferencedModelPath);
+
+        Assert.Equal(
+            new[] { "ddm:0001", "ddm:0002", "ddm:0003" },
+            front.DisplayDimensions.Select(d => d.Id));
+        DisplayDimensionRecord length = front.DisplayDimensions[0];
+        Assert.Equal("D1@Sketch1@housing.sldprt", length.Name);
+        Assert.True(length.IsOverridden);
+        Assert.Equal(12.0, length.OverrideValue!.Value);
+        Assert.Equal("mm", length.OverrideValue.Unit);
+        Assert.Equal(11.5, length.Value!.Value);
+
+        // An angular dimension: Quantity carries a LengthUnit only, so the Quantity | Angle
+        // union is what lets this record exist at all.
+        DisplayDimensionRecord angle = front.DisplayDimensions[1];
+        Assert.Equal("deg", angle.OverrideValue!.Unit);
+        Assert.Equal(30.0, angle.Value!.Value);
+
+        // A number came back and its unit did not, so no number is written: rendering it in
+        // a guessed unit is the macro's own bug (difference p).
+        DisplayDimensionRecord unitless = front.DisplayDimensions[2];
+        Assert.Null(unitless.OverrideValue);
+        Assert.Null(unitless.Value);
+        Assert.Null(unitless.IsOverridden);
+
+        DrawingAnnotation dangling = Assert.Single(front.Annotations);
+        Assert.Equal("dan:0001", dangling.Id);
+        Assert.Equal("dvw:0002", dangling.OwnerId);
+        Assert.Equal(6, dangling.TypeRaw);
+        Assert.True(dangling.IsDangling);
+
+        RevisionTable table = Assert.Single(active.RevisionTables);
+        Assert.Equal("drv:0001", table.Id);
+        Assert.Equal("dsh:0001", table.SheetId);
+        Assert.Equal(string.Empty, table.CurrentRevisionRaw);
+        Assert.Equal(2, table.RowCount);
+        Assert.Equal(3, table.ColumnCount);
+        Assert.Equal(new[] { 0, 1 }, table.Rows.Select(r => r.Index));
+        Assert.True(table.Rows[0].IsHeader);
+        Assert.Equal(new[] { "REV", "DESCRIPTION", "DATE" }, table.Rows[0].Cells);
+
+        // An empty cell is the empty string; a cell that could not be read is null, and the
+        // two must not be confused - an empty revision cell is a real mismatch.
+        Assert.Equal(new string?[] { "B", string.Empty, null }, table.Rows[1].Cells);
+        Assert.Null(table.Rows[1].IsHeader);
+
+        // Nothing activated the second sheet, and its view enumeration came back empty.
+        DrawingSheetRecord quiet = drawing.Sheets[1];
+        Assert.False(quiet.WasActive);
+        Assert.Null(quiet.SheetFormatName);
+        Assert.Empty(quiet.Views);
+        Assert.Empty(quiet.RevisionTables);
+    }
+
+    /// <summary>
+    /// The additivity rule's point 3, on the C# side: every new scalar is omitted when it is
+    /// null. <see cref="PackageSerializer"/> is configured
+    /// <c>DefaultIgnoreCondition = Never</c> on Principle I grounds, so each of these members
+    /// carries the first per-property override of that global, and a missed one writes
+    /// <c>"is_exploded": null</c> into every package the extractor has ever produced.
+    /// </summary>
+    [Fact]
+    public void StandardsPackage_OmitsEveryUnreadAdditionRatherThanWritingItsNull()
+    {
+        string json = PackageSerializer.Serialize(BuildStandardsPackage());
+
+        foreach (string name in new[]
+        {
+            "is_exploded", "rebuild_error_count", "mass_overridden", "material_configuration",
+            "transparency_raw", "has_appearance_override", "visibility_raw",
+            "is_pattern_instance", "resolution_status", "text_segment_count", "source",
+            "body_count", "excluded_from_cut_list", "active_sheet_name", "sheet_format_name",
+            "view_type_raw", "referenced_document_id", "referenced_model_path",
+            "dimension_type_raw", "is_overridden", "override_value", "type_raw",
+            "is_dangling", "text", "current_revision_raw", "row_count", "column_count",
+            "is_header", "persist_ref_scope",
+        })
+        {
+            Assert.DoesNotContain("\"" + name + "\": null", json, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// The additivity rule's point 5, measured rather than inspected: a package carrying none
+    /// of this feature's evidence serializes to exactly the bytes the 1.3.0 build wrote for
+    /// it, so the feature 001, 002 and 003 goldens stay byte-identical (SC-004).
+    ///
+    /// This is the only thing that proves the per-property
+    /// <c>[JsonIgnore(WhenWritingNull)]</c> overrides and the null-when-empty arrays work on
+    /// the C# side. A stray <c>"cut_list_items": []</c> or <c>"is_exploded": null</c> sails
+    /// through every schema validation in this file - both are contract-valid - and still
+    /// moves every package on disk.
+    ///
+    /// The one deliberate difference is the version string itself, and the test states it
+    /// rather than letting it hide inside a diff. Newlines are compared normalized: the
+    /// baseline is checked in as text and git rewrites its line endings per platform, while
+    /// <c>Utf8JsonWriter</c> writes <c>Environment.NewLine</c>.
+    /// </summary>
+    [Fact]
+    public void PackageWithNoneOfTheStandardsEvidence_SerializesToTheBytesThe130BuildWrote()
+    {
+        string baseline = ReadPre140Baseline();
+        string expected = baseline.Replace(
+            "\"schema_version\": \"1.3.0\"", "\"schema_version\": \"1.4.0\"");
+
+        Assert.NotEqual(baseline, expected);
+
+        Assert.Equal(expected, Normalize(PackageSerializer.Serialize(BuildSamplePackage())));
+    }
+
+    [Fact]
+    public void PackageWithNoneOfTheStandardsEvidence_NamesNoneOfTheNewMembers()
+    {
+        // The same fact as the byte comparison above, said by name: that one fails on a
+        // twelve-kilobyte string and this one fails on the member that moved.
+        string json = PackageSerializer.Serialize(BuildSamplePackage());
+
+        foreach (string name in new[]
+        {
+            "is_exploded", "rebuild_error_count", "mass_overridden", "material_configuration",
+            "transparency_raw", "has_appearance_override", "visibility_raw",
+            "is_pattern_instance", "text_segment_count", "cut_list_items", "drawing_records",
+        })
+        {
+            Assert.DoesNotContain("\"" + name + "\"", json, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// A package written before 1.4.0 loads, and every addition comes back as the absence it
+    /// was (contracts/ir-additions.md additivity rule point 3, quickstart gate 3). The
+    /// baseline fixture IS such a package, so this reads the real thing rather than a 1.4.0
+    /// package with members stripped out of its text.
+    /// </summary>
+    [Fact]
+    public void APackageWrittenBefore140_StillLoadsAndStillValidates()
+    {
+        string json = ReadPre140Baseline();
+
+        EvidencePackage restored = PackageSerializer.Deserialize(json);
+
+        Assert.Equal("1.3.0", restored.SchemaVersion);
+        Assert.Null(restored.Documents[0].IsExploded);
+        Assert.Null(restored.Documents[0].RebuildErrorCount);
+        Assert.Null(restored.Documents[0].MassOverridden);
+        Assert.Null(restored.Documents[0].MaterialConfiguration);
+        Assert.Null(restored.Components[0].TransparencyRaw);
+        Assert.Null(restored.Components[0].HasAppearanceOverride);
+        Assert.Null(restored.Components[0].VisibilityRaw);
+        Assert.Null(restored.Components[0].IsPatternInstance);
+        Assert.Null(restored.Features[0].Sketch!.TextSegmentCount);
+        Assert.Null(restored.CutListItems);
+        Assert.Null(restored.DrawingRecords);
+
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+    }
+
+    /// <summary>
+    /// A sheet the Python ingest wrote carrying <c>"source"</c> deserializes rather than
+    /// throwing. <see cref="PackageSerializer"/> sets
+    /// <c>UnmappedMemberHandling.Disallow</c>, and <c>RunPackageIndex</c>,
+    /// <c>PackageAppender</c> and <c>PackageReuse</c> all read packages produced elsewhere,
+    /// so without the DTO member every ingested package becomes an exception in three places.
+    /// </summary>
+    [Fact]
+    public void SheetWrittenByThePythonIngestCarryingItsSource_Deserializes()
+    {
+        string json = WithIngestSheet(IngestSheetJson);
+
+        Assert.Contains("\"source\": \"pdf_ingest\"", json, StringComparison.Ordinal);
+
+        DrawingSheet sheet = Assert.Single(PackageSerializer.Deserialize(json).Drawings);
+
+        Assert.Equal(DrawingEvidenceSource.PdfIngest, sheet.Source);
+        Assert.Equal("Sheet1", sheet.SheetName);
+        Assert.Equal(ParseStatus.Text, sheet.ParseStatus);
+
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+    }
+
+    [Fact]
+    public void SheetWrittenBeforeTheSourceStampExisted_LoadsWithNoSource()
+    {
+        // Five shipped golden fixtures carry ingested sheets that predate the stamp. Null is
+        // "source not recorded", which the drawing checks treat exactly as "pdf_ingest".
+        string json = WithIngestSheet(
+            IngestSheetJson.Replace(", \"source\": \"pdf_ingest\"", string.Empty));
+
+        Assert.DoesNotContain("\"source\"", json, StringComparison.Ordinal);
+
+        Assert.Null(Assert.Single(PackageSerializer.Deserialize(json).Drawings).Source);
+    }
+
+    [Fact]
+    public void EnumToJsonName_MatchesTheSchemaSpellingForTheNewEnums()
+    {
+        Assert.Equal("native", PackageSerializer.EnumToJsonName(DrawingEvidenceSource.Native));
+        Assert.Equal(
+            "pdf_ingest", PackageSerializer.EnumToJsonName(DrawingEvidenceSource.PdfIngest));
+        Assert.Equal("resolved", PackageSerializer.EnumToJsonName(MateEntityResolution.Resolved));
+        Assert.Equal(
+            "unresolved", PackageSerializer.EnumToJsonName(MateEntityResolution.Unresolved));
+        Assert.Equal("unknown", PackageSerializer.EnumToJsonName(MateEntityResolution.Unknown));
+        Assert.Equal("standards", PackageSerializer.EnumToJsonName(DumpProfile.Standards));
+    }
+
+    [Fact]
+    public void StandardsProfile_IsAcceptedByTheReaderAndByTheContract()
+    {
+        EvidencePackage package = BuildSamplePackage();
+        package.Extractor.Profile = DumpProfile.Standards;
+
+        string json = PackageSerializer.Serialize(package);
+
+        Assert.Contains("\"profile\": \"standards\"", json, StringComparison.Ordinal);
+        Assert.Equal(
+            DumpProfile.Standards, PackageSerializer.Deserialize(json).Extractor.Profile);
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+    }
+
+    /// <summary>
+    /// One ingest-written sheet as the Python <c>package_builder</c> writes it from 1.4.0 on.
+    /// Authored as text rather than built from the DTO on purpose: what is under test is that
+    /// this assembly can read what the other side writes.
+    /// </summary>
+    private const string IngestSheetJson =
+        "{\"document_id\": \"doc:housing\", \"sheet_name\": \"Sheet1\", \"page\": 1, "
+        + "\"scale\": \"1:2\", \"units\": \"mm\", \"general_notes\": [], \"dimensions\": [], "
+        + "\"views\": [], \"parse_status\": \"text\", \"parser\": \"pdfplumber 0.11.4\""
+        + ", \"source\": \"pdf_ingest\"}";
+
+    /// <summary>The sample package with one ingest-written sheet spliced into drawings[].</summary>
+    private static string WithIngestSheet(string sheetJson)
+    {
+        string json = PackageSerializer.Serialize(BuildSamplePackage());
+        string written = json.Replace("\"drawings\": [],", "\"drawings\": [" + sheetJson + "],");
+
+        Assert.NotEqual(json, written);
+        return written;
+    }
+
+    /// <summary>
+    /// The bytes the 1.3.0 build wrote for <see cref="BuildSamplePackage"/>, captured from
+    /// that build and static thereafter. Newlines normalized, for the reason the byte
+    /// comparison above states.
+    /// </summary>
+    private static string ReadPre140Baseline()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "package-pre-1.4.0.json");
+        Assert.True(
+            File.Exists(path),
+            "Fixtures/package-pre-1.4.0.json was not copied next to the test assembly; "
+            + "check the Content item in the csproj.");
+        return Normalize(File.ReadAllText(path));
+    }
+
+    private static string Normalize(string text) => text.Replace("\r\n", "\n");
+
+    /// <summary>The referenced model path the sample drawing view names.</summary>
+    private const string SampleModelPath = @"C:\work\bracket\housing.sldprt";
+
+    /// <summary>
+    /// <see cref="BuildSamplePackage"/> plus every schema 1.4.0 addition: the ten section 1
+    /// fields, the ingest's <c>source</c> stamp, the widened profile, two cut-list items and
+    /// one drawing record carrying one of each of the seven drawing models.
+    ///
+    /// Deliberately kept out of <see cref="BuildSamplePackage"/>: that package is what the
+    /// byte-identity test measures, and a sample carrying this feature's evidence could not
+    /// measure it.
+    /// </summary>
+    internal static EvidencePackage BuildStandardsPackage()
+    {
+        EvidencePackage package = BuildSamplePackage();
+        package.Extractor.Profile = DumpProfile.Standards;
+
+        // The assembly answers the exploded question and the part never does; nothing read
+        // the assembly's mass override, so it stays absent rather than being written false.
+        Document assembly = package.Documents[0];
+        assembly.IsExploded = true;
+        assembly.RebuildErrorCount = 2;
+
+        Document part = package.Documents[1];
+        part.RebuildErrorCount = 0;
+        part.MassOverridden = true;
+        part.MaterialConfiguration = "Default";
+
+        ComponentInstance housing = package.Components[0];
+        housing.TransparencyRaw = 0.75;
+        housing.HasAppearanceOverride = true;
+        housing.VisibilityRaw = 1;
+        housing.IsPatternInstance = false;
+
+        package.Mates.Add(new Mate
+        {
+            Id = "mat:0001",
+            PersistRef = Convert.ToBase64String(new byte[] { 0x61, 0x62, 0x63 }),
+            PersistRefScope = "doc:asm",
+            Type = "CONCENTRIC",
+            Alignment = MateAlignment.Aligned,
+            Suppressed = false,
+            Entities =
+            {
+                new MateEntityRef
+                {
+                    ComponentId = "cmp:0001",
+                    PersistRef = Convert.ToBase64String(new byte[] { 0x64, 0x65, 0x66 }),
+                    EntityKind = "FACE",
+                    ResolutionStatus = MateEntityResolution.Resolved,
+                },
+
+                // Reference came back null: the mate points at an entity that is gone. Before
+                // 1.4.0 this row and the one below were both a null persist_ref and neither
+                // could be told from the other, which is the defect the check hunts.
+                new MateEntityRef
+                {
+                    ComponentId = "cmp:0002",
+                    PersistRef = null,
+                    EntityKind = "FACE",
+                    ResolutionStatus = MateEntityResolution.Unresolved,
+                },
+                new MateEntityRef
+                {
+                    ComponentId = "cmp:0002",
+                    PersistRef = null,
+                    EntityKind = "FACE",
+                    ResolutionStatus = MateEntityResolution.Unknown,
+                },
+            },
+        });
+
+        // A sketch with no text segments, and one whose text segments could not be read.
+        package.Features[0].Sketch!.TextSegmentCount = 0;
+        package.Features[5].Sketch!.TextSegmentCount = null;
+
+        package.Drawings.Add(new DrawingSheet
+        {
+            DocumentId = "doc:housing",
+            SheetName = "Sheet1",
+            Page = 1,
+            Scale = "1:2",
+            Units = SheetUnits.Mm,
+            ParseStatus = ParseStatus.Text,
+            Parser = "pdfplumber 0.11.4",
+            Source = DrawingEvidenceSource.PdfIngest,
+        });
+
+        package.CutListItems = new List<CutListItem>
+        {
+            new CutListItem
+            {
+                Id = "cut:0001",
+                DocumentId = "doc:housing",
+                Configuration = "Default",
+                FolderName = "Cut list",
+                FolderTypeName = "CutListFolder",
+                Name = "Cut-List-Item1",
+                BodyCount = 2,
+                ExcludedFromCutList = false,
+                PersistRef = Convert.ToBase64String(new byte[] { 0x71, 0x72, 0x73 }),
+                PersistRefScope = "doc:housing",
+            },
+
+            // Neither question answered and no persistent reference: `id` is the whole
+            // identity, and the gaps beside it say which reads failed.
+            new CutListItem
+            {
+                Id = "cut:0002",
+                DocumentId = "doc:housing",
+                Configuration = "Default",
+                FolderName = "Cut list",
+                FolderTypeName = "SolidBodyFolder",
+                Name = "Cut-List-Item2",
+            },
+        };
+
+        package.DrawingRecords = new List<DrawingRecord> { NewDrawingRecord() };
+
+        return package;
+    }
+
+    /// <summary>
+    /// One natively dumped drawing: an active sheet with the sheet-format pseudo-view, a
+    /// front view, a revision table and three display dimensions, plus a second sheet nothing
+    /// activated and whose view enumeration therefore came back empty.
+    /// </summary>
+    private static DrawingRecord NewDrawingRecord()
+    {
+        var format = new DrawingView
+        {
+            Id = "dvw:0001",
+            SheetId = "dsh:0001",
+            Name = "Sheet Format1",
+            ViewTypeRaw = 1,
+            Notes =
+            {
+                new DrawingNote
+                {
+                    Id = "dnt:0001",
+                    OwnerId = "dvw:0001",
+                    Text = "PLACEHOLDER HANDLING STATEMENT",
+                },
+            },
+        };
+
+        var front = new DrawingView
+        {
+            Id = "dvw:0002",
+            SheetId = "dsh:0001",
+            Name = "Drawing View1",
+            ViewTypeRaw = 2,
+            ReferencedDocumentId = "doc:housing",
+            ReferencedModelPath = SampleModelPath,
+            DisplayDimensions =
+            {
+                new DisplayDimensionRecord
+                {
+                    Id = "ddm:0001",
+                    ViewId = "dvw:0002",
+                    Name = "D1@Sketch1@housing.sldprt",
+                    DimensionTypeRaw = 2,
+                    IsOverridden = true,
+                    OverrideValue = IrMeasure.FromQuantity(new Quantity(12.0, LengthUnit.Mm)),
+                    Value = IrMeasure.FromQuantity(new Quantity(11.5, LengthUnit.Mm)),
+                },
+                new DisplayDimensionRecord
+                {
+                    Id = "ddm:0002",
+                    ViewId = "dvw:0002",
+                    Name = "A1@Sketch1@housing.sldprt",
+                    DimensionTypeRaw = 3,
+                    IsOverridden = false,
+                    OverrideValue = IrMeasure.FromAngle(new Angle(30.0, AngleUnit.Deg)),
+                    Value = IrMeasure.FromAngle(new Angle(30.0, AngleUnit.Deg)),
+                },
+
+                // A number came back and its unit did not, so no number is written.
+                new DisplayDimensionRecord
+                {
+                    Id = "ddm:0003",
+                    ViewId = "dvw:0002",
+                    Name = "D2@Sketch1@housing.sldprt",
+                },
+            },
+            Annotations =
+            {
+                new DrawingAnnotation
+                {
+                    Id = "dan:0001",
+                    OwnerId = "dvw:0002",
+                    Name = "RevisionSymbol1",
+                    TypeRaw = 6,
+                    IsDangling = true,
+                },
+            },
+        };
+
+        var table = new RevisionTable
+        {
+            Id = "drv:0001",
+            SheetId = "dsh:0001",
+
+            // Verbatim, including the empty string: the property comes back empty under some
+            // vaults and the rows are the other reading, so the check names both with their
+            // source rather than letting the dumper choose.
+            CurrentRevisionRaw = string.Empty,
+            RowCount = 2,
+            ColumnCount = 3,
+            Rows =
+            {
+                new RevisionTableRow
+                {
+                    Index = 0,
+                    IsHeader = true,
+                    Cells = { "REV", "DESCRIPTION", "DATE" },
+                },
+                new RevisionTableRow
+                {
+                    Index = 1,
+                    Cells = { "B", string.Empty, null },
+                },
+            },
+        };
+
+        return new DrawingRecord
+        {
+            DocumentId = "doc:drawing",
+            ActiveSheetName = "Sheet1",
+            Sheets =
+            {
+                new DrawingSheetRecord
+                {
+                    Id = "dsh:0001",
+                    Name = "Sheet1",
+                    Index = 0,
+                    SheetFormatName = "A2-Landscape",
+                    WasActive = true,
+                    Views = { format, front },
+                    RevisionTables = { table },
+                },
+
+                // Nothing activates a sheet (FR-044), and this one's view enumeration came
+                // back empty: a drawing_sheet_views gap names it and every drawing check is
+                // unresolved for that sheet.
+                new DrawingSheetRecord
+                {
+                    Id = "dsh:0002",
+                    Name = "Sheet2",
+                    Index = 1,
+                    WasActive = false,
+                },
+            },
+        };
     }
 
     // One loader for the whole test assembly (IrContract): JsonSchema.Net registers the

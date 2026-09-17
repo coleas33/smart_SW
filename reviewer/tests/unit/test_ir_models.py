@@ -50,9 +50,9 @@ def test_angle_is_a_distinct_type_from_quantity() -> None:
 
 
 def test_supported_schema_version_loads() -> None:
-    package = build_package(schema_version="1.3.0")
+    package = build_package(schema_version="1.4.0")
 
-    assert package.schema_version == "1.3.0"
+    assert package.schema_version == "1.4.0"
 
 
 def test_unsupported_schema_major_raises_the_dedicated_error() -> None:

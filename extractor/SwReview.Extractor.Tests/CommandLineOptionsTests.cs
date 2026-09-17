@@ -278,6 +278,8 @@ public class CommandLineOptionsTests
     [InlineData("full", DumpProfile.Full)]
     [InlineData("model-check", DumpProfile.ModelCheck)]
     [InlineData("MODEL-CHECK", DumpProfile.ModelCheck)]
+    [InlineData("standards", DumpProfile.Standards)]
+    [InlineData("STANDARDS", DumpProfile.Standards)]
     public void DumpProfile_ReadsEveryContractValue(string value, DumpProfile expected)
     {
         CommandLine parsed = CommandLine.Parse(
@@ -297,11 +299,19 @@ public class CommandLineOptionsTests
             CommandLine.Parse(new[] { "dump", "--out", @"C:\out" }, 1, DumpOptions).DumpProfile());
     }
 
-    [Fact]
-    public void DumpProfile_UnknownValue_Throws()
+    [Theory]
+    [InlineData("quick")]
+
+    // The near misses this parser exists to refuse. `standard` and `model_check` are the
+    // two a hand would actually type - the singular, and the IR spelling of the profile
+    // beside it - and a dump that fell back to full on either would tessellate every body
+    // on the one path built to avoid it (FR-027).
+    [InlineData("standard")]
+    [InlineData("model_check")]
+    public void DumpProfile_UnknownValue_Throws(string value)
     {
         CommandLine parsed = CommandLine.Parse(
-            new[] { "dump", "--profile", "quick" }, 1, DumpOptions);
+            new[] { "dump", "--profile", value }, 1, DumpOptions);
 
         Assert.Throws<UsageError>(() => parsed.DumpProfile());
     }
@@ -318,6 +328,7 @@ public class CommandLineOptionsTests
     [Theory]
     [InlineData("full")]
     [InlineData("model-check")]
+    [InlineData("standards")]
     public void DumpProfile_CliName_RoundTripsEveryContractValue(string value)
     {
         // extract.log reconstructs the command that ran, so the spelling it prints has to be
@@ -338,6 +349,11 @@ public class CommandLineOptionsTests
         Assert.Equal("model_check", PackageSerializer.EnumToJsonName(DumpProfile.ModelCheck));
         Assert.Equal("model-check", CommandLine.CliName(DumpProfile.ModelCheck));
         Assert.Equal("full", CommandLine.CliName(DumpProfile.Full));
+
+        // The third profile is the one case where the two spellings agree; it is pinned so
+        // that stays a fact about this mapping rather than a coincidence nobody checked.
+        Assert.Equal("standards", PackageSerializer.EnumToJsonName(DumpProfile.Standards));
+        Assert.Equal("standards", CommandLine.CliName(DumpProfile.Standards));
     }
 
     // ---- probe rms ---------------------------------------------------------------
