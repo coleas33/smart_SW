@@ -150,7 +150,7 @@ def stderr(result: Any) -> str:
 # --- 1. the output: the verdict, its counts, the findings and the coverage ------------------
 
 
-ANSI_ESCAPE = re.compile(r"\[[0-9;?]*[A-Za-z]")
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
 
 def plain(text: str) -> str:
