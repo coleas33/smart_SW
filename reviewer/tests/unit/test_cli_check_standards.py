@@ -28,6 +28,7 @@ Every package here is built by `tests/support/standards.py` and graded against a
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -148,6 +149,16 @@ def stderr(result: Any) -> str:
 
 # --- 1. the output: the verdict, its counts, the findings and the coverage ------------------
 
+
+ANSI_ESCAPE = re.compile(r"\[[0-9;?]*[A-Za-z]")
+
+
+def plain(text: str) -> str:
+    """Typer renders help and usage errors through Rich, which under a colour-forcing
+    terminal (CI sets one) wraps each dash of an option name in its own escape sequence,
+    so `--package` is never a contiguous substring of the raw output. Strip the codes
+    before asserting on the words."""
+    return ANSI_ESCAPE.sub("", text)
 
 def test_the_human_output_is_headed_by_the_verdict_and_its_counts(
     graded: tuple[Path, Path],
@@ -629,14 +640,15 @@ def test_the_command_offers_no_filter_and_no_repair_flag(
     result = run_standards(package_dir, out_dir, flag, "anything")
 
     assert result.exit_code != 0
-    assert flag in stderr(result)
+    assert flag in plain(stderr(result))
 
 
 def test_the_help_names_the_three_options_it_does_offer(graded: tuple[Path, Path]) -> None:
     result = invoke("check", "standards", "--help")
 
     assert result.exit_code == 0
-    assert "--package" in result.stdout
-    assert "--out" in result.stdout
-    assert "--profile" in result.stdout
-    assert "--json" in result.stdout
+    text = plain(result.stdout)
+    assert "--package" in text
+    assert "--out" in text
+    assert "--profile" in text
+    assert "--json" in text
