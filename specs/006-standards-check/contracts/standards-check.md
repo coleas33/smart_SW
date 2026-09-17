@@ -34,7 +34,7 @@ both.
 | Method | Path | Body | Response |
 |--------|------|------|----------|
 | POST | `/checks/standards` **[D]** | `{run_dir, profile_path: str}` **[D]** | `201 StandardsResult` (below). 400 when `run_dir` fails the path rule, or when `run_dir/package.json` is missing or invalid; 400 `error_class: "MissingStandardsPhases"` **[D]** when the package's phase rows show the phases the standards checks read did not run, naming the profile that produced it and the missing phases; 400 `error_class: "ProfileUnreadable"` **[D]** when `profile_path` is absent, unreadable or not configured; 400 `error_class: "ProfileInvalid"` **[D]** carrying the schema error when the file parses but fails the schema; 400 `error_class: "UnreadableExceptions"` when the carry-forward candidate exists and cannot be parsed. Runs synchronously: there is no provider, no network call and no turn. |
-| GET | `/checks/{check_id}` | | `200` **the record's own family shape** **[D]**: a `StandardsResult` for a folder whose `check.json` carries `family: "standards"`, the feature 003 `CheckResult` for `family: "rms"` or for a record written before the field existed. 404 when no such check folder is under the run root. **Neither family answers for the other**: a `check_id` naming an rms folder requested by the Standards page returns the rms shape, and the page reports that the id is not a standards check rather than rendering it. |
+| GET | `/checks/{check_id}` | | `200` **the record's own family shape** **[D]**: a `StandardsResult` for a folder whose `check.json` carries `family: "standards"`, the feature 003 `CheckResult` for `family: "rms"` or for a record written before the field existed. 404 when no such check folder is under the run root. **Neither family answers for the other**: a `check_id` naming an rms folder requested by the Standards page returns the rms shape, and the Standards page renders nothing of it - each page reads back only the ids its own evaluation route produced, and renders nothing it cannot read. |
 | POST | `/checks/{check_id}/exceptions/{finding_id}` | `{note, by}` | `200 {finding, exception_id}` with the finding re-rendered as checked within scope carrying the exception id; `400 EmptyNote` when the note is blank; `404` for an unknown check or finding; `409 RuleNotAcceptable` when the finding's check severity is `warning` (FR-041); `409 AlreadyAccepted` when an active exception with the same bindings and check already exists. Re-renders `report.md`. Dispatches on the record's `family`, so one route serves both. |
 
 `check_id` is the check run folder's name (`<yyyyMMdd-HHmmss>-<doc>-standards` **[D]**), so a
@@ -322,3 +322,33 @@ drawing, which is exactly what SC-008 forbids.
 | D11 | `kind` tells the page whether a check can run | `kind` tells the page **what** will be graded | All three kinds are gradable; a drawing-rooted run fans out and the engineer should not be surprised by it |
 | D12 | Accept label "for this part" | "for this document"; and a drawing exception is bound by `document_id` alone | Drawings are graded and have no component instances |
 | D13 | The reduced profile's partial-evidence rule is stated for `model_check` | The same rule, **generalized over the profile name** | Two reduced profiles now exist; a rule written per profile name would need a third copy next time |
+
+## 7. The family's one check tool
+
+One tool, offered for a standards run and nothing else, and documented **here** rather than
+in feature 001's `contracts/agent-tools.md`.
+
+| Tool | Arguments | Offered when | Returns |
+|------|-----------|--------------|---------|
+| `check_standards` | none | the tool context carries a standards run, which only `checks/standards/run.py` arranges | every graded document's checks: one finding per failing (check, document) naming its subjects, one aggregated coverage item per bucket, and the `standards.release` summary carrying the verdict and the counts |
+
+**Why there is one at all.** `checks/rules/run.py` dispatches through `ToolRegistry` with a
+`SessionSink`, so a finding's `tool_result_ids` names an investigation step that exists in
+the session it cites. **One tool and not one per scope**, which is where the rms family
+landed: its three scopes read different evidence and are selectable from the command line,
+while all sixteen checks here run on every run and the document kinds decide which apply
+(section 1, D1). It takes **no argument** for the same reason - there is no choice to offer.
+
+**Why not a row in `agent-tools.md`.** That file's curated tables are asserted **set-equal**
+to `registry.TOOL_FUNCTIONS`, which is built from `REGISTRATIONS` alone, and this tool is
+registered outside `REGISTRATIONS` - exactly as feature 004's five re-modeler tools are,
+which is why they are written down in `specs/004-resilient-remodeler/contracts/tools.md`
+instead. **No row is added there and no curated count is bumped**, and
+`reviewer/tests/unit/test_provider_schema.py` passes unedited,
+`test_registered_tools_are_exactly_the_contract_tables` included. It follows that the tool is
+in neither `MCP_TOOL_FUNCTIONS` nor the terminal profile's `enabled_tools`: a review, a
+general-chat session and every other tab carry no standards run, so none of them can see it
+(FR-035).
+
+No provider is constructed and no API key is read when it runs, on this path or any other
+standards path (FR-045).

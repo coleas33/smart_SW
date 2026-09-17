@@ -728,6 +728,28 @@ def _exceptions_by_id(
     }
 
 
+def _with_exception(
+    row: dict[str, Any],
+    finding: Mapping[str, Any],
+    exceptions: Mapping[str, ReviewException],
+) -> dict[str, Any]:
+    """`row` with the exception the finding cites beside it, when it cites one.
+
+    The same three fields in both families' rows, so it is written once: which exception
+    matched, whether it is still `active` and what was accepted are facts about the record
+    and not about whose check raised the finding (T099). A finding that cites none gets no
+    `exception` key at all, which is what it has always got.
+    """
+    exception = exceptions.get(str(finding.get("exception_id") or ""))
+    if exception is not None:
+        row["exception"] = {
+            "id": exception.id,
+            "state": exception.status,
+            "note": exception.note,
+        }
+    return row
+
+
 def _finding_row(
     finding: Mapping[str, Any], exceptions: Mapping[str, ReviewException]
 ) -> dict[str, Any]:
@@ -737,24 +759,24 @@ def _finding_row(
     beyond it - the rule's statement, whether the rule is waivable at all, and the
     exception that matched - sits beside it, so a consumer that only knows feature 001
     sees exactly what it always saw.
+
+    `acceptable` is asked of `checks/rules/family.py`'s one reader, exactly as the
+    standards row asks it: which rules may be waived is `RMS_FAMILY.status_by_severity`
+    read for `WAIVABLE_STATUS`, and the `"fail"` this line used to spell out was a second
+    answer to the question the accept route and `exceptions accept-rms` already decide
+    from the descriptor (`checks/rules/family.py`, T099).
     """
-    rule = RULES.get(str(finding["check"]))
+    check = str(finding["check"])
+    rule = RULES.get(check)
     row: dict[str, Any] = {
         "finding": finding,
         "rule_id": finding["check"],
         "severity": None if rule is None else rule.severity,
         "statement": None if rule is None else rule.statement,
         "observed": finding["observed"],
-        "acceptable": rule is not None and rule.severity == "fail",
+        "acceptable": waiver_invalidity(RMS_FAMILY, RULES, check) is None,
     }
-    exception = exceptions.get(str(finding.get("exception_id") or ""))
-    if exception is not None:
-        row["exception"] = {
-            "id": exception.id,
-            "state": exception.status,
-            "note": exception.note,
-        }
-    return row
+    return _with_exception(row, finding, exceptions)
 
 
 # --- the Standards result (`contracts/standards-check.md`) -------------------------------
@@ -837,14 +859,7 @@ def _standards_finding_row(
         "observed": finding["observed"],
         "acceptable": _standards_waiver_invalidity(check) is None,
     }
-    exception = exceptions.get(str(finding.get("exception_id") or ""))
-    if exception is not None:
-        row["exception"] = {
-            "id": exception.id,
-            "state": exception.status,
-            "note": exception.note,
-        }
-    return row
+    return _with_exception(row, finding, exceptions)
 
 
 def _standards_waiver_invalidity(check_id: str) -> str | None:

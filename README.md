@@ -8,7 +8,8 @@ model decides what to investigate and explains, never computes a verdict.
 The design documents live in `specs/001-agentic-design-review/` (spec, plan, research,
 data model, contracts, quickstart, tasks), the Task Pane assistant that runs the reviewer
 from inside SOLIDWORKS in `specs/002-task-pane-assistant/`, the Resilient Modeling checks
-and the Model check tab in `specs/003-resilient-modeling/`, and the governing rules in
+and the Model check tab in `specs/003-resilient-modeling/`, the Standards check tab in
+`specs/006-standards-check/`, and the governing rules in
 `.specify/memory/constitution.md`. `README-complete.md` is the original pilot proposal and
 `sw-review-architecture-proposal.md` the architecture decision record.
 
@@ -95,6 +96,28 @@ than a full extract), runs the same `run_rms_check` the command line runs, and s
 grade, the findings and an Accept control for a demonstrated failure. It registers no tool
 and adds no mutation - the model is not in this loop at all, and no API key is needed to
 use it.
+
+## Standards check
+
+The Task Pane has six tabs - **Review**, **Ask**, **Extract**, **Model check**, **Remodel**
+and **Standards** - and the sixth is the release gate. Press Standards on a part, an
+assembly or a drawing and it dumps the active document with `--profile standards`
+(the model check phases plus cut lists, and the drawing sheets when the document is a
+drawing), grades it against sixteen checks, and shows a release verdict with every check
+accounted for as checked, skipped, unresolved or out of scope. Like the Model check tab it
+**needs no language model and no API key**: no provider is constructed and no key is read
+on any standards path, and the only host it reaches is the loopback backend. What it grades
+against is a **profile** - the library folders, part-number pattern and property names of
+one company - which lives on the workstation at `%LOCALAPPDATA%\SwReview\standards.yaml`
+and is never in this repository; `config/standards.example.yaml` is a fictional example of
+its shape. The checks read the documents as they stand: nothing is opened, rebuilt,
+activated or saved. The catalogue is `specs/006-standards-check/contracts/rules.md`.
+
+```powershell
+swreview-extract dump --out <package dir> --profile standards
+swreview check standards --package <package dir> --out <run dir> --profile <standards.yaml>
+swreview exceptions accept-standards <run dir> --package <package dir> --file <waivers.json>
+```
 
 ## Spec Kit
 

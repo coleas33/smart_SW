@@ -14,9 +14,12 @@ check tab), whose `PaneActions`, `RunFolders`, `web/shared/dom.js` and run-folde
 feature reuses.
 
 **Offline**: everything `reviewer/tests/support/standards.py` writes, named rather than
-counted - **six golden packages** graded by scenarios 1 to 4 and 4b
+counted - **ten golden packages** graded by scenarios 1 to 4 and 4b
 (`tests\golden\fixtures\standards-seeded`, `-compliant`, `-compliant-flat`, `-unknown`,
-`-drawings`, `-multiplicity`), the **two matched-pair packages** of SC-005
+`-multiplicity`, and the **five** cases of the `standards-drawings` case *group*, which holds
+one package per root drawing - `-seeded`, `-compliant`, `-ingested`, `-two-models`, `-no-views` -
+because a run grades the drawing that was opened and no other), the **two matched-pair packages**
+of SC-005
 (`standards-profile-a`, `standards-profile-b`, graded in scenario 6), and the **second-subject
 package** of SC-008 (`standards-seeded-second-subject`, copied and graded in scenario 5) - plus
 the two fictional profiles `reviewer/tests/fixtures/standards/profile-a.yaml` and
@@ -53,12 +56,22 @@ $pb = "tests\fixtures\standards\profile-b.yaml"
 cd reviewer
 uv run python -m swreview.ir.schema --write ..\specs\001-agentic-design-review\contracts\ir.schema.json
 uv run pytest tests/golden tests/unit/test_schema_sync.py tests/unit/test_ir_*.py tests/unit/test_reuse_key.py
-git status --porcelain reviewer/tests/golden
+git -C .. status --porcelain reviewer/tests/golden
 ```
 
 Expected: the schema command rewrites the contract, the tests pass, and the last command prints
-**nothing** - no golden moved. The three regression gates this scenario measures are gates 2, 3
-and 5 below, and the artefact gate 2 is about is **`reviewer/tests/golden/test_golden/*.yml`**,
+**nothing but this feature's own new goldens as `??`, plus the two golden harness modules**
+(`tests/golden/test_golden.py` and `tests/golden/test_standards_goldens.py`, which are code and
+not artefacts) - no line naming a feature 001, 002 or 003 baseline, and no `standards-*` artefact
+of this feature's own in any state but `??` except the ones
+`REWRITTEN_BY_THE_DRAWING_CHECKS` names. That rule as an executable assertion is
+`tests/unit/test_ir_golden_fixtures_load.py::test_the_golden_tree_holds_only_this_feature_s_new_goldens`,
+which this scenario's pytest run executes; read the `git status` output against it rather than
+against a bare "prints nothing". The `-C ..` matters: `git status` resolves a pathspec against the
+current directory, so the same command run from `reviewer\` asks about `reviewer\reviewer\tests`,
+prints a warning to standard error and **nothing** to standard output - which reads as the gate
+passing when it measured nothing at all. The three regression gates this scenario measures are
+gates 2, 3 and 5 below, and the artefact gate 2 is about is **`reviewer/tests/golden/test_golden/*.yml`**,
 the pytest-regressions baselines, which are regenerated from callable output and would move if a
 new IR field reached a summary or a coverage row. The input fixtures
 (`reviewer/tests/golden/fixtures/*/package.json`) are static files nothing rewrites, so they are
@@ -182,29 +195,42 @@ check ids named. Specifically, and this is the whole point of the fixture:
 ## Scenario 4 (US2): Drawings, every sheet
 
 ```powershell
-uv run swreview check standards --package tests\golden\fixtures\standards-drawings --out $runs\drawings\run --profile $pa
+$group = "tests\golden\fixtures\standards-drawings"
+uv run swreview check standards --package $group\standards-drawings-seeded      --out $runs\drawings\seeded      --profile $pa
+uv run swreview check standards --package $group\standards-drawings-compliant   --out $runs\drawings\compliant   --profile $pa
+uv run swreview check standards --package $group\standards-drawings-ingested    --out $runs\drawings\ingested    --profile $pa
+uv run swreview check standards --package $group\standards-drawings-two-models  --out $runs\drawings\two-models  --profile $pa
+uv run swreview check standards --package $group\standards-drawings-no-views    --out $runs\drawings\no-views    --profile $pa
 ```
 
-The fixture carries a hand-written three-sheet drawing record with one overridden dimension,
+Five packages and not one, because a standards run grades the drawing that was **opened** and
+no other (`checks/standards/traversal.py`): the five relationships below are five root
+drawings. `standards-drawings` is therefore a case *group* holding one case directory each,
+the way `fixtures/remodel-plan/` holds feature 004's, and it carries no `package.json` of its
+own - pointing `--package` at the group itself is refused, naming the missing file.
+
+`-seeded` carries a hand-written three-sheet drawing record with one overridden dimension,
 one dangling annotation, a revision table whose last data row disagrees with the drawing's
-revision property, and the profile's export-control phrase in a note **on sheet 3**; plus a
-second, compliant drawing whose file name conforms to the part-number pattern, whose revision
+revision property, and the profile's export-control phrase in a note **on sheet 3**;
+`-compliant` is a drawing whose file name conforms to the part-number pattern, whose revision
 table's last data row agrees with its revision property, and whose referenced model is present
 in the package with the same revision.
 
-Expected: four findings on the first drawing, with the right check ids, severities and
+Expected: four findings on `-seeded`, with the right check ids, severities and
 subjects; each drawing finding naming its **sheet, view and entity identity** (difference o,
 difference q); the overridden dimension rendered **with the unit the package recorded it in**,
-never a bare number (difference p); five checked-coverage rows and zero findings on the second
-drawing; and, for a drawing whose only sheet evidence carries `source: "pdf_ingest"`, all four
-drawing checks **unresolved** naming the evidence source. The report states that the drawings
-were read as they stood and were not rebuilt.
+never a bare number (difference p); five checked-coverage rows on `-compliant`'s **drawing
+document** - its scope's four plus `standards.document.data_card_complete`, out of the 14
+checked rows the four-document package produces - and zero findings anywhere in that package;
+and, on `-ingested`, whose only sheet evidence carries `source: "pdf_ingest"`,
+all four drawing checks **unresolved** naming the evidence source. The report states that the
+drawings were read as they stood and were not rebuilt.
 
-Also in this fixture: a drawing whose views reference **two** models (both graded, both
-revisions compared, both disagreements named in the one revision warning), a drawing with **no
-views** (the drawing's own checks still run, the model comparison is unresolved naming the
-missing referenced document, nothing crashes - difference f), and a document reached both from
-the root and from a drawing's reference (graded **once**).
+The other two cases: `-two-models`, a drawing whose views reference **two** models (both
+graded, both revisions compared, both disagreements named in the one revision warning, and a
+document reached both from the root and from a drawing's reference graded **once**), and
+`-no-views` (the drawing's own checks still run, the model comparison is unresolved naming the
+missing referenced document, nothing crashes - difference f).
 
 ## Scenario 4b (US1 and US2): The counting rule, proved
 
@@ -237,8 +263,11 @@ uv run swreview check standards --package $accept\package --out $accept\run-1 --
 
 # Write the waiver file the next command reads. Set-Content -Encoding utf8 on Windows
 # PowerShell 5.1 writes a BOM, which the reader rejects, so write the bytes directly.
-# <failing-id> is any error-severity check id that failed in run-1; <passing-id> is one
-# that did not; the other two are fixed.
+# <failing-id> is standards.part.cut_list_excluded: the re-review step below needs the
+# check the second-subject package seeds its extra subject of, and any other failing id
+# leaves the exception matching and the finding quietly waived in run-3, which is the one
+# outcome this scenario exists to rule out. <passing-id> is standards.assembly.not_transparent,
+# the one error-severity check standards-seeded does not fail; the other two are fixed.
 $waivers = @'
 {
   "<failing-id>": "legacy part, deviation accepted at release review",
@@ -496,7 +525,7 @@ Every item below is a pass condition for this feature, checked before it is acce
 | # | Gate |
 |---|---|
 | 1 | **Every `checks/rms` unit test and every `rms-*` golden passes with no edits** after the family machinery moves to `checks/rules/`. This is the proof that the move was a move (RK-7), and its task contains none of this feature's own code |
-| 2 | **Scenario 0.** The pytest-regressions baselines `reviewer/tests/golden/test_golden/*.yml` are **byte-identical** after the IR bump (`git status --porcelain reviewer/tests/golden` prints nothing), every existing golden `package.json` still loads unchanged under the 1.4.0 models, and every new field and model is optional, defaulted, omitted when null (arrays when empty) and absent from the required set (SC-004). The input fixtures are static files nothing rewrites, so the baselines are the artefact at risk |
+| 2 | **Scenario 0.** The pytest-regressions baselines `reviewer/tests/golden/test_golden/*.yml` are **byte-identical** after the IR bump - `git status --porcelain reviewer/tests/golden` prints nothing but this feature's own new goldens as `??` and the two golden harness modules, with no feature 001, 002 or 003 baseline named and no `standards-*` artefact in any state but `??` except those `REWRITTEN_BY_THE_DRAWING_CHECKS` names; `test_the_golden_tree_holds_only_this_feature_s_new_goldens` in `tests/unit/test_ir_golden_fixtures_load.py` is that rule as an assertion - every existing golden `package.json` still loads unchanged under the 1.4.0 models, and every new field and model is optional, defaulted, omitted when null (arrays when empty) and absent from the required set (SC-004). The input fixtures are static files nothing rewrites, so the baselines are the artefact at risk |
 | 3 | **Scenario 0.** `test_schema_sync` passes against the regenerated 1.4.0 contract; the C# serializer test validates a package carrying cut-list items, a drawing record and every new field of `contracts/ir-additions.md` section 1; and a second C# test asserts a package carrying **none** of this feature's evidence serializes to bytes identical to the pre-1.4.0 output |
 | 3b | **Scenario 0.** The 1.3.0 -> 1.4.0 bump edits **exactly** the version pins listed in `plan.md`'s Source Code block and nothing else, and `ReuseFixture.cs` plus both pinned cross-language canonical-form strings change in the same commit |
 | 4 | A **`model_check`** dump of a part or assembly produces the same gap set **except for the drawing gap's new message** (which now names the profile that skipped the phase) - a `model_check` dump never runs the drawing phase, so it always carries that gap with the new wording; the comparison is over gap kinds, entity kinds, entity ids and count, with the one changed message asserted separately. A **`full`** dump of a part or assembly produces the same gap set except for the drawing gap's new message (which now names the profile that skipped the phase) and any gap the new `cutlist` phase records. A `full` dump of a **drawing root** omits the drawing gap entirely, which is its own assertion (SC-004, `contracts/ir-additions.md` section 5) |

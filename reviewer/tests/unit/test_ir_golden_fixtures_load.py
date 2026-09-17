@@ -142,17 +142,32 @@ are also the baselines `REWRITTEN_BY_THE_DRAWING_CHECKS` allows to have moved; t
 new and has never been committed, so the gate holds it to `??` and nothing else.
 """
 
+MATCHED_PAIR_CASES: tuple[str, ...] = (
+    "standards-profile-a",
+    "standards-profile-b",
+)
+"""The two goldens T098 adds: SC-005's matched pair, one package per fictional profile.
+
+Named one by one for the reason the lists above are - a `standards-profile` substring filter
+would go on excusing a **modified** baseline of this feature's own for ever - and on their
+own line rather than inside `NEW_GOLDEN_CASES`, because those five are also the baselines
+`REWRITTEN_BY_THE_DRAWING_CHECKS` allows to have moved. These two are new and have never
+been committed, so the gate holds them to `??` and nothing else.
+"""
+
 NEW_GOLDEN_PATHS: frozenset[str] = frozenset(
     [f"fixtures/{case}/" for case in NEW_GOLDEN_CASES]
     + [f"test_golden/{case}.yml" for case in NEW_GOLDEN_CASES]
     + [f"fixtures/{WAIVER_GOLDEN_CASE}/", f"test_golden/{WAIVER_GOLDEN_CASE}.yml"]
+    + [f"fixtures/{case}/" for case in MATCHED_PAIR_CASES]
+    + [f"test_golden/{case}.yml" for case in MATCHED_PAIR_CASES]
     + [f"fixtures/{DRAWING_GOLDEN_GROUP}/"]
     + [f"test_golden/{case}.yml" for case in DRAWING_GOLDEN_CASES]
 )
 """The paths under `tests/golden/` this feature adds, as `git status --short` prints them
 while they are new: the five round-B fixture directories and their baselines, plus T069's
 one case-group directory - git collapses a wholly untracked directory to a single line -
-and the five baselines its cases write.
+the five baselines its cases write, and T098's matched pair with its own two baselines.
 
 They are allowed **only** as untracked (`??`), unless they are named in
 `REWRITTEN_BY_THE_DRAWING_CHECKS` above. A line naming one of them in any other state is a

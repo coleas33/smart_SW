@@ -50,6 +50,7 @@ from swreview.checks.rules.registry import evaluable as _evaluable
 __all__ = [
     "CHECK_TOOL",
     "HIGH_SEVERITY_CHECKS",
+    "NO_EVALUATOR",
     "RULES",
     "RULES_VERSION",
     "STANDARDS_FAMILY",
@@ -60,6 +61,7 @@ __all__ = [
     "bind",
     "by_scope",
     "evaluable",
+    "rules_in",
 ]
 
 RuleScope = Literal["assembly", "part", "drawing", "document"]
@@ -284,3 +286,33 @@ def evaluable() -> tuple[StandardsRule, ...]:
     owes a function while it is still binding them.
     """
     return _evaluable(RULES)
+
+
+NO_EVALUATOR = (
+    "{ids} in scope {scope!r} carr{y} no evaluator; importing swreview.checks.standards is "
+    "what binds every check of the catalogue, and a scope entry point that dispatched the "
+    "rest would grade a document against fewer checks than the contract holds"
+)
+
+
+def rules_in(scope: str) -> tuple[StandardsRule, ...]:
+    """The checks of one scope, in contract order, with every evaluator bound.
+
+    What the four scope entry points of `checks/standards/` walk. It is here rather than
+    once per evaluator module because "the checks of this scope, and each of them has a
+    function to call" was four copies of one invariant, and a copy of an invariant is the
+    one that goes out of date (constitution Principle V).
+
+    Raises `KeyError` for a scope this family does not have, and `ValueError` - **before
+    any check of the scope is dispatched**, rather than part of the way through it - when
+    one of them was never bound.
+    """
+    rules = by_scope()[scope]
+    unbound = [rule.id for rule in rules if rule.fn is None]
+    if unbound:
+        raise ValueError(
+            NO_EVALUATOR.format(
+                ids=", ".join(unbound), scope=scope, y="y" if len(unbound) == 1 else "ies"
+            )
+        )
+    return rules

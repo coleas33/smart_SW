@@ -59,6 +59,7 @@ __all__ = [
     "BOUND_TO",
     "DOCUMENT_SCOPED_KINDS",
     "NO_PERSIST_REF",
+    "SUMMARY_BUCKETS",
     "ExtraCoverage",
     "SubjectDecorator",
     "report_results",
@@ -155,9 +156,14 @@ _BUCKET_BY_OUTCOME: dict[str, CoverageBucket] = {
 }
 """The three outcomes that are coverage rather than a finding."""
 
-_SUMMARY_BUCKETS: tuple[CoverageBucket, ...] = ("checked", "unresolved")
-"""The two buckets the summary can be in. It is one item that moves between them, which
-`replace_coverage` - same check, same bucket - cannot express on its own."""
+SUMMARY_BUCKETS: tuple[CoverageBucket, ...] = ("checked", "unresolved")
+"""The two buckets a family's summary item can be in. It is one item that moves between
+them, which `replace_coverage` - same check, same bucket - cannot express on its own, so
+the other bucket is cleared first.
+
+Public because a family that writes its own summary item **over** this one clears the same
+pair, and a second copy of "which two buckets a summary moves between" is one that a third
+bucket would leave behind (`checks/standards/report.py`, T099)."""
 
 
 def report_results(
@@ -594,7 +600,7 @@ def _write_summary(
         ),
         error=None,
     )
-    for bucket in _SUMMARY_BUCKETS:
+    for bucket in SUMMARY_BUCKETS:
         if bucket != target:
             items = getattr(session.coverage, bucket)
             items[:] = [

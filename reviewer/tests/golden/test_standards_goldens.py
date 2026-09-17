@@ -29,6 +29,7 @@ from swreview.checks.standards.registry import RULES, STANDARDS_FAMILY
 from swreview.checks.standards.traversal import part_number_matches
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
+from tests.checks.matched_pair import UNNUMBERED_PART
 from tests.checks.standards_fixtures import fixture_profile
 from tests.golden.test_golden import FIXTURES_DIR, resolve_callable
 
@@ -1165,3 +1166,179 @@ class TestDrawings:
         assert result["document_kinds"][drawing_id] == "drawing"
         assert result["unavailable_checks"] == []
         assert "no drawing graded" not in result["verdict"]["notes"]
+
+
+# --- T098: standards-profile-a and standards-profile-b -------------------------------------
+
+
+MATCHED_PAIR: dict[str, str] = {
+    "standards-profile-a": "profile-a",
+    "standards-profile-b": "profile-b",
+}
+"""SC-005's third measurement: one design written twice, once for each fictional profile.
+
+The packages differ in every string a profile decides - the vault root, the library folders,
+the file names, the data-card property names, the material configuration, the revision
+property and the export-control phrase - and in nothing else. Graded each against its own
+profile they must agree, and a value compiled into the source cannot make them
+(`tests/checks/matched_pair.py`).
+"""
+
+PAIR_A, PAIR_B = MATCHED_PAIR
+
+MATERIAL_ASSIGNED = "standards.part.material_assigned"
+
+
+def graded_against(case_name: str, profile: str) -> dict[str, Any]:
+    """One golden case, graded against `profile` rather than the one its `case.json` names.
+
+    The cross grading is the control the equality below needs: two packages graded by a
+    reviewer that ignored the profile entirely would agree just as well, so the pair is only
+    evidence if grading a package against the *other* profile changes what it says.
+    """
+    directory = FIXTURES_DIR / case_name
+    case = json.loads((directory / "case.json").read_text(encoding="utf-8"))
+    function = resolve_callable(case["callable"])
+    return function(load_package(directory).package, profile=profile)
+
+
+def coverage_shape(result: dict[str, Any]) -> list[tuple[str, str, tuple[str, ...]]]:
+    """Every coverage row as `(bucket, check, documents)`, ordered and profile-free.
+
+    The rows' **reasons** are deliberately not compared: a reason names the matched prefix,
+    the property or the configuration the profile supplied, so two runs against two profiles
+    that differ in every field cannot carry the same reason text and should not be asked to.
+    What must be identical is where every check landed, over which documents.
+    """
+    return sorted(
+        (row["bucket"], row["check"], tuple(sorted(row["scope"]["document_ids"])))
+        for row in result["coverage"]
+    )
+
+
+def findings_shape(result: dict[str, Any]) -> list[tuple[str, str, str, int, tuple[str, ...]]]:
+    """Every finding as `(check, status, severity, subjects, components)`."""
+    return sorted(
+        (
+            finding["check"],
+            finding["status"],
+            finding["severity"],
+            len(result["subjects"][finding["id"]]),
+            tuple(sorted(finding["component_ids"])),
+        )
+        for finding in result["findings"]
+    )
+
+
+def profile_strings(case_name: str) -> set[str]:
+    """Every document path, file name and custom-property name the package carries.
+
+    The pair is only a pair if these differ: two packages written for one profile would
+    agree trivially, and the whole measurement would be vacuous.
+    """
+    package = package_of(case_name)
+    strings = {row.path for row in package.documents if row.path}
+    strings |= {row.file_name for row in package.documents if row.file_name}
+    for row in package.documents:
+        strings |= set(row.custom_properties)
+    return strings
+
+
+class TestTheMatchedPair:
+    """T098, quickstart Scenario 6: no company value is compiled in (SC-005, RK-1)."""
+
+    def test_the_two_packages_share_no_path_file_name_or_property_name(self) -> None:
+        """The control: they really are written for two different profiles.
+
+        One string is shared and has to be: the file name that follows **neither**
+        convention, which is how each package carries a document the data-card check skips.
+        Its path still differs, because the vault root does.
+        """
+        shared = profile_strings(PAIR_A) & profile_strings(PAIR_B)
+
+        assert shared == {f"{UNNUMBERED_PART}.SLDPRT"}, shared
+        for case_name, profile in MATCHED_PAIR.items():
+            pattern = fixture_profile(profile).part_number.pattern
+            assert not part_number_matches(pattern, f"{UNNUMBERED_PART}.SLDPRT"), case_name
+
+    def test_each_package_names_its_own_profile_in_its_case_file(self) -> None:
+        for case_name, profile in MATCHED_PAIR.items():
+            case = json.loads(
+                (FIXTURES_DIR / case_name / "case.json").read_text(encoding="utf-8")
+            )
+            assert case["kwargs"] == {"profile": profile}, case_name
+
+    def test_the_two_own_profile_runs_produce_the_same_coverage_rows(self) -> None:
+        """SC-005: the same sixteen checks land in the same buckets over the same documents."""
+        first = graded(PAIR_A)
+        second = graded(PAIR_B)
+
+        assert coverage_shape(first) == coverage_shape(second)
+
+    def test_the_two_own_profile_runs_produce_the_same_findings_by_check_id(self) -> None:
+        first = graded(PAIR_A)
+        second = graded(PAIR_B)
+
+        assert findings_shape(first) == findings_shape(second)
+        assert [finding["check"] for finding in first["findings"]] == [
+            finding["check"] for finding in second["findings"]
+        ]
+
+    def test_the_two_own_profile_runs_reach_the_same_verdict(self) -> None:
+        first, second = graded(PAIR_A)["verdict"], graded(PAIR_B)["verdict"]
+
+        assert first == second
+
+    @pytest.mark.parametrize("case_name", sorted(MATCHED_PAIR))
+    def test_every_check_is_bound_and_all_sixteen_are_accounted_for(
+        self, case_name: str
+    ) -> None:
+        result = graded(case_name)
+
+        assert result["unavailable_checks"] == []
+        assert {row["check"] for row in result["coverage"]} | {
+            finding["check"] for finding in result["findings"]
+        } == set(RULES) | {STANDARDS_FAMILY.summary_check}
+
+    # --- the control: the profile decides, not the package ---------------------------------
+
+    def test_grading_a_package_against_the_other_profile_changes_what_it_says(self) -> None:
+        """Without this, a reviewer that read no profile at all would pass the pair."""
+        own = graded(PAIR_A)
+        other = graded_against(PAIR_A, MATCHED_PAIR[PAIR_B])
+
+        assert coverage_shape(own) != coverage_shape(other)
+        assert findings_shape(own) != findings_shape(other)
+
+    def test_the_other_profile_finds_no_export_control_phrase(self) -> None:
+        """The phrase in the package is profile A's, and profile B names another."""
+        other = graded_against(PAIR_A, MATCHED_PAIR[PAIR_B])
+        drawing_id = drawing_document(package_of(PAIR_A))
+
+        assert buckets_of(other, NO_ITAR).get("checked") == [drawing_id]
+        assert NO_ITAR not in findings_by_check(other)
+
+    def test_the_other_profile_recognizes_no_file_name_so_no_data_card_is_graded(self) -> None:
+        """`part_number.pattern` decides which documents the data card is read on."""
+        other = graded_against(PAIR_A, MATCHED_PAIR[PAIR_B])
+        every_document = sorted(row.document_id for row in package_of(PAIR_A).documents)
+
+        assert sorted(buckets_of(other, DATA_CARD)["skipped"]) == every_document
+        assert DATA_CARD not in findings_by_check(other)
+
+    def test_the_other_profile_names_a_configuration_the_parts_do_not_carry(self) -> None:
+        """`material.configuration` decides which configuration the material is read in."""
+        other = graded_against(PAIR_A, MATCHED_PAIR[PAIR_B])
+        parts = sorted(
+            row.document_id for row in package_of(PAIR_A).documents if row.kind == "part"
+        )
+
+        assert sorted(buckets_of(other, MATERIAL_ASSIGNED)["unresolved"]) == parts
+
+    def test_the_two_cross_gradings_agree_with_each_other(self) -> None:
+        """The mismatch is symmetric, because the two packages are one design twice."""
+        first = graded_against(PAIR_A, MATCHED_PAIR[PAIR_B])
+        second = graded_against(PAIR_B, MATCHED_PAIR[PAIR_A])
+
+        assert coverage_shape(first) == coverage_shape(second)
+        assert findings_shape(first) == findings_shape(second)

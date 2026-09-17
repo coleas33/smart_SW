@@ -80,8 +80,22 @@ public static class Program
     /// </summary>
     internal const string SuppressTestLogFileName = "suppress-test.log";
 
-    /// <summary>The only subject <c>probe</c> accepts today.</summary>
+    /// <summary>The feature 003 probe subject.</summary>
     private const string RmsProbe = "rms";
+
+    /// <summary>
+    /// The feature 006 probe subject: the ten workstation probes of <c>research.md</c> R4,
+    /// printed in one read-only run (contracts/cli.md).
+    /// </summary>
+    private const string StandardsProbe = "standards";
+
+    /// <summary>
+    /// The subjects <c>probe</c> accepts (contracts/cli.md). <see cref="RunProbe"/> validates
+    /// against THIS list and names it in the usage error, so a subject the switch handles and
+    /// the list does not - or the reverse - is a failing test rather than an "Unknown probe"
+    /// discovered at the workstation.
+    /// </summary>
+    internal static readonly string[] ProbeSubjects = { RmsProbe, StandardsProbe };
 
     /// <summary>
     /// The interop members <c>probe rms</c> reads per feature, by the name each is gated
@@ -117,6 +131,330 @@ public static class Program
         public const string SketchStatus = "GetConstrainedStatus";
         public const string Definition = "GetDefinition";
         public const string Radius = "DefaultRadius";
+    }
+
+    /// <summary>
+    /// The interop members <c>probe standards</c> names to the gate itself, by the name each
+    /// is gated under. Named once so the call sites and
+    /// <see cref="StandardsProbeInteropMembers"/> cannot drift apart - the same reason
+    /// <see cref="ProbeMember"/> exists.
+    ///
+    /// Only the members the probe names: the shipped readers
+    /// (<c>SwDrawingReader</c>, <c>SwCutListReader</c>, <c>SwFeatureReader</c>,
+    /// <c>PersistRefService</c>) gate the rest themselves, and a member gated twice would be
+    /// a gate log that counts calls nobody made. The names are bare because
+    /// <c>SwGate.Call</c> names them bare; the two dotted ones disambiguate a bare name that
+    /// belongs to two different interfaces, the way <c>ConfigurationManager.ActiveConfiguration</c>
+    /// and <c>ITableAnnotation.Type</c> already do elsewhere.
+    /// </summary>
+    private static class StandardsProbeMember
+    {
+        // The run's own header, and the check that stops SwSession.Attach opening anything.
+        public const string OpenDocumentByName = "GetOpenDocumentByName";
+        public const string PathName = "GetPathName";
+        public const string ConfigurationName = "Configuration.Name";
+
+        // PROBE-1, the exploded read.
+        public const string IsExploded = "IsExploded";
+        public const string ExtensionIsExploded = "IModelDocExtension.IsExploded";
+        public const string ConfigurationNames = "GetConfigurationNames";
+        public const string ConfigurationByName = "GetConfigurationByName";
+        public const string ExplodeSteps = "GetNumberOfExplodeSteps";
+        public const string ModelDoc2 = "GetModelDoc2";
+
+        // PROBE-2, the transparency-override polarity.
+        public const string HasMaterialPropertyValues = "HasMaterialPropertyValues";
+        public const string MaterialPropertyValues = "GetMaterialPropertyValues2";
+
+        // PROBE-3, component visibility.
+        public const string Visible = "Visible";
+        public const string Visibility = "GetVisibility";
+
+        // PROBE-4, the revision-table read.
+        public const string RevisionTable = "RevisionTable";
+        public const string TableType = "ITableAnnotation.Type";
+        public const string CurrentRevision = "CurrentRevision";
+        public const string TotalRowCount = "TotalRowCount";
+        public const string CellText = "Text";
+        public const string CellDisplayedText = "DisplayedText";
+
+        // PROBE-5's note walk and PROBE-7's sheet enumeration.
+        public const string Sheet = "Sheet";
+        public const string Views = "GetViews";
+
+        /// <summary>
+        /// <c>ISheet.GetName()</c> and <c>IAnnotation.GetName()</c> are one bare name to the
+        /// gate, so they are one constant here: two constants with one value would read as
+        /// two members in a log that cannot tell them apart.
+        /// </summary>
+        public const string Name = "GetName";
+
+        public const string ViewTypeMember = "Type";
+        public const string Notes = "GetNotes";
+        public const string NoteText = "GetText";
+        public const string FirstView = "GetFirstView";
+        public const string NextView = "GetNextView";
+
+        // PROBE-6, the drawing-view and annotation walk.
+        public const string ViewName = "GetName2";
+        public const string ReferencedModelName = "GetReferencedModelName";
+        public const string ReferencedDocument = "ReferencedDocument";
+        public const string Annotations = "GetAnnotations";
+        public const string AnnotationCount = "GetAnnotationCount";
+        public const string FirstAnnotation = "GetFirstAnnotation3";
+        public const string NextAnnotation = "GetNext3";
+        public const string AnnotationType = "GetType";
+        public const string Dangling = "IsDangling";
+        public const string DisplayDimensions = "GetDisplayDimensions";
+        public const string DimensionType = "Type2";
+        public const string Override = "GetOverride";
+        public const string OverrideValue = "GetOverrideValue";
+
+        // PROBE-8, the cut-list walk.
+        public const string FeatureName = "Feature.Name";
+        public const string TypeName = "GetTypeName2";
+        public const string SpecificFeature = "GetSpecificFeature2";
+        public const string BodyCount = "GetBodyCount";
+        public const string ExcludeFromCutList = "ExcludeFromCutList";
+
+        // PROBE-9, the sketch text-segment read.
+        public const string SketchTextSegments = "GetSketchTextSegments";
+
+        // PROBE-10, the persistent references.
+        public const string PersistReferenceCount = "GetPersistReferenceCount3";
+    }
+
+    /// <summary>
+    /// Every interop member <c>probe standards</c> names to the gate, in the order the run
+    /// first names it (contracts/cli.md row 20, <c>research.md</c> R4).
+    ///
+    /// The list exists so the option tests can assert that every one of them passes
+    /// <see cref="ReadOnlyGuard"/>: the shipped readers leave these members ungated on purpose
+    /// - their dumpers name them - so on this path the probe is the caller. Ungated they would
+    /// reach no guard, no circuit breaker and no observer, and the gate log this command
+    /// prints as its proof would be missing exactly the reads it printed.
+    /// </summary>
+    internal static readonly string[] StandardsProbeInteropMembers =
+    {
+        StandardsProbeMember.OpenDocumentByName,
+        StandardsProbeMember.PathName,
+        StandardsProbeMember.ConfigurationName,
+
+        StandardsProbeMember.IsExploded,
+        StandardsProbeMember.ExtensionIsExploded,
+        StandardsProbeMember.ConfigurationNames,
+        StandardsProbeMember.ConfigurationByName,
+        StandardsProbeMember.ExplodeSteps,
+        StandardsProbeMember.ModelDoc2,
+
+        StandardsProbeMember.HasMaterialPropertyValues,
+        StandardsProbeMember.MaterialPropertyValues,
+
+        StandardsProbeMember.Visible,
+        StandardsProbeMember.Visibility,
+
+        StandardsProbeMember.RevisionTable,
+        StandardsProbeMember.TableType,
+        StandardsProbeMember.CurrentRevision,
+        StandardsProbeMember.TotalRowCount,
+        StandardsProbeMember.CellText,
+        StandardsProbeMember.CellDisplayedText,
+
+        StandardsProbeMember.Sheet,
+        StandardsProbeMember.Views,
+        StandardsProbeMember.Name,
+        StandardsProbeMember.ViewTypeMember,
+        StandardsProbeMember.Notes,
+        StandardsProbeMember.NoteText,
+        StandardsProbeMember.FirstView,
+        StandardsProbeMember.NextView,
+
+        StandardsProbeMember.ViewName,
+        StandardsProbeMember.ReferencedModelName,
+        StandardsProbeMember.ReferencedDocument,
+        StandardsProbeMember.Annotations,
+        StandardsProbeMember.AnnotationCount,
+        StandardsProbeMember.FirstAnnotation,
+        StandardsProbeMember.NextAnnotation,
+        StandardsProbeMember.AnnotationType,
+        StandardsProbeMember.Dangling,
+        StandardsProbeMember.DisplayDimensions,
+        StandardsProbeMember.DimensionType,
+        StandardsProbeMember.Override,
+        StandardsProbeMember.OverrideValue,
+
+        StandardsProbeMember.FeatureName,
+        StandardsProbeMember.TypeName,
+        StandardsProbeMember.SpecificFeature,
+        StandardsProbeMember.BodyCount,
+        StandardsProbeMember.ExcludeFromCutList,
+
+        StandardsProbeMember.SketchTextSegments,
+
+        StandardsProbeMember.PersistReferenceCount,
+    };
+
+    /// <summary>
+    /// The members whose ABSENCE from the gate log is contracts/cli.md's "activates no
+    /// sheet". <c>ActivateSheet</c> and <c>ActivateView</c> are on the read-only denylist and
+    /// would be refused anyway; <c>SheetNext</c> and <c>SheetPrevious</c> are not, and they
+    /// activate a sheet just as surely, which is why the claim is checked against a list of
+    /// its own rather than against the denylist.
+    /// </summary>
+    internal static readonly string[] StandardsProbeSheetActivationMembers =
+        { "ActivateSheet", "ActivateView", "SheetNext", "SheetPrevious" };
+
+    /// <summary>
+    /// The members whose absence is "opens no document". <c>OpenDoc6</c> is the extractor's
+    /// one file-opening call (<c>SwSession.OpenReadOnly</c>); the other three are the
+    /// neighbouring ways in, listed so the claim does not rest on one spelling.
+    /// </summary>
+    internal static readonly string[] StandardsProbeDocumentOpeningMembers =
+        { "OpenDoc6", "OpenDoc7", "LoadFile4", "ActivateDoc3" };
+
+    /// <summary>
+    /// The members whose absence is "changes no display state" - what the engineer would see
+    /// differently afterwards. Several are on the read-only denylist as well; the list is
+    /// written out because the claim the log makes is about these members, not about whatever
+    /// the denylist happens to hold.
+    /// </summary>
+    internal static readonly string[] StandardsProbeDisplayStateMembers =
+    {
+        "ShowConfiguration2", "ShowNamedView2", "ViewZoomtofit2", "GraphicsRedraw2",
+        "ShowExploded", "ShowExploded2", "SetVisibility", "SetVisibilityInAsmDisplayStates",
+        "set_Visible",
+    };
+
+    /// <summary>
+    /// How deep <c>probe standards</c> walks sub-features. The cut list is one level of items
+    /// under one folder, so four is three more than anything expected; the probe prints that
+    /// it stopped rather than recursing without a bound on a tree that answers in a cycle.
+    /// </summary>
+    private const int StandardsProbeMaxDepth = 4;
+
+    /// <summary>
+    /// How many items either linked-list walk - <c>GetFirstView</c>/<c>GetNextView</c> and
+    /// <c>GetFirstAnnotation3</c>/<c>GetNext3</c> - may list. Same bound, same reason as
+    /// <see cref="StandardsProbeMaxDepth"/>: a list that never ends must stop the probe, not
+    /// the workstation.
+    /// </summary>
+    private const int StandardsProbeMaxWalk = 10000;
+
+    /// <summary>
+    /// The gate <c>probe standards</c> runs on: the READ-ONLY guard, watched by a recorder so
+    /// the distinct member names reach the gate log the command prints at the end
+    /// (contracts/cli.md row 20). Built here rather than left to <c>SwSession</c>'s default,
+    /// so the guard this command carries is a decision the option tests can see - and it is
+    /// never <see cref="SuppressTestGuard"/>, the only other <c>ICallGuard</c> in the product.
+    /// </summary>
+    internal static SwGate StandardsProbeGate(RecordingGateObserver observer) =>
+        new SwGate(new CircuitBreaker(), ReadOnlyCallGuard.Instance) { Observer = observer };
+
+    /// <summary>
+    /// Why <c>probe standards</c> will not run on a document that is not already open:
+    /// <c>SwSession.Attach</c> would open it read-only - the extractor's one file-opening
+    /// call - and this command's own gate log is the proof that it opened nothing.
+    /// </summary>
+    internal static string StandardsProbeDocumentNotOpenMessage(string documentPath) =>
+        $"'{documentPath}' is not open in SOLIDWORKS. Open it first: probe standards opens no "
+        + "document, and its gate log is the proof - a run that had opened this one would be "
+        + "proving the opposite of what it was asked to prove.";
+
+    /// <summary>
+    /// The gate log <c>probe standards</c> prints at the end of every run, successful or not
+    /// (contracts/cli.md row 20, quickstart scenario 9).
+    ///
+    /// Four claims, each on its own line and each naming what it watched for, because a bare
+    /// "none" is only worth reading beside the list it is none of. The mutating line asks
+    /// <see cref="ReadOnlyGuard"/> itself rather than carrying a copy of the denylist, so a
+    /// member added to the guard is covered here the same day.
+    /// </summary>
+    internal static IReadOnlyList<string> StandardsProbeGateLogLines(
+        IReadOnlyList<string> gatedMembers, IReadOnlyList<MutatingCallError> refusals)
+    {
+        IReadOnlyList<string> members = gatedMembers ?? new string[0];
+        var mutating = new List<string>();
+        foreach (string member in members)
+        {
+            if (IsMutating(member))
+            {
+                mutating.Add(member);
+            }
+        }
+
+        var reasons = new List<string>();
+        if (refusals != null)
+        {
+            foreach (MutatingCallError refusal in refusals)
+            {
+                reasons.Add(refusal.Message);
+            }
+        }
+
+        return new[]
+        {
+            $"gate log: the read-only guard, {members.Count} distinct interop members",
+            "  members: " + Listed(members),
+            "  mutating members: " + Listed(mutating),
+            "  refusals: " + Listed(reasons),
+            Claim("sheet activation", members, StandardsProbeSheetActivationMembers),
+            Claim("document opening", members, StandardsProbeDocumentOpeningMembers),
+            Claim("display state", members, StandardsProbeDisplayStateMembers),
+        };
+    }
+
+    /// <summary>One gate-log claim: what of <paramref name="watched"/> the run actually touched.</summary>
+    private static string Claim(string name, IReadOnlyList<string> members, string[] watched)
+    {
+        var touched = new List<string>();
+        foreach (string member in watched)
+        {
+            foreach (string seen in members)
+            {
+                if (string.Equals(seen, member, StringComparison.OrdinalIgnoreCase))
+                {
+                    touched.Add(member);
+                    break;
+                }
+            }
+        }
+
+        return $"  {name}: {Listed(touched)}  (watched: {string.Join(", ", watched)})";
+    }
+
+    /// <summary>
+    /// Would the read-only guard refuse this member? Asked of the guard rather than
+    /// re-implemented, so the prefix families and the denylist cannot get two answers.
+    /// A handful of names at the end of a run, so the throw costs nothing worth saving.
+    /// </summary>
+    private static bool IsMutating(string member)
+    {
+        try
+        {
+            ReadOnlyGuard.Assert(member);
+            return false;
+        }
+        catch (MutatingCallError)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>A gate-log list, or the word that says the list was empty.</summary>
+    private static string Listed(IReadOnlyList<string> items)
+    {
+        if (items.Count == 0)
+        {
+            return "none";
+        }
+
+        var parts = new string[items.Count];
+        for (int i = 0; i < items.Count; i++)
+        {
+            parts[i] = items[i];
+        }
+
+        return string.Join(", ", parts);
     }
 
     /// <summary>
@@ -822,17 +1160,22 @@ public static class Program
     {
         CommandLine parsed;
         bool allowStart;
+        string subject;
 
         try
         {
             if (args.Length < 2 || args[1].StartsWith("--", StringComparison.Ordinal))
             {
-                throw new UsageError($"probe needs a subject: probe {RmsProbe} --doc <part>.");
+                throw new UsageError(
+                    "probe needs a subject: probe "
+                    + string.Join("|", ProbeSubjects) + " --doc <document>.");
             }
 
-            if (!string.Equals(args[1], RmsProbe, StringComparison.Ordinal))
+            subject = args[1];
+            if (!IsProbeSubject(subject))
             {
-                throw new UsageError($"Unknown probe '{args[1]}'; the only probe is {RmsProbe}.");
+                throw new UsageError(
+                    $"Unknown probe '{subject}'; the probes are {string.Join(", ", ProbeSubjects)}.");
             }
 
             parsed = CommandLine.Parse(args, 2, KnownOptions(ProbeOptionNames));
@@ -844,7 +1187,23 @@ public static class Program
             return ExitError;
         }
 
-        return ExecuteProbeRms(parsed.Value("doc"), allowStart);
+        return string.Equals(subject, StandardsProbe, StringComparison.Ordinal)
+            ? ExecuteProbeStandards(parsed.Value("doc"), allowStart)
+            : ExecuteProbeRms(parsed.Value("doc"), allowStart);
+    }
+
+    /// <summary>Is this one of the subjects <see cref="ProbeSubjects"/> lists?</summary>
+    private static bool IsProbeSubject(string subject)
+    {
+        foreach (string known in ProbeSubjects)
+        {
+            if (string.Equals(subject, known, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -1138,6 +1497,1269 @@ public static class Program
         }
     }
 
+    // ---- probe standards (T095) ---------------------------------------------------
+
+    /// <summary>
+    /// T095. The ten workstation probes of <c>research.md</c> R4, printed in one read-only run
+    /// in R4's order (contracts/cli.md row 20). Every question the repository could not settle
+    /// offline is here: which interface answers "exploded" and whether the answer is
+    /// per-configuration; which appearance slot carries transparency; what a display-state
+    /// hide looks like beside a suppression; whether a revision table's cells are reachable
+    /// and whether one sheet can carry two tables; whether the type-1 sheet-format pseudo-view
+    /// is in <c>GetViews()</c>; whether <c>GetAnnotations()</c> returns what the macro's walk
+    /// did; whether a non-active sheet answers at all; which type names the cut-list folders
+    /// carry; whether sketch text segments read; and which entity kinds carry a persistent
+    /// reference.
+    ///
+    /// <b>Nothing is opened, activated, rebuilt or written.</b> The document must already be
+    /// open, every call goes through a gate built with the read-only guard, and the gate log
+    /// printed at the end names every member the run touched - so the claim is checkable
+    /// rather than asserted (quickstart scenario 9).
+    ///
+    /// A probe whose member throws prints the failure and the run carries on: which members
+    /// fail on this release is half of what the probe is for.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static int ExecuteProbeStandards(string? documentPath, bool allowStart)
+    {
+        var observer = new RecordingGateObserver();
+        SwGate gate = StandardsProbeGate(observer);
+        int exitCode;
+
+        using (var log = new ExtractLog(null))
+        {
+            try
+            {
+                ISldWorks swApp = Connect(allowStart, log);
+
+                // SwSession.Attach would OPEN a named document that is not open, read-only -
+                // the extractor's one file-opening call. This run opens nothing, so a document
+                // that is not open is refused here, before anything else is asked of it.
+                if (!string.IsNullOrWhiteSpace(documentPath)
+                    && !(gate.Call(
+                            StandardsProbeMember.OpenDocumentByName,
+                            () => swApp.GetOpenDocumentByName(documentPath)) is IModelDoc2))
+                {
+                    throw new InvalidOperationException(
+                        StandardsProbeDocumentNotOpenMessage(documentPath!));
+                }
+
+                SwSession session = SwSession.Attach(swApp, documentPath, null, gate);
+                var refs = new PersistRefService(gate);
+                DocumentKind kind = SwSession.KindOf(session.Document, gate);
+                var samples = new PersistRefSamples();
+
+                Out.WriteLine("probe: standards - the ten workstation probes of research.md R4");
+                Out.WriteLine("document: " + Gated(
+                    gate, StandardsProbeMember.PathName, () => Quote(session.DocumentPath)));
+                Out.WriteLine("kind: " + PackageSerializer.EnumToJsonName(kind));
+                Out.WriteLine("configuration: " + Gated(
+                    gate, StandardsProbeMember.ConfigurationName, () => Quote(session.Configuration.Name)));
+
+                DumpScope scope = StandardsProbeComponents(session, refs);
+
+                ProbeExplodedState(session, gate, scope);
+                ProbeAppearanceOverrides(gate, scope);
+                ProbeComponentVisibility(gate, scope);
+                ProbeDrawing(session, gate, refs, kind, samples);
+                ProbeCutListWalk(session, gate, refs, kind, samples);
+                ProbeSketchTextSegments(session, gate, refs, kind);
+                ProbePersistentReferences(session, gate, refs, samples);
+
+                exitCode = ExitSuccess;
+            }
+            catch (Exception error)
+            {
+                // The gate log below still prints: "what had it touched when it stopped" is the
+                // question a failed read-only run most needs answered.
+                log.WriteError("probe standards stopped.", error);
+                exitCode = ExitError;
+            }
+
+            foreach (string line in StandardsProbeGateLogLines(observer.Members, observer.Refusals))
+            {
+                Out.WriteLine(line);
+            }
+        }
+
+        return exitCode;
+    }
+
+    /// <summary>
+    /// One instance of each of the seven entity kinds PROBE-10 asks about, kept by the walks
+    /// that already hold them so no walk runs a second time.
+    /// </summary>
+    private sealed class PersistRefSamples
+    {
+        public object? Sheet { get; set; }
+
+        public object? View { get; set; }
+
+        public object? DisplayDimension { get; set; }
+
+        public object? Annotation { get; set; }
+
+        public object? Note { get; set; }
+
+        public object? RevisionTable { get; set; }
+
+        public object? BodyFolder { get; set; }
+    }
+
+    /// <summary>
+    /// The four sections one sheet walk fills. PROBE-4, PROBE-5, PROBE-6 and PROBE-7 all read
+    /// the same sheets and views, so the drawing is walked once and the lines are printed
+    /// afterwards in R4's order: four walks would be four times the interop for one answer,
+    /// and on a six-sheet drawing that is the difference the engineer waits for.
+    /// </summary>
+    private sealed class DrawingProbeLines
+    {
+        public List<string> Tables { get; } = new List<string>();
+
+        public List<string> Notes { get; } = new List<string>();
+
+        public List<string> Views { get; } = new List<string>();
+
+        public List<string> Sheets { get; } = new List<string>();
+    }
+
+    /// <summary>The per-sheet counts PROBE-7 compares; a sheet that came back empty shows up in them.</summary>
+    private sealed class SheetCounts
+    {
+        public int SheetFormatViews { get; set; }
+
+        public int RevisionTables { get; set; }
+
+        public int Annotations { get; set; }
+
+        public int DisplayDimensions { get; set; }
+
+        public int Notes { get; set; }
+    }
+
+    /// <summary>
+    /// The traversal exactly as the dump performs it - same dumper, same ids - so PROBE-1,
+    /// PROBE-2 and PROBE-3 answer about the components package.json would carry. A component
+    /// the traversal synthesized (a part root, a drawing's forest root, a referenced model)
+    /// has no live <c>IComponent2</c>, and the probes that need one say so rather than
+    /// skipping it in silence.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static DumpScope StandardsProbeComponents(SwSession session, PersistRefService refs)
+    {
+        var gaps = new GapCollector();
+        var options = new DumpOptions { Meshes = MeshFormat.None, Features = FeatureScope.None };
+        ComponentTreeResult tree = new ComponentTreeDumper(session, refs).Traverse(gaps, options);
+        DumpScope scope = PackageWriter.ScopeFor(gaps, options, tree);
+
+        Out.WriteLine($"components: {scope.Components.Count}, traversal gaps: {gaps.Count}");
+        foreach (Gap gap in gaps.Gaps)
+        {
+            Out.WriteLine($"  {gap.EntityKind} {gap.EntityId ?? "-"}: {gap.Reason}");
+        }
+
+        return scope;
+    }
+
+    /// <summary>
+    /// PROBE-1. Which interface answers "is this assembly exploded", whether the answer is
+    /// per-configuration, and whether a sub-assembly's document answers at all.
+    ///
+    /// The second configuration is read through <c>IConfiguration.GetNumberOfExplodeSteps</c>,
+    /// which answers per configuration <b>without activating one</b>: activating a
+    /// configuration is a display-state change and a rebuild, the one thing this run may not
+    /// do. So the document-level pair answers for the ACTIVE configuration and the step count
+    /// answers for every one, and reading the two together is what settles the question.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbeExplodedState(SwSession session, SwGate gate, DumpScope scope)
+    {
+        Out.WriteLine("probe-1 exploded_state:");
+        Out.WriteLine("  open document: " + DescribeExploded(gate, session.Document));
+        Out.WriteLine("  configurations (read without activating any):");
+
+        string? failure;
+        IReadOnlyList<string> names = ReadList(
+            () => ConfigurationNames(gate, session.Document), out failure);
+
+        if (failure != null)
+        {
+            Out.WriteLine("    GetConfigurationNames: " + failure);
+        }
+
+        foreach (string name in names)
+        {
+            string configuration = name;
+            Out.WriteLine($"    {Quote(configuration)} explode_steps=" + Describe(() =>
+            {
+                var live = gate.Call(
+                    StandardsProbeMember.ConfigurationByName,
+                    () => session.Document.GetConfigurationByName(configuration)) as IConfiguration;
+
+                return live == null
+                    ? "(GetConfigurationByName gave nothing)"
+                    : gate.Call(StandardsProbeMember.ExplodeSteps, () => live.GetNumberOfExplodeSteps())
+                        .ToString(CultureInfo.InvariantCulture);
+            }));
+        }
+
+        Out.WriteLine("  sub-assembly documents:");
+        int printed = 0;
+
+        foreach (ScopedComponent component in scope.Components)
+        {
+            ComponentNode node = component.Node;
+            if (node.ParentKey == null
+                || node.DocumentKind != DocumentKind.Assembly
+                || !(node.Handle is IComponent2 live))
+            {
+                continue;
+            }
+
+            printed++;
+            Out.WriteLine($"    {component.Id} {node.Key}: " + Describe(() =>
+            {
+                var model = gate.Call(
+                    StandardsProbeMember.ModelDoc2, () => live.GetModelDoc2()) as IModelDoc2;
+
+                return model == null
+                    ? "(no loaded document; nothing is opened to produce one)"
+                    : DescribeExploded(gate, model);
+            }));
+        }
+
+        if (printed == 0)
+        {
+            Out.WriteLine("    (none)");
+        }
+    }
+
+    /// <summary>The two exploded reads, side by side, for one document.</summary>
+    private static string DescribeExploded(SwGate gate, IModelDoc2 document)
+    {
+        string first = Gated(
+            gate, StandardsProbeMember.IsExploded, () => document.IsExploded().ToString());
+
+        string second = Describe(() =>
+        {
+            string? view = null;
+            bool exploded = gate.Call(
+                StandardsProbeMember.ExtensionIsExploded,
+                () =>
+                {
+                    string name;
+                    bool answer = document.Extension.IsExploded(out name);
+                    view = name;
+                    return answer;
+                });
+
+            return exploded.ToString() + " view=" + Quote(view);
+        });
+
+        return $"IModelDoc2.IsExploded()={first} IModelDocExtension.IsExploded(out name)={second}";
+    }
+
+    /// <summary>Every configuration name, so the per-configuration read below has a list to walk.</summary>
+    private static IReadOnlyList<string> ConfigurationNames(SwGate gate, IModelDoc2 document)
+    {
+        var names = new List<string>();
+        var raw = gate.Call(
+            StandardsProbeMember.ConfigurationNames, () => document.GetConfigurationNames()) as object[];
+
+        if (raw == null)
+        {
+            return names;
+        }
+
+        foreach (object item in raw)
+        {
+            if (item is string text)
+            {
+                names.Add(text);
+            }
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// PROBE-2. <c>HasMaterialPropertyValues()</c> and all nine appearance slots for every
+    /// component, so the engineer can compare one they have made visibly transparent, one with
+    /// an opaque override and one with no override at all.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbeAppearanceOverrides(SwGate gate, DumpScope scope)
+    {
+        Out.WriteLine("probe-2 appearance_overrides:");
+        int printed = 0;
+
+        foreach (ScopedComponent component in scope.Components)
+        {
+            if (!(component.Node.Handle is IComponent2 live))
+            {
+                continue;
+            }
+
+            printed++;
+            Out.WriteLine(
+                $"  {component.Id} {component.Node.Key}"
+                + " HasMaterialPropertyValues=" + Gated(
+                    gate,
+                    StandardsProbeMember.HasMaterialPropertyValues,
+                    () => live.HasMaterialPropertyValues().ToString())
+                + " GetMaterialPropertyValues2(1, null)=" + Describe(() => AppearanceSlots(gate, live)));
+        }
+
+        if (printed == 0)
+        {
+            Out.WriteLine("  (no live component on this document)");
+        }
+    }
+
+    /// <summary>
+    /// Every slot verbatim, in order. WHICH slot carries transparency on this build, and which
+    /// number means transparent, is what PROBE-2 is asked to settle - so no slot is singled
+    /// out and nothing is interpreted here.
+    /// </summary>
+    private static string AppearanceSlots(SwGate gate, IComponent2 component)
+    {
+        var values = gate.Call(
+            StandardsProbeMember.MaterialPropertyValues,
+            () => component.GetMaterialPropertyValues2(
+                (int)SolidWorks.Interop.swconst.swInConfigurationOpts_e.swThisConfiguration, null))
+            as double[];
+
+        if (values == null)
+        {
+            return "null";
+        }
+
+        var slots = new List<string>(values.Length);
+        for (int i = 0; i < values.Length; i++)
+        {
+            slots.Add($"[{i}]={values[i].ToString("G6", CultureInfo.InvariantCulture)}");
+        }
+
+        return $"{values.Length} slots " + string.Join(" ", slots.ToArray());
+    }
+
+    /// <summary>
+    /// PROBE-3. <c>Visible</c> and <c>GetVisibility(1, null)</c> for every component, with the
+    /// suppression state beside them: which read answers "hidden" <b>without</b> conflating
+    /// suppression is the question, and it cannot be read off either number alone.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbeComponentVisibility(SwGate gate, DumpScope scope)
+    {
+        Out.WriteLine("probe-3 component_visibility:");
+        int printed = 0;
+
+        foreach (ScopedComponent component in scope.Components)
+        {
+            ComponentNode node = component.Node;
+            if (!(node.Handle is IComponent2 live))
+            {
+                continue;
+            }
+
+            printed++;
+            Out.WriteLine(
+                $"  {component.Id} {node.Key}"
+                + " Visible=" + Gated(
+                    gate,
+                    StandardsProbeMember.Visible,
+                    () => live.Visible.ToString(CultureInfo.InvariantCulture))
+                + " GetVisibility(1, null)=" + Gated(
+                    gate,
+                    StandardsProbeMember.Visibility,
+                    () => DescribeVisibility(live.GetVisibility(
+                        (int)SolidWorks.Interop.swconst.swInConfigurationOpts_e.swThisConfiguration,
+                        null)))
+                + $" suppression={PackageSerializer.EnumToJsonName(node.Suppression)}");
+        }
+
+        if (printed == 0)
+        {
+            Out.WriteLine("  (no live component on this document)");
+        }
+    }
+
+    /// <summary>
+    /// <c>GetVisibility</c> is declared as returning <c>object</c> and may hand back one value
+    /// or one per configuration; both shapes are printed as they came.
+    /// </summary>
+    private static string DescribeVisibility(object? answer)
+    {
+        if (answer == null)
+        {
+            return "null";
+        }
+
+        if (answer is Array array)
+        {
+            var parts = new List<string>(array.Length);
+            for (int i = 0; i < array.Length; i++)
+            {
+                object? item = array.GetValue(i);
+                parts.Add(item == null
+                    ? "null"
+                    : Convert.ToString(item, CultureInfo.InvariantCulture) ?? "null");
+            }
+
+            return "[" + string.Join(", ", parts.ToArray()) + "]";
+        }
+
+        return Convert.ToString(answer, CultureInfo.InvariantCulture) ?? "null";
+    }
+
+    /// <summary>
+    /// PROBE-4, PROBE-5, PROBE-6 and PROBE-7: one walk of every sheet, with sheet 1 left
+    /// active throughout, printed as four sections in R4's order.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbeDrawing(
+        SwSession session,
+        SwGate gate,
+        PersistRefService refs,
+        DocumentKind kind,
+        PersistRefSamples samples)
+    {
+        if (kind != DocumentKind.Drawing)
+        {
+            WriteDrawingSections("(the open document is not a drawing)");
+            return;
+        }
+
+        var reader = new SwDrawingReader(session, refs);
+        object? drawing = reader.Drawing();
+        if (drawing == null)
+        {
+            // The kind read said drawing and the COM cast disagreed. Nothing is opened or
+            // activated to resolve it: the probe says so, which is the answer.
+            WriteDrawingSections("(the document reports kind drawing but is not an IDrawingDoc)");
+            return;
+        }
+
+        var lines = new DrawingProbeLines();
+        lines.Sheets.Add(
+            "  active sheet before the walk: " + Describe(() => Quote(reader.ActiveSheetName(drawing))));
+
+        string? failure;
+        IReadOnlyList<string> names = ReadList(() => reader.SheetNames(drawing), out failure);
+        if (failure != null)
+        {
+            lines.Sheets.Add("  GetSheetNames: " + failure);
+        }
+
+        foreach (string name in names)
+        {
+            ProbeSheet(gate, reader, drawing, name, lines, samples);
+        }
+
+        // PROBE-7's answer is this pair with the per-sheet counts between them: nothing was
+        // activated, so the sheet active before the walk is the sheet active after it.
+        lines.Sheets.Add(
+            "  active sheet after the walk: " + Describe(() => Quote(reader.ActiveSheetName(drawing))));
+
+        ProbeViewWalkFallback(gate, reader, drawing, lines.Notes);
+
+        WriteSection("probe-4 revision_tables:", lines.Tables);
+        WriteSection("probe-5 notes:", lines.Notes);
+        WriteSection("probe-6 views_annotations_dimensions:", lines.Views);
+        WriteSection("probe-7 non_active_sheets:", lines.Sheets);
+    }
+
+    /// <summary>The four drawing sections, each saying the same thing, when there is no drawing to walk.</summary>
+    private static void WriteDrawingSections(string reason)
+    {
+        Out.WriteLine("probe-4 revision_tables: " + reason);
+        Out.WriteLine("probe-5 notes: " + reason);
+        Out.WriteLine("probe-6 views_annotations_dimensions: " + reason);
+        Out.WriteLine("probe-7 non_active_sheets: " + reason);
+    }
+
+    private static void WriteSection(string header, IReadOnlyList<string> lines)
+    {
+        Out.WriteLine(header);
+        if (lines.Count == 0)
+        {
+            Out.WriteLine("  (nothing was read)");
+            return;
+        }
+
+        foreach (string line in lines)
+        {
+            Out.WriteLine(line);
+        }
+    }
+
+    /// <summary>
+    /// One sheet, read <b>without activating it</b>: its revision tables, its views' notes,
+    /// annotations and display dimensions, and the counts PROBE-7 compares against a second
+    /// run in which the engineer activates each sheet by hand first.
+    /// </summary>
+    private static void ProbeSheet(
+        SwGate gate,
+        SwDrawingReader reader,
+        object drawing,
+        string name,
+        DrawingProbeLines lines,
+        PersistRefSamples samples)
+    {
+        object? sheet;
+        try
+        {
+            sheet = gate.Call(StandardsProbeMember.Sheet, () => reader.Sheet(drawing, name));
+        }
+        catch (Exception error)
+        {
+            AddToEverySection(lines, $"  sheet {Quote(name)}: !{error.GetType().Name}: {error.Message}");
+            return;
+        }
+
+        if (sheet == null)
+        {
+            AddToEverySection(lines, $"  sheet {Quote(name)}: (Sheet gave nothing)");
+            return;
+        }
+
+        if (samples.Sheet == null)
+        {
+            samples.Sheet = sheet;
+        }
+
+        string header = $"  sheet {Quote(name)} GetName="
+            + Gated(gate, StandardsProbeMember.Name, () => Quote(reader.SheetName(sheet)));
+
+        lines.Tables.Add(header);
+        lines.Notes.Add(header);
+        lines.Views.Add(header);
+
+        string? failure;
+        IReadOnlyList<object> views = ReadList(
+            () => gate.Call(StandardsProbeMember.Views, () => reader.Views(sheet)), out failure);
+
+        if (failure != null)
+        {
+            lines.Tables.Add("    GetViews: " + failure);
+            lines.Notes.Add("    GetViews: " + failure);
+            lines.Views.Add("    GetViews: " + failure);
+            lines.Sheets.Add($"  sheet {Quote(name)}: GetViews failed, so no count here would be honest");
+            return;
+        }
+
+        var counts = new SheetCounts();
+        ProbeSheetRevisionTables(gate, reader, sheet, views, lines.Tables, counts, samples);
+
+        foreach (object view in views)
+        {
+            ProbeViewNotes(gate, reader, view, lines.Notes, counts, samples);
+            ProbeView(gate, reader, view, lines.Views, counts, samples);
+        }
+
+        lines.Sheets.Add(
+            $"  sheet {Quote(name)}: views={views.Count}"
+            + $" sheet_format_views(Type 1)={counts.SheetFormatViews}"
+            + $" tables={counts.RevisionTables} annotations={counts.Annotations}"
+            + $" display_dimensions={counts.DisplayDimensions} notes={counts.Notes}");
+    }
+
+    private static void AddToEverySection(DrawingProbeLines lines, string line)
+    {
+        lines.Tables.Add(line);
+        lines.Notes.Add(line);
+        lines.Views.Add(line);
+        lines.Sheets.Add(line);
+    }
+
+    /// <summary>
+    /// PROBE-4. <c>ISheet.RevisionTable</c> is single-valued and finds at most one table; the
+    /// per-view <c>GetTableAnnotations()</c> walk is what would find a second. Both are printed
+    /// and counted against each other, because a table the walk misses is a silent miss in a
+    /// coverage check rather than an unresolved row.
+    /// </summary>
+    private static void ProbeSheetRevisionTables(
+        SwGate gate,
+        SwDrawingReader reader,
+        object sheet,
+        IReadOnlyList<object> views,
+        List<string> output,
+        SheetCounts counts,
+        PersistRefSamples samples)
+    {
+        object? fromSheet = null;
+        output.Add("    ISheet.RevisionTable: " + Describe(() =>
+        {
+            fromSheet = gate.Call(
+                StandardsProbeMember.RevisionTable, () => reader.SheetRevisionTable(sheet));
+
+            return fromSheet == null ? "(null)" : "present";
+        }));
+
+        object? firstFromWalk = null;
+        int found = 0;
+
+        foreach (object view in views)
+        {
+            string? failure;
+            IReadOnlyList<object> tables = ReadList(() => reader.TableAnnotations(view), out failure);
+            if (failure != null)
+            {
+                output.Add("    GetTableAnnotations: " + failure);
+                continue;
+            }
+
+            foreach (object table in tables)
+            {
+                output.Add($"    table [{found}] ITableAnnotation.Type=" + Gated(
+                    gate,
+                    StandardsProbeMember.TableType,
+                    () => reader.TableAnnotationType(table).ToString(CultureInfo.InvariantCulture)));
+
+                ProbeTableCells(gate, reader, table, output);
+                found++;
+
+                if (firstFromWalk == null)
+                {
+                    firstFromWalk = table;
+                }
+            }
+        }
+
+        counts.RevisionTables = found;
+        output.Add(
+            $"    tables from the GetTableAnnotations walk: {found}; ISheet.RevisionTable is "
+            + $"single-valued and found {(fromSheet == null ? "none" : "one")}");
+
+        if (samples.RevisionTable == null)
+        {
+            samples.RevisionTable = fromSheet ?? firstFromWalk;
+        }
+    }
+
+    /// <summary>
+    /// The runtime COM cast PROBE-4 asks about and everything it unlocks. An
+    /// <c>InvalidCastException</c> here is the whole table's rows lost, so it is reported and
+    /// the walk carries on.
+    /// </summary>
+    private static void ProbeTableCells(
+        SwGate gate, SwDrawingReader reader, object table, List<string> output)
+    {
+        output.Add("      CurrentRevision=" + Gated(
+            gate, StandardsProbeMember.CurrentRevision, () => Quote(reader.CurrentRevision(table))));
+
+        RevisionTableShape? shape = null;
+        output.Add("      ITableAnnotation cast and counts: " + Describe(() =>
+        {
+            RevisionTableShape read = reader.TableShape(table);
+            shape = read;
+
+            return $"cast ok, RowCount={read.RowCount} ColumnCount={read.ColumnCount} TotalRowCount="
+                + Gated(
+                    gate,
+                    StandardsProbeMember.TotalRowCount,
+                    () => ((ITableAnnotation)table).TotalRowCount.ToString(CultureInfo.InvariantCulture));
+        }));
+
+        if (shape == null)
+        {
+            return;
+        }
+
+        for (int row = 0; row < shape.Value.RowCount; row++)
+        {
+            for (int column = 0; column < shape.Value.ColumnCount; column++)
+            {
+                int r = row;
+                int c = column;
+                output.Add(
+                    $"      cell[{r},{c}] Text=" + Gated(
+                        gate, StandardsProbeMember.CellText, () => Quote(reader.Cell(table, r, c)))
+                    + " DisplayedText=" + Gated(
+                        gate,
+                        StandardsProbeMember.CellDisplayedText,
+                        () => Quote(((ITableAnnotation)table).DisplayedText[r, c])));
+            }
+        }
+    }
+
+    /// <summary>
+    /// PROBE-5. Every note of every view, with the sheet-format pseudo-view marked. Whether a
+    /// <c>Type == 1</c> view appears in <c>ISheet.GetViews()</c> at all is what decides whether
+    /// FR-024's fall-back enumeration is needed - and whether the export-control check can be
+    /// answered for a sheet rather than left unresolved.
+    /// </summary>
+    private static void ProbeViewNotes(
+        SwGate gate,
+        SwDrawingReader reader,
+        object view,
+        List<string> output,
+        SheetCounts counts,
+        PersistRefSamples samples)
+    {
+        string type = Gated(
+            gate,
+            StandardsProbeMember.ViewTypeMember,
+            () => reader.ViewType(view).ToString(CultureInfo.InvariantCulture));
+
+        bool isSheetFormat = type == "1";
+        if (isSheetFormat)
+        {
+            counts.SheetFormatViews++;
+        }
+
+        output.Add(
+            "    view " + Gated(gate, StandardsProbeMember.ViewName, () => Quote(reader.ViewName(view)))
+            + $" Type={type}" + (isSheetFormat ? "  <- the sheet-format pseudo-view" : string.Empty));
+
+        string? failure;
+        IReadOnlyList<object> notes = ReadList(
+            () => gate.Call(StandardsProbeMember.Notes, () => reader.Notes(view)), out failure);
+
+        if (failure != null)
+        {
+            output.Add("      GetNotes: " + failure);
+            return;
+        }
+
+        counts.Notes += notes.Count;
+        output.Add($"      notes: {notes.Count}");
+
+        foreach (object note in notes)
+        {
+            if (samples.Note == null)
+            {
+                samples.Note = note;
+            }
+
+            output.Add("        " + Gated(
+                gate, StandardsProbeMember.NoteText, () => Quote(reader.NoteText(note))));
+        }
+    }
+
+    /// <summary>
+    /// PROBE-6. Per view: the type, the referenced model, whether its document handle is
+    /// non-null - nothing is opened or loaded to make it so - and then every annotation and
+    /// every display dimension.
+    /// </summary>
+    private static void ProbeView(
+        SwGate gate,
+        SwDrawingReader reader,
+        object view,
+        List<string> output,
+        SheetCounts counts,
+        PersistRefSamples samples)
+    {
+        if (samples.View == null)
+        {
+            samples.View = view;
+        }
+
+        output.Add(
+            "    view " + Gated(gate, StandardsProbeMember.ViewName, () => Quote(reader.ViewName(view)))
+            + " Type=" + Gated(
+                gate,
+                StandardsProbeMember.ViewTypeMember,
+                () => reader.ViewType(view).ToString(CultureInfo.InvariantCulture))
+            + " GetReferencedModelName=" + Gated(
+                gate,
+                StandardsProbeMember.ReferencedModelName,
+                () => Quote(reader.ReferencedModelPath(view)))
+            + " ReferencedDocument=" + Describe(() =>
+            {
+                object? referenced = gate.Call(
+                    StandardsProbeMember.ReferencedDocument, () => reader.ReferencedDocument(view));
+
+                return referenced == null
+                    ? "null (the model is not loaded; nothing is opened to load it)"
+                    : "non-null, GetPathName=" + Gated(
+                        gate, StandardsProbeMember.PathName, () => Quote(reader.DocumentPath(referenced)));
+            }));
+
+        ProbeViewAnnotations(gate, reader, view, output, counts, samples);
+        ProbeViewDimensions(gate, reader, view, output, counts, samples);
+    }
+
+    /// <summary>
+    /// <c>GetAnnotations()</c> against <c>GetAnnotationCount()</c> and the macro's own
+    /// <c>GetFirstAnnotation3</c>/<c>GetNext3</c> walk. A set from <c>GetAnnotations()</c>
+    /// smaller than the walk's is a silent under-report rather than an unresolved row, which
+    /// is exactly what SC-016's per-(check, document) parity would hide - so the names and
+    /// types on either side are listed rather than counted.
+    /// </summary>
+    private static void ProbeViewAnnotations(
+        SwGate gate,
+        SwDrawingReader reader,
+        object view,
+        List<string> output,
+        SheetCounts counts,
+        PersistRefSamples samples)
+    {
+        string? failure;
+        IReadOnlyList<object> fromGetAnnotations = ReadList(
+            () => gate.Call(StandardsProbeMember.Annotations, () => reader.Annotations(view)), out failure);
+
+        if (failure != null)
+        {
+            output.Add("      GetAnnotations: " + failure);
+            return;
+        }
+
+        string count = Gated(
+            gate,
+            StandardsProbeMember.AnnotationCount,
+            () => ((IView)view).GetAnnotationCount().ToString(CultureInfo.InvariantCulture));
+
+        string? walkFailure;
+        IReadOnlyList<object> fromWalk = ReadList(() => AnnotationWalk(gate, view), out walkFailure);
+
+        counts.Annotations += fromGetAnnotations.Count;
+        output.Add(
+            $"      annotations: GetAnnotations()={fromGetAnnotations.Count} GetAnnotationCount()={count}"
+            + " GetFirstAnnotation3/GetNext3 walk="
+            + (walkFailure ?? fromWalk.Count.ToString(CultureInfo.InvariantCulture)));
+
+        foreach (object annotation in fromGetAnnotations)
+        {
+            if (samples.Annotation == null)
+            {
+                samples.Annotation = annotation;
+            }
+
+            output.Add("        " + DescribeAnnotation(gate, reader, annotation));
+        }
+
+        if (walkFailure != null)
+        {
+            return;
+        }
+
+        output.Add("        only in GetAnnotations(): "
+            + MissingAnnotations(gate, reader, fromGetAnnotations, fromWalk));
+        output.Add("        only in the GetFirstAnnotation3 walk: "
+            + MissingAnnotations(gate, reader, fromWalk, fromGetAnnotations));
+    }
+
+    /// <summary>The macro's own annotation enumeration, bounded the way every walk here is.</summary>
+    private static IReadOnlyList<object> AnnotationWalk(SwGate gate, object view)
+    {
+        var walked = new List<object>();
+        var current = gate.Call(
+            StandardsProbeMember.FirstAnnotation,
+            () => ((IView)view).GetFirstAnnotation3()) as IAnnotation;
+
+        while (current != null && walked.Count < StandardsProbeMaxWalk)
+        {
+            IAnnotation annotation = current;
+            walked.Add(annotation);
+            current = gate.Call(
+                StandardsProbeMember.NextAnnotation, () => annotation.GetNext3()) as IAnnotation;
+        }
+
+        return walked;
+    }
+
+    private static string DescribeAnnotation(SwGate gate, SwDrawingReader reader, object annotation) =>
+        "name=" + AnnotationName(gate, reader, annotation)
+        + " type=" + AnnotationType(gate, reader, annotation)
+        + " dangling=" + Gated(
+            gate, StandardsProbeMember.Dangling, () => reader.IsDangling(annotation).ToString());
+
+    private static string AnnotationName(SwGate gate, SwDrawingReader reader, object annotation) =>
+        Gated(gate, StandardsProbeMember.Name, () => Quote(reader.AnnotationName(annotation)));
+
+    private static string AnnotationType(SwGate gate, SwDrawingReader reader, object annotation) =>
+        Gated(
+            gate,
+            StandardsProbeMember.AnnotationType,
+            () => reader.AnnotationType(annotation).ToString(CultureInfo.InvariantCulture));
+
+    /// <summary>
+    /// The annotations of <paramref name="left"/> whose name no annotation of
+    /// <paramref name="right"/> carries, as name and type.
+    /// </summary>
+    private static string MissingAnnotations(
+        SwGate gate,
+        SwDrawingReader reader,
+        IReadOnlyList<object> left,
+        IReadOnlyList<object> right)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (object annotation in right)
+        {
+            names.Add(AnnotationName(gate, reader, annotation));
+        }
+
+        var missing = new List<string>();
+        foreach (object annotation in left)
+        {
+            string name = AnnotationName(gate, reader, annotation);
+            if (!names.Contains(name))
+            {
+                missing.Add(name + " type=" + AnnotationType(gate, reader, annotation));
+            }
+        }
+
+        return Listed(missing);
+    }
+
+    /// <summary>
+    /// Every display dimension's override flag, override value, type and computed value. The
+    /// computed value is in metres; whether the override value is reported in the same unit is
+    /// exactly what PROBE-6 is asked to settle, so both are printed raw and neither is
+    /// converted.
+    /// </summary>
+    private static void ProbeViewDimensions(
+        SwGate gate,
+        SwDrawingReader reader,
+        object view,
+        List<string> output,
+        SheetCounts counts,
+        PersistRefSamples samples)
+    {
+        string? failure;
+        IReadOnlyList<object> dimensions = ReadList(
+            () => gate.Call(StandardsProbeMember.DisplayDimensions, () => reader.DisplayDimensions(view)),
+            out failure);
+
+        if (failure != null)
+        {
+            output.Add("      GetDisplayDimensions: " + failure);
+            return;
+        }
+
+        counts.DisplayDimensions += dimensions.Count;
+        output.Add($"      display dimensions: {dimensions.Count}");
+
+        foreach (object dimension in dimensions)
+        {
+            if (samples.DisplayDimension == null)
+            {
+                samples.DisplayDimension = dimension;
+            }
+
+            output.Add(
+                "        name=" + Describe(() => Quote(reader.DimensionName(dimension)))
+                + " Type2=" + Gated(
+                    gate,
+                    StandardsProbeMember.DimensionType,
+                    () => reader.DimensionType(dimension).ToString(CultureInfo.InvariantCulture))
+                + " GetOverride=" + Gated(
+                    gate, StandardsProbeMember.Override, () => reader.IsOverridden(dimension).ToString())
+                + " GetOverrideValue=" + Gated(
+                    gate,
+                    StandardsProbeMember.OverrideValue,
+                    () => reader.OverrideValue(dimension).ToString("G17", CultureInfo.InvariantCulture))
+                + " GetSystemValue3=" + Describe(
+                    () => reader.DimensionValue(dimension).ToString("G17", CultureInfo.InvariantCulture)));
+        }
+    }
+
+    /// <summary>
+    /// PROBE-5's comparison: the <c>IDrawingDoc.GetFirstView()</c> / <c>IView.GetNextView()</c>
+    /// enumeration, which crosses every sheet without activating one. If the type-1
+    /// sheet-format pseudo-view is missing from <c>ISheet.GetViews()</c> and present here, the
+    /// fall-back enumeration is needed; if it is in neither, the export-control check is
+    /// unresolved for that sheet and this run is the reason it is.
+    /// </summary>
+    private static void ProbeViewWalkFallback(
+        SwGate gate, SwDrawingReader reader, object drawing, List<string> output)
+    {
+        output.Add("  GetFirstView()/GetNextView() walk (every sheet, nothing activated):");
+
+        object? current;
+        try
+        {
+            current = gate.Call(
+                StandardsProbeMember.FirstView, () => ((IDrawingDoc)drawing).GetFirstView());
+        }
+        catch (Exception error)
+        {
+            output.Add($"    !{error.GetType().Name}: {error.Message}");
+            return;
+        }
+
+        int index = 0;
+        while (current != null && index < StandardsProbeMaxWalk)
+        {
+            object view = current;
+            output.Add(
+                $"    [{index}] name=" + Gated(
+                    gate, StandardsProbeMember.ViewName, () => Quote(reader.ViewName(view)))
+                + " Type=" + Gated(
+                    gate,
+                    StandardsProbeMember.ViewTypeMember,
+                    () => reader.ViewType(view).ToString(CultureInfo.InvariantCulture)));
+
+            index++;
+            try
+            {
+                current = gate.Call(
+                    StandardsProbeMember.NextView, () => ((IView)view).GetNextView());
+            }
+            catch (Exception error)
+            {
+                output.Add($"    !{error.GetType().Name}: {error.Message}");
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// PROBE-8. Every feature's <c>GetTypeName2</c> and <c>Name</c> at every depth, with the
+    /// <c>GetSpecificFeature2</c> object type, the body count and the exclusion flag for each
+    /// body folder - which is what settles the type names the cut-list folders carry on this
+    /// release, and whether the exclusion flag reads without activating a folder.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbeCutListWalk(
+        SwSession session,
+        SwGate gate,
+        PersistRefService refs,
+        DocumentKind kind,
+        PersistRefSamples samples)
+    {
+        Out.WriteLine("probe-8 cut_list_walk:");
+        if (kind == DocumentKind.Drawing)
+        {
+            Out.WriteLine(
+                "  (the open document is a drawing; run this on the weldment or sheet-metal part)");
+            return;
+        }
+
+        var reader = new SwCutListReader(gate, refs);
+        string? failure;
+        IReadOnlyList<object> features = ReadList(() => reader.Features(session.Document), out failure);
+
+        if (failure != null)
+        {
+            Out.WriteLine("  FirstFeature walk: " + failure);
+            return;
+        }
+
+        Out.WriteLine($"  features: {features.Count}");
+        foreach (object feature in features)
+        {
+            ProbeCutListFeature(gate, reader, feature, 0, samples);
+        }
+    }
+
+    private static void ProbeCutListFeature(
+        SwGate gate, SwCutListReader reader, object feature, int depth, PersistRefSamples samples)
+    {
+        string indent = new string(' ', 4 + (depth * 2));
+        object? folder = null;
+
+        string specific = Describe(() =>
+        {
+            folder = gate.Call(StandardsProbeMember.SpecificFeature, () => reader.BodyFolder(feature));
+            return folder == null ? "(not an IBodyFolder)" : "IBodyFolder";
+        });
+
+        string bodies = "-";
+        string excluded = "-";
+        if (folder != null)
+        {
+            object bodyFolder = folder;
+            bodies = Gated(
+                gate,
+                StandardsProbeMember.BodyCount,
+                () => reader.BodyCount(bodyFolder).ToString(CultureInfo.InvariantCulture));
+
+            excluded = Gated(
+                gate,
+                StandardsProbeMember.ExcludeFromCutList,
+                () => reader.ExcludedFromCutList(feature).ToString());
+
+            if (samples.BodyFolder == null)
+            {
+                // The persistent reference is asked for the FEATURE, which is what a cut-list
+                // item's subject is; the body folder is only how it was identified.
+                samples.BodyFolder = feature;
+            }
+        }
+
+        Out.WriteLine(
+            $"{indent}depth={depth}"
+            + " type_name=" + Gated(
+                gate, StandardsProbeMember.TypeName, () => Quote(reader.TypeName(feature)))
+            + " name=" + Gated(
+                gate, StandardsProbeMember.FeatureName, () => Quote(reader.Name(feature)))
+            + $" GetSpecificFeature2={specific} bodies={bodies} ExcludeFromCutList={excluded}");
+
+        if (depth >= StandardsProbeMaxDepth)
+        {
+            Out.WriteLine($"{indent}  (deeper sub-features not walked)");
+            return;
+        }
+
+        string? failure;
+        IReadOnlyList<object> children = ReadList(() => reader.SubFeatures(feature), out failure);
+        if (failure != null)
+        {
+            Out.WriteLine($"{indent}  GetFirstSubFeature: " + failure);
+            return;
+        }
+
+        foreach (object child in children)
+        {
+            ProbeCutListFeature(gate, reader, child, depth + 1, samples);
+        }
+    }
+
+    /// <summary>
+    /// PROBE-9. <c>GetSketchTextSegments()</c> for every sketch in the tree, sub-features
+    /// included - which is where a hole-wizard's sketch lives - printing null, empty and a
+    /// length distinctly, because telling those three apart is the whole question.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbeSketchTextSegments(
+        SwSession session, SwGate gate, PersistRefService refs, DocumentKind kind)
+    {
+        Out.WriteLine("probe-9 sketch_text_segments:");
+        if (kind == DocumentKind.Drawing)
+        {
+            Out.WriteLine("  (the open document is a drawing; run this on the part carrying the sketches)");
+            return;
+        }
+
+        var reader = new SwFeatureReader(gate, refs);
+        string? failure;
+        IReadOnlyList<FeatureTreeNode> walk = ReadList(() => reader.Walk(session.Document), out failure);
+
+        if (failure != null)
+        {
+            Out.WriteLine("  FirstFeature walk: " + failure);
+            return;
+        }
+
+        IReadOnlyList<FeatureTreeRow> rows = FeatureTreeIndexer.Index(walk, new IdAllocator("feat"));
+        int printed = 0;
+
+        foreach (FeatureTreeRow row in rows)
+        {
+            object? handle = row.Node.Handle;
+            if (handle == null)
+            {
+                continue;
+            }
+
+            object? sketch;
+            try
+            {
+                sketch = gate.Call(StandardsProbeMember.SpecificFeature, () => reader.Sketch(handle));
+            }
+            catch (Exception error)
+            {
+                Out.WriteLine($"  {row.Id} GetSpecificFeature2: !{error.GetType().Name}: {error.Message}");
+                continue;
+            }
+
+            if (sketch == null)
+            {
+                continue;
+            }
+
+            object live = sketch;
+            printed++;
+            Out.WriteLine(
+                $"  {row.Id} depth={row.Depth} type_name={Quote(row.Node.TypeName)}"
+                + $" name={Quote(row.Node.Name)} GetSketchTextSegments=" + Gated(
+                    gate,
+                    StandardsProbeMember.SketchTextSegments,
+                    () => DescribeSegments(reader.SketchTextSegments(live))));
+        }
+
+        if (printed == 0)
+        {
+            Out.WriteLine("  (no sketch in the feature tree)");
+        }
+    }
+
+    /// <summary>null, empty and a length, told apart - which is what PROBE-9 asks.</summary>
+    private static string DescribeSegments(object? segments)
+    {
+        if (segments == null)
+        {
+            return "null";
+        }
+
+        if (segments is Array array)
+        {
+            return array.Length == 0
+                ? "empty (a zero-length array)"
+                : array.Length.ToString(CultureInfo.InvariantCulture) + " segment(s)";
+        }
+
+        return $"(not an array: {segments.GetType().Name})";
+    }
+
+    /// <summary>
+    /// PROBE-10. <c>GetPersistReference3</c> and <c>GetPersistReferenceCount3</c> for one
+    /// instance of each of the seven entity kinds schema 1.4.0 added. Which kinds SOLIDWORKS
+    /// answers for decides which finding subjects the page renders a Show control for
+    /// (FR-026, FR-031), so a kind with no instance on this document says that rather than
+    /// reading as a refusal.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ProbePersistentReferences(
+        SwSession session, SwGate gate, PersistRefService refs, PersistRefSamples samples)
+    {
+        Out.WriteLine("probe-10 persistent_references:");
+        ProbePersistentReference(session, gate, refs, "sheet", samples.Sheet);
+        ProbePersistentReference(session, gate, refs, "view", samples.View);
+        ProbePersistentReference(session, gate, refs, "display_dimension", samples.DisplayDimension);
+        ProbePersistentReference(session, gate, refs, "annotation", samples.Annotation);
+        ProbePersistentReference(session, gate, refs, "note", samples.Note);
+        ProbePersistentReference(session, gate, refs, "revision_table", samples.RevisionTable);
+        ProbePersistentReference(session, gate, refs, "cut_list_item", samples.BodyFolder);
+    }
+
+    private static void ProbePersistentReference(
+        SwSession session, SwGate gate, PersistRefService refs, string kind, object? entity)
+    {
+        if (entity == null)
+        {
+            Out.WriteLine($"  {kind}: (no instance on this document)");
+            return;
+        }
+
+        object live = entity;
+        Out.WriteLine($"  {kind}: " + Describe(() =>
+        {
+            ScopedPersistRef? reference = refs.TryGet(session.Document, live);
+            string count = Gated(
+                gate,
+                StandardsProbeMember.PersistReferenceCount,
+                () => session.Document.Extension.GetPersistReferenceCount3(live)
+                    .ToString(CultureInfo.InvariantCulture));
+
+            return reference == null
+                ? $"GetPersistReference3 gave none, GetPersistReferenceCount3={count}"
+                : $"{Convert.FromBase64String(reference.Base64).Length} bytes, "
+                    + $"GetPersistReferenceCount3={count}";
+        }));
+    }
+
+    /// <summary>
+    /// One probe reading that produces a list. A member that throws yields an empty list and
+    /// the failure text, so the caller puts the failure in the section it belongs to and the
+    /// walk carries on: which members fail on this release is half of what the probe is for.
+    /// </summary>
+    private static IReadOnlyList<T> ReadList<T>(Func<IReadOnlyList<T>> read, out string? failure)
+    {
+        try
+        {
+            failure = null;
+            return read();
+        }
+        catch (Exception error)
+        {
+            failure = $"!{error.GetType().Name}: {error.Message}";
+            return new T[0];
+        }
+    }
+
     /// <summary>
     /// T055. The engineer-run suppressibility test: the only command in the product that
     /// changes the model (contracts/cli.md, research R6). Not reachable from the add-in, the
@@ -1384,6 +3006,16 @@ public static class Program
         writer.WriteLine("                GetRootComponent3 returned, the components the traversal");
         writer.WriteLine("                produced, and for an assembly its mates and their");
         writer.WriteLine("                suppression. Writes nothing.");
+        writer.WriteLine("  probe standards  [--doc <path>]");
+        writer.WriteLine("                Print the ten workstation probes: the exploded reads, the nine");
+        writer.WriteLine("                appearance slots and both visibility reads per component, the");
+        writer.WriteLine("                revision tables, notes, views, annotations and dimensions of");
+        writer.WriteLine("                every sheet with sheet 1 left active, the cut-list walk, the");
+        writer.WriteLine("                sketch text segments, and the persistent references of the");
+        writer.WriteLine("                seven new entity kinds. The document must already be open:");
+        writer.WriteLine("                this run opens nothing, activates no sheet and changes no");
+        writer.WriteLine("                display state, and prints its own gate log to prove it.");
+        writer.WriteLine("                Writes nothing.");
         writer.WriteLine("  suppress-test --doc <part> --plan <suppress-plan.json> --acknowledge-rebuild");
         writer.WriteLine("                --out <package dir> [--limit <n>] [--timeout-seconds <n>]");
         writer.WriteLine("                Suppress each planned Detail feature in turn, rebuild, record");

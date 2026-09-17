@@ -43,7 +43,7 @@ from typing import Literal
 from swreview.checks.rms_types import ConstrainedStatus, load_table
 from swreview.checks.standards.library import PrefixMatcher
 from swreview.checks.standards.profile import StandardsProfile
-from swreview.checks.standards.registry import RULES, bind
+from swreview.checks.standards.registry import RULES, bind, rules_in
 from swreview.checks.standards.results import (
     MATE_PHASE_GAPS,
     NO_REBUILD_NOTE,
@@ -324,10 +324,8 @@ def evaluate_assembly(
     """
     scope = assembly_scope(document, package, profile)
     results: list[RuleResult] = []
-    for rule in RULES.values():
-        if rule.scope == SCOPE:
-            assert rule.fn is not None, f"{rule.id} has no evaluator"
-            results.extend(rule.fn(scope))
+    for rule in rules_in(SCOPE):
+        results.extend(rule.fn(scope))
     return results
 
 

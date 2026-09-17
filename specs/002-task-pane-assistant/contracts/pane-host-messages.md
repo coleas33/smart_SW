@@ -15,18 +15,19 @@ folder, through `WebResourceRequested` - see the next section for why, and what 
 ## WebView2 environment (every page)
 
 The add-in creates **one** `CoreWebView2Environment` for the process with an explicit user
-data folder `%LOCALAPPDATA%\SwReview\WebView2\<add-in instance>`, and all three pages -
-Review, Terminal and Model check - share it. The default folder is derived from
-`SLDWORKS.exe`, which is shared with SOLIDWORKS' own WebView2 usage and every other add-in in
-the process, and its directory under `C:\Program Files\...` is not writable. A second
-environment created over a user data folder already opened with different options fails at
-runtime. The Model check tab's WebView2 is created on its **first activation** rather than at
-add-in load, on that same environment: a page loaded into every SOLIDWORKS session that never
-presses Model check is a renderer process nobody asked for. Environment or `EnsureCoreWebView2`
-failure surfaces as the documented "WebView2 runtime missing" fallback panel (download link
-plus the run folder path in plain text), never as an exception escaping into SOLIDWORKS, and
-the Extract tab keeps working. A failure on the Model check tab lands in that tab only; the
-other pages keep working.
+data folder `%LOCALAPPDATA%\SwReview\WebView2\<add-in instance>`, and every one of the five
+pages - Review, Terminal, Model check, Remodel and Standards - shares it. Six tabs, five
+pages: the Extract tab is a WinForms panel and has no WebView2 at all. The default
+folder is derived from `SLDWORKS.exe`, which is shared with SOLIDWORKS' own WebView2 usage
+and every other add-in in the process, and its directory under `C:\Program Files\...` is
+not writable. A second environment created over a user data folder already opened with
+different options fails at runtime. The Model check tab's WebView2 is created on its
+**first activation** rather than at add-in load, on that same environment: a page loaded
+into every SOLIDWORKS session that never presses Model check is a renderer process nobody
+asked for. Environment or `EnsureCoreWebView2` failure surfaces as the documented
+"WebView2 runtime missing" fallback panel (download link plus the run folder path in plain
+text), never as an exception escaping into SOLIDWORKS, and the Extract tab keeps working.
+A failure on the Model check tab lands in that tab only; the other pages keep working.
 
 ### Every page resource is served by the host
 
@@ -196,7 +197,54 @@ the check routes itself with the endpoint and token its `init` carried: a tab op
 backend was still starting holds a null endpoint, and `status {stage: "ready"}` is what tells
 it to re-send `ready` and take the endpoint from the fresh `init`.
 
-## The step strip (all four tabs)
+## Standards page → host
+
+Tab 6, the Standards page (`specs/006-standards-check/contracts/standards-check.md`, which
+is the full contract; these are the rows as this pane serves them). The tab grades the
+active document against the profile this workstation is configured with. It needs no
+language model and no API key: nothing on this path constructs a provider, and the only
+host it reaches is the loopback backend.
+
+| type | payload | host action |
+|------|---------|-------------|
+| `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, run_root, profile_path: str \| null, document: {path, configuration, kind} \| null, latest_check: {run_dir, at} \| null}`. `profile_path` is the configured path, or null when the setting is blank; `latest_check` names only the newest **`-standards`** folder, never a model check's. |
+| `standards.start` | `{}` | Refuse with `error {error_class: "NoDocument"}`, `"NotAttached"`, `"NeverSaved"` (the document has never been saved, so it has no name or folder for the library and part-number checks to read), `"UnsupportedKind"` (it is not a part, an assembly or a drawing) or `"NoProfile"` (none is configured, or the file at the configured path cannot be opened) - **every refusal comes first, the profile check among them, so a refused run leaves no run folder behind**. Otherwise create the check run folder, run the `Standards` profile dump in process, register that folder as the pane's latest run, and reply `standards.extracted {run_dir, document, configuration, counts: {documents, features, cut_list_items, drawing_sheets}, gaps}`. Progress via `status`. The host stops there: the page calls `POST /checks/standards` itself, with the token, the origin and the `profile_path` from `init`. |
+| `entity.show` | `{persist_ref, persist_ref_scope, component_id}` | **The Review page's row, unchanged**: all three hosts delegate it to the one `PaneActions`; reply `entity.shown {ok, state_code, message, full_path \| null}`. |
+| `report.open` | `{run_id}` | Delegated to `PaneActions`; the path comes from the host's own record, never from the page. |
+| `folder.open` | `{run_id}` | Delegated to `PaneActions`. |
+| `log.open` | `{}` | Delegated to `PaneActions`. |
+
+The last four rows are the same code as the Review and Model check pages', under the same
+rule: the resolved path is canonicalized and must be a descendant of `run_root` (or the log
+folder) before it reaches `ShellExecute`, and the page never supplies a path.
+
+The check run folder is `<run_root>/<yyyyMMdd-HHmmss>-<doc>-standards`, named through the
+same `RunFolders` helper as a review's and a model check's, and it is the pane's current
+session folder afterwards. The suffix is what keeps the two check tabs apart: each host
+reads back only the newest folder carrying its own.
+
+**`profile_path` is a path and nothing else.** It is configured as
+`standards_profile_path` in the settings file (`settings.schema.json`), whose default is
+`%LOCALAPPDATA%\SwReview\standards.yaml`; the host checks that a path is set and that the
+file at it can be opened, and reads no byte of it. It is **not** one of the fields
+`settings.get`, `settings.save` and `settings.saved` carry - those rows are exactly as the
+Review page defines them, and this build offers no pane control that writes it - and no
+value read out of the profile ever travels on any message to any page.
+
+## Host → Standards page (unsolicited)
+
+| type | payload |
+|------|---------|
+| `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
+| `document.changed` | `{path, configuration, kind} \| null` when the active document changes |
+| `backend.stopped` | `{exit_code, log_path}` |
+
+The Model check page's table exactly, including the two backend stages and why they are
+here. What differs is what the page does with `kind`: all three kinds can be graded, so
+this page uses it to say *what* will be graded - this drawing and the models its views
+reference, this assembly and everything under it - rather than whether anything can be.
+
+## The step strip (all six tabs)
 
 Above the tabs, the strip renders three steps - open a document, extract evidence, review or
 ask - each done or pending with the reason it is pending, from two facts the add-in answers:

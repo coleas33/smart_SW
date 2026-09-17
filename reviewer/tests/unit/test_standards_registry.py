@@ -29,6 +29,7 @@ from typing import get_args
 
 import pytest
 
+import swreview.checks.standards  # noqa: F401  - importing it is what binds the evaluators
 from swreview.checks.rules.family import WAIVABLE_STATUS
 from swreview.checks.rules.registry import binder, catalogue, coverage_only, evaluable
 from swreview.checks.standards.registry import (
@@ -39,6 +40,7 @@ from swreview.checks.standards.registry import (
     RuleSeverity,
     StandardsRule,
     by_scope,
+    rules_in,
 )
 from tests.support.contracts import REPO_ROOT
 
@@ -309,6 +311,40 @@ class TestEvaluators:
         bind = binder(copies, "contracts/rules.md")
         with pytest.raises(KeyError, match="contracts/rules.md"):
             bind("standards.release")(lambda *args, **kwargs: [])
+
+
+class TestRulesIn:
+    """`rules_in` is what the four scope entry points walk (T099).
+
+    Each of `checks/standards/{assembly,part,drawing,document}.py` used to hold its own copy
+    of "the checks of my scope, and each of them has a function to call". The invariant now
+    lives here, so these assertions are the four copies' replacement rather than an addition
+    to them.
+    """
+
+    @pytest.mark.parametrize("scope", sorted(get_args(RuleScope)))
+    def test_it_is_the_scope_s_partition_with_every_evaluator_bound(self, scope: str) -> None:
+        rules = rules_in(scope)
+        assert rules == by_scope()[scope]
+        assert all(callable(rule.fn) for rule in rules)
+
+    def test_the_four_scopes_together_are_the_whole_catalogue(self) -> None:
+        walked = [rule.id for scope in get_args(RuleScope) for rule in rules_in(scope)]
+        assert sorted(walked) == sorted(RULES)
+
+    def test_a_check_with_no_evaluator_refuses_the_scope_before_any_of_it_runs(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Naming the check, and before the scope's first check is dispatched: a scope
+        entry point that graded the rest would grade a document against fifteen."""
+        unbound = "standards.part.rebuild_errors"
+        monkeypatch.setattr(RULES[unbound], "fn", None)
+        with pytest.raises(ValueError, match=unbound):
+            rules_in("part")
+
+    def test_a_scope_this_family_does_not_have_is_a_key_error(self) -> None:
+        with pytest.raises(KeyError):
+            rules_in("equations")
 
 
 class TestTheFamily:

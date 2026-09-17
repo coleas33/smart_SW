@@ -1,0 +1,1112 @@
+{
+  "schema_version": "1.4.0",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "created_at": "2026-09-12T12:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "test",
+    "profile": "standards",
+    "phases": [
+      {
+        "name": "document",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "manifest",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "mate",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "feature",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "equation",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "cutlist",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "drawing",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "hole",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "fastener",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "face",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "body",
+        "elapsed_ms": null,
+        "status": "skipped"
+      }
+    ]
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:1",
+        "vault_path": "K:/kestrel-store/release/pair/XX90001-KS.SLDDRW",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:2",
+        "vault_path": "K:/kestrel-store/release/pair/XX20001-KS.SLDASM",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:3",
+        "vault_path": "K:/kestrel-store/release/pair/XX10001-KS.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Machined",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:4",
+        "vault_path": "K:/kestrel-store/stock/XX10002-KS.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Machined",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:5",
+        "vault_path": "K:/kestrel-store/stock/foams/XX10003-KS.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Machined",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:6",
+        "vault_path": "K:/kestrel-store/parts/hardware/XX10004-KS.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Machined",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:7",
+        "vault_path": "K:/kestrel-store/parts/hardware/dowels/XX10005-KS.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Machined",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:8",
+        "vault_path": "K:/kestrel-store/release/pair/loose-bracket.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Machined",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:1",
+    "name": "XX90001-KS",
+    "root_assembly_document_id": "doc:1",
+    "active_configuration": "Default",
+    "drawing_document_ids": [
+      "doc:1"
+    ]
+  },
+  "documents": [
+    {
+      "document_id": "doc:1",
+      "kind": "drawing",
+      "file_name": "XX90001-KS.SLDDRW",
+      "path": "K:/kestrel-store/release/pair/XX90001-KS.SLDDRW",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Kestrel Catalog Ref": "fixture value 1",
+        "Long Title": "fixture value 2",
+        "Surface Treatment": "fixture value 3",
+        "Blank Material": "fixture value 4",
+        "KestrelRevision": "-"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:2",
+      "kind": "assembly",
+      "file_name": "XX20001-KS.SLDASM",
+      "path": "K:/kestrel-store/release/pair/XX20001-KS.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Kestrel Catalog Ref": "fixture value 1",
+        "Long Title": "fixture value 2",
+        "Surface Treatment": "fixture value 3",
+        "Blank Material": "fixture value 4",
+        "KestrelRevision": "-"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null,
+      "is_exploded": false,
+      "rebuild_error_count": 0
+    },
+    {
+      "document_id": "doc:3",
+      "kind": "part",
+      "file_name": "XX10001-KS.SLDPRT",
+      "path": "K:/kestrel-store/release/pair/XX10001-KS.SLDPRT",
+      "configurations": [
+        "Machined"
+      ],
+      "active_configuration": "Machined",
+      "custom_properties": {
+        "Kestrel Catalog Ref": "fixture value 1",
+        "Long Title": "   ",
+        "Surface Treatment": "fixture value 3"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Machined"
+    },
+    {
+      "document_id": "doc:4",
+      "kind": "part",
+      "file_name": "XX10002-KS.SLDPRT",
+      "path": "K:/kestrel-store/stock/XX10002-KS.SLDPRT",
+      "configurations": [
+        "Machined"
+      ],
+      "active_configuration": "Machined",
+      "custom_properties": {
+        "Kestrel Catalog Ref": "fixture value 1",
+        "Long Title": "fixture value 2",
+        "Surface Treatment": "fixture value 3",
+        "Blank Material": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 7",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Machined"
+    },
+    {
+      "document_id": "doc:5",
+      "kind": "part",
+      "file_name": "XX10003-KS.SLDPRT",
+      "path": "K:/kestrel-store/stock/foams/XX10003-KS.SLDPRT",
+      "configurations": [
+        "Machined"
+      ],
+      "active_configuration": "Machined",
+      "custom_properties": {
+        "Kestrel Catalog Ref": "fixture value 1",
+        "Long Title": "fixture value 2",
+        "Surface Treatment": "fixture value 3",
+        "Blank Material": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 7",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Machined"
+    },
+    {
+      "document_id": "doc:6",
+      "kind": "part",
+      "file_name": "XX10004-KS.SLDPRT",
+      "path": "K:/kestrel-store/parts/hardware/XX10004-KS.SLDPRT",
+      "configurations": [
+        "Machined"
+      ],
+      "active_configuration": "Machined",
+      "custom_properties": {
+        "Kestrel Catalog Ref": "fixture value 1",
+        "Long Title": "fixture value 2",
+        "Surface Treatment": "fixture value 3",
+        "Blank Material": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 7",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Machined"
+    },
+    {
+      "document_id": "doc:7",
+      "kind": "part",
+      "file_name": "XX10005-KS.SLDPRT",
+      "path": "K:/kestrel-store/parts/hardware/dowels/XX10005-KS.SLDPRT",
+      "configurations": [
+        "Machined"
+      ],
+      "active_configuration": "Machined",
+      "custom_properties": {
+        "Kestrel Catalog Ref": "fixture value 1",
+        "Long Title": "fixture value 2",
+        "Surface Treatment": "fixture value 3",
+        "Blank Material": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 7",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Machined"
+    },
+    {
+      "document_id": "doc:8",
+      "kind": "part",
+      "file_name": "loose-bracket.SLDPRT",
+      "path": "K:/kestrel-store/release/pair/loose-bracket.SLDPRT",
+      "configurations": [
+        "Machined"
+      ],
+      "active_configuration": "Machined",
+      "custom_properties": {
+        "Kestrel Catalog Ref": "fixture value 1",
+        "Long Title": "fixture value 2",
+        "Surface Treatment": "fixture value 3",
+        "Blank Material": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 7",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Machined"
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:1",
+      "name": "XX90001-KS",
+      "document_id": "doc:1",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "XX90001-KS",
+      "constrained_status_raw": null,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:1",
+      "name": "XX20001-KS",
+      "document_id": "doc:2",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "XX90001-KS/XX20001-KS",
+      "constrained_status_raw": null,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:2",
+      "name": "XX10001-KS-1",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Machined",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "XX10001-KS-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:2",
+      "name": "XX10002-KS-1",
+      "document_id": "doc:4",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Machined",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "XX10002-KS-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0005",
+      "persist_ref": "Y21wOjAwMDU=",
+      "persist_ref_scope": "doc:2",
+      "name": "XX10003-KS-1",
+      "document_id": "doc:5",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Machined",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "XX10003-KS-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0006",
+      "persist_ref": "Y21wOjAwMDY=",
+      "persist_ref_scope": "doc:2",
+      "name": "XX10004-KS-1",
+      "document_id": "doc:6",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Machined",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "XX10004-KS-1",
+      "constrained_status_raw": 2,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0007",
+      "persist_ref": "Y21wOjAwMDc=",
+      "persist_ref_scope": "doc:2",
+      "name": "XX10005-KS-1",
+      "document_id": "doc:7",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Machined",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "XX10005-KS-1",
+      "constrained_status_raw": 2,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0008",
+      "persist_ref": "Y21wOjAwMDg=",
+      "persist_ref_scope": "doc:2",
+      "name": "loose-bracket-1",
+      "document_id": "doc:8",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Machined",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "loose-bracket-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    }
+  ],
+  "mates": [
+    {
+      "id": "mate:0001",
+      "persist_ref": "bWF0ZTowMDAx",
+      "persist_ref_scope": "doc:2",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0006",
+          "persist_ref": "bWF0ZTowMDAxL1hYMTAwMDQtS1MtMQ==",
+          "entity_kind": "swSelDATUMPLANES",
+          "resolution_status": "resolved"
+        },
+        {
+          "component_id": "cmp:0003",
+          "persist_ref": "bWF0ZTowMDAxL1hYMTAwMDEtS1MtMQ==",
+          "entity_kind": "swSelDATUMPLANES",
+          "resolution_status": "resolved"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    },
+    {
+      "id": "mate:0002",
+      "persist_ref": "bWF0ZTowMDAy",
+      "persist_ref_scope": "doc:2",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0007",
+          "persist_ref": "bWF0ZTowMDAyL1hYMTAwMDUtS1MtMQ==",
+          "entity_kind": "swSelDATUMPLANES",
+          "resolution_status": "resolved"
+        },
+        {
+          "component_id": "cmp:0003",
+          "persist_ref": "bWF0ZTowMDAyL1hYMTAwMDEtS1MtMQ==",
+          "entity_kind": "swSelDATUMPLANES",
+          "resolution_status": "resolved"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    }
+  ],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "drawing_records": [
+    {
+      "document_id": "doc:1",
+      "source": "native",
+      "active_sheet_name": "Sheet1",
+      "sheets": [
+        {
+          "id": "dsh:0001",
+          "source": "native",
+          "name": "Sheet1",
+          "index": 0,
+          "sheet_format_name": "Sheet Format",
+          "was_active": true,
+          "views": [
+            {
+              "id": "dvw:0001",
+              "sheet_id": "dsh:0001",
+              "name": "Sheet Format",
+              "view_type_raw": 1,
+              "notes": [
+                {
+                  "id": "dnt:0001",
+                  "owner_id": "dvw:0001",
+                  "text": "BREAK ALL SHARP EDGES",
+                  "persist_ref": "ZG50OjAwMDE="
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDE="
+            },
+            {
+              "id": "dvw:0002",
+              "sheet_id": "dsh:0001",
+              "name": "Drawing View1",
+              "view_type_raw": 2,
+              "referenced_document_id": "doc:2",
+              "referenced_model_path": "K:/kestrel-store/release/pair/XX20001-KS.SLDASM",
+              "display_dimensions": [
+                {
+                  "id": "ddm:0001",
+                  "view_id": "dvw:0002",
+                  "name": "D1@Drawing View1",
+                  "dimension_type_raw": 2,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 24.0,
+                    "unit": "mm"
+                  },
+                  "persist_ref": "ZGRtOjAwMDE="
+                }
+              ],
+              "annotations": [
+                {
+                  "id": "dan:0001",
+                  "owner_id": "dvw:0002",
+                  "name": "Balloon1",
+                  "type_raw": 1,
+                  "is_dangling": false,
+                  "persist_ref": "ZGFuOjAwMDE="
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDI="
+            }
+          ],
+          "persist_ref": "ZHNoOjAwMDE="
+        },
+        {
+          "id": "dsh:0002",
+          "source": "native",
+          "name": "Sheet2",
+          "index": 1,
+          "sheet_format_name": "Sheet Format Sheet2",
+          "was_active": false,
+          "views": [
+            {
+              "id": "dvw:0003",
+              "sheet_id": "dsh:0002",
+              "name": "Sheet Format Sheet2",
+              "view_type_raw": 1,
+              "notes": [
+                {
+                  "id": "dnt:0002",
+                  "owner_id": "dvw:0003",
+                  "text": "THIS DRAWING CARRIES KESTREL-CONTROLLED DATA",
+                  "persist_ref": "ZG50OjAwMDI="
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDM="
+            }
+          ],
+          "revision_tables": [
+            {
+              "id": "drv:0001",
+              "sheet_id": "dsh:0002",
+              "current_revision_raw": "ZZ",
+              "row_count": 4,
+              "column_count": 3,
+              "rows": [
+                {
+                  "index": 0,
+                  "cells": [
+                    "REVISIONS TABLE",
+                    "COLUMN 1",
+                    "COLUMN 2"
+                  ],
+                  "is_header": true
+                },
+                {
+                  "index": 1,
+                  "cells": [
+                    "ZZ",
+                    "row 1 cell 1",
+                    "row 1 cell 2"
+                  ],
+                  "is_header": false
+                },
+                {
+                  "index": 2,
+                  "cells": [
+                    "row 2 cell 0",
+                    "row 2 cell 1",
+                    "row 2 cell 2"
+                  ],
+                  "is_header": false
+                },
+                {
+                  "index": 3,
+                  "cells": [
+                    "row 3 cell 0",
+                    "row 3 cell 1",
+                    "row 3 cell 2"
+                  ],
+                  "is_header": false
+                }
+              ],
+              "persist_ref": "ZHJ2OjAwMDE="
+            }
+          ],
+          "persist_ref": "ZHNoOjAwMDI="
+        }
+      ]
+    }
+  ],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "ZG9jOjMvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Machined",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "ZG9jOjMvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Machined",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0001",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 2,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "ZG9jOjQvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Machined",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0004",
+      "persist_ref": "ZG9jOjQvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Machined",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0003",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 2,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0005",
+      "persist_ref": "ZG9jOjUvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
+      "configuration": "Machined",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0006",
+      "persist_ref": "ZG9jOjUvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
+      "configuration": "Machined",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0005",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 2,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0007",
+      "persist_ref": "ZG9jOjYvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:6",
+      "document_id": "doc:6",
+      "configuration": "Machined",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0008",
+      "persist_ref": "ZG9jOjcvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:7",
+      "document_id": "doc:7",
+      "configuration": "Machined",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0009",
+      "persist_ref": "ZG9jOjgvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:8",
+      "document_id": "doc:8",
+      "configuration": "Machined",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0010",
+      "persist_ref": "ZG9jOjgvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:8",
+      "document_id": "doc:8",
+      "configuration": "Machined",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0009",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    }
+  ],
+  "equations": [],
+  "cut_list_items": [
+    {
+      "id": "cut:0001",
+      "document_id": "doc:3",
+      "configuration": "Machined",
+      "folder_name": "Cut-List-Item1",
+      "folder_type_name": "CutListFolder",
+      "name": "Tube 25 x 25 x 2",
+      "body_count": 1,
+      "excluded_from_cut_list": false,
+      "persist_ref": "Y3V0OjAwMDE=",
+      "persist_ref_scope": "doc:3"
+    }
+  ],
+  "rms_suppress_test": null,
+  "gaps": []
+}
