@@ -17,21 +17,28 @@ What one call does, in order, and why each step is where it is:
    carry costs nothing;
 3. **carry accepted exceptions forward** (FR-029): the newest `exceptions.json` under the
    caller's run root whose package carries the same `design_id`, copied byte-identically
-   into this folder *before the rules run*, so an acceptance survives the next check
+   into the run folder *before the rules run*, so an acceptance survives the next check
    without an engineer copying a file. A missing candidate is reported and is not an
    error; a candidate that cannot be parsed refuses the run, because an unreadable store
    read as "no exceptions" silently re-raises a condition somebody already accepted
    (RK-18). The run root is a parameter and has no default: the pane's check folder sits
-   in one, and `swreview check rms --package <dir>` is pointed at a directory whose parent
-   is an arbitrary folder;
+   in one, and `swreview check rms` names `--out`'s parent, because the package it is
+   pointed at can sit anywhere and the folders beside *it* are not this design's earlier
+   runs. A candidate is a folder that is its own package, which is what the pane's check
+   folders are; a `swreview check rms --out` run folder is not one, so that command
+   carries nothing forward from its own earlier runs and an acceptance survives it
+   through the store beside the package instead (`_store_to_grade_against`);
 4. **dispatch the check tools through `ToolRegistry` with a `SessionSink`** (defect D1).
    `report.py` gives every finding `tool_result_ids=[context.current_step_id]`, and that id
    is the index the *next* recorded step takes - true only inside a recorded call. Calling
    the check functions directly, as the command line used to, wrote findings citing a step
    that was never recorded. Dispatching through the registry also brings the never-raise
    rule and the `failed` coverage item for a tool that fails;
-5. **write the run folder**: `session.json` and `report.md` beside the package, which is
-   what makes a check replayable and what `swreview exceptions accept` reads afterwards;
+5. **write the run folder**: `session.json` and `report.md` in `out_dir` - the package
+   directory itself when no caller named one - which is what makes a check replayable and
+   what `swreview exceptions accept` reads afterwards. A caller that names one is saying
+   the package is not its run folder: `swreview check rms` grades a directory an engineer
+   chose, and grading a package must not edit it;
 6. **record what the session does not** in `check.json`: the scope, the documents graded,
    the structured subjects of each finding and what the carry-forward did. That is what
    makes `read_rms_check` - and so `GET /checks/{check_id}` - a read. Answering a read by
@@ -60,7 +67,7 @@ from pydantic_core import to_jsonable_python
 from swreview.agent.runner import load_exceptions
 from swreview.checks.rms.grade import RmsGrade, grade
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
-from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
+from swreview.ir.loader import PACKAGE_FILE_NAME, LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.dispositions import REPORT_FILE_NAME, SESSION_FILE_NAME
 from swreview.report.markdown import render_report
@@ -294,6 +301,7 @@ class RmsCheckRun:
 def run_rms_check(
     package_dir: Path | str,
     *,
+    out_dir: Path | str | None = None,
     scope: RmsScope = RmsScope.all,
     document_id: str | Sequence[str] | None = None,
     families: Sequence[RmsScope] | None = None,
@@ -304,7 +312,13 @@ def run_rms_check(
 
     Args:
         package_dir: The directory holding `package.json`. For a check started from the
-            pane this is the check's own run folder.
+            pane this is the check's own run folder. It is read and never written.
+        out_dir: The run folder `session.json`, `report.md`, `check.json` and the
+            carried-forward `exceptions.json` go into, created when it is not there.
+            `None`, the default, is `package_dir` itself, which is what `POST /checks/rms`
+            relies on: a check run folder *is* its own package directory, and the route
+            reads the folder it passed back as the check. `swreview check rms --out <dir>`
+            names one, because it is pointed at a package it must not edit.
         scope: Which rule families to run.
         document_id: One part document id, several, or `None` for every part document in
             the package. Several is the command line's repeatable `--document`; the tab
@@ -317,7 +331,10 @@ def run_rms_check(
         run_root: The run root whose earlier run folders the carry-forward may copy an
             `exceptions.json` from (FR-029). Named rather than inferred from
             `package_dir.parent`, because a package is not always a run folder: `None`
-            carries nothing forward and reports that.
+            carries nothing forward and reports that. The command line names `--out`'s
+            parent; a sibling is a candidate only when it is its own package, so what the
+            command line finds there is the pane's check folders, or the package itself
+            when `--out` was pointed beside it, and never one of its own run folders.
         exceptions: The store to grade against, for a caller that owns more than one
             grade of the same part and has to apply one store to all of them unchanged.
             Feature 004's re-modeler is that caller: it grades a dump of the copy before
@@ -332,8 +349,8 @@ def run_rms_check(
             under `run_root`, load what is beside the package, refresh it here.
 
     Returns:
-        Everything the run produced, with `session.json` and `report.md` written into
-        `package_dir`.
+        Everything the run produced, with `session.json`, `report.md` and `check.json`
+        written into `out_dir`.
 
     Raises:
         EmptyFeatureTreeError: the package carries no feature rows.
@@ -352,9 +369,14 @@ def run_rms_check(
     context = build_context(loaded)
     documents = _part_documents(context, document_id)
 
+    # After both refusals above, so a run that is refused for its arguments leaves no
+    # folder behind, and before the carry-forward, which copies into it.
+    out = directory if out_dir is None else Path(out_dir).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+
     if exceptions is None:
-        carried = _carry_forward(directory, package, run_root)
-        store = load_exceptions(loaded)
+        carried = _carry_forward(out, package, run_root)
+        store = _store_to_grade_against(loaded, out)
         if store is not None:
             store.refresh(package)
     else:
@@ -362,7 +384,7 @@ def run_rms_check(
         carried = CarriedForward(
             from_run=None,
             count=len(store.exceptions),
-            reason=SUPPLIED_STORE.format(directory=directory),
+            reason=SUPPLIED_STORE.format(directory=out),
         )
     context.exceptions = store
 
@@ -406,9 +428,9 @@ def run_rms_check(
             if family not in RMS_SCOPES_BUILT
         ],
         session=session,
-        session_file=save_session(session, directory / SESSION_FILE_NAME),
-        report_file=_write_report(directory, session, package),
-        check_file=directory / CHECK_FILE_NAME,
+        session_file=save_session(session, out / SESSION_FILE_NAME),
+        report_file=_write_report(out, session, package),
+        check_file=out / CHECK_FILE_NAME,
     )
     _write_check_record(run)
     return run
@@ -554,13 +576,31 @@ def _close(context: ToolContext, started: float) -> ReviewSession:
 
 
 def _write_report(directory: Path, session: ReviewSession, package: EvidencePackage) -> Path:
-    """Render `session` beside its package and return the file."""
+    """Render `session` into the run folder and return the file."""
     report_file = directory / REPORT_FILE_NAME
     report_file.write_text(render_report(session, package), encoding="utf-8")
     return report_file
 
 
 # --- 2. the carry-forward (FR-029) ------------------------------------------------
+
+
+def _store_to_grade_against(loaded: LoadedPackage, out: Path) -> ExceptionStore | None:
+    """The `exceptions.json` this run grades against: the run folder's, else the package's.
+
+    The run folder first, because that is where the carry-forward just wrote (FR-029) and
+    a copy nothing graded against would silence nothing - the acceptance would quietly
+    not survive the next check. The package's own store is the fallback, because a package
+    the command line is pointed at is read where it is: its waivers are evidence about it,
+    and a run folder somewhere else does not make them disappear.
+
+    The two are the same file whenever `out_dir` was not named, which is every caller but
+    `swreview check rms --out <dir>`, so this is one rule and not a branch on the caller.
+    """
+    carried = out / EXCEPTIONS_FILE_NAME
+    if carried.is_file():
+        return ExceptionStore(carried).load()
+    return load_exceptions(loaded)
 
 
 def _carry_forward(

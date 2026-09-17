@@ -80,12 +80,46 @@ The virtual-host origin is passed to the backend at start (`--allow-origin <orig
 `http://127.0.0.1` is a potentially-trustworthy origin, so an `https://` virtual host
 reaching it is not mixed content; the virtual host keeps `https://`.
 
+The add-in also installs a **same-origin proxy** on every Task Pane page: a call to
+`https://swreview.invalid/__backend/<path>` is answered by the add-in's own C# code, which
+re-issues it to `http://127.0.0.1:<port>/<path>` (`docs/pane-backend-proxy.md`). A call that
+arrives that way carries **no `Origin`** - `BackendProxyHandler` drops the header, because the
+page's origin is the virtual host and the origin guard above would refuse the very call the
+proxy exists to deliver - and it gets **no `Access-Control-*` header back**, because same
+origin has nothing to allow and a stray `Access-Control-Allow-Origin` would re-open the
+question the proxy closes.
+
+None of this section is therefore removed. The origin guard, the `OPTIONS` 204 and every
+`Access-Control-*` header stay exactly as they are: the `swreview` CLI and any other direct
+caller still use them, the pages still reach the backend cross-origin on a workstation whose
+web filter leaves loopback alone, and a request with no `Origin` is not a cross-origin request
+for the guard to refuse in the first place.
+
 ## Reading the event stream
 
-The page MUST read `GET /sessions/{chat_id}/events` with `fetch` plus a `ReadableStream`
-reader, not `EventSource`: only `fetch` can set `Authorization` and `Last-Event-ID`.
-Putting the token in the URL is forbidden (it would land in access logs, WebView2 history
-and crash dumps).
+**The host reads this route, not the page.** The add-in reads
+`GET /sessions/{chat_id}/events` with `HttpWebRequest` (`Proxy = null`, `Authorization`,
+`Accept: text/event-stream`, and `Last-Event-ID` when the page supplied one), splits the
+response on blank lines, and posts each raw frame to the page as `events.frame`
+(`pane-host-messages.md`). The page asks for the stream with `events.open` and gives it up
+with `events.close`; the frame it receives is the one the server wrote, and the page's own
+parser reads it.
+
+Two reasons, and either alone would be enough. A Task Pane page is a browser process, and an
+endpoint web filter that intercepts browser HTTP to `127.0.0.1` answers the page's `fetch`
+with its own interstitial while the backend logs a clean 200 (`docs/pane-backend-proxy.md`);
+a request made by the add-in's own code is not intercepted. And this route is the one that
+cannot be handed to WebView2's `WebResourceRequested` either — a response there must have all
+of its content available when the deferral completes — so there is no proxy that could serve
+it.
+
+`EventSource` is still not an option anywhere: it can set neither `Authorization` nor
+`Last-Event-ID`. Putting the token in the URL remains forbidden (it would land in access
+logs, WebView2 history and crash dumps), which is why it travels as a header - on the
+host's own request for this route, and in the page's `Authorization` header for the routes
+the page still calls itself. `init` carries the token to the page for those
+(`pane-host-messages.md`); what moving the stream into the host bought is that the stream's
+token is no longer one of them.
 
 ## Shutdown and settings changes
 

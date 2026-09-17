@@ -276,7 +276,12 @@ public sealed class ModelCheckHost : IDisposable
                     : new Dictionary<string, object?>
                     {
                         { "port", endpoint.Port },
-                        { "origin", endpoint.Origin },
+
+                        // The page's OWN origin under `/__backend`, as `ReviewHost` sends: the
+                        // check page calls `POST /checks/rms` and reads the result back, and it
+                        // does both through the host rather than over loopback
+                        // (docs/pane-backend-proxy.md). The port stays for diagnostics.
+                        { "origin", BackendProxy.PageOrigin },
                     }
             },
             { "token", endpoint?.Token },

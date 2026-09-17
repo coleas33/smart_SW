@@ -486,12 +486,15 @@ public sealed class InProcPipeServerTests
 
     // ---- the document goes away --------------------------------------------------------------
 
+    /// <summary>The document the tool service attached to, which the message has to name.</summary>
+    private const string AttachedDocument = @"C:\models\TopDeckCableManagement\810-10068.SLDASM";
+
     [Fact]
     public void ARequestWhoseDocumentIsGoneAnswersTheDocumentClosedError()
     {
         bool open = true;
         var inner = new RecordingDispatcher { Failure = "COMException: the RPC server is unavailable" };
-        var presence = new DocumentPresenceDispatcher(inner, () => open);
+        var presence = new DocumentPresenceDispatcher(inner, () => open, AttachedDocument);
 
         using (var app = new FakeAppThread())
         using (InProcPipeServer server = Server(presence, app))
@@ -506,6 +509,11 @@ public sealed class InProcPipeServerTests
             // is asserted in reviewer/tests/unit/test_bridge_client.py and test_tools_bridge.py.
             Assert.Contains("no longer open", response.Error!, StringComparison.OrdinalIgnoreCase);
             Assert.StartsWith("document no longer open", response.Error!, StringComparison.Ordinal);
+
+            // docs/pane-findings-2026-09-16.md, finding 1: the engineer reads this message
+            // against the document they are looking at, so it has to name the other one - the
+            // document the tool service is attached to.
+            Assert.Contains(AttachedDocument, response.Error!, StringComparison.Ordinal);
         }
     }
 
@@ -518,7 +526,8 @@ public sealed class InProcPipeServerTests
             Status = BridgeStatus.Error,
             Failure = SwBridgeDispatcher.UnauthorizedError,
         };
-        var presence = new DocumentPresenceDispatcher(inner, () => { asked++; return true; });
+        var presence = new DocumentPresenceDispatcher(
+            inner, () => { asked++; return true; }, AttachedDocument);
 
         BridgeResponse response = presence.Dispatch(
             BridgeCodec.ReadRequest(Line("1", "ping", "wrong")));
@@ -531,7 +540,7 @@ public sealed class InProcPipeServerTests
     public void AnOpenDocumentLeavesTheOriginalErrorAlone()
     {
         var inner = new RecordingDispatcher { Failure = "\"view\" must be one of fit, iso; got 'sideways'." };
-        var presence = new DocumentPresenceDispatcher(inner, () => true);
+        var presence = new DocumentPresenceDispatcher(inner, () => true, AttachedDocument);
 
         BridgeResponse response = presence.Dispatch(
             BridgeCodec.ReadRequest(Line("1", "capture", ReviewSecret)));

@@ -9,7 +9,10 @@ it was started:
   session for an RMS run, so every RMS finding cited step 0 of a file that had no steps.
   The test walks every finding of a written `session.json` and resolves its step ids in
   that same file;
-- **it writes the run folder**: `session.json` and `report.md`, beside the package;
+- **it writes the run folder**: `session.json`, `report.md` and `check.json`, into `out_dir`
+  when the caller names one and beside the package when it does not. `POST /checks/rms`
+  names none, because a check run folder *is* its own package directory; `swreview check
+  rms --out <dir>` names one, because grading a package must not edit it;
 - **it constructs no provider, reads no key and makes no network call** (SC-011), asserted
   by making `agent.providers`' adapter lookup raise;
 - **it refuses a feature tree that is not there** (FR-022), naming the dump profile, rather
@@ -255,6 +258,55 @@ class TestRunFolder:
         assert run.report_file == check_dir / REPORT_FILE
         assert run.session_file.is_file()
         assert DESCRIBED_RULE in run.report_file.read_text(encoding="utf-8")
+
+    def test_out_dir_takes_the_run_and_the_package_is_not_written(
+        self, check_dir: Path, tmp_path: Path
+    ) -> None:
+        """What `swreview check rms --out <dir>` needs: grading a package must not edit it.
+
+        The three files are the whole run folder, and the package directory is left
+        holding exactly what it held before - which is what keeps a golden fixture a
+        baseline rather than a directory a grading command writes into.
+        """
+        out = tmp_path / "elsewhere" / "20260916-110000-frame-check"
+
+        run = run_rms_check(check_dir, scope=RmsScope.all, out_dir=out)
+
+        assert run.session_file == out / SESSION_FILE
+        assert run.report_file == out / REPORT_FILE
+        assert run.check_file == out / CHECK_FILE_NAME
+        assert sorted(item.name for item in out.iterdir()) == [
+            CHECK_FILE_NAME,
+            REPORT_FILE,
+            SESSION_FILE,
+        ]
+        assert [item.name for item in check_dir.iterdir()] == [PACKAGE_FILE_NAME]
+
+    def test_out_dir_is_created_when_it_is_not_there(
+        self, check_dir: Path, tmp_path: Path
+    ) -> None:
+        """A run root the caller has not made yet is made here, as `save_session` does
+        for the session it writes: the carry-forward copies into the folder before the
+        rules run, so it cannot wait for the first write."""
+        out = tmp_path / "runs" / "today" / "20260916-101532-frame-check"
+
+        run = run_rms_check(check_dir, scope=RmsScope.part, out_dir=out)
+
+        assert run.session_file.is_file()
+        assert run.report_file.is_file()
+        assert run.check_file.is_file()
+
+    def test_out_dir_holds_a_check_that_reads_back(
+        self, check_dir: Path, tmp_path: Path
+    ) -> None:
+        """The run folder is the check, wherever it was written: `check.json` names the
+        session beside it, so `read_rms_check` answers from the folder alone."""
+        out = tmp_path / "elsewhere" / "20260916-110000-frame-check"
+
+        run = run_rms_check(check_dir, scope=RmsScope.part, out_dir=out)
+
+        assert is_check_folder(out)
+        assert read_rms_check(out).session.session_id == run.session.session_id
 
     def test_the_written_session_is_the_one_that_was_returned(self, check_dir: Path) -> None:
         run = run_rms_check(check_dir, scope=RmsScope.all)
@@ -594,6 +646,51 @@ class TestCarryForward:
         assert not (directory / EXCEPTIONS_FILE_NAME).exists()
         assert run.exceptions_carried_forward.from_run is None
         assert str(run_root) in (run.exceptions_carried_forward.reason or "")
+
+    def test_the_candidate_is_copied_into_the_out_folder_and_not_the_package(
+        self, run_root: Path, check_dir: Path
+    ) -> None:
+        """The carry-forward writes into the run folder, which is `out_dir` when there is
+        one: the copy is this run's evidence, and the package is not written to at all."""
+        source = earlier_run(run_root, "20260915-090000-frame-check")
+        text = accepted_exceptions(source)
+        out = run_root / "20260916-110000-frame-check"
+
+        run = run_rms_check(check_dir, scope=RmsScope.part, run_root=run_root, out_dir=out)
+
+        assert (out / EXCEPTIONS_FILE_NAME).read_text(encoding="utf-8") == text
+        assert not (check_dir / EXCEPTIONS_FILE_NAME).exists()
+        assert run.exceptions_carried_forward.from_run == source.name
+        assert run.exceptions_carried_forward.count == 1
+
+    def test_the_carried_store_is_what_an_out_folder_run_is_graded_against(
+        self, run_root: Path, check_dir: Path
+    ) -> None:
+        """FR-029 through `--out`: a copy nothing graded against would silence nothing,
+        which is the acceptance quietly not surviving the next check (SC-010)."""
+        accepted_exceptions(earlier_run(run_root, "20260915-090000-frame-check"))
+        out = run_root / "20260916-110000-frame-check"
+
+        run = run_rms_check(check_dir, scope=RmsScope.part, run_root=run_root, out_dir=out)
+
+        described = next(item for item in run.findings if item["check"] == DESCRIBED_RULE)
+        assert described["status"] == "checked_within_scope"
+        assert described["exception_id"] == "EX-001"
+
+    def test_the_store_beside_the_package_is_graded_when_the_out_folder_has_none(
+        self, check_dir: Path, tmp_path: Path
+    ) -> None:
+        """A package is read where it is: its own `exceptions.json` still silences what
+        it waives when the run folder is somewhere else, and is left byte-for-byte."""
+        text = accepted_exceptions(check_dir)
+        out = tmp_path / "elsewhere" / "20260916-110000-frame-check"
+
+        run = run_rms_check(check_dir, scope=RmsScope.part, out_dir=out)
+
+        described = next(item for item in run.findings if item["check"] == DESCRIBED_RULE)
+        assert described["exception_id"] == "EX-001"
+        assert not (out / EXCEPTIONS_FILE_NAME).exists()
+        assert (check_dir / EXCEPTIONS_FILE_NAME).read_text(encoding="utf-8") == text
 
 
 # --- 6. the check record: a check is read back, never run again (T072) ------------

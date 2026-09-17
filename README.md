@@ -77,7 +77,7 @@ the feature type tables are `reviewer/src/swreview/checks/rms_types.yaml`.
 
 ```powershell
 swreview-extract dump --out <package dir>            # --features tree --equations on
-swreview check rms --package <package dir>           # findings, coverage, session.json, report.md
+swreview check rms --package <package dir> --out <run dir>   # findings, coverage; session.json, report.md, check.json into <run dir>
 swreview rms types --package <package dir>           # type names the tables do not classify
 ```
 

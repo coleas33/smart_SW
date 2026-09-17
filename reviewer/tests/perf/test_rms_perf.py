@@ -136,10 +136,20 @@ def hundred_part_package_dir(tmp_path: Path) -> Path:
 
 def test_check_rms_grades_a_hundred_part_package_within_the_budget(
     hundred_part_package_dir: Path,
+    tmp_path: Path,
 ) -> None:
     started = time.perf_counter()
     result = runner.invoke(
-        app, ["check", "rms", "--package", str(hundred_part_package_dir), "--json"]
+        app,
+        [
+            "check",
+            "rms",
+            "--package",
+            str(hundred_part_package_dir),
+            "--out",
+            str(tmp_path / "runs" / "perf-check"),
+            "--json",
+        ],
     )
     elapsed = time.perf_counter() - started
 

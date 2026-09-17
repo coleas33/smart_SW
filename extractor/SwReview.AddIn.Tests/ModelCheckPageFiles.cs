@@ -78,7 +78,7 @@ internal static class ModelCheckPageFiles
 /// with a script evaluated inside it.
 ///
 /// The boot is <see cref="OffscreenReviewPage.WithPage(string, Action{Microsoft.Web.WebView2.Core.CoreWebView2}, Func{Microsoft.Web.WebView2.Core.CoreWebView2, System.Threading.Tasks.Task})"/>
-/// - the same virtual host mapping, the same real page URL, the same real CSP - because the
+/// - the same page file server, the same real page URL, the same real CSP - because the
 /// two pages share an origin and must not be tested under two different approximations of it.
 /// Only the prelude differs: this one renders through `window.SwReviewCheck`.
 ///

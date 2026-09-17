@@ -661,7 +661,7 @@ public sealed class RemodelPageContractTests
                 case "ready":
                     Reply("init", id, new
                     {
-                        backend = new { port = 51234, origin = "http://127.0.0.1:51234" },
+                        backend = new { port = 51234, origin = "https://swreview.invalid/__backend" },
                         token = "0FAKEtoken",
                         run_root = @"C:\SwReviewRuns",
                         document = new

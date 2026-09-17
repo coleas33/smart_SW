@@ -247,6 +247,243 @@ public sealed class ToolServiceWiringTests
         Assert.Null(gate.GeneralChatBridge);
     }
 
+    // ---- following the active document (docs/pane-findings-2026-09-16.md, finding 1) ---------
+
+    /// <summary>
+    /// The finding: the service bound to whichever document was open when the add-in started,
+    /// the engineer switched to another part, and every bridge command afterwards asked about a
+    /// document that no longer exists. <c>EnsureStarted</c> cannot fix it - it is a no-op once a
+    /// service exists, and deliberately so - hence a second entry point.
+    /// </summary>
+    [Fact]
+    public void AChangeToAnotherDocumentReattachesTheToolServiceToIt()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+
+        FakeToolService first = world.Services[0];
+        Assert.Equal(@"C:\models\deck.SLDASM", gate.DocumentPath);
+
+        // The engineer opens a different part. EnsureStarted alone leaves the bridge attached
+        // to the assembly, which is the whole of the finding.
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.EnsureStarted();
+        Assert.Equal(1, world.Starts);
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, world.Starts);
+        Assert.True(first.Disposed);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+
+        // Re-pointed by the same callback the first start used: the secret `POST /sessions`
+        // carries belongs to the service that is listening now, not to the disposed one.
+        Assert.Equal(world.Services[1].ReviewBridge.Secret, world.Published!.Secret);
+        Assert.Equal(world.Services[1].RemodelBridge.Secret, gate.RemodelBridge!.Secret);
+
+        // Once followed, it stays followed: the next ActiveDocChangeNotify restarts nothing.
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        Assert.Equal(2, world.Starts);
+    }
+
+    /// <summary>
+    /// SOLIDWORKS is not asked to spell the path the same way twice, and Windows does not care
+    /// about case. A restart per document change would be a new pipe, a new scope and a new
+    /// pair of secrets for nothing.
+    /// </summary>
+    [Fact]
+    public void TheSameDocumentSpeltDifferentlyDoesNotRestartAnything()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+
+        gate.FollowDocument(@"C:\models\deck.SLDASM");
+        gate.FollowDocument(@"c:\MODELS\DECK.sldasm");
+        gate.FollowDocument(@"C:\models\sub\..\deck.SLDASM");
+
+        Assert.Equal(1, world.Starts);
+        Assert.False(world.Services[0].Disposed);
+    }
+
+    /// <summary>
+    /// A review turn or a remodel run is holding the bridge. Disposing the service underneath
+    /// it would fail the work in flight, so the gate does not - and says so where the engineer
+    /// reading the tool-service log will find it, naming both documents.
+    /// </summary>
+    [Fact]
+    public void ABusyBridgeIsNotRestartedAndTheLogSaysWhyNamingBothDocuments()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM", Busy = true };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(1, world.Starts);
+        Assert.False(world.Services[0].Disposed);
+        Assert.Equal(@"C:\models\deck.SLDASM", gate.DocumentPath);
+
+        string line = Assert.Single(world.Services[0].LogLines);
+        Assert.Contains("not re-attaching", line, StringComparison.Ordinal);
+        Assert.Contains(@"C:\models\bracket.SLDPRT", line, StringComparison.Ordinal);
+        Assert.Contains(@"C:\models\deck.SLDASM", line, StringComparison.Ordinal);
+
+        // The turn ends. The next ActiveDocChangeNotify - or the next tab switch - follows it.
+        world.Busy = false;
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, world.Starts);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+    }
+
+    /// <summary>
+    /// A busy predicate that throws - <c>AnyTurnRunning</c> asks the backend over HTTP - is
+    /// read as busy. Tearing down a service on an unanswered question is the one outcome that
+    /// cannot be undone.
+    /// </summary>
+    [Fact]
+    public void ABusyPredicateThatThrowsIsTreatedAsBusyAndReported()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        world.BusyFailure = new InvalidOperationException("the backend did not answer");
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(1, world.Starts);
+        Assert.False(world.Services[0].Disposed);
+        Assert.Contains("the backend did not answer", Assert.Single(world.Reports));
+    }
+
+    /// <summary>
+    /// Closing the last document is not a reason to drop the service: the engineer reopens one,
+    /// and a service attached to a document that is gone still answers `document no longer
+    /// open` with that document's name, which is the message finding 1 asked for.
+    /// </summary>
+    [Fact]
+    public void NothingOpenLeavesTheAttachedServiceAlone()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+
+        gate.FollowDocument(null);
+        gate.FollowDocument(string.Empty);
+        gate.FollowDocument("   ");
+
+        Assert.Equal(1, world.Starts);
+        Assert.False(world.Services[0].Disposed);
+        Assert.NotNull(gate.GeneralChatBridge);
+        Assert.Equal(@"C:\models\deck.SLDASM", gate.DocumentPath);
+    }
+
+    [Fact]
+    public void FollowDocumentStartsNothingBeforeTheFirstService()
+    {
+        var world = new GateWorld { DocumentOpen = false };
+        ToolServiceGate gate = world.Gate();
+
+        // Starting is EnsureStarted's job, and it has its own rule about when it may.
+        gate.FollowDocument(@"C:\models\deck.SLDASM");
+
+        Assert.Equal(0, world.Starts);
+        Assert.Null(gate.GeneralChatBridge);
+    }
+
+    [Fact]
+    public void DisposeDuringAPendingRestartStartsNothingAndStopsWhatWasThere()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        Action? pending = null;
+        ToolServiceGate gate = world.Gate(schedule: work => pending = work);
+
+        gate.EnsureStarted();
+        pending!();
+        pending = null;
+        FakeToolService first = world.Services[0];
+
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        // Nothing has happened on the caller's thread: the busy question, the teardown and the
+        // start are all inside the scheduled work, because the caller is the application thread.
+        Assert.False(first.Disposed);
+        Assert.NotNull(pending);
+
+        gate.Dispose();
+        pending!();
+
+        // The add-in unloaded before the re-attach ran, so nothing new is started: a pipe
+        // listening into a SOLIDWORKS with no add-in is worse than no tool service at all. The
+        // service the engineer had is stopped by Dispose itself.
+        Assert.True(first.Disposed);
+        Assert.Equal(1, world.Starts);
+        Assert.Null(gate.GeneralChatBridge);
+        Assert.Equal(first.ReviewBridge.Secret, world.Published!.Secret);
+    }
+
+    /// <summary>
+    /// Between the teardown and the new service listening the gate answers null, which is what
+    /// makes the Remodel tab refuse a run rather than start one against a pipe that is closing.
+    /// Captured rather than asserted inside the start delegate: an exception thrown there is a
+    /// failed start, which is not what a broken assertion should look like.
+    /// </summary>
+    [Fact]
+    public void MidRestartTheGateAnswersNullRatherThanNamingAClosingPipe()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+
+        bool stoppedFirst = false;
+        BridgeConfig? remodelMidway = null;
+        string? documentMidway = null;
+        world.OnStart = () =>
+        {
+            stoppedFirst = first.Disposed;
+            remodelMidway = gate.RemodelBridge;
+            documentMidway = gate.DocumentPath;
+        };
+
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, world.Starts);
+        Assert.True(stoppedFirst);
+        Assert.Null(remodelMidway);
+        Assert.Null(documentMidway);
+    }
+
+    [Fact]
+    public void ARestartWhoseAttachFailsIsReportedAndTheNextDocumentTriesAgain()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+
+        world.Failure = new InvalidOperationException("the component tree could not be walked");
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.True(world.Services[0].Disposed);
+        Assert.Null(gate.GeneralChatBridge);
+        Assert.Contains(
+            "the component tree could not be walked",
+            Assert.Single(world.Reports));
+
+        // A failed attach is not terminal, and EnsureStarted is no longer a no-op: the gate is
+        // empty, so the next ActiveDocChangeNotify starts one against the document it names.
+        world.Failure = null;
+        gate.EnsureStarted();
+
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+    }
+
     // ---- the thread it starts on -------------------------------------------------------------
 
     [Fact]
@@ -272,6 +509,68 @@ public sealed class ToolServiceWiringTests
 
         Assert.True(done.Wait(TimeSpan.FromSeconds(10)), "the tool service start never ran.");
         Assert.NotEqual(caller, starter);
+        gate.Dispose();
+    }
+
+    /// <summary>
+    /// The same rule, for the other entry point, and for all three of the expensive things it
+    /// does. <c>FollowDocument</c> is called from <c>ActiveDocChangeNotify</c> - the SOLIDWORKS
+    /// application thread - and the add-in's busy question is a 30-second-timeout HTTP round
+    /// trip per open chat while the teardown joins the accept thread, every client thread and
+    /// the pump. Blocking the caller on either freezes SOLIDWORKS on an ordinary document
+    /// switch, so the only work left on that thread is the decision to schedule.
+    /// </summary>
+    [Fact]
+    public void TheBusyProbeTheTeardownAndTheRestartAllRunOffTheCallingThread()
+    {
+        var attached = new ManualResetEventSlim();
+        var probing = new ManualResetEventSlim();
+        var release = new ManualResetEventSlim();
+        var restarted = new ManualResetEventSlim();
+        int caller = Thread.CurrentThread.ManagedThreadId;
+        int prober = caller;
+        int starter = caller;
+
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        world.Publish = _ =>
+        {
+            if (world.Services.Count > 1)
+            {
+                restarted.Set();
+                return;
+            }
+
+            attached.Set();
+        };
+
+        // Null schedule: the gate's own, which is the one SwReviewAddIn gets.
+        ToolServiceGate gate = world.Gate(schedule: null);
+        gate.EnsureStarted();
+        Assert.True(attached.Wait(TimeSpan.FromSeconds(10)), "the first tool service never started.");
+
+        FakeToolService first = world.Services[0];
+        world.OnBusy = () =>
+        {
+            prober = Thread.CurrentThread.ManagedThreadId;
+            probing.Set();
+            release.Wait(TimeSpan.FromSeconds(10));
+        };
+        world.OnStart = () => starter = Thread.CurrentThread.ManagedThreadId;
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        // Reached while the busy question is still out: before the fix, this line waited for it.
+        Assert.True(probing.Wait(TimeSpan.FromSeconds(10)), "the busy question was never asked.");
+        Assert.False(first.Disposed);
+        release.Set();
+
+        Assert.True(restarted.Wait(TimeSpan.FromSeconds(10)), "the tool service never re-attached.");
+        Assert.NotEqual(caller, prober);
+        Assert.NotEqual(caller, first.DisposedThreadId);
+        Assert.NotEqual(caller, starter);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        Assert.Empty(world.Reports);
         gate.Dispose();
     }
 
@@ -641,6 +940,19 @@ public sealed class ToolServiceWiringTests
 
         public bool DocumentOpen { get; set; } = true;
 
+        /// <summary>What the next start attaches to, as SOLIDWORKS' active document would be.</summary>
+        public string DocumentPath { get; set; } = @"C:\models\bracket.sldasm";
+
+        /// <summary>A review turn or a remodel run is holding the bridge.</summary>
+        public bool Busy { get; set; }
+
+        /// <summary>Set to make the busy question throw, as an unanswering backend would.</summary>
+        public Exception? BusyFailure { get; set; }
+
+        /// <summary>Runs inside the busy question, on whichever thread asked it. The add-in's
+        /// answer is one HTTP round trip per open chat, so a test may block here.</summary>
+        public Action? OnBusy { get; set; }
+
         /// <summary>Set to make the next start throw, as a failed attach would.</summary>
         public Exception? Failure { get; set; }
 
@@ -676,7 +988,20 @@ public sealed class ToolServiceWiringTests
                 Published = service.ReviewBridge;
             },
             (what, failure) => Reports.Add(what + " " + failure.Message),
-            schedule);
+            schedule,
+            Asked);
+
+        private bool Asked()
+        {
+            OnBusy?.Invoke();
+
+            if (BusyFailure != null)
+            {
+                throw BusyFailure;
+            }
+
+            return Busy;
+        }
 
         private IToolService Start()
         {
@@ -687,7 +1012,7 @@ public sealed class ToolServiceWiringTests
                 throw Failure;
             }
 
-            var service = new FakeToolService(++_next);
+            var service = new FakeToolService(++_next, DocumentPath);
             Services.Add(service);
             return service;
         }
@@ -696,13 +1021,13 @@ public sealed class ToolServiceWiringTests
     /// <summary>A tool service with no pipe, no SOLIDWORKS and two distinct secrets.</summary>
     private sealed class FakeToolService : IToolService
     {
-        public FakeToolService(int ordinal)
+        public FakeToolService(int ordinal, string? documentPath = null)
         {
             PipeName = "swreview-fake-" + ordinal;
             ReviewBridge = new BridgeConfig(PipeName, "review-secret-" + ordinal);
             GeneralChatBridge = new BridgeConfig(PipeName, "chat-secret-" + ordinal);
             RemodelBridge = new BridgeConfig(PipeName, "remodel-secret-" + ordinal);
-            DocumentPath = @"C:\models\bracket-" + ordinal + ".sldasm";
+            DocumentPath = documentPath ?? @"C:\models\bracket-" + ordinal + ".sldasm";
             Session = new FakeSession();
         }
 
@@ -720,7 +1045,23 @@ public sealed class ToolServiceWiringTests
 
         public bool Disposed { get; private set; }
 
-        public void Dispose() => Disposed = true;
+        /// <summary>
+        /// The thread the gate stopped it on. Recorded because the real stop joins an accept
+        /// thread, every client thread and the pump - so it must not be the SOLIDWORKS
+        /// application thread.
+        /// </summary>
+        public int DisposedThreadId { get; private set; }
+
+        /// <summary>What the gate wrote into this service's own tool-service log.</summary>
+        public List<string> LogLines { get; } = new List<string>();
+
+        public void WriteLog(string line) => LogLines.Add(line);
+
+        public void Dispose()
+        {
+            DisposedThreadId = Thread.CurrentThread.ManagedThreadId;
+            Disposed = true;
+        }
     }
 
     /// <summary>Identity only: the tests assert which scope `entity.show` was handed, never

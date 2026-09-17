@@ -549,7 +549,7 @@ public sealed class ModelCheckPageTests
 
   window.__calls = [];
   window.fetch = function (url, request) {
-    window.__calls.push(request.method + ' ' + String(url).replace('http://127.0.0.1:51234', ''));
+    window.__calls.push(request.method + ' ' + String(url).replace('https://swreview.invalid/__backend', ''));
     var body = (request.method === 'POST') ? {finding: row, exception_id: 'EX-009'} : accepted;
     return Promise.resolve({
       ok: true,
@@ -644,7 +644,7 @@ public sealed class ModelCheckPageTests
                 payload = new
                 {
                     backend = withBackend
-                        ? (object?)new { port = 51234, origin = "http://127.0.0.1:51234" }
+                        ? (object?)new { port = 51234, origin = "https://swreview.invalid/__backend" }
                         : null,
                     token = withBackend ? "0FAKEtoken" : null,
                     run_root = @"C:\SwReviewRuns",

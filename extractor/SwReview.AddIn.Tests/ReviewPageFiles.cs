@@ -14,14 +14,14 @@ namespace SwReview.AddIn.Tests;
 /// Everything is read from the build output rather than from the source tree, for two reasons.
 /// The output is the copy the add-in actually ships - the `&lt;Content&gt;` items in
 /// SwReview.AddIn.csproj land the page under `web/`, which is the folder
-/// `SetVirtualHostNameToFolderMapping("swreview.invalid", ...)` maps - so a page file that
-/// never reaches `web/` fails the scan instead of passing it from source. And it is the same
+/// <see cref="SwReview.AddIn.Review.PageFileServer"/> serves `https://swreview.invalid` from -
+/// so a page file that never reaches `web/` fails the scan instead of passing it from source. And it is the same
 /// convention <see cref="SettingsContract"/> already uses for a copied contract file, so there
 /// is one way to find a contract in this assembly rather than two.
 /// </summary>
 internal static class ReviewPageFiles
 {
-    /// <summary>The folder the add-in maps as `https://swreview.invalid`.</summary>
+    /// <summary>The folder the add-in serves as `https://swreview.invalid`.</summary>
     public static string WebFolder => Path.Combine(AppContext.BaseDirectory, "web");
 
     /// <summary>The Review page's own folder inside it.</summary>

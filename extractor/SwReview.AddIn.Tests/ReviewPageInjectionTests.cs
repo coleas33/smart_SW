@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using SwReview.AddIn.Review;
 using Xunit;
 
 namespace SwReview.AddIn.Tests;
@@ -253,8 +254,9 @@ public sealed class ReviewPageInjectionTests
 /// The Review page, loaded from the add-in's own virtual host in an offscreen WebView2, with a
 /// script evaluated inside it.
 ///
-/// The page is navigated to `https://swreview.invalid/Review/ReviewPage/index.html` over the
-/// same `SetVirtualHostNameToFolderMapping` the add-in uses, so the CSP meta tag, the relative
+/// The page is navigated to `https://swreview.invalid/Review/ReviewPage/index.html` and served
+/// by the same <see cref="PageFileServer"/>, through the same `WebResourceRequested` filter,
+/// that the add-in serves it with, so the CSP meta tag, the relative
 /// `src` of every script and the page's origin are the real ones rather than a `file://`
 /// approximation of them. `window.chrome.webview` exists in this host as it does in the add-in,
 /// so `app.js` starts normally; nothing answers its `ready`, which is exactly the state the page
@@ -331,8 +333,8 @@ internal static class OffscreenReviewPage
     /// functions (T041's turn state). Those need the host end of the bridge - a
     /// `WebMessageReceived` handler answering `ready` and `review.start` the way the add-in does
     /// - and it has to be subscribed before the page loads, because the page posts `ready` from
-    /// `DOMContentLoaded`. Everything above it is the same boot: the virtual host mapping, the
-    /// real page URL, the real CSP.
+    /// `DOMContentLoaded`. Everything above it is the same boot: the add-in's own page file
+    /// server behind the add-in's own filter, the real page URL, the real CSP.
     /// </summary>
     /// <param name="beforeNavigate">Runs on the UI thread with the page not yet navigated;
     /// this is where event handlers are attached. May be null.</param>
@@ -341,9 +343,9 @@ internal static class OffscreenReviewPage
         WithPage(ReviewPageFiles.PageUrl, beforeNavigate, body);
 
     /// <summary>
-    /// The same boot for either page. The virtual host is mapped at the `web` folder, which is
-    /// the mapping the add-in makes, so the Terminal page loads from its own URL under the same
-    /// origin and the same CSP as the Review page.
+    /// The same boot for either page. Every page is served out of the `web` folder the way the
+    /// add-in serves it, so the Terminal page loads from its own URL under the same origin and
+    /// the same CSP as the Review page.
     /// </summary>
     /// <param name="pageUrl">Which page to navigate to, on the virtual host.</param>
     public static void WithPage(
@@ -380,10 +382,7 @@ internal static class OffscreenReviewPage
                     }
 
                     await view.EnsureCoreWebView2Async(environment);
-                    view.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                        "swreview.invalid",
-                        ReviewPageFiles.WebFolder,
-                        CoreWebView2HostResourceAccessKind.Allow);
+                    ServeThePagesTheWayTheAddInDoes(view.CoreWebView2, environment);
 
                     var loaded = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>();
                     view.CoreWebView2.NavigationCompleted += (sender, args) => loaded.TrySetResult(args);
@@ -407,6 +406,41 @@ internal static class OffscreenReviewPage
         {
             TryDelete(userDataFolder);
         }
+    }
+
+    /// <summary>
+    /// Serves the page and everything it loads exactly as <c>TaskPaneControl.AttachPageAsync</c>
+    /// does: one filter over the whole origin, one `WebResourceRequested` handler, and the same
+    /// <see cref="PageFileServer"/> class, over the same `web` folder.
+    ///
+    /// This used to be `SetVirtualHostNameToFolderMapping`, and it is not any more for the same
+    /// reason the add-in dropped it (docs/pane-backend-proxy.md section 4): a folder-mapped host
+    /// raises no `WebResourceRequested`, so a page booted that way would be a page booted the
+    /// one way the add-in no longer boots it. Every page test in this assembly goes through
+    /// <see cref="WithPage(string, Action{CoreWebView2}, Func{CoreWebView2, Task})"/>, so this
+    /// line is what makes all of them exercise the real serving path rather than an
+    /// approximation of it.
+    ///
+    /// Synchronous: a file read off the disk, so there is nothing to defer and no UI thread to
+    /// keep off. The add-in takes a deferral because its other half is a blocking HTTP round
+    /// trip on the SOLIDWORKS application thread; these tests have no backend at all.
+    /// </summary>
+    private static void ServeThePagesTheWayTheAddInDoes(
+        CoreWebView2 core, CoreWebView2Environment environment)
+    {
+        var files = new PageFileServer(ReviewPageFiles.WebFolder);
+
+        core.AddWebResourceRequestedFilter(
+            TaskPaneControl.PageResourceFilter,
+            CoreWebView2WebResourceContext.All,
+            CoreWebView2WebResourceRequestSourceKinds.All);
+
+        core.WebResourceRequested += (sender, args) =>
+        {
+            ProxiedResponse answer = files.Serve(args.Request.Uri);
+            args.Response = environment.CreateWebResourceResponse(
+                new MemoryStream(answer.Content), answer.Status, answer.Reason, answer.Headers);
+        };
     }
 
     /// <summary>

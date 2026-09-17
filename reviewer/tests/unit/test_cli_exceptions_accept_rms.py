@@ -35,13 +35,10 @@ from typing import Any
 
 import pytest
 
-from swreview import cli
 from swreview.agent.runner import SESSION_FILE_NAME
+from swreview.checks.rms.run import RmsScope, run_rms_check
 from swreview.exceptions import EXCEPTIONS_FILE_NAME
 from swreview.report.dispositions import REPORT_FILE_NAME
-from swreview.report.session import save_session
-from swreview.tools import rms_checks
-from swreview.tools.context import use_context
 from tests.unit.test_cli import invoke, payload
 
 RMS_PART_FIXTURE = Path(__file__).resolve().parents[1] / "golden" / "fixtures" / "rms-part"
@@ -82,20 +79,14 @@ REASON = "legacy bracket; scheduled for the next revision"
 
 
 def rms_run(package_dir: Path, run_dir: Path) -> Path:
-    """The run directory a `swreview check rms --scope part` over `package_dir` leaves.
+    """The run directory `swreview check rms --package <pkg> --out <run_dir> --scope part`
+    leaves, built through `run_rms_check` - the entry point the command itself calls.
 
-    `check rms` prints its findings and saves nothing - grading a package must not edit it
-    - so the session it builds is built here through the two calls the command itself
-    makes (`cli._context_for` with the exceptions beside the package, then
-    `run_part_checks` over every part document) and written where `accept-rms` reads it.
+    Not a second evaluation assembled here: a session no command produces is not the
+    session `accept-rms` is read against in the field. `--out` is what makes it the same
+    call, and it is also why every package these fixtures copy is left as it was copied.
     """
-    context = cli._context_for(package_dir, exceptions=True)
-    documents = rms_checks.part_documents(context, None)
-    assert not isinstance(documents, dict), documents
-    with use_context(context):
-        result = rms_checks.run_part_checks(context, documents)
-    assert "error" not in result, result
-    save_session(context.require_session(), Path(run_dir) / SESSION_FILE_NAME)
+    run_rms_check(package_dir, out_dir=run_dir, scope=RmsScope.part)
     return run_dir
 
 
@@ -363,12 +354,16 @@ def test_accept_rms_writes_nothing_when_no_listed_rule_has_a_finding(
     run_dir: Path, package_dir: Path, waiver_file: Callable[[object], Path]
 ) -> None:
     file = waiver_file({GLOBAL_VARIABLES: REASON})
+    report = (run_dir / REPORT_FILE_NAME).read_bytes()
+
     body = payload(accept_rms(run_dir, package_dir, file, "--json"))
 
     assert statuses(body) == {GLOBAL_VARIABLES: "unused"}
     assert body["report_file"] is None
     assert not (package_dir / EXCEPTIONS_FILE_NAME).exists()
-    assert not (run_dir / REPORT_FILE_NAME).exists()
+    # The report in the run folder is the check's own; an import that accepted nothing
+    # re-renders nothing over it.
+    assert (run_dir / REPORT_FILE_NAME).read_bytes() == report
 
 
 def test_accept_rms_on_an_empty_waiver_file_accepts_nothing(
@@ -387,6 +382,7 @@ def test_accept_rms_refuses_a_warn_rule_and_writes_nothing(
     run_dir: Path, package_dir: Path, waiver_file: Callable[[object], Path]
 ) -> None:
     file = waiver_file({SHELL_LAST: REASON, HOLES_LAST: "holes are last enough"})
+    report = (run_dir / REPORT_FILE_NAME).read_bytes()
 
     result = accept_rms(run_dir, package_dir, file, "--json")
 
@@ -396,7 +392,8 @@ def test_accept_rms_refuses_a_warn_rule_and_writes_nothing(
     assert body["exceptions"] == []
     assert body["report_file"] is None
     assert not (package_dir / EXCEPTIONS_FILE_NAME).exists()
-    assert not (run_dir / REPORT_FILE_NAME).exists()
+    # The check's own report, untouched: a refused import re-renders nothing over it.
+    assert (run_dir / REPORT_FILE_NAME).read_bytes() == report
     assert all(item["exception_id"] is None for item in session_of(run_dir)["findings"])
     assert HOLES_LAST in result.stderr
 
@@ -611,7 +608,17 @@ def test_check_rms_clears_the_finding_the_import_re_accepted(
     accept_rms(stale_run_dir, stale_package_dir, waiver_file({CHAMFERS_BEFORE_FILLETS: REASON}))
 
     body = payload(
-        invoke("check", "rms", "--package", str(stale_package_dir), "--scope", "part", "--json")
+        invoke(
+            "check",
+            "rms",
+            "--package",
+            str(stale_package_dir),
+            "--out",
+            str(stale_run_dir),
+            "--scope",
+            "part",
+            "--json",
+        )
     )
 
     graded = [item for item in body["findings"] if item["check"] == CHAMFERS_BEFORE_FILLETS]

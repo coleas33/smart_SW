@@ -871,6 +871,10 @@ def check_interference_command(
 @check_app.command("rms")
 def check_rms_command(
     package: PackageOption,
+    out: Annotated[
+        Path,
+        typer.Option("--out", help="Run directory session.json, report.md and check.json go in."),
+    ],
     document: Annotated[
         list[str] | None,
         typer.Option("--document", help="Part document id to grade; repeatable."),
@@ -887,30 +891,47 @@ def check_rms_command(
     aggregated coverage printed here are what the tab shows and what a review would
     record - not a second evaluation that could drift from either.
 
-    That entry point writes `session.json` and `report.md` into the package directory and,
-    before the rules run, carries forward the newest `exceptions.json` under the run root
-    whose package carries the same `design_id` (`contracts/cli.md`). The run root this
-    command names is the package directory's own parent, so `--package` names a run
-    folder: pointed at a loose directory, the folders beside it are what is read as
-    earlier runs of this design. `exceptions.json` beside the package is read and
-    refreshed in memory, so a waiver whose feature tree has moved reads `needs_review` and
-    silences nothing; the file itself is never rewritten.
+    `--out` is required and is the run folder: `session.json`, `report.md` and `check.json`
+    go there, as they do for `review --out`, and the package directory is only read.
+    Grading a package must not edit it - the rule `check interference` already holds to -
+    and a default write target is how three untracked files ended up inside a golden
+    fixture, which is this project's regression baseline.
+
+    Before the rules run, the entry point carries forward the newest `exceptions.json`
+    under the run root whose package carries the same `design_id` (`contracts/cli.md`),
+    into the run folder. The run root this command names is `--out`'s own parent. A
+    candidate is a sibling that is its own package - the pane's check folders are, and so
+    is the package itself when `--out` is pointed beside it - so a run folder *this*
+    command wrote is never one: it holds `session.json`, `report.md` and `check.json` and
+    no `package.json`, and nothing is carried from one command-line run to the next.
+
+    What makes an acceptance survive the next check here is the other half of the rule:
+    `swreview exceptions accept-rms` writes `exceptions.json` beside the package, and that
+    file is read and refreshed in memory when the run folder carries none, so a waiver
+    whose feature tree has moved reads `needs_review` and silences nothing. Neither file
+    is ever rewritten.
 
     Violations are output, not an exit code: this exits 1 only when the package cannot be
     read, its feature array is empty, an argument names something the package does not
     carry, or a carried-forward exception store cannot be parsed.
     """
     document_ids = list(document) if document else None
+    out_dir = Path(out).resolve()
     with _errors_as_exit_1():
         run = run_rms_check(
             package,
+            out_dir=out_dir,
             scope=scope,
             document_id=document_ids,
-            run_root=Path(package).resolve().parent,
+            run_root=out_dir.parent,
         )
 
     payload = {
         "package": str(Path(package).resolve()),
+        "out_dir": str(out_dir),
+        "session_file": str(run.session_file),
+        "report_file": str(run.report_file),
+        "check_file": str(run.check_file),
         "scope": scope.value,
         "documents": run.documents,
         "assembly_document": run.assembly_document,
@@ -930,6 +951,8 @@ def check_rms_command(
     lines.append("")
     lines.append(f"coverage: {_counts_line(_coverage_counts(run.coverage))}")
     lines += [f"scope {item['scope']}: {item['reason']}" for item in run.unavailable_scopes]
+    lines.append(f"session: {run.session_file}")
+    lines.append(f"report: {run.report_file}")
     _emit(payload, lines, json_output)
 
 

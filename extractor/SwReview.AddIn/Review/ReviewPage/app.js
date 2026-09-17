@@ -15,12 +15,20 @@
   3. Every host message is `{type, id, payload}` and replies echo `id`
      (contracts/pane-host-messages.md). An object is posted rather than a string so the host
      reads it with `WebMessageAsJson`.
-  4. The backend is talked to directly - messages, evidence answers, dispositions, Stop and the
-     event stream - with the port, origin and token the host sent in `init`. The stream is read
-     with `fetch` plus a `ReadableStream` reader and never with `EventSource`, which can set
-     neither `Authorization` nor `Last-Event-ID`; the token travels in a header and never in a
-     URL, because a URL reaches access logs, WebView2's history and every crash dump
-     (chat-api.md, "Reading the event stream").
+  4. The backend is reached over `fetch` - messages, evidence answers, dispositions and Stop -
+     at the `origin` the host sent in `init`, which is THIS PAGE'S OWN origin under
+     `/__backend`. Nothing here crosses the network: the host answers that prefix itself and
+     calls the backend from C#, because a Task Pane page is a browser process and an endpoint
+     web filter that intercepts browser HTTP to loopback answers such a call with its own
+     interstitial no `fetch` can click through (docs/pane-backend-proxy.md). The page's CSP is
+     `connect-src 'self'` for the same reason, so a loopback URL is refused here before a
+     socket is ever opened. The event stream is the one route that cannot be served that way -
+     a `WebResourceRequested` response has to be complete before it is handed back, and a
+     stream never is - so the HOST reads `GET /sessions/{chat_id}/events` and pushes each raw
+     frame here as `events.frame` (chat-api.md "Reading the event stream"). This
+     page asks with `events.open`, gives up with `events.close`, and parses what arrives with
+     the same `onFrame` it always used - one SSE parser, and it lives here. Reconnect and its
+     backoff stay here too, because this page is what knows which `seq` it has shown.
   5. The page names no path. `report.open` and `folder.open` carry the `chat_id` and the host
      resolves the folder from its own record.
 */
@@ -101,6 +109,21 @@
     });
   }
 
+  /**
+   * One message the host does not reply to (`events.open`, `events.close`).
+   *
+   * Posted with no `id`, so nothing is left waiting for an answer that is never coming: a
+   * stream that is reopened on every reconnect would otherwise leave one pending promise per
+   * attempt for the life of the page. A refusal still arrives - as an unsolicited `error`,
+   * which reaches the banner.
+   */
+  function post(type, payload) {
+    if (!bridge) {
+      return;
+    }
+    bridge.postMessage({ type: type, id: null, payload: payload || {} });
+  }
+
   function onHostMessage(event) {
     var message = event.data;
     if (!message || typeof message.type !== 'string') {
@@ -144,6 +167,26 @@
         closeStream();
         setTurnRunning(false);
         renderBackendState('The backend stopped. Reopen the pane to start it again.', true);
+        return;
+      case 'events.frame':
+        // One raw SSE frame, read by the host. Frames for a chat this page is no longer
+        // showing are dropped: a reconnect or a second review replaces the transcript, and a
+        // late frame from the stream before it belongs to a session that is gone.
+        if (payload.chat_id === state.chatId) {
+          // A frame is the only proof this side of the channel has that the stream really
+          // connected: `events.open` is a request, and the host does not answer it. So this is
+          // where the backoff resets. Resetting it in `openStream` - which is exactly what the
+          // reconnect timer calls - undoes the doubling on every retry, and a backend that is
+          // down is then reopened once a second for the life of the pane.
+          state.reconnectDelay = RECONNECT_MIN;
+          showStreamState('Streaming.');
+          onFrame(payload.frame || '');
+        }
+        return;
+      case 'events.closed':
+        if (payload.chat_id === state.chatId) {
+          scheduleReconnect(payload.reason || 'The event stream closed.');
+        }
         return;
       case 'models':
         // Pushed with an `UnknownModel` refusal so the picker re-renders without asking.
@@ -220,76 +263,28 @@
   // ---- the event stream -------------------------------------------------------------------
 
   /**
-   * Reads `GET /sessions/{chat_id}/events` with `fetch` and a `ReadableStream` reader.
+   * Asks the host to read `GET /sessions/{chat_id}/events` and push the frames here.
    *
-   * `EventSource` cannot set `Authorization` and cannot set `Last-Event-ID` on a first
-   * connection, and putting the token in the query string is forbidden (chat-api.md), so the
-   * frames are parsed here. `Last-Event-ID` carries the highest `seq` already on screen, so a
-   * reconnect replays what was missed from `events.jsonl` and nothing that was not.
+   * The page does not make this call itself, and it could not be proxied like the others
+   * either: a `WebResourceRequested` response must be complete before the host hands it back,
+   * which a stream never is. The host reads it instead, from C#, where no endpoint web filter
+   * intercepts it (docs/pane-backend-proxy.md). `last_event_id` carries the
+   * highest `seq` already on screen, so a reconnect replays what was missed from
+   * `events.jsonl` and nothing that was not - the same rule as before, on the other side of
+   * the channel.
    */
   function openStream() {
-    if (!state.chatId || !state.backend || !state.token) {
+    if (!state.chatId) {
       return;
     }
 
     closeStream();
 
-    var controller = new AbortController();
-    state.stream = controller;
-
-    var headers = { Authorization: 'Bearer ' + state.token, Accept: 'text/event-stream' };
-    if (state.lastSeq > 0) {
-      headers['Last-Event-ID'] = String(state.lastSeq);
-    }
-
-    fetch(backendUrl(sessionPath('/events')), {
-      method: 'GET',
-      headers: headers,
-      cache: 'no-store',
-      signal: controller.signal
-    }).then(function (response) {
-      if (!response.ok || !response.body) {
-        throw new Error('the event stream answered ' + response.status);
-      }
-      state.reconnectDelay = RECONNECT_MIN;
-      showStreamState('Streaming.');
-      return read(response.body.getReader(), controller);
-    }).then(function () {
-      // The server closed the stream. Nothing is lost - every event is in events.jsonl and
-      // `Last-Event-ID` asks for what came after the last one shown.
-      scheduleReconnect(controller, 'The event stream closed.');
-    }).catch(function (error) {
-      scheduleReconnect(controller, error && error.message ? error.message : 'the event stream failed');
+    state.stream = state.chatId;
+    post('events.open', {
+      chat_id: state.chatId,
+      last_event_id: state.lastSeq > 0 ? String(state.lastSeq) : null
     });
-  }
-
-  function read(reader, controller) {
-    var decoder = new TextDecoder();
-    var buffer = '';
-
-    function step() {
-      return reader.read().then(function (chunk) {
-        if (chunk.done) {
-          return undefined;
-        }
-        if (controller !== state.stream) {
-          // A newer stream took over (a retry, or a second review). Stop feeding this one.
-          return undefined;
-        }
-
-        buffer += decoder.decode(chunk.value, { stream: true });
-
-        // SSE frames are separated by a blank line; the tail is a partial frame.
-        var frames = buffer.split(/\r?\n\r?\n/);
-        buffer = frames.pop();
-        for (var index = 0; index < frames.length; index++) {
-          onFrame(frames[index]);
-        }
-        return step();
-      });
-    }
-
-    return step();
   }
 
   /** One SSE frame: `id:`, `data:` (possibly several lines), and comments to ignore. */
@@ -340,8 +335,8 @@
     onChatEvent(event);
   }
 
-  function scheduleReconnect(controller, why) {
-    if (controller !== state.stream) {
+  function scheduleReconnect(why) {
+    if (!state.stream) {
       return;
     }
 
@@ -366,9 +361,8 @@
       state.reconnectTimer = null;
     }
     if (state.stream) {
-      var controller = state.stream;
       state.stream = null;
-      controller.abort();
+      post('events.close', {});
     }
   }
 

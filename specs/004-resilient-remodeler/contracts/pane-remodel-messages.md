@@ -36,6 +36,13 @@ byte-identical CSP meta tag, the `textContent`-only rule for every untrusted str
 | `remodel.show_change` | `{run_dir, change_seq}` | Resolve that change's persist ref through feature 003's `FeatureSelection` and the existing `SwEntityResolver`; reply `entity.shown {ok, state_code, message, full_path \| null}`, deliberately the identical payload `entity.show` already returns, so one resolver serves three tabs |
 | `report.open` / `folder.open` / `log.open` | `{run_dir}` / `{run_dir}` / `{}` | Delegated to `PaneActions`. The path is resolved from the host's own run record, canonicalized, and must be a descendant of `run_root` (or the log folder) before it reaches `ShellExecute`; anything else is answered `error` |
 
+`backend.origin` is the page's own origin under the backend prefix,
+`https://swreview.invalid/__backend` - the same value feature 002's `init` carries, never the
+backend's loopback origin. This page makes no `fetch` today; the field is sent so that one
+`init` field means one thing on every tab, and so that a fetch added here later is same-origin,
+as this page's `connect-src 'self'` CSP requires. `backend.port` is for the pane and for
+diagnostics; no page builds a URL out of it.
+
 The page never supplies a path. `run_dir` is echoed back from a `remodel.planned` the host itself
 issued, and the host resolves it against its own run record.
 

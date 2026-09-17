@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using SwReview.AddIn.Settings;
@@ -200,7 +201,12 @@ public sealed class ReviewHostOptions
 ///
 /// Threading: <see cref="Receive"/> is not re-entrant. The caller delivers page messages one
 /// at a time (see <see cref="IPageChannel"/>), off the SOLIDWORKS UI thread, because a
-/// backend restart takes seconds.
+/// backend restart takes seconds. That pump thread is the only one that *mutates* the session
+/// list, but it is no longer the only one that reads it: the tool-service gate asks
+/// <see cref="AnyTurnRunning"/> from the thread it schedules its re-attach on, to decide
+/// whether the bridge may follow the document the engineer just opened
+/// (docs/pane-findings-2026-09-16.md, finding 1). So the list is guarded by its own lock, and
+/// the backend round trips that scan makes are taken outside it.
 /// </summary>
 public sealed class ReviewHost : IDisposable
 {
@@ -210,7 +216,18 @@ public sealed class ReviewHost : IDisposable
 
     private readonly ReviewHostOptions _options;
     private readonly List<SessionRecord> _sessions = new List<SessionRecord>();
+
+    /// <summary>Guards <see cref="_sessions"/>; see the threading note in the class remarks.</summary>
+    private readonly object _sessionsLock = new object();
     private readonly PaneActions _actions;
+
+    /// <summary>
+    /// The one event-stream reader this host owns. One per host rather than one per chat: the
+    /// page shows one chat at a time, and a reader for a chat nobody is looking at would be a
+    /// socket and a thread kept open for a transcript that has been replaced.
+    /// </summary>
+    private readonly EventStreamPump _events;
+
     private UserSettings _settings;
     private string? _settingsError;
 
@@ -236,13 +253,42 @@ public sealed class ReviewHost : IDisposable
             Opener = () => _options.Opener,
             Secrets = () => new[] { _settings.ResolveApiKey(_options.Environment).Key },
         });
+
+        // Both callbacks run on the pump's reader thread. They go out through `Post`, which is
+        // the same choke point every other unsolicited message uses, and both strings are
+        // redacted: a frame carries a provider's own error message, and a failure reason carries
+        // whatever the transport said (FR-015).
+        _events = new EventStreamPump(
+            () => _options.Backend.Endpoint,
+            (chatId, frame) => Post("events.frame", new Dictionary<string, object?>
+            {
+                { "chat_id", chatId },
+                { "frame", Redact(frame) },
+            }),
+            (chatId, reason) => Post("events.closed", new Dictionary<string, object?>
+            {
+                { "chat_id", chatId },
+                { "reason", Redact(reason) },
+            }));
     }
 
     /// <summary>The settings in force. Replaced by a successful `settings.save`.</summary>
     public UserSettings Settings => _settings;
 
-    /// <summary>The chats this host started, newest last.</summary>
-    public IReadOnlyList<SessionRecord> Sessions => _sessions;
+    /// <summary>
+    /// The chats this host started, newest last. A snapshot: the list itself is guarded, and a
+    /// caller that walked the live one would be back to enumerating it while the pump appends.
+    /// </summary>
+    public IReadOnlyList<SessionRecord> Sessions
+    {
+        get
+        {
+            lock (_sessionsLock)
+            {
+                return _sessions.ToArray();
+            }
+        }
+    }
 
     /// <summary>
     /// The chat the pane is showing: the most recently started one, or null before the first
@@ -265,9 +311,13 @@ public sealed class ReviewHost : IDisposable
             throw new ArgumentNullException(nameof(chatId));
         }
 
-        _sessions.RemoveAll(session => session.ChatId == chatId);
         var record = new SessionRecord(chatId, runDirectory);
-        _sessions.Add(record);
+        lock (_sessionsLock)
+        {
+            _sessions.RemoveAll(session => session.ChatId == chatId);
+            _sessions.Add(record);
+        }
+
         LatestSession = record;
     }
 
@@ -284,19 +334,39 @@ public sealed class ReviewHost : IDisposable
     public SessionRecord TrackCheck(string runDirectory)
     {
         var record = SessionRecord.ForCheck(runDirectory);
-        _sessions.Add(record);
+        lock (_sessionsLock)
+        {
+            _sessions.Add(record);
+        }
+
         LatestSession = record;
         return record;
     }
 
     /// <summary>The record for <paramref name="chatId"/>, or null.</summary>
-    public SessionRecord? FindSession(string chatId) =>
-        _sessions.FirstOrDefault(session => session.ChatId == chatId);
+    public SessionRecord? FindSession(string chatId)
+    {
+        lock (_sessionsLock)
+        {
+            return _sessions.FirstOrDefault(session => session.ChatId == chatId);
+        }
+    }
 
     /// <summary>Whether any chat this host started has a turn in flight.</summary>
     public bool AnyTurnRunning()
     {
-        foreach (SessionRecord session in _sessions)
+        // A snapshot, because this is asked from the tool-service gate's thread while the page
+        // pump may be tracking a `review.start` or a Model check: enumerating the live list
+        // threw `Collection was modified` out of here, which the gate read as "cannot be asked"
+        // and skipped the re-attach for. The round trip below is taken outside the lock - it is
+        // the backend's 30-second timeout, and the pump must not queue behind it.
+        SessionRecord[] sessions;
+        lock (_sessionsLock)
+        {
+            sessions = _sessions.ToArray();
+        }
+
+        foreach (SessionRecord session in sessions)
         {
             // A check has no chat, so there is no chat id to ask the backend about. Skipped
             // explicitly rather than left to the catch below: a fabricated id would appear to
@@ -376,7 +446,12 @@ public sealed class ReviewHost : IDisposable
 
     public void Dispose()
     {
-        _sessions.Clear();
+        _events.Dispose();
+        lock (_sessionsLock)
+        {
+            _sessions.Clear();
+        }
+
         LatestSession = null;
     }
 
@@ -392,7 +467,18 @@ public sealed class ReviewHost : IDisposable
         switch (type)
         {
             case "ready":
+                // A page that says `ready` has reloaded: it has no transcript and no stream, so
+                // a reader started for the page before it is writing into something that is gone.
+                _events.Close();
                 SendInit(id);
+                return;
+
+            case "events.open":
+                OpenEventStream(id, payload);
+                return;
+
+            case "events.close":
+                _events.Close();
                 return;
 
             case "settings.get":
@@ -438,7 +524,13 @@ public sealed class ReviewHost : IDisposable
                     : new Dictionary<string, object?>
                     {
                         { "port", endpoint.Port },
-                        { "origin", endpoint.Origin },
+
+                        // The page's OWN origin under `/__backend`, not the backend's loopback
+                        // one: the page never crosses the network boundary, the host serves
+                        // that prefix from C# (docs/pane-backend-proxy.md), and the page's CSP
+                        // is `connect-src 'self'`. The port stays because the pane still shows
+                        // it and a diagnostic still needs it.
+                        { "origin", BackendProxy.PageOrigin },
                     }
             },
             { "token", endpoint?.Token },
@@ -454,6 +546,60 @@ public sealed class ReviewHost : IDisposable
 
     private string[] Providers() =>
         _options.BuildMode == BuildMode.Development ? AllProviders : ReleaseProviders;
+
+    // ---- the event stream -----------------------------------------------------------------
+
+    /// <summary>
+    /// `events.open`: read this chat's stream in the host and post each frame to the page.
+    ///
+    /// There is no reply. The page is not waiting for one - what it is waiting for is frames -
+    /// and a reader that answered `ok` before the first byte arrived would be saying something
+    /// it does not know yet. A refusal is still an `error`, because a page that asked for a
+    /// stream and will never get one has to be told.
+    /// </summary>
+    private void OpenEventStream(string? id, JsonElement payload)
+    {
+        string? chatId = Blank(Text(payload, "chat_id"));
+        if (chatId == null)
+        {
+            SendError(
+                id,
+                "InvalidRequest",
+                "events.open needs the chat_id of the stream to read.",
+                retryable: false);
+            return;
+        }
+
+        _events.Open(chatId, LastEventId(payload));
+    }
+
+    /// <summary>
+    /// The `last_event_id` the page sent, as a header value.
+    ///
+    /// A number as well as a string, because the page's own `seq` is a number and asking it to
+    /// stringify one before sending it would be a rule to forget. Zero and below mean "from the
+    /// beginning", which is the absence of the header rather than an id of 0.
+    /// </summary>
+    private static string? LastEventId(JsonElement payload)
+    {
+        if (payload.ValueKind != JsonValueKind.Object
+            || !payload.TryGetProperty("last_event_id", out JsonElement value))
+        {
+            return null;
+        }
+
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            return Blank(value.GetString());
+        }
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out long seq))
+        {
+            return seq > 0 ? seq.ToString(CultureInfo.InvariantCulture) : null;
+        }
+
+        return null;
+    }
 
     // ---- settings -----------------------------------------------------------------------
 
