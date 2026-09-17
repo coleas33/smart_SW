@@ -354,18 +354,44 @@ public sealed class ToolServiceRequestLogger : IBridgeDispatcher
 /// </summary>
 public sealed class DocumentPresenceDispatcher : IBridgeDispatcher
 {
-    /// <summary>The documented answer, and the substring the Python client matches on.</summary>
-    public const string DocumentClosedError =
-        "document no longer open: the model the tool service attached to was closed in SOLIDWORKS";
+    /// <summary>
+    /// The documented answer's opening, and the substring the Python client matches on. The
+    /// message repeats it - see <see cref="DocumentClosedError"/> - because this half is the
+    /// wire marker and the rest of the sentence is for the engineer.
+    /// </summary>
+    public const string DocumentClosedPrefix = "document no longer open";
 
     private readonly IBridgeDispatcher _inner;
     private readonly Func<bool> _documentIsOpen;
+    private readonly string _attachedDocumentPath;
 
-    public DocumentPresenceDispatcher(IBridgeDispatcher inner, Func<bool> documentIsOpen)
+    /// <param name="inner">The dispatcher whose failures are re-read.</param>
+    /// <param name="documentIsOpen">Asked on the application thread, after a failed command.</param>
+    /// <param name="attachedDocumentPath">The document the scope is bound to. Named in the
+    /// message, because the engineer reads that message against the document they are looking
+    /// at (docs/pane-findings-2026-09-16.md, finding 1).</param>
+    public DocumentPresenceDispatcher(
+        IBridgeDispatcher inner,
+        Func<bool> documentIsOpen,
+        string attachedDocumentPath)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _documentIsOpen = documentIsOpen ?? throw new ArgumentNullException(nameof(documentIsOpen));
+        _attachedDocumentPath = attachedDocumentPath
+            ?? throw new ArgumentNullException(nameof(attachedDocumentPath));
     }
+
+    /// <summary>
+    /// The answer for a document that has gone, naming the one the scope is bound to. The old
+    /// wording - "the model the tool service attached to was closed" - was accurate and still
+    /// misled: the pane header shows an open document, and the engineer read the sentence
+    /// against that one. The tool service now follows the active document
+    /// (<see cref="ToolServiceGate.FollowDocument"/>), so what is left for this message is the
+    /// window between the switch and the re-attach, and the attachment a running turn held.
+    /// </summary>
+    public static string DocumentClosedError(string attachedDocumentPath) =>
+        DocumentClosedPrefix + ": the tool service is attached to " + attachedDocumentPath
+        + ", which is no longer open in SOLIDWORKS";
 
     public BridgeResponse Dispatch(BridgeRequest request)
     {
@@ -398,7 +424,7 @@ public sealed class DocumentPresenceDispatcher : IBridgeDispatcher
             Id = response.Id,
             Status = BridgeStatus.Error,
             Result = null,
-            Error = DocumentClosedError,
+            Error = DocumentClosedError(_attachedDocumentPath),
             ElapsedMs = response.ElapsedMs,
         };
     }
@@ -648,6 +674,13 @@ public sealed class ToolServiceHost : IToolService
     /// <summary>The SC-004 artifact.</summary>
     public string LogPath => _log.Path;
 
+    /// <summary>
+    /// One timestamped line into this launch's log, for the gate: the only thing it has to say
+    /// is why it is leaving this service attached to a document the engineer has switched away
+    /// from, which belongs beside the <c>attached to ...</c> line rather than in the add-in log.
+    /// </summary>
+    public void WriteLog(string line) => _log.WriteLine(line);
+
     /// <summary>What <c>POST /sessions</c> is given as <c>bridge</c>.</summary>
     public BridgeConfig ReviewBridge => new BridgeConfig(PipeName, ReviewSecret);
 
@@ -700,7 +733,8 @@ public sealed class ToolServiceHost : IToolService
         // rewritten because the document went away. A remodel request's line is written to the
         // run folder's `remodel.log` as well, where the run report reads it.
         var chain = new ToolServiceRequestLogger(
-            new DocumentPresenceDispatcher(dispatcher, attached.DocumentIsOpen),
+            new DocumentPresenceDispatcher(
+                dispatcher, attached.DocumentIsOpen, attached.DocumentPath),
             recorder,
             log.Write,
             remodelLog: new RemodelRunLog(() => dispatcher.RemodelRunDirectory).Write);

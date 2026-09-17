@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+import subprocess
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
@@ -1365,6 +1366,29 @@ RMS_SUBASSEMBLY = "doc:5"
 """The subassembly the assembly family does not reach, named in its coverage item."""
 
 
+def check_rms(package_dir: str, *args: str, out: Path) -> Any:
+    """`swreview check rms` over `package_dir`, writing its run folder into `out`.
+
+    `--out` is required and is spelled here once rather than in thirty invocations: every
+    case below grades a package the command must not write into, which is the whole point
+    of the option, so a case that passed something else would be saying something this
+    helper's absence would hide. The three cases that are *about* `--out` - it is
+    required, what it writes, and which run root it implies - call `invoke` directly.
+    """
+    return invoke("check", "rms", "--package", package_dir, "--out", str(out), *args)
+
+
+@pytest.fixture
+def rms_out(tmp_path: Path) -> Path:
+    """The run folder a check writes into: under its own run root, never the package.
+
+    Its own root, because the run root the command derives from `--out` is that folder's
+    parent: a run folder dropped beside the package would make the package a sibling run
+    of itself, and the carry-forward would read it as an earlier run of this design.
+    """
+    return tmp_path / "runs" / "20260916-101532-check"
+
+
 @pytest.fixture
 def rms_dir(tmp_path: Path) -> Path:
     """A written package with one compliant part, one failing part, and an assembly."""
@@ -1457,8 +1481,8 @@ def rms_assembly_dir(tmp_path: Path) -> Path:
     return directory
 
 
-def test_check_rms_grades_every_part_document_by_default(rms_dir: Path) -> None:
-    body = payload(invoke("check", "rms", "--package", str(rms_dir), "--json"))
+def test_check_rms_grades_every_part_document_by_default(rms_dir: Path, rms_out: Path) -> None:
+    body = payload(check_rms(str(rms_dir), "--json", out=rms_out))
 
     assert body["scope"] == "all"
     assert body["documents"] == [RMS_FRAME, RMS_COVER]
@@ -1467,16 +1491,16 @@ def test_check_rms_grades_every_part_document_by_default(rms_dir: Path) -> None:
     ]
 
 
-def test_check_rms_document_limits_the_run_to_that_document(rms_dir: Path) -> None:
+def test_check_rms_document_limits_the_run_to_that_document(rms_dir: Path, rms_out: Path) -> None:
     body = payload(
-        invoke("check", "rms", "--package", str(rms_dir), "--document", RMS_FRAME, "--json")
+        check_rms(str(rms_dir), "--document", RMS_FRAME, "--json", out=rms_out)
     )
 
     assert body["documents"] == [RMS_FRAME]
     assert body["findings"] == []
 
 
-def test_check_rms_document_is_repeatable(rms_dir: Path) -> None:
+def test_check_rms_document_is_repeatable(rms_dir: Path, rms_out: Path) -> None:
     """`--document` selects part documents, in the caller's order, and narrows only them.
 
     The default scope still runs the assembly family, which has no document to narrow -
@@ -1484,16 +1508,14 @@ def test_check_rms_document_is_repeatable(rms_dir: Path) -> None:
     one other document the coverage names.
     """
     body = payload(
-        invoke(
-            "check",
-            "rms",
-            "--package",
+        check_rms(
             str(rms_dir),
             "--document",
             RMS_COVER,
             "--document",
             RMS_FRAME,
             "--json",
+            out=rms_out,
         )
     )
 
@@ -1504,16 +1526,18 @@ def test_check_rms_document_is_repeatable(rms_dir: Path) -> None:
     } == {RMS_FRAME, RMS_COVER, RMS_ASSEMBLY}
 
 
-def test_check_rms_reports_coverage_as_well_as_findings(rms_dir: Path) -> None:
-    body = payload(invoke("check", "rms", "--package", str(rms_dir), "--json"))
+def test_check_rms_reports_coverage_as_well_as_findings(rms_dir: Path, rms_out: Path) -> None:
+    body = payload(check_rms(str(rms_dir), "--json", out=rms_out))
 
     buckets = {item["bucket"] for item in body["coverage"]}
     assert {"checked", "unresolved", "out_of_scope"} <= buckets
     assert "modeling.resilience" in [item["check"] for item in body["coverage"]]
 
 
-def test_check_rms_human_output_names_the_findings_and_the_coverage(rms_dir: Path) -> None:
-    result = invoke("check", "rms", "--package", str(rms_dir))
+def test_check_rms_human_output_names_the_findings_and_the_coverage(
+    rms_dir: Path, rms_out: Path
+) -> None:
+    result = check_rms(str(rms_dir), out=rms_out)
 
     assert result.exit_code == 0
     assert "2 part document(s)" in result.stdout
@@ -1521,9 +1545,9 @@ def test_check_rms_human_output_names_the_findings_and_the_coverage(rms_dir: Pat
     assert "coverage: " in result.stdout
 
 
-def test_check_rms_scope_part_runs_the_part_rules(rms_dir: Path) -> None:
+def test_check_rms_scope_part_runs_the_part_rules(rms_dir: Path, rms_out: Path) -> None:
     body = payload(
-        invoke("check", "rms", "--package", str(rms_dir), "--scope", "part", "--json")
+        check_rms(str(rms_dir), "--scope", "part", "--json", out=rms_out)
     )
 
     assert body["scope"] == "part"
@@ -1533,9 +1557,10 @@ def test_check_rms_scope_part_runs_the_part_rules(rms_dir: Path) -> None:
 
 def test_check_rms_scope_assembly_runs_the_assembly_rules(
     rms_assembly_dir: Path,
+    rms_out: Path,
 ) -> None:
     body = payload(
-        invoke("check", "rms", "--package", str(rms_assembly_dir), "--scope", "assembly", "--json")
+        check_rms(str(rms_assembly_dir), "--scope", "assembly", "--json", out=rms_out)
     )
 
     assert body["scope"] == "assembly"
@@ -1547,7 +1572,9 @@ def test_check_rms_scope_assembly_runs_the_assembly_rules(
     }
 
 
-def test_check_rms_scope_assembly_grades_no_part_document(rms_assembly_dir: Path) -> None:
+def test_check_rms_scope_assembly_grades_no_part_document(
+    rms_assembly_dir: Path, rms_out: Path
+) -> None:
     """`--document` narrows the part families; the assembly family has one subject document.
 
     So an assembly-only run reports no part document and writes no part-scope coverage -
@@ -1555,7 +1582,7 @@ def test_check_rms_scope_assembly_grades_no_part_document(rms_assembly_dir: Path
     would make `--scope` mean nothing.
     """
     body = payload(
-        invoke("check", "rms", "--package", str(rms_assembly_dir), "--scope", "assembly", "--json")
+        check_rms(str(rms_assembly_dir), "--scope", "assembly", "--json", out=rms_out)
     )
 
     assert body["documents"] == []
@@ -1566,8 +1593,9 @@ def test_check_rms_scope_assembly_grades_no_part_document(rms_assembly_dir: Path
 
 def test_check_rms_scope_assembly_human_output_names_the_root_assembly_document(
     rms_assembly_dir: Path,
+    rms_out: Path,
 ) -> None:
-    result = invoke("check", "rms", "--package", str(rms_assembly_dir), "--scope", "assembly")
+    result = check_rms(str(rms_assembly_dir), "--scope", "assembly", out=rms_out)
 
     assert result.exit_code == 0
     assert f"root assembly document: {RMS_ASSEMBLY}" in result.stdout
@@ -1577,9 +1605,10 @@ def test_check_rms_scope_assembly_human_output_names_the_root_assembly_document(
 
 def test_check_rms_scope_assembly_names_the_subassembly_it_did_not_reach(
     rms_assembly_dir: Path,
+    rms_out: Path,
 ) -> None:
     body = payload(
-        invoke("check", "rms", "--package", str(rms_assembly_dir), "--scope", "assembly", "--json")
+        check_rms(str(rms_assembly_dir), "--scope", "assembly", "--json", out=rms_out)
     )
 
     subassemblies = [
@@ -1616,8 +1645,9 @@ def rms_part_only_dir(tmp_path: Path) -> Path:
 
 def test_check_rms_scope_all_on_a_part_only_package_names_no_root_assembly(
     rms_part_only_dir: Path,
+    rms_out: Path,
 ) -> None:
-    body = payload(invoke("check", "rms", "--package", str(rms_part_only_dir), "--json"))
+    body = payload(check_rms(str(rms_part_only_dir), "--json", out=rms_out))
 
     assert body["scope"] == "all"
     assert body["assembly_document"] is None
@@ -1633,18 +1663,19 @@ def test_check_rms_scope_all_on_a_part_only_package_names_no_root_assembly(
 
 def test_check_rms_scope_all_on_a_part_only_package_still_exits_zero(
     rms_part_only_dir: Path,
+    rms_out: Path,
 ) -> None:
     """A part-only dump is a package, not a bad argument: the run reports what it could
     not grade instead of failing."""
-    result = invoke("check", "rms", "--package", str(rms_part_only_dir))
+    result = check_rms(str(rms_part_only_dir), out=rms_out)
 
     assert result.exit_code == 0
     assert "root assembly document:" not in result.stdout
 
 
-def test_check_rms_scope_equations_runs_the_equation_rules(rms_dir: Path) -> None:
+def test_check_rms_scope_equations_runs_the_equation_rules(rms_dir: Path, rms_out: Path) -> None:
     body = payload(
-        invoke("check", "rms", "--package", str(rms_dir), "--scope", "equations", "--json")
+        check_rms(str(rms_dir), "--scope", "equations", "--json", out=rms_out)
     )
 
     assert body["scope"] == "equations"
@@ -1656,10 +1687,12 @@ def test_check_rms_scope_equations_runs_the_equation_rules(rms_dir: Path) -> Non
     ]
 
 
-def test_check_rms_scope_equations_does_not_run_the_part_rules(rms_dir: Path) -> None:
+def test_check_rms_scope_equations_does_not_run_the_part_rules(
+    rms_dir: Path, rms_out: Path
+) -> None:
     """The scopes are separate: `--scope equations` grades the managers, not the trees."""
     body = payload(
-        invoke("check", "rms", "--package", str(rms_dir), "--scope", "equations", "--json")
+        check_rms(str(rms_dir), "--scope", "equations", "--json", out=rms_out)
     )
 
     checks = {item["check"] for item in body["coverage"]}
@@ -1667,18 +1700,16 @@ def test_check_rms_scope_equations_does_not_run_the_part_rules(rms_dir: Path) ->
     assert RMS_GLOBALS_RULE in checks
 
 
-def test_check_rms_scope_equations_honours_document(rms_dir: Path) -> None:
+def test_check_rms_scope_equations_honours_document(rms_dir: Path, rms_out: Path) -> None:
     body = payload(
-        invoke(
-            "check",
-            "rms",
-            "--package",
+        check_rms(
             str(rms_dir),
             "--scope",
             "equations",
             "--document",
             RMS_FRAME,
             "--json",
+            out=rms_out,
         )
     )
 
@@ -1686,9 +1717,9 @@ def test_check_rms_scope_equations_honours_document(rms_dir: Path) -> None:
     assert body["findings"] == []
 
 
-def test_check_rms_scope_all_runs_every_family(rms_dir: Path) -> None:
-    result = invoke("check", "rms", "--package", str(rms_dir))
-    body = payload(invoke("check", "rms", "--package", str(rms_dir), "--json"))
+def test_check_rms_scope_all_runs_every_family(rms_dir: Path, rms_out: Path) -> None:
+    result = check_rms(str(rms_dir), out=rms_out)
+    body = payload(check_rms(str(rms_dir), "--json", out=rms_out))
 
     assert result.exit_code == 0
     assert body["unavailable_scopes"] == []
@@ -1701,16 +1732,18 @@ def test_check_rms_scope_all_runs_every_family(rms_dir: Path) -> None:
     assert "not yet available in this build" not in result.stdout
 
 
-def test_check_rms_scope_part_reports_no_assembly_document(rms_dir: Path) -> None:
+def test_check_rms_scope_part_reports_no_assembly_document(rms_dir: Path, rms_out: Path) -> None:
     """The key says what was graded, so a family that did not run leaves it null."""
     body = payload(
-        invoke("check", "rms", "--package", str(rms_dir), "--scope", "part", "--json")
+        check_rms(str(rms_dir), "--scope", "part", "--json", out=rms_out)
     )
 
     assert body["assembly_document"] is None
 
 
-def test_check_rms_reads_the_exceptions_file_beside_the_package(rms_dir: Path) -> None:
+def test_check_rms_reads_the_exceptions_file_beside_the_package(
+    rms_dir: Path, rms_out: Path
+) -> None:
     """An accepted exception waives the failing rule, exactly as it does for the tool."""
     from datetime import UTC, datetime
 
@@ -1733,7 +1766,7 @@ def test_check_rms_reads_the_exceptions_file_beside_the_package(rms_dir: Path) -
     )
     store.save()
 
-    body = payload(invoke("check", "rms", "--package", str(rms_dir), "--json"))
+    body = payload(check_rms(str(rms_dir), "--json", out=rms_out))
 
     described = next(
         finding
@@ -1744,43 +1777,43 @@ def test_check_rms_reads_the_exceptions_file_beside_the_package(rms_dir: Path) -
     assert described["exception_id"] == "EX-001"
 
 
-def test_check_rms_leaves_the_exceptions_file_byte_for_byte(rms_dir: Path) -> None:
+def test_check_rms_leaves_the_exceptions_file_byte_for_byte(rms_dir: Path, rms_out: Path) -> None:
     exceptions_file = rms_dir / "exceptions.json"
     exceptions_file.write_text('{"exceptions": []}\n', encoding="utf-8")
     before = exceptions_file.read_bytes()
 
-    assert invoke("check", "rms", "--package", str(rms_dir)).exit_code == 0
+    assert check_rms(str(rms_dir), out=rms_out).exit_code == 0
     assert exceptions_file.read_bytes() == before
 
 
-def test_check_rms_with_an_unknown_document_exits_1(rms_dir: Path) -> None:
-    result = invoke("check", "rms", "--package", str(rms_dir), "--document", "doc:99")
+def test_check_rms_with_an_unknown_document_exits_1(rms_dir: Path, rms_out: Path) -> None:
+    result = check_rms(str(rms_dir), "--document", "doc:99", out=rms_out)
 
     assert result.exit_code == 1
     assert "doc:99" in result.stderr
     assert result.stdout == ""
 
 
-def test_check_rms_with_an_assembly_document_exits_1(rms_dir: Path) -> None:
-    result = invoke("check", "rms", "--package", str(rms_dir), "--document", "doc:1")
+def test_check_rms_with_an_assembly_document_exits_1(rms_dir: Path, rms_out: Path) -> None:
+    result = check_rms(str(rms_dir), "--document", "doc:1", out=rms_out)
 
     assert result.exit_code == 1
     assert "doc:1" in result.stderr
 
 
-def test_check_rms_with_an_unknown_scope_is_a_usage_error(rms_dir: Path) -> None:
-    assert invoke("check", "rms", "--package", str(rms_dir), "--scope", "drawing").exit_code == 2
+def test_check_rms_with_an_unknown_scope_is_a_usage_error(rms_dir: Path, rms_out: Path) -> None:
+    assert check_rms(str(rms_dir), "--scope", "drawing", out=rms_out).exit_code == 2
 
 
-def test_check_rms_on_a_missing_package_exits_1(tmp_path: Path) -> None:
-    result = invoke("check", "rms", "--package", str(tmp_path / "nowhere"))
+def test_check_rms_on_a_missing_package_exits_1(tmp_path: Path, rms_out: Path) -> None:
+    result = check_rms(str(tmp_path / "nowhere"), out=rms_out)
 
     assert result.exit_code == 1
     assert result.stderr.startswith("error: ")
 
 
 def test_check_rms_reports_a_rule_that_cannot_grade_as_an_error_not_a_traceback(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, rms_out: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A raise out of the rule layer is exit 1 and one line on stderr, not a crash.
 
@@ -1817,12 +1850,241 @@ def test_check_rms_reports_a_rule_that_cannot_grade_as_an_error_not_a_traceback(
 
     monkeypatch.setattr(rms_checks, "run_part_checks", raising)
 
-    result = invoke("check", "rms", "--package", str(directory), "--scope", "part")
+    result = check_rms(str(directory), "--scope", "part", out=rms_out)
 
     assert result.exit_code == 1
     assert result.stderr.startswith("error: ")
     assert "the method has 6" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+RMS_PART_FIXTURE = REPO_ROOT / "reviewer" / "tests" / "golden" / "fixtures" / "rms-part"
+"""The golden fixture the command used to write into (docs/pane-findings-2026-09-16.md)."""
+
+
+def git_status_of(directory: Path) -> str:
+    """`git status --short` for one directory of this checkout, skipping when git cannot.
+
+    Skipped rather than failed when git has nothing to say: a source tree unpacked
+    without its repository is not a failing regression, it is a tree this test cannot
+    ask the question in.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--short", "--", str(directory)],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+            cwd=REPO_ROOT,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:  # pragma: no cover - no git here
+        pytest.skip(f"git cannot be run here: {exc}")
+    if proc.returncode != 0:  # pragma: no cover - not a checkout
+        pytest.skip(f"git cannot read {REPO_ROOT}: {proc.stderr.strip()}")
+    return proc.stdout.strip()
+
+
+def test_check_rms_without_out_is_a_usage_error(rms_dir: Path) -> None:
+    """`--out` is required and not defaulted. A grading command that defaults its write
+    target to the package is the one an engineer runs against a golden fixture without
+    meaning to, which is how three untracked files landed in one."""
+    result = invoke("check", "rms", "--package", str(rms_dir))
+
+    assert result.exit_code == 2
+    assert sorted(item.name for item in rms_dir.iterdir()) == ["package.json"]
+
+
+def test_check_rms_writes_the_run_folder_into_out_and_not_the_package(
+    rms_dir: Path, rms_out: Path
+) -> None:
+    body = payload(
+        invoke("check", "rms", "--package", str(rms_dir), "--out", str(rms_out), "--json")
+    )
+
+    assert sorted(item.name for item in rms_out.iterdir()) == [
+        "check.json",
+        "report.md",
+        "session.json",
+    ]
+    assert sorted(item.name for item in rms_dir.iterdir()) == ["package.json"]
+    assert body["out_dir"] == str(rms_out)
+    assert body["session_file"] == str(rms_out / "session.json")
+    assert body["report_file"] == str(rms_out / "report.md")
+    assert body["check_file"] == str(rms_out / "check.json")
+
+
+def test_check_rms_human_output_names_the_run_folder(rms_dir: Path, rms_out: Path) -> None:
+    result = check_rms(str(rms_dir), out=rms_out)
+
+    assert result.exit_code == 0
+    assert f"session: {rms_out / 'session.json'}" in result.stdout
+    assert f"report: {rms_out / 'report.md'}" in result.stdout
+
+
+def test_check_rms_carries_forward_from_the_runs_beside_out(
+    rms_dir: Path, rms_out: Path
+) -> None:
+    """The run root is `--out`'s parent: a sibling of the run folder that is *its own
+    package* and names this design carries its `exceptions.json` into this check (FR-029),
+    and nothing is written into the package being graded.
+
+    The sibling is built here as a copy of the package, because that is the shape a
+    candidate has to have - `carry_forward` reads a candidate's design from the
+    `package.json` in it - and it is the shape the pane's `POST /checks/rms` check folders
+    have, a check folder being its own package directory. It is deliberately *not* a shape
+    `check rms --out` produces: the test below pins that a run folder this command wrote is
+    never a candidate, and the one after it pins what does make a command-line acceptance
+    survive."""
+    from datetime import UTC, datetime
+
+    from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
+    from swreview.ir.loader import load_package
+    from tests.unit.test_tools_rms_checks import AcceptedFinding
+
+    earlier = rms_out.parent / "20260915-090000-check"
+    shutil.copytree(rms_dir, earlier)
+    package = load_package(earlier).package
+    store = ExceptionStore(earlier / EXCEPTIONS_FILE_NAME)
+    store.accept(
+        AcceptedFinding(
+            check="rms.intent.every_feature_described",
+            component_ids=["cmp:0003"],
+            configuration=package.design.active_configuration,
+        ),
+        package,
+        by="owner",
+        note="legacy tree, accepted by the owner",
+        at=datetime(2026, 9, 15, tzinfo=UTC),
+    )
+    store.save()
+
+    body = payload(check_rms(str(rms_dir), "--scope", "part", "--json", out=rms_out))
+
+    described = next(
+        finding
+        for finding in body["findings"]
+        if finding["check"] == "rms.intent.every_feature_described"
+    )
+    assert described["status"] == "checked_within_scope"
+    assert described["exception_id"] == "EX-001"
+    assert (rms_out / EXCEPTIONS_FILE_NAME).is_file()
+    assert not (rms_dir / EXCEPTIONS_FILE_NAME).exists()
+
+
+def test_check_rms_does_not_carry_forward_from_a_sibling_run_folder_of_its_own(
+    rms_dir: Path, rms_out: Path
+) -> None:
+    """A folder holding only a check run's artifacts is not a carry-forward candidate.
+
+    This is the boundary the test above sits on the far side of, and it is the one this
+    command's own run folders fall on: `carry_forward` reads a candidate's design from a
+    `package.json`, and `check rms --out` writes `session.json`, `report.md` and
+    `check.json` and nothing else. So an `exceptions.json` left in an earlier run folder
+    is not carried into the next run however new it is - which is why the contract does
+    not promise a CLI run-to-run chain, and why what actually carries an acceptance
+    forward is the file beside the package (the test below)."""
+    from datetime import UTC, datetime
+
+    from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
+    from swreview.ir.loader import load_package
+    from tests.unit.test_tools_rms_checks import AcceptedFinding
+
+    earlier = rms_out.parent / "20260915-090000-check"
+    assert check_rms(str(rms_dir), "--scope", "part", out=earlier).exit_code == 0
+    assert sorted(item.name for item in earlier.iterdir()) == [
+        "check.json",
+        "report.md",
+        "session.json",
+    ], "a run folder this command wrote is the subject; a package copy is the test above"
+    package = load_package(rms_dir).package
+    store = ExceptionStore(earlier / EXCEPTIONS_FILE_NAME)
+    store.accept(
+        AcceptedFinding(
+            check="rms.intent.every_feature_described",
+            component_ids=["cmp:0003"],
+            configuration=package.design.active_configuration,
+        ),
+        package,
+        by="owner",
+        note="legacy tree, accepted by the owner",
+        at=datetime(2026, 9, 15, tzinfo=UTC),
+    )
+    store.save()
+
+    body = payload(check_rms(str(rms_dir), "--scope", "part", "--json", out=rms_out))
+
+    described = next(
+        finding
+        for finding in body["findings"]
+        if finding["check"] == "rms.intent.every_feature_described"
+    )
+    assert described["status"] == "demonstrated"
+    assert described["exception_id"] is None
+    assert not (rms_out / EXCEPTIONS_FILE_NAME).exists()
+    carried = json.loads((rms_out / "check.json").read_text(encoding="utf-8"))
+    assert carried["exceptions_carried_forward"]["from_run"] is None
+    assert carried["exceptions_carried_forward"]["count"] == 0
+
+
+def test_check_rms_grades_the_acceptance_accept_rms_wrote_beside_the_package(
+    rms_dir: Path, rms_out: Path, tmp_path: Path
+) -> None:
+    """`check rms` -> `exceptions accept-rms` -> `check rms`: the loop an engineer walks.
+
+    The acceptance survives the second check, and it survives through `exceptions.json`
+    beside the package - which is where `accept-rms --package` writes it and what a run
+    whose run folder carries no store grades against - not through one run folder carrying
+    it to the next, which the test above shows cannot happen. The second run folder is
+    asserted empty of a store for the same reason: nothing was carried, and nothing needed
+    to be."""
+    from swreview.exceptions import EXCEPTIONS_FILE_NAME
+
+    first = rms_out.parent / "20260916-090000-check"
+    assert check_rms(str(rms_dir), "--scope", "part", out=first).exit_code == 0
+
+    waivers = tmp_path / "rms_exceptions.json"
+    waivers.write_text(
+        json.dumps({"rms.intent.every_feature_described": "legacy tree, accepted by owner"}),
+        encoding="utf-8",
+    )
+    imported = invoke(
+        "exceptions",
+        "accept-rms",
+        str(first),
+        "--package",
+        str(rms_dir),
+        "--file",
+        str(waivers),
+        "--by",
+        "owner",
+    )
+    assert imported.exit_code == 0, imported.stdout
+    assert (rms_dir / EXCEPTIONS_FILE_NAME).is_file(), "accept-rms writes beside the package"
+
+    body = payload(check_rms(str(rms_dir), "--scope", "part", "--json", out=rms_out))
+
+    described = next(
+        finding
+        for finding in body["findings"]
+        if finding["check"] == "rms.intent.every_feature_described"
+    )
+    assert described["status"] == "checked_within_scope"
+    assert described["exception_id"] == "EX-001"
+    assert not (rms_out / EXCEPTIONS_FILE_NAME).exists()
+
+
+def test_check_rms_leaves_a_golden_fixture_it_graded_untouched(rms_out: Path) -> None:
+    """The defect `--out` exists for: grading `tests/golden/fixtures/rms-part` in place
+    left `session.json`, `report.md` and `check.json` inside the fixture, and the fixtures
+    are this project's regression baseline (docs/pane-findings-2026-09-16.md item 2)."""
+    assert git_status_of(RMS_PART_FIXTURE) == "", "the fixture was already dirty"
+
+    result = check_rms(str(RMS_PART_FIXTURE), "--scope", "part", out=rms_out)
+
+    assert result.exit_code == 0
+    assert git_status_of(RMS_PART_FIXTURE) == ""
+    assert (rms_out / "session.json").is_file()
 
 
 # --- exceptions accept | list ----------------------------------------------------

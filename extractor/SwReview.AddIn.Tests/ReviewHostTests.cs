@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
 using SwReview.Extractor.Dump;
@@ -405,6 +406,108 @@ public sealed class ReviewHostTests
 
             Assert.True(world.Host.AnyTurnRunning());
             Assert.Equal(new[] { "chat-1" }, world.Backend.TurnQuestions.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// The session list belongs to the page-message pump thread, and the tool-service gate now
+    /// asks `AnyTurnRunning` from another one - it is the gate's busy question, and the answer
+    /// decides whether the bridge may be re-attached to the document the engineer just opened
+    /// (docs/pane-findings-2026-09-16.md, finding 1). A `review.start` or a Model check landing
+    /// while the question is out used to throw `Collection was modified` out of the enumerator,
+    /// which the gate read as "busy" and skipped the re-attach for: the very failure the
+    /// wiring exists to remove, with a race as its trigger.
+    ///
+    /// Deterministic rather than threaded: the backend round trip is where the pump gets its
+    /// turn, so a mutation from inside it is the same interleaving without the flake.
+    /// </summary>
+    [Fact]
+    public void AnyTurnRunningSurvivesASessionArrivingWhileItIsAsking()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            world.Host.TrackSession("chat-1", world.TrackedRun("chat-1"));
+            world.Host.TrackSession("chat-2", world.TrackedRun("chat-2"));
+
+            string check = world.TrackedRun("bracket-check");
+            world.Backend.OnTurnQuestion = chatId =>
+            {
+                if (chatId == "chat-1")
+                {
+                    world.Host.TrackCheck(check);
+                }
+            };
+
+            Assert.False(world.Host.AnyTurnRunning());
+
+            // The scan answers about the chats it started with; the new record is the pump's,
+            // and the next question will see it.
+            Assert.Equal(new[] { "chat-1", "chat-2" }, world.Backend.TurnQuestions.ToArray());
+        }
+    }
+
+    /// <summary>
+    /// The same invariant under real threads, because the deterministic test above only pins
+    /// the one interleaving it stages. Every mutation is on one thread, as the pump's are; only
+    /// the question crosses.
+    /// </summary>
+    [Fact]
+    public void TheSessionListSurvivesTheBusyQuestionAndThePumpRunningAtOnce()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun("chat-x");
+            var failures = new List<Exception>();
+            var stop = new ManualResetEventSlim();
+
+            var pump = new Thread(() =>
+            {
+                try
+                {
+                    for (int i = 0; i < 500 && !stop.IsSet; i++)
+                    {
+                        world.Host.TrackSession("chat-" + i, run);
+                        world.Host.TrackCheck(run);
+                        world.Host.FindSession("chat-" + i);
+                    }
+                }
+                catch (Exception failure)
+                {
+                    lock (failures)
+                    {
+                        failures.Add(failure);
+                    }
+                }
+                finally
+                {
+                    stop.Set();
+                }
+            })
+            {
+                IsBackground = true,
+            };
+
+            pump.Start();
+            try
+            {
+                while (!stop.IsSet)
+                {
+                    world.Host.AnyTurnRunning();
+                }
+            }
+            catch (Exception failure)
+            {
+                lock (failures)
+                {
+                    failures.Add(failure);
+                }
+            }
+
+            stop.Set();
+            Assert.True(pump.Join(TimeSpan.FromSeconds(30)), "the pump thread never finished.");
+            Assert.True(failures.Count == 0, failures.Count == 0 ? string.Empty : failures[0].ToString());
         }
     }
 
@@ -1046,11 +1149,18 @@ public sealed class ReviewHostTests
         /// <summary>Thrown for a chat this fake was never told about (T076).</summary>
         public Exception? TurnRunningFailure { get; set; }
 
+        /// <summary>
+        /// Runs inside the question, before it is answered. The real one is an HTTP round trip,
+        /// which is where the page-message pump gets to deliver the next message.
+        /// </summary>
+        public Action<string>? OnTurnQuestion { get; set; }
+
         public IReadOnlyList<ModelChoice> ListModels(string provider) => new ModelChoice[0];
 
         public bool IsTurnRunning(string chatId)
         {
             TurnQuestions.Add(chatId);
+            OnTurnQuestion?.Invoke(chatId);
             if (TurnRunningFailure != null)
             {
                 throw TurnRunningFailure;

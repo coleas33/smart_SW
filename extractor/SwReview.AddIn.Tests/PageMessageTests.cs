@@ -50,8 +50,18 @@ public sealed class PageMessageTests
             world.Receive("ready", "req-1", new { });
 
             JsonElement init = world.Reply("init", "req-1");
+            // The page's own origin under `/__backend`, not the backend's loopback one: the
+            // page never crosses the network boundary and the host serves that prefix from C#
+            // (docs/pane-backend-proxy.md). The port is still sent for the pane and for
+            // diagnostics; no page builds a URL out of it.
             Assert.Equal(51234, init.GetProperty("backend").GetProperty("port").GetInt32());
-            Assert.Equal("http://127.0.0.1:51234", init.GetProperty("backend").GetProperty("origin").GetString());
+            Assert.Equal(
+                "https://swreview.invalid/__backend",
+                init.GetProperty("backend").GetProperty("origin").GetString());
+            Assert.DoesNotContain(
+                "127.0.0.1",
+                init.GetProperty("backend").GetProperty("origin").GetString()!,
+                StringComparison.Ordinal);
             Assert.Equal("0FAKEtoken", init.GetProperty("token").GetString());
             Assert.Equal("settings", init.GetProperty("key_source").GetString());
             Assert.Equal(world.Settings.RunRoot, init.GetProperty("run_root").GetString());

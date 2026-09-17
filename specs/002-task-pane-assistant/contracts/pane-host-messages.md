@@ -4,11 +4,13 @@ The WebView2 pages talk to the add-in with `window.chrome.webview.postMessage(js
 receive `WebMessageReceived` replies as JSON. Every message is `{ "type": string, "id":
 string, "payload": object }`; replies echo `id`. Unknown types are answered with
 `{type: "error", payload: {message}}`. Pages are loaded from the add-in's content folder
-with the fixed virtual host name `swreview.invalid`, mapped with
-`SetVirtualHostNameToFolderMapping("swreview.invalid", <web folder>,
-CoreWebView2HostResourceAccessKind.Allow)`, never from the run folder. The page origin is
-therefore `https://swreview.invalid`, and that exact string is what the backend is started
-with as its allowed origin (`chat-api.md`).
+under the fixed virtual host name `swreview.invalid`, never from the run folder. The page
+origin is therefore `https://swreview.invalid`, and that exact string is what the backend is
+started with as its allowed origin (`chat-api.md`).
+
+`swreview.invalid` is a **name, not a mapping**: nothing calls
+`SetVirtualHostNameToFolderMapping`. The host serves every page file itself, out of the web
+folder, through `WebResourceRequested` - see the next section for why, and what that costs.
 
 ## WebView2 environment (every page)
 
@@ -26,6 +28,34 @@ plus the run folder path in plain text), never as an exception escaping into SOL
 the Extract tab keeps working. A failure on the Model check tab lands in that tab only; the
 other pages keep working.
 
+### Every page resource is served by the host
+
+Each page's WebView2 gets **one** `WebResourceRequested` filter - `https://swreview.invalid/*`,
+every resource context, every request source kind - and **one** handler, and that handler
+answers everything on the origin:
+
+| Request | Answered by |
+|---|---|
+| `https://swreview.invalid/__backend/...` | The backend proxy: the host calls `http://127.0.0.1:<port>/...` from C# and returns what it gets. `GET /sessions/{chat_id}/events` is refused with 501 - a `WebResourceRequested` response must be complete before it is handed back, so the host reads that route itself and pushes frames over the `events.*` messages instead. |
+| Anything else on the origin | The page file server: the file at that path under the web folder. |
+
+**There is no `SetVirtualHostNameToFolderMapping`, and there must not be one.** WebView2 raises
+no `WebResourceRequested` at all for a folder-mapped host - the mapping resolves the request
+itself, ahead of the event - so a page served that way cannot have its own origin intercepted,
+which is the whole of the same-origin proxy. Every page's `fetch` would reach the loopback
+backend as a browser request, and an endpoint web filter that intercepts browser HTTP to
+loopback answers it with an interstitial no `fetch` can click through
+(`docs/pane-backend-proxy.md`).
+
+The file server replaces the sandbox the mapping used to provide, so its rules are part of this
+contract: the canonical path must stay under the web folder (traversal, a rooted segment, or
+anything resolving outside it is a 404); the content type comes from a closed list of
+extensions - `html`, `js`, `css`, `json`, `svg`, `png`, `ico`, `woff2` - and any other
+extension is a 404; the query string and the fragment never choose the file; there is no
+directory listing and no implicit `index.html`; every response carries `Cache-Control:
+no-store`; and every refusal is the same 404, so a page learns only that it did not get what it
+asked for.
+
 ## Rendering untrusted text (every page)
 
 Assistant text deltas, tool `result_summary`, finding `title` and `recommended_action`,
@@ -36,7 +66,7 @@ is ever rendered, the renderer is vendored with HTML disabled and escaping on. E
 ships the same strict CSP meta tag:
 
 ```html
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 ```
 
 The host handles `NavigationStarting` and `NewWindowRequested` on every WebView2 control and
@@ -55,14 +85,30 @@ cancels any URL outside `https://swreview.invalid/`.
 | `report.open` | `{chat_id}` | Open `report.md` in the default app; reply `ok`. |
 | `folder.open` | `{chat_id}` | Open that session's run folder; reply `ok`. |
 | `log.open` | `{}` | Open the log folder; reply `ok`. |
+| `events.open` | `{chat_id, last_event_id \| null}` | Read `GET /sessions/{chat_id}/events` in the host and post every frame back as `events.frame`. Stops any stream this host was already reading. No reply: what the page is waiting for is frames. `error {error_class: "InvalidRequest"}` when no `chat_id` is given. |
+| `events.close` | `{}` | Stop the host's reader. No reply. |
 
 `report.open` and `folder.open` resolve the path from the host's own session record keyed by
 `chat_id`; the page never supplies a path. `log.open` uses the host's log folder. Every
 resolved path is canonicalized and must be a descendant of `run_root` (or the log folder)
 before it reaches `ShellExecute`; anything else is answered `error`.
 
-The page talks to the backend directly for messages, evidence answers, dispositions, and the
-event stream, using the token and origin from `init`. The host never proxies the SSE stream.
+The page talks to the backend directly for messages, evidence answers and dispositions, using
+the token and origin from `init`. **The event stream is the exception**: the host reads
+`GET /sessions/{chat_id}/events` itself and pushes each frame over this channel. That route
+cannot be served any other way — a `WebResourceRequested` response must be complete when its
+deferral ends, so server-sent events cannot be proxied — and reading it in C# is also what
+keeps it working on a workstation whose web filter intercepts HTTP from browser processes
+(`docs/pane-backend-proxy.md`). The frame is passed on **verbatim apart from two
+transformations**, and the page's parser is indifferent to both. Every configured secret is
+masked out of it first, through the host's own redacting choke point, because a frame carries a
+provider's own error message (FR-015). And the host reads the response line by line and rejoins
+a frame's lines with `\n`, so a backend that separates them with `\r\n` - `sse-starlette`'s
+default, which is what `reviewer/src/swreview/chat/server.py` streams - reaches the page as the
+same frame as one that uses `\n`; the page splits on either. Nothing else is done to it, and in
+particular nothing is parsed: the page already reads `id:` and `data:` and tracks `seq`, and a
+second parser in the host could disagree with it. "Untouched" would be the wrong word for both
+of those, and it would invite the next change to remove the redaction as a contract violation.
 
 ## Host → review page (unsolicited)
 
@@ -71,6 +117,13 @@ event stream, using the token and origin from `init`. The host never proxies the
 | `status` | `{stage: "extracting" \| "backend_starting" \| "ready" \| "error", message}` |
 | `document.changed` | `{path, configuration} \| null` when the active document changes |
 | `backend.stopped` | `{exit_code, log_path}` |
+| `events.frame` | `{chat_id, frame}` — one raw SSE frame, the text between blank lines, redacted of every configured secret and with its line endings normalised to `\n`; unparsed otherwise |
+| `events.closed` | `{chat_id, reason}` — the backend closed the stream or the read failed; the page decides whether to reopen, and with which `last_event_id` |
+
+One reader per host. A new `events.open`, an `events.close`, a `ready` from a page that
+reloaded, and disposing the host all stop it, and a frame that arrives from a stream that has
+already been replaced is dropped rather than posted: it belongs to a transcript that is gone.
+Reconnect and its backoff live in the page, because the page is what knows what it has shown.
 
 ## Terminal page → host
 

@@ -79,8 +79,11 @@ public sealed class TaskPaneOptions
     public string RunRoot { get; }
 
     /// <summary>
-    /// The folder mapped as `https://swreview.invalid`. Defaults to `web` beside the add-in,
-    /// which is where SwReview.AddIn.csproj copies both pages.
+    /// The folder the pages are served from as `https://swreview.invalid`. Defaults to `web`
+    /// beside the add-in, which is where SwReview.AddIn.csproj copies every page.
+    ///
+    /// Served by <see cref="PageFileServer"/> through `WebResourceRequested` rather than by a
+    /// virtual host mapping, so this is also the boundary a page request may not escape.
     /// </summary>
     public string WebFolder { get; set; } = DefaultWebFolder();
 
@@ -118,6 +121,24 @@ public sealed class TaskPaneOptions
     /// tab starts a CLI in and the same one the Extract tab is opened on.
     /// </summary>
     public Func<bool> EvidencePresent { get; set; } = () => false;
+
+    /// <summary>
+    /// Where the review backend is listening, or null before it has handshaken.
+    ///
+    /// The pane needs it because the pages no longer call loopback themselves: they call their
+    /// own origin under <see cref="BackendProxy.PathPrefix"/> and this control serves those
+    /// calls from C# (`docs/pane-backend-proxy.md`). A callback for the same reason
+    /// <see cref="CurrentSessionRunDirectory"/> is one - the pane is built before the backend
+    /// is started, and a `settings.save` starts a new child on a new port.
+    /// </summary>
+    public Func<BackendEndpoint?> Backend { get; set; } = () => null;
+
+    /// <summary>
+    /// How a proxied call is actually made. The real one is
+    /// <see cref="BackendProxyHandler.Send"/>; injected so the wiring can be exercised against
+    /// a fake with no backend, no Python and no socket.
+    /// </summary>
+    public Func<ProxiedRequest, ProxiedResponse> ProxySend { get; set; } = BackendProxyHandler.Send;
 
     private static string DefaultWebFolder() =>
         Path.Combine(Path.GetDirectoryName(typeof(TaskPaneOptions).Assembly.Location) ?? ".", "web");
@@ -164,16 +185,29 @@ public sealed class TaskPaneOptions
 /// </summary>
 public sealed class TaskPaneControl : UserControl
 {
-    /// <summary>The fixed virtual host both pages are served from (pane-host-messages.md).</summary>
+    /// <summary>
+    /// The fixed virtual host name every page is served from (pane-host-messages.md).
+    ///
+    /// A <i>name</i>, not a mapping: nothing calls `SetVirtualHostNameToFolderMapping` any
+    /// more, because WebView2 raises no `WebResourceRequested` for a folder-mapped host and
+    /// that event is how the pane serves both its pages and the backend proxy
+    /// (docs/pane-backend-proxy.md).
+    /// </summary>
     public const string VirtualHostName = "swreview.invalid";
 
     /// <summary>The page origin, and the origin the backend is started with.</summary>
     public const string PageOrigin = "https://swreview.invalid";
 
-    /// <summary>The Review page inside the mapped folder.</summary>
+    /// <summary>
+    /// The one `WebResourceRequested` filter every page gets: the whole origin, because the
+    /// host now serves the page files as well as the backend prefix.
+    /// </summary>
+    public const string PageResourceFilter = PageOrigin + "/*";
+
+    /// <summary>The Review page inside the web folder.</summary>
     public const string ReviewPageUrl = PageOrigin + "/Review/ReviewPage/index.html";
 
-    /// <summary>The Ask tab's terminal page inside the same mapped folder (T060).</summary>
+    /// <summary>The Ask tab's terminal page inside the same web folder (T060).</summary>
     public const string TerminalPageUrl = PageOrigin + "/Terminal/TerminalPage/index.html";
 
     /// <summary>The Model check tab's page, tab 4 (T083, contracts/model-check.md).</summary>
@@ -253,6 +287,19 @@ public sealed class TaskPaneControl : UserControl
     private readonly ActionsPanel _actions;
     private readonly StepStrip _steps;
 
+    /// <summary>
+    /// One proxy handler for the control, shared by every page: it holds no per-page state, and
+    /// four of them would be four copies of the same two callbacks.
+    /// </summary>
+    private readonly BackendProxyHandler _proxy;
+
+    /// <summary>
+    /// The other half of the same handler: the pane's own page files, served from
+    /// <see cref="TaskPaneOptions.WebFolder"/> because there is no folder mapping any more.
+    /// One per control for the same reason <see cref="_proxy"/> is.
+    /// </summary>
+    private readonly PageFileServer _files;
+
     private Task<CoreWebView2Environment>? _environment;
     private WebView2? _reviewView;
     private WebView2? _terminalView;
@@ -268,6 +315,12 @@ public sealed class TaskPaneControl : UserControl
     public TaskPaneControl(TaskPaneOptions options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
+
+        // Through the options rather than from captured values: the backend is started after
+        // the pane is built, and a `settings.save` replaces it with a child on another port.
+        _proxy = new BackendProxyHandler(
+            () => _options.Backend(), request => _options.ProxySend(request));
+        _files = new PageFileServer(_options.WebFolder);
 
         _reviewTab = NewTab("Review", ReviewPurpose, Note("Starting the review page..."));
         _terminalTab = NewTab("Ask", AskPurpose, Note("Starting the Ask page..."));
@@ -377,6 +430,14 @@ public sealed class TaskPaneControl : UserControl
 
     /// <summary>Whether the Review page is loaded (false on a workstation with no runtime).</summary>
     public bool ReviewPageReady => _reviewView != null && _reviewView.CoreWebView2 != null;
+
+    /// <summary>
+    /// The Review page itself, for the tests that drive the real pane's page rather than an
+    /// offscreen copy of it (`BackendProxyPageTests`). Internal: nothing in the
+    /// add-in reaches into a page, and everything that talks to one goes through
+    /// <see cref="ReviewChannel"/>.
+    /// </summary>
+    internal CoreWebView2? ReviewPage => _reviewView?.CoreWebView2;
 
     /// <summary>Whether the Terminal page is loaded.</summary>
     public bool TerminalPageReady => _terminalView != null && _terminalView.CoreWebView2 != null;
@@ -571,11 +632,22 @@ public sealed class TaskPaneControl : UserControl
         await view.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
 
         CoreWebView2 core = view.CoreWebView2;
-        core.SetVirtualHostNameToFolderMapping(
-            VirtualHostName, _options.WebFolder, CoreWebView2HostResourceAccessKind.Allow);
 
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.IsSwipeNavigationEnabled = false;
+
+        // The whole origin, one filter, one handler (docs/pane-backend-proxy.md section 4).
+        // There is deliberately no `SetVirtualHostNameToFolderMapping`: WebView2 raises no
+        // `WebResourceRequested` at all for a folder-mapped host, so a page served that way
+        // cannot call its own origin under `/__backend` - which is the entire same-origin
+        // proxy. `BackendProxyHandler.TryServe` answers the backend prefix and
+        // `PageFileServer` answers the page's own files, so the pane keeps one origin, the CSP
+        // stays `connect-src 'self'`, and there is no CORS anywhere.
+        core.AddWebResourceRequestedFilter(
+            PageResourceFilter,
+            CoreWebView2WebResourceContext.All,
+            CoreWebView2WebResourceRequestSourceKinds.All);
+        core.WebResourceRequested += (sender, args) => ServePageResource(environment, args);
 
         core.NavigationStarting += OnNavigationStarting;
         core.NewWindowRequested += OnNewWindowRequested;
@@ -583,6 +655,122 @@ public sealed class TaskPaneControl : UserControl
 
         core.Navigate(url);
         return view;
+    }
+
+    /// <summary>
+    /// Answers every request on `https://swreview.invalid`: a `/__backend/...` call by calling
+    /// the loopback backend from C# (<see cref="BackendProxy"/>), and anything else by reading
+    /// the file out of the web folder (<see cref="PageFileServer"/>).
+    ///
+    /// Two servers, one order: <see cref="BackendProxyHandler.TryServe"/> first, and its null -
+    /// "not mine" - is what hands the request to the file server. Nothing falls through to
+    /// WebView2 any more, because there is no folder mapping behind this: an unanswered request
+    /// is a blank tab, so the file server always answers, with a 404 when it will not serve.
+    ///
+    /// The order of the rest is the whole of it. The request is read <b>before</b> the deferral
+    /// goes async: `args.Request` and its `Content` stream belong to this thread and to this
+    /// handler call, and reading them after the first `await` reads a stream that has already
+    /// been closed. The work itself runs off the UI thread, because it is a synchronous HTTP
+    /// round trip or a file read and this is the SOLIDWORKS application thread. The response is
+    /// created and assigned back on the UI thread, where the deferral is completed.
+    ///
+    /// `async void` because that is what a `WebResourceRequested` handler taking a deferral has
+    /// to be; nothing is allowed to escape it, so the body is a `try` around everything.
+    /// </summary>
+    private async void ServePageResource(
+        CoreWebView2Environment environment, CoreWebView2WebResourceRequestedEventArgs args)
+    {
+        CoreWebView2Deferral deferral;
+        string uri;
+        string method;
+        var headers = new List<KeyValuePair<string, string>>();
+        byte[]? body;
+
+        try
+        {
+            uri = args.Request.Uri;
+            method = args.Request.Method;
+            foreach (KeyValuePair<string, string> header in args.Request.Headers)
+            {
+                headers.Add(header);
+            }
+
+            body = ReadRequestContent(args.Request.Content);
+            deferral = args.GetDeferral();
+        }
+        catch (Exception)
+        {
+            // The page went away mid-request. There is nothing to answer and nothing to log to.
+            return;
+        }
+
+        try
+        {
+            ProxiedResponse answer = await Task.Run(
+                () => _proxy.TryServe(
+                        uri,
+                        method,
+                        headers,
+                        body == null ? null : new MemoryStream(body))
+                    ?? _files.Serve(uri)).ConfigureAwait(true);
+
+            if (!IsDisposed)
+            {
+                args.Response = environment.CreateWebResourceResponse(
+                    new MemoryStream(answer.Content),
+                    answer.Status,
+                    // WebView2 rejects an empty reason phrase, and a backend that sent none
+                    // still sent a status.
+                    string.IsNullOrEmpty(answer.Reason) ? "OK" : answer.Reason,
+                    answer.Headers);
+            }
+        }
+        catch (Exception)
+        {
+            // Left unanswered on purpose. WebView2 then tries the request itself and fails -
+            // a network error for a backend call, which the page already renders, and a
+            // missing resource for a page file, which is a tab that does not finish loading.
+            // Both are worse than an answer and better than the alternative: an exception out
+            // of an `async void` here would surface inside SOLIDWORKS, which is the one
+            // outcome this pane never allows. Nothing reaches here that the two servers below
+            // answer themselves - they return a response for every input, including a 404.
+        }
+        finally
+        {
+            try
+            {
+                deferral.Complete();
+            }
+            catch (Exception)
+            {
+                // The page or the WebView2 went away while the call was outstanding - up to
+                // the proxy's own timeout, which a `settings.save` restart or a disposed pane
+                // both make reachable. There is nothing left to answer, and this `finally`
+                // sits outside the guard above, so an exception here would escape an
+                // `async void` and surface inside SOLIDWORKS: the one outcome this pane
+                // never allows.
+            }
+        }
+    }
+
+    /// <summary>
+    /// The request body, read whole on the UI thread. Null when there is none, which is what
+    /// <see cref="BackendProxyHandler"/> means by "no body" - a `GET` has no content stream at
+    /// all.
+    /// </summary>
+    private static byte[]? ReadRequestContent(Stream? content)
+    {
+        if (content == null)
+        {
+            return null;
+        }
+
+        using (var buffer = new MemoryStream())
+        {
+            content.CopyTo(buffer);
+            byte[] bytes = buffer.ToArray();
+            return bytes.Length == 0 ? null : bytes;
+        }
     }
 
     /// <summary>

@@ -349,6 +349,11 @@ public class SwReviewAddIn : ISwAddin
             // than captured, because these run long after the constructor that assigns it.
             DocumentPresent = () => CurrentDocument() != null,
             EvidencePresent = () => RunFolders.HasEvidence(_pane?.SessionRunDirectory),
+
+            // The same-origin backend proxy (docs/pane-backend-proxy.md). Read through the
+            // field for the same reason as the two above: `_backend` is created after this
+            // pane is, and a settings save replaces it with a child on another port.
+            Backend = () => _backend?.Endpoint,
         });
 
         _panel = _pane.Actions;
@@ -722,7 +727,13 @@ public class SwReviewAddIn : ISwAddin
             () => CurrentDocument() != null,
             () => ToolServiceHost.Start(new ToolServiceOptions(app, new ControlAppThreadInvoker(pane))),
             service => reviewOptions.Bridge = service.ReviewBridge,
-            Report);
+            Report,
+            schedule: null,
+            // What holds the bridge, and so what stops it being re-attached to another document
+            // (docs/pane-findings-2026-09-16.md, finding 1). Both read late: the remodel host is
+            // built after this gate is, and either can be gone by the time the question is asked.
+            busy: () => (_reviewHost != null && _reviewHost.AnyTurnRunning())
+                || (_remodelHost != null && _remodelHost.RunInProgress));
     }
 
     private void StartBackend(UserSettings settings, ResolvedApiKey key)
@@ -841,6 +852,14 @@ public class SwReviewAddIn : ISwAddin
             // is running this is a no-op: one add-in instance, one tool service, one scope
             // (data-model.md).
             _toolService?.EnsureStarted();
+
+            // ...and a no-op is not enough once the engineer switches documents: the scope is
+            // bound to the one it attached to, so the bridge answers `document no longer open`
+            // for every later command until the add-in is reloaded
+            // (docs/pane-findings-2026-09-16.md, finding 1). This re-attaches it, unless a
+            // review turn or a remodel run is holding it, in which case it says so in the
+            // tool-service log. Still one service at a time.
+            _toolService?.FollowDocument(CurrentDocument()?.Path);
         }
         catch (Exception failure)
         {

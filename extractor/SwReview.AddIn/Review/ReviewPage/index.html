@@ -2,15 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <title>SwReview</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <!--
-  The Review tab. Served from the virtual host https://swreview.invalid, so the CSP above is
+  The Review tab. Served by the host itself on https://swreview.invalid, so the CSP above is
   what the page actually runs under: no inline script, no inline style, no remote anything,
-  and connections only to the loopback backend. Every handler is attached in app.js with
+  and connections to this page's own origin only - the backend is reached under `/__backend`,
+  where the host answers and calls it from C# (docs/pane-backend-proxy.md).
+
+  Every handler is attached in app.js with
   addEventListener - there is no event-handler attribute anywhere in this file - and app.js
   builds every node with textContent rather than by assigning markup, because assistant text,
   finding titles and drawing text are authored by a model or by a reviewed document

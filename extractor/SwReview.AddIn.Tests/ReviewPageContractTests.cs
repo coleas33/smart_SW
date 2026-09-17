@@ -128,6 +128,45 @@ public sealed class ReviewPageContractTests
                 + Environment.NewLine + "chat-events.schema.json: " + Join(Contract.ChatEvents));
     }
 
+    // ---- the event stream travels over this channel -----------------------------------------
+
+    /// <summary>
+    /// The four rows the event stream now travels on, and the reader that had to go with them.
+    ///
+    /// Rules 1 to 3 above already hold the page and the contract to the same vocabulary, so this
+    /// test exists for what they cannot see: that these four rows in particular are on the
+    /// tables, and that the page no longer reads `GET /sessions/{id}/events` itself. The second
+    /// half is the point of the round. A page that kept its `fetch` reader <i>and</i> handled
+    /// `events.frame` would pass every scan above while still making the one call a web filter
+    /// intercepts, and the pane would go on showing nothing on the workstation this was built
+    /// for (`docs/pane-backend-proxy.md`).
+    /// </summary>
+    [Fact]
+    public void TheEventStreamRowsAreOnTheTablesAndThePageNoLongerReadsTheStreamItself()
+    {
+        Assert.Contains("events.open", Contract.PageToHost);
+        Assert.Contains("events.close", Contract.PageToHost);
+        Assert.Contains("events.frame", Contract.HostToPage);
+        Assert.Contains("events.closed", Contract.HostToPage);
+
+        string all = string.Join(
+            Environment.NewLine,
+            ReviewPageFiles.Scripts().Select(script => Strip(script.Value)));
+
+        foreach (string type in new[] { "events.open", "events.close", "events.frame", "events.closed" })
+        {
+            Assert.True(Mentions(all, type), $"the page never names '{type}'.");
+        }
+
+        foreach (string gone in new[] { "text/event-stream", "getReader", "ReadableStream" })
+        {
+            Assert.False(
+                all.Contains(gone),
+                $"the page still reads the event stream itself ({gone}); the host reads that "
+                    + "route and pushes frames as `events.frame` (contracts/chat-api.md).");
+        }
+    }
+
     // ---- rule 4: the key never comes back --------------------------------------------------
 
     [Fact]

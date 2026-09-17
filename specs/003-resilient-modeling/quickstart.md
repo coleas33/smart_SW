@@ -9,31 +9,42 @@ two fixture parts built by hand from `benchmarks/native/rms-part/RECIPE.md` (one
 six groups in order and one seeded violation per reachable rule; one with a missing group
 and two groups transposed).
 
-### Working copies of the fixtures
+### Where the runs land
 
-`swreview check rms` writes `session.json` and `report.md` into the package directory and,
-before the rules run, carries the newest same-`design_id` `exceptions.json` under the run
-root - the package directory's parent - into it (FR-029). Every `tests/golden/fixtures`
-package carries the placeholder `design_id` `dsn:1`, so running these scenarios against the
-fixture directories in place would leave untracked files in the repository and copy one
-fixture's waivers into another. Copy each fixture into its own run root first; every path
-below is one of those copies.
+`swreview check rms` requires `--out <dir>`: `session.json`, `report.md` and `check.json` go
+into that run folder, and the package directory is only read. The fixtures are therefore
+graded where they are, and nothing is copied for the `check rms` scenarios below. Before the
+rules run, the newest same-`design_id` `exceptions.json` under the run root - `--out`'s own
+parent - is carried into the run folder (FR-029), but only from a sibling that is *its own
+package*: `carry_forward` reads a candidate's design from the `package.json` in it, and a
+`check rms` run folder holds `session.json`, `report.md` and `check.json` and no package. So
+two run folders side by side cannot carry one fixture's waivers into the other whatever
+`design_id` they share, and no `check rms` below carries anything forward from an earlier
+one. The one carry-forward these scenarios do see is Scenario 5's, where `--out` sits beside
+the copied package: a package *is* its own candidate, so its `exceptions.json` is copied into
+the run folder - the same store the run would have graded as the fallback. Each fixture still
+gets its own run root below; that is ordinary hygiene, one scenario's artifacts kept out of
+another's folder, not protection against a cross-carry that cannot happen. What survives from
+one run to the next is an acceptance `exceptions accept-rms` recorded: it writes
+`exceptions.json` beside the package, and a run whose run folder carries no store grades that
+file.
 
 ```powershell
 cd reviewer
 $runs = "$env:TEMP\swreview-quickstart"
 Remove-Item -Recurse -Force $runs -ErrorAction Ignore
-foreach ($name in 'rms-part', 'rms-assembly', 'rms-equations', 'rms-exceptions') {
-  $dir = New-Item -ItemType Directory -Force "$runs\$name\run"
-  Copy-Item "tests\golden\fixtures\$name\package.json" $dir
-  Copy-Item "tests\golden\fixtures\$name\exceptions.json" $dir -ErrorAction Ignore
-}
+New-Item -ItemType Directory -Force $runs | Out-Null
 ```
+
+One command below still needs a writable copy of a fixture, and says so where it is used:
+`exceptions accept-rms` records an acceptance, so it writes `exceptions.json` beside the
+package it accepts against. That is what it is for - it is not grading - but it must never
+be pointed at a fixture.
 
 ## Scenario 1 (US1): Part rules on a fixture package (no SOLIDWORKS)
 
 ```powershell
-uv run swreview check rms --package $runs\rms-part\run --scope part
+uv run swreview check rms --package tests\golden\fixtures\rms-part --out $runs\rms-part\run --scope part
 ```
 
 Expected: one finding per seeded violation on the seeded part `doc:2`, with the rule id,
@@ -54,14 +65,14 @@ reason `no suppress-test run` for the other two parts, with the coverage reason 
 `<tested>/<present>`; the four assembly data-gap rules unresolved and the six out-of-scope
 rules once each, which a `--scope part` run writes too because they are the session's
 never-dispatched rules; and the `modeling.resilience` summary item in `unresolved` with the
-counts. The closing line reads
+counts. The coverage line reads
 `coverage: checked: 18, skipped: 4, unresolved: 11, failed: 0, out_of_scope: 6`.
 
 ## Scenario 2 (US2, US3): Assembly and equation rules
 
 ```powershell
-uv run swreview check rms --package $runs\rms-assembly\run --scope assembly
-uv run swreview check rms --package $runs\rms-equations\run --scope equations
+uv run swreview check rms --package tests\golden\fixtures\rms-assembly --out $runs\rms-assembly\run --scope assembly
+uv run swreview check rms --package tests\golden\fixtures\rms-equations --out $runs\rms-equations\run --scope equations
 ```
 
 Expected from the assembly run: the face-mate finding, the first-component finding (unfixed
@@ -70,14 +81,14 @@ fixed root, and the Toolbox finding naming the one document inserted as two conf
 `rms.assembly.mate_chain_depth` and `rms.assembly.toolbox_parts_not_configurations` also
 unresolved for the components the mate graph and the Toolbox flag could not answer for; the
 four data-gap rules unresolved once, with `rms.assembly.subassemblies` naming the fixture's
-subassembly document `doc:2`. The closing line reads
+subassembly document `doc:2`. The coverage line reads
 `coverage: checked: 0, skipped: 0, unresolved: 7, failed: 0, out_of_scope: 6`.
 
 Expected from the equations run: both equation rules fail on the part with no equations at
 all - `rms.params.global_variables_present` demonstrated and
 `rms.params.dimensions_driven_by_equations` suspected - and both are unresolved on two other
 parts for two different reasons: the part whose equation manager was a gap, and the part
-whose `is_global` flag could not be read. The closing line reads
+whose `is_global` flag could not be read. The coverage line reads
 `coverage: checked: 2, skipped: 0, unresolved: 7, failed: 0, out_of_scope: 6`.
 
 ## Scenario 3 (US1 to US3, workstation): Probe, dump, check on a real part
@@ -90,8 +101,8 @@ whose `is_global` flag could not be read. The closing line reads
 3. Time `swreview-extract dump --out ..\benchmarks\packages\rms-part\native` once with the
    defaults and once with `--features none --equations off`; record both timings.
 4. `uv run swreview validate benchmarks/packages/rms-part/native`, then
-   `uv run swreview check rms --package benchmarks/packages/rms-part/native` and compare with
-   `benchmarks/answer_keys/rms-part.json`.
+   `uv run swreview check rms --package benchmarks/packages/rms-part/native --out $runs\native\run-1`,
+   and compare with `benchmarks/answer_keys/rms-part.json`.
 
 Expected: the seeded violations are found; anything the probe showed unavailable appears as
 unresolved coverage, never as pass or fail; the two timings differ by well under 20 s on the
@@ -102,7 +113,7 @@ fixture and are re-measured on a 200-component assembly in T062.
 ```powershell
 uv run swreview rms suppress-plan --package benchmarks/packages/rms-part/native --document <doc id>
 swreview-extract suppress-test --doc <part> --plan ..\benchmarks\packages\rms-part\native\suppress-plan.json --acknowledge-rebuild --out ..\benchmarks\packages\rms-part\native
-uv run swreview check rms --package benchmarks/packages/rms-part/native --scope part
+uv run swreview check rms --package benchmarks/packages/rms-part/native --out $runs\native\run-2 --scope part
 ```
 
 Expected: the plan lists the Detail content features; the command refuses without the flag,
@@ -117,7 +128,7 @@ coverage, and the pre-suppressed one as skipped.
 ## Scenario 5 (US5): Exceptions and advisory coverage
 
 ```powershell
-uv run swreview check rms --package $runs\rms-exceptions\run --scope part
+uv run swreview check rms --package tests\golden\fixtures\rms-exceptions --out $runs\rms-exceptions\run --scope part
 ```
 
 The fixture carries an active exception for `rms.core.shell_last` on one part and a
@@ -127,11 +138,16 @@ Expected: the shell result is checked within scope with `exception:EX-001` in it
 limits; the other finding stands and names its exception as needing re-review; the six
 out-of-scope rules appear once under `out_of_scope` with their reasons.
 
-Then, on the run directory Scenario 1 produced - which is its package directory, because
-`run_rms_check` writes `session.json` and `report.md` beside the package it graded:
+Then the import, against a run of the `rms-part` fixture. This is the one scenario that
+copies a fixture: `accept-rms` writes `exceptions.json` beside the package it accepts
+against, so it is pointed at a copy and never at the fixture itself.
 
 ```powershell
-uv run swreview exceptions accept-rms $runs\rms-part\run --package $runs\rms-part\run --file rms_exceptions.json
+$accept = "$runs\rms-part-accept"
+New-Item -ItemType Directory -Force $accept | Out-Null
+Copy-Item -Recurse "tests\golden\fixtures\rms-part" "$accept\package"
+uv run swreview check rms --package $accept\package --out $accept\run --scope part
+uv run swreview exceptions accept-rms $accept\run --package $accept\package --file rms_exceptions.json
 ```
 
 with a file naming `rms.core.shell_last`, `rms.detail.holes_last`, and `rms.bogus.rule`.

@@ -164,6 +164,14 @@ public sealed class RemodelHost : IDisposable
     /// <summary>The runs this host planned, oldest first.</summary>
     public IReadOnlyList<RemodelRun> Runs => _runs;
 
+    /// <summary>
+    /// Whether a plan or a run is in flight - the same fact `remodel.plan` refuses a second
+    /// one on. Read by <see cref="SwReview.AddIn.ToolService.ToolServiceGate.FollowDocument"/>:
+    /// every write the run makes goes through the bridge, so restarting the tool service
+    /// underneath one would fail it mid-copy.
+    /// </summary>
+    public bool RunInProgress => _busy;
+
     /// <summary>The newest run, or null before the first `remodel.plan`.</summary>
     public RemodelRun? LatestRun { get; private set; }
 
@@ -375,7 +383,16 @@ public sealed class RemodelHost : IDisposable
                     : new Dictionary<string, object?>
                     {
                         { "port", endpoint.Port },
-                        { "origin", endpoint.Origin },
+
+                        // The page's OWN origin under `/__backend`, as `ReviewHost` and
+                        // `ModelCheckHost` send: one field, one meaning in all three
+                        // contracts. This page does not fetch today - its backend work is
+                        // host-side - but handing it the loopback origin would be a trap,
+                        // because the page's CSP is `connect-src 'self'`, so the first fetch
+                        // built from it would be refused by the renderer
+                        // (docs/pane-backend-proxy.md). The port stays because the pane still
+                        // shows it and a diagnostic still needs it.
+                        { "origin", BackendProxy.PageOrigin },
                     }
             },
             { "token", endpoint?.Token },

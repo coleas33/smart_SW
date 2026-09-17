@@ -51,12 +51,19 @@ public sealed class ModelCheckHostTests
             world.Receive("ready", "r1", new { });
 
             JsonElement init = world.Reply("init", "r1");
-            // The backend's own loopback origin, which is what the page sends its `Origin`
-            // header and its fetch URLs against; the page's origin is the virtual host.
+            // The page's OWN origin under `/__backend`, not the backend's loopback one: the
+            // page fetches its own origin and the host serves that prefix from C#
+            // (docs/pane-backend-proxy.md). The port is still sent - the pane shows it, and a
+            // diagnostic still needs to know which child is listening - but no page builds a
+            // URL from it.
             Assert.Equal(51234, init.GetProperty("backend").GetProperty("port").GetInt32());
             Assert.Equal(
-                "http://127.0.0.1:51234",
+                "https://swreview.invalid/__backend",
                 init.GetProperty("backend").GetProperty("origin").GetString());
+            Assert.DoesNotContain(
+                "127.0.0.1",
+                init.GetProperty("backend").GetProperty("origin").GetString()!,
+                StringComparison.Ordinal);
             Assert.Equal("0FAKEtoken", init.GetProperty("token").GetString());
             Assert.Equal(world.RunRoot, init.GetProperty("run_root").GetString());
 
