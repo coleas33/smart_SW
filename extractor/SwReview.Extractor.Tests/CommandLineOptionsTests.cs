@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using SwReview.Extractor.Capture;
@@ -415,6 +416,248 @@ public class CommandLineOptionsTests
         {
             ReadOnlyGuard.Assert(member);
         }
+    }
+
+    // ---- probe standards (T094) ---------------------------------------------------
+
+    [Fact]
+    public void StandardsProbe_IsTheSecondSubjectOfProbe()
+    {
+        // contracts/cli.md row 20: "probe standards --doc <document>". The subject list is
+        // the shipped one, so a subject added to the switch and forgotten here - or the
+        // reverse - is a failing test rather than an "Unknown probe" at the workstation.
+        Assert.Equal(new[] { "rms", "standards" }, Program.ProbeSubjects);
+    }
+
+    [Fact]
+    public void StandardsProbe_ReadsTheDocumentOption()
+    {
+        // The subject is args[1], so the options start at index 2 - the same shape
+        // "probe rms" parses with, and the same option list.
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "probe", "standards", "--doc", @"C:\vault\frame.SLDDRW" }, 2, ProbeOptions);
+
+        Assert.Equal(@"C:\vault\frame.SLDDRW", parsed.Value("doc"));
+    }
+
+    [Fact]
+    public void StandardsProbe_DocIsOptionalAndMeansTheActiveDocument()
+    {
+        Assert.Null(CommandLine.Parse(new[] { "probe", "standards" }, 2, ProbeOptions).Value("doc"));
+    }
+
+    [Theory]
+    [InlineData("out")]
+    [InlineData("profile")]
+    [InlineData("meshes")]
+    public void StandardsProbe_TakesNoOptionThatImpliesAWriteOrADump(string option)
+    {
+        // The probe prints and writes nothing (contracts/cli.md). An option it does not have
+        // is a usage error rather than a silent no-op that looks like it was honoured.
+        Assert.Throws<UsageError>(() =>
+            CommandLine.Parse(new[] { "probe", "standards", "--" + option, "x" }, 2, ProbeOptions));
+    }
+
+    [Fact]
+    public void StandardsProbe_BuildsItsGateWithTheReadOnlyGuard()
+    {
+        // contracts/cli.md row 20: the run is read-only and "activates no sheet". The gate is
+        // built HERE, not left to SwSession's default, so the guard it carries is a decision
+        // the test can see - and it is the READ-ONLY guard, never the suppress-test one,
+        // which is the only other ICallGuard in the product.
+        var observer = new RecordingGateObserver();
+        SwGate gate = Program.StandardsProbeGate(observer);
+
+        Assert.Same(observer, gate.Observer);
+        Assert.Equal("ok", gate.Call("GetViews", () => "ok"));
+        Assert.Throws<MutatingCallError>(() => gate.Call("ActivateSheet", () => "no"));
+        Assert.Throws<MutatingCallError>(() => gate.Call("ActivateView", () => "no"));
+        Assert.Throws<MutatingCallError>(() => gate.Call("SetSuppression2", () => "no"));
+        Assert.Throws<MutatingCallError>(() => gate.Call("ForceRebuild3", () => "no"));
+
+        // Attempted-and-refused is part of "what did this run touch", so every name is in the
+        // gated set and every refusal is recorded for the log to print.
+        Assert.Equal(
+            new[] { "GetViews", "ActivateSheet", "ActivateView", "SetSuppression2", "ForceRebuild3" },
+            observer.Members);
+        Assert.Equal(4, observer.Refusals.Count);
+    }
+
+    [Fact]
+    public void StandardsProbe_NamesEveryInteropMemberItReadsToTheGuard()
+    {
+        // The ten probes of research.md R4 read members the shipped readers leave ungated on
+        // purpose (their dumpers name them). Ungated they would reach no ReadOnlyGuard.Assert,
+        // no circuit breaker and no observer, and the probe's own gate log - the artifact
+        // contracts/cli.md says proves the run - would be missing exactly the reads it is
+        // printing. These are the production names, not copies.
+        Assert.Equal(
+            new[]
+            {
+                // The run's own header, and the check that stops SwSession.Attach opening
+                // anything - the only reason this command can claim it opened no document.
+                "GetOpenDocumentByName",
+                "GetPathName",
+                "Configuration.Name",
+
+                // PROBE-1, the exploded read.
+                "IsExploded",
+                "IModelDocExtension.IsExploded",
+                "GetConfigurationNames",
+                "GetConfigurationByName",
+                "GetNumberOfExplodeSteps",
+                "GetModelDoc2",
+
+                // PROBE-2, the transparency-override polarity.
+                "HasMaterialPropertyValues",
+                "GetMaterialPropertyValues2",
+
+                // PROBE-3, component visibility.
+                "Visible",
+                "GetVisibility",
+
+                // PROBE-4, the revision-table read.
+                "RevisionTable",
+                "ITableAnnotation.Type",
+                "CurrentRevision",
+                "TotalRowCount",
+                "Text",
+                "DisplayedText",
+
+                // PROBE-5, the note walk, and PROBE-7's sheet enumeration.
+                "Sheet",
+                "GetViews",
+                "GetName",
+                "Type",
+                "GetNotes",
+                "GetText",
+                "GetFirstView",
+                "GetNextView",
+
+                // PROBE-6, the drawing-view and annotation walk.
+                "GetName2",
+                "GetReferencedModelName",
+                "ReferencedDocument",
+                "GetAnnotations",
+                "GetAnnotationCount",
+                "GetFirstAnnotation3",
+                "GetNext3",
+                "GetType",
+                "IsDangling",
+                "GetDisplayDimensions",
+                "Type2",
+                "GetOverride",
+                "GetOverrideValue",
+
+                // PROBE-8, the cut-list walk.
+                "Feature.Name",
+                "GetTypeName2",
+                "GetSpecificFeature2",
+                "GetBodyCount",
+                "ExcludeFromCutList",
+
+                // PROBE-9, the sketch text-segment read.
+                "GetSketchTextSegments",
+
+                // PROBE-10, the persistent references.
+                "GetPersistReferenceCount3",
+            },
+            Program.StandardsProbeInteropMembers);
+
+        foreach (string member in Program.StandardsProbeInteropMembers)
+        {
+            ReadOnlyGuard.Assert(member);
+        }
+
+        Assert.Equal(
+            Program.StandardsProbeInteropMembers.Length,
+            Program.StandardsProbeInteropMembers.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    [Fact]
+    public void StandardsProbe_GateLogProvesTheThreeClaimsWhenNothingWasTouched()
+    {
+        // "Activates no sheet, opens no document, changes no display state, and its own gate
+        // log is printed at the end so the run proves it" (contracts/cli.md row 20). Each
+        // claim is its own line, and each names what it watched for, because a bare "none" is
+        // only worth reading beside the list it is none of.
+        IReadOnlyList<string> lines = Program.StandardsProbeGateLogLines(
+            new[] { "GetViews", "GetNotes" }, new MutatingCallError[0]);
+
+        Assert.Equal("gate log: the read-only guard, 2 distinct interop members", lines[0]);
+        Assert.Contains("  members: GetViews, GetNotes", lines);
+        Assert.Contains("  mutating members: none", lines);
+        Assert.Contains("  refusals: none", lines);
+        Assert.Contains(lines, line => line.StartsWith("  sheet activation: none  (watched: ActivateSheet, "));
+        Assert.Contains(lines, line => line.StartsWith("  document opening: none  (watched: OpenDoc6, "));
+        Assert.Contains(lines, line => line.StartsWith("  display state: none  (watched: "));
+    }
+
+    [Fact]
+    public void StandardsProbe_GateLogNamesWhatWasTouchedWhenSomethingWas()
+    {
+        // The log is evidence, so it must be able to say "yes". A run that activated a sheet
+        // prints the member on the sheet-activation line rather than a "none" nobody can
+        // check.
+        IReadOnlyList<string> lines = Program.StandardsProbeGateLogLines(
+            new[] { "ActivateSheet", "OpenDoc6", "ShowNamedView2" }, new MutatingCallError[0]);
+
+        Assert.Contains(lines, line => line.StartsWith("  mutating members: ActivateSheet"));
+        Assert.Contains(lines, line => line.StartsWith("  sheet activation: ActivateSheet  (watched:"));
+        Assert.Contains(lines, line => line.StartsWith("  document opening: OpenDoc6  (watched:"));
+        Assert.Contains(lines, line => line.StartsWith("  display state: ShowNamedView2  (watched:"));
+    }
+
+    [Fact]
+    public void StandardsProbe_GateLogNamesEveryRefusal()
+    {
+        IReadOnlyList<string> lines = Program.StandardsProbeGateLogLines(
+            new[] { "ActivateSheet" },
+            new[] { new MutatingCallError("ActivateSheet", "ActivateSheet modifies the model.") });
+
+        Assert.Contains("  refusals: ActivateSheet modifies the model.", lines);
+    }
+
+    [Fact]
+    public void StandardsProbe_GateLogIsPrintedEvenWhenTheRunGatedNothing()
+    {
+        // A run that failed on attach still prints its gate log: "it touched nothing" is the
+        // answer the log exists to give, and a missing log reads as an unanswered question.
+        IReadOnlyList<string> lines = Program.StandardsProbeGateLogLines(
+            new string[0], new MutatingCallError[0]);
+
+        Assert.Equal("gate log: the read-only guard, 0 distinct interop members", lines[0]);
+        Assert.Contains("  members: none", lines);
+        Assert.Contains("  mutating members: none", lines);
+    }
+
+    [Fact]
+    public void StandardsProbe_WatchedMembersAnswerExactlyOneClaimEach()
+    {
+        // Three claims, three lists. A name on two of them would be reported twice and
+        // silently make one line's "none" a lie about the other.
+        string[] watched = Program.StandardsProbeSheetActivationMembers
+            .Concat(Program.StandardsProbeDocumentOpeningMembers)
+            .Concat(Program.StandardsProbeDisplayStateMembers)
+            .ToArray();
+
+        Assert.Equal(watched.Length, watched.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Contains("ActivateSheet", Program.StandardsProbeSheetActivationMembers);
+        Assert.Contains("ActivateView", Program.StandardsProbeSheetActivationMembers);
+        Assert.Contains("OpenDoc6", Program.StandardsProbeDocumentOpeningMembers);
+    }
+
+    [Fact]
+    public void StandardsProbe_RefusesADocumentThatIsNotAlreadyOpen()
+    {
+        // SwSession.Attach would otherwise OPEN the named document read-only - the
+        // extractor's one file-opening call - and contracts/cli.md says this run opens no
+        // document. The refusal names the document and says why, before SOLIDWORKS is asked
+        // for anything else.
+        string message = Program.StandardsProbeDocumentNotOpenMessage(@"C:\vault\frame.SLDDRW");
+
+        Assert.Contains(@"C:\vault\frame.SLDDRW", message);
+        Assert.Contains("opens no document", message);
     }
 
     // ---- suppress-test -----------------------------------------------------------

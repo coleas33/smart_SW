@@ -50,7 +50,7 @@ from dataclasses import dataclass
 
 from swreview.checks.standards.document import read_card
 from swreview.checks.standards.profile import StandardsProfile
-from swreview.checks.standards.registry import RULES, StandardsRule, bind
+from swreview.checks.standards.registry import RULES, StandardsRule, bind, rules_in
 from swreview.checks.standards.results import (
     RuleResult,
     Subject,
@@ -377,10 +377,8 @@ def evaluate_drawing(
     """Every drawing check over one graded drawing document, in catalogue order."""
     scope = drawing_scope(document, package, profile)
     results: list[RuleResult] = []
-    for rule in RULES.values():
-        if rule.scope == SCOPE:
-            assert rule.fn is not None, f"{rule.id} has no evaluator"
-            results.extend(_evaluate(scope, rule))
+    for rule in rules_in(SCOPE):
+        results.extend(_evaluate(scope, rule))
     return results
 
 

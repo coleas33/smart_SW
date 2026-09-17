@@ -596,6 +596,44 @@ def test_the_newest_same_design_store_under_the_run_root_is_carried_forward(
     assert body["verdict"]["waived"] == 1
 
 
+def test_the_human_line_names_the_run_a_carried_forward_store_came_from(
+    tmp_path: Path,
+) -> None:
+    """Quickstart Scenario 5, the human line: `(None)` is not a statement about anything.
+
+    `CarriedForward.reason` says why nothing was copied and is `None` when something was,
+    so the parenthetical has to be built from whichever of the two is present - the reason
+    when nothing was carried forward, and the run folder it came from when something was.
+    """
+    package = exploded_package()
+    package_dir = written(tmp_path, package)
+    earlier = written(tmp_path, package, name="earlier")
+    (earlier / EXCEPTIONS_FILE_NAME).write_text(store_body(package), encoding="utf-8")
+
+    result = run_standards(package_dir, tmp_path / "run")
+
+    line = next(
+        row for row in result.stdout.splitlines() if row.startswith("exceptions carried forward:")
+    )
+    assert line == "exceptions carried forward: 1 (copied from the run folder 'earlier')"
+    assert "None" not in line
+
+
+def test_the_human_line_gives_the_reason_when_nothing_was_carried_forward(
+    graded: tuple[Path, Path],
+) -> None:
+    """The other half of the same line: nothing copied, and the run says why."""
+    package_dir, out_dir = graded
+
+    result = run_standards(package_dir, out_dir)
+
+    body = payload(run_standards(package_dir, out_dir.parent / "run-json", "--json"))
+    line = next(
+        row for row in result.stdout.splitlines() if row.startswith("exceptions carried forward:")
+    )
+    assert line == f"exceptions carried forward: 0 ({body['exceptions_carried_forward']['reason']})"
+
+
 def test_a_run_folder_this_command_wrote_is_never_a_carry_forward_candidate(
     tmp_path: Path,
 ) -> None:

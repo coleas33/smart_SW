@@ -35,7 +35,7 @@ from typing import Literal
 
 from swreview.checks.standards.library import PrefixMatcher
 from swreview.checks.standards.profile import StandardsProfile
-from swreview.checks.standards.registry import RULES, bind
+from swreview.checks.standards.registry import RULES, bind, rules_in
 from swreview.checks.standards.results import (
     RuleResult,
     Subject,
@@ -117,10 +117,8 @@ def evaluate_document(
             "every check rather than a document to grade"
         )
     results: list[RuleResult] = []
-    for rule in RULES.values():
-        if rule.scope == SCOPE:
-            assert rule.fn is not None, f"{rule.id} has no evaluator"
-            results.extend(rule.fn(document, package, profile))
+    for rule in rules_in(SCOPE):
+        results.extend(rule.fn(document, package, profile))
     return results
 
 

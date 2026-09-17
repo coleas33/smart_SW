@@ -105,7 +105,11 @@ from swreview.checks.standards.profile import DEFAULT_PATH, SETTING_NAME, Profil
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
 from swreview.checks.standards.registry import STANDARDS_FAMILY
 from swreview.checks.standards.report import document_of, verdict_json
-from swreview.checks.standards.run import NO_REBUILD_SENTENCE, run_standards_check
+from swreview.checks.standards.run import (
+    NO_REBUILD_SENTENCE,
+    CarriedForward,
+    run_standards_check,
+)
 from swreview.exceptions import (
     EXCEPTIONS_FILE_NAME,
     ExceptionStore,
@@ -1008,6 +1012,19 @@ golden fixture must not, which is how three untracked files ended up inside a fi
 already."""
 
 
+def _carry_forward_note(carried: CarriedForward) -> str:
+    """What the carry-forward did, as one sentence for the human line.
+
+    `CarriedForward` states the two cases in two fields - `reason` when nothing was copied
+    and `from_run` when something was, each `None` in the other case - so the parenthetical
+    is built from whichever is present. Printing the field that is `None` would put the
+    word "None" where a statement about what silenced what belongs.
+    """
+    if carried.reason is not None:
+        return carried.reason
+    return f"copied from the run folder '{carried.from_run}'"
+
+
 @check_app.command("standards")
 def check_standards_command(
     package: PackageOption,
@@ -1097,7 +1114,7 @@ def check_standards_command(
             f"{document_id} ({run.document_kinds.get(document_id) or 'kind not recorded'})"
             for document_id in run.documents
         ),
-        f"exceptions carried forward: {carried.count} ({carried.reason})",
+        f"exceptions carried forward: {carried.count} ({_carry_forward_note(carried)})",
     ]
     for finding in run.findings:
         lines.append("")

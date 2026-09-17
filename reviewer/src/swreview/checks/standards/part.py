@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from swreview.checks.rms_types import load_table
 from swreview.checks.standards.library import PrefixMatch, PrefixMatcher
 from swreview.checks.standards.profile import StandardsProfile
-from swreview.checks.standards.registry import RULES, bind
+from swreview.checks.standards.registry import RULES, bind, rules_in
 from swreview.checks.standards.results import (
     CUT_LIST_PHASE_GAPS,
     FEATURE_PHASE_GAPS,
@@ -241,10 +241,8 @@ def evaluate_part(
     """Every part check over one graded part document, in catalogue order."""
     scope = part_scope(document, package, profile)
     results: list[RuleResult] = []
-    for rule in RULES.values():
-        if rule.scope == SCOPE:
-            assert rule.fn is not None, f"{rule.id} has no evaluator"
-            results.extend(rule.fn(scope))
+    for rule in rules_in(SCOPE):
+        results.extend(rule.fn(scope))
     return results
 
 

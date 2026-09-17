@@ -49,13 +49,14 @@ from typing import Any
 
 from pydantic_core import to_jsonable_python
 
+from swreview.checks.rules.report import SUMMARY_BUCKETS, scope_over
 from swreview.checks.rules.report import report_results as _report_results
-from swreview.checks.rules.report import scope_over
 from swreview.checks.standards.profile import ProfileIdentity
 from swreview.checks.standards.registry import RULES, STANDARDS_FAMILY, StandardsRule
 from swreview.checks.standards.results import RuleResult
 from swreview.checks.standards.traversal import CheckedDocument
 from swreview.checks.standards.verdict import (
+    COVERAGE_BUCKETS,
     CoveragePair,
     FindingOutcome,
     ReleaseVerdict,
@@ -136,9 +137,14 @@ BUCKET_ORDER: tuple[str, ...] = (
 """Worst first (FR-033). A single line standing for a check shows `buckets[0]`, so no
 summary line claims coverage that is partly unknown."""
 
-SESSION_BUCKETS: frozenset[str] = frozenset({"unresolved", "skipped", "checked", "out_of_scope"})
+SESSION_BUCKETS: frozenset[str] = frozenset(COVERAGE_BUCKETS)
 """The rendered buckets that are read off `session.coverage`. `failed` and `warned` are not:
-the session has no `warned` bucket, and its `failed` one is for a tool that raised."""
+the session has no `warned` bucket, and its `failed` one is for a tool that raised.
+
+The four are `checks/standards/verdict.py`'s vocabulary and not a second list: this module
+walks them three times - here, over the pairs the verdict counts, and over the documents the
+summary names - and three typed-out copies of one vocabulary are three chances for a walk to
+be one bucket short of it (T099)."""
 
 EMPTY_SETTING = re.compile(r"the profile's (?P<setting>[A-Za-z0-9_.]+) is empty")
 """How a check says it was skipped because the profile setting it reads is empty.
@@ -417,7 +423,7 @@ def _finding_outcomes(session: ReviewSession) -> list[FindingOutcome]:
 def _coverage_pairs(session: ReviewSession) -> list[CoveragePair]:
     """Every (check, document) pair the session's coverage holds for one of the sixteen."""
     pairs: list[CoveragePair] = []
-    for bucket in ("checked", "skipped", "unresolved", "out_of_scope"):
+    for bucket in COVERAGE_BUCKETS:
         for item in getattr(session.coverage, bucket):
             if item.check not in RULES:
                 continue
@@ -467,13 +473,13 @@ def _write_summary(
     documents = sorted(
         {
             document_id
-            for bucket in ("checked", "skipped", "unresolved", "out_of_scope")
+            for bucket in COVERAGE_BUCKETS
             for item in getattr(session.coverage, bucket)
             if item.check in RULES
             for document_id in item.scope.document_ids
         }
     )
-    for bucket in ("checked", "unresolved"):
+    for bucket in SUMMARY_BUCKETS:
         if bucket != target:
             items = getattr(session.coverage, bucket)
             items[:] = [item for item in items if item.check != SUMMARY_CHECK]

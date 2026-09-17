@@ -1,0 +1,6 @@
+{
+  "callable": "tests.checks.golden_standards:standards_case",
+  "kwargs": {
+    "profile": "profile-b"
+  }
+}

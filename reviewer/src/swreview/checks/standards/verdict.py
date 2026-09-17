@@ -32,10 +32,11 @@ from __future__ import annotations
 
 from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, get_args
 
 __all__ = [
     "COUNT_UNITS",
+    "COVERAGE_BUCKETS",
     "EMPTY_SETTING_NOTE",
     "NO_DRAWING_NOTE",
     "WAIVED_NOTE",
@@ -57,6 +58,15 @@ CoverageBucketName = Literal["checked", "skipped", "unresolved", "out_of_scope"]
 """The four session coverage buckets a (check, document) pair can land in. `failed` and
 `warned` are **rendered** buckets derived from findings by `checks/standards/report.py`,
 never session buckets, so they are counted here as findings and not as pairs."""
+
+COVERAGE_BUCKETS: tuple[CoverageBucketName, ...] = get_args(CoverageBucketName)
+"""The same four, as a tuple to walk.
+
+Derived from the type rather than typed out a second time: every walk over "the session
+buckets a (check, document) pair can land in" - here, and the three in
+`checks/standards/report.py` - reads this, so a fifth bucket is added in one place and no
+walk can quietly be one short of the vocabulary (constitution Principle V, T099).
+"""
 
 FindingSeverity = Literal["error", "warning"]
 
@@ -174,12 +184,7 @@ def _counted(
     check per bucket, so a caller that passed a pair per document *and* a pair per
     aggregated item must not double it.
     """
-    buckets: dict[str, set[tuple[str, str]]] = {
-        "checked": set(),
-        "skipped": set(),
-        "unresolved": set(),
-        "out_of_scope": set(),
-    }
+    buckets: dict[str, set[tuple[str, str]]] = {name: set() for name in COVERAGE_BUCKETS}
     unresolved_ids: dict[str, None] = {}
     for pair in coverage:
         buckets[pair.bucket].add((pair.check, pair.document_id))

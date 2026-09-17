@@ -143,7 +143,14 @@ package.json      the ModelCheck-profile dump; extractor.profile == "model_check
 exceptions.json   carried forward from the newest same-design run, before the rules run
 session.json      the recorded tool steps, so tool_result_ids name steps that exist
 report.md         the rule-by-rule result
+check.json        the check record, carrying family: "rms"
 ```
+
+`check.json` now carries a **`family`** field, written first and `"rms"` for these runs, so a
+backend handed a run folder knows whose check it is holding before it answers a read of it; a
+record written before the field existed is read as `"rms"` too, which is why the default is
+named rather than the folder refused (feature 006
+`specs/006-standards-check/contracts/standards-check.md` section 1 and D10).
 
 **The check folder is registered as the pane's latest run.** The add-in points
 `CurrentSessionRunDirectory` and `RunPackageIndex` at the latest session's run directory, and
