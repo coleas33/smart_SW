@@ -49,4 +49,28 @@
     </Content>
   </ItemGroup>
 
+  <!--
+    T014. The bytes PackageSerializer wrote for IrSerializerTests.BuildSamplePackage under
+    schema 1.3.0, captured from that build and thereafter static. It is what makes "a package
+    carrying none of feature 006's evidence serializes exactly as it did" a measurement rather
+    than an inspection (contracts/ir-additions.md additivity rule point 5).
+  -->
+  <ItemGroup>
+    <Content Include="Fixtures\package-pre-1.4.0.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!--
+    T019. research.md R8's table is the count of the members feature 006 denies, and the guard
+    test derives its expected set from that table's membership rather than transcribing it. So
+    the document is copied, not duplicated - the same arrangement as ir.schema.json above -
+    and a row added to R8 without a matching entry in ReadOnlyGuard is a red test.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\specs\006-standards-check\research.md" Link="standards-research.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

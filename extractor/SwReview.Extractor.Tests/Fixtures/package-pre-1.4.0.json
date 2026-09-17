@@ -1,0 +1,507 @@
+{
+  "schema_version": "1.3.0",
+  "package_id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+  "created_at": "2026-09-12T14:30:00+00:00",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": "2024 SP5",
+    "machine": "WS-CAD-01",
+    "profile": "full",
+    "phases": []
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:asm",
+        "vault_path": "\\\\vault\\projects\\bracket\\bracket.sldasm",
+        "vault_version": 7,
+        "revision": "B",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native",
+        "file_modified_utc": "2026-09-10T08:30:00+00:00",
+        "file_size_bytes": 262144
+      },
+      {
+        "document_id": "doc:housing",
+        "vault_path": "\\\\vault\\projects\\bracket\\housing.sldprt",
+        "vault_version": null,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": null,
+        "export_method": "native",
+        "file_modified_utc": null,
+        "file_size_bytes": null
+      }
+    ],
+    "discrepancies": [
+      {
+        "document_id": "doc:housing",
+        "kind": "version_mismatch",
+        "expected": 7,
+        "actual": 6,
+        "note": "Local copy is one version behind the vault."
+      }
+    ]
+  },
+  "design": {
+    "design_id": "design:bracket",
+    "name": "Bracket assembly",
+    "root_assembly_document_id": "doc:asm",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:asm",
+      "kind": "assembly",
+      "file_name": "bracket.sldasm",
+      "path": "C:\\work\\bracket\\bracket.sldasm",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Project": "Pilot"
+      },
+      "config_properties": {
+        "Default": {
+          "Description": "Bracket assembly"
+        }
+      },
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:housing",
+      "kind": "part",
+      "file_name": "housing.sldprt",
+      "path": "C:\\work\\bracket\\housing.sldprt",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "PartNumber": "HSG-1001"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": {
+        "mass_kg": 0.41199999999999998,
+        "volume_m3": 0.0001526,
+        "center_of_mass": {
+          "x": 0.01,
+          "y": 0.02,
+          "z": 0.0050000000000000001
+        },
+        "configuration": "Default"
+      }
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "AQIDBAU=",
+      "persist_ref_scope": "doc:asm",
+      "name": "housing-1",
+      "full_path": "housing-1",
+      "document_id": "doc:housing",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "constrained_status_raw": 3
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "ERITFBU=",
+      "persist_ref_scope": "doc:asm",
+      "name": "screw-1",
+      "full_path": "housing-1/screw-1",
+      "document_id": "doc:housing",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "M6X1.0X20",
+      "transform": [
+        [
+          1,
+          0,
+          0,
+          0.012
+        ],
+        [
+          0,
+          1,
+          0,
+          0.034000000000000002
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": "pat:0001",
+      "is_toolbox": true,
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [],
+  "holes": [
+    {
+      "id": "hole:0001",
+      "persist_ref": "ISIj",
+      "persist_ref_scope": "doc:housing",
+      "component_id": "cmp:0001",
+      "feature_name": "M6 Tapped Hole1",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M6",
+      "thread_designation": "M6x1.0",
+      "thread_depth": null,
+      "hole_depth": {
+        "value": 12,
+        "unit": "mm"
+      },
+      "end_condition": "blind",
+      "diameter": {
+        "value": 5,
+        "unit": "mm"
+      },
+      "axis": {
+        "origin": {
+          "x": 0.012,
+          "y": 0.034000000000000002,
+          "z": 0
+        },
+        "direction": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        }
+      },
+      "face_ids": [
+        "face:0001"
+      ]
+    }
+  ],
+  "threads": [],
+  "fasteners": [
+    {
+      "id": "fas:0001",
+      "persist_ref": "MTIz",
+      "persist_ref_scope": "doc:asm",
+      "component_id": "cmp:0002",
+      "kind": "screw",
+      "identity_source": "custom_property",
+      "thread_designation": "M6x1.0",
+      "length": {
+        "value": 20,
+        "unit": "mm"
+      },
+      "head_type": "socket head cap",
+      "head_diameter": {
+        "value": 10,
+        "unit": "mm"
+      },
+      "head_height": {
+        "value": 6,
+        "unit": "mm"
+      },
+      "drive": "hex",
+      "axis": {
+        "origin": {
+          "x": 0.012,
+          "y": 0.034000000000000002,
+          "z": 0.01
+        },
+        "direction": {
+          "x": 0,
+          "y": 0,
+          "z": -1
+        }
+      },
+      "material": null
+    }
+  ],
+  "faces": [],
+  "bodies": [],
+  "interferences": [
+    {
+      "id": "int:0001",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0002"
+      ],
+      "volume": {
+        "value": 41.700000000000003,
+        "unit": "mm3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": false,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": true,
+        "ignore_hidden": false,
+        "fastener_folder_treatment": "include"
+      },
+      "is_fastener": true,
+      "is_possible": true,
+      "status": "computed",
+      "error": null,
+      "group_key": "pat:0001|cmp:0001"
+    }
+  ],
+  "captures": [],
+  "drawings": [],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "ZmVhdDowMDAx",
+      "persist_ref_scope": "doc:housing",
+      "document_id": "doc:housing",
+      "configuration": "Default",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "outer profile of the boss",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0002"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0002"
+        ]
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "ZmVhdDowMDAy",
+      "persist_ref_scope": "doc:housing",
+      "document_id": "doc:housing",
+      "configuration": "Default",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrusion",
+      "description": "core stock the detail is cut from",
+      "index": 1,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0001"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "ZmVhdDowMDAz",
+      "persist_ref_scope": "doc:housing",
+      "document_id": "doc:housing",
+      "configuration": "Default",
+      "name": "6-Quarantine",
+      "type_name": "FtrFolder",
+      "description": "",
+      "index": 2,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0004",
+      "persist_ref": "ZmVhdDowMDA0",
+      "persist_ref_scope": "doc:housing",
+      "document_id": "doc:housing",
+      "configuration": "Default",
+      "name": "Fillet1",
+      "type_name": "Fillet",
+      "description": "cosmetic break on the outer edge",
+      "index": 3,
+      "depth": 1,
+      "folder_id": "feat:0003",
+      "suppressed": true,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0002"
+      ],
+      "sketch": null,
+      "fillet": {
+        "default_radius": {
+          "value": 0.0030000000000000001,
+          "unit": "m"
+        }
+      }
+    },
+    {
+      "id": "feat:0005",
+      "persist_ref": "ZmVhdDowMDA1",
+      "persist_ref_scope": "doc:housing",
+      "document_id": "doc:housing",
+      "configuration": "Default",
+      "name": "VarFillet1",
+      "type_name": "VarFillet",
+      "description": null,
+      "index": 4,
+      "depth": 1,
+      "folder_id": "feat:0003",
+      "suppressed": null,
+      "error_code": null,
+      "child_ids": null,
+      "parent_ids": null,
+      "sketch": null,
+      "fillet": {
+        "default_radius": null
+      }
+    },
+    {
+      "id": "feat:0006",
+      "persist_ref": "ZmVhdDowMDA2",
+      "persist_ref_scope": "doc:housing",
+      "document_id": "doc:housing",
+      "configuration": "Default",
+      "name": "Sketch2",
+      "type_name": "ProfileFeature",
+      "description": "locating slot",
+      "index": 5,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": null,
+        "consumer_ids": null
+      },
+      "fillet": null
+    }
+  ],
+  "equations": [
+    {
+      "document_id": "doc:housing",
+      "index": 0,
+      "text": "\"WallThickness\" = 3",
+      "lhs": "WallThickness",
+      "is_global": true,
+      "value": 3
+    },
+    {
+      "document_id": "doc:housing",
+      "index": 1,
+      "text": "\"D1@Sketch1\" = \"WallThickness\" * 2",
+      "lhs": "D1@Sketch1",
+      "is_global": null,
+      "value": null
+    }
+  ],
+  "rms_suppress_test": {
+    "document_id": "doc:housing",
+    "configuration": "Default",
+    "group": "4-Detail",
+    "plan_file": "C:\\work\\bracket\\rms-suppress-plan.json",
+    "run_at": "2026-09-15T09:00:00+00:00",
+    "acknowledged": true,
+    "baseline_whats_wrong_count": 0,
+    "limit": 20,
+    "timeout_seconds": 120,
+    "features_present": 2,
+    "restore_verified": false,
+    "unrestored_feature_ids": [
+      "feat:0005"
+    ],
+    "rows": [
+      {
+        "feature_id": "feat:0004",
+        "persist_ref": "QUJD",
+        "persist_ref_scope": "doc:housing",
+        "name": "Fillet1",
+        "outcome": "ok",
+        "whats_wrong_count": 0,
+        "messages": [
+          "Fillet1 rebuilt cleanly"
+        ],
+        "messages_truncated": 0,
+        "error": null,
+        "elapsed_ms": 412
+      },
+      {
+        "feature_id": "feat:0005",
+        "persist_ref": "UVJT",
+        "persist_ref_scope": "doc:housing",
+        "name": "VarFillet1",
+        "outcome": "aborted",
+        "whats_wrong_count": null,
+        "messages": [
+          "the rebuild was still running when the timeout expired"
+        ],
+        "messages_truncated": 3,
+        "error": "TimeoutException: the rebuild did not finish inside 120 s",
+        "elapsed_ms": null
+      }
+    ]
+  },
+  "gaps": [
+    {
+      "kind": "not_extracted",
+      "entity_kind": "hole",
+      "entity_id": "hole:0001",
+      "reason": "IWizardHoleFeatureData2.ThreadDepth was not set on this feature.",
+      "error": null
+    }
+  ]
+}

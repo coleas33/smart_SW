@@ -39,6 +39,12 @@ public static class SwDump
             new MateDumper(session, refs),
             new FeatureDumper(session.Gate, new SwFeatureReader(session.Gate, refs)),
             new EquationDumper(session.Gate, new SwEquationReader()),
+
+            // No interop reader is wired for the cut-list or drawing phases in this build,
+            // so both are recorded `skipped` rather than silently returning nothing - which
+            // is the row `swreview check standards` refuses a package on (FR-043).
+            cutList: null,
+            drawings: null,
             new HoleDumper(session, refs),
             new FastenerDumper(session, refs),
             new FaceDumper(session, refs, openDocument),

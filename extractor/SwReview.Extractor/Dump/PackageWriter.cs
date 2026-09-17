@@ -56,7 +56,8 @@ public sealed class PackageWriter
     /// </summary>
     private static readonly string[] PhaseOrder =
     {
-        "document", "manifest", "mate", "feature", "equation", "hole", "fastener", "face", "body",
+        "document", "manifest", "mate", "feature", "equation", "cutlist", "drawing",
+        "hole", "fastener", "face", "body",
     };
 
     /// <summary>
@@ -74,6 +75,8 @@ public sealed class PackageWriter
     private readonly IMateSource _mates;
     private readonly IFeatureSource _features;
     private readonly IEquationSource _equations;
+    private readonly ICutListSource? _cutList;
+    private readonly IDrawingSource? _drawings;
     private readonly IHoleSource _holes;
     private readonly IFastenerSource _fasteners;
     private readonly IFaceSource _faces;
@@ -88,6 +91,8 @@ public sealed class PackageWriter
         IMateSource mates,
         IFeatureSource features,
         IEquationSource equations,
+        ICutListSource? cutList,
+        IDrawingSource? drawings,
         IHoleSource holes,
         IFastenerSource fasteners,
         IFaceSource faces,
@@ -101,6 +106,15 @@ public sealed class PackageWriter
         _mates = mates ?? throw new ArgumentNullException(nameof(mates));
         _features = features ?? throw new ArgumentNullException(nameof(features));
         _equations = equations ?? throw new ArgumentNullException(nameof(equations));
+
+        // The two schema 1.4.0 phases are the only sources a caller may leave out, and the
+        // omission is deliberate rather than defensive: a build with no interop reader wired
+        // for them records the phase `skipped`, which is exactly the row `swreview check
+        // standards` refuses a package on (FR-043). Silence would be the alternative, and
+        // an empty cut_list_items[] with no row beside it reads as a part with no cut list.
+        _cutList = cutList;
+        _drawings = drawings;
+
         _holes = holes ?? throw new ArgumentNullException(nameof(holes));
         _fasteners = fasteners ?? throw new ArgumentNullException(nameof(fasteners));
         _faces = faces ?? throw new ArgumentNullException(nameof(faces));
@@ -237,6 +251,44 @@ public sealed class PackageWriter
                 package.Equations.AddRange(_equations.Dump(scope)));
         }
 
+        // The cut list, under the Standards and Full profiles (006 FR-027): the standards
+        // checks read it, and a full extract is never less complete than a standards one.
+        bool standardsEvidence =
+            options.Profile == DumpProfile.Full || options.Profile == DumpProfile.Standards;
+
+        if (!aborted && standardsEvidence && _cutList != null)
+        {
+            aborted |= !RunPhase(gaps, phases, "cutlist", "read the part cut lists", () =>
+            {
+                IReadOnlyList<CutListItem> items = _cutList.Dump(scope);
+
+                // Assigned only when it carries rows, so the member and the JSON say the
+                // same thing: "the phase ran and found none" is the `ok` row beside it, not
+                // an empty array (contracts/ir-additions.md, additivity rule point 3).
+                if (items.Count > 0)
+                {
+                    package.CutListItems = new List<CutListItem>(items);
+                }
+            });
+        }
+
+        // The drawing phase runs only when the root document IS a drawing (FR-025). The dump
+        // does not go looking for the drawings of an open model: a drawing enters a package
+        // when it is itself the dumped document, and not otherwise.
+        bool drawingRoot = tree.RootDocumentKind == DocumentKind.Drawing;
+
+        if (!aborted && standardsEvidence && drawingRoot && _drawings != null)
+        {
+            aborted |= !RunPhase(gaps, phases, "drawing", "read the drawing sheets", () =>
+            {
+                IReadOnlyList<DrawingRecord> records = _drawings.Dump(scope);
+                if (records.Count > 0)
+                {
+                    package.DrawingRecords = new List<DrawingRecord>(records);
+                }
+            });
+        }
+
         // The four geometry phases, gated by the profile (plan key point 8). ModelCheck
         // skips them and records NOTHING beyond extractor.profile: unlike --features none
         // and --equations off, which are a dump that dropped evidence it normally carries
@@ -300,14 +352,23 @@ public sealed class PackageWriter
         // it could only be inferred by guessing from which arrays came back empty.
         package.Extractor.Phases.AddRange(phases.Rows());
 
-        // Native drawing extraction is not part of this build; drawing sheets come from the
-        // Python PDF ingest (US1). Recording it keeps the absence visible.
-        gaps.Add(
-            GapKind.Unsupported,
-            "drawing",
-            null,
-            "The native extractor does not read drawing sheets; they come from the PDF ingest.",
-            null);
+        // Conditional from schema 1.4.0 (006 contracts/ir-additions.md section 5): emitted
+        // only when the drawing phase did not run, and then naming the profile that skipped
+        // it. A drawing root dumped `full` or `standards` runs the phase and carries the
+        // sheets, so the old unconditional gap would have sat beside the very evidence it
+        // said was missing; and a reader who does see it is told which extract to run again
+        // rather than a fact about the extractor that is no longer true (FR-024).
+        if (!phases.Ran("drawing"))
+        {
+            gaps.Add(
+                GapKind.Unsupported,
+                "drawing",
+                null,
+                "Drawing sheets were not read natively: the drawing phase did not run under "
+                + $"the '{PackageSerializer.EnumToJsonName(options.Profile)}' profile. Any "
+                + "sheets in this package came from the PDF ingest.",
+                null);
+        }
 
         // Last, because the key is taken over the manifest and the component instances and
         // both are complete only now. Gaps are deliberately not in it: they are evidence
@@ -549,6 +610,13 @@ public sealed class PackageWriter
     {
         private readonly Dictionary<string, DumpPhase> _rows =
             new Dictionary<string, DumpPhase>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Whether a row was recorded for <paramref name="name"/> - that is, whether the
+        /// phase actually started. A phase that threw or met an open circuit still ran, so
+        /// it answers true: what this distinguishes is "ran" from "never started".
+        /// </summary>
+        public bool Ran(string name) => _rows.ContainsKey(name);
 
         public void Record(string name, long elapsedMilliseconds, DumpPhaseStatus status)
         {

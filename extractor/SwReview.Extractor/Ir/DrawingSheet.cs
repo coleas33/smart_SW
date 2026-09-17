@@ -28,8 +28,17 @@ public sealed class Capture
     public string Note { get; set; } = string.Empty;
 }
 
-/// <summary>A view region on a drawing sheet, in PDF points.</summary>
-public sealed class DrawingView
+/// <summary>
+/// contracts/ir.schema.json #/$defs/SheetView. A view region on a PDF-ingested drawing
+/// sheet, in PDF points.
+///
+/// Named <c>SheetView</c> rather than <c>DrawingView</c> from schema 1.4.0 on: it matches the
+/// Python model of the same shape, and it frees the name for
+/// <see cref="Ir.DrawingView"/>, the natively dumped view, which is a different thing
+/// entirely - that one carries dimensions, annotations and notes, and this one carries a
+/// bounding box a PDF parser measured.
+/// </summary>
+public sealed class SheetView
 {
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
@@ -68,7 +77,7 @@ public sealed class DrawingSheet
     public List<Dimension> Dimensions { get; set; } = new List<Dimension>();
 
     [JsonPropertyName("views")]
-    public List<DrawingView> Views { get; set; } = new List<DrawingView>();
+    public List<SheetView> Views { get; set; } = new List<SheetView>();
 
     [JsonPropertyName("parse_status")]
     public ParseStatus ParseStatus { get; set; } = ParseStatus.Text;
@@ -76,6 +85,21 @@ public sealed class DrawingSheet
     /// <summary>Name and version of the parser that produced this sheet.</summary>
     [JsonPropertyName("parser")]
     public string Parser { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Which path wrote this sheet (schema 1.4.0); the PDF ingest stamps
+    /// <see cref="DrawingEvidenceSource.PdfIngest"/>. Null in a sheet written before the
+    /// stamp existed, which a consumer reads as "source not recorded" and the drawing checks
+    /// treat exactly as <c>pdf_ingest</c>.
+    ///
+    /// The DTO carries it because <see cref="PackageSerializer"/> sets
+    /// <c>UnmappedMemberHandling.Disallow</c> and three readers deserialize packages produced
+    /// elsewhere - RunPackageIndex, PackageAppender and PackageReuse - so without this member
+    /// an ingest-written package would throw in all three.
+    /// </summary>
+    [JsonPropertyName("source")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DrawingEvidenceSource? Source { get; set; }
 }
 
 /// <summary>

@@ -35,8 +35,10 @@ public enum EquationScope
 
 /// <summary>
 /// What <c>--profile</c> asked for: how much of the design the dump reads. Recorded on
-/// <see cref="ExtractorInfo.Profile"/> as "full" or "model_check" (schema 1.2.0), so a
-/// reader can tell a deliberately thin package from a dump that lost half its evidence.
+/// <see cref="ExtractorInfo.Profile"/> as "full", "model_check" or "standards" (schema
+/// 1.4.0), so a reader can tell a deliberately thin package from a dump that lost half its
+/// evidence. A consumer that needs a particular phase decides from <c>extractor.phases</c>
+/// rather than from this name (FR-043).
 /// Named here, with the other <c>dump</c> options, because it is a dump decision; the IR
 /// DTO carries the value but does not own the vocabulary.
 /// </summary>
@@ -50,6 +52,15 @@ public enum DumpProfile
     /// face and body or mesh phases are skipped, so those arrays are empty by design.
     /// </summary>
     ModelCheck,
+
+    /// <summary>
+    /// <see cref="ModelCheck"/>'s five phases plus <c>cutlist</c>, and <c>drawing</c> when
+    /// the root document is a drawing (schema 1.4.0, FR-027). It still skips hole, fastener,
+    /// face and body - the four phases that read face geometry, tessellate every body and
+    /// write mesh files, which is most of a dump's cost and none of which any standards
+    /// check reads.
+    /// </summary>
+    Standards,
 }
 
 /// <summary>What <c>--faces</c> asked for.</summary>
@@ -355,6 +366,27 @@ public interface IFeatureSource
 public interface IEquationSource
 {
     IReadOnlyList<Equation> Dump(DumpScope scope);
+}
+
+/// <summary>
+/// Cut-list items of every resolved part document (schema 1.4.0, feature 006). Items are
+/// identified <b>structurally</b> from the body-folder tree, never by matching a feature
+/// name: a renamed item is still the same item, so a renamed item is not a waiver.
+/// </summary>
+public interface ICutListSource
+{
+    IReadOnlyList<CutListItem> Dump(DumpScope scope);
+}
+
+/// <summary>
+/// Sheets, views, dimensions, annotations, revision tables and notes of a drawing document
+/// (schema 1.4.0, feature 006). Runs only when the root document is a drawing, and
+/// <b>activates nothing</b>: a sheet that was not the active one is read as it stands, and
+/// <c>was_active</c> says which rows a consumer can trust (FR-044).
+/// </summary>
+public interface IDrawingSource
+{
+    IReadOnlyList<DrawingRecord> Dump(DumpScope scope);
 }
 
 /// <summary>Hole Wizard features and cosmetic threads (T052).</summary>

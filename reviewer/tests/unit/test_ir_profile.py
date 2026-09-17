@@ -51,8 +51,8 @@ def build_extractor(**overrides: object) -> ExtractorInfo:
 
 def test_the_profile_bump_is_carried_by_the_current_schema_version() -> None:
     """1.2.0 is where `extractor.profile` arrived; 1.3.0 (T089) added the reuse fields
-    beside it and left this member exactly as it was."""
-    assert SCHEMA_VERSION == "1.3.0"
+    beside it and 1.4.0 (006 T013) widened its enumeration with `standards`."""
+    assert SCHEMA_VERSION == "1.4.0"
     assert build_package().schema_version == SCHEMA_VERSION
 
 
@@ -126,12 +126,18 @@ def test_every_shipped_golden_fixture_loads_at_the_profile_it_declares(
 # --- the generated contract -------------------------------------------------------
 
 
-def test_the_generated_schema_makes_profile_optional_with_the_two_values() -> None:
+def test_the_generated_schema_makes_profile_optional_with_the_three_values() -> None:
+    """`standards` joined the enumeration in 1.4.0 (006 T013); the member stays optional
+    and still defaults to `full`."""
     extractor = export_schema()["$defs"]["ExtractorInfo"]
 
     assert "profile" not in extractor["required"]
     assert extractor["properties"]["profile"]["default"] == "full"
-    assert sorted(extractor["properties"]["profile"]["enum"]) == ["full", "model_check"]
+    assert sorted(extractor["properties"]["profile"]["enum"]) == [
+        "full",
+        "model_check",
+        "standards",
+    ]
 
 
 @pytest.mark.parametrize("profile", ["full", "model_check"])

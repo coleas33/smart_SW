@@ -64,6 +64,10 @@ public static class PackageSerializer
             throw new ArgumentNullException(nameof(package));
         }
 
+        // The two schema 1.4.0 arrays are omitted when they carry no rows, and
+        // WhenWritingNull omits only a null List, never an empty one.
+        package.OmitEmptyAdditiveArrays();
+
         return JsonSerializer.Serialize(package, Options);
     }
 

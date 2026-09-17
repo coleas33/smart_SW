@@ -23,6 +23,16 @@ public sealed class SketchInfo
     /// </summary>
     [JsonPropertyName("consumer_ids")]
     public List<string>? ConsumerIds { get; set; }
+
+    /// <summary>
+    /// len(ISketch.GetSketchTextSegments()), 0 for an empty or null array (schema 1.4.0);
+    /// null plus a sketch_text gap when unreadable, which leaves the sketch unresolved
+    /// because the text exemption can then neither be applied nor ruled out. Omitted when
+    /// null, unlike the two members above, which keep theirs.
+    /// </summary>
+    [JsonPropertyName("text_segment_count")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? TextSegmentCount { get; set; }
 }
 
 /// <summary>

@@ -533,7 +533,7 @@ not having run, naming the profile that skipped it (FR-024).
 only by the Python PDF path (PyMuPDF, with a `parse_status` and a `parser` name and a
 deliberately empty `views` list). The native phase does **not** reuse that model: a native
 sheet has no `page`, no `parse_status` and no parser, and filling those in would be a fiction.
-Instead the new records live in `EvidencePackage.drawings[]`, each **sheet record** carrying
+Instead the new records live in `EvidencePackage.drawing_records[]` (a new member beside the PDF ingest's `drawings[]`, which keeps its `DrawingSheet` rows and its always-written form), each **sheet record** carrying
 `source: "native"` (the per-sheet half of FR-024, beside the constant on `DrawingRecord`), and
 the existing `DrawingSheet` gains an optional `source` that the ingest stamps `"pdf_ingest"` -
 in the Python model **and in the C# DTO**, which has no such property today and whose serializer

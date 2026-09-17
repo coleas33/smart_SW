@@ -15,6 +15,16 @@ public sealed class MateEntityRef
     /// <summary>swSelectType_e name of the mated entity, e.g. "FACE", "PLANE".</summary>
     [JsonPropertyName("entity_kind")]
     public string EntityKind { get; set; } = string.Empty;
+
+    /// <summary>
+    /// What IMateEntity2.Reference gave, with <b>no new interop call</b> (schema 1.4.0), and
+    /// omitted when null the way every 1.4.0 addition is. Null only in a package written
+    /// before 1.4.0: without it, a reference that was null and a read that threw are both a
+    /// null <see cref="PersistRef"/> and indistinguishable.
+    /// </summary>
+    [JsonPropertyName("resolution_status")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public MateEntityResolution? ResolutionStatus { get; set; }
 }
 
 /// <summary>contracts/ir.schema.json #/$defs/Mate.</summary>

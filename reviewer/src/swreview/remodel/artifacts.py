@@ -456,7 +456,7 @@ def _grade(
         run_dir / _WORK_DIR[side],
         scope=RmsScope.all,
         document_id=document_id,
-        families=RMS_FAMILIES,
+        scopes=RMS_FAMILIES,
         exceptions=store,
     )
 

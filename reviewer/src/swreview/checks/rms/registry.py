@@ -18,17 +18,38 @@ Two kinds of rule live here and the difference is the invariant of data-model se
 `fn` is present exactly when `severity` is present exactly when `coverage` is null. The
 severity half of that invariant is enforced on construction; the `fn` half is completed by
 `bind`, which the three evaluator modules apply when `swreview.checks.rms` is imported.
+
+**What this family is, as facts.** `RMS_FAMILY` is this catalogue's `CheckFamily`: the
+summary check id, the scope and severity vocabularies, the severity map, the high-severity
+ids and the waiver labels that `checks/rules/` reads instead of hard-coding them
+(`specs/006-standards-check/research.md` R7). It lives here, beside the catalogue it
+describes, because everything on it is a statement about these 34 rules; the rest of the
+family reads it from here rather than restating any of it.
+
+The row type, the binder and the three partitions come from `checks/rules/registry.py`: a
+rule row is the same shape in every family, and only the rows themselves are this one's.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any, Literal, get_args
+from typing import Literal
 
-from swreview.report.session import CoverageBucket
+from swreview.checks.rules.family import CheckFamily
+from swreview.checks.rules.registry import (
+    Rule,
+    RuleCoverageBucket,
+    RuleFn,
+    binder,
+    catalogue,
+)
+from swreview.checks.rules.registry import by_scope as _by_scope
+from swreview.checks.rules.registry import coverage_only as _coverage_only
+from swreview.checks.rules.registry import evaluable as _evaluable
 
 __all__ = [
+    "HIGH_SEVERITY_RULES",
+    "HIGH_SEVERITY_RULE_PREFIX",
+    "RMS_FAMILY",
     "RULES",
     "RULES_VERSION",
     "RmsRule",
@@ -47,52 +68,18 @@ RuleScope = Literal["part", "assembly", "equations", "drawing", "advisory"]
 or - for the rules this version does not evaluate - drawings and judgement calls."""
 
 RuleSeverity = Literal["fail", "warn"]
-"""The method's own grading, mapped to a `Finding` status and severity by `report.py`
-(data-model section 2): `fail` to `demonstrated`, `warn` to `suspected`. Only `fail` rules
-are waivable (`contracts/rules.md`, "Waivable rules")."""
+"""The method's own grading, mapped to a `Finding` status and severity by
+`RMS_FAMILY.status_by_severity` (data-model section 2): `fail` to `demonstrated`, `warn` to
+`suspected`. Only `fail` rules are waivable (`contracts/rules.md`, "Waivable rules")."""
 
-RuleCoverageBucket = Literal["unresolved", "out_of_scope"]
-"""The two `swreview.report.session.CoverageBucket` values a coverage-only rule can land
-in: `unresolved` when the data is simply not extracted yet, `out_of_scope` when this
-version has decided not to decide. Named apart from the session's wider alias so that a
-reader of `RmsRule.coverage` cannot mistake it for the full set of report buckets."""
+RmsRule = Rule
+"""One rule of `contracts/rules.md` (data-model section 2).
 
-assert set(get_args(RuleCoverageBucket)) <= set(get_args(CoverageBucket)), (
-    "a coverage-only rule is emitted as a CoverageItem in its bucket, so every "
-    "RuleCoverageBucket must be a swreview.report.session.CoverageBucket"
-)
-
-RuleFn = Callable[..., Any]
-"""An evaluator. The argument list differs by scope - part rules read a document's
-features and its group assignment, assembly rules read the package - so the alias pins
-only that it is callable; every one of them returns `list[RuleResult]`."""
-
-
-@dataclass
-class RmsRule:
-    """One rule of `contracts/rules.md` (data-model section 2).
-
-    Mutable in exactly one respect: `fn` is filled in by `bind` after construction,
-    because the evaluator modules import this one and not the other way round.
-    """
-
-    id: str
-    scope: RuleScope
-    statement: str
-    severity: RuleSeverity | None = None
-    coverage: tuple[RuleCoverageBucket, str] | None = None
-    fn: RuleFn | None = None
-
-    def __post_init__(self) -> None:
-        if (self.severity is None) == (self.coverage is None):
-            raise ValueError(
-                f"{self.id}: a rule carries either a severity or a coverage reason, "
-                f"never both and never neither (severity={self.severity!r}, "
-                f"coverage={self.coverage!r})"
-            )
-        if not self.statement.strip():
-            raise ValueError(f"{self.id}: a rule needs a statement to report as its requirement")
-
+The family-neutral row of `checks/rules/registry.py` under this family's name: `scope` is a
+`RuleScope` and `severity` a `RuleSeverity` for every row below. Mutable in exactly one
+respect - `fn` is filled in by `bind` after construction, because the evaluator modules
+import this one and not the other way round.
+"""
 
 RULES_VERSION = "1"
 """This catalogue's version: the rms family's `Calculation.function_version`.
@@ -100,7 +87,7 @@ RULES_VERSION = "1"
 The deterministic checks each carry a module-level `FUNCTION_VERSION` (`checks/fit.py`,
 `checks/fastener.py` and the rest) that rides into every finding's `Calculation` and says
 which implementation produced the number. The rms rules produce no calculation
-(`checks/rms/results.py`), so their findings have nowhere to carry one - and feature 005's
+(`checks/rules/results.py`), so their findings have nowhere to carry one - and feature 005's
 carry-over key needs exactly that fact, because a verdict reused from an earlier run is a
 claim that **this** implementation would conclude the same thing (guard 5,
 `carry_over.carry_over_key`).
@@ -111,18 +98,20 @@ change, which is the honest cost of there being no calculation to version; the d
 the error is a carried verdict, so the bump is part of editing a rule, not an afterthought.
 """
 
+HIGH_SEVERITY_RULE_PREFIX = "rms.refs."
+HIGH_SEVERITY_RULES: frozenset[str] = frozenset({"rms.sketches.not_over_defined"})
+"""The `fail` rules reported `high` rather than `medium` (data-model section 2): a
+reference that points the wrong way and an over-defined sketch both break a rebuild,
+where the other `fail` rules describe a tree that works but will not survive editing.
 
-def _catalogue(*rules: RmsRule) -> dict[str, RmsRule]:
-    """Key the rules by id, refusing a duplicate rather than silently keeping one."""
-    by_id: dict[str, RmsRule] = {}
-    for rule in rules:
-        if rule.id in by_id:
-            raise ValueError(f"{rule.id} is registered twice")
-        by_id[rule.id] = rule
-    return by_id
+The prefix is the rule and not a shorthand: every `rms.refs.*` rule is one of them, and a
+future one is high without anybody remembering to list it. `RMS_FAMILY.high_severity` is
+that rule read over this catalogue once, because a family carries the ids and not the test
+that produced them - an id set can be printed and asserted, where a predicate can only be
+called.
+"""
 
-
-RULES: dict[str, RmsRule] = _catalogue(
+RULES: dict[str, RmsRule] = catalogue(
     # Part scope: one evaluation per part document.
     RmsRule(
         id="rms.folders.present",
@@ -364,48 +353,64 @@ RULES: dict[str, RmsRule] = _catalogue(
 )
 """Every rule of `contracts/rules.md`, in the contract's order, keyed by id."""
 
+RMS_FAMILY = CheckFamily(
+    name="rms",
+    summary_check="modeling.resilience",
+    rules_version=RULES_VERSION,
+    scopes=frozenset({"part", "assembly", "equations", "drawing", "advisory"}),
+    tools={
+        "part": "check_rms_part",
+        "assembly": "check_rms_assembly",
+        "equations": "check_rms_equations",
+    },
+    check_file_family="rms",
+    severities=frozenset({"fail", "warn"}),
+    status_by_severity={
+        "fail": ("demonstrated", "medium"),
+        "warn": ("suspected", "low"),
+    },
+    high_severity=frozenset(
+        rule_id
+        for rule_id in RULES
+        if rule_id.startswith(HIGH_SEVERITY_RULE_PREFIX) or rule_id in HIGH_SEVERITY_RULES
+    ),
+    waiver_labels={
+        "unknown": "invalid (unknown rule)",
+        "warn": "invalid (warn rule)",
+        "unresolved": "invalid (data-gap rule)",
+        "out_of_scope": "invalid (out-of-scope rule)",
+    },
+)
+"""This family, as the facts `checks/rules/` reads instead of hard-coding them.
 
-def bind(rule_id: str) -> Callable[[RuleFn], RuleFn]:
-    """Register `rule_id`'s evaluator, as a decorator in that scope's evaluator module.
+`summary_check` is the checklist item these rules answer; its coverage item is the one-line
+verdict on the whole method for this review (`agent/checklist_v1.yaml`).
 
-    Bound late rather than passed to `RmsRule` so that the evaluator modules import the
-    registry and not the reverse; importing `swreview.checks.rms`, which imports all
-    three of them, is what completes the invariant.
+`waiver_labels` are the lines `swreview exceptions accept-rms` prints for an id it cannot
+accept, keyed by the reason: `unknown` for an id the catalogue does not hold, the rule's own
+severity when it has one, and its coverage bucket when it has not. `contracts/rules.md`
+("Waivable rules") names exactly these three refusals - a `warn` rule, a data-gap rule and
+an out-of-scope rule - and each is reported as itself rather than folded into one label: a
+waiver for `rms.assembly.mates_described` is refused because the data is not extracted, and
+telling an engineer it is a `warn` rule would send them looking for a severity to argue
+with.
+"""
 
-    Raises `KeyError` for an unknown id, and `ValueError` for a coverage-only rule (which
-    is never dispatched) or a rule that already has an evaluator.
-    """
+bind = binder(RULES, "contracts/rules.md")
+"""Register a rule's evaluator, as a decorator in that scope's evaluator module.
 
-    def register(fn: RuleFn) -> RuleFn:
-        try:
-            rule = RULES[rule_id]
-        except KeyError:
-            raise KeyError(f"{rule_id} is not a rule of contracts/rules.md") from None
-        if rule.severity is None:
-            raise ValueError(
-                f"{rule_id} is coverage-only ({rule.coverage}); it is never dispatched "
-                f"and takes no evaluator"
-            )
-        if rule.fn is not None:
-            raise ValueError(f"{rule_id} already has an evaluator: {rule.fn!r}")
-        rule.fn = fn
-        return fn
+Bound late rather than passed to `RmsRule` so that the evaluator modules import the
+registry and not the reverse; importing `swreview.checks.rms`, which imports all three of
+them, is what completes the invariant.
 
-    return register
+Raises `KeyError` for an unknown id, and `ValueError` for a coverage-only rule (which is
+never dispatched) or a rule that already has an evaluator.
+"""
 
 
-def by_scope() -> dict[RuleScope, tuple[RmsRule, ...]]:
+def by_scope() -> dict[str, tuple[RmsRule, ...]]:
     """The catalogue partitioned by scope, in contract order; every scope is a key."""
-    groups: dict[RuleScope, list[RmsRule]] = {
-        "part": [],
-        "assembly": [],
-        "equations": [],
-        "drawing": [],
-        "advisory": [],
-    }
-    for rule in RULES.values():
-        groups[rule.scope].append(rule)
-    return {scope: tuple(rules) for scope, rules in groups.items()}
+    return _by_scope(RULES, RMS_FAMILY.scopes)
 
 
 def evaluable() -> tuple[RmsRule, ...]:
@@ -414,9 +419,9 @@ def evaluable() -> tuple[RmsRule, ...]:
     Read from `coverage`, not from `fn`, so that an evaluator module can ask which ids it
     owes a function while it is still binding them.
     """
-    return tuple(rule for rule in RULES.values() if rule.coverage is None)
+    return _evaluable(RULES)
 
 
 def coverage_only() -> tuple[RmsRule, ...]:
     """The rules that are never dispatched and are emitted as coverage, in contract order."""
-    return tuple(rule for rule in RULES.values() if rule.coverage is not None)
+    return _coverage_only(RULES)

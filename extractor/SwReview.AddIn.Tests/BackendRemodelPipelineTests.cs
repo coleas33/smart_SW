@@ -975,7 +975,7 @@ public sealed class BackendRemodelPipelineTests : IDisposable
 
             File.WriteAllText(
                 path,
-                @"{""schema_version"":""1.3.0"",""extractor"":{""name"":""SwReview"","
+                @"{""schema_version"":""1.4.0"",""extractor"":{""name"":""SwReview"","
                 + @"""version"":""0.1.0"",""profile"":""" + Profile + @"""},""documents"":"
                 + documents + "}");
 

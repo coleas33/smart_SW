@@ -161,6 +161,36 @@ public enum NoteKind
     Other,
 }
 
+/// <summary>
+/// MateEntity.resolution_status (schema 1.4.0): what <c>IMateEntity2.Reference</c> said about
+/// one mate entity, with no new interop call. Before it, a reference that came back null and
+/// a read that threw were both a null persist_ref and neither could be told from the other -
+/// which is the whole defect standards.assembly.mate_references hunts.
+/// </summary>
+public enum MateEntityResolution
+{
+    /// <summary>The reference was non-null.</summary>
+    Resolved,
+
+    /// <summary>The reference was null: the mate points at an entity that is gone.</summary>
+    Unresolved,
+
+    /// <summary>The read threw; a mate_entity_reference gap says so.</summary>
+    Unknown,
+}
+
+/// <summary>
+/// Which path produced a drawing sheet (schema 1.4.0): the native <c>drawing</c> dump phase or
+/// the Python PDF ingest. Carried per sheet, so a drawing whose sheets came from both has a
+/// per-sheet answer (FR-024). Null on a <see cref="DrawingSheet"/> written before the stamp
+/// existed, which the drawing checks treat exactly as <see cref="PdfIngest"/>.
+/// </summary>
+public enum DrawingEvidenceSource
+{
+    Native,
+    PdfIngest,
+}
+
 /// <summary>DrawingSheet.units: "mm" | "in" | "unknown".</summary>
 public enum SheetUnits
 {

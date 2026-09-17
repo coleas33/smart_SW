@@ -484,6 +484,7 @@ public class PackageWriterTests : IDisposable
         Assert.True(sources.MatesWereDumped);
         Assert.True(sources.FeaturesWereDumped);
         Assert.True(sources.EquationsWereDumped);
+        Assert.True(sources.CutListWasDumped);
         Assert.True(sources.HolesWereDumped);
         Assert.True(sources.FastenersWereDumped);
         Assert.True(sources.FacesWereDumped);
@@ -539,24 +540,216 @@ public class PackageWriterTests : IDisposable
     [Fact]
     public void Build_ModelCheckProfile_RecordsNothingButTheProfile()
     {
-        // The four skipped phases add no gap of their own, unlike --features none and
+        // The skipped geometry phases add no gap of their own, unlike --features none and
         // --equations off. Those two are a dump that dropped evidence it normally carries,
         // so the absence needs a sentence; model-check is a package whose shape is declared
-        // by extractor.profile, and four gaps on every check run would be noise an engineer
-        // learns to skip - which is how a real gap gets lost (Principle I).
+        // by extractor.profile, and a gap per skipped phase on every check run would be
+        // noise an engineer learns to skip - which is how a real gap gets lost (Principle I).
+        //
+        // Compared on kind, entity kind and entity id rather than on the reason text: from
+        // schema 1.4.0 the standing drawing gap names the profile that skipped it, so the
+        // one sentence that differs between these two packages is that one, and it is
+        // asserted on its own below (contracts/ir-additions.md section 5).
         EvidencePackage full = NewWriter().Build(Options());
         EvidencePackage thin = NewWriter().Build(ModelCheckOptions());
 
         Assert.Equal(DumpProfile.ModelCheck, thin.Extractor.Profile);
         Assert.Equal(
-            full.Gaps.Select(g => $"{g.EntityKind}|{g.Reason}"),
-            thin.Gaps.Select(g => $"{g.EntityKind}|{g.Reason}"));
+            full.Gaps.Select(g => $"{PackageSerializer.EnumToJsonName(g.Kind)}|{g.EntityKind}|{g.EntityId}"),
+            thin.Gaps.Select(g => $"{PackageSerializer.EnumToJsonName(g.Kind)}|{g.EntityKind}|{g.EntityId}"));
+
+        // Every reason except the drawing gap's is word for word what it was.
+        Assert.Equal(
+            full.Gaps.Where(g => g.EntityKind != "drawing").Select(g => g.Reason),
+            thin.Gaps.Where(g => g.EntityKind != "drawing").Select(g => g.Reason));
     }
 
     [Fact]
     public void Build_ModelCheckProfile_ProducesAPackageThatValidatesAgainstTheContract()
     {
         IrContract.AssertValid(PackageSerializer.Serialize(NewWriter().Build(ModelCheckOptions())));
+    }
+
+    // ---- the cutlist and drawing phases (T016, schema 1.4.0) ---------------------
+
+    [Fact]
+    public void Build_StandardsProfile_RunsTheFiveModelCheckPhasesAndTheCutListPhase()
+    {
+        // FR-027. The standards profile extends model-check: the sixteen checks read the
+        // documents, the mates, the feature trees, the equations and the cut list, and none
+        // of them reads face geometry or a mesh - which is most of a dump's cost.
+        var sources = new FakeSources();
+
+        EvidencePackage package = NewWriter(sources).Build(StandardsOptions());
+
+        Assert.True(sources.DocumentsWereDumped);
+        Assert.True(sources.ManifestWasBuilt);
+        Assert.True(sources.MatesWereDumped);
+        Assert.True(sources.FeaturesWereDumped);
+        Assert.True(sources.EquationsWereDumped);
+        Assert.True(sources.CutListWasDumped);
+
+        Assert.NotNull(package.CutListItems);
+        Assert.Equal(new[] { "cut:0001" }, package.CutListItems!.Select(item => item.Id));
+        Assert.Equal(DumpProfile.Standards, package.Extractor.Profile);
+    }
+
+    [Fact]
+    public void Build_StandardsProfile_NeverCallsTheHoleFastenerFaceOrMeshSources()
+    {
+        // Not "returns nothing": the saving is the reads themselves. Asserting on the empty
+        // arrays alone would pass with the full cost paid.
+        var sources = new FakeSources();
+
+        EvidencePackage package = NewWriter(sources).Build(StandardsOptions());
+
+        Assert.False(sources.HolesWereDumped);
+        Assert.False(sources.FastenersWereDumped);
+        Assert.False(sources.FacesWereDumped);
+        Assert.False(sources.MeshesWereDumped);
+
+        Assert.Empty(package.Holes);
+        Assert.Empty(package.Fasteners);
+        Assert.Empty(package.Faces);
+        Assert.Empty(package.Bodies);
+    }
+
+    [Fact]
+    public void Build_StandardsProfileOverAnAssembly_RecordsTheDrawingPhaseAsSkipped()
+    {
+        // The drawing phase runs only when the root document IS a drawing (FR-025): the dump
+        // does not go looking for the drawings of an open model. The row says so, which is
+        // what lets `swreview check standards` tell "no drawing here" from "nobody looked".
+        var sources = new FakeSources();
+
+        EvidencePackage package = NewWriter(sources).Build(StandardsOptions());
+
+        Assert.False(sources.DrawingsWereDumped);
+        Assert.Equal(
+            DumpPhaseStatus.Skipped,
+            Assert.Single(package.Extractor.Phases, phase => phase.Name == "drawing").Status);
+        Assert.Null(package.DrawingRecords);
+    }
+
+    [Fact]
+    public void Build_ModelCheckProfile_RecordsTheTwoNewPhasesAsSkippedAndCallsNeitherSource()
+    {
+        // The Model check tab reads neither the cut list nor a drawing, so both phases cost
+        // it nothing - and the rows are what say that, rather than two empty arrays a reader
+        // would have to guess about.
+        var sources = new FakeSources();
+
+        EvidencePackage package = NewWriter(sources).Build(ModelCheckOptions());
+
+        Assert.False(sources.CutListWasDumped);
+        Assert.False(sources.DrawingsWereDumped);
+        Assert.Equal(
+            new[] { "cutlist:skipped", "drawing:skipped" },
+            Rows(package).Where(row => row.StartsWith("cutlist", StringComparison.Ordinal)
+                || row.StartsWith("drawing", StringComparison.Ordinal)));
+        Assert.Null(package.CutListItems);
+        Assert.Null(package.DrawingRecords);
+    }
+
+    [Fact]
+    public void Build_FullProfile_RunsTheCutListPhaseToo()
+    {
+        // A full extract is never less complete than a standards one (FR-027), so the phase
+        // the standards profile added runs here as well.
+        var sources = new FakeSources();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.True(sources.CutListWasDumped);
+        Assert.NotNull(package.CutListItems);
+    }
+
+    [Fact]
+    public void Build_FullProfileOverADrawingRoot_RunsTheDrawingPhase()
+    {
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.True(sources.DrawingsWereDumped);
+        Assert.Equal(
+            DumpPhaseStatus.Ok,
+            Assert.Single(package.Extractor.Phases, phase => phase.Name == "drawing").Status);
+        Assert.Equal(
+            new[] { "doc:drawing" },
+            package.DrawingRecords!.Select(record => record.DocumentId));
+    }
+
+    [Fact]
+    public void Build_StandardsProfileOverADrawingRoot_RunsTheDrawingPhase()
+    {
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(StandardsOptions());
+
+        Assert.True(sources.DrawingsWereDumped);
+        Assert.NotNull(package.DrawingRecords);
+    }
+
+    /// <summary>
+    /// The standing drawing gap becomes conditional (contracts/ir-additions.md section 5):
+    /// it is emitted only when the drawing phase did not run, and it then names the profile
+    /// that skipped it, so a reader is told which extract to run again rather than being told
+    /// a permanent fact about the extractor that is no longer true.
+    ///
+    /// This assertion is <b>added</b> beside
+    /// <see cref="Build_RecordsThatDrawingsAreNotExtractedNatively"/>, which asserts the
+    /// entity kind and the gap kind and never the message string, and which keeps passing
+    /// unedited - though its name is now stale.
+    /// </summary>
+    [Theory]
+    [InlineData(DumpProfile.Full, "full")]
+    [InlineData(DumpProfile.ModelCheck, "model_check")]
+    [InlineData(DumpProfile.Standards, "standards")]
+    public void Build_DrawingPhaseThatDidNotRun_IsAGapNamingTheProfileThatSkippedIt(
+        DumpProfile profile, string spelling)
+    {
+        DumpOptions options = Options();
+        options.Profile = profile;
+
+        EvidencePackage package = NewWriter().Build(options);
+
+        Gap gap = Assert.Single(package.Gaps, g => g.EntityKind == "drawing");
+        Assert.Equal(GapKind.Unsupported, gap.Kind);
+        Assert.Contains(spelling, gap.Reason, StringComparison.Ordinal);
+        Assert.Contains("PDF ingest", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_DrawingPhaseThatRan_EmitsNoDrawingGapAtAll()
+    {
+        // The other half of "only when the phase did not run". Without it the conditional
+        // could be wired to the profile alone and a drawing root would still carry a gap
+        // saying its sheets were never read - beside the sheets.
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.DoesNotContain(package.Gaps, g => g.EntityKind == "drawing");
+    }
+
+    [Fact]
+    public void Build_DrawingRootPackage_ValidatesAgainstTheContract()
+    {
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+
+        IrContract.AssertValid(PackageSerializer.Serialize(NewWriter(sources).Build(Options())));
+    }
+
+    [Fact]
+    public void Build_StandardsProfilePackage_ValidatesAgainstTheContract()
+    {
+        IrContract.AssertValid(
+            PackageSerializer.Serialize(NewWriter().Build(StandardsOptions())));
     }
 
     // ---- dump phase timing (feature 005, T033) -----------------------------------
@@ -576,14 +769,22 @@ public class PackageWriterTests : IDisposable
             new[]
             {
                 "document:ok", "manifest:ok", "mate:ok", "feature:ok", "equation:ok",
+                "cutlist:ok", "drawing:skipped",
                 "hole:ok", "fastener:ok", "face:ok", "body:ok",
             },
             Rows(package));
-        Assert.All(package.Extractor.Phases, phase =>
-        {
-            Assert.NotNull(phase.ElapsedMs);
-            Assert.True(phase.ElapsedMs >= 0, $"{phase.Name} reported {phase.ElapsedMs} ms");
-        });
+        // Every phase that ran is timed. `drawing` is the one exception and it is not an
+        // exception to the rule: the root document here is an assembly, so that phase never
+        // started, and a phase that never started has no elapsed time (schema 1.4.0).
+        Assert.All(
+            package.Extractor.Phases.Where(phase => phase.Status != DumpPhaseStatus.Skipped),
+            phase =>
+            {
+                Assert.NotNull(phase.ElapsedMs);
+                Assert.True(phase.ElapsedMs >= 0, $"{phase.Name} reported {phase.ElapsedMs} ms");
+            });
+        Assert.Null(
+            Assert.Single(package.Extractor.Phases, phase => phase.Name == "drawing").ElapsedMs);
     }
 
     /// <summary>
@@ -601,6 +802,7 @@ public class PackageWriterTests : IDisposable
             new[]
             {
                 "document:ok", "manifest:ok", "mate:ok", "feature:ok", "equation:ok",
+                "cutlist:skipped", "drawing:skipped",
                 "hole:skipped", "fastener:skipped", "face:skipped", "body:skipped",
             },
             Rows(package));
@@ -622,6 +824,7 @@ public class PackageWriterTests : IDisposable
             new[]
             {
                 "document:ok", "manifest:ok", "mate:ok", "feature:skipped", "equation:skipped",
+                "cutlist:ok", "drawing:skipped",
                 "hole:ok", "fastener:ok", "face:ok", "body:ok",
             },
             Rows(package));
@@ -659,6 +862,7 @@ public class PackageWriterTests : IDisposable
             new[]
             {
                 "document:ok", "manifest:ok", "mate:failed", "feature:ok", "equation:ok",
+                "cutlist:ok", "drawing:skipped",
                 "hole:ok", "fastener:ok", "face:ok", "body:ok",
             },
             Rows(package));
@@ -681,8 +885,8 @@ public class PackageWriterTests : IDisposable
             new[]
             {
                 "document:ok", "manifest:ok", "mate:aborted", "feature:skipped",
-                "equation:skipped", "hole:skipped", "fastener:skipped", "face:skipped",
-                "body:skipped",
+                "equation:skipped", "cutlist:skipped", "drawing:skipped", "hole:skipped",
+                "fastener:skipped", "face:skipped", "body:skipped",
             },
             Rows(package));
         Assert.All(
@@ -703,8 +907,8 @@ public class PackageWriterTests : IDisposable
             new[]
             {
                 "document:ok", "manifest:ok", "mate:skipped", "feature:skipped",
-                "equation:skipped", "hole:skipped", "fastener:skipped", "face:skipped",
-                "body:skipped",
+                "equation:skipped", "cutlist:skipped", "drawing:skipped", "hole:skipped",
+                "fastener:skipped", "face:skipped", "body:skipped",
             },
             Rows(package));
     }
@@ -893,15 +1097,15 @@ public class PackageWriterTests : IDisposable
 
         Assert.Throws<ArgumentNullException>(() => new PackageWriter(
             null!, sources, sources, sources, sources, sources, sources, sources, sources, sources,
-            "2024 SP5"));
+            sources, sources, "2024 SP5"));
 
         Assert.Throws<ArgumentNullException>(() => new PackageWriter(
             sources, sources, sources, sources, null!, sources, sources, sources, sources, sources,
-            "2024 SP5"));
+            sources, sources, "2024 SP5"));
 
         Assert.Throws<ArgumentNullException>(() => new PackageWriter(
             sources, sources, sources, sources, sources, null!, sources, sources, sources, sources,
-            "2024 SP5"));
+            sources, sources, "2024 SP5"));
     }
 
     private DumpOptions Options() => new DumpOptions
@@ -916,23 +1120,33 @@ public class PackageWriterTests : IDisposable
         return options;
     }
 
+    private DumpOptions StandardsOptions()
+    {
+        DumpOptions options = Options();
+        options.Profile = DumpProfile.Standards;
+        return options;
+    }
+
     private static PackageWriter NewWriter(FakeSources? sources = null)
     {
         FakeSources s = sources ?? new FakeSources();
-        return new PackageWriter(s, s, s, s, s, s, s, s, s, s, "2024 SP5", "TEST-WORKSTATION");
+        return new PackageWriter(
+            s, s, s, s, s, s, s, s, s, s, s, s, "2024 SP5", "TEST-WORKSTATION");
     }
 
     /// <summary>
-    /// One class standing in for all nine phases. It returns canned IR objects, so the
+    /// One class standing in for all eleven phases. It returns canned IR objects, so the
     /// test exercises PackageWriter and nothing else.
     /// </summary>
     private sealed class FakeSources
         : IComponentTreeSource, IDocumentSource, IManifestSource, IMateSource, IFeatureSource,
-          IEquationSource, IHoleSource, IFastenerSource, IFaceSource, IMeshSource
+          IEquationSource, ICutListSource, IDrawingSource, IHoleSource, IFastenerSource,
+          IFaceSource, IMeshSource
     {
         private const string AssemblyPath = @"C:\vault\bracket-assy\bracket-assy.SLDASM";
         private const string HousingPath = @"C:\vault\bracket-assy\housing.SLDPRT";
         private const string ScrewPath = @"C:\vault\toolbox\hex-cap-screw.SLDPRT";
+        private const string DrawingPath = @"C:\vault\bracket-assy\bracket-assy.SLDDRW";
 
         private readonly List<TypeNameSighting> _holePass = new List<TypeNameSighting>();
 
@@ -978,6 +1192,10 @@ public class PackageWriterTests : IDisposable
 
         public bool EquationsWereDumped { get; private set; }
 
+        public bool CutListWasDumped { get; private set; }
+
+        public bool DrawingsWereDumped { get; private set; }
+
         public string? MeshDirectory { get; private set; }
 
         public DumpOptions? SeenOptions { get; private set; }
@@ -993,6 +1211,25 @@ public class PackageWriterTests : IDisposable
             RootDocumentPath = HousingPath;
             RootDocumentKind = DocumentKind.Part;
             DesignName = "housing";
+
+            ComponentNode root = NewNode("housing", null, HousingPath, DocumentKind.Part);
+            root.IsFixed = true;
+            root.PersistRefScopePath = HousingPath;
+
+            Nodes.Clear();
+            Nodes.Add(root);
+        }
+
+        /// <summary>
+        /// A drawing opened alone: the root document is the drawing itself, and the tree is
+        /// the one subtree its views reference (FR-025). Nothing is opened, loaded or
+        /// activated to produce it.
+        /// </summary>
+        public void UseDrawingRootTree()
+        {
+            RootDocumentPath = DrawingPath;
+            RootDocumentKind = DocumentKind.Drawing;
+            DesignName = "bracket-assy";
 
             ComponentNode root = NewNode("housing", null, HousingPath, DocumentKind.Part);
             root.IsFixed = true;
@@ -1063,9 +1300,7 @@ public class PackageWriterTests : IDisposable
             return documentPaths.Select(path => new Document
             {
                 DocumentId = scope.DocumentId(path),
-                Kind = path.EndsWith(".SLDASM", StringComparison.OrdinalIgnoreCase)
-                    ? DocumentKind.Assembly
-                    : DocumentKind.Part,
+                Kind = DocumentKindOf(path),
                 FileName = Path.GetFileName(path),
                 Path = path,
                 Configurations = { "Default" },
@@ -1187,6 +1422,52 @@ public class PackageWriterTests : IDisposable
             };
         }
 
+        IReadOnlyList<CutListItem> ICutListSource.Dump(DumpScope scope)
+        {
+            CutListWasDumped = true;
+
+            return new List<CutListItem>
+            {
+                new CutListItem
+                {
+                    // A literal rather than an allocator off the scope: the id vocabulary belongs to
+                    // the real CutListDumper, and a fake that invented one would pin it here.
+                    Id = "cut:0001",
+                    DocumentId = scope.DocumentId(HousingPath),
+                    Configuration = scope.ActiveConfiguration,
+                    FolderName = "Cut list",
+                    FolderTypeName = "CutListFolder",
+                    Name = "Cut-List-Item1",
+                    BodyCount = 1,
+                    ExcludedFromCutList = false,
+                },
+            };
+        }
+
+        IReadOnlyList<DrawingRecord> IDrawingSource.Dump(DumpScope scope)
+        {
+            DrawingsWereDumped = true;
+
+            return new List<DrawingRecord>
+            {
+                new DrawingRecord
+                {
+                    DocumentId = "doc:drawing",
+                    ActiveSheetName = "Sheet1",
+                    Sheets =
+                    {
+                        new DrawingSheetRecord
+                        {
+                            Id = "dsh:0001",
+                            Name = "Sheet1",
+                            Index = 0,
+                            WasActive = true,
+                        },
+                    },
+                },
+            };
+        }
+
         HoleDumpResult IHoleSource.Dump(DumpScope scope)
         {
             HolesWereDumped = true;
@@ -1286,6 +1567,18 @@ public class PackageWriterTests : IDisposable
         IReadOnlyList<BodyRef> IMeshSource.DumpComponent(
             DumpScope scope, ScopedComponent component, string meshDirectory) =>
             throw new NotSupportedException("The dump exports every component, not one.");
+
+        private static DocumentKind DocumentKindOf(string path)
+        {
+            if (path.EndsWith(".SLDASM", StringComparison.OrdinalIgnoreCase))
+            {
+                return DocumentKind.Assembly;
+            }
+
+            return path.EndsWith(".SLDDRW", StringComparison.OrdinalIgnoreCase)
+                ? DocumentKind.Drawing
+                : DocumentKind.Part;
+        }
 
         private static ComponentNode NewNode(string key, string? parentKey, string path, DocumentKind kind) =>
             new ComponentNode

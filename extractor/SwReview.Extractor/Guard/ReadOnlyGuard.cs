@@ -65,6 +65,74 @@ public static class ReadOnlyGuard
         // save it - both leave the reviewed document changed for the engineer.
         "EditRollback",
         "SetSaveFlag",
+
+        // ---- feature 006: the families the cut-list and drawing phases read from ----------
+        //
+        // Every member below sits beside a read one of those phases performs, and none of them
+        // is called. They are here because this list grows the moment a phase touches an API
+        // family that can write, which is the rule stated above. The table that fixes the
+        // membership - and therefore the count - is `006-standards-check/research.md` R8; it is
+        // restated in `004-resilient-remodeler/contracts/guard-allowlist.md` and asserted from
+        // both ends by StandardsDenylistTests and RemodelGuardTests.
+        //
+        // The names are bare because SwGate.Call names them bare: `SetText` is one entry and
+        // covers IDisplayDimension.SetText and INote.SetText alike.
+
+        // Sheet and view activation - the release-checklist macro's one side effect, and the
+        // thing the drawing phase is written not to need.
+        "ActivateSheet",
+        "ActivateView",
+
+        // Exploded-state writes, beside the exploded read.
+        "ShowExploded",
+        "ShowExploded2",
+        "CreateExplodedView",
+        "AutoExplode",
+
+        // Visibility writes, beside the visibility read.
+        "SetVisibility",
+        "SetVisibilityInAsmDisplayStates",
+        "set_Visible",
+
+        // Appearance writes, beside the transparency read.
+        "SetMaterialPropertyValues2",
+        "RemoveMaterialProperty",
+        "RemoveMaterialProperty2",
+
+        // Table-cell and revision writes, beside the revision-table read.
+        "set_Text",
+        "set_Text2",
+        "AddRevision",
+        "DeleteRevision",
+        "InsertRevisionTable",
+        "InsertRevisionTable2",
+
+        // Cut-list writes, beside the cut-list read.
+        "SetAutomaticCutList",
+        "UpdateCutList",
+        "SortCutList",
+        "SetAutomaticUpdate",
+
+        // Mass-override writes, beside the mass-override read.
+        "set_OverrideMass",
+        "SetOverrideMassValue",
+
+        // Dimension, display-dimension and note writes, beside the GetOverride,
+        // GetOverrideValue, GetSystemValue3 and GetText reads. SetSystemValue3 is already
+        // refused by the SetSystemValue prefix below and is named here as well, because R8's
+        // table is the membership and a reader checking the two against each other should not
+        // have to know which rule catches it.
+        "SetOverride",
+        "SetText",
+        "SetSystemValue3",
+        "set_SystemValue",
+        "set_Value",
+
+        // Annotation-identity writes, beside the GetName read.
+        "SetName",
+
+        // Cut-list exclusion writes, beside the ExcludeFromCutList read.
+        "set_ExcludeFromCutList",
     };
 
     /// <summary>

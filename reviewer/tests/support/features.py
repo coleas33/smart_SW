@@ -75,6 +75,10 @@ class SketchSpec:
 
     raw_status: int | None = 3
     consumer_names: Sequence[str] | None = ()
+    text_segments: int | None = None
+    """`SketchInfo.text_segment_count` (schema 1.4.0). Null by default, which is how a
+    package written before that schema reads and how every feature 003 fixture stays
+    byte-identical: the field is omitted when null."""
 
 
 @dataclass(frozen=True)
@@ -186,6 +190,7 @@ def sketch_feature(
     raw_status: int | None = 3,
     consumers: Sequence[str] | None = (),
     type_name: str = "ProfileFeature",
+    text_segments: int | None = None,
     **kwargs: Any,
 ) -> FeatureSpec:
     """A sketch. `consumers` are its dependents: both `child_ids` and `consumer_ids`,
@@ -194,7 +199,9 @@ def sketch_feature(
     return feature(
         name,
         type_name,
-        sketch=SketchSpec(raw_status=raw_status, consumer_names=consumers),
+        sketch=SketchSpec(
+            raw_status=raw_status, consumer_names=consumers, text_segments=text_segments
+        ),
         **kwargs,
     )
 
@@ -322,6 +329,7 @@ def build_features(
             sketch = SketchInfo(
                 raw_status=spec.sketch.raw_status,
                 consumer_ids=resolve(spec.sketch.consumer_names, f"{spec.name} consumers"),
+                text_segment_count=spec.sketch.text_segments,
             )
         rows.append(
             Feature(

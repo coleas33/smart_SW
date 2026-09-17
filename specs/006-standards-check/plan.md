@@ -353,7 +353,7 @@ specs/003-resilient-modeling/contracts/model-check.md      # CHANGED: one senten
    - composition keeps the rejection of inheritance intact and keeps each host's own
    dependencies explicit. It carries the plumbing above and one start step supplied by its
    owner; `ModelCheckHost` and `StandardsHost` keep their own start verb, their own refusals
-   and their own record type. The gate is the same one RK-7 uses for the Python move:
+   and share one check record (folder name, directory, timestamp) held by the collaborator, because two identical three-field records in two namespaces would be exactly the copy the collaborator exists to prevent (decided 2026-09-17). The gate is the same one RK-7 uses for the Python move:
    **`ModelCheckHostTests` passes unedited** after `ModelCheckHost` is rebuilt on the
    collaborator, and that is its own task with none of this feature's own code in it. The four
    shared actions stay **delegated to `PaneActions`**, which is not edited, and its tests are

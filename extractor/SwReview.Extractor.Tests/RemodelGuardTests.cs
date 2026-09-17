@@ -53,6 +53,14 @@ public class RemodelGuardTests
     /// <see cref="ReadOnlyGuard.DeniedMembers"/> as this allowlist was written against it.
     /// A denial added, removed or reworded upstream fails the set assertions below rather
     /// than silently widening or narrowing the remodel surface.
+    ///
+    /// The second block is feature 006's, added with the cut-list and drawing phases
+    /// (`006-standards-check/research.md` R8, tabulated in contracts/guard-allowlist.md under
+    /// "Denials added after stage 1"). Every one of them is a narrowing: none is on the
+    /// stage-1 allowlist, so
+    /// <see cref="Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive"/> and
+    /// <see cref="RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse"/>
+    /// answer exactly as they did before it.
     /// </summary>
     private static readonly string[] ExpectedDeniedMembers =
     {
@@ -71,6 +79,39 @@ public class RemodelGuardTests
         "AccessSelections",
         "EditRollback",
         "SetSaveFlag",
+
+        // Feature 006, research.md R8.
+        "ActivateSheet",
+        "ActivateView",
+        "ShowExploded",
+        "ShowExploded2",
+        "CreateExplodedView",
+        "AutoExplode",
+        "SetVisibility",
+        "SetVisibilityInAsmDisplayStates",
+        "set_Visible",
+        "SetMaterialPropertyValues2",
+        "RemoveMaterialProperty",
+        "RemoveMaterialProperty2",
+        "set_Text",
+        "set_Text2",
+        "AddRevision",
+        "DeleteRevision",
+        "InsertRevisionTable",
+        "InsertRevisionTable2",
+        "SetAutomaticCutList",
+        "UpdateCutList",
+        "SortCutList",
+        "SetAutomaticUpdate",
+        "set_OverrideMass",
+        "SetOverrideMassValue",
+        "SetOverride",
+        "SetText",
+        "SetSystemValue3",
+        "set_SystemValue",
+        "set_Value",
+        "SetName",
+        "set_ExcludeFromCutList",
     };
 
     /// <summary><see cref="ReadOnlyGuard.DeniedPrefixes"/> as this allowlist was written against it.</summary>

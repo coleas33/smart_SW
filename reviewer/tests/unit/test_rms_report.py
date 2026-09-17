@@ -281,6 +281,10 @@ class TestFindingFields:
         item = item_for(context, "unresolved", "rms.core.shell_last")
         assert item.scope.document_ids == [GHOST]
         assert f"no component instance for {GHOST}" in item.reason
+        # The report layer admits a document-scoped finding for a kind that never carries
+        # an instance (a drawing). The ghost is a part, so an rms result about it is still
+        # unresolved coverage and not a finding bound to the document (feature 006 T011).
+        assert [row.kind for row in package.documents if row.document_id == GHOST] == ["part"]
 
     def test_a_finding_on_a_document_with_other_configurations_says_they_were_not_read(
         self,

@@ -53,7 +53,10 @@ public sealed class ExtractorInfo
 public sealed class DumpPhase
 {
     /// <summary>The phase, named as <c>PackageWriter</c> names it in its gaps: "document",
-    /// "manifest", "mate", "feature", "equation", "hole", "fastener", "face", "body".</summary>
+    /// "manifest", "mate", "feature", "equation", "cutlist", "drawing", "hole", "fastener",
+    /// "face", "body" (schema 1.4.0 added the middle two). The same list the Python
+    /// <c>DumpPhase.name</c> field description carries, because the generated contract is
+    /// written from that one and the two sides must describe the same dump.</summary>
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 

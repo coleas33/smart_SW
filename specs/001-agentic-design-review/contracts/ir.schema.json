@@ -266,6 +266,58 @@
           "default": null,
           "description": "IComponent2.GetConstrainedStatus verbatim; null (plus a component_constrained_status gap) when unreadable. Named in Python, not here.",
           "title": "Constrained Status Raw"
+        },
+        "transparency_raw": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Slot 7 of IComponent2.GetMaterialPropertyValues2(1, null) verbatim (schema 1.4.0); null plus a component_transparency gap when unreadable, and null without a gap when has_appearance_override is false - there is nothing to read.",
+          "title": "Transparency Raw"
+        },
+        "has_appearance_override": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IComponent2.HasMaterialPropertyValues() (schema 1.4.0); null plus a component_transparency gap when unreadable. Replaces the -1 sentinel that conflated 'no override' with a real value.",
+          "title": "Has Appearance Override"
+        },
+        "visibility_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IComponent2.Visible verbatim, in swComponentVisibilityState_e - hidden 0, visible 1, unknown -1 (schema 1.4.0); null plus a component_visibility gap when unreadable. The extractor records the number; Python names it.",
+          "title": "Visibility Raw"
+        },
+        "is_pattern_instance": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IComponent2.IsPatternInstance() (schema 1.4.0); null plus a component_pattern gap when unreadable. `pattern_id` keeps the pattern's name and cannot replace this: a null pattern_id conflates 'not in a pattern' with 'the pattern map was never built'.",
+          "title": "Is Pattern Instance"
         }
       },
       "required": [
@@ -343,6 +395,106 @@
         "is_external"
       ],
       "title": "CosmeticThread",
+      "type": "object"
+    },
+    "CutListItem": {
+      "additionalProperties": false,
+      "description": "One cut-list item of one part document (schema 1.4.0).\n\nIdentified structurally from the body-folder tree, never by matching a feature name:\na renamed item is not a waiver.",
+      "properties": {
+        "id": {
+          "pattern": "^cut:[0-9]{4,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "configuration": {
+          "description": "The configuration the tree was read in",
+          "title": "Configuration",
+          "type": "string"
+        },
+        "folder_name": {
+          "description": "IFeature.Name of the enclosing cut-list folder",
+          "title": "Folder Name",
+          "type": "string"
+        },
+        "folder_type_name": {
+          "description": "IFeature.GetTypeName2 of the enclosing folder, verbatim, so an unknown folder type is visible rather than silently dropped",
+          "title": "Folder Type Name",
+          "type": "string"
+        },
+        "name": {
+          "description": "IFeature.Name of the item",
+          "title": "Name",
+          "type": "string"
+        },
+        "body_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IBodyFolder.GetBodyCount(); null plus a cut_list_body_count gap. A folder whose count is 0 is not displayed by SOLIDWORKS and is not a subject of any check; it is still recorded so a coverage reason can say how many folders were seen and how many were displayable.",
+          "title": "Body Count"
+        },
+        "excluded_from_cut_list": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IFeature.ExcludeFromCutList(); null plus a cut_list_exclusion gap, and that item is then unresolved",
+          "title": "Excluded From Cut List"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "persist_ref_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "document_id whose IModelDocExtension produced persist_ref; null when SOLIDWORKS gave none, and `id` is then the identity",
+          "title": "Persist Ref Scope"
+        }
+      },
+      "required": [
+        "id",
+        "document_id",
+        "configuration",
+        "folder_name",
+        "folder_type_name",
+        "name"
+      ],
+      "title": "CutListItem",
       "type": "object"
     },
     "CylinderFace": {
@@ -499,6 +651,125 @@
       "title": "Discrepancy",
       "type": "object"
     },
+    "DisplayDimensionRecord": {
+      "additionalProperties": false,
+      "description": "One display dimension on a drawing view (schema 1.4.0).\n\nBoth value members are a `Quantity | Angle` union, following the existing IR precedent\n`Tolerance.upper` / `.lower`: `Quantity` carries a `LengthUnit` only, so an angular\ndimension cannot be represented by one and `dimension_type_raw` is what decides which\nof the two a record carries.",
+      "properties": {
+        "id": {
+          "pattern": "^ddm:[0-9]{4,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "view_id": {
+          "title": "View Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDimension.FullName, falling back to Name; null plus a dimension_override gap",
+          "title": "Name"
+        },
+        "dimension_type_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.Type2 verbatim; what decides whether the value is a length or an angle, and therefore its unit. Python names it",
+          "title": "Dimension Type Raw"
+        },
+        "is_overridden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.GetOverride(); null plus a dimension_override gap, and the dimension is then unresolved",
+          "title": "Is Overridden"
+        },
+        "override_value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "$ref": "#/$defs/Angle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.GetOverrideValue() in the unit dimension_type_raw implies; null plus a dimension_unit gap when the unit could not be determined even though a number was read, because a number with a guessed unit is worse than no number.",
+          "title": "Override Value"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "$ref": "#/$defs/Angle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDimension.GetSystemValue3(1, null), the computed value, for the finding's observed text; same union and same null rule",
+          "title": "Value"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "persist_ref_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref Scope"
+        }
+      },
+      "required": [
+        "id",
+        "view_id"
+      ],
+      "title": "DisplayDimensionRecord",
+      "type": "object"
+    },
     "Document": {
       "additionalProperties": false,
       "properties": {
@@ -571,6 +842,59 @@
               "type": "null"
             }
           ]
+        },
+        "is_exploded": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IModelDoc2.IsExploded() for an assembly document (schema 1.4.0); null plus an assembly_exploded gap when unreadable. Always null for a part or a drawing, where the question does not apply and the absence is not a gap.",
+          "title": "Is Exploded"
+        },
+        "rebuild_error_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IModelDocExtension.GetWhatsWrongCount read as the document stands - nothing is rebuilt (schema 1.4.0); null plus a rebuild_error_count gap when unreadable.",
+          "title": "Rebuild Error Count"
+        },
+        "mass_overridden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IMassProperty.OverrideMass, read before the volume gates so a surface-only part still answers (schema 1.4.0); null plus a mass_override gap when the object, the cast or the read fails.",
+          "title": "Mass Overridden"
+        },
+        "material_configuration": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The configuration `material` was read in (schema 1.4.0). Null for an assembly or a drawing, and present whenever the read was attempted - including when `material` came back null, because 'no material in configuration X' and 'no material, configuration unknown' are different facts.",
+          "title": "Material Configuration"
         }
       },
       "required": [
@@ -586,6 +910,199 @@
         "mass"
       ],
       "title": "Document",
+      "type": "object"
+    },
+    "DrawingAnnotation": {
+      "additionalProperties": false,
+      "description": "One annotation of any type on a drawing view (schema 1.4.0).",
+      "properties": {
+        "id": {
+          "pattern": "^dan:[0-9]{4,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "owner_id": {
+          "description": "The DrawingView.id it was read from; a sheet-format annotation's owner is the type-1 pseudo-view",
+          "title": "Owner Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IAnnotation.GetName(); null plus an annotation_identity gap. The annotation is still a subject, identified by `id`, its sheet and its view",
+          "title": "Name"
+        },
+        "type_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IAnnotation.GetType() verbatim, in swAnnotationType_e; Python names it",
+          "title": "Type Raw"
+        },
+        "is_dangling": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IAnnotation.IsDangling(); null plus an annotation_dangling gap, and that annotation is then unresolved",
+          "title": "Is Dangling"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "persist_ref_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref Scope"
+        }
+      },
+      "required": [
+        "id",
+        "owner_id"
+      ],
+      "title": "DrawingAnnotation",
+      "type": "object"
+    },
+    "DrawingNote": {
+      "additionalProperties": false,
+      "description": "One note read off a drawing view (schema 1.4.0). Notes are reachable only through a\nview, and the export-control statement lives on the sheet-format pseudo-view.",
+      "properties": {
+        "id": {
+          "pattern": "^dnt:[0-9]{4,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "owner_id": {
+          "description": "The DrawingView.id it was read from",
+          "title": "Owner Id",
+          "type": "string"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "INote.GetText(); null plus a note_text gap, which leaves the export-control check unresolved because an unread note cannot be shown not to carry the phrase.",
+          "title": "Text"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "persist_ref_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref Scope"
+        }
+      },
+      "required": [
+        "id",
+        "owner_id"
+      ],
+      "title": "DrawingNote",
+      "type": "object"
+    },
+    "DrawingRecord": {
+      "additionalProperties": false,
+      "description": "One natively dumped drawing document, keyed by its `document_id` (schema 1.4.0).\n\nKeyed rather than identified: there is one record per drawing document, so it carries\nneither a package id nor a persistent reference of its own.",
+      "properties": {
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "source": {
+          "const": "native",
+          "default": "native",
+          "description": "Constant for this model (FR-024)",
+          "title": "Source",
+          "type": "string"
+        },
+        "active_sheet_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDrawingDoc.GetCurrentSheet().GetName(), recorded read-only so the coverage reason can say which sheet was active while the others were read",
+          "title": "Active Sheet Name"
+        },
+        "sheets": {
+          "description": "GetSheetNames() order; empty plus a drawing_sheet gap when the enumeration failed",
+          "items": {
+            "$ref": "#/$defs/DrawingSheetRecord"
+          },
+          "title": "Sheets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "title": "DrawingRecord",
       "type": "object"
     },
     "DrawingSheet": {
@@ -657,6 +1174,23 @@
         "parser": {
           "title": "Parser",
           "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "enum": [
+                "native",
+                "pdf_ingest"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Which path wrote this sheet (schema 1.4.0); the PDF ingest stamps 'pdf_ingest'. Null in a sheet written before the stamp existed, which a consumer reads as 'source not recorded' and the drawing checks treat exactly as 'pdf_ingest'.",
+          "title": "Source"
         }
       },
       "required": [
@@ -674,12 +1208,231 @@
       "title": "DrawingSheet",
       "type": "object"
     },
+    "DrawingSheetRecord": {
+      "additionalProperties": false,
+      "description": "One natively dumped sheet of a drawing document (schema 1.4.0).\n\n`was_active` is load-bearing: nothing activates a sheet, so if only the active sheet's\ncontents come back this is how a consumer knows which rows to trust.",
+      "properties": {
+        "id": {
+          "pattern": "^dsh:[0-9]{4,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source": {
+          "const": "native",
+          "default": "native",
+          "description": "Constant for this model: the per-sheet half of FR-024, so a sheet from either path says which produced it",
+          "title": "Source",
+          "type": "string"
+        },
+        "name": {
+          "description": "ISheet.GetName()",
+          "title": "Name",
+          "type": "string"
+        },
+        "index": {
+          "description": "Position in GetSheetNames(), from 0",
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "sheet_format_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISheet.GetSheetFormatName(); null plus a drawing_sheet gap",
+          "title": "Sheet Format Name"
+        },
+        "was_active": {
+          "description": "Whether this sheet was the active one when it was read; nothing activates a sheet",
+          "title": "Was Active",
+          "type": "boolean"
+        },
+        "views": {
+          "description": "ISheet.GetViews() order. Empty plus a drawing_sheet_views gap when the enumeration failed or came back empty on a non-active sheet",
+          "items": {
+            "$ref": "#/$defs/DrawingView"
+          },
+          "title": "Views",
+          "type": "array"
+        },
+        "revision_tables": {
+          "description": "Every revision table on the sheet, not just one",
+          "items": {
+            "$ref": "#/$defs/RevisionTable"
+          },
+          "title": "Revision Tables",
+          "type": "array"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "persist_ref_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref Scope"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "index",
+        "was_active"
+      ],
+      "title": "DrawingSheetRecord",
+      "type": "object"
+    },
+    "DrawingView": {
+      "additionalProperties": false,
+      "description": "One view on one sheet, including the sheet-format pseudo-view (schema 1.4.0).",
+      "properties": {
+        "id": {
+          "pattern": "^dvw:[0-9]{4,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "sheet_id": {
+          "title": "Sheet Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IView.GetName2(); null plus a drawing_view gap",
+          "title": "Name"
+        },
+        "view_type_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IView.Type verbatim, in swDrawingViewTypes_e; 1 is the sheet-format pseudo-view. Python names the number",
+          "title": "View Type Raw"
+        },
+        "referenced_document_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IView.ReferencedDocument resolved to a Document in this package; null when the view references nothing, or when the referenced model is not loaded - a drawing_referenced_document gap names the second case",
+          "title": "Referenced Document Id"
+        },
+        "referenced_model_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IView.GetReferencedModelName(), recorded even when referenced_document_id is null, because it is what lets the gap name the model that was not loaded",
+          "title": "Referenced Model Path"
+        },
+        "display_dimensions": {
+          "items": {
+            "$ref": "#/$defs/DisplayDimensionRecord"
+          },
+          "title": "Display Dimensions",
+          "type": "array"
+        },
+        "annotations": {
+          "items": {
+            "$ref": "#/$defs/DrawingAnnotation"
+          },
+          "title": "Annotations",
+          "type": "array"
+        },
+        "notes": {
+          "items": {
+            "$ref": "#/$defs/DrawingNote"
+          },
+          "title": "Notes",
+          "type": "array"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "persist_ref_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref Scope"
+        }
+      },
+      "required": [
+        "id",
+        "sheet_id"
+      ],
+      "title": "DrawingView",
+      "type": "object"
+    },
     "DumpPhase": {
       "additionalProperties": false,
       "description": "What one phase of the dump cost and what became of it (schema 1.3.0, feature 005 T033).\n\nThe same shape `SuppressTestRow.elapsed_ms` set as the package's only elapsed\nprecedent. `status` is recorded rather than inferred from which arrays came back\nempty: an empty `holes[]` beside an `ok` row is a part with no holes, beside a\n`failed` one it is evidence the dump lost, and beside a `skipped` one it is a phase\nnobody ran.",
       "properties": {
         "name": {
-          "description": "The phase as `PackageWriter` names it in its gaps: document, manifest, mate, feature, equation, hole, fastener, face, body",
+          "description": "The phase as `PackageWriter` names it in its gaps: document, manifest, mate, feature, equation, cutlist, drawing, hole, fastener, face, body",
           "title": "Name",
           "type": "string"
         },
@@ -805,10 +1558,11 @@
         },
         "profile": {
           "default": "full",
-          "description": "Which dump profile wrote this package (schema 1.2.0). 'model_check' skips the hole, fastener, face and body phases, so those arrays are empty by design rather than by failure. Absent in 1.0.0 and 1.1.0 packages, which were all 'full'.",
+          "description": "Which dump profile wrote this package (schema 1.2.0). 'model_check' skips the hole, fastener, face and body phases, so those arrays are empty by design rather than by failure. 'standards' (schema 1.4.0) extends it with the cutlist phase, and the drawing phase for a drawing root. A closed enumeration in both serializers, so a pre-1.4.0 reader refuses a 'standards' package outright rather than reading it. Absent in 1.0.0 and 1.1.0 packages, which were all 'full'.",
           "enum": [
             "full",
-            "model_check"
+            "model_check",
+            "standards"
           ],
           "title": "Profile",
           "type": "string"
@@ -1832,6 +2586,24 @@
         "entity_kind": {
           "title": "Entity Kind",
           "type": "string"
+        },
+        "resolution_status": {
+          "anyOf": [
+            {
+              "enum": [
+                "resolved",
+                "unresolved",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What IMateEntity2.Reference gave, with no new interop call (schema 1.4.0): 'resolved' when the reference was non-null, 'unresolved' when it was null, 'unknown' plus a mate_entity_reference gap when the read threw. Null only in a package written before 1.4.0. Without it both outcomes are a null persist_ref and indistinguishable.",
+          "title": "Resolution Status"
         }
       },
       "required": [
@@ -1912,6 +2684,149 @@
       "title": "Quantity",
       "type": "object"
     },
+    "RevisionTable": {
+      "additionalProperties": false,
+      "description": "One revision table on one sheet (schema 1.4.0). Every table is read, not just the\none `ISheet.RevisionTable` returns, so a second table is visible rather than silently\nmissing from the one check whose purpose is coverage.",
+      "properties": {
+        "id": {
+          "pattern": "^drv:[0-9]{4,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "sheet_id": {
+          "title": "Sheet Id",
+          "type": "string"
+        },
+        "current_revision_raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IRevisionTableAnnotation.CurrentRevision verbatim, including the empty string. Recorded alongside the rows because it comes back empty under some vaults; the check names both readings with their source rather than letting the dumper choose.",
+          "title": "Current Revision Raw"
+        },
+        "row_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ITableAnnotation.RowCount; null plus a revision_table_read gap",
+          "title": "Row Count"
+        },
+        "column_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ITableAnnotation.ColumnCount; null plus a revision_table_read gap",
+          "title": "Column Count"
+        },
+        "rows": {
+          "description": "Empty when the COM cast failed; the gap says so",
+          "items": {
+            "$ref": "#/$defs/RevisionTableRow"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "persist_ref_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "document_id whose IModelDocExtension produced persist_ref; null when SOLIDWORKS gave none, and `id` is then the identity",
+          "title": "Persist Ref Scope"
+        }
+      },
+      "required": [
+        "id",
+        "sheet_id"
+      ],
+      "title": "RevisionTable",
+      "type": "object"
+    },
+    "RevisionTableRow": {
+      "additionalProperties": false,
+      "description": "One row of a revision table, keyed by its index inside that table (schema 1.4.0).\n\nWhich row is the revision row, and whether a row is the header, are profile questions\nanswered in Python; the extractor records cells and classifies nothing.",
+      "properties": {
+        "index": {
+          "description": "Position in the table, from 0",
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "cells": {
+          "description": "One per column, from ITableAnnotation.Text[row, col]. An empty cell is the empty string - a null cell is one that could not be read, and the two must not be confused: an empty revision cell is a real mismatch.",
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Cells",
+          "type": "array"
+        },
+        "is_header": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The extractor's reading of the table's own title-row structure (TotalRowCount versus RowCount); may be null, and no check relies on it alone.",
+          "title": "Is Header"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "title": "RevisionTableRow",
+      "type": "object"
+    },
     "SheetView": {
       "additionalProperties": false,
       "properties": {
@@ -1966,6 +2881,20 @@
           ],
           "description": "Feature ids that consume this sketch (GetChildren); null plus a feature_children gap when unavailable, [] when there are none",
           "title": "Consumer Ids"
+        },
+        "text_segment_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "len(ISketch.GetSketchTextSegments()), 0 for an empty or null array (schema 1.4.0); null plus a sketch_text gap when unreadable, which leaves the sketch unresolved because the text exemption can then neither be applied nor ruled out.",
+          "title": "Text Segment Count"
         }
       },
       "required": [
@@ -2538,6 +3467,14 @@
       "title": "Drawings",
       "type": "array"
     },
+    "drawing_records": {
+      "description": "Natively dumped drawing documents (schema 1.4.0), one per drawing, written by the `drawing` phase. Beside `drawings` rather than inside it: that member is the PDF ingest's `DrawingSheet`, whose `page`, `parse_status` and `parser` a native sheet has no honest value for (006 research R9). Omitted when empty, so a package that ran no drawing phase serializes as it did before 1.4.0.",
+      "items": {
+        "$ref": "#/$defs/DrawingRecord"
+      },
+      "title": "Drawing Records",
+      "type": "array"
+    },
     "features": {
       "items": {
         "$ref": "#/$defs/Feature"
@@ -2550,6 +3487,14 @@
         "$ref": "#/$defs/Equation"
       },
       "title": "Equations",
+      "type": "array"
+    },
+    "cut_list_items": {
+      "description": "Cut-list items of the package's part documents (schema 1.4.0), written by the `cutlist` phase. Omitted when empty.",
+      "items": {
+        "$ref": "#/$defs/CutListItem"
+      },
+      "title": "Cut List Items",
       "type": "array"
     },
     "rms_suppress_test": {

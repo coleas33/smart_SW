@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using SwReview.Extractor.Dump;
@@ -116,8 +116,8 @@ public sealed class PackageReuseTests : IDisposable
         Assert.Equal(
             new[]
             {
-                "document", "manifest", "mate", "feature", "equation", "hole", "fastener",
-                "face", "body",
+                "document", "manifest", "mate", "feature", "equation", "cutlist",
+                "drawing", "hole", "fastener", "face", "body",
             },
             written.Extractor.Phases.Select(phase => phase.Name));
         Assert.All(written.Extractor.Phases, phase =>
