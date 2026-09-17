@@ -78,6 +78,13 @@ public interface IFeatureReader
     /// <summary><c>ISketch.GetConstrainedStatus</c> verbatim; never mapped here (research R7).</summary>
     int SketchConstrainedStatus(object sketch);
 
+    /// <summary>
+    /// <c>ISketch.GetSketchTextSegments()</c> as it came: an array, or nothing when the sketch
+    /// carries no text (schema 1.4.0). The count is taken by the dumper, so "empty" and
+    /// "absent" are one answer in one place.
+    /// </summary>
+    object? SketchTextSegments(object sketch);
+
     /// <summary><c>IFeature.GetDefinition</c>; null for a feature that has none.</summary>
     object? Definition(object feature);
 
@@ -491,7 +498,38 @@ public sealed class FeatureDumper : IFeatureSource
         {
             RawStatus = raw,
             ConsumerIds = childIds,
+            TextSegmentCount = ReadTextSegmentCount(scope, id, name, found),
         };
+    }
+
+    /// <summary>
+    /// How many text segments the sketch carries (schema 1.4.0), recorded for EVERY sketch the
+    /// tree holds - including one SOLIDWORKS nests under a hole-wizard feature, because
+    /// difference z makes every recorded sketch a subject of
+    /// <c>standards.part.sketches_fully_defined</c>.
+    ///
+    /// An empty or absent array is <c>0</c>, which rules the text exemption out; a read that
+    /// threw is null plus a <c>sketch_text</c> gap, which leaves that sketch unresolved,
+    /// because the exemption can then neither be applied nor ruled out. Whether an empty
+    /// sketch answers with an empty array or with nothing is PROBE-9, and both read as 0 here:
+    /// neither is a failure.
+    /// </summary>
+    private int? ReadTextSegmentCount(DumpScope scope, string id, string name, object sketch)
+    {
+        int? count = null;
+        scope.Gaps.TryStep(
+            "sketch_text",
+            id,
+            $"read GetSketchTextSegments for sketch '{name}'",
+            () =>
+            {
+                object? segments = _gate.Call(
+                    "GetSketchTextSegments", () => _reader.SketchTextSegments(sketch));
+
+                count = segments is object[] array ? array.Length : 0;
+            });
+
+        return count;
     }
 
     /// <summary>

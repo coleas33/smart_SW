@@ -1,0 +1,1093 @@
+{
+  "schema_version": "1.4.0",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "created_at": "2026-09-12T12:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "test",
+    "profile": "standards",
+    "phases": [
+      {
+        "name": "document",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "manifest",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "mate",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "feature",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "equation",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "cutlist",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "drawing",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "hole",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "fastener",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "face",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "body",
+        "elapsed_ms": null,
+        "status": "skipped"
+      }
+    ]
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:1",
+        "vault_path": "/srv/meridian-vault/jobs/probe/MR-30001.SLDASM",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:2",
+        "vault_path": "/srv/meridian-vault/jobs/probe/MR-30002.SLDASM",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:3",
+        "vault_path": "/srv/meridian-vault/jobs/probe/MR-13001.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:4",
+        "vault_path": "/srv/meridian-vault/jobs/probe/MR-13002.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:5",
+        "vault_path": "/srv/meridian-vault/jobs/probe/MR-13003.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:6",
+        "vault_path": "/srv/meridian-vault/jobs/probe/MR-13004.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:7",
+        "vault_path": "/srv/meridian-vault/jobs/probe/MR-13005.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:8",
+        "vault_path": "/srv/meridian-vault/catalog/screws/MR-13006.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:9",
+        "vault_path": "/srv/meridian-vault/jobs/probe/MR-13007.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:1",
+    "name": "MR-30001",
+    "root_assembly_document_id": "doc:1",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:1",
+      "kind": "assembly",
+      "file_name": "MR-30001.SLDASM",
+      "path": "/srv/meridian-vault/jobs/probe/MR-30001.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null,
+      "is_exploded": false,
+      "rebuild_error_count": 0
+    },
+    {
+      "document_id": "doc:2",
+      "kind": "assembly",
+      "file_name": "MR-30002.SLDASM",
+      "path": "/srv/meridian-vault/jobs/probe/MR-30002.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null,
+      "is_exploded": false,
+      "rebuild_error_count": 0
+    },
+    {
+      "document_id": "doc:3",
+      "kind": "part",
+      "file_name": "MR-13001.SLDPRT",
+      "path": "/srv/meridian-vault/jobs/probe/MR-13001.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 4",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    },
+    {
+      "document_id": "doc:4",
+      "kind": "part",
+      "file_name": "MR-13002.SLDPRT",
+      "path": "/srv/meridian-vault/jobs/probe/MR-13002.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 4",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    },
+    {
+      "document_id": "doc:5",
+      "kind": "part",
+      "file_name": "MR-13003.SLDPRT",
+      "path": "/srv/meridian-vault/jobs/probe/MR-13003.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 4",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    },
+    {
+      "document_id": "doc:6",
+      "kind": "part",
+      "file_name": "MR-13004.SLDPRT",
+      "path": "/srv/meridian-vault/jobs/probe/MR-13004.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 4",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "material_configuration": "Fabricated"
+    },
+    {
+      "document_id": "doc:7",
+      "kind": "part",
+      "file_name": "MR-13005.SLDPRT",
+      "path": "/srv/meridian-vault/jobs/probe/MR-13005.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 4",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    },
+    {
+      "document_id": "doc:8",
+      "kind": "part",
+      "file_name": "MR-13006.SLDPRT",
+      "path": "/srv/meridian-vault/catalog/screws/MR-13006.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 4",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    },
+    {
+      "document_id": "doc:9",
+      "kind": "part",
+      "file_name": "MR-13007.SLDPRT",
+      "path": "/srv/meridian-vault/jobs/probe/MR-13007.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 4",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-30001",
+      "document_id": "doc:1",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-30001",
+      "constrained_status_raw": null,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-30002-1",
+      "document_id": "doc:2",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-30002-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-13001-1",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-13001-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-13002-1",
+      "document_id": "doc:4",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "suppressed",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-13002-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0005",
+      "persist_ref": "Y21wOjAwMDU=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-13003-1",
+      "document_id": "doc:5",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "lightweight",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-13003-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0006",
+      "persist_ref": "Y21wOjAwMDY=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-13004-1",
+      "document_id": "doc:6",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-13004-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0007",
+      "persist_ref": "Y21wOjAwMDc=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-13005-1",
+      "document_id": "doc:7",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-13005-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0008",
+      "persist_ref": "Y21wOjAwMDg=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-13007-1",
+      "document_id": "doc:9",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-30002-1/MR-13007-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0009",
+      "persist_ref": "Y21wOjAwMDk=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-13006-1",
+      "document_id": "doc:8",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-30002-1/MR-13006-1",
+      "constrained_status_raw": 2,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    }
+  ],
+  "mates": [
+    {
+      "id": "mate:0001",
+      "persist_ref": "bWF0ZTowMDAx",
+      "persist_ref_scope": "doc:1",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0002",
+          "persist_ref": "bWF0ZTowMDAxL01SLTMwMDAyLTE=",
+          "entity_kind": "swSelDATUMPLANES",
+          "resolution_status": "resolved"
+        },
+        {
+          "component_id": "cmp:0003",
+          "persist_ref": "bWF0ZTowMDAxL01SLTEzMDAxLTE=",
+          "entity_kind": "swSelDATUMPLANES",
+          "resolution_status": "resolved"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    }
+  ],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "ZG9jOjMvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "ZG9jOjMvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0001",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "ZG9jOjQvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0004",
+      "persist_ref": "ZG9jOjQvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0003",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0005",
+      "persist_ref": "ZG9jOjUvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0006",
+      "persist_ref": "ZG9jOjUvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0005",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0007",
+      "persist_ref": "ZG9jOjYvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:6",
+      "document_id": "doc:6",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0008",
+      "persist_ref": "ZG9jOjYvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:6",
+      "document_id": "doc:6",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0007",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0009",
+      "persist_ref": "ZG9jOjcvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:7",
+      "document_id": "doc:7",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0010",
+      "persist_ref": "ZG9jOjcvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:7",
+      "document_id": "doc:7",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0009",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": null,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0011",
+      "persist_ref": "ZG9jOjgvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:8",
+      "document_id": "doc:8",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0012",
+      "persist_ref": "ZG9jOjgvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:8",
+      "document_id": "doc:8",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0011",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0013",
+      "persist_ref": "ZG9jOjkvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:9",
+      "document_id": "doc:9",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0014",
+      "persist_ref": "ZG9jOjkvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:9",
+      "document_id": "doc:9",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0013",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    }
+  ],
+  "equations": [],
+  "rms_suppress_test": null,
+  "gaps": []
+}

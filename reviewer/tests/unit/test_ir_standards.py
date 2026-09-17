@@ -56,12 +56,14 @@ from swreview.ir.models import (
     UnsupportedSchemaVersionError,
 )
 from swreview.ir.schema import export_schema
-from tests.golden.test_golden import case_dirs
+from tests.golden.test_golden import PRE_1_4_0_FIXTURE_DIRS
 from tests.support.contracts import load_contract
 from tests.support.packages import build_package, persist_ref
 
-GOLDEN_FIXTURES = Path(__file__).resolve().parents[1] / "golden" / "fixtures"
-GOLDEN_FIXTURE_DIRS = case_dirs(GOLDEN_FIXTURES)
+GOLDEN_FIXTURE_DIRS = PRE_1_4_0_FIXTURE_DIRS
+"""Every golden written before 1.4.0. Feature 006's own `standards-*` goldens are written
+*at* 1.4.0 and carry its evidence by design, so they are not packages the two gates below
+can ask "does this predate the bump?" of (`tests/golden/test_golden.py`)."""
 
 # `contracts/ir-additions.md` section 1, verbatim: the ten fields on existing models plus
 # the one on the PDF ingest's sheet. The count is stated in the contract and read here.

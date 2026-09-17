@@ -484,6 +484,10 @@ public sealed class PackageWriter
                 PatternId = node.PatternId,
                 IsToolbox = node.IsToolbox,
                 ConstrainedStatusRaw = node.ConstrainedStatusRaw,
+                HasAppearanceOverride = node.HasAppearanceOverride,
+                TransparencyRaw = node.TransparencyRaw,
+                VisibilityRaw = node.VisibilityRaw,
+                IsPatternInstance = node.IsPatternInstance,
             });
         }
     }

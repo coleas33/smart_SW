@@ -10,6 +10,25 @@ using IrMate = SwReview.Extractor.Ir.Mate;
 namespace SwReview.Extractor.Dump;
 
 /// <summary>
+/// What one <c>IMateEntity2.Reference</c> read gave, and how the package says so: the entity
+/// itself when there was one, and the <see cref="MateEntityResolution"/> that distinguishes a
+/// null reference from a read that threw (schema 1.4.0).
+/// </summary>
+public sealed class MateEntityReferenceRead
+{
+    public MateEntityReferenceRead(MateEntityResolution status, object? reference)
+    {
+        Status = status;
+        Reference = reference;
+    }
+
+    public MateEntityResolution Status { get; }
+
+    /// <summary>The live entity, or null when it was null or unreadable.</summary>
+    public object? Reference { get; }
+}
+
+/// <summary>
 /// T051. Mates of the root assembly.
 ///
 /// SOLIDWORKS 2024 has no <c>IAssemblyDoc.GetMates</c>; mates live in the feature tree
@@ -213,7 +232,15 @@ public sealed class MateDumper : IMateSource
                     : gate.Call("Name2", () => owner.Name2) ?? string.Empty;
 
                 ScopedComponent? component = scope.Find(ownerKey);
-                object? reference = gate.Call("MateEntity.Reference", () => entity.Reference);
+
+                // Schema 1.4.0, and no new interop call: the Reference read already happened
+                // here, and all that changes is that a reference that came back null is now
+                // told from a read that threw. Both produced a null persist_ref before, which
+                // is the conflation standards.assembly.mate_references exists to end.
+                MateEntityReferenceRead resolution = ReadEntityReference(
+                    record.Id, featureName, index, scope.Gaps, gate, () => entity.Reference);
+
+                object? reference = resolution.Reference;
 
                 record.Entities.Add(new MateEntityRef
                 {
@@ -222,11 +249,49 @@ public sealed class MateDumper : IMateSource
                         ? null
                         : _refs.TryGet(_session.Document, reference)?.Base64,
                     EntityKind = EntityKindName(gate.Call("ReferenceType2", () => entity.ReferenceType2)),
+                    ResolutionStatus = resolution.Status,
                 });
 
                 RequestFaceGeometry(reference, component, owner, scope);
             });
         }
+    }
+
+    /// <summary>
+    /// One <c>IMateEntity2.Reference</c> read, and what it means (schema 1.4.0): non-null is
+    /// <c>resolved</c>, null is <c>unresolved</c> - the mate points at an entity that is gone,
+    /// which is a finding - and a read that threw is <c>unknown</c> plus a
+    /// <c>mate_entity_reference</c> gap, which is unresolved coverage. Before 1.4.0 all three
+    /// produced a null <c>persist_ref</c> and were indistinguishable.
+    ///
+    /// The interop expression stays at the call site and the policy lives here, because the
+    /// dumper holds a live <c>IMate2</c> that no machine without a seat can produce - the same
+    /// split <see cref="FeatureDumper"/> makes with <see cref="IFeatureReader"/>, one delegate
+    /// wide instead of one interface wide.
+    /// </summary>
+    public static MateEntityReferenceRead ReadEntityReference(
+        string mateId,
+        string featureName,
+        int index,
+        GapCollector gaps,
+        SwGate gate,
+        Func<object?> read)
+    {
+        object? reference = null;
+        bool answered = gaps.TryStep(
+            "mate_entity_reference",
+            mateId,
+            $"read Reference for entity {index} of mate '{featureName}'",
+            () => { reference = gate.Call("MateEntity.Reference", read); });
+
+        if (!answered)
+        {
+            return new MateEntityReferenceRead(MateEntityResolution.Unknown, null);
+        }
+
+        return new MateEntityReferenceRead(
+            reference == null ? MateEntityResolution.Unresolved : MateEntityResolution.Resolved,
+            reference);
     }
 
     /// <summary>

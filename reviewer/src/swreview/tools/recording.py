@@ -51,6 +51,7 @@ def result_to_finding(
     drawing_locations: Sequence[SourceRef] = (),
     exception_id: str | None = None,
     tool_result_ids: Sequence[int] = (),
+    document_ids: Sequence[str] = (),
 ) -> Finding:
     """One `CheckResult` as a session-ready `Finding`.
 
@@ -81,6 +82,7 @@ def result_to_finding(
         recommended_action=result.recommended_action,
         component_ids=component_ids,
         drawing_locations=drawing_locations,
+        document_ids=document_ids,
         inputs=result.inputs,
         calculation=result.calculation,
         tool_result_ids=tool_result_ids,
@@ -96,8 +98,13 @@ def record_result(
     drawing_locations: Sequence[SourceRef] = (),
     exception_id: str | None = None,
     tool_result_ids: Sequence[int] = (),
+    document_ids: Sequence[str] = (),
 ) -> ToolResult:
-    """Append the finding for `result` to the session and return it."""
+    """Append the finding for `result` to the session and return it.
+
+    `document_ids` binds a document-scoped finding - one whose document has no
+    `ComponentInstance` by nature - to the document it was read from; see `build_finding`.
+    """
     try:
         finding = result_to_finding(
             context,
@@ -106,6 +113,7 @@ def record_result(
             drawing_locations,
             exception_id=exception_id,
             tool_result_ids=tool_result_ids,
+            document_ids=document_ids,
         )
     except ValueError as exc:
         return error_result(str(exc))

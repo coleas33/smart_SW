@@ -376,45 +376,78 @@ def _entry(document: Document) -> ManifestEntry:
     )
 
 
+@dataclass(frozen=True)
+class _Synthesized:
+    """One instance the dump synthesizes rather than reading it off a component spec."""
+
+    document: str
+    """The document spec's name it instantiates."""
+
+    parent: str | None = None
+    """Another synthesized instance's document name; `None` is the forest's own top."""
+
+
+def _synthesized(documents: Sequence[DocumentSpec]) -> tuple[_Synthesized, ...]:
+    """The instances no component spec names, in traversal order.
+
+    An **assembly** root contributes its own instance. A **drawing** root contributes the
+    synthesized forest root the dump hangs one subtree per referenced model under, plus one
+    instance of each referenced **assembly** - the dump walks a referenced model's component
+    tree exactly as it walks an assembly root (`contracts/ir-additions.md` section 7,
+    `research.md` R9). A referenced part has no component tree and so has no subtree to hang.
+    A part opened alone contributes none.
+    """
+    root = documents[0]
+    if isinstance(root, AssemblySpec):
+        return (_Synthesized(root.name),)
+    if isinstance(root, DrawingSpec):
+        return (
+            _Synthesized(root.name),
+            *(
+                _Synthesized(name, parent=root.name)
+                for name in _referenced_assemblies(root, documents)
+            ),
+        )
+    return ()
+
+
+def _referenced_assemblies(
+    root: DrawingSpec, documents: Sequence[DocumentSpec]
+) -> tuple[str, ...]:
+    """Every assembly a view on any sheet references, once each, in sheet and view order."""
+    assemblies = {spec.name for spec in documents if isinstance(spec, AssemblySpec)}
+    seen: dict[str, None] = {}
+    for sheet in root.sheets:
+        for view in sheet.views:
+            if view.references is not None and view.references in assemblies:
+                seen.setdefault(view.references, None)
+    return tuple(seen)
+
+
 def _components(
     documents: Sequence[DocumentSpec], ids: Mapping[str, str]
 ) -> list[ComponentInstance]:
-    """The root assembly's own instance first, then every spec in document order."""
-    rows: list[ComponentInstance] = []
+    """The synthesized instances first, then every component spec in document order."""
     root_spec = documents[0]
+    synthesized = _synthesized(documents)
     specs = [(spec, owner) for owner in documents for spec in _component_specs(owner)]
 
-    numbers: dict[str, str] = {}
-    if isinstance(root_spec, AssemblySpec):
-        numbers[root_spec.name] = "cmp:0001"
+    synthesized_ids = {
+        item.document: f"cmp:{number:04d}" for number, item in enumerate(synthesized, start=1)
+    }
+    numbers: dict[str, str] = dict(synthesized_ids)
     for number, (spec, _) in enumerate(specs, start=len(numbers) + 1):
         if spec.name in numbers:
             raise ValueError(f"duplicate component instance name {spec.name!r}")
         numbers[spec.name] = f"cmp:{number:04d}"
 
-    if isinstance(root_spec, AssemblySpec):
-        rows.append(
-            ComponentInstance(
-                id="cmp:0001",
-                persist_ref=persist_ref("cmp:0001"),
-                persist_ref_scope=ids[root_spec.name],
-                name=root_spec.name,
-                full_path=root_spec.name,
-                document_id=ids[root_spec.name],
-                parent_id=None,
-                referenced_configuration=root_spec.configuration,
-                transform=IDENTITY_TRANSFORM,
-                suppression="resolved",
-                is_fixed=True,
-                pattern_id=None,
-                is_toolbox=False,
-                has_appearance_override=False,
-                visibility_raw=1,
-                is_pattern_instance=False,
-            )
-        )
-
     configurations = {spec.name: spec.configuration for spec in documents}
+    rows = [
+        _synthesized_row(item, synthesized_ids, ids, configurations, root_spec)
+        for item in synthesized
+    ]
+
+    forest_root_id = synthesized_ids.get(root_spec.name)
     for spec, owner in specs:
         if spec.document not in ids:
             raise ValueError(
@@ -426,7 +459,11 @@ def _components(
                 f"component {spec.name!r} names parent {spec.parent!r}, "
                 "which is not a component instance of this package"
             )
-        parent_id = numbers[spec.parent] if spec.parent is not None else _root_id(numbers)
+        parent_id = (
+            numbers[spec.parent]
+            if spec.parent is not None
+            else synthesized_ids.get(owner.name, forest_root_id)
+        )
         full_path = spec.name if spec.parent is None else f"{spec.parent}/{spec.name}"
         rows.append(
             ComponentInstance(
@@ -455,12 +492,37 @@ def _components(
     return rows
 
 
+def _synthesized_row(
+    item: _Synthesized,
+    synthesized_ids: Mapping[str, str],
+    ids: Mapping[str, str],
+    configurations: Mapping[str, str],
+    root: DocumentSpec,
+) -> ComponentInstance:
+    """One synthesized instance: a top-level, resolved, fixed instance of its document."""
+    instance_id = synthesized_ids[item.document]
+    return ComponentInstance(
+        id=instance_id,
+        persist_ref=persist_ref(instance_id),
+        persist_ref_scope=ids[root.name],
+        name=item.document,
+        full_path=item.document if item.parent is None else f"{item.parent}/{item.document}",
+        document_id=ids[item.document],
+        parent_id=None if item.parent is None else synthesized_ids[item.parent],
+        referenced_configuration=configurations[item.document],
+        transform=IDENTITY_TRANSFORM,
+        suppression="resolved",
+        is_fixed=True,
+        pattern_id=None,
+        is_toolbox=False,
+        has_appearance_override=False,
+        visibility_raw=1,
+        is_pattern_instance=False,
+    )
+
+
 def _component_specs(spec: DocumentSpec) -> Sequence[ComponentSpec]:
     return spec.components if isinstance(spec, AssemblySpec) else ()
-
-
-def _root_id(numbers: Mapping[str, str]) -> str | None:
-    return "cmp:0001" if "cmp:0001" in numbers.values() else None
 
 
 def _mates(documents: Sequence[DocumentSpec], component_ids: Mapping[str, str]) -> list[Mate]:

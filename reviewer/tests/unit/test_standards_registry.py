@@ -297,7 +297,7 @@ class TestEvaluators:
     """
 
     def test_binding_every_id_completes_the_catalogue(self) -> None:
-        copies = catalogue(*(replace(rule) for rule in RULES.values()))
+        copies = catalogue(*(replace(rule, fn=None) for rule in RULES.values()))
         bind = binder(copies, "contracts/rules.md")
         for check_id in copies:
             bind(check_id)(lambda *args, **kwargs: [])

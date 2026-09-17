@@ -49,6 +49,23 @@ def case_dirs(root: Path) -> list[Path]:
 
 FIXTURE_DIRS = case_dirs(FIXTURES_DIR)
 
+WRITTEN_AT_1_4_0 = "standards-"
+"""The name prefix of the goldens feature 006 writes at schema 1.4.0 (T053 to T056).
+
+Every other golden in this tree was written before 1.4.0 existed and must still parse,
+untimed and carrying none of that schema's evidence - which is how `SC-004` is measured
+(`tests/unit/test_ir_golden_fixtures_load.py`, `test_ir_phases.py`, `test_ir_standards.py`).
+A `standards-*` fixture is written by the 1.4.0 builder on purpose: it declares 1.4.0,
+records its dump phases and carries cut-list items and drawing records, so it is not a
+package those three gates can ask that question of. The prefix lives here, beside the walk
+that finds the cases, so the three of them read one rule rather than three copies.
+"""
+
+PRE_1_4_0_FIXTURE_DIRS = [
+    directory for directory in FIXTURE_DIRS if not directory.name.startswith(WRITTEN_AT_1_4_0)
+]
+"""Every golden that predates the 1.4.0 bump: the corpus SC-004 is measured over."""
+
 
 def resolve_callable(spec: str) -> Any:
     """Import `module:attribute`, skipping the test when it has not been written yet."""

@@ -427,6 +427,121 @@ def test_a_view_referencing_an_unknown_document_is_refused() -> None:
         standards_package(documents=[a_part(), drawing])
 
 
+# --- a drawing root ------------------------------------------------------------------------
+
+# A drawing is never instantiated as a component, so the dump synthesizes a forest root
+# carrying the drawing's own document id and hangs one subtree per referenced model under it
+# (`contracts/ir-additions.md` section 7, `research.md` R9). The builder must produce that
+# shape, because a traversal test that writes that shape by hand is testing its own helper.
+
+
+def a_drawing_root(*references: str) -> DrawingSpec:
+    """A drawing whose one sheet carries a sheet-format view and one view per reference."""
+    return DrawingSpec(
+        name="cover",
+        sheets=(
+            SheetSpec(
+                name="Sheet1",
+                views=(
+                    ViewSpec(name="Sheet Format1", view_type_raw=1),
+                    *(
+                        ViewSpec(name=f"View{number}", references=name)
+                        for number, name in enumerate(references, start=1)
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def parents(package: EvidencePackage) -> list[tuple[str, str | None]]:
+    return [(row.id, row.parent_id) for row in package.components]
+
+
+def test_a_drawing_root_carries_a_synthesized_forest_root_of_its_own() -> None:
+    package = standards_package(documents=[a_drawing_root("cover-assy"), an_assembly(), a_part()])
+
+    forest_root = package.components[0]
+
+    assert forest_root.id == "cmp:0001"
+    assert forest_root.document_id == "doc:1"
+    assert forest_root.parent_id is None
+    assert forest_root.name == "cover"
+    assert forest_root.suppression == "resolved"
+
+
+def test_each_referenced_assembly_gets_one_instance_under_the_forest_root() -> None:
+    package = standards_package(
+        documents=[
+            a_drawing_root("cover-assy", "sub-assy"),
+            an_assembly(),
+            AssemblySpec(
+                name="sub-assy", components=(ComponentSpec(name="bracket-1", document="bracket"),)
+            ),
+            a_part(),
+            PartSpec(name="bracket"),
+        ]
+    )
+
+    assert parents(package) == [
+        ("cmp:0001", None),
+        ("cmp:0002", "cmp:0001"),
+        ("cmp:0003", "cmp:0001"),
+        ("cmp:0004", "cmp:0002"),
+        ("cmp:0005", "cmp:0003"),
+    ]
+    assert [row.document_id for row in package.components] == [
+        "doc:1",
+        "doc:2",
+        "doc:3",
+        "doc:4",
+        "doc:5",
+    ]
+    assert [row.name for row in package.components[1:3]] == ["cover-assy", "sub-assy"]
+    assert [row.full_path for row in package.components[1:3]] == [
+        "cover/cover-assy",
+        "cover/sub-assy",
+    ]
+
+
+def test_a_referenced_assembly_drawn_in_two_views_gets_one_instance() -> None:
+    package = standards_package(
+        documents=[a_drawing_root("cover-assy", "cover-assy"), an_assembly(), a_part()]
+    )
+
+    assert [row.document_id for row in package.components] == ["doc:1", "doc:2", "doc:3"]
+
+
+def test_a_referenced_part_gets_no_instance_of_its_own() -> None:
+    """A part has no component tree, so there is no subtree to hang under the forest root."""
+    package = standards_package(documents=[a_drawing_root("housing"), a_part()])
+
+    assert [row.document_id for row in package.components] == ["doc:1"]
+
+
+def test_no_instance_of_a_drawing_rooted_package_is_its_own_parent() -> None:
+    """The defect this shape replaces: with no root-assembly instance to fall back on, the
+    first component of a referenced model became its own parent and the referenced assembly
+    got no instance row at all."""
+    package = standards_package(documents=[a_drawing_root("cover-assy"), an_assembly(), a_part()])
+
+    assert all(row.parent_id != row.id for row in package.components)
+    assert {row.document_id for row in package.components} == {"doc:1", "doc:2", "doc:3"}
+
+
+def test_a_drawing_that_references_nothing_still_carries_its_forest_root() -> None:
+    package = standards_package(documents=[a_drawing_root(), a_part()])
+
+    assert [(row.id, row.document_id) for row in package.components] == [("cmp:0001", "doc:1")]
+
+
+def test_an_assembly_root_is_unchanged_by_the_drawing_branch() -> None:
+    """The root assembly's own instance is still `cmp:0001`, and nothing hangs above it."""
+    package = standards_package(documents=[an_assembly(), a_part()])
+
+    assert parents(package) == [("cmp:0001", None), ("cmp:0002", "cmp:0001")]
+
+
 # --- what a standards package says about itself --------------------------------------------
 
 

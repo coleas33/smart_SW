@@ -19,7 +19,7 @@ what proves they still **load** is this module, which parses every one of them u
 
 The baselines under `tests/golden/test_golden/` are the artefact actually at risk - they
 are regenerated from callable output, so a new IR field that reached a summary or a
-coverage row would move one. `test_the_golden_tree_has_no_uncommitted_change` is that
+coverage row would move one. `test_the_golden_tree_holds_only_this_feature_s_new_goldens` is that
 gate, and `tests/golden/test_golden.py` regenerating them is what makes it meaningful.
 """
 
@@ -42,23 +42,73 @@ from swreview.ir.models import (
     MateEntity,
     SketchInfo,
 )
-from tests.golden.test_golden import FIXTURE_DIRS, FIXTURES_DIR
-from tests.unit.test_cli import git_status_of
+from tests.golden.test_golden import (
+    FIXTURES_DIR,
+    PRE_1_4_0_FIXTURE_DIRS,
+    WRITTEN_AT_1_4_0,
+)
+from tests.unit.test_cli import REPO_ROOT, git_status_of
 
 GOLDEN_DIR = FIXTURES_DIR.parent
 """`reviewer/tests/golden/` - the fixtures and the pytest-regressions baselines both."""
 
 GOLDEN_PACKAGES: list[Path] = [
     directory / PACKAGE_FILE_NAME
-    for directory in FIXTURE_DIRS
+    for directory in PRE_1_4_0_FIXTURE_DIRS
     if (directory / PACKAGE_FILE_NAME).is_file()
 ]
-"""Every existing golden package, discovered through `test_golden.py`'s own case walk.
+"""Every golden package written **before** the bump, through `test_golden.py`'s case walk.
 
 Discovered rather than listed, so a golden added by a later feature is gated the day it
 lands; through the golden module's walk rather than a glob of this module's own, so the
 nested group directories (`fixtures/remodel-plan/<case>/`) are covered by the same rule
 that collects them for grading.
+
+Feature 006's own `standards-*` goldens are excluded, and that is the gate's subject rather
+than a hole in it: they are written *at* 1.4.0 by `tests/support/standards.py` and carry
+this feature's cut-list items and drawing records deliberately, so asking whether they
+predate the bump has no answer. What SC-004 measures is that no golden that **did** predate
+it moved, and `test_the_golden_tree_holds_only_this_feature_s_new_goldens` is where the new
+ones are accounted for by name.
+"""
+
+NEW_GOLDEN_PREFIX = WRITTEN_AT_1_4_0
+"""The name prefix of this feature's own golden fixtures and baselines."""
+
+NEW_GOLDEN_CASES: tuple[str, ...] = (
+    "standards-compliant",
+    "standards-compliant-flat",
+    "standards-multiplicity",
+    "standards-seeded",
+    "standards-unknown",
+)
+"""The five goldens this feature adds (T053 to T056), named one by one rather than matched.
+
+A `standards` substring filter would keep exempting them for ever: the day they are
+committed it would go on excusing a **modified** `test_golden/standards-seeded.yml`, which
+is drift in this feature's own byte-compared baseline and exactly what a golden exists to
+catch. Naming the five costs one line each and expires on its own - once they are
+committed the tree is clean and the gate is the absolute one again.
+"""
+
+NEW_GOLDEN_PATHS: frozenset[str] = frozenset(
+    [f"fixtures/{case}/" for case in NEW_GOLDEN_CASES]
+    + [f"test_golden/{case}.yml" for case in NEW_GOLDEN_CASES]
+)
+"""The ten paths under `tests/golden/` this feature adds, as `git status --short` prints
+them while they are new: five untracked fixture directories and their five baselines.
+
+They are allowed **only** as untracked (`??`). A line naming one of them in any other
+state is a golden of this feature's own that moved after it was written, and fails.
+"""
+
+GOLDEN_HARNESS: frozenset[str] = frozenset({"test_golden.py", "test_standards_goldens.py"})
+"""The two modules in that tree that are code rather than artefact, named so that they are
+accounted for rather than dropped by a directory filter.
+
+A golden is an artefact nobody edits by hand, which is why a change to one is a finding; a
+harness module is reviewed as code, so a change to one of these two is not. A *third* file
+appearing beside them is neither, and fails.
 """
 
 PACKAGE_IDS: list[str] = [
@@ -152,10 +202,15 @@ def test_every_golden_package_is_discovered() -> None:
     assert GOLDEN_PACKAGES, f"no golden package.json under {FIXTURES_DIR}"
     assert "rms-part" in PACKAGE_IDS
     assert "remodel-plan/remodel-ordered" in PACKAGE_IDS
-    assert len(GOLDEN_PACKAGES) == len(FIXTURE_DIRS), (
-        "a golden case directory holds no package.json: "
-        f"{sorted({d.name for d in FIXTURE_DIRS} - {p.parent.name for p in GOLDEN_PACKAGES})}"
+    without_a_package = sorted(
+        {directory.name for directory in PRE_1_4_0_FIXTURE_DIRS}
+        - {package.parent.name for package in GOLDEN_PACKAGES}
     )
+
+    assert without_a_package == [], (
+        f"a golden case directory holds no package.json: {without_a_package}"
+    )
+    assert not [name for name in PACKAGE_IDS if name.startswith(NEW_GOLDEN_PREFIX)]
 
 
 def test_every_member_the_gate_names_is_a_real_1_4_0_field() -> None:
@@ -214,12 +269,46 @@ def test_the_round_trip_adds_only_the_defaults_earlier_minors_named() -> None:
     assert added == FILLED_IN_BY_EARLIER_MINORS
 
 
-def test_the_golden_tree_has_no_uncommitted_change() -> None:
-    """Gate 2's artefact: `git status --porcelain reviewer/tests/golden` prints nothing.
+def golden_tree_status() -> list[tuple[str, str]]:
+    """Every `git status --short` line for `tests/golden/`, as `(status, path)`.
+
+    The path is relative to that tree and slash-separated, so the expectations below can
+    be written as the ten paths they are rather than as substrings of a status line.
+    """
+    prefix = f"{GOLDEN_DIR.relative_to(REPO_ROOT).as_posix()}/"
+    rows: list[tuple[str, str]] = []
+    for line in git_status_of(GOLDEN_DIR).splitlines():
+        status, path = line[:2].strip(), line[2:].strip().strip('"').replace("\\", "/")
+        rows.append((status, path.removeprefix(prefix)))
+    return rows
+
+
+def test_the_golden_tree_holds_only_this_feature_s_new_goldens() -> None:
+    """Gate 2's artefact: `git status --porcelain reviewer/tests/golden` names nothing else.
 
     The pytest-regressions baselines under `tests/golden/test_golden/` are regenerated
     from callable output, so this is only a real measurement in a run that has just
     regenerated them - `uv run pytest tests/golden` alongside this module, which is what
     quickstart Scenario 0 runs.
+
+    The gate is absolute over the **whole** of that tree: every line it prints must be one
+    of the ten goldens this feature adds (T053 to T056), still untracked, or one of the two
+    harness modules named above. A feature 001, 002 or 003 baseline that drifted prints a
+    line that is none of those, and so does a `standards-*` baseline of this feature's own
+    that stopped being new - which is SC-004 measured rather than asserted by inspection.
     """
-    assert git_status_of(GOLDEN_DIR) == ""
+    changed = golden_tree_status()
+
+    stray = [
+        f"{status} {path}"
+        for status, path in changed
+        if path not in NEW_GOLDEN_PATHS and path not in GOLDEN_HARNESS
+    ]
+    drifted = [
+        f"{status} {path}"
+        for status, path in changed
+        if path in NEW_GOLDEN_PATHS and status != "??"
+    ]
+
+    assert stray == [], f"the golden tree moved outside this feature: {stray}"
+    assert drifted == [], f"a golden this feature wrote moved after it was written: {drifted}"

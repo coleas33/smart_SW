@@ -40,10 +40,12 @@ public static class SwDump
             new FeatureDumper(session.Gate, new SwFeatureReader(session.Gate, refs)),
             new EquationDumper(session.Gate, new SwEquationReader()),
 
-            // No interop reader is wired for the cut-list or drawing phases in this build,
-            // so both are recorded `skipped` rather than silently returning nothing - which
-            // is the row `swreview check standards` refuses a package on (FR-043).
-            cutList: null,
+            // The cut-list phase runs under the Standards and Full profiles and is recorded
+            // `skipped` under ModelCheck, which PackageWriter decides. No interop reader is
+            // wired for the DRAWING phase in this build, so it is recorded `skipped` rather
+            // than silently returning nothing - which is the row `swreview check standards`
+            // refuses a package on (FR-043).
+            cutList: new CutListDumper(session.Gate, new SwCutListReader(session.Gate, refs)),
             drawings: null,
             new HoleDumper(session, refs),
             new FastenerDumper(session, refs),

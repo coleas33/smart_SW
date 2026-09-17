@@ -513,6 +513,100 @@ public class FeatureDumperTests
         Assert.Single(_scope.Gaps.Gaps, g => g.EntityKind == "sketch_status");
     }
 
+    // ---- sketch text segments (T037) ----------------------------------------------
+
+    [Fact]
+    public void Dump_SketchTextSegmentCount_IsTheLengthOfTheSegmentArray()
+    {
+        FakeFeature sketch = Feat("Sketch1", "ProfileFeature");
+        sketch.IsSketch = true;
+        sketch.TextSegments = new object[] { new object(), new object(), new object() };
+        _reader.Add(HousingPath).Features.Add(Node(sketch));
+
+        Feature row = Assert.Single(Dump(Root(), Part("housing-1", HousingPath)));
+
+        Assert.Equal(3, row.Sketch!.TextSegmentCount);
+        Assert.Contains("GetSketchTextSegments", _observer.Members);
+        Assert.DoesNotContain(_scope.Gaps.Gaps, g => g.EntityKind == "sketch_text");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Dump_SketchWithNoText_IsZeroNotNull(bool emptyArray)
+    {
+        // 0 and null are different answers to the text exemption: 0 rules it out, null means
+        // it can neither be applied nor ruled out. PROBE-9 settles which of the two an empty
+        // sketch actually returns; both read as 0 here, because neither is a failure.
+        FakeFeature sketch = Feat("Sketch1", "ProfileFeature");
+        sketch.IsSketch = true;
+        sketch.TextSegments = emptyArray ? new object[0] : null;
+        _reader.Add(HousingPath).Features.Add(Node(sketch));
+
+        Feature row = Assert.Single(Dump(Root(), Part("housing-1", HousingPath)));
+
+        Assert.Equal(0, row.Sketch!.TextSegmentCount);
+        Assert.DoesNotContain(_scope.Gaps.Gaps, g => g.EntityKind == "sketch_text");
+    }
+
+    [Fact]
+    public void Dump_SketchTextThatFailed_IsNullPlusASketchTextGap()
+    {
+        FakeFeature sketch = Feat("Sketch1", "ProfileFeature");
+        sketch.IsSketch = true;
+        sketch.SketchStatus = 2;
+        sketch.TextSegmentsThrow = true;
+        _reader.Add(HousingPath).Features.Add(Node(sketch));
+
+        Feature row = Assert.Single(Dump(Root(), Part("housing-1", HousingPath)));
+
+        Assert.Null(row.Sketch!.TextSegmentCount);
+
+        // The status still arrived: one unreadable member does not cost the sketch its
+        // other evidence.
+        Assert.Equal(2, row.Sketch!.RawStatus);
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps, g => g.EntityKind == "sketch_text");
+        Assert.Equal("feat:0001", gap.EntityId);
+        Assert.Equal(GapKind.ToolError, gap.Kind);
+        Assert.Contains("Sketch1", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_SketchConsumedByAHoleWizardFeature_IsRecordedAtItsOwnDepth()
+    {
+        // Difference z: every recorded sketch is a subject of
+        // standards.part.sketches_fully_defined, including the ones SOLIDWORKS nests under a
+        // hole-wizard feature, which the macro's top-level walk never saw. PROBE-9 asks
+        // whether GetSketchTextSegments answers for one of those at all; a throw is the
+        // gap above, never a silent zero.
+        FakeFeature placed = Feat("Sketch2", "ProfileFeature");
+        placed.IsSketch = true;
+        placed.TextSegments = new object[] { new object() };
+
+        FakeFeature wizard = Feat("M6 Tapped Hole1", "HoleWzd");
+        _reader.Add(HousingPath).Features.Add(Node(wizard, Node(placed)));
+
+        IReadOnlyList<Feature> rows = Dump(Root(), Part("housing-1", HousingPath));
+
+        Feature nested = Assert.Single(rows, r => r.Name == "Sketch2");
+        Assert.Equal(1, nested.Depth);
+        Assert.Equal(1, nested.Sketch!.TextSegmentCount);
+        Assert.Null(Assert.Single(rows, r => r.Name == "M6 Tapped Hole1").Sketch);
+    }
+
+    [Fact]
+    public void Dump_FeatureThatIsNotASketch_HasNoTextSegmentCountAndNoGap()
+    {
+        _reader.Add(HousingPath).Features.Add(Node(Feat("Boss-Extrude1", "Extrusion")));
+
+        Feature row = Assert.Single(Dump(Root(), Part("housing-1", HousingPath)));
+
+        Assert.Null(row.Sketch);
+        Assert.DoesNotContain("GetSketchTextSegments", _observer.Members);
+        Assert.DoesNotContain(_scope.Gaps.Gaps, g => g.EntityKind == "sketch_text");
+    }
+
     // ---- fillets -----------------------------------------------------------------
 
     [Fact]
@@ -824,6 +918,11 @@ public class FeatureDumperTests
 
         public bool SketchStatusThrows { get; set; }
 
+        /// <summary>What GetSketchTextSegments answered; null is the empty answer (T037).</summary>
+        public object? TextSegments { get; set; }
+
+        public bool TextSegmentsThrow { get; set; }
+
         /// <summary>Null means GetDefinition answered nothing, as it does for a folder.</summary>
         public FilletDefinitionKind? Definition { get; set; }
 
@@ -928,6 +1027,9 @@ public class FeatureDumperTests
 
         public int SketchConstrainedStatus(object sketch) =>
             Throwing(sketch, f => f.SketchStatusThrows, "GetConstrainedStatus").SketchStatus;
+
+        public object? SketchTextSegments(object sketch) =>
+            Throwing(sketch, f => f.TextSegmentsThrow, "GetSketchTextSegments").TextSegments;
 
         public object? Definition(object feature)
         {
