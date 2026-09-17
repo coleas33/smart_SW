@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using SolidWorks.Interop.sldworks;
 using SwReview.Extractor.Dump;
 using SwReview.Extractor.Sw;
@@ -78,7 +79,13 @@ public sealed class SwReviewDump : IReviewDump
                 result.Gaps.Count,
                 result.Package.Documents.Count,
                 result.Package.Features.Count,
-                result.Package.Equations.Count);
+                result.Package.Equations.Count,
+
+                // Null when the phase did not run, which is what the two arrays being null
+                // means: a zero would say "this weldment has no cut list" or "this drawing has
+                // no sheets", which is a statement about the design rather than about the dump.
+                result.Package.CutListItems?.Count,
+                result.Package.DrawingRecords?.Sum(drawing => drawing.Sheets.Count));
         });
     }
 }

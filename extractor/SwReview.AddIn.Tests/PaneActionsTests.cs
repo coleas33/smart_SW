@@ -426,7 +426,7 @@ public sealed class PaneActionsTests
     private abstract class PaneHostWorld : IDisposable
     {
         /// <summary>Every host that delegates the four rows to <see cref="PaneActions"/>.</summary>
-        public static readonly string[] Kinds = { "review", "model-check" };
+        public static readonly string[] Kinds = { "review", "model-check", "standards" };
 
         private readonly string _root;
 
@@ -451,6 +451,9 @@ public sealed class PaneActionsTests
 
                 case "model-check":
                     return new ModelCheckWorld();
+
+                case "standards":
+                    return new StandardsWorld();
 
                 default:
                     throw new ArgumentOutOfRangeException(
@@ -659,6 +662,54 @@ public sealed class PaneActionsTests
         }
 
         private SwReview.AddIn.Model.ModelCheckHost Host =>
+            _host ?? throw new InvalidOperationException("call Open() first");
+    }
+
+    /// <summary>
+    /// The third host, and the reason the parameterization exists rather than a third copy of
+    /// the rows: the Standards tab serves the same four and must serve them the same way
+    /// (T077, `contracts/standards-check.md` section 2).
+    /// </summary>
+    private sealed class StandardsWorld : PaneHostWorld
+    {
+        private SwReview.AddIn.Standards.StandardsHost? _host;
+
+        public override string RunIdField => "run_id";
+
+        public override string UnknownErrorClass => "UnknownCheck";
+
+        public override string UnknownSentence(string runId) =>
+            $"this pane did not run a check called '{runId}', so it does not know which "
+            + "folder to open.";
+
+        public override void Open()
+        {
+            SaveSettings();
+            _host = new SwReview.AddIn.Standards.StandardsHost(
+                new SwReview.AddIn.Standards.StandardsHostOptions(
+                    new FakeChannel(Posted), () => RunRoot)
+                {
+                    LogFolder = () => LogFolder,
+                    EntityResolver = () => UseResolver ? Resolver : null,
+                    Opener = () => Opener,
+                    Secrets = () => new[] { Settings.ResolveApiKey(_ => null).Key },
+                });
+        }
+
+        public override string Track(string runDirectory)
+        {
+            return Host.TrackCheck(runDirectory).CheckId;
+        }
+
+        protected override void Deliver(string json) => Host.Receive(json);
+
+        public override void Dispose()
+        {
+            _host?.Dispose();
+            base.Dispose();
+        }
+
+        private SwReview.AddIn.Standards.StandardsHost Host =>
             _host ?? throw new InvalidOperationException("call Open() first");
     }
 

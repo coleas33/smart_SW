@@ -92,6 +92,15 @@
    *     a waiver is bound to - a part for one family, any graded document for the other.
    *   - `describeCounts(result)`: the one-line sentence about the counts, printed after a check
    *     and after an accept. The buckets it reads are the family's, so the family writes it.
+   *
+   * And two hooks, both optional, for the facts one family's `init` carries and the other's
+   * does not. A page that defines neither behaves exactly as it did before they existed:
+   *   - `onInit(payload, api)`: the whole `init`, after it has been applied. One family's page
+   *     shows which profile file is in force and relays its path on its own request; the other
+   *     has no such field at all, and a shared half that read one would be reading a family's.
+   *   - `onDocument(documentInfo, api)`: the open document, whenever it changes. One family can
+   *     grade only a part and the button says so; the other grades three kinds and says what
+   *     each of them would pull in. Called last, so the page decides after the chrome has.
    */
   function create(page) {
     var pending = Object.create(null);
@@ -550,7 +559,11 @@
       if (finding.status === 'checked_within_scope') {
         return 'checked';
       }
-      return row.severity === 'warn' ? 'warned' : 'failed';
+
+      // The two families spell the advisory severity differently - `warn` in one catalogue,
+      // `warning` in the other - and both mean the row is advice rather than a failure. Read as
+      // a failure, an advisory row would contradict the same check's own bucket in the header.
+      return (row.severity === 'warn' || row.severity === 'warning') ? 'warned' : 'failed';
     }
 
     function documentsOfSubjects(subjects, fallback) {
@@ -779,7 +792,18 @@
 
       line.appendChild(dom.el('span', 'subject-meta', subjectMeta(subject)));
 
-      if (subject.persist_ref) {
+      if (subject.showable === false) {
+        // The result said outright that there is nothing to select: a data-card property name,
+        // a note, a revision-table row, a cut-list item, a mate, and every drawing entity while
+        // the resolver reads model entities only. The reference such a subject carries would
+        // make a button that reported failure every single time, which is worse than no button
+        // at all. Only `false` counts: a family whose subjects do not answer the question is
+        // decided by the reference below, exactly as it always was.
+        line.appendChild(dom.el(
+          'span',
+          'subject-note',
+          subject.reason || 'there is nothing in SOLIDWORKS to select'));
+      } else if (subject.persist_ref) {
         line.appendChild(dom.button(showLabel(entry), 'show', 'action show'));
       } else {
         // Honest rather than hopeful: with no persistent reference the host has nothing to
@@ -835,6 +859,12 @@
           ? fileName(open.path) + (open.configuration ? ' [' + open.configuration + ']' : '')
           : 'No document open');
       ui.runCheck.disabled = state.checking || !open || !open.path;
+
+      // Last, so a page that can say more about this document than "there is one" - which kinds
+      // it grades, and what each of them pulls in - decides after the chrome has.
+      if (page.onDocument) {
+        page.onDocument(open, api);
+      }
     }
 
     function renderBackendState(text, warn) {
@@ -996,6 +1026,9 @@
 
       renderDocument();
       renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', !state.backend);
+      if (page.onInit) {
+        page.onInit(payload, api);
+      }
       if (loadLatest) {
         loadLatestCheck();
       }

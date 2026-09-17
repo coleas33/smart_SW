@@ -86,6 +86,30 @@ public sealed class CheckPaneHostOptions
     /// <summary>%LOCALAPPDATA%\SwReview\logs by default; what `log.open` opens.</summary>
     public Func<string> LogFolder { get; set; } = ReviewHostOptions.DefaultLogFolder;
 
+    /// <summary>
+    /// The run-folder suffix this pane's own checks carry - <see cref="RunFolders.CheckSuffix"/>
+    /// for the Model check tab, <see cref="RunFolders.StandardsSuffix"/> for the Standards tab -
+    /// or null to look on disk for nothing.
+    ///
+    /// It is what <see cref="SendInit"/> reads the newest run back by after a restart, from the
+    /// folder names alone (`contracts/standards-check.md` section 4). There is no default: an
+    /// owner that did not say which suffix is its own reports only the checks this session ran,
+    /// which is exactly the behaviour every pane had before the scan existed. A wrong default
+    /// here would answer one tab with the other tab's run.
+    /// </summary>
+    public string? LatestCheckSuffix { get; set; }
+
+    /// <summary>
+    /// Fields the owner adds to its own `init` reply, or null. The Standards tab's
+    /// `profile_path` is the only one (`contracts/standards-check.md` section 2, D9); the Model
+    /// check tab adds none, and its `init` is unchanged.
+    ///
+    /// A seam rather than a `profile_path` field on this class, because a profile is the
+    /// Standards tab's business and nothing here should know it exists.
+    /// </summary>
+    public Func<IEnumerable<KeyValuePair<string, object?>>?> ExtraInitFields { get; set; } =
+        () => null;
+
     /// <summary>Check-record timestamps. Injected so the naming rule is testable.</summary>
     public Func<DateTime> Now { get; set; } = () => DateTime.Now;
 
@@ -242,15 +266,17 @@ public sealed class CheckPaneHost : IDisposable
         Post("document.changed", DocumentPayload(_options.CurrentDocument()));
 
     /// <summary>
-    /// The `init` reply: the backend, the token, the run root, the open document and the check
-    /// this session last ran.
+    /// The `init` reply: the backend, the token, the run root, the open document, whatever the
+    /// owner adds, and the newest check this pane can answer for - the one this session ran, or
+    /// failing that the newest folder on disk carrying this pane's own suffix, which is how a
+    /// check survives a restart (FR-034, SC-009).
     /// </summary>
     public void SendInit(string? id)
     {
         BackendEndpoint? endpoint = _options.Backend();
-        CheckRecord? latest = LatestCheck;
+        CheckRecord? latest = LatestCheck ?? NewestOnDisk();
 
-        _actions.Send("init", id, new Dictionary<string, object?>
+        var payload = new Dictionary<string, object?>
         {
             {
                 "backend",
@@ -280,7 +306,58 @@ public sealed class CheckPaneHost : IDisposable
                         { "at", latest.At.ToString("o", CultureInfo.InvariantCulture) },
                     }
             },
-        });
+        };
+
+        IEnumerable<KeyValuePair<string, object?>>? extra = _options.ExtraInitFields();
+        if (extra != null)
+        {
+            foreach (KeyValuePair<string, object?> field in extra)
+            {
+                payload[field.Key] = field.Value;
+            }
+        }
+
+        _actions.Send("init", id, payload);
+    }
+
+    /// <summary>
+    /// The newest run folder on disk carrying this pane's own suffix, as a record, or null.
+    ///
+    /// It is <b>recorded</b> as well as reported, so `report.open` and `folder.open` answer for
+    /// the run the page was just told about: a check read back after a restart that could be
+    /// rendered but not opened would be a button that always refuses. It is <b>not</b> handed to
+    /// <see cref="CheckPaneHostOptions.RegisterLatestRun"/> and does not become
+    /// <see cref="LatestCheck"/> - this session did not run it, and re-pointing the pane's
+    /// latest run at an old folder would move `entity.show` and the Ask tab off whatever the
+    /// engineer is actually working in.
+    /// </summary>
+    private CheckRecord? NewestOnDisk()
+    {
+        if (_options.LatestCheckSuffix == null)
+        {
+            return null;
+        }
+
+        string? directory = RunFolders.NewestCheckFolder(
+            _options.RunRoot(), _options.LatestCheckSuffix!);
+        if (directory == null)
+        {
+            return null;
+        }
+
+        string name = System.IO.Path.GetFileName(directory);
+        CheckRecord? known = FindCheck(name);
+        if (known != null)
+        {
+            return known;
+        }
+
+        // The folder's own name carries when the run started, which is the same thing
+        // `TrackCheck` records from the clock for a run this session made.
+        var record = new CheckRecord(
+            name, directory, RunFolders.TimestampOf(name) ?? _options.Now());
+        _checks.Add(record);
+        return record;
     }
 
     /// <summary>

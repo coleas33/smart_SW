@@ -43,6 +43,18 @@ public static class RunFolders
     public const string CheckSuffix = "-check";
 
     /// <summary>
+    /// What marks a Standards check's run folder (`contracts/standards-check.md` section 4).
+    ///
+    /// A second suffix rather than a shared `-check` one, and that is the whole mechanism
+    /// behind <see cref="NewestCheckFolder"/>: one enumeration of the run root answers "what is
+    /// this tab's newest run" for each check tab <b>from the folder names alone</b>, so neither
+    /// tab's latest check is ever the other tab's and `init` opens nothing. The `family` field
+    /// inside `check.json` answers the other question - what a check id the backend was handed
+    /// turns out to be - and the two mechanisms are not interchangeable.
+    /// </summary>
+    public const string StandardsSuffix = "-standards";
+
+    /// <summary>
     /// What marks a re-modeler's run folder (`contracts/run-artifacts.md`).
     ///
     /// A suffix, for the same reasons as <see cref="CheckSuffix"/>: the folder sorts beside the
@@ -83,6 +95,144 @@ public static class RunFolders
     /// </summary>
     public static string CreateForCheck(string runRoot, string? documentPath, DateTime timestamp) =>
         Create(runRoot, timestamp, DocumentName(documentPath) + CheckSuffix);
+
+    /// <summary>
+    /// Creates the run folder for one Standards check of <paramref name="documentPath"/>.
+    ///
+    /// Its own folder, every time, for the reasons <see cref="CreateForCheck"/> gives, and named
+    /// by the same rule so the two kinds of check sort beside the review they belong to in the
+    /// one listing the engineer reads in Explorer.
+    /// </summary>
+    public static string CreateForStandards(string runRoot, string? documentPath, DateTime timestamp) =>
+        Create(runRoot, timestamp, DocumentName(documentPath) + StandardsSuffix);
+
+    /// <summary>
+    /// The newest check run folder under <paramref name="runRoot"/> carrying
+    /// <paramref name="suffix"/> (<see cref="CheckSuffix"/> or <see cref="StandardsSuffix"/>),
+    /// or null when there is none.
+    ///
+    /// <b>The run root is enumerated and nothing inside it is opened.</b> This is called from
+    /// `init`, which runs on every tab activation, and a `check.json` read per sibling folder
+    /// would put one file read per check ever run on that path. A name comparison is free where
+    /// a file read is not - and the name is all that is needed, because the folder's name <i>is</i>
+    /// the check id the page hands to `GET /checks/{check_id}`
+    /// (`contracts/standards-check.md` section 4).
+    ///
+    /// "Newest" is decided by the timestamp the name carries, then by the name itself, which is
+    /// what puts a collision-suffixed `...-standards-2` after the `...-standards` of the same
+    /// second. A folder whose name does not start with a run timestamp was not named here and
+    /// is not a candidate.
+    ///
+    /// <b>Nothing here throws.</b> Every caller is a page message: a run root that is not there,
+    /// cannot be combined or cannot be listed is answered "none", which is the same answer as
+    /// an empty one and is equally true of a tab opened before the first run.
+    /// </summary>
+    public static string? NewestCheckFolder(string? runRoot, string suffix)
+    {
+        if (suffix == null)
+        {
+            throw new ArgumentNullException(nameof(suffix));
+        }
+
+        if (string.IsNullOrWhiteSpace(runRoot))
+        {
+            return null;
+        }
+
+        string[] directories;
+        try
+        {
+            directories = Directory.Exists(runRoot)
+                ? Directory.GetDirectories(runRoot)
+                : new string[0];
+        }
+        catch (Exception failure)
+            when (failure is IOException || failure is UnauthorizedAccessException
+                || failure is ArgumentException)
+        {
+            return null;
+        }
+
+        string? newest = null;
+        DateTime newestStamp = DateTime.MinValue;
+        foreach (string directory in directories)
+        {
+            string name = Path.GetFileName(directory);
+            if (!CarriesSuffix(name, suffix))
+            {
+                continue;
+            }
+
+            DateTime? stamp = TimestampOf(name);
+            if (stamp == null)
+            {
+                continue;
+            }
+
+            if (newest == null
+                || stamp.Value > newestStamp
+                || (stamp.Value == newestStamp
+                    && string.CompareOrdinal(name, Path.GetFileName(newest)) > 0))
+            {
+                newest = directory;
+                newestStamp = stamp.Value;
+            }
+        }
+
+        return newest;
+    }
+
+    /// <summary>
+    /// The timestamp a run folder's name begins with, or null when it does not begin with one.
+    ///
+    /// The name is the run id, so this is the one place that reads it back, and it reads only
+    /// the fixed-width prefix <see cref="Create"/> wrote.
+    /// </summary>
+    public static DateTime? TimestampOf(string? folderName)
+    {
+        if (folderName == null || folderName.Length < TimestampFormat.Length)
+        {
+            return null;
+        }
+
+        return DateTime.TryParseExact(
+            folderName.Substring(0, TimestampFormat.Length),
+            TimestampFormat,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out DateTime parsed)
+            ? parsed
+            : (DateTime?)null;
+    }
+
+    /// <summary>
+    /// Whether a folder name is one this helper named with <paramref name="suffix"/>: the
+    /// suffix ends the name, or the collision suffix does - `...-standards-2` is the second
+    /// standards run of that second, not a folder of some other kind.
+    /// </summary>
+    private static bool CarriesSuffix(string name, string suffix)
+    {
+        if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        int end = name.LastIndexOf('-');
+        if (end <= 0 || end == name.Length - 1)
+        {
+            return false;
+        }
+
+        for (int index = end + 1; index < name.Length; index++)
+        {
+            if (!char.IsDigit(name[index]))
+            {
+                return false;
+            }
+        }
+
+        return name.Substring(0, end).EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Creates the run folder for one re-modeler run over <paramref name="documentPath"/>.

@@ -18,10 +18,13 @@ What it does, in the order it does it:
    `tool_result_ids=[current_step_id]` and no `Calculation`: these rules' evidence is the
    model the reader was shown.
 2. **exceptions.** Only a `fail` outcome asks the store, and it asks with `check=<rule id>`
-   so one document's instances cannot hand an interference waiver to a sketch rule.
-   `active` waives the finding, `needs_review` leaves it standing with the marker. A `warn`
-   is advisory and never asks, in any family: what a family calls its warning severity
-   differs, but a `warn` **outcome** is the same thing everywhere.
+   so one document's instances cannot hand an interference waiver to a sketch rule - and
+   with the **document** as well whenever the store binds that check's exceptions to one,
+   which `fingerprint_kind_for` answers and this layer does not decide. `active` waives the
+   finding, `needs_review` leaves it standing with the marker, and both say which evidence
+   the exception was accepted for (`BOUND_TO`). A `warn` is advisory and never asks, in any
+   family: what a family calls its warning severity differs, but a `warn` **outcome** is
+   the same thing everywhere.
 3. **coverage.** One item per rule per bucket, written through
    `ToolContext.replace_coverage`, so a tool called twice leaves one item and not two; then
    the family's own extra coverage steps, in the order the family supplies them; and last
@@ -39,13 +42,13 @@ holds facts and no callables.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from swreview.checks.result import CheckResult
 from swreview.checks.rules.family import CheckFamily
 from swreview.checks.rules.registry import Rule
 from swreview.checks.rules.results import RuleResult
-from swreview.exceptions import ReviewException
+from swreview.exceptions import FingerprintKind, ReviewException, fingerprint_kind_for
 from swreview.ir.models import EvidencePackage, SourceRef
 from swreview.report.session import CoverageBucket, CoverageItem, CoverageScope, ReviewSession
 from swreview.tools.context import ToolContext
@@ -53,6 +56,7 @@ from swreview.tools.query import ToolResult
 from swreview.tools.recording import record_result
 
 __all__ = [
+    "BOUND_TO",
     "DOCUMENT_SCOPED_KINDS",
     "NO_PERSIST_REF",
     "ExtraCoverage",
@@ -84,6 +88,50 @@ turn every drawing finding into a coverage row (`specs/006-standards-check/data-
 section 2). The distinction is the document's kind and not the family's name, so a family
 that never grades a drawing is unaffected by it.
 """
+
+STANDARDS_BINDING: FingerprintKind = "standards"
+"""The one fingerprint kind whose exceptions are bound to a **document** as well as to the
+instances that reach it.
+
+The store's own vocabulary and not a family name: `fingerprint_kind_for` decides it from
+the check id, and this layer asks rather than deciding, so "what is this exception bound
+to" has one answer (`swreview.exceptions`, `data-model.md` section 5).
+"""
+
+
+@dataclass(frozen=True)
+class BoundTo:
+    """How a finding talks about the evidence an exception was accepted for.
+
+    Three phrasings and not one, because the sentence has to be true: an exception bound to
+    a feature tree is re-reviewed when the features change, and one bound to a drawing has
+    no feature tree at all to point at.
+    """
+
+    subject: str
+    """What the exception was accepted for: "for this <subject> and configuration"."""
+
+    changes: str
+    """What would make it need re-review: "Re-review EX-001 if <changes>"."""
+
+    repair: str
+    """What an engineer fixes instead of re-accepting: "fix the <repair>"."""
+
+
+DEFAULT_BOUND_TO = BoundTo(
+    subject="feature tree", changes="these features change", repair="tree"
+)
+"""What every exception written before this feature says, byte for byte: the geometry and
+feature-tree kinds are re-reviewed when the tree moves, and feature 001's and 003's goldens
+carry these words."""
+
+BOUND_TO: dict[str, BoundTo] = {
+    STANDARDS_BINDING: BoundTo(subject="document", changes="it changes", repair="document")
+}
+"""The kinds that say something else. Only the document-bound one does, so the map holds
+one entry and `DEFAULT_BOUND_TO` answers for the rest - which is what keeps the existing
+wording unchanged rather than nearly unchanged."""
+
 
 SubjectDecorator = Callable[
     [EvidencePackage, Sequence[str]], Callable[[str, str], Mapping[str, object]]
@@ -371,6 +419,11 @@ def _exception_for(
     store that happens to hold an exception with the same bindings must not quieten it.
     The test is the outcome and not the family's severity word, because the outcome is what
     both vocabularies map onto.
+
+    The lookup is asked with the **document** whenever the store binds this check's
+    exceptions to one, which `fingerprint_kind_for` answers from the check id: a standards
+    waiver names the document it was accepted on, and asking without it would find no
+    record at all for a check that has one, silently un-waiving it (FR-041, RK-11).
     """
     if result.outcome != "fail":
         return None
@@ -382,43 +435,61 @@ def _exception_for(
         component_ids,
         context.ir.design.active_configuration,
         check=result.rule_id,
+        document_id=_bound_document(result),
+    )
+
+
+def _bound_document(result: RuleResult) -> str | None:
+    """The document an exception for this rule binds to, or `None` for one that binds to
+    components alone.
+
+    The store's own rule, read by the check id rather than by the family's name: which
+    evidence a kind of exception is bound to is `swreview.exceptions`' answer, and a second
+    copy of it here would be free to disagree with the record the store writes.
+    """
+    return (
+        result.document_id
+        if fingerprint_kind_for(result.rule_id) == STANDARDS_BINDING
+        else None
     )
 
 
 def _waived(result: CheckResult, exception: ReviewException) -> CheckResult:
     """The same condition, accepted: `checked_within_scope` citing the exception."""
+    bound_to = BOUND_TO.get(exception.fingerprint_kind, DEFAULT_BOUND_TO)
     return replace(
         result,
         status="checked_within_scope",
         severity="info",
         observed=(
             f"{result.observed}. Excepted by {exception.id}, accepted by "
-            f"{exception.accepted_by} on {exception.accepted_at} for this feature tree "
-            f"and configuration: {exception.note}"
+            f"{exception.accepted_by} on {exception.accepted_at} for this "
+            f"{bound_to.subject} and configuration: {exception.note}"
         ),
         coverage_limits=[
             *result.coverage_limits,
             f"exception:{exception.id}: {exception.note}",
         ],
         recommended_action=(
-            f"None while the feature tree is unchanged. Re-review {exception.id} if these "
-            "features change."
+            f"None while the {bound_to.subject} is unchanged. Re-review {exception.id} if "
+            f"{bound_to.changes}."
         ),
     )
 
 
 def _needs_review(result: CheckResult, exception: ReviewException) -> CheckResult:
-    """The finding stands: the tree it was accepted for is not the tree that is here."""
+    """The finding stands: what it was accepted for is not what is here."""
+    bound_to = BOUND_TO.get(exception.fingerprint_kind, DEFAULT_BOUND_TO)
     return replace(
         result,
         observed=(
             f"{result.observed}. Exception {exception.id} was accepted for this condition "
-            f"but the feature tree it was bound to has changed, so it does not clear this "
-            f"finding - needs re-review: {exception.id}"
+            f"but the {bound_to.subject} it was bound to has changed, so it does not clear "
+            f"this finding - needs re-review: {exception.id}"
         ),
         recommended_action=(
             f"Re-review exception {exception.id}: confirm the changed condition is still "
-            f"intended and re-accept it, or retire it and fix the tree. "
+            f"intended and re-accept it, or retire it and fix the {bound_to.repair}. "
             f"{result.recommended_action}"
         ),
     )

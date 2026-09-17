@@ -363,6 +363,12 @@ def store_body(check_id: str = NOT_EXPLODED) -> str:
     The fingerprint is computed rather than typed, because a fingerprint that does not
     match is `needs_review` by design - the finding stands and says so - and the case this
     body exists for is the one where the acceptance still holds.
+
+    The record is the one `ExceptionStore.accept` writes for a `standards.*` check (T085):
+    the `standards` fingerprint kind, hashing the **document** it was accepted on, with
+    `document_id` naming it. A standards waiver waives a check on a document, so the
+    lookup asks with that document and a record that carried another kind would neither be
+    written by any command nor found by any run (FR-041).
     """
     return json.dumps(
         {
@@ -374,9 +380,10 @@ def store_body(check_id: str = NOT_EXPLODED) -> str:
                     "persist_ref_scopes": ["doc:1"],
                     "configuration": "Default",
                     "geometry_fingerprint": fingerprint(
-                        exploded_package(), ["cmp:0001"], "feature_tree"
+                        exploded_package(), ["cmp:0001"], "standards", document_id="doc:1"
                     ),
-                    "fingerprint_kind": "feature_tree",
+                    "fingerprint_kind": "standards",
+                    "document_id": "doc:1",
                     "accepted_by": "a.engineer",
                     "accepted_at": "2026-09-17T10:00:00Z",
                     "note": "accepted for this release",

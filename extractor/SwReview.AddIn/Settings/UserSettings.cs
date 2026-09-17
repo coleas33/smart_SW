@@ -162,6 +162,19 @@ public sealed class UserSettings
     [JsonPropertyName("run_root")]
     public string RunRoot { get; set; } = DefaultRunRoot();
 
+    /// <summary>
+    /// Where the Standards profile is, `%LOCALAPPDATA%\SwReview\standards.yaml` by default
+    /// (`contracts/profile.md`). The file itself is never committed and is never read here:
+    /// the add-in knows the path and the reasoning side owns the schema, which is what keeps
+    /// every company value out of this repository (FR-001, FR-002).
+    ///
+    /// A blank value is left blank rather than defaulted past, unlike <see cref="RunRoot"/>:
+    /// "no profile is configured" is a state the Standards tab refuses by name, and this
+    /// feature has no fallback values of any kind.
+    /// </summary>
+    [JsonPropertyName("standards_profile_path")]
+    public string StandardsProfilePath { get; set; } = DefaultStandardsProfilePath();
+
     /// <summary>%APPDATA%\SwReview\settings.json.</summary>
     public static string DefaultPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SwReview", "settings.json");
@@ -369,6 +382,16 @@ public sealed class UserSettings
     /// </summary>
     private static string DefaultRunRoot() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "SwReview", "runs");
+
+    /// <summary>
+    /// %LOCALAPPDATA%\SwReview\standards.yaml. Local rather than roaming, beside the logs: the
+    /// profile describes this workstation's vault paths, and a roaming copy would follow the
+    /// engineer to a machine where those paths mean something else.
+    /// </summary>
+    public static string DefaultStandardsProfilePath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "SwReview",
+        "standards.yaml");
 
     /// <summary>
     /// Replaces every field the contract cannot accept with its default, collecting one message

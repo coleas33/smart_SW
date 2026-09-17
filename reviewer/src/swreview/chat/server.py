@@ -94,7 +94,7 @@ from swreview.chat.sessions import (
     record_disposition,
     replay_events,
 )
-from swreview.checks.rms.registry import RULES
+from swreview.checks.rms.registry import RMS_FAMILY, RULES
 from swreview.checks.rms.run import (
     RMS_SCOPE_RUNS,
     NotACheckError,
@@ -104,6 +104,17 @@ from swreview.checks.rms.run import (
     is_check_folder,
     read_rms_check,
     run_rms_check,
+)
+from swreview.checks.rules.family import waiver_invalidity
+from swreview.checks.rules.run import check_record
+from swreview.checks.standards.profile import SETTING_NAME, ProfileError, ProfileUnreadable
+from swreview.checks.standards.registry import RULES as STANDARDS_RULES
+from swreview.checks.standards.registry import STANDARDS_FAMILY
+from swreview.checks.standards.report import document_of, verdict_json
+from swreview.checks.standards.run import (
+    StandardsCheckRun,
+    read_standards_check,
+    run_standards_check,
 )
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
 from swreview.ir.loader import load_package
@@ -334,6 +345,20 @@ class CheckRefused(ChatError):
     """
 
     def __init__(self, exc: RmsRunError) -> None:
+        super().__init__(str(exc))
+        self.error_class = exc.error_class
+
+
+class ProfileRefused(ChatError):
+    """A `ProfileError` as the contract's error body, keeping the profile module's class.
+
+    `ProfileUnreadable` and `ProfileInvalid` are named by `contracts/standards-check.md`
+    and are decided by `checks/standards/profile.py`, the one module that owns the schema
+    (FR-002). Re-deciding either here would be a second opinion about a file this route
+    only passes along, so the class travels with the exception instead.
+    """
+
+    def __init__(self, exc: ProfileError) -> None:
         super().__init__(str(exc))
         self.error_class = exc.error_class
 
@@ -666,8 +691,14 @@ def _checked_document(package: EvidencePackage, documents: Sequence[str]) -> dic
     """
     if len(documents) != 1:
         return None
+    return _document_row(package, documents[0])
+
+
+def _document_row(package: EvidencePackage, document_id: str | None) -> dict[str, Any] | None:
+    """One document of `package` as the `{id, path, configuration, kind}` a page titles
+    itself with, or `None` when the package records no such document."""
     found = next(
-        (item for item in package.documents if item.document_id == documents[0]), None
+        (item for item in package.documents if item.document_id == document_id), None
     )
     if found is None:  # pragma: no cover - the run graded it, so the package carries it
         return None
@@ -724,6 +755,108 @@ def _finding_row(
             "note": exception.note,
         }
     return row
+
+
+# --- the Standards result (`contracts/standards-check.md`) -------------------------------
+
+
+def standards_result(check_dir: Path, run: StandardsCheckRun) -> dict[str, Any]:
+    """One `StandardsCheckRun` as the `StandardsResult` of `contracts/standards-check.md`.
+
+    Four things the shape states rather than leaves to the page, and each of them is a
+    release gate's question:
+
+    - the **verdict** replaces feature 003's grade. It carries the counts in every bucket
+      and the unresolved check ids in every state, and no letter grade and no single
+      number, so a clean headline cannot be rendered without what the run does not cover
+      (FR-032).
+    - **all sixteen checks** come back whether they applied or not, each with the buckets
+      it landed in, so "all sixteen were accounted for" is readable from one array (FR-033).
+    - the **profile is `{path, sha256}`**. No profile value travels on any reply (FR-001):
+      the reasoning side owns the schema and the page shows which file is in force.
+    - **`rebuilt` is always false**, said out loud rather than left implicit, because the
+      two rebuild-error checks report counts the macro this feature replaces would have
+      refreshed by force-rebuilding.
+
+    The package is read again here for the same reason `check_result` reads it: the root
+    document, when it was extracted and which dump profile wrote it are the package's own
+    evidence and not the run's conclusion.
+    """
+    package = load_package(check_dir).package
+    exceptions = _exceptions_by_id(check_dir, run.findings)
+    carried = run.exceptions_carried_forward
+    return {
+        "check_id": check_dir.name,
+        "run_dir": str(check_dir),
+        "family": STANDARDS_FAMILY.check_file_family,
+        "document": _document_row(package, package.design.root_assembly_document_id),
+        "extracted_at": package.created_at.isoformat(),
+        "profile": {"path": run.profile.path, "sha256": run.profile.sha256},
+        "extractor_profile": package.extractor.profile,
+        "documents_graded": [
+            {
+                "id": document_id,
+                "kind": run.document_kinds.get(document_id),
+                "reached_by": run.document_reached_by.get(document_id),
+            }
+            for document_id in run.documents
+        ],
+        "verdict": verdict_json(run.verdict),
+        "checks": run.checks,
+        "findings": [
+            _standards_finding_row(finding, exceptions) for finding in run.findings
+        ],
+        "coverage": run.coverage,
+        "subjects": run.subjects,
+        "exceptions_carried_forward": {
+            "from_run": carried.from_run,
+            "count": carried.count,
+            "reason": carried.reason,
+        },
+        "rebuilt": False,
+    }
+
+
+def _standards_finding_row(
+    finding: Mapping[str, Any], exceptions: Mapping[str, ReviewException]
+) -> dict[str, Any]:
+    """One standards finding as the tab reads it: the `Finding`, its check, and what it can do.
+
+    `finding` is the feature 001 `Finding` untouched (FR-026), exactly as `_finding_row`
+    leaves an rms one. The two rows differ in the one field whose name is the family's -
+    `check` here, `rule_id` there - and in where `acceptable` is decided from, which is why
+    they are two functions and not one with a flag.
+    """
+    check = str(finding["check"])
+    rule = STANDARDS_RULES.get(check)
+    row: dict[str, Any] = {
+        "finding": finding,
+        "check": finding["check"],
+        "severity": None if rule is None else rule.severity,
+        "statement": None if rule is None else rule.statement,
+        "observed": finding["observed"],
+        "acceptable": _standards_waiver_invalidity(check) is None,
+    }
+    exception = exceptions.get(str(finding.get("exception_id") or ""))
+    if exception is not None:
+        row["exception"] = {
+            "id": exception.id,
+            "state": exception.status,
+            "note": exception.note,
+        }
+    return row
+
+
+def _standards_waiver_invalidity(check_id: str) -> str | None:
+    """Why `check_id` cannot be waived, or `None` when it is a waivable `error` check.
+
+    The standards family's binding of `checks/rules/family.py`'s one reader, and not a
+    second table: `status_by_severity` read for `WAIVABLE_STATUS` is what makes `error`
+    waivable and `warning` not, and the line the refusal prints is
+    `STANDARDS_FAMILY.waiver_labels`, so the tab and `swreview exceptions accept-standards`
+    cannot disagree about one waiver (FR-041, FR-042).
+    """
+    return waiver_invalidity(STANDARDS_FAMILY, STANDARDS_RULES, check_id)
 
 
 # --- the door ------------------------------------------------------------------------------
@@ -1077,6 +1210,32 @@ class ChatServer:
         )
         return JSONResponse(result, status_code=201)
 
+    async def run_standards(self, request: Request) -> Response:
+        """`POST /checks/standards`: grade the dump in `run_dir` against `profile_path`.
+
+        The Standards counterpart of `run_check`, and synchronous for the same reasons: no
+        provider, no network call and no turn, so the folder is not claimed, nothing is
+        registered and nothing has to be finalized (FR-045).
+
+        Two fields and no third. **There is no `scope`**: every standards check runs on
+        every run, the document kinds decide which apply, and a check that applies to no
+        graded document is an out-of-scope coverage row. A body that names one is refused
+        rather than quietly answered, because a verdict whose coverage depended on a
+        control nobody recorded is what a release gate must never produce.
+        """
+        body = await self._json(request)
+        run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
+        if "scope" in body:
+            raise ChatError(
+                "a standards check takes no scope: every check runs on every run, and one "
+                "that does not apply to a graded document is an out-of-scope coverage row "
+                "rather than a check nobody ran"
+            )
+        result = await run_in_threadpool(
+            partial(self._standards_check, run_dir, body.get("profile_path"))
+        )
+        return JSONResponse(result, status_code=201)
+
     async def read_check(self, request: Request) -> Response:
         """`GET /checks/{check_id}`: the check that run folder holds, read back.
 
@@ -1084,9 +1243,14 @@ class ChatServer:
         it by running the rules again would write a new `session.json` and `report.md`
         every time the page was refreshed, over the evidence `swreview exceptions accept`
         reads by name and an engineer's recorded disposition lives in.
+
+        One route, two families. The answer is **the record's own family shape**
+        (`contracts/standards-check.md` section 1): neither family ever answers for the
+        other, so a page handed the wrong id reports that it is not its kind of check
+        rather than rendering somebody else's result.
         """
         check_dir = self._check_dir(request.path_params["check_id"])
-        return JSONResponse(await run_in_threadpool(partial(self._read_check, check_dir)))
+        return JSONResponse(await run_in_threadpool(partial(self._read_any_check, check_dir)))
 
     async def accept_check_exception(self, request: Request) -> Response:
         """`POST /checks/{check_id}/exceptions/{finding_id}`: accept a rule for this part.
@@ -1101,6 +1265,10 @@ class ChatServer:
         turns an accepted condition into a `checked_within_scope` finding, so the check is
         run again over the store that was just written and the row for this finding is what
         is returned. That re-run is also what re-renders `report.md`.
+
+        One route serves both families: the record says whose check this is, and that is
+        what decides which catalogue answers "may this be waived" and which entry point
+        re-renders the folder (`contracts/standards-check.md` section 1).
         """
         check_dir = self._check_dir(request.path_params["check_id"])
         finding_id = str(request.path_params["finding_id"])
@@ -1111,6 +1279,7 @@ class ChatServer:
                 "an exception states why the condition is accepted; an unexplained one is "
                 "a blanket exclusion and is refused"
             )
+        family = await run_in_threadpool(partial(self._family_of, check_dir))
         exception_id = await run_in_threadpool(
             partial(
                 self._accept_exception,
@@ -1118,9 +1287,10 @@ class ChatServer:
                 finding_id,
                 note=note,
                 by=str(body.get("by") or "").strip(),
+                family=family,
             )
         )
-        result = await run_in_threadpool(partial(self._recheck, check_dir))
+        result = await run_in_threadpool(partial(self._recheck, check_dir, family))
         # A waived finding keeps its row (Principle VI: never hidden), so this is the same
         # finding rendered as checked within scope rather than a finding that went away.
         row = next(
@@ -1144,6 +1314,19 @@ class ChatServer:
         if not directory.is_dir():
             raise UnknownCheck(f"no check {raw!r} under the run root")
         return directory
+
+    def _family_of(self, check_dir: Path) -> str:
+        """The family whose check `check_dir` holds, from the record's own stamp.
+
+        A record written before the field existed is a feature 003 model check, which is
+        the whole reason the fall-back is named rather than refused: every check folder on
+        a workstation that ran this build's predecessor carries no `family` at all.
+        """
+        try:
+            record = check_record(check_dir)
+        except NotACheckError as exc:
+            raise UnknownCheck(self.redact(str(exc))) from exc
+        return str(record.get("family", RMS_FAMILY.check_file_family))
 
     def _check(
         self, package_dir: Path, *, scope: RmsScope, document_id: list[str] | str | None
@@ -1178,6 +1361,55 @@ class ChatServer:
             ) from exc
         return check_result(package_dir, run)
 
+    def _standards_check(self, package_dir: Path, profile_path: Any) -> dict[str, Any]:
+        """One evaluation of the package in `package_dir`, as the `StandardsResult`.
+
+        `run_standards_check` is the one no-language-model entry point (FR-043): what the
+        tab shows and what `swreview check standards` prints cannot be two different
+        gradings of the same design, so this route adds no check and no finding of its own.
+        Blocking, so every caller runs it off the event loop.
+
+        The profile is read and validated **there** and not here (FR-002): the reasoning
+        side owns the schema, the page relays the path the host gave it, and expressing the
+        schema a second time is the drift this design exists to avoid. What this route
+        states is the run root the carry-forward may copy an earlier `exceptions.json`
+        from, which is this server's own `--run-root`.
+        """
+        path = self._profile_path(profile_path)
+        try:
+            run = run_standards_check(
+                package_dir, path, package_dir, run_root=self.run_root
+            )
+        except ProfileError as exc:
+            raise ProfileRefused(exc) from exc
+        except RmsRunError as exc:
+            raise CheckRefused(exc) from exc
+        except PACKAGE_ERRORS as exc:
+            raise InvalidPackage(
+                f"{package_dir} is not a readable evidence package: "
+                f"{type(exc).__name__}: {self.redact(str(exc))}"
+            ) from exc
+        return standards_result(package_dir, run)
+
+    @staticmethod
+    def _profile_path(raw: Any) -> str:
+        """The body's `profile_path`, or the profile module's own refusal for an absent one.
+
+        Reported as `ProfileUnreadable` rather than as a malformed request because that is
+        what it is to the engineer: the host sends the configured path and sends null when
+        there is none, and "no profile is configured" is one condition with one name
+        (`contracts/standards-check.md` section 1).
+        """
+        if not isinstance(raw, str) or not raw.strip():
+            raise ProfileRefused(
+                ProfileUnreadable(
+                    "profile_path is required and names the standards profile this design "
+                    f"is graded against; the {SETTING_NAME} setting configures it, and "
+                    "there is no default"
+                )
+            )
+        return raw.strip()
+
     def _read_check(self, check_dir: Path) -> dict[str, Any]:
         """The check `check_dir` holds, as the contract's `CheckResult`. Nothing is run.
 
@@ -1207,7 +1439,44 @@ class ChatServer:
         except NotACheckError as exc:
             raise UnknownCheck(self.redact(str(exc))) from exc
 
-    def _recheck(self, check_dir: Path) -> dict[str, Any]:
+    def _read_any_check(self, check_dir: Path) -> dict[str, Any]:
+        """The check `check_dir` holds, in **its own** family's shape. Nothing is run."""
+        if self._family_of(check_dir) == STANDARDS_FAMILY.check_file_family:
+            return self._read_standards_check(check_dir)
+        return self._read_check(check_dir)
+
+    def _read_standards_check(self, check_dir: Path) -> dict[str, Any]:
+        """The standards check `check_dir` holds, as the `StandardsResult`. Nothing is run.
+
+        The read half of the same bargain `_read_check` makes: `session.json` holds the
+        findings and the coverage, and `check.json` holds what it does not - the documents
+        and their kinds, the profile identity, the verdict, the subjects and what the
+        carry-forward did - so answering a `GET` writes nothing over the file an engineer's
+        recorded disposition lives in.
+        """
+        run = self._recorded_standards_check(check_dir)
+        try:
+            return standards_result(check_dir, run)
+        except PACKAGE_ERRORS as exc:
+            raise InvalidPackage(
+                f"{check_dir} is not a readable evidence package: "
+                f"{type(exc).__name__}: {self.redact(str(exc))}"
+            ) from exc
+
+    def _recorded_standards_check(self, check_dir: Path) -> StandardsCheckRun:
+        """The standards check recorded in `check_dir`, or `UnknownCheck`.
+
+        A folder that was never checked, one holding a record this build cannot read, one
+        whose session is no longer the one its record describes and one holding the *other*
+        family's check are all the same answer to the caller: there is no such standards
+        check here.
+        """
+        try:
+            return read_standards_check(check_dir)
+        except NotACheckError as exc:
+            raise UnknownCheck(self.redact(str(exc))) from exc
+
+    def _recheck(self, check_dir: Path, family: str) -> dict[str, Any]:
         """Evaluate a check folder again, exactly as the check that wrote it was run.
 
         What Accept needs and a read does not: an exception accepted a moment ago has to
@@ -1219,14 +1488,23 @@ class ChatServer:
         One field does differ from the first answer, and honestly:
         `exceptions_carried_forward` then reports that the folder already holds its own
         store, because it does - that is a different statement from "there was none".
+
+        A standards folder is re-run against the profile **its own record names**, which is
+        the only profile this grading was ever against: re-reading it is what makes the
+        re-render the same evaluation, and a profile that has since moved or changed
+        refuses by name rather than silently grading against another standard (FR-002).
         """
+        if family == STANDARDS_FAMILY.check_file_family:
+            return self._standards_check(
+                check_dir, self._recorded_standards_check(check_dir).profile.path
+            )
         record = self._recorded_check(check_dir)
         return self._check(
             check_dir, scope=record.scope, document_id=record.documents or None
         )
 
     def _accept_exception(
-        self, check_dir: Path, finding_id: str, *, note: str, by: str
+        self, check_dir: Path, finding_id: str, *, note: str, by: str, family: str
     ) -> str:
         """Write the exception for `finding_id` and return its id. Blocking.
 
@@ -1236,6 +1514,11 @@ class ChatServer:
         is exactly the drift that would let the tab and the command line disagree about
         one waiver. The import is inside the function so `chat.server` stays importable
         without pulling in typer, as `build_provider` already does.
+
+        Only one of the five is a family's own: which checks may be waived at all. The
+        folder's record says whose check this is, and that is what picks the catalogue -
+        everything after it (is this condition already covered, accept or re-bind, who
+        accepted it) is the same question in both families and is asked once.
         """
         from swreview.cli import (
             _accept_or_reaccept,
@@ -1245,6 +1528,11 @@ class ChatServer:
             _uncovered,
         )
 
+        invalidity_of = (
+            _standards_waiver_invalidity
+            if family == STANDARDS_FAMILY.check_file_family
+            else _rms_waiver_invalidity
+        )
         session_file = check_dir / SESSION_FILE_NAME
         if not session_file.is_file():
             raise UnknownCheck(
@@ -1257,7 +1545,7 @@ class ChatServer:
             raise UnknownFinding(
                 f"no finding {finding_id!r} in check {check_dir.name}"
             ) from exc
-        invalidity = _rms_waiver_invalidity(finding.check)
+        invalidity = invalidity_of(finding.check)
         if invalidity is not None:
             raise RuleNotAcceptable(
                 f"{finding.check} cannot be accepted: it is {invalidity}. Only a rule the "
@@ -1270,8 +1558,14 @@ class ChatServer:
                 f"{check_dir} is not a readable evidence package: "
                 f"{type(exc).__name__}: {self.redact(str(exc))}"
             ) from exc
+        # A standards waiver is bound to the document it was accepted on as well as to the
+        # instances, because a drawing finding has no instances at all and two drawings'
+        # waivers would otherwise be indistinguishable (FR-041, RK-11).
+        document_id = (
+            document_of(finding) if family == STANDARDS_FAMILY.check_file_family else None
+        )
         store.refresh(evidence)
-        pending = _uncovered(store, evidence, [finding])
+        pending = _uncovered(store, evidence, [finding], document_id=document_id)
         if not pending:
             raise AlreadyAccepted(
                 f"an active exception already covers {finding.check} on these components "
@@ -1279,7 +1573,13 @@ class ChatServer:
             )
         [(target, retained)] = pending
         exception = _accept_or_reaccept(
-            store, evidence, target, retained, by=by or _default_user(), note=note
+            store,
+            evidence,
+            target,
+            retained,
+            by=by or _default_user(),
+            note=note,
+            document_id=document_id,
         )
         store.save()
         return exception.id
@@ -1711,9 +2011,12 @@ def create_app(
         ),
         Route("/sessions/{chat_id}/stop", server.stop, methods=["POST"]),
         Route("/sessions/{chat_id}/report", server.report, methods=["GET"]),
-        # The Model check tab (`contracts/model-check.md`). `/checks/rms` is listed first
-        # so the literal path is matched before the `{check_id}` pattern that follows it.
+        # The Model check tab (`contracts/model-check.md`) and the Standards tab
+        # (`contracts/standards-check.md`). The two literal paths are listed first so they
+        # are matched before the `{check_id}` pattern that follows them; the read and the
+        # accept routes serve both families and answer in the record's own shape.
         Route("/checks/rms", server.run_check, methods=["POST"]),
+        Route("/checks/standards", server.run_standards, methods=["POST"]),
         Route("/checks/{check_id}", server.read_check, methods=["GET"]),
         Route(
             "/checks/{check_id}/exceptions/{finding_id}",

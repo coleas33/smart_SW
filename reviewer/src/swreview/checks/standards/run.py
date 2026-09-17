@@ -200,6 +200,13 @@ class StandardsCheckRun:
     """The kind of each graded document; `None` for one the package records none for, which
     is unresolved coverage for every check rather than a document nobody mentions."""
 
+    document_reached_by: dict[str, str]
+    """How the traversal reached each graded document: `root`, `component_tree` or
+    `drawing_reference` (`contracts/standards-check.md` section 1). Carried here rather
+    than left on the traversal, because it is the field that tells a reader a document was
+    pulled in by a drawing view rather than by a component tree, and a read of the folder
+    answers with it too."""
+
     profile: ProfileIdentity
     """`{path, sha256}` and never a profile value (FR-001, FR-034)."""
 
@@ -302,6 +309,9 @@ def run_standards_check(
         documents=[document.document_id for document in documents],
         document_kinds={
             document.document_id: document.kind for document in documents
+        },
+        document_reached_by={
+            document.document_id: document.reached_by for document in documents
         },
         profile=profile.identity,
         verdict=verdict,
@@ -419,6 +429,7 @@ def _write_check_record(run: StandardsCheckRun) -> Path:
             "session_id": str(run.session.session_id),
             "documents": run.documents,
             "document_kinds": run.document_kinds,
+            "document_reached_by": run.document_reached_by,
             "profile": {"path": run.profile.path, "sha256": run.profile.sha256},
             "verdict": verdict_json(run.verdict),
             "subjects": run.subjects,
@@ -462,6 +473,7 @@ def read_standards_check(check_dir: Path | str) -> StandardsCheckRun:
             package_dir=directory,
             documents=[str(item) for item in record["documents"]],
             document_kinds=dict(record["document_kinds"]),
+            document_reached_by=dict(record["document_reached_by"]),
             profile=ProfileIdentity(**record["profile"]),
             verdict=verdict_from(record["verdict"]),
             findings=[finding.model_dump(mode="json") for finding in session.findings],

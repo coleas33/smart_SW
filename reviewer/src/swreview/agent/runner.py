@@ -39,7 +39,7 @@ injectable for the same reason: `--bridge` needs a workstation, a unit test does
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -95,13 +95,60 @@ SESSION_FILE_NAME = "session.json"
 EVIDENCE_CHECK = "coverage.evidence_request"
 PROFILE_CHECK = "coverage.extractor_profile"
 
-MODEL_CHECK_SKIPPED = (
-    "the evidence was written by the {profile!r} dump profile: the hole, fastener, face "
-    "and body or mesh phases were never run, so holes, fasteners, faces and bodies are "
-    "empty because nothing read them - not because this design has none. Extract full "
-    "evidence and review again to cover anything that depends on them (FR-022)."
+REDUCED_PROFILE_SKIPPED = (
+    "the evidence was written by the {profile!r} dump profile: the {phases} phases were "
+    "never run, so {arrays} are empty because nothing read them - not because this design "
+    "has none. Extract full evidence and review again to cover anything that depends on "
+    "them (FR-022)."
 )
-"""Why a Model check package cannot answer the checks that read the four skipped phases."""
+"""Why a reduced package cannot answer the checks that read the phases it skipped.
+
+One template for every reduced profile, not one sentence per profile name (FR-037): the
+profile is the package's own, and so are the phases, so a third reduced profile needs no
+edit here. With `model_check`'s four skipped phases substituted in, it renders feature 003's
+sentence byte for byte, which four unedited test modules read.
+"""
+
+GEOMETRY_PHASES: tuple[str, ...] = ("hole", "fastener", "face", "body")
+"""The four phases **every** reduced profile switches off (`DumpProfile`).
+
+The floor, and only the floor: a package that recorded no phase rows at all - written before
+schema 1.3.0, or by a build that timed nothing - is still a reduced package, and saying
+nothing about what it skipped is the silence this coverage item exists to break. A package
+that does record its phases is read instead of this.
+"""
+
+STANDARDS_EVIDENCE_PHASES: tuple[str, ...] = ("cutlist", "drawing")
+"""The phases a dump runs only when it was asked for standards evidence.
+
+They are the reason this is not simply "every skipped row". A real package records a row for
+**every** phase the extractor knows, skipped ones included (`PackageWriter.PhaseLog.Rows()`),
+so a `model_check` dump reports these two as skipped exactly as it reports the geometry four -
+and naming them would rewrite feature 003's sentence on every package the workstation writes,
+which FR-037 forbids. A dump that ran neither of them was never asked for standards evidence,
+so what it does not carry is not evidence its profile withheld; a dump that ran one and
+skipped the other **was** asked, and the half it did not get - a standards dump of a part,
+which has no drawing - is exactly what the sentence exists to name.
+
+Phases, not profile names (FR-037): a third reduced profile is read the same way, by what its
+package's rows say it ran, and needs no entry anywhere.
+"""
+
+PHASE_WORDS: dict[str, tuple[str, str]] = {
+    "cutlist": ("cut list", "cut lists"),
+    "drawing": ("drawing", "drawings"),
+    "hole": ("hole", "holes"),
+    "fastener": ("fastener", "fasteners"),
+    "face": ("face", "faces"),
+    "body": ("body or mesh", "bodies"),
+}
+"""How a phase is named in the sentence, and what its evidence is called there.
+
+`body` is the pair that has to be written down: the phase writes bodies *or* meshes and the
+array is `bodies`, and the two halves of the sentence therefore differ. Every other phase a
+reduced profile can skip is here for the same reason - so the sentence reads as English
+rather than as a field name - with an unnamed phase falling back to its own name.
+"""
 
 OPENING_MESSAGE = (
     "Review the evidence package described in the system prompt. Work through the "
@@ -201,14 +248,21 @@ def _unresolved(
 
 
 def record_partial_evidence(session: ReviewSession, package: EvidencePackage) -> None:
-    """Record what the dump profile never extracted, before the first turn (FR-022).
+    """Record what the dump profile never extracted, before the first turn (FR-022, FR-037).
 
-    A `model_check` package carries documents, mates, features and equations and nothing
-    else. Reviewed as if it were a full extract it reads as a design with no holes, no
-    fasteners and no geometry - the one reading of a partial package that is worse than
-    no reading at all - so the review says up front that those phases were skipped, in
-    the same coverage the report already renders rather than in a new channel nobody
-    reads.
+    A reduced package carries some of the phases and not others: a `model_check` package
+    carries documents, mates, features and equations, and a `standards` one adds cut lists
+    and, for a drawing root, drawings. Reviewed as if it were a full extract, either reads
+    as a design with no holes, no fasteners and no geometry - the one reading of a partial
+    package that is worse than no reading at all - so the review says up front which phases
+    were skipped, in the same coverage the report already renders rather than in a new
+    channel nobody reads.
+
+    **Any** reduced profile, and the phases from the **package's own rows** (FR-037). The
+    guard used to be `profile != "model_check"`, which a `standards` package passes, so it
+    would have been reviewed as full evidence; and the phases used to be a literal four,
+    which is right for one profile and wrong for the next. A profile name is not a list of
+    phases, and the package already records which of its phases never ran.
 
     Written here rather than on the `POST /sessions` route (T084) so the command line
     gets it too: `swreview review` over a check folder is the same partial evidence, and
@@ -217,16 +271,50 @@ def record_partial_evidence(session: ReviewSession, package: EvidencePackage) ->
     A `full` package is untouched, which is why every feature 001 and 002 golden is
     byte-identical after this.
     """
-    if package.extractor.profile != "model_check":
+    if package.extractor.profile == "full":
         return
+
+    skipped = _skipped_phases(package)
     session.coverage.skipped.append(
         CoverageItem(
             check=PROFILE_CHECK,
             scope=CoverageScope(),
-            reason=MODEL_CHECK_SKIPPED.format(profile=package.extractor.profile),
+            reason=REDUCED_PROFILE_SKIPPED.format(
+                profile=package.extractor.profile,
+                phases=_sentence([PHASE_WORDS.get(name, (name, name))[0] for name in skipped]),
+                arrays=_sentence(
+                    [PHASE_WORDS.get(name, (name, name + "s"))[1] for name in skipped]
+                ),
+            ),
             error=None,
         )
     )
+
+
+def _skipped_phases(package: EvidencePackage) -> list[str]:
+    """Which phases this package records as never having run, in the order it ran them.
+
+    `skipped` and not `failed`: a failed phase threw, was recorded as a gap and the dump
+    carried on, so its evidence is missing for a reason the gaps already name
+    (`DumpPhase.status`). Only `skipped` means the profile or the options switched it off.
+
+    The standards-evidence phases are dropped from the answer unless the package ran one of
+    them, because every dump records a row for every phase and a `model_check` package
+    therefore reports them skipped alongside the geometry four; see
+    `STANDARDS_EVIDENCE_PHASES` for why that is not this sentence's business.
+    """
+    recorded = [phase.name for phase in package.extractor.phases if phase.status == "skipped"]
+    ran = {phase.name for phase in package.extractor.phases if phase.status != "skipped"}
+    if ran.isdisjoint(STANDARDS_EVIDENCE_PHASES):
+        recorded = [name for name in recorded if name not in STANDARDS_EVIDENCE_PHASES]
+    return recorded or list(GEOMETRY_PHASES)
+
+
+def _sentence(words: Sequence[str]) -> str:
+    """`a`, `a and b`, `a, b and c`: the list as it is read out loud."""
+    if len(words) < 2:
+        return "".join(words)
+    return ", ".join(words[:-1]) + " and " + words[-1]
 
 
 def load_exceptions(loaded: LoadedPackage) -> ExceptionStore | None:

@@ -74,6 +74,59 @@ public sealed class UserSettingsTests
         Assert.Equal(expected, UserSettings.DefaultPath);
     }
 
+    /// <summary>
+    /// T076: where the Standards profile is looked for when nobody said. Local rather than
+    /// roaming, because the profile describes this workstation's vault paths
+    /// (`contracts/profile.md`). The add-in knows this PATH and never the file's schema, which
+    /// is what keeps every company value out of this repository (FR-001, FR-002).
+    /// </summary>
+    [Fact]
+    public void TheStandardsProfilePathDefaultsToLocalAppDataAndRoundTripsThroughTheFile()
+    {
+        using (var temp = new TempDirectory())
+        {
+            string expected = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "SwReview",
+                "standards.yaml");
+            Assert.Equal(expected, UserSettings.Defaults().StandardsProfilePath);
+            Assert.Equal(expected, UserSettings.DefaultStandardsProfilePath());
+
+            string path = temp.File("settings.json");
+            UserSettings saved = UserSettings.Defaults();
+            saved.StandardsProfilePath = temp.File("standards.yaml");
+            saved.Save(path);
+
+            SettingsContract.AssertValid(File.ReadAllText(path, Encoding.UTF8));
+            SettingsLoadResult result = UserSettings.Load(path, BuildMode.Release);
+
+            Assert.Null(result.Error);
+            Assert.Equal(saved.StandardsProfilePath, result.Settings.StandardsProfilePath);
+        }
+    }
+
+    /// <summary>
+    /// A blank path stays blank, unlike `run_root`, which is defaulted past: "no profile is
+    /// configured" is a state the Standards tab refuses by name, and this feature has no
+    /// fallback values of any kind (`contracts/profile.md`).
+    /// </summary>
+    [Fact]
+    public void ABlankStandardsProfilePathIsLeftBlankRatherThanDefaultedPast()
+    {
+        using (var temp = new TempDirectory())
+        {
+            string path = temp.File("settings.json");
+            UserSettings saved = UserSettings.Defaults();
+            saved.StandardsProfilePath = string.Empty;
+            saved.Save(path);
+
+            SettingsLoadResult result = UserSettings.Load(path, BuildMode.Release);
+
+            Assert.Null(result.Error);
+            Assert.Equal(string.Empty, result.Settings.StandardsProfilePath);
+        }
+    }
+
     // ---- round trip -------------------------------------------------------------------
 
     [Fact]

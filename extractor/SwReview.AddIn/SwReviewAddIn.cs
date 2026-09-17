@@ -19,6 +19,7 @@ using SwReview.AddIn.Native;
 using SwReview.AddIn.Remodel;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
+using SwReview.AddIn.Standards;
 using SwReview.AddIn.Terminal;
 using SwReview.AddIn.ToolService;
 
@@ -110,6 +111,7 @@ public class SwReviewAddIn : ISwAddin
     private TerminalHost? _terminalHost;
     private ModelCheckHost? _modelCheckHost;
     private RemodelHost? _remodelHost;
+    private StandardsHost? _standardsHost;
     private ToolServiceGate? _toolService;
 
     /// <summary>
@@ -150,6 +152,18 @@ public class SwReviewAddIn : ISwAddin
     private readonly BlockingCollection<string> _remodelMessages = new BlockingCollection<string>();
 
     private Thread? _remodelPump;
+
+    /// <summary>
+    /// The Standards page's messages, on a queue and a thread of their own.
+    ///
+    /// Separate for the reason every other page's are: a `standards.start` runs a dump on the
+    /// application thread - over a drawing, every model its views reference - and queueing it
+    /// behind a review's messages would make one tab's work wait on the other's. One thread
+    /// each, one message at a time each, because no host is re-entrant.
+    /// </summary>
+    private readonly BlockingCollection<string> _standardsMessages = new BlockingCollection<string>();
+
+    private Thread? _standardsPump;
 
     /// <summary>The running SOLIDWORKS session, or null while disconnected.</summary>
     public ISldWorks? SwApp => _swApp;
@@ -246,6 +260,7 @@ public class SwReviewAddIn : ISwAddin
             _pane.PageMessageReceived -= OnPageMessage;
             _pane.ModelCheckPageMessageReceived -= OnModelCheckPageMessage;
             _pane.RemodelPageMessageReceived -= OnRemodelPageMessage;
+            _pane.StandardsPageMessageReceived -= OnStandardsPageMessage;
         }
 
         if (_events != null)
@@ -257,6 +272,7 @@ public class SwReviewAddIn : ISwAddin
         StopPageMessagePump();
         StopModelCheckPump();
         StopRemodelPump();
+        StopStandardsPump();
 
         // Before the review host, because the tool service is what still holds SOLIDWORKS
         // pointers: the pipe stops listening and the scope is let go while the add-in is still
@@ -279,6 +295,11 @@ public class SwReviewAddIn : ISwAddin
         // the review host, so the two stop answering in this order.
         _remodelHost?.Dispose();
         _remodelHost = null;
+
+        // With the other two check hosts and for their reason: a standards check registers its
+        // folder on the review host, so the three stop answering before it does.
+        _standardsHost?.Dispose();
+        _standardsHost = null;
 
         _reviewHost?.Dispose();
         _reviewHost = null;
@@ -438,6 +459,7 @@ public class SwReviewAddIn : ISwAddin
 
         StartModelCheckHost(reviewOptions);
         StartRemodelHost(reviewOptions);
+        StartStandardsHost(reviewOptions);
 
         // The pane follows the engineer: the Review button and the document name track
         // whatever is active, so a review is never started against the document that was open
@@ -566,6 +588,116 @@ public class SwReviewAddIn : ISwAddin
         // not made to wait for it.
         _modelCheckPump.Join(TimeSpan.FromSeconds(2));
         _modelCheckPump = null;
+    }
+
+    /// <summary>
+    /// The Standards tab's host (T081, contracts/standards-check.md).
+    ///
+    /// It shares with the other tabs exactly what the Model check tab shares - the same
+    /// in-process extractor (asked for the reduced <c>Standards</c> profile), the same entity
+    /// resolver, so Show selects the same way on every page, and the same answer to "which
+    /// folder is the pane looking at", which the review host keeps.
+    ///
+    /// The one thing that is this tab's alone is the <b>profile path</b>: the configured
+    /// `StandardsProfilePath`, read fresh because a settings save moves it, and handed to the
+    /// page as a path and never as a value. The host checks it is there and can be opened and
+    /// stops; the backend reads and validates the file, because the reasoning side owns the
+    /// schema and expressing it twice is the drift this design exists to avoid (FR-002).
+    /// </summary>
+    private void StartStandardsHost(ReviewHostOptions reviewOptions)
+    {
+        if (_pane == null)
+        {
+            return;
+        }
+
+        _standardsHost = new StandardsHost(new StandardsHostOptions(
+            _pane.StandardsChannel,
+            () => (_reviewHost?.Settings ?? UserSettings.Defaults()).RunRoot)
+        {
+            Backend = () => _backend?.Endpoint,
+            CurrentDocument = CurrentDocument,
+            Dump = reviewOptions.Dump,
+            EntityResolver = () => reviewOptions.EntityResolver,
+            ProfilePath = () => (_reviewHost?.Settings ?? UserSettings.Defaults()).StandardsProfilePath,
+
+            // One answer to "which folder is the pane looking at", and it is the review host's
+            // to keep: a check that registered itself anywhere else would silently degrade Show
+            // to "no full path" for every finding and open the Ask tab in an unrelated folder.
+            RegisterLatestRun = runDirectory =>
+            {
+                _reviewHost?.TrackCheck(runDirectory);
+                _pane?.RefreshSteps();
+            },
+
+            // The same secret the Review host masks out of its own messages: this host is handed
+            // the backend's start-up failures too (FR-015).
+            Secrets = () => new[]
+            {
+                (_reviewHost?.Settings ?? UserSettings.Defaults()).ResolveApiKey().Key,
+            },
+        });
+
+        StartStandardsPump();
+        _pane.StandardsPageMessageReceived += OnStandardsPageMessage;
+    }
+
+    private void OnStandardsPageMessage(object sender, string json)
+    {
+        try
+        {
+            _standardsMessages.Add(json);
+        }
+        catch (Exception)
+        {
+            // The pump is shutting down; the page is about to go with it.
+        }
+    }
+
+    private void StartStandardsPump()
+    {
+        _standardsPump = new Thread(() =>
+        {
+            foreach (string json in _standardsMessages.GetConsumingEnumerable())
+            {
+                try
+                {
+                    _standardsHost?.Receive(json);
+                }
+                catch (Exception)
+                {
+                    // StandardsHost.Receive answers its own failures; an exception escaping onto
+                    // this background thread would take SOLIDWORKS down with it.
+                }
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "swreview-standards-messages",
+        };
+
+        _standardsPump.Start();
+    }
+
+    private void StopStandardsPump()
+    {
+        if (_standardsPump == null)
+        {
+            return;
+        }
+
+        try
+        {
+            _standardsMessages.CompleteAdding();
+        }
+        catch (Exception)
+        {
+        }
+
+        // Bounded, like the other pumps: the thread may be inside a dump, and SOLIDWORKS is not
+        // made to wait for it.
+        _standardsPump.Join(TimeSpan.FromSeconds(2));
+        _standardsPump = null;
     }
 
     /// <summary>
@@ -779,6 +911,12 @@ public class SwReviewAddIn : ISwAddin
         _reviewHost?.PostStatus(stage, message);
         _modelCheckHost?.PostStatus(stage, message);
 
+        // The Standards page tracks the backend for the reason the Model check page does: it
+        // calls `POST /checks/standards` itself with the endpoint its `init` carried, so a tab
+        // opened while the backend was still starting holds a null endpoint, and `ready` is
+        // what tells it to ask again.
+        _standardsHost?.PostStatus(stage, message);
+
         // The Remodel page's `status` stages are a closed list that names the three
         // backend-lifecycle stages posted here, so today every one of them goes through; the
         // gate is what keeps a stage another page grows later from being written into tab 5's
@@ -843,6 +981,11 @@ public class SwReviewAddIn : ISwAddin
             // Tab 5 needs this for more than its header: a `document.changed` whose copy has
             // gone away aborts the run in flight, leaving the change log intact (RK-14).
             _remodelHost?.DocumentChanged();
+
+            // Tab 6 decides from `kind` what it would grade - this drawing and the models its
+            // views reference, this assembly and everything under it - so it is told whenever
+            // the answer changes (contracts/standards-check.md section 3).
+            _standardsHost?.DocumentChanged();
 
             // Step 1 of the strip above the tabs has just changed answer, and this is the event
             // that says so (pane-host-messages.md, `document.changed`).

@@ -17,7 +17,7 @@ clean result, which is the worst failure a release gate has.
 | Default | `%LOCALAPPDATA%\SwReview\standards.yaml` |
 | Override | `swreview check standards --profile <yaml>`, which is what lets CI grade a fixture package against a fictional profile |
 | Who validates it | **Exactly one place**: `checks/standards/profile.py` on the reasoning side. The host checks only that a path is configured and the file is readable, and refuses before it creates a run folder or dumps anything (FR-002) |
-| What leaves the reasoning side | `{path, sha256}` only. **No profile value is written into the check record, the session, the report, a finding or any message to the page** (FR-034) |
+| What leaves the reasoning side | `{path, sha256}` only. **No profile value is written into the check record, the session, the report, a finding or any message to the page as a profile field** (FR-034); a coverage reason may quote the one value a check compared against where FR-016 requires both configurations to be named |
 
 ## Schema
 

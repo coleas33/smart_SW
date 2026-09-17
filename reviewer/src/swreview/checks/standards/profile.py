@@ -34,6 +34,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, NonNegativeInt, PrivateAttr, ValidationError
 
 __all__ = [
+    "DEFAULT_PATH",
     "PROFILE_VERSION",
     "SETTING_NAME",
     "DataCardSection",
@@ -57,7 +58,15 @@ both, rather than loaded while its unrecognised fields are ignored."""
 
 SETTING_NAME = "StandardsProfilePath"
 """The add-in setting that names the file, quoted in the refusal so a reader knows where to
-look. The default it documents is `%LOCALAPPDATA%\\SwReview\\standards.yaml`."""
+look (`contracts/profile.md`, "Where it lives")."""
+
+DEFAULT_PATH = "%LOCALAPPDATA%\\SwReview\\standards.yaml"
+"""The path `SETTING_NAME` documents as its default, quoted beside it in a refusal.
+
+**Not a fallback.** Nothing reads this: a run with no configured profile is refused, and
+this is only what the refusal tells the engineer to look for. A constant rather than prose
+in a message, because the command line and the host both name it and two copies of a path
+are free to disagree."""
 
 
 class ProfileError(Exception):

@@ -181,6 +181,66 @@ public sealed class WebViewFallbackTests
     }
 
     /// <summary>
+    /// T080: the sixth tab (feature 006) is created on first activation too, and for the reason
+    /// tabs 4 and 5 are. Six tabs loaded at add-in load would cost <b>five</b> renderer
+    /// processes inside the SOLIDWORKS process before the engineer has pressed anything; three
+    /// of the six are lazy, so a session that opens none of them pays for none of them.
+    ///
+    /// The Standards tab is the one most likely to be opened on a release day and never
+    /// otherwise, which is exactly the shape laziness is for.
+    /// </summary>
+    [Fact]
+    public void TheStandardsTabIsLoadedOnFirstActivationAndFailsIntoTheSameFallback()
+    {
+        WithPane(async (control, factory) =>
+        {
+            TabPage tab = TabNamed(control, "Standards");
+
+            string before = TextOf(tab);
+            Assert.False(
+                EvergreenDownload.IsMatch(before),
+                "The Standards tab loaded its page at add-in load; it is created on first "
+                    + "activation (T081). It showed:" + Environment.NewLine + before);
+            Assert.Contains(TaskPaneControl.StandardsPending, before);
+
+            Exception? escaped = await Record.ExceptionAsync(() => control.ActivateStandardsAsync());
+            Assert.True(
+                escaped == null,
+                "Opening the Standards tab with no WebView2 runtime threw: " + escaped);
+
+            string after = TextOf(tab);
+            Assert.True(
+                EvergreenDownload.IsMatch(after),
+                "The Standards tab shows no Evergreen WebView2 download URL when the runtime is "
+                    + "missing. It showed:" + Environment.NewLine + after);
+            Assert.Contains(RunRoot, after);
+
+            // The fallback message is the one every other tab already renders, word for word.
+            Assert.Contains("Review, Ask and Model check tabs cannot be shown", after);
+            Assert.Contains("The Extract tab still works.", after);
+
+            // Still one environment, shared with the five tabs that came before it.
+            Assert.Equal(1, factory.Calls);
+        });
+    }
+
+    [Fact]
+    public void ActivatingTheStandardsTabTwiceLoadsItOnce()
+    {
+        WithPane(async (control, factory) =>
+        {
+            Task first = control.ActivateStandardsAsync();
+            await first;
+
+            Task second = control.ActivateStandardsAsync();
+            Assert.Same(first, second);
+            await second;
+
+            Assert.Equal(1, factory.Calls);
+        });
+    }
+
+    /// <summary>
     /// Activating twice creates one WebView. The activation task is cached - failure included -
     /// so the second selection of the tab is not a second page load, and the count of
     /// environment requests stays at one.
@@ -202,17 +262,18 @@ public sealed class WebViewFallbackTests
     }
 
     /// <summary>
-    /// The two lazy tabs share the one environment with the two eager ones. Opening both is
-    /// still one `CreateAsync`, which is the rule that matters: a second environment over the
+    /// The three lazy tabs share the one environment with the two eager ones. Opening all three
+    /// is still one `CreateAsync`, which is the rule that matters: a second environment over the
     /// same user data folder fails at runtime.
     /// </summary>
     [Fact]
-    public void OpeningBothLazyTabsStillAsksForOneEnvironment()
+    public void OpeningEveryLazyTabStillAsksForOneEnvironment()
     {
         WithPane(async (control, factory) =>
         {
             await control.ActivateModelCheckAsync();
             await control.ActivateRemodelAsync();
+            await control.ActivateStandardsAsync();
 
             Assert.Equal(1, factory.Calls);
             Assert.Same(control.EnvironmentAsync(), control.EnvironmentAsync());
@@ -220,11 +281,11 @@ public sealed class WebViewFallbackTests
     }
 
     /// <summary>
-    /// The order the engineer reads left to right, and the order both contracts name:
-    /// Review, Ask, Extract, Model check, Remodel.
+    /// The order the engineer reads left to right, and the order the three contracts name:
+    /// Review, Ask, Extract, Model check, Remodel, Standards (T080, FR-035).
     /// </summary>
     [Fact]
-    public void TheFiveTabsAreInTheOrderTheContractsName()
+    public void TheSixTabsAreInTheOrderTheContractsName()
     {
         WithPane((control, factory) =>
         {
@@ -234,7 +295,8 @@ public sealed class WebViewFallbackTests
                 .ToArray();
 
             Assert.Equal(
-                new[] { "Review", "Ask", "Extract", "Model check", "Remodel" }, captions);
+                new[] { "Review", "Ask", "Extract", "Model check", "Remodel", "Standards" },
+                captions);
         });
     }
 
@@ -309,6 +371,7 @@ public sealed class WebViewFallbackTests
             Assert.NotNull(TabNamed(control, "Ask"));
             Assert.NotNull(TabNamed(control, "Model check"));
             Assert.NotNull(TabNamed(control, "Remodel"));
+            Assert.NotNull(TabNamed(control, "Standards"));
             Assert.Equal(1, factory.Calls);
 
             // The failure is cached like a success: a workstation with no runtime must not

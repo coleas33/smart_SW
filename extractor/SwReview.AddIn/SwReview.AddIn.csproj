@@ -69,6 +69,10 @@
       <Link>web\Model\ModelCheckPage\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Standards\StandardsPage\**\*">
+      <Link>web\Standards\StandardsPage\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="Remodel\RemodelPage\**\*">
       <Link>web\Remodel\RemodelPage\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

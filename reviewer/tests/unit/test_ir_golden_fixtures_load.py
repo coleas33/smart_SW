@@ -133,9 +133,19 @@ matched, and the list expires on its own the moment the round is committed. Noth
 `standards-*` may move, which is what SC-004 measures.
 """
 
+WAIVER_GOLDEN_CASE = "standards-seeded-second-subject"
+"""The golden T090 adds: `standards-seeded` with one more subject of one check on one
+document, which is the re-review case of `contracts/standards-check.md` section 5.
+
+Named on its own line rather than added to `NEW_GOLDEN_CASES` above, because those five
+are also the baselines `REWRITTEN_BY_THE_DRAWING_CHECKS` allows to have moved; this one is
+new and has never been committed, so the gate holds it to `??` and nothing else.
+"""
+
 NEW_GOLDEN_PATHS: frozenset[str] = frozenset(
     [f"fixtures/{case}/" for case in NEW_GOLDEN_CASES]
     + [f"test_golden/{case}.yml" for case in NEW_GOLDEN_CASES]
+    + [f"fixtures/{WAIVER_GOLDEN_CASE}/", f"test_golden/{WAIVER_GOLDEN_CASE}.yml"]
     + [f"fixtures/{DRAWING_GOLDEN_GROUP}/"]
     + [f"test_golden/{case}.yml" for case in DRAWING_GOLDEN_CASES]
 )

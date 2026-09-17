@@ -53,8 +53,10 @@ already checked it is present and readable (FR-002), and **the page sends it on 
 the same way it sends the token and the origin it received in `init`; the backend reads and
 validates the file, because the reasoning side owns the schema and expressing it twice is the
 drift this design exists to avoid. FR-038 names `profile_path` among `init`'s fields for that
-reason, and because the page shows which profile is in force. **No profile value ever travels
-on this request or on any reply.**
+reason, and because the page shows which profile is in force. **No profile value travels
+on this request or on any reply as a profile field.** A coverage reason may quote the one value a
+check compared against where the spec requires the comparison to be named (FR-016's material
+configuration); the profile itself is never reproduced.
 
 ### `StandardsResult`
 
