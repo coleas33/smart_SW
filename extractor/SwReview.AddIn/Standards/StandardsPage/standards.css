@@ -1,0 +1,96 @@
+/*
+  The Standards page's own stylesheet: the verdict block and the sixteen-check list, and
+  nothing else (T079).
+
+  Everything a check tab shows the same way - the bar, the banner, the session row, the chips
+  and the check list below the fold - is in `shared/check-page.css`, which this page loads
+  first. What is left here is the header this page renders and the Model check page does not:
+  a release verdict, with the counts in every bucket and the unit each of them counts, and the
+  roster of all sixteen checks with the buckets each one landed in.
+
+  A separate file rather than a `<style>` block because the CSP is `style-src 'self'`: the page
+  it is served with refuses an inline one, which is the point of the policy. Nothing here is
+  generated and nothing is set from script, so a hostile component name or revision-table cell
+  cannot reach a declaration.
+*/
+
+.verdict {
+  margin: 10px 0 6px;
+}
+
+.verdict-headline {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.verdict-document,
+.unresolved-checks,
+.verdict-note,
+.not-rebuilt {
+  margin: 4px 0 0;
+}
+
+.verdict-note {
+  font-style: italic;
+}
+
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.count {
+  white-space: nowrap;
+}
+
+/* The roster: every check the family has, whether it applied or not. It is a reference list
+   rather than the thing to act on, so it is set smaller than the rows below it - present and
+   readable, and not competing with the findings. */
+.checks {
+  margin: 10px 0 6px;
+}
+
+.checks-heading {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.check-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.check {
+  margin: 0 0 6px;
+  padding: 4px 0 0;
+  border-top: 1px solid #e3e3e3;
+}
+
+.check-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.check-id {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.check-severity {
+  color: #666;
+}
+
+.check-buckets {
+  margin: 2px 0 0;
+  padding: 0 0 0 14px;
+}
+
+.check-bucket {
+  margin: 0;
+}

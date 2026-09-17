@@ -64,6 +64,14 @@ public sealed class TaskPaneGuidanceTests
         + "then review the change list, the grade, and the geometry comparison. The original "
         + "file is never touched.";
 
+    /// <summary>
+    /// Tab 6 (T081). "No AI, no key" is here for the reason it is on the Model check tab: it is
+    /// the first question a first-time user has about a pane whose other tabs need one.
+    /// </summary>
+    private const string StandardsPurpose =
+        "Check the open part, assembly or drawing against this workstation's release standards "
+        + "in seconds, and see whether it is ready to release. No AI, no key; read-only.";
+
     // ---- the tabs ------------------------------------------------------------------------
 
     [Fact]
@@ -74,9 +82,11 @@ public sealed class TaskPaneGuidanceTests
             string[] captions = Tabs(pane).Select(tab => tab.Text).ToArray();
 
             // Model check is tab 4 (contracts/model-check.md); Remodel is tab 5
-            // (contracts/pane-remodel-messages.md).
+            // (contracts/pane-remodel-messages.md); Standards is tab 6
+            // (contracts/standards-check.md), and none of the five before it moved.
             Assert.Equal(
-                new[] { "Review", "Ask", "Extract", "Model check", "Remodel" }, captions);
+                new[] { "Review", "Ask", "Extract", "Model check", "Remodel", "Standards" },
+                captions);
         });
     }
 
@@ -96,6 +106,7 @@ public sealed class TaskPaneGuidanceTests
                 { "Extract", ExtractPurpose },
                 { "Model check", ModelCheckPurpose },
                 { "Remodel", RemodelPurpose },
+                { "Standards", StandardsPurpose },
             };
 
             foreach (TabPage tab in Tabs(pane))
@@ -283,6 +294,131 @@ public sealed class TaskPaneGuidanceTests
         {
             Delete(session);
         }
+    }
+
+    // ---- the second reduced profile (T082, FR-037) --------------------------------------------
+
+    /// <summary>
+    /// A Standards dump is the second reduced profile: features, equations, cut lists and
+    /// drawings, and none of the four geometry phases (FR-027). The strip has to say so before
+    /// Review for exactly the reason it says it about a Model check package - a review of it
+    /// reports "no holes" and "no fasteners" as facts about the design.
+    ///
+    /// Today's flag is <c>== DumpProfile.ModelCheck</c>, which a standards package <b>fails</b>,
+    /// so it would be handed to a review as full evidence and the sentence would never appear.
+    /// The flag is "is a reduced profile", and this is the test that says so.
+    /// </summary>
+    [Fact]
+    public void StandardsEvidenceSaysWhatItLeavesOutAndOffersTheFullExtract()
+    {
+        string session = NewFolderWithPackage(DumpProfile.Standards);
+        try
+        {
+            WithPane(
+                (pane, options) =>
+                {
+                    options.DocumentPresent = () => true;
+                    options.EvidencePresent = () => true;
+                    pane.RefreshSteps();
+
+                    Assert.Equal(
+                        "Evidence: standards check only (features, equations, cut lists and "
+                            + "drawings)",
+                        pane.Steps.Notice);
+                    Assert.True(
+                        ButtonNamed(pane.Steps, "Extract full evidence").Visible,
+                        "The Extract full evidence action is hidden on a standards package.");
+
+                    // Not a step: partial evidence is evidence, and step 2 is done.
+                    Assert.Equal(
+                        new[]
+                        {
+                            "1 Open a document - done: ready",
+                            "2 Extract evidence - done: ready",
+                            "3 Review or Ask - done: ready",
+                        },
+                        pane.Steps.Lines.ToArray());
+                },
+                options => options.CurrentSessionRunDirectory = () => session);
+        }
+        finally
+        {
+            Delete(session);
+        }
+    }
+
+    /// <summary>
+    /// The suppression of the Extract tab's suggested folder falls out of the same one boolean:
+    /// a standards run folder holds the package its own `session.json`, `report.md` and
+    /// `check.json` describe, and a full extract into it would overwrite exactly that.
+    /// </summary>
+    [Fact]
+    public void AFullExtractIsNeverSuggestedIntoTheStandardsFolderItWouldOverwrite()
+    {
+        string session = NewFolderWithPackage(DumpProfile.Standards);
+        try
+        {
+            WithPane(
+                (pane, options) =>
+                {
+                    options.DocumentPresent = () => true;
+                    options.EvidencePresent = () => true;
+                    pane.RefreshSteps();
+
+                    Assert.Equal(string.Empty, pane.Actions.OutputDirectory);
+                },
+                options => options.CurrentSessionRunDirectory = () => session);
+        }
+        finally
+        {
+            Delete(session);
+        }
+    }
+
+    /// <summary>
+    /// The strip renders a sentence <b>per profile</b>, and the Model check one is byte-identical
+    /// to what it has always been: a rule written once per profile name is a rule that needs a
+    /// third copy next time, and a reworded model-check sentence would be a behaviour change
+    /// nobody asked for (FR-037, RK-9).
+    /// </summary>
+    [Theory]
+    [InlineData(null, "")]
+    [InlineData(DumpProfile.Full, "")]
+    [InlineData(DumpProfile.ModelCheck, "Evidence: model check only (features and equations)")]
+    [InlineData(
+        DumpProfile.Standards,
+        "Evidence: standards check only (features, equations, cut lists and drawings)")]
+    public void TheStripRendersOneSentencePerReducedProfile(DumpProfile? profile, string expected)
+    {
+        StaHost.Run(form =>
+        {
+            using (var strip = new StepStrip())
+            {
+                form.Controls.Add(strip);
+
+                strip.Show(document: true, evidence: true, reducedProfile: StepStrip.ReducedProfile(profile));
+
+                Assert.Equal(expected, strip.Notice);
+                Assert.Equal(
+                    expected.Length > 0,
+                    ButtonNamed(strip, "Extract full evidence").Visible);
+            }
+
+            return Task.CompletedTask;
+        });
+    }
+
+    /// <summary>
+    /// Which profiles are reduced is one answer, read off the sentences the strip can render,
+    /// rather than a second literal list kept beside them.
+    /// </summary>
+    [Fact]
+    public void AProfileIsReducedExactlyWhenTheStripHasASentenceForIt()
+    {
+        Assert.Null(StepStrip.ReducedProfile(null));
+        Assert.Null(StepStrip.ReducedProfile(DumpProfile.Full));
+        Assert.Equal(DumpProfile.ModelCheck, StepStrip.ReducedProfile(DumpProfile.ModelCheck));
+        Assert.Equal(DumpProfile.Standards, StepStrip.ReducedProfile(DumpProfile.Standards));
     }
 
     /// <summary>The unchanged half of FR-022: a full dump is not annotated as a partial one.</summary>

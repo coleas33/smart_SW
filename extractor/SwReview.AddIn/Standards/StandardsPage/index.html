@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<title>SwReview Standards check</title>
+<link rel="stylesheet" href="../../shared/check-page.css">
+<link rel="stylesheet" href="standards.css">
+</head>
+<body>
+<!--
+  The Standards tab, tab 6 (T079, contracts/standards-check.md). Served from the virtual host
+  https://swreview.invalid, so the CSP above - byte-for-byte every other page's in this pane,
+  which is byte-for-byte contracts/pane-host-messages.md's - is what the page actually runs
+  under: no inline script, no inline style, no remote anything, and connections only to the
+  loopback backend under /__backend on this same origin.
+
+  Every handler is attached in shared/check-page.js with addEventListener; there is no
+  event-handler attribute anywhere in this file. Every node is built through shared/dom.js,
+  which is the one place the "insert every untrusted string with createTextNode" rule is
+  written down (T080). The untrusted text here is wider than the other check pages': a
+  component name is whatever an engineer typed into the feature tree, an observed string is
+  assembled out of those names, and a revision-table cell is whatever a draughtsman typed into
+  a drawing that may have come from a supplier.
+
+  Nothing on this page needs a provider, a key or a network beyond the loopback backend. That
+  is the point of the tab, and the banner on the tab says so.
+-->
+<header class="bar">
+  <span id="document-name" class="document">No document open</span>
+  <span id="backend-state" class="badge">Backend starting</span>
+</header>
+
+<p id="banner" class="banner" hidden></p>
+
+<section id="session" class="session">
+  <div class="row">
+    <button type="button" id="run-check" disabled>Standards check</button>
+    <button type="button" id="open-report" disabled>Open report</button>
+    <button type="button" id="open-folder" disabled>Open check folder</button>
+    <button type="button" id="open-log">View log</button>
+  </div>
+  <!-- What would be graded if the button were pressed now, from the document's kind: a
+       drawing-rooted run fans out to every model its views reference, and an engineer should
+       not be surprised by that (contracts/standards-check.md D11). -->
+  <span id="grading" class="note"></span>
+  <span id="profile" class="note"></span>
+  <span id="run-dir" class="note"></span>
+  <span id="check-state" class="note" role="status"></span>
+  <span id="carried-forward" class="note"></span>
+</section>
+
+<!-- The release verdict: a state, the counts in every bucket with the unit each one counts,
+     the unresolved check ids and the notes. No letter grade and no single percentage: "ready"
+     is not a score, and a release gate that could be read as 83% would be read as 83%. -->
+<section id="verdict" class="verdict" aria-live="polite"></section>
+
+<!-- All sixteen checks, each with every bucket it landed in. A check that did not apply is
+     present with an out-of-scope bucket, never absent, so "all sixteen were accounted for" is
+     readable off one list (FR-033). -->
+<section id="checks" class="checks"></section>
+
+<!-- The chips are built from the buckets the result actually carries, so nothing offers a
+     filter for a bucket that is empty. Failed and warned are on when the page opens. -->
+<div id="filters" class="filters" role="group" aria-label="Which checks are shown"></div>
+
+<main id="rules" class="rules"></main>
+
+<script src="../../shared/dom.js"></script>
+<script src="../../shared/check-page.js"></script>
+<script src="standards.js"></script>
+</body>
+</html>

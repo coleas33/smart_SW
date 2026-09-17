@@ -24,9 +24,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from swreview.checks.rules.registry import Rule
 from swreview.findings import FindingStatus, Severity
 
-__all__ = ["WAIVABLE_STATUS", "CheckFamily"]
+__all__ = ["WAIVABLE_STATUS", "CheckFamily", "waiver_invalidity"]
 
 WAIVABLE_STATUS: FindingStatus = "demonstrated"
 """The one finding status an acceptance may waive, in every family.
@@ -129,3 +130,34 @@ class CheckFamily:
                 f"{self.name}: a severity that cannot be waived is refused by name, so "
                 f"{', '.join(unlabelled)} needs a waiver_labels entry"
             )
+
+
+def waiver_invalidity(
+    family: CheckFamily, rules: Mapping[str, Rule], check_id: str
+) -> str | None:
+    """Why a waiver naming `check_id` is invalid in `family`, or `None` when it is waivable.
+
+    One reader for every family, because "may this be waived, and what does the refusal
+    say" is `waiver_labels` read with `status_by_severity` - two facts already on the
+    descriptor - and a second copy of it in the command line or in a route is exactly how
+    the tab and `swreview exceptions accept-<family>` would come to disagree about one
+    waiver (FR-042, `specs/006-standards-check/contracts/cli.md`).
+
+    Three answers, in this order:
+
+    1. an id the catalogue does not hold at all is the `"unknown"` label;
+    2. an evaluable rule whose severity maps to `WAIVABLE_STATUS` is waivable: `None`;
+    3. anything else is refused **by its own name** - its severity when it has one, its
+       coverage bucket when it is coverage-only - so a rule refused because the data it
+       needs is not extracted is not reported as a warning the reader could argue with.
+    """
+    rule = rules.get(check_id)
+    if rule is None:
+        return family.waiver_labels["unknown"]
+    if (
+        rule.severity is not None
+        and family.status_by_severity[rule.severity][0] == WAIVABLE_STATUS
+    ):
+        return None
+    key = rule.severity if rule.coverage is None else rule.coverage[0]
+    return family.waiver_labels[str(key)]

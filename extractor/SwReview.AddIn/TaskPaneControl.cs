@@ -216,6 +216,9 @@ public sealed class TaskPaneControl : UserControl
     /// <summary>The Remodel tab's page, tab 5 (T121, contracts/pane-remodel-messages.md).</summary>
     public const string RemodelPageUrl = PageOrigin + "/Remodel/RemodelPage/index.html";
 
+    /// <summary>The Standards tab's page, tab 6 (T081, contracts/standards-check.md).</summary>
+    public const string StandardsPageUrl = PageOrigin + "/Standards/StandardsPage/index.html";
+
     /// <summary>Where the Evergreen runtime comes from, shown when it is missing.</summary>
     public const string RuntimeDownloadUrl = "https://developer.microsoft.com/en-us/microsoft-edge/webview2/";
 
@@ -277,6 +280,30 @@ public sealed class TaskPaneControl : UserControl
     /// </summary>
     public const string RemodelPending = "The Remodel page opens when you select this tab.";
 
+    /// <summary>
+    /// What the <b>Standards</b> tab is for (tab 6, contracts/standards-check.md).
+    ///
+    /// "No AI, no key" is here for the reason it is on the Model check tab: it is the first
+    /// question a first-time user has about a pane whose other tabs need one. The three kinds
+    /// are named because this is the only tab that grades a drawing, and "read-only" because an
+    /// engineer pressing a release check on a document they are about to issue wants to know
+    /// that nothing is written back into it (FR-036).
+    /// </summary>
+    public const string StandardsPurpose =
+        "Check the open part, assembly or drawing against this workstation's release standards "
+        + "in seconds, and see whether it is ready to release. No AI, no key; read-only.";
+
+    /// <summary>
+    /// What the Standards tab holds before anyone opens it.
+    ///
+    /// The third lazy tab, for the reason the other two are (RK-11): six tabs loaded at add-in
+    /// load would cost <b>five</b> renderer processes inside the SOLIDWORKS process before the
+    /// engineer has pressed anything. This is the tab most sessions never open at all - it is
+    /// pressed on the day something is released - so a session that does not open it pays
+    /// nothing for it.
+    /// </summary>
+    public const string StandardsPending = "The Standards page opens when you select this tab.";
+
     private readonly TaskPaneOptions _options;
     private readonly TabControl _tabs;
     private readonly TabPage _reviewTab;
@@ -284,6 +311,7 @@ public sealed class TaskPaneControl : UserControl
     private readonly TabPage _actionsTab;
     private readonly TabPage _modelCheckTab;
     private readonly TabPage _remodelTab;
+    private readonly TabPage _standardsTab;
     private readonly ActionsPanel _actions;
     private readonly StepStrip _steps;
 
@@ -305,8 +333,10 @@ public sealed class TaskPaneControl : UserControl
     private WebView2? _terminalView;
     private WebView2? _modelCheckView;
     private WebView2? _remodelView;
+    private WebView2? _standardsView;
     private Task? _modelCheckActivation;
     private Task? _remodelActivation;
+    private Task? _standardsActivation;
     private bool _initializing;
 
     /// <summary>The terminal-first run folder this pane created, once it has created one.</summary>
@@ -334,12 +364,18 @@ public sealed class TaskPaneControl : UserControl
         _modelCheckTab = NewTab("Model check", ModelCheckPurpose, Note(ModelCheckPending));
         _remodelTab = NewTab("Remodel", RemodelPurpose, Note(RemodelPending));
 
+        // Tab 6, the third lazy one (contracts/standards-check.md).
+        _standardsTab = NewTab("Standards", StandardsPurpose, Note(StandardsPending));
+
         _tabs = new TabControl { Dock = DockStyle.Fill, ShowToolTips = true };
         _tabs.TabPages.Add(_reviewTab);
         _tabs.TabPages.Add(_terminalTab);
         _tabs.TabPages.Add(_actionsTab);
         _tabs.TabPages.Add(_modelCheckTab);
         _tabs.TabPages.Add(_remodelTab);
+
+        // Sixth, and after the five that were already here: no existing tab moves (FR-035).
+        _tabs.TabPages.Add(_standardsTab);
 
         _steps = new StepStrip { Dock = DockStyle.Top };
 
@@ -362,6 +398,7 @@ public sealed class TaskPaneControl : UserControl
         TerminalChannel = new PageChannel(this, () => _terminalView);
         ModelCheckChannel = new PageChannel(this, () => _modelCheckView);
         RemodelChannel = new PageChannel(this, () => _remodelView);
+        StandardsChannel = new PageChannel(this, () => _standardsView);
 
         RefreshSteps();
     }
@@ -399,6 +436,14 @@ public sealed class TaskPaneControl : UserControl
     public IPageChannel RemodelChannel { get; }
 
     /// <summary>
+    /// Posts host messages to the Standards page, from any thread. The fifth channel: valid
+    /// before the page exists, because the channel asks for the view per post, so a `status`
+    /// posted while the backend starts into a tab nobody has opened is dropped rather than
+    /// thrown (see <see cref="IPageChannel"/>).
+    /// </summary>
+    public IPageChannel StandardsChannel { get; }
+
+    /// <summary>
     /// One `{type, id, payload}` document from the Review page, raised on the UI thread. The
     /// add-in hands it to <see cref="ReviewHost"/> off this thread and one at a time.
     /// </summary>
@@ -428,6 +473,14 @@ public sealed class TaskPaneControl : UserControl
     /// </summary>
     public event EventHandler<string>? RemodelPageMessageReceived;
 
+    /// <summary>
+    /// One `{type, id, payload}` document from the Standards page, raised on the UI thread. Kept
+    /// apart from the other four for the reason they are kept apart from each other: six pages,
+    /// six vocabularies, and a `standards.start` answered by the review host would be answered
+    /// `error` while the tab waited.
+    /// </summary>
+    public event EventHandler<string>? StandardsPageMessageReceived;
+
     /// <summary>Whether the Review page is loaded (false on a workstation with no runtime).</summary>
     public bool ReviewPageReady => _reviewView != null && _reviewView.CoreWebView2 != null;
 
@@ -447,6 +500,9 @@ public sealed class TaskPaneControl : UserControl
 
     /// <summary>Whether the Remodel page is loaded; false until the tab is first opened.</summary>
     public bool RemodelPageReady => _remodelView != null && _remodelView.CoreWebView2 != null;
+
+    /// <summary>Whether the Standards page is loaded; false until the tab is first opened.</summary>
+    public bool StandardsPageReady => _standardsView != null && _standardsView.CoreWebView2 != null;
 
     /// <summary>
     /// The process's one WebView2 environment. Created on the first call and shared by every
@@ -596,6 +652,49 @@ public sealed class TaskPaneControl : UserControl
     }
 
     /// <summary>
+    /// Loads the Standards page, once, on the first activation of its tab (T081).
+    ///
+    /// The same rule as tabs 4 and 5 and the same reason, one tab further on: six tabs loaded at
+    /// add-in load would cost five renderer processes inside the SOLIDWORKS process before the
+    /// engineer has pressed anything. It shares the one environment, so the "one per process"
+    /// rule is untouched, and when that environment failed this tab shows the documented
+    /// fallback panel exactly as the others do.
+    ///
+    /// Never throws: it runs on the SOLIDWORKS UI thread, from a tab click. The task is cached
+    /// including its failure, so activating the tab twice loads the page once.
+    /// </summary>
+    public Task ActivateStandardsAsync()
+    {
+        if (IsDisposed)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _standardsActivation ??= LoadStandardsAsync();
+    }
+
+    private async Task LoadStandardsAsync()
+    {
+        try
+        {
+            CoreWebView2Environment environment = await EnvironmentAsync().ConfigureAwait(true);
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            _standardsView = await AttachPageAsync(
+                environment, _standardsTab, StandardsPageUrl, OnStandardsMessageReceived)
+                .ConfigureAwait(true);
+        }
+        catch (Exception failure)
+        {
+            _standardsView = null;
+            SetTabContent(_standardsTab, BuildFallback(failure));
+        }
+    }
+
+    /// <summary>
     /// Switching tabs is the moment an engineer is looking at the step strip, and it is also
     /// the moment the Model check page is wanted for the first time.
     /// </summary>
@@ -612,6 +711,10 @@ public sealed class TaskPaneControl : UserControl
         else if (ReferenceEquals(_tabs.SelectedTab, _remodelTab))
         {
             _ = ActivateRemodelAsync();
+        }
+        else if (ReferenceEquals(_tabs.SelectedTab, _standardsTab))
+        {
+            _ = ActivateStandardsAsync();
         }
     }
 
@@ -867,16 +970,23 @@ public sealed class TaskPaneControl : UserControl
         // The profile is read from the package itself rather than remembered from the dump
         // that wrote it: the folder the pane is showing may have been written by a previous
         // session, by the command line, or by the other pane in a second SOLIDWORKS window.
-        bool checkOnly = evidence && RunFolders.ProfileOf(session) == DumpProfile.ModelCheck;
+        //
+        // "Is a **reduced** profile", not "is a Model check" (FR-037): there are two reduced
+        // profiles now, and a standards package fails `== DumpProfile.ModelCheck`, so it would
+        // be handed to a review as full evidence and its check folder would be offered as the
+        // Extract tab's output. One boolean, and the suppression below falls out of it.
+        DumpProfile? reduced = evidence
+            ? StepStrip.ReducedProfile(RunFolders.ProfileOf(session))
+            : null;
 
-        _steps.Show(document, evidence, checkOnly);
+        _steps.Show(document, evidence, reduced);
 
         try
         {
-            // Never the check folder: a full extract into it would overwrite the package its
+            // Never a check folder: a full extract into it would overwrite the package its
             // own `session.json` and `report.md` describe (T084). The engineer chooses where
             // the full dump goes, which is what the Extract tab's folder box is for.
-            _actions.SuggestOutputDirectory(checkOnly ? null : session);
+            _actions.SuggestOutputDirectory(reduced == null ? session : null);
         }
         catch (Exception)
         {
@@ -929,6 +1039,9 @@ public sealed class TaskPaneControl : UserControl
 
     private void OnRemodelMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e) =>
         Raise(e, RemodelPageMessageReceived);
+
+    private void OnStandardsMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e) =>
+        Raise(e, StandardsPageMessageReceived);
 
     private void OnTerminalMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e) =>
         Raise(e, TerminalPageMessageReceived);
@@ -1186,9 +1299,44 @@ public sealed class StepStrip : UserControl
     /// </summary>
     public const string CheckOnlyEvidence = "Evidence: model check only (features and equations)";
 
-    /// <summary>The action beside <see cref="CheckOnlyEvidence"/>: it opens the Extract tab,
+    /// <summary>
+    /// What the strip says when this session's evidence came from a Standards check (FR-037).
+    ///
+    /// The `Standards` profile runs the Model check profile's five phases plus the cut list,
+    /// and the drawing phase for a drawing root; it skips the hole, fastener, face and body
+    /// phases exactly as the Model check profile does. So the sentence has the same shape and
+    /// names what is in the package rather than what is missing from it.
+    /// </summary>
+    public const string StandardsEvidence =
+        "Evidence: standards check only (features, equations, cut lists and drawings)";
+
+    /// <summary>
+    /// The partial-evidence sentence per reduced dump profile, and the one place that decides
+    /// which profiles <i>are</i> reduced.
+    ///
+    /// One map rather than a boolean per profile name (FR-037, RK-9). Feature 003 asked
+    /// `== DumpProfile.ModelCheck` in two places; a second reduced profile made that answer
+    /// wrong in both, and a third would have made a third copy wrong. A profile is reduced
+    /// exactly when there is a sentence here to say what it left out, which is the only thing
+    /// the pane does with the answer.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<DumpProfile, string> ReducedEvidence =
+        new Dictionary<DumpProfile, string>
+        {
+            { DumpProfile.ModelCheck, CheckOnlyEvidence },
+            { DumpProfile.Standards, StandardsEvidence },
+        };
+
+    /// <summary>The action beside the partial-evidence sentence: it opens the Extract tab,
     /// which dumps every phase.</summary>
     public const string ExtractFullEvidence = "Extract full evidence";
+
+    /// <summary>
+    /// <paramref name="profile"/> when it is a reduced one, and null otherwise - including for
+    /// a folder with no readable package at all, which is not a partial one.
+    /// </summary>
+    public static DumpProfile? ReducedProfile(DumpProfile? profile) =>
+        profile != null && ReducedEvidence.ContainsKey(profile.Value) ? profile : null;
 
     private static readonly Color DoneColor = Color.FromArgb(0, 100, 0);
 
@@ -1241,7 +1389,7 @@ public sealed class StepStrip : UserControl
         Controls.Add(_evidence);
         Controls.Add(_document);
 
-        Show(document: false, evidence: false, checkOnly: false);
+        Show(document: false, evidence: false, reducedProfile: null);
     }
 
     /// <summary>Raised by the <see cref="ExtractFullEvidence"/> button. The pane answers it by
@@ -1272,10 +1420,12 @@ public sealed class StepStrip : UserControl
     /// </summary>
     /// <param name="document">Whether a document is open.</param>
     /// <param name="evidence">Whether this session's run folder holds an evidence package.</param>
-    /// <param name="checkOnly">Whether that package came from a Model check, and therefore
-    /// carries features and equations and none of the geometry phases (FR-022). It says
-    /// nothing about the three steps: partial evidence is evidence, and step 2 is done.</param>
-    public void Show(bool document, bool evidence, bool checkOnly)
+    /// <param name="reducedProfile">Which reduced dump profile wrote that package, or null when
+    /// it was a full dump (FR-022, FR-037). The <b>identity</b> and not a boolean, because the
+    /// two reduced profiles leave out different things and each says so in its own sentence. It
+    /// says nothing about the three steps: partial evidence is evidence, and step 2 is done.
+    /// </param>
+    public void Show(bool document, bool evidence, DumpProfile? reducedProfile)
     {
         bool ready = document && evidence;
 
@@ -1283,8 +1433,14 @@ public sealed class StepStrip : UserControl
         Set(_evidence, "2 Extract evidence", evidence, evidence ? Ready : NoEvidence);
         Set(_work, "3 Review or Ask", ready, ready ? Ready : (document ? NoEvidence : NoDocument));
 
-        _noticeText.Text = CheckOnlyEvidence;
-        _notice.Visible = checkOnly;
+        string? sentence = null;
+        if (reducedProfile != null)
+        {
+            ReducedEvidence.TryGetValue(reducedProfile.Value, out sentence);
+        }
+
+        _noticeText.Text = sentence ?? CheckOnlyEvidence;
+        _notice.Visible = sentence != null;
     }
 
     private static void Set(Label row, string step, bool done, string reason)

@@ -120,6 +120,12 @@ public sealed class ModelCheckHost : IDisposable
         {
             Backend = () => options.Backend(),
             CurrentDocument = () => options.CurrentDocument(),
+
+            // What `init` reads the newest check back by after a restart, from the folder names
+            // alone. `-check` is this tab's own suffix, so the Standards tab's runs are never
+            // answered with here and this tab's are never answered with there
+            // (`contracts/standards-check.md` section 4).
+            LatestCheckSuffix = RunFolders.CheckSuffix,
             RegisterLatestRun = directory => options.RegisterLatestRun(directory),
             EntityResolver = () => options.EntityResolver(),
             Opener = () => options.Opener(),

@@ -21,6 +21,7 @@
     },
     "terminal_cli": { "enum": ["codex", "gemini"] },
     "python": { "type": ["string", "null"], "description": "Interpreter or uv path override; null = locate automatically" },
-    "run_root": { "type": "string" }
+    "run_root": { "type": "string" },
+    "standards_profile_path": { "type": "string", "description": "Where the Standards profile YAML is on this workstation (feature 006, contracts/profile.md). The path only: the file is never committed and its schema is owned by the reasoning side. Absent in a settings file written before the Standards tab existed, which loads with the documented default." }
   }
 }

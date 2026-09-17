@@ -113,6 +113,13 @@
     <Content Include="..\..\specs\004-resilient-remodeler\contracts\pane-remodel-messages.md" Link="pane-remodel-messages.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!--
+      And for StandardsPageTests (T078), which reads the tab-6 message tables out of the
+      feature 006 contract the same way.
+    -->
+    <Content Include="..\..\specs\006-standards-check\contracts\standards-check.md" Link="standards-check.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,1956 @@
+{
+  "schema_version": "1.4.0",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "created_at": "2026-09-12T12:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "test",
+    "profile": "standards",
+    "phases": [
+      {
+        "name": "document",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "manifest",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "mate",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "feature",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "equation",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "cutlist",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "drawing",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "hole",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "fastener",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "face",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "body",
+        "elapsed_ms": null,
+        "status": "skipped"
+      }
+    ]
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:1",
+        "vault_path": "/srv/meridian-vault/jobs/main/MR-90001.SLDDRW",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:2",
+        "vault_path": "/srv/meridian-vault/jobs/main/MR-20001.SLDASM",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:3",
+        "vault_path": "/srv/meridian-vault/jobs/main/MR-10001.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:4",
+        "vault_path": "/srv/meridian-vault/jobs/main/MR-10002.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:5",
+        "vault_path": "/srv/meridian-vault/catalog/screws/hex/MR-10003.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:1",
+    "name": "MR-90001",
+    "root_assembly_document_id": "doc:1",
+    "active_configuration": "Default",
+    "drawing_document_ids": [
+      "doc:1"
+    ]
+  },
+  "documents": [
+    {
+      "document_id": "doc:1",
+      "kind": "drawing",
+      "file_name": "MR-90001.SLDDRW",
+      "path": "/srv/meridian-vault/jobs/main/MR-90001.SLDDRW",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4",
+        "MeridianRev": "AB"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:2",
+      "kind": "assembly",
+      "file_name": "MR-20001.SLDASM",
+      "path": "/srv/meridian-vault/jobs/main/MR-20001.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null,
+      "is_exploded": true,
+      "rebuild_error_count": 3
+    },
+    {
+      "document_id": "doc:3",
+      "kind": "part",
+      "file_name": "MR-10001.SLDPRT",
+      "path": "/srv/meridian-vault/jobs/main/MR-10001.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null,
+      "rebuild_error_count": 2,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    },
+    {
+      "document_id": "doc:4",
+      "kind": "part",
+      "file_name": "MR-10002.SLDPRT",
+      "path": "/srv/meridian-vault/jobs/main/MR-10002.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "   ",
+        "Plating Spec": "fixture value 3"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 1",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    },
+    {
+      "document_id": "doc:5",
+      "kind": "part",
+      "file_name": "MR-10003.SLDPRT",
+      "path": "/srv/meridian-vault/catalog/screws/hex/MR-10003.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 1",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-90001",
+      "document_id": "doc:1",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-90001",
+      "constrained_status_raw": null,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-20001",
+      "document_id": "doc:2",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-90001/MR-20001",
+      "constrained_status_raw": null,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-1",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-2",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-2",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0005",
+      "persist_ref": "Y21wOjAwMDU=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-3",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-3",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0006",
+      "persist_ref": "Y21wOjAwMDY=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-4",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-4",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0007",
+      "persist_ref": "Y21wOjAwMDc=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-5",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-5",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0008",
+      "persist_ref": "Y21wOjAwMDg=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-6",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-6",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0009",
+      "persist_ref": "Y21wOjAwMDk=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-7",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-7",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0010",
+      "persist_ref": "Y21wOjAwMTA=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-8",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-8",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0011",
+      "persist_ref": "Y21wOjAwMTE=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-9",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-9",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0012",
+      "persist_ref": "Y21wOjAwMTI=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-10",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-10",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0013",
+      "persist_ref": "Y21wOjAwMTM=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-11",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-11",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0014",
+      "persist_ref": "Y21wOjAwMTQ=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-12",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-12",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0015",
+      "persist_ref": "Y21wOjAwMTU=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-13",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-13",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0016",
+      "persist_ref": "Y21wOjAwMTY=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-14",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-14",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0017",
+      "persist_ref": "Y21wOjAwMTc=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-15",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-15",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0018",
+      "persist_ref": "Y21wOjAwMTg=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-16",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-16",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0019",
+      "persist_ref": "Y21wOjAwMTk=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-17",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-17",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0020",
+      "persist_ref": "Y21wOjAwMjA=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-18",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-18",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0021",
+      "persist_ref": "Y21wOjAwMjE=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-19",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-19",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0022",
+      "persist_ref": "Y21wOjAwMjI=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10001-20",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10001-20",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0023",
+      "persist_ref": "Y21wOjAwMjM=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10002-1",
+      "document_id": "doc:4",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10002-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0024",
+      "persist_ref": "Y21wOjAwMjQ=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10002-2",
+      "document_id": "doc:4",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10002-2",
+      "constrained_status_raw": 2,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0025",
+      "persist_ref": "Y21wOjAwMjU=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10002-3",
+      "document_id": "doc:4",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10002-3",
+      "constrained_status_raw": 3,
+      "transparency_raw": 0.6,
+      "has_appearance_override": true,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0026",
+      "persist_ref": "Y21wOjAwMjY=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10002-4",
+      "document_id": "doc:4",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10002-4",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 0,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0027",
+      "persist_ref": "Y21wOjAwMjc=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-10003-1",
+      "document_id": "doc:5",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-10003-1",
+      "constrained_status_raw": 2,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    }
+  ],
+  "mates": [
+    {
+      "id": "mate:0001",
+      "persist_ref": "bWF0ZTowMDAx",
+      "persist_ref_scope": "doc:2",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0027",
+          "persist_ref": "bWF0ZTowMDAxL01SLTEwMDAzLTE=",
+          "entity_kind": "swSelDATUMPLANES",
+          "resolution_status": "resolved"
+        },
+        {
+          "component_id": "cmp:0006",
+          "persist_ref": "bWF0ZTowMDAxL01SLTEwMDAxLTQ=",
+          "entity_kind": "swSelDATUMPLANES",
+          "resolution_status": "resolved"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    },
+    {
+      "id": "mate:0002",
+      "persist_ref": "bWF0ZTowMDAy",
+      "persist_ref_scope": "doc:2",
+      "type": "CONCENTRIC",
+      "entities": [
+        {
+          "component_id": "cmp:0023",
+          "persist_ref": "bWF0ZTowMDAyL01SLTEwMDAyLTE=",
+          "entity_kind": "swSelFACES",
+          "resolution_status": "unresolved"
+        },
+        {
+          "component_id": "cmp:0007",
+          "persist_ref": "bWF0ZTowMDAyL01SLTEwMDAxLTU=",
+          "entity_kind": "swSelFACES",
+          "resolution_status": "resolved"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    }
+  ],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "drawing_records": [
+    {
+      "document_id": "doc:1",
+      "source": "native",
+      "active_sheet_name": "Sheet1",
+      "sheets": [
+        {
+          "id": "dsh:0001",
+          "source": "native",
+          "name": "Sheet1",
+          "index": 0,
+          "sheet_format_name": "Sheet Format",
+          "was_active": true,
+          "views": [
+            {
+              "id": "dvw:0001",
+              "sheet_id": "dsh:0001",
+              "name": "Sheet Format",
+              "view_type_raw": 1,
+              "notes": [
+                {
+                  "id": "dnt:0001",
+                  "owner_id": "dvw:0001",
+                  "text": "THIS DRAWING CARRIES MERIDIAN-EMBARGO DATA",
+                  "persist_ref": "ZG50OjAwMDE="
+                },
+                {
+                  "id": "dnt:0002",
+                  "owner_id": "dvw:0001",
+                  "text": "UNLESS OTHERWISE SPECIFIED, BREAK ALL SHARP EDGES",
+                  "persist_ref": "ZG50OjAwMDI="
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDE="
+            },
+            {
+              "id": "dvw:0002",
+              "sheet_id": "dsh:0001",
+              "name": "Drawing View1",
+              "view_type_raw": 2,
+              "referenced_document_id": "doc:2",
+              "referenced_model_path": "/srv/meridian-vault/jobs/main/MR-20001.SLDASM",
+              "display_dimensions": [
+                {
+                  "id": "ddm:0001",
+                  "view_id": "dvw:0002",
+                  "name": "D1@Drawing View1",
+                  "dimension_type_raw": 2,
+                  "is_overridden": true,
+                  "override_value": {
+                    "value": 100.0,
+                    "unit": "mm"
+                  },
+                  "value": {
+                    "value": 11.0,
+                    "unit": "mm"
+                  },
+                  "persist_ref": "ZGRtOjAwMDE="
+                },
+                {
+                  "id": "ddm:0002",
+                  "view_id": "dvw:0002",
+                  "name": "D2@Drawing View1",
+                  "dimension_type_raw": 2,
+                  "is_overridden": true,
+                  "override_value": {
+                    "value": 101.0,
+                    "unit": "mm"
+                  },
+                  "value": {
+                    "value": 12.0,
+                    "unit": "mm"
+                  },
+                  "persist_ref": "ZGRtOjAwMDI="
+                },
+                {
+                  "id": "ddm:0003",
+                  "view_id": "dvw:0002",
+                  "name": "D3@Drawing View1",
+                  "dimension_type_raw": 2,
+                  "is_overridden": true,
+                  "override_value": {
+                    "value": 102.0,
+                    "unit": "mm"
+                  },
+                  "value": {
+                    "value": 13.0,
+                    "unit": "mm"
+                  },
+                  "persist_ref": "ZGRtOjAwMDM="
+                },
+                {
+                  "id": "ddm:0004",
+                  "view_id": "dvw:0002",
+                  "name": "D4@Drawing View1",
+                  "dimension_type_raw": 2,
+                  "is_overridden": true,
+                  "override_value": {
+                    "value": 103.0,
+                    "unit": "mm"
+                  },
+                  "value": {
+                    "value": 14.0,
+                    "unit": "mm"
+                  },
+                  "persist_ref": "ZGRtOjAwMDQ="
+                },
+                {
+                  "id": "ddm:0005",
+                  "view_id": "dvw:0002",
+                  "name": "D5@Drawing View1",
+                  "dimension_type_raw": 2,
+                  "is_overridden": true,
+                  "override_value": {
+                    "value": 104.0,
+                    "unit": "mm"
+                  },
+                  "value": {
+                    "value": 15.0,
+                    "unit": "mm"
+                  },
+                  "persist_ref": "ZGRtOjAwMDU="
+                },
+                {
+                  "id": "ddm:0006",
+                  "view_id": "dvw:0002",
+                  "name": "D6@Drawing View1",
+                  "dimension_type_raw": 2,
+                  "is_overridden": true,
+                  "override_value": {
+                    "value": 105.0,
+                    "unit": "mm"
+                  },
+                  "value": {
+                    "value": 16.0,
+                    "unit": "mm"
+                  },
+                  "persist_ref": "ZGRtOjAwMDY="
+                },
+                {
+                  "id": "ddm:0007",
+                  "view_id": "dvw:0002",
+                  "name": "D7@Drawing View1",
+                  "dimension_type_raw": 2,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 42.0,
+                    "unit": "mm"
+                  },
+                  "persist_ref": "ZGRtOjAwMDc="
+                }
+              ],
+              "annotations": [
+                {
+                  "id": "dan:0001",
+                  "owner_id": "dvw:0002",
+                  "name": "Note1",
+                  "type_raw": 1,
+                  "is_dangling": false,
+                  "persist_ref": "ZGFuOjAwMDE="
+                },
+                {
+                  "id": "dan:0002",
+                  "owner_id": "dvw:0002",
+                  "name": "Datum1",
+                  "type_raw": 5,
+                  "is_dangling": true,
+                  "persist_ref": "ZGFuOjAwMDI="
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDI="
+            }
+          ],
+          "revision_tables": [
+            {
+              "id": "drv:0001",
+              "sheet_id": "dsh:0001",
+              "current_revision_raw": "AC",
+              "row_count": 2,
+              "column_count": 3,
+              "rows": [
+                {
+                  "index": 0,
+                  "cells": [
+                    "ZONE",
+                    "REV",
+                    "DESCRIPTION"
+                  ],
+                  "is_header": true
+                },
+                {
+                  "index": 1,
+                  "cells": [
+                    "A1",
+                    "AC",
+                    "Released for manufacture"
+                  ],
+                  "is_header": false
+                }
+              ],
+              "persist_ref": "ZHJ2OjAwMDE="
+            }
+          ],
+          "persist_ref": "ZHNoOjAwMDE="
+        }
+      ]
+    }
+  ],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "ZG9jOjMvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "ZG9jOjMvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0001",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "ZG9jOjMvRGVyaXZlZC1Qb2NrZXQ=",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Fabricated",
+      "name": "Derived-Pocket",
+      "type_name": "IndentFeature",
+      "description": "intent",
+      "index": 2,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0004",
+      "persist_ref": "ZG9jOjMvU2tldGNoMg==",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Fabricated",
+      "name": "Sketch2",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 3,
+      "depth": 1,
+      "folder_id": "feat:0003",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 2,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0005",
+      "persist_ref": "ZG9jOjMvU3RpZmZlbmVycw==",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Fabricated",
+      "name": "Stiffeners",
+      "type_name": "FtrFolder",
+      "description": "intent",
+      "index": 4,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0006",
+      "persist_ref": "ZG9jOjMvUmliMQ==",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Fabricated",
+      "name": "Rib1",
+      "type_name": "Rib",
+      "description": "intent",
+      "index": 5,
+      "depth": 1,
+      "folder_id": "feat:0005",
+      "suppressed": false,
+      "error_code": 1,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0007",
+      "persist_ref": "ZG9jOjMvU2tldGNoLUxhYmVs",
+      "persist_ref_scope": "doc:3",
+      "document_id": "doc:3",
+      "configuration": "Fabricated",
+      "name": "Sketch-Label",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 6,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 2,
+        "consumer_ids": [],
+        "text_segment_count": 2
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0008",
+      "persist_ref": "ZG9jOjQvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0009",
+      "persist_ref": "ZG9jOjQvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0008",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0010",
+      "persist_ref": "ZG9jOjUvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0011",
+      "persist_ref": "ZG9jOjUvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0010",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    }
+  ],
+  "equations": [],
+  "cut_list_items": [
+    {
+      "id": "cut:0001",
+      "document_id": "doc:3",
+      "configuration": "Fabricated",
+      "folder_name": "Cut-List-Item1",
+      "folder_type_name": "CutListFolder",
+      "name": "Tube 40 x 40 x 3",
+      "body_count": 1,
+      "excluded_from_cut_list": false,
+      "persist_ref": "Y3V0OjAwMDE=",
+      "persist_ref_scope": "doc:3"
+    },
+    {
+      "id": "cut:0002",
+      "document_id": "doc:3",
+      "configuration": "Fabricated",
+      "folder_name": "Cut-List-Item2",
+      "folder_type_name": "CutListFolder",
+      "name": "Tube 60 x 60 x 3",
+      "body_count": 1,
+      "excluded_from_cut_list": false,
+      "persist_ref": "Y3V0OjAwMDI=",
+      "persist_ref_scope": "doc:3"
+    }
+  ],
+  "rms_suppress_test": null,
+  "gaps": []
+}

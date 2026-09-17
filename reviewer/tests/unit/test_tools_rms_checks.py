@@ -476,9 +476,12 @@ class RecordingStore(ExceptionStore):
         component_ids: Sequence[str],
         configuration: str,
         check: str,
+        document_id: str | None = None,
     ) -> ReviewException | None:
         self.calls.append((tuple(component_ids), check))
-        return super().match(package, component_ids, configuration, check)
+        return super().match(
+            package, component_ids, configuration, check, document_id=document_id
+        )
 
 
 def accept(

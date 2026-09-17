@@ -28,13 +28,19 @@ public sealed class DumpSummary
     /// data. The Model check tab renders a count it was not given as absent.</param>
     /// <param name="features">Feature rows in the package, or null; same rule.</param>
     /// <param name="equations">Equation rows in the package, or null; same rule.</param>
+    /// <param name="cutListItems">Cut-list rows in the package, or null; same rule. Only the
+    /// Standards profile runs the phase that produces them, and the Standards tab reports the
+    /// count so a run over a weldment says what it read.</param>
+    /// <param name="drawingSheets">Drawing sheets in the package, or null; same rule.</param>
     public DumpSummary(
         string packageFilePath,
         int components,
         int gaps,
         int? documents = null,
         int? features = null,
-        int? equations = null)
+        int? equations = null,
+        int? cutListItems = null,
+        int? drawingSheets = null)
     {
         PackageFilePath = packageFilePath ?? throw new ArgumentNullException(nameof(packageFilePath));
         Components = components;
@@ -42,6 +48,8 @@ public sealed class DumpSummary
         Documents = documents;
         Features = features;
         Equations = equations;
+        CutListItems = cutListItems;
+        DrawingSheets = drawingSheets;
     }
 
     /// <summary>Absolute path of the package.json that was written.</summary>
@@ -60,6 +68,12 @@ public sealed class DumpSummary
 
     /// <summary>Equation rows in the package; null when the dump did not report a count.</summary>
     public int? Equations { get; }
+
+    /// <summary>Cut-list rows in the package; null when the dump did not report a count.</summary>
+    public int? CutListItems { get; }
+
+    /// <summary>Drawing sheets in the package; null when the dump did not report a count.</summary>
+    public int? DrawingSheets { get; }
 }
 
 /// <summary>

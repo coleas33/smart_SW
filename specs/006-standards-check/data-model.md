@@ -354,6 +354,7 @@ check.json        what the session does not hold (below)
 | `session_id` | str | Ties the record to the session in the folder; a folder whose session is no longer the recorded one is no longer this check |
 | `documents` | list[str] | Every document graded, in traversal order |
 | `document_kinds` | dict[str, str] | Kind per graded document, so a read need not re-open the package |
+| `document_reached_by` | dict[str, str] | How each graded document was reached (`root`, `component_tree`, `drawing_reference`), so `GET` answers `documents_graded[].reached_by` without re-walking the package (added 2026-09-17 with T074) |
 | `profile` | `{path, sha256}` | **Identity only.** No profile value is written here, into the session, into the report or into any message to the page |
 | `verdict` | `ReleaseVerdict` | |
 | `subjects` | dict[finding id, list[`Subject`]] | Beside the findings, never inside the `Finding` |

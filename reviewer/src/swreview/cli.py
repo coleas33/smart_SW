@@ -39,7 +39,7 @@ import inspect
 import json
 import os
 import re
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -95,10 +95,23 @@ from swreview.benchmark.timing import record_timing
 from swreview.chat import DEFAULT_ALLOW_ORIGIN, DEFAULT_RUN_ROOT
 from swreview.checks.golden_interference import interference_case
 from swreview.checks.rms.plan import PLAN_FILE_NAME, build_plan
-from swreview.checks.rms.registry import RULES
+from swreview.checks.rms.registry import RMS_FAMILY, RULES
 from swreview.checks.rms.run import RmsScope, run_rms_check
 from swreview.checks.rms_types import load_table, unknown_types
-from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
+from swreview.checks.rules.family import WAIVABLE_STATUS, CheckFamily, waiver_invalidity
+from swreview.checks.rules.registry import Rule
+from swreview.checks.rules.run import CHECK_FILE_NAME, check_record
+from swreview.checks.standards.profile import DEFAULT_PATH, SETTING_NAME, ProfileError
+from swreview.checks.standards.registry import RULES as STANDARDS_RULES
+from swreview.checks.standards.registry import STANDARDS_FAMILY
+from swreview.checks.standards.report import document_of, verdict_json
+from swreview.checks.standards.run import NO_REBUILD_SENTENCE, run_standards_check
+from swreview.exceptions import (
+    EXCEPTIONS_FILE_NAME,
+    ExceptionStore,
+    ReviewException,
+    fingerprint_kind_for,
+)
 from swreview.findings import Finding
 from swreview.ingest.package_builder import build_package
 from swreview.ir.loader import AnswerKeyAccessError, load_package
@@ -352,11 +365,17 @@ def _one_line(exc: BaseException) -> str:
 
 
 @contextmanager
-def _errors_as_exit_1() -> Iterator[None]:
-    """Turn anything in `HANDLED_ERRORS` into one line on stderr and exit code 1."""
+def _errors_as_exit_1(*also: type[BaseException]) -> Iterator[None]:
+    """Turn anything in `HANDLED_ERRORS`, or in `also`, into one line on stderr and exit 1.
+
+    `also` is for a command whose library states a refusal outside the shared list.
+    `ProfileUnreadable` and `ProfileInvalid` are the standards profile's two of those
+    (FR-002): a refusal to grade anything, not a bug, and named by their own class so the
+    engineer reads which of the two it was.
+    """
     try:
         yield
-    except HANDLED_ERRORS as exc:
+    except (*HANDLED_ERRORS, *also) as exc:
         typer.echo(f"error: {_one_line(exc)}", err=True)
         raise typer.Exit(1) from exc
 
@@ -964,6 +983,134 @@ def _coverage_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+# --- check standards -------------------------------------------------------------
+
+NO_PROFILE = (
+    "no standards profile was named: pass --profile <yaml>, or configure the {setting} "
+    "setting, whose documented default is {default}. There is no built-in profile and no "
+    "fallback value - grading a design against the wrong standard would report a clean "
+    "result, which is the worst failure a release gate has"
+)
+"""The refusal when neither `--profile` nor a configured path is available (FR-002).
+
+The setting lives in the add-in's user settings, which this command cannot read, so
+`--profile` is how a command-line run names one. The setting is quoted anyway, because the
+engineer reading this line is the person who configures it."""
+
+OUT_INSIDE_PACKAGE = (
+    "--out {out} is inside the package directory {package}: grading a package must not "
+    "edit it, so the run folder is written beside the package and never into it"
+)
+"""The refusal when `--out` would write into the package (SC-010).
+
+The pane grades in place - its check folder *is* the package - and a command pointed at a
+golden fixture must not, which is how three untracked files ended up inside a fixture once
+already."""
+
+
+@check_app.command("standards")
+def check_standards_command(
+    package: PackageOption,
+    out: Annotated[
+        Path,
+        typer.Option("--out", help="Run directory session.json, report.md and check.json go in."),
+    ],
+    profile: Annotated[
+        Path | None,
+        typer.Option("--profile", help="The standards profile YAML to grade against."),
+    ] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Grade a package against the sixteen standards checks, without the agent.
+
+    A thin shell around `checks/standards/run.py::run_standards_check`, which is the same
+    entry point the Standards tab's `POST /checks/standards` calls (FR-043), so the verdict
+    printed here is the verdict the tab shows - not a second evaluation that could drift
+    from it. No language model is constructed and no API key is read on this path (FR-045).
+
+    `--out` is required and is the run folder: `session.json`, `report.md` and `check.json`
+    go there, and the package directory is only read (SC-010). It must be outside the
+    package directory, for the reason `check rms` names: grading a package must not edit it.
+
+    `--profile` names the standards profile. There is no default and no fallback: a run
+    without a usable profile is refused by name, before anything is created (FR-002).
+
+    Before the checks run, the entry point carries forward the newest `exceptions.json`
+    under the run root whose package carries the same `design_id` - the run root being
+    `--out`'s own parent. A folder this command wrote is never a candidate: it holds no
+    `package.json`. What makes a command-line acceptance survive is the other half of the
+    rule, `swreview exceptions accept-standards` writing `exceptions.json` beside the
+    package.
+
+    Violations are output, not an exit code: this exits 1 only on the seven refusals
+    `contracts/cli.md` lists, so a continuous-integration job decides for itself what to do
+    with a verdict.
+    """
+    package_dir = Path(package).resolve()
+    out_dir = Path(out).resolve()
+    with _errors_as_exit_1(ProfileError):
+        if profile is None:
+            raise ValueError(NO_PROFILE.format(setting=SETTING_NAME, default=DEFAULT_PATH))
+        if out_dir == package_dir or package_dir in out_dir.parents:
+            raise ValueError(OUT_INSIDE_PACKAGE.format(out=out_dir, package=package_dir))
+        run = run_standards_check(
+            package_dir, profile, out_dir, run_root=out_dir.parent
+        )
+
+    carried = run.exceptions_carried_forward
+    verdict = run.verdict
+    counts = verdict.counts
+    payload = {
+        "package": str(package_dir),
+        "out_dir": str(out_dir),
+        "session_file": str(run.session_file),
+        "report_file": str(run.report_file),
+        "check_file": str(run.check_file),
+        "profile": {"path": run.profile.path, "sha256": run.profile.sha256},
+        "documents": run.documents,
+        "document_kinds": run.document_kinds,
+        "verdict": verdict_json(verdict),
+        "findings": run.findings,
+        "subjects": run.subjects,
+        "coverage": run.coverage,
+        "checks": run.checks,
+        "unavailable_checks": run.unavailable_checks,
+        "exceptions_carried_forward": {
+            "from_run": carried.from_run,
+            "count": carried.count,
+            "reason": carried.reason,
+        },
+    }
+    lines = [
+        f"verdict: {verdict.state}",
+        f"findings: {counts.error} error, {counts.warning} warning, "
+        f"{verdict.waived} waived",
+        f"coverage: {counts.checked} checked, {counts.skipped} skipped, "
+        f"{counts.unresolved} unresolved, {counts.out_of_scope} out of scope "
+        f"((check, document) pairs)",
+        "unresolved checks: " + (", ".join(verdict.unresolved_check_ids) or "none"),
+        "notes: " + ("; ".join(verdict.notes) or "none"),
+        NO_REBUILD_SENTENCE,
+        f"profile: {run.profile.path} sha256:{run.profile.sha256}",
+        f"{len(run.documents)} document(s) graded: "
+        + ", ".join(
+            f"{document_id} ({run.document_kinds.get(document_id) or 'kind not recorded'})"
+            for document_id in run.documents
+        ),
+        f"exceptions carried forward: {carried.count} ({carried.reason})",
+    ]
+    for finding in run.findings:
+        lines.append("")
+        lines += _finding_lines(finding)
+    lines.append("")
+    lines.append(f"coverage rows: {_counts_line(_coverage_counts(run.coverage))}")
+    lines += [f"not run: {row['check']}: {row['reason']}" for row in run.unavailable_checks]
+    lines.append(f"session: {run.session_file}")
+    lines.append(f"report: {run.report_file}")
+    lines.append(f"check: {run.check_file}")
+    _emit(payload, lines, json_output)
+
+
 # --- rms types -------------------------------------------------------------------
 
 
@@ -1191,47 +1338,79 @@ def exceptions_accept(
     _emit(payload, lines, json_output)
 
 
-# --- exceptions accept-rms: the checker's flat file as an import ------------------
+# --- exceptions accept-<family>: the checker's flat file as an import -------------
 
-RMS_WAIVER_UNKNOWN = "invalid (unknown rule)"
-"""A listed id that is not a rule of `contracts/rules.md` at all."""
-
-RMS_WAIVER_INVALID: dict[str, str] = {
-    "warn": "invalid (warn rule)",
-    "unresolved": "invalid (data-gap rule)",
-    "out_of_scope": "invalid (out-of-scope rule)",
+CHECK_FAMILIES: dict[str, tuple[CheckFamily, Mapping[str, Rule]]] = {
+    RMS_FAMILY.check_file_family: (RMS_FAMILY, RULES),
+    STANDARDS_FAMILY.check_file_family: (STANDARDS_FAMILY, STANDARDS_RULES),
 }
-"""Why a known rule cannot be waived, keyed by the rule's own severity when it has one
-and by its coverage bucket when it has not.
+"""Every family a waiver file can be imported against, with its catalogue.
 
-`contracts/rules.md` ("Waivable rules") names exactly these three kinds - "a waiver naming
-a `warn`, data-gap, or out-of-scope rule is reported invalid and changes nothing" - and
-each is reported as itself rather than folded into the `warn` label `contracts/cli.md`
-abbreviates them to: a waiver for `rms.assembly.mates_described` is refused because the
-data is not extracted, and telling an engineer it is a `warn` rule would send them looking
-for a severity to argue with."""
+Keyed by what `check.json` writes as its `family`, because that is what a run folder says
+about itself and what the command name is a guard on. The command names follow from the
+keys - `accept-rms`, `accept-standards` - rather than being a third list to keep in step
+(`specs/006-standards-check/contracts/cli.md`)."""
 
-_ACCEPTABLE_STATUS = "demonstrated"
-"""The one finding status an import accepts. A `suspected` finding is a `warn` rule's and
-is not waivable; a `checked_within_scope` one is already waived by an exception, and
-accepting it again would write a second exception for one condition.
+LEGACY_FAMILY = RMS_FAMILY.check_file_family
+"""What a run folder with no `check.json` is. Feature 003's model check wrote none, and a
+workstation that ran this build's predecessor is full of them, so the fall-back is named
+rather than refused."""
+
+WRONG_FAMILY = (
+    "{run_dir} holds a {found!r} check and accept-{wanted} imports waivers for the "
+    "{wanted!r} family; one family never grades the other's run. Use accept-{found} for "
+    "this folder"
+)
+"""The family guard's refusal, naming **both** families (`contracts/cli.md`).
+
+Auto-detecting the family and grading whatever is there is what this refuses: an engineer
+who typed the wrong command name meant the other run, and quietly importing rms waivers
+against a standards run would report every id `invalid (unknown check)` - a true sentence
+that answers the wrong question."""
+
+_ACCEPTABLE_STATUS = WAIVABLE_STATUS
+"""The one finding status an import accepts, in either family. A `suspected` finding is an
+advisory rule's and is not waivable; a `checked_within_scope` one is already waived by an
+exception, and accepting it again would write a second exception for one condition.
 
 The status is necessary and not sufficient: a `demonstrated` finding can also be one an
 exception already covers - one this command wrote itself on an earlier run, which re-reads
-the session it wrote back and finds it still `demonstrated` because only a fresh
-`check rms` reclassifies a finding, or one the store holds as `needs_review`. `_uncovered`
-is what decides between them."""
+the session it wrote back and finds it still `demonstrated` because only a fresh check
+reclassifies a finding, or one the store holds as `needs_review`. `_uncovered` is what
+decides between them."""
 
 
 def _rms_waiver_invalidity(rule_id: str) -> str | None:
-    """Why `rule_id` cannot be waived, or `None` when it is a waivable `fail` rule."""
-    rule = RULES.get(rule_id)
-    if rule is None:
-        return RMS_WAIVER_UNKNOWN
-    if rule.severity == "fail":
+    """Why `rule_id` cannot be waived, or `None` when it is a waivable `fail` rule.
+
+    The rms family's binding of the one generalized reader, kept as a name because the
+    Model check route asks this question by it."""
+    return waiver_invalidity(RMS_FAMILY, RULES, rule_id)
+
+
+def _run_family(run_dir: Path) -> str:
+    """The family whose check `run_dir` holds, from the record's own stamp.
+
+    A folder with no `check.json` at all is `LEGACY_FAMILY`; one that holds a record this
+    build cannot read refuses the import rather than being guessed at, because a waiver
+    imported against the wrong catalogue is silently the wrong grading.
+    """
+    directory = Path(run_dir).resolve()
+    if not (directory / CHECK_FILE_NAME).is_file():
+        return LEGACY_FAMILY
+    return str(check_record(directory).get("family", LEGACY_FAMILY))
+
+
+def _waiver_document(finding: Finding) -> str | None:
+    """The document a waiver for `finding` binds to, or `None` for a component binding.
+
+    The store's own rule, asked by the check id: a `standards.*` exception waives a check
+    **on a document** and a drawing finding has no component instances at all, where every
+    other family binds to components and refuses a `document_id` (FR-041, RK-11).
+    """
+    if fingerprint_kind_for(finding.check) != "standards":
         return None
-    key = rule.severity if rule.coverage is None else rule.coverage[0]
-    return RMS_WAIVER_INVALID[key]
+    return document_of(finding)
 
 
 def _flat_waivers(path: Path) -> dict[str, str]:
@@ -1261,7 +1440,11 @@ def _flat_waivers(path: Path) -> dict[str, str]:
 
 
 def _uncovered(
-    store: ExceptionStore, evidence: EvidencePackage, findings: Iterable[Finding]
+    store: ExceptionStore,
+    evidence: EvidencePackage,
+    findings: Iterable[Finding],
+    *,
+    document_id: str | None = None,
 ) -> list[tuple[Finding, ReviewException | None]]:
     """The findings this import still has something to do about, each with the retained
     exception for its condition when there is one.
@@ -1272,16 +1455,47 @@ def _uncovered(
     `ExceptionStore.match` returns the first non-retired match, so everything written
     after it is dead. A `needs_review` one is kept, because that is the exception whose
     finding the run reports as standing: re-binding it is the only thing that clears it.
+
+    `document_id` is the document a **standards** waiver is bound to, and `None` - the
+    default - is every other family, which binds to components alone. It is passed rather
+    than derived because a caller that already knows which document it is accepting on
+    must not have that answer decided a second time here (FR-041, RK-11).
     """
     pending: list[tuple[Finding, ReviewException | None]] = []
     for finding in findings:
         retained = store.match(
-            evidence, finding.component_ids, finding.configuration, check=finding.check
+            evidence,
+            finding.component_ids,
+            finding.configuration,
+            check=finding.check,
+            document_id=document_id,
         )
         if retained is not None and retained.status == "active":
             continue
         pending.append((finding, retained))
     return pending
+
+
+def _uncovered_each(
+    store: ExceptionStore,
+    evidence: EvidencePackage,
+    findings: Iterable[Finding],
+) -> list[tuple[Finding, ReviewException | None]]:
+    """`_uncovered`, asked of each finding about **its own** document.
+
+    One check can fail on two documents in one standards run - two parts with no material
+    is two findings - and each of those binds to the document it was found on. Asking the
+    store once with one document would hand the second finding the first one's answer,
+    which is the cross-document confusion SC-008 forbids. For a family that binds to
+    components alone every call passes `None` and this is `_uncovered` unchanged.
+    """
+    return [
+        pair
+        for finding in findings
+        for pair in _uncovered(
+            store, evidence, [finding], document_id=_waiver_document(finding)
+        )
+    ]
 
 
 def _accept_or_reaccept(
@@ -1292,6 +1506,7 @@ def _accept_or_reaccept(
     *,
     by: str,
     note: str,
+    document_id: str | None = None,
 ) -> ReviewException:
     """The exception covering `finding` after the import: a new one, or `retained` re-bound.
 
@@ -1299,14 +1514,164 @@ def _accept_or_reaccept(
     tree the flagged record was accepted for is not the tree that is here, so the person
     running this import is accepting something the original acceptor never saw, and a
     fresh fingerprint under their name and their reason would say otherwise.
+
+    `document_id` is `_uncovered`'s, and reaches `ExceptionStore.accept`, which requires it
+    for a standards check and refuses it for every other one.
     """
     if retained is None:
-        return store.accept(finding, evidence, by=by, note=note)
+        return store.accept(finding, evidence, by=by, note=note, document_id=document_id)
     exception = store.reaccept(retained.id, evidence)
     exception.accepted_by = by
     exception.accepted_at = datetime.now(UTC)
     exception.note = note
     return exception
+
+
+def _accept_waiver_file(
+    family: CheckFamily,
+    rules: Mapping[str, Rule],
+    *,
+    run_dir: Path,
+    package: Path,
+    file: Path,
+    by: str | None,
+    json_output: bool,
+) -> None:
+    """Import one checker's flat waiver file against one run of `family`.
+
+    **One body, two names** (FR-042, `specs/006-standards-check/contracts/cli.md`): what
+    differs between `accept-rms` and `accept-standards` is the family's catalogue, its
+    status labels and whether its waivers bind to a document - three facts read from
+    `CheckFamily` and from the store, never a second implementation that could drift.
+
+    The file is an import and never a store: `{ "<check_id>": "<reason>" }` says nothing
+    about which condition was accepted, and keeping it would silence its checks on every
+    document forever. Read against a run it says enough - every `demonstrated` finding of
+    a listed waivable check becomes one exception bound to that finding's components, its
+    document where the family binds to one, its configuration and a fingerprint of what
+    the check read, with the reason as the note - and the exceptions are what is kept.
+
+    The **command name is a guard on the family**, which the run's `check.json` states: a
+    run of the other family is refused naming both, rather than graded against a catalogue
+    that does not hold its ids and reported as a file of unknown ones.
+
+    A condition one exception already covers never gets a second. The store is refreshed
+    against the package first, exactly as the run that produced the session was graded, so
+    an `active` exception means the condition is covered and its finding is reported
+    `unused`; a `needs_review` one - the evidence it was accepted for has moved, which is
+    why its finding still stands - is re-bound to what is here rather than duplicated, and
+    counts as accepted, because that is what clears the finding. An import that writes
+    writes that refreshed store, as `exceptions list` does: a waiver the package has
+    outgrown is recorded `needs_review` rather than left reading `active` on disk.
+
+    Per listed id one status is reported, in the file's order: `accepted <n>`, `unused`
+    (the check left this import nothing to do - it passed, it never ran, or every finding
+    it reported is already covered), or invalid. An invalid id refuses the whole import:
+    the statuses are printed, exit is 1, and nothing is written, so the ids that would have
+    been accepted read `would accept <n>` rather than claiming an acceptance that did not
+    happen. A half-applied import is worse than a refused one.
+    """
+    accepted_by = by if by else _default_user()
+    with _errors_as_exit_1():
+        found = _run_family(run_dir)
+        if found != family.check_file_family:
+            raise ValueError(
+                WRONG_FAMILY.format(
+                    run_dir=Path(run_dir).resolve(),
+                    found=found,
+                    wanted=family.check_file_family,
+                )
+            )
+        waivers = _flat_waivers(file)
+        session = load_session(Path(run_dir).resolve() / SESSION_FILE_NAME)
+        store, evidence = _store_for(package)
+        store.refresh(evidence)
+
+    plan: list[tuple[str, str, str | None, list[tuple[Finding, ReviewException | None]]]] = []
+    for check_id, reason in waivers.items():
+        invalidity = waiver_invalidity(family, rules, check_id)
+        pending = (
+            []
+            if invalidity is not None
+            else _uncovered_each(
+                store,
+                evidence,
+                [
+                    finding
+                    for finding in session.findings
+                    if finding.check == check_id and finding.status == _ACCEPTABLE_STATUS
+                ],
+            )
+        )
+        plan.append((check_id, reason, invalidity, pending))
+
+    refused = [
+        (check_id, invalidity)
+        for check_id, _, invalidity, _ in plan
+        if invalidity is not None
+    ]
+    accepted: dict[str, list[ReviewException]] = {check_id: [] for check_id, *_ in plan}
+    report_file: Path | None = None
+    if not refused:
+        with _errors_as_exit_1():
+            for check_id, reason, _, findings in plan:
+                for finding, retained in findings:
+                    exception = _accept_or_reaccept(
+                        store,
+                        evidence,
+                        finding,
+                        retained,
+                        by=accepted_by,
+                        note=reason,
+                        document_id=_waiver_document(finding),
+                    )
+                    finding.exception_id = exception.id
+                    accepted[check_id].append(exception)
+            if any(accepted.values()):
+                store.save()
+                report_file = _save_run(run_dir, session, evidence)
+
+    rows = [
+        {
+            "rule_id": check_id,
+            "reason": reason,
+            "status": _waiver_status(invalidity, len(findings), refused=bool(refused)),
+            "count": len(findings),
+            "finding_ids": [finding.id for finding, _ in findings],
+            "exception_ids": [exception.id for exception in accepted[check_id]],
+        }
+        for check_id, reason, invalidity, findings in plan
+    ]
+    payload = {
+        "run_dir": str(Path(run_dir).resolve()),
+        "package_dir": str(Path(package).resolve()),
+        "waiver_file": str(Path(file).resolve()),
+        "accepted_by": accepted_by,
+        "exceptions_file": str(store.path),
+        "report_file": None if report_file is None else str(report_file),
+        "rules": rows,
+        "exceptions": [
+            to_jsonable_python(exception)
+            for exceptions in accepted.values()
+            for exception in exceptions
+        ],
+    }
+    lines = [f"{row['rule_id']}: {row['status']}" for row in rows]
+    if refused:
+        lines.append(f"nothing written: {len(refused)} invalid id(s)")
+    elif report_file is None:
+        lines.append("nothing written: no listed id left this import a finding to accept")
+    else:
+        lines.append(f"wrote {store.path}")
+    _emit(payload, lines, json_output)
+
+    if refused:
+        typer.echo(
+            "error: nothing was written; "
+            + ", ".join(f"{check_id} is {why}" for check_id, why in refused),
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 @exceptions_app.command("accept-rms")
@@ -1327,118 +1692,68 @@ def exceptions_accept_rms(
 ) -> None:
     """Import the checker's flat waiver file against one `check rms` run.
 
-    The file is an import and never a store: `{ "<rule_id>": "<reason>" }` says nothing
-    about which condition was accepted, and keeping it would silence its rules on every
-    document forever. Read against a run it says enough - every `demonstrated` finding of
-    a listed `fail` rule becomes one exception bound to that finding's components, its
-    configuration and a feature-tree fingerprint, with the reason as the note - and the
-    exceptions are what is kept.
+    Every `demonstrated` finding of a listed `fail` rule becomes one exception bound to
+    that finding's components, its configuration and a feature-tree fingerprint, with the
+    reason as the note. A `warn`, data-gap or out-of-scope rule is reported invalid and
+    refuses the whole import, and so is an id `contracts/rules.md` does not hold.
 
-    A condition one exception already covers never gets a second. The store is refreshed
-    against the package first, exactly as the run that produced the session was graded, so
-    an `active` exception means the condition is covered and its finding is reported
-    `unused`; a `needs_review` one - the tree it was accepted for has moved, which is why
-    its finding still stands - is re-bound to the tree that is here rather than duplicated,
-    and counts as accepted, because that is what clears the finding. An import that writes
-    writes that refreshed store, as `exceptions list` does: a waiver the package has
-    outgrown is recorded `needs_review` rather than left reading `active` on disk.
-
-    Per listed id one status is reported, in the file's order: `accepted <n>`,
-    `unused` (the rule left this import nothing to do - it passed, it never ran, or every
-    finding it reported is already covered), or invalid. An invalid id refuses the whole
-    import: the statuses are printed, exit is 1, and nothing is written, so the ids that
-    would have been accepted read `would accept <n>` rather than claiming an acceptance
-    that did not happen. A half-applied import is worse than a refused one.
+    Pointed at a **standards** run this refuses naming both families: `accept-standards` is
+    the name for that folder.
     """
-    accepted_by = by if by else _default_user()
-    with _errors_as_exit_1():
-        waivers = _flat_waivers(file)
-        session = load_session(Path(run_dir).resolve() / SESSION_FILE_NAME)
-        store, evidence = _store_for(package)
-        store.refresh(evidence)
-
-    plan: list[tuple[str, str, str | None, list[tuple[Finding, ReviewException | None]]]] = []
-    for rule_id, reason in waivers.items():
-        invalidity = _rms_waiver_invalidity(rule_id)
-        pending = (
-            []
-            if invalidity is not None
-            else _uncovered(
-                store,
-                evidence,
-                [
-                    finding
-                    for finding in session.findings
-                    if finding.check == rule_id and finding.status == _ACCEPTABLE_STATUS
-                ],
-            )
-        )
-        plan.append((rule_id, reason, invalidity, pending))
-
-    refused = [
-        (rule_id, invalidity)
-        for rule_id, _, invalidity, _ in plan
-        if invalidity is not None
-    ]
-    accepted: dict[str, list[ReviewException]] = {rule_id: [] for rule_id, *_ in plan}
-    report_file: Path | None = None
-    if not refused:
-        with _errors_as_exit_1():
-            for rule_id, reason, _, findings in plan:
-                for finding, retained in findings:
-                    exception = _accept_or_reaccept(
-                        store, evidence, finding, retained, by=accepted_by, note=reason
-                    )
-                    finding.exception_id = exception.id
-                    accepted[rule_id].append(exception)
-            if any(accepted.values()):
-                store.save()
-                report_file = _save_run(run_dir, session, evidence)
-
-    rules = [
-        {
-            "rule_id": rule_id,
-            "reason": reason,
-            "status": _rms_waiver_status(invalidity, len(findings), refused=bool(refused)),
-            "count": len(findings),
-            "finding_ids": [finding.id for finding, _ in findings],
-            "exception_ids": [exception.id for exception in accepted[rule_id]],
-        }
-        for rule_id, reason, invalidity, findings in plan
-    ]
-    payload = {
-        "run_dir": str(Path(run_dir).resolve()),
-        "package_dir": str(Path(package).resolve()),
-        "waiver_file": str(Path(file).resolve()),
-        "accepted_by": accepted_by,
-        "exceptions_file": str(store.path),
-        "report_file": None if report_file is None else str(report_file),
-        "rules": rules,
-        "exceptions": [
-            to_jsonable_python(exception)
-            for exceptions in accepted.values()
-            for exception in exceptions
-        ],
-    }
-    lines = [f"{row['rule_id']}: {row['status']}" for row in rules]
-    if refused:
-        lines.append(f"nothing written: {len(refused)} invalid rule id(s)")
-    elif report_file is None:
-        lines.append("nothing written: no listed rule left this import a finding to accept")
-    else:
-        lines.append(f"wrote {store.path}")
-    _emit(payload, lines, json_output)
-
-    if refused:
-        typer.echo(
-            "error: nothing was written; "
-            + ", ".join(f"{rule_id} is {why}" for rule_id, why in refused),
-            err=True,
-        )
-        raise typer.Exit(1)
+    _accept_waiver_file(
+        RMS_FAMILY,
+        RULES,
+        run_dir=run_dir,
+        package=package,
+        file=file,
+        by=by,
+        json_output=json_output,
+    )
 
 
-def _rms_waiver_status(invalidity: str | None, count: int, *, refused: bool) -> str:
+@exceptions_app.command("accept-standards")
+def exceptions_accept_standards(
+    run_dir: Annotated[Path, typer.Argument(help="Directory holding session.json.")],
+    package: Annotated[
+        Path,
+        typer.Option("--package", help="Package directory the run was graded from."),
+    ],
+    file: Annotated[
+        Path,
+        typer.Option("--file", help="The checker's flat waiver file: check id to reason."),
+    ],
+    by: Annotated[
+        str | None, typer.Option("--by", help="Who accepted them; defaults to the current user.")
+    ] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Import a flat waiver file against one `check standards` run.
+
+    Every `demonstrated` finding of a listed **error**-severity check becomes one exception
+    bound to the **document** it was accepted on as well as to that document's component
+    instances, with the reason as the note: a standards waiver waives a check on a
+    document, so one drawing's waiver never answers for another's (FR-041).
+    `exceptions.json` is written beside the package, which is what makes the acceptance
+    survive the next run.
+
+    The two warning checks are not waivable: a listed one is `invalid (warning check)` and
+    refuses the whole import, as an id the catalogue does not hold is
+    `invalid (unknown check)`.
+
+    Pointed at an **rms** run this refuses naming both families.
+    """
+    _accept_waiver_file(
+        STANDARDS_FAMILY,
+        STANDARDS_RULES,
+        run_dir=run_dir,
+        package=package,
+        file=file,
+        by=by,
+        json_output=json_output,
+    )
+
+
+def _waiver_status(invalidity: str | None, count: int, *, refused: bool) -> str:
     """One listed id's status: why it is invalid, or what happened to its findings."""
     if invalidity is not None:
         return invalidity
