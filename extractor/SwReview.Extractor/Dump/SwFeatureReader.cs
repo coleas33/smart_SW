@@ -127,6 +127,9 @@ public sealed class SwFeatureReader : IFeatureReader
     public int SketchConstrainedStatus(object sketch) =>
         ((ISketch)sketch).GetConstrainedStatus();
 
+    public object? SketchTextSegments(object sketch) =>
+        ((ISketch)sketch).GetSketchTextSegments();
+
     public object? Definition(object feature) =>
         Feature(feature).GetDefinition();
 

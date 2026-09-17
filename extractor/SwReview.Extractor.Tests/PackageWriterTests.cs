@@ -68,6 +68,42 @@ public class PackageWriterTests : IDisposable
     }
 
     [Fact]
+    public void Build_CarriesTheFourSchema140ComponentReadsThroughToThePackage()
+    {
+        // T034. The appearance override, the transparency slot, the visibility state and the
+        // pattern origin are read in ComponentTreeDumper.ReadNode and have to survive the
+        // whole way to package.json, exactly as IsFixed and IsToolbox do. A read that did not
+        // happen stays null: the rules report unresolved rather than treating "not read" as
+        // "not transparent" or "not hidden".
+        var sources = new FakeSources();
+        ComponentNode node = sources.Nodes[1];
+        node.HasAppearanceOverride = true;
+        node.TransparencyRaw = 0.75;
+        node.VisibilityRaw = 0;
+        node.IsPatternInstance = true;
+        node.PatternId = "LocalLPattern1";
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        ComponentInstance instance = package.Components[1];
+        Assert.True(instance.HasAppearanceOverride);
+        Assert.Equal(0.75, instance.TransparencyRaw);
+        Assert.Equal(0, instance.VisibilityRaw);
+        Assert.True(instance.IsPatternInstance);
+
+        // pattern_id keeps the pattern's NAME for the reason text and does not stand in for
+        // the flag; the two travel independently.
+        Assert.Equal("LocalLPattern1", instance.PatternId);
+
+        ComponentInstance unread = package.Components[2];
+        Assert.Null(unread.HasAppearanceOverride);
+        Assert.Null(unread.TransparencyRaw);
+        Assert.Null(unread.VisibilityRaw);
+        Assert.Null(unread.IsPatternInstance);
+        Assert.Null(unread.PatternId);
+    }
+
+    [Fact]
     public void Build_ConstrainedStatusThatCouldNotBeRead_IsAGapNamingTheComponent()
     {
         // data-model.md section 1: every added gap entity kind names one entity_id. The

@@ -67,40 +67,6 @@ def package_of(*documents: DocumentSpec) -> EvidencePackage:
     return standards_package(documents=list(documents), profile=PROFILE)
 
 
-def with_forest_root(
-    package: EvidencePackage, *tops: str, instance_id: str = "cmp:0000"
-) -> EvidencePackage:
-    """`package` with a synthesized forest root carrying the root document's own id.
-
-    The shape the real dumper produces for a **drawing** root (`research.md` R9): one
-    subtree per referenced model hangs under one synthesized instance of the drawing
-    itself. No builder can produce it and no dump of an assembly root contains it - a
-    drawing is never instantiated as a component - so it is written here, because the
-    traversal must walk **through** it without grading the drawing as a component.
-    `tops` are the instance ids that hang directly under it.
-    """
-    rows = list(package.components)
-    root_document_id = package.design.root_assembly_document_id
-    forest_root = rows[0].model_copy(
-        update={
-            "id": instance_id,
-            "name": root_document_id,
-            "full_path": root_document_id,
-            "document_id": root_document_id,
-            "parent_id": None,
-        }
-    )
-    return package.model_copy(
-        update={
-            "components": [forest_root]
-            + [
-                row.model_copy(update={"parent_id": instance_id}) if row.id in tops else row
-                for row in rows
-            ]
-        }
-    )
-
-
 def with_components(package: EvidencePackage, **parents: str | None) -> EvidencePackage:
     """`package` with the named instances re-parented - an orphan, a self-parent, a top."""
     return package.model_copy(
@@ -345,7 +311,7 @@ class TestADrawingRoot:
 
         assert ids(graded) == ["doc:1", "doc:2", "doc:3"]
         assert plate.reached_by == "drawing_reference"
-        assert [row.id for row in plate.instances] == ["cmp:0001"]
+        assert [row.id for row in plate.instances] == ["cmp:0003"]
 
     def test_a_view_that_references_nothing_in_the_package_adds_no_document(self) -> None:
         package = package_of(
@@ -389,36 +355,33 @@ class TestADrawingRoot:
     def test_a_forest_hung_under_a_synthesized_instance_of_the_drawing_is_walked_through(
         self,
     ) -> None:
-        """The shape the real dumper emits (`research.md` R9): one subtree per referenced
-        model under a synthesized forest root carrying the drawing's own document id. The
-        drawing is graded once as the root and is never a component of itself."""
-        package = with_forest_root(
-            package_of(
-                DrawingSpec(
-                    name="MR-40000",
-                    sheets=(
-                        SheetSpec(
-                            name="Sheet1",
-                            views=(
-                                ViewSpec(name="View1", references="MR-40100"),
-                                ViewSpec(name="View2", references="MR-40200"),
-                            ),
+        """The shape the real dumper emits (`research.md` R9), which the fixture builder
+        produces: one subtree per referenced model under a synthesized forest root
+        (`cmp:0001`) carrying the drawing's own document id. The drawing is graded once as
+        the root and is never a component of itself."""
+        package = package_of(
+            DrawingSpec(
+                name="MR-40000",
+                sheets=(
+                    SheetSpec(
+                        name="Sheet1",
+                        views=(
+                            ViewSpec(name="View1", references="MR-40100"),
+                            ViewSpec(name="View2", references="MR-40200"),
                         ),
                     ),
                 ),
-                AssemblySpec(
-                    name="MR-40100",
-                    components=(ComponentSpec(name="plate-1", document="MR-40021"),),
-                ),
-                AssemblySpec(
-                    name="MR-40200",
-                    components=(ComponentSpec(name="bracket-1", document="MR-40022"),),
-                ),
-                a_part(),
-                a_part("MR-40022"),
             ),
-            "cmp:0001",
-            "cmp:0002",
+            AssemblySpec(
+                name="MR-40100",
+                components=(ComponentSpec(name="plate-1", document="MR-40021"),),
+            ),
+            AssemblySpec(
+                name="MR-40200",
+                components=(ComponentSpec(name="bracket-1", document="MR-40022"),),
+            ),
+            a_part(),
+            a_part("MR-40022"),
         )
 
         graded = graded_documents(package, PROFILE)
@@ -426,9 +389,11 @@ class TestADrawingRoot:
         assert ids(graded) == ["doc:1", "doc:2", "doc:3", "doc:4", "doc:5"]
         assert graded[0].kind == "drawing"
         assert graded[0].instances == ()
-        assert "cmp:0000" not in {row.id for document in graded for row in document.instances}
-        assert [row.id for row in by_id(graded, "doc:4").instances] == ["cmp:0001"]
-        assert [row.id for row in by_id(graded, "doc:5").instances] == ["cmp:0002"]
+        assert "cmp:0001" not in {row.id for document in graded for row in document.instances}
+        assert [row.id for row in by_id(graded, "doc:2").instances] == ["cmp:0002"]
+        assert [row.id for row in by_id(graded, "doc:3").instances] == ["cmp:0003"]
+        assert [row.id for row in by_id(graded, "doc:4").instances] == ["cmp:0004"]
+        assert [row.id for row in by_id(graded, "doc:5").instances] == ["cmp:0005"]
 
 
 # --- the top of the forest -------------------------------------------------------------------

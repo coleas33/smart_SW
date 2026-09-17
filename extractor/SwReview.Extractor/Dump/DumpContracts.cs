@@ -146,6 +146,35 @@ public sealed class ComponentNode
     /// </summary>
     public string? ConstrainedStatusError { get; set; }
 
+    /// <summary>
+    /// IComponent2.HasMaterialPropertyValues() (schema 1.4.0); null plus a
+    /// component_transparency gap. Read before <see cref="TransparencyRaw"/>, because a
+    /// component with no override has no slot to read and its null is not a gap.
+    /// </summary>
+    public bool? HasAppearanceOverride { get; set; }
+
+    /// <summary>
+    /// Slot 7 of IComponent2.GetMaterialPropertyValues2(1, null) verbatim (schema 1.4.0);
+    /// null plus a component_transparency gap when the read failed, and null without one
+    /// when there was no override to read. Which value means transparent is PROBE-2 and is
+    /// decided in Python, never here.
+    /// </summary>
+    public double? TransparencyRaw { get; set; }
+
+    /// <summary>
+    /// IComponent2.Visible verbatim, in swComponentVisibilityState_e (schema 1.4.0); null
+    /// plus a component_visibility gap. The traversal records the number and names nothing.
+    /// </summary>
+    public int? VisibilityRaw { get; set; }
+
+    /// <summary>
+    /// IComponent2.IsPatternInstance() (schema 1.4.0); null plus a component_pattern gap.
+    /// <see cref="PatternId"/> keeps the pattern's name for the reason text and cannot
+    /// replace this: a null PatternId conflates "not in a pattern" with "the pattern map was
+    /// never built".
+    /// </summary>
+    public bool? IsPatternInstance { get; set; }
+
     /// <summary>Base64 persistent reference, or null when SOLIDWORKS gave none (a Gap).</summary>
     public string? PersistRef { get; set; }
 
@@ -280,6 +309,13 @@ public sealed class DumpScope
     public IdAllocator BodyIds { get; } = new IdAllocator("bod");
 
     public IdAllocator MateIds { get; } = new IdAllocator("mat");
+
+    /// <summary>
+    /// Cut-list item ids, allocated in traversal order across the package (schema 1.4.0), so
+    /// <c>cut:0007</c> means one item of one document in one package - the same rule
+    /// <see cref="FeatureIds"/> follows.
+    /// </summary>
+    public IdAllocator CutListIds { get; } = new IdAllocator("cut");
 
     /// <summary>
     /// Feature ids run across the package, not per document: one allocator for every

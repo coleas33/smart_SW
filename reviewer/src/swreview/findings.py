@@ -157,9 +157,10 @@ def _referenced_document_ids(
     package: EvidencePackage,
     component_ids: Sequence[str],
     drawing_locations: Sequence[SourceRef],
+    bound_document_ids: Sequence[str] = (),
 ) -> list[str]:
     by_id = {component.id: component for component in package.components}
-    document_ids: list[str] = []
+    document_ids: list[str] = [*dict.fromkeys(bound_document_ids)]
     for component_id in component_ids:
         component = by_id.get(component_id)
         if component is None:
@@ -200,6 +201,7 @@ def build_finding(
     recommended_action: str,
     component_ids: Sequence[str] = (),
     drawing_locations: Sequence[SourceRef] = (),
+    document_ids: Sequence[str] = (),
     inputs: Sequence[Dimension | Quantity | str] = (),
     calculation: Calculation | None = None,
     tool_result_ids: Sequence[int] = (),
@@ -213,10 +215,20 @@ def build_finding(
 
     `numeric=False` marks a finding that no deterministic calculation backs - a drawing
     reading, for example - and restricts it to `suspected` or `unresolved`.
+
+    `document_ids` binds a **document-scoped** finding: one about a document that has no
+    `ComponentInstance` by nature - a drawing - and whose subjects may have nothing in
+    SOLIDWORKS to select, such as a data-card property name. It names the documents in
+    `provenance` and satisfies the evidence rule on its own, because the document it was
+    read from is what such a finding is about. It invents no locator: a subject with no
+    persistent reference still contributes no `SourceRef`.
+
     Raises `ValueError` when the evidence rules of data-model.md section 3 are not met.
     """
-    if not component_ids and not drawing_locations:
-        raise ValueError("a finding must name at least one of component_ids, drawing_locations")
+    if not component_ids and not drawing_locations and not document_ids:
+        raise ValueError(
+            "a finding must name at least one of component_ids, drawing_locations, document_ids"
+        )
     if not numeric and status not in NON_NUMERIC_STATUSES:
         raise ValueError(
             f"status {status!r} is not available to a non-numeric finding; "
@@ -229,7 +241,9 @@ def build_finding(
     if status == "unresolved" and not coverage_limits:
         raise ValueError("status 'unresolved' requires at least one entry in coverage_limits")
 
-    document_ids = _referenced_document_ids(package, component_ids, drawing_locations)
+    referenced = _referenced_document_ids(
+        package, component_ids, drawing_locations, document_ids
+    )
     return Finding(
         id=finding_id,
         check=check,
@@ -238,7 +252,7 @@ def build_finding(
         severity=severity,
         component_ids=list(component_ids),
         drawing_locations=list(drawing_locations),
-        provenance=_provenance(package, document_ids),
+        provenance=_provenance(package, referenced),
         configuration=configuration,
         observed=observed,
         requirement=requirement,

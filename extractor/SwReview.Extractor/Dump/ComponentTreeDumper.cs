@@ -343,6 +343,24 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
 
         ReadConstrainedStatus(component, node);
 
+        // The four schema 1.4.0 reads (contracts/ir-additions.md section 1). They sit inside
+        // Traverse, where no cmp:NNNN exists yet, so each failure is a TryStep gap that names
+        // the component in its reason - the shape every other traversal gap has.
+        node.HasAppearanceOverride = ReadHasAppearanceOverride(
+            key, gaps, gate, () => component.HasMaterialPropertyValues());
+
+        node.TransparencyRaw = ReadTransparency(
+            node.HasAppearanceOverride,
+            key,
+            gaps,
+            gate,
+            () => component.GetMaterialPropertyValues2(
+                (int)swInConfigurationOpts_e.swThisConfiguration, null));
+
+        node.VisibilityRaw = ReadVisibility(key, gaps, gate, () => component.Visible);
+        node.IsPatternInstance = ReadIsPatternInstance(
+            key, gaps, gate, () => component.IsPatternInstance());
+
         double[][]? transform = ReadTransform(component, key, gaps);
         if (transform != null)
         {
@@ -367,6 +385,121 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
         }
 
         return node;
+    }
+
+    /// <summary>
+    /// <c>HasMaterialPropertyValues()</c>: whether this instance overrides the appearance of
+    /// the document it references. It is read <b>before</b> the transparency slot and decides
+    /// whether that slot is worth asking for at all; it replaces the macro's <c>-1</c>
+    /// sentinel, which conflated "no override" with a real value.
+    ///
+    /// The interop expression stays at the call site and the policy lives here, because the
+    /// traversal holds a live <c>IComponent2</c> that no machine without a seat can produce -
+    /// the same split <see cref="FeatureDumper"/> makes with <see cref="IFeatureReader"/>,
+    /// one delegate wide instead of one interface wide.
+    /// </summary>
+    public static bool? ReadHasAppearanceOverride(
+        string key, GapCollector gaps, SwGate gate, Func<bool> read) =>
+        Read("component_transparency", "HasMaterialPropertyValues", key, gaps, gate, read);
+
+    /// <summary>
+    /// Slot 7 of <c>GetMaterialPropertyValues2(1, null)</c>, verbatim. Which number means
+    /// transparent, and whether slot 7 is the slot on this build, is PROBE-2 and is decided in
+    /// Python; the extractor records what it was given (plan Structure Decision 1).
+    ///
+    /// <paramref name="hasOverride"/> false means there is nothing to read, so the null is
+    /// silent: a coverage row on every component of every assembly would bury the components
+    /// that really could not be read. Null means the override read itself failed and has
+    /// already written the gap, so this one adds no second row for the same failure.
+    /// </summary>
+    public static double? ReadTransparency(
+        bool? hasOverride, string key, GapCollector gaps, SwGate gate, Func<object?> read)
+    {
+        if (hasOverride != true)
+        {
+            return null;
+        }
+
+        object? values = null;
+        bool answered = gaps.TryStep(
+            "component_transparency",
+            null,
+            $"read GetMaterialPropertyValues2 for '{key}'",
+            () => { values = gate.Call("GetMaterialPropertyValues2", read); });
+
+        if (!answered)
+        {
+            return null;
+        }
+
+        double? transparency = Slot(values, 7);
+        if (transparency == null)
+        {
+            // An answer nobody can read slot 7 out of is unknown, never a zero: a zero would
+            // be a number the rule could act on.
+            gaps.Add(
+                GapKind.NotExtracted,
+                "component_transparency",
+                null,
+                $"GetMaterialPropertyValues2 answered for '{key}' with no slot 7, so its "
+                + "transparency is unknown.",
+                null);
+        }
+
+        return transparency;
+    }
+
+    /// <summary>
+    /// <c>Visible</c> verbatim, in <c>swComponentVisibilityState_e</c> (hidden 0, visible 1,
+    /// unknown -1). Python names the number. <c>IsHidden(bool)</c> is deliberately not called:
+    /// with <c>ConsiderSuppressed</c> it is the macro's difference-c bug, and without it the
+    /// answer is this one with a state fewer (research R3.4).
+    /// </summary>
+    public static int? ReadVisibility(string key, GapCollector gaps, SwGate gate, Func<int> read) =>
+        Read("component_visibility", "Visible", key, gaps, gate, read);
+
+    /// <summary>
+    /// <c>IsPatternInstance()</c>. <see cref="ComponentNode.PatternId"/> keeps the pattern's
+    /// name for the reason text and cannot replace this: a null PatternId conflates "not in a
+    /// pattern" with "the pattern map was never built".
+    /// </summary>
+    public static bool? ReadIsPatternInstance(
+        string key, GapCollector gaps, SwGate gate, Func<bool> read) =>
+        Read("component_pattern", "IsPatternInstance", key, gaps, gate, read);
+
+    /// <summary>One gated read of one component, null plus a gap when it threw.</summary>
+    private static T? Read<T>(
+        string entityKind, string member, string key, GapCollector gaps, SwGate gate, Func<T> read)
+        where T : struct
+    {
+        T? value = null;
+        gaps.TryStep(
+            entityKind,
+            null,
+            $"read {member} for '{key}'",
+            () => { value = gate.Call(member, read); });
+
+        return value;
+    }
+
+    /// <summary>
+    /// One slot of the appearance array, which interop hands back as a <c>double[]</c> or as
+    /// a VARIANT array of boxed doubles depending on the build. Null when the answer carries
+    /// no such slot.
+    /// </summary>
+    private static double? Slot(object? values, int index)
+    {
+        if (values is double[] doubles)
+        {
+            return doubles.Length > index ? doubles[index] : (double?)null;
+        }
+
+        if (values is object[] boxed && boxed.Length > index && boxed[index] is double boxedValue)
+        {
+            return boxedValue;
+        }
+
+        return null;
     }
 
     private double[][]? ReadTransform(IComponent2 component, string key, GapCollector gaps)

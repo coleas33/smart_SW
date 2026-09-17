@@ -1,0 +1,1025 @@
+{
+  "schema_version": "1.4.0",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "created_at": "2026-09-12T12:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "test",
+    "profile": "standards",
+    "phases": [
+      {
+        "name": "document",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "manifest",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "mate",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "feature",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "equation",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "cutlist",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "drawing",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "hole",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "fastener",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "face",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "body",
+        "elapsed_ms": null,
+        "status": "skipped"
+      }
+    ]
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:1",
+        "vault_path": "/srv/meridian-vault/jobs/flight/MR-91001.SLDDRW",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:2",
+        "vault_path": "/srv/meridian-vault/jobs/flight/MR-21001.SLDASM",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:3",
+        "vault_path": "/srv/meridian-vault/jobs/flight/MR-21002.SLDASM",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:4",
+        "vault_path": "/srv/meridian-vault/jobs/flight/MR-11001.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:5",
+        "vault_path": "/srv/meridian-vault/jobs/flight/MR-11002.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:6",
+        "vault_path": "/srv/meridian-vault/catalog/screws/MR-11003.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:7",
+        "vault_path": "/srv/meridian-vault/jobs/flight/MR-11004.SLDPRT",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Fabricated",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:1",
+    "name": "MR-91001",
+    "root_assembly_document_id": "doc:1",
+    "active_configuration": "Default",
+    "drawing_document_ids": [
+      "doc:1"
+    ]
+  },
+  "documents": [
+    {
+      "document_id": "doc:1",
+      "kind": "drawing",
+      "file_name": "MR-91001.SLDDRW",
+      "path": "/srv/meridian-vault/jobs/flight/MR-91001.SLDDRW",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4",
+        "MeridianRev": "AA"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:2",
+      "kind": "assembly",
+      "file_name": "MR-21001.SLDASM",
+      "path": "/srv/meridian-vault/jobs/flight/MR-21001.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4",
+        "MeridianRev": "AA"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null,
+      "is_exploded": false,
+      "rebuild_error_count": 0
+    },
+    {
+      "document_id": "doc:3",
+      "kind": "assembly",
+      "file_name": "MR-21002.SLDASM",
+      "path": "/srv/meridian-vault/jobs/flight/MR-21002.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4",
+        "MeridianRev": "AA"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null,
+      "is_exploded": false,
+      "rebuild_error_count": 0
+    },
+    {
+      "document_id": "doc:4",
+      "kind": "part",
+      "file_name": "MR-11001.SLDPRT",
+      "path": "/srv/meridian-vault/jobs/flight/MR-11001.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4",
+        "MeridianRev": "AA"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 2",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    },
+    {
+      "document_id": "doc:5",
+      "kind": "part",
+      "file_name": "MR-11002.SLDPRT",
+      "path": "/srv/meridian-vault/jobs/flight/MR-11002.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4",
+        "MeridianRev": "AA"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 2",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    },
+    {
+      "document_id": "doc:6",
+      "kind": "part",
+      "file_name": "MR-11003.SLDPRT",
+      "path": "/srv/meridian-vault/catalog/screws/MR-11003.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4",
+        "MeridianRev": "AA"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 2",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    },
+    {
+      "document_id": "doc:7",
+      "kind": "part",
+      "file_name": "MR-11004.SLDPRT",
+      "path": "/srv/meridian-vault/jobs/flight/MR-11004.SLDPRT",
+      "configurations": [
+        "Fabricated"
+      ],
+      "active_configuration": "Fabricated",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4",
+        "MeridianRev": "AA"
+      },
+      "config_properties": {},
+      "material": "Fictional Alloy 2",
+      "mass": null,
+      "rebuild_error_count": 0,
+      "mass_overridden": false,
+      "material_configuration": "Fabricated"
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-91001",
+      "document_id": "doc:1",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-91001",
+      "constrained_status_raw": null,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-21001",
+      "document_id": "doc:2",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-91001/MR-21001",
+      "constrained_status_raw": null,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-21002-1",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-21002-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-11001-1",
+      "document_id": "doc:4",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-11001-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0005",
+      "persist_ref": "Y21wOjAwMDU=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-11002-1",
+      "document_id": "doc:5",
+      "parent_id": "cmp:0002",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-11002-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0006",
+      "persist_ref": "Y21wOjAwMDY=",
+      "persist_ref_scope": "doc:3",
+      "name": "MR-11004-1",
+      "document_id": "doc:7",
+      "parent_id": "cmp:0003",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-21002-1/MR-11004-1",
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0007",
+      "persist_ref": "Y21wOjAwMDc=",
+      "persist_ref_scope": "doc:3",
+      "name": "MR-11003-1",
+      "document_id": "doc:6",
+      "parent_id": "cmp:0003",
+      "referenced_configuration": "Fabricated",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-21002-1/MR-11003-1",
+      "constrained_status_raw": 2,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    }
+  ],
+  "mates": [
+    {
+      "id": "mate:0001",
+      "persist_ref": "bWF0ZTowMDAx",
+      "persist_ref_scope": "doc:2",
+      "type": "COINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0003",
+          "persist_ref": "bWF0ZTowMDAxL01SLTIxMDAyLTE=",
+          "entity_kind": "swSelDATUMPLANES",
+          "resolution_status": "resolved"
+        },
+        {
+          "component_id": "cmp:0004",
+          "persist_ref": "bWF0ZTowMDAxL01SLTExMDAxLTE=",
+          "entity_kind": "swSelDATUMPLANES",
+          "resolution_status": "resolved"
+        }
+      ],
+      "alignment": "aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    }
+  ],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "drawing_records": [
+    {
+      "document_id": "doc:1",
+      "source": "native",
+      "active_sheet_name": "Sheet1",
+      "sheets": [
+        {
+          "id": "dsh:0001",
+          "source": "native",
+          "name": "Sheet1",
+          "index": 0,
+          "sheet_format_name": "Sheet Format",
+          "was_active": true,
+          "views": [
+            {
+              "id": "dvw:0001",
+              "sheet_id": "dsh:0001",
+              "name": "Sheet Format Sheet1",
+              "view_type_raw": 1,
+              "notes": [
+                {
+                  "id": "dnt:0001",
+                  "owner_id": "dvw:0001",
+                  "text": "UNLESS OTHERWISE SPECIFIED, DIMENSIONS ARE IN MILLIMETRES",
+                  "persist_ref": "ZG50OjAwMDE="
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDE="
+            },
+            {
+              "id": "dvw:0002",
+              "sheet_id": "dsh:0001",
+              "name": "Drawing View Sheet1",
+              "view_type_raw": 2,
+              "referenced_document_id": "doc:2",
+              "referenced_model_path": "/srv/meridian-vault/jobs/flight/MR-21001.SLDASM",
+              "display_dimensions": [
+                {
+                  "id": "ddm:0001",
+                  "view_id": "dvw:0002",
+                  "name": "D1@Sheet1",
+                  "dimension_type_raw": 2,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 25.0,
+                    "unit": "mm"
+                  },
+                  "persist_ref": "ZGRtOjAwMDE="
+                }
+              ],
+              "annotations": [
+                {
+                  "id": "dan:0001",
+                  "owner_id": "dvw:0002",
+                  "name": "Balloon1@Sheet1",
+                  "type_raw": 1,
+                  "is_dangling": false,
+                  "persist_ref": "ZGFuOjAwMDE="
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDI="
+            }
+          ],
+          "revision_tables": [
+            {
+              "id": "drv:0001",
+              "sheet_id": "dsh:0001",
+              "current_revision_raw": "AA",
+              "row_count": 2,
+              "column_count": 3,
+              "rows": [
+                {
+                  "index": 0,
+                  "cells": [
+                    "ZONE",
+                    "REV",
+                    "DESCRIPTION"
+                  ],
+                  "is_header": true
+                },
+                {
+                  "index": 1,
+                  "cells": [
+                    "A1",
+                    "AA",
+                    "Initial release"
+                  ],
+                  "is_header": false
+                }
+              ],
+              "persist_ref": "ZHJ2OjAwMDE="
+            }
+          ],
+          "persist_ref": "ZHNoOjAwMDE="
+        },
+        {
+          "id": "dsh:0002",
+          "source": "native",
+          "name": "Sheet2",
+          "index": 1,
+          "sheet_format_name": "Sheet Format",
+          "was_active": false,
+          "views": [
+            {
+              "id": "dvw:0003",
+              "sheet_id": "dsh:0002",
+              "name": "Sheet Format Sheet2",
+              "view_type_raw": 1,
+              "notes": [
+                {
+                  "id": "dnt:0002",
+                  "owner_id": "dvw:0003",
+                  "text": "UNLESS OTHERWISE SPECIFIED, DIMENSIONS ARE IN MILLIMETRES",
+                  "persist_ref": "ZG50OjAwMDI="
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDM="
+            },
+            {
+              "id": "dvw:0004",
+              "sheet_id": "dsh:0002",
+              "name": "Drawing View Sheet2",
+              "view_type_raw": 2,
+              "referenced_document_id": "doc:2",
+              "referenced_model_path": "/srv/meridian-vault/jobs/flight/MR-21001.SLDASM",
+              "display_dimensions": [
+                {
+                  "id": "ddm:0002",
+                  "view_id": "dvw:0004",
+                  "name": "D1@Sheet2",
+                  "dimension_type_raw": 2,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 25.0,
+                    "unit": "mm"
+                  },
+                  "persist_ref": "ZGRtOjAwMDI="
+                }
+              ],
+              "annotations": [
+                {
+                  "id": "dan:0002",
+                  "owner_id": "dvw:0004",
+                  "name": "Balloon1@Sheet2",
+                  "type_raw": 1,
+                  "is_dangling": false,
+                  "persist_ref": "ZGFuOjAwMDI="
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDQ="
+            }
+          ],
+          "revision_tables": [
+            {
+              "id": "drv:0002",
+              "sheet_id": "dsh:0002",
+              "current_revision_raw": "AA",
+              "row_count": 2,
+              "column_count": 3,
+              "rows": [
+                {
+                  "index": 0,
+                  "cells": [
+                    "ZONE",
+                    "REV",
+                    "DESCRIPTION"
+                  ],
+                  "is_header": true
+                },
+                {
+                  "index": 1,
+                  "cells": [
+                    "A1",
+                    "AA",
+                    "Initial release"
+                  ],
+                  "is_header": false
+                }
+              ],
+              "persist_ref": "ZHJ2OjAwMDI="
+            }
+          ],
+          "persist_ref": "ZHNoOjAwMDI="
+        }
+      ]
+    }
+  ],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "ZG9jOjQvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "ZG9jOjQvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0001",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "ZG9jOjUvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0004",
+      "persist_ref": "ZG9jOjUvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0003",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0005",
+      "persist_ref": "ZG9jOjYvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:6",
+      "document_id": "doc:6",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0006",
+      "persist_ref": "ZG9jOjYvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:6",
+      "document_id": "doc:6",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0005",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0007",
+      "persist_ref": "ZG9jOjcvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:7",
+      "document_id": "doc:7",
+      "configuration": "Fabricated",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrude",
+      "description": "intent",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0008",
+      "persist_ref": "ZG9jOjcvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:7",
+      "document_id": "doc:7",
+      "configuration": "Fabricated",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 1,
+      "depth": 1,
+      "folder_id": "feat:0007",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    }
+  ],
+  "equations": [],
+  "cut_list_items": [
+    {
+      "id": "cut:0001",
+      "document_id": "doc:4",
+      "configuration": "Fabricated",
+      "folder_name": "Cut-List-Item1",
+      "folder_type_name": "CutListFolder",
+      "name": "Plate 200 x 100 x 6",
+      "body_count": 1,
+      "excluded_from_cut_list": true,
+      "persist_ref": "Y3V0OjAwMDE=",
+      "persist_ref_scope": "doc:4"
+    }
+  ],
+  "rms_suppress_test": null,
+  "gaps": []
+}

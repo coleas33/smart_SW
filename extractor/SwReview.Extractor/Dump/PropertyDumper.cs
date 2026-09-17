@@ -86,15 +86,28 @@ public sealed class PropertyDumper : IDocumentSource
             gate.Call("ActiveConfiguration.Name", () => model.ConfigurationManager?.ActiveConfiguration?.Name)
             ?? string.Empty;
 
+        DocumentKind kind = SwSession.KindOf(model, gate);
+        string fileName = Path.GetFileName(path);
+
         var document = new Document
         {
             DocumentId = documentId,
-            Kind = SwSession.KindOf(model, gate),
-            FileName = Path.GetFileName(path),
+            Kind = kind,
+            FileName = fileName,
             Path = path,
             ActiveConfiguration = activeConfiguration,
             CustomProperties = ReadProperties(model, string.Empty, gate),
             Material = ReadMaterial(model, activeConfiguration, gate),
+
+            // Schema 1.4.0 (contracts/ir-additions.md section 1). The configuration costs no
+            // interop call: ReadMaterial above already passed it to GetMaterialPropertyName2
+            // and discarded it, and recording it is what tells "no material in configuration
+            // X" from "no material, configuration unknown".
+            MaterialConfiguration = MaterialConfiguration(kind, activeConfiguration),
+            IsExploded = ReadIsExploded(
+                kind, documentId, fileName, scope.Gaps, gate, () => model.IsExploded()),
+            RebuildErrorCount = ReadRebuildErrorCount(
+                documentId, fileName, scope.Gaps, gate, () => model.Extension.GetWhatsWrongCount()),
         };
 
         if (gate.Call("GetConfigurationNames", () => model.GetConfigurationNames()) is object[] names)
@@ -112,8 +125,121 @@ public sealed class PropertyDumper : IDocumentSource
             }
         }
 
-        document.Mass = ReadMass(model, activeConfiguration, documentId, scope, gate);
+        // One CreateMassProperty2 call feeds both reads, and the override is answered FIRST,
+        // before ReadMass's volume gates: a surface-only part returns no mass properties, and
+        // standards.part.material_assigned would otherwise be unresolved for every one of
+        // them (contracts/ir-additions.md section 1).
+        object? massProperty = gate.Call("CreateMassProperty2", () => model.Extension.CreateMassProperty2());
+
+        document.MassOverridden = ReadMassOverridden(
+            massProperty,
+            documentId,
+            fileName,
+            scope.Gaps,
+            gate,
+            property => ((IMassProperty)property).OverrideMass);
+
+        document.Mass = ReadMass(massProperty, activeConfiguration, documentId, scope, gate);
         return document;
+    }
+
+    /// <summary>
+    /// <c>IModelDoc2.IsExploded()</c> for an ASSEMBLY document (schema 1.4.0). A part and a
+    /// drawing have no exploded state, so their null is silent rather than a gap: the question
+    /// does not apply, and naming it would put a coverage row on every part in the package.
+    /// Null plus an <c>assembly_exploded</c> gap when the read threw.
+    ///
+    /// The interop expression stays at the call site and the policy lives here, because this
+    /// dumper holds an <c>ISldWorks</c> and an <c>IModelDoc2</c> that no machine without a
+    /// seat can produce - the same split <see cref="FeatureDumper"/> makes with
+    /// <see cref="IFeatureReader"/>, one delegate wide instead of one interface wide.
+    /// </summary>
+    public static bool? ReadIsExploded(
+        DocumentKind kind,
+        string documentId,
+        string fileName,
+        GapCollector gaps,
+        SwGate gate,
+        Func<bool> read)
+    {
+        if (kind != DocumentKind.Assembly)
+        {
+            return null;
+        }
+
+        return Read("assembly_exploded", "IsExploded", documentId, fileName, gaps, gate, read);
+    }
+
+    /// <summary>
+    /// <c>IModelDocExtension.GetWhatsWrongCount</c> <b>as the document stands</b>: nothing is
+    /// rebuilt to refresh it, which is difference g. Null plus a <c>rebuild_error_count</c>
+    /// gap when the read threw, never a zero - a zero is "this document rebuilds clean".
+    /// </summary>
+    public static int? ReadRebuildErrorCount(
+        string documentId, string fileName, GapCollector gaps, SwGate gate, Func<int> read) =>
+        Read("rebuild_error_count", "GetWhatsWrongCount", documentId, fileName, gaps, gate, read);
+
+    /// <summary>
+    /// <c>IMassProperty.OverrideMass</c>, read off the object <c>CreateMassProperty2</c>
+    /// returned (schema 1.4.0). Null plus a <c>mass_override</c> gap when the object, the cast
+    /// or the read fails: <c>IMassProperty2</c> exposes no <c>OverrideMass</c> and declares no
+    /// base interface in this interop, so the cast is the UNVERIFIED half of the read
+    /// (research R3.2) and it fails as unknown rather than as false.
+    /// </summary>
+    public static bool? ReadMassOverridden(
+        object? massProperty,
+        string documentId,
+        string fileName,
+        GapCollector gaps,
+        SwGate gate,
+        Func<object, bool> read)
+    {
+        if (massProperty == null)
+        {
+            gaps.Add(
+                GapKind.NotExtracted,
+                "mass_override",
+                documentId,
+                $"CreateMassProperty2 returned nothing for '{fileName}', so whether its mass "
+                + "was overridden is unknown.",
+                null);
+            return null;
+        }
+
+        object property = massProperty;
+        return Read(
+            "mass_override", "OverrideMass", documentId, fileName, gaps, gate, () => read(property));
+    }
+
+    /// <summary>
+    /// The configuration the material read was attempted in, or null for a document that has
+    /// no material to read (schema 1.4.0). It is recorded even when the material itself came
+    /// back null, because "no material in configuration X" and "no material, configuration
+    /// unknown" are different facts - which is why this helper is not told what
+    /// <see cref="ReadMaterial"/> gave.
+    /// </summary>
+    public static string? MaterialConfiguration(DocumentKind kind, string configuration) =>
+        kind == DocumentKind.Part ? configuration : null;
+
+    /// <summary>One gated read of one document, null plus a gap when it threw.</summary>
+    private static T? Read<T>(
+        string entityKind,
+        string member,
+        string documentId,
+        string fileName,
+        GapCollector gaps,
+        SwGate gate,
+        Func<T> read)
+        where T : struct
+    {
+        T? value = null;
+        gaps.TryStep(
+            entityKind,
+            documentId,
+            $"read {member} for '{fileName}'",
+            () => { value = gate.Call(member, read); });
+
+        return value;
     }
 
     /// <summary>
@@ -190,10 +316,12 @@ public sealed class PropertyDumper : IDocumentSource
     /// the mass has been overridden.
     /// </summary>
     private static MassProperties? ReadMass(
-        IModelDoc2 model, string configuration, string documentId, DumpScope scope, SwGate gate)
+        object? massProperty, string configuration, string documentId, DumpScope scope, SwGate gate)
     {
-        var mass = gate.Call("CreateMassProperty2", () => model.Extension.CreateMassProperty2())
-            as IMassProperty2;
+        // CreateMassProperty2 is called once, by Read, and its object feeds both the override
+        // read and this one; the gap below is unchanged, so the gap set of an existing dump
+        // does not move on this account (contracts/ir-additions.md, additivity rule point 5).
+        var mass = massProperty as IMassProperty2;
 
         if (mass == null)
         {

@@ -167,6 +167,36 @@ def remodel_tools() -> tuple[Callable[..., Any], ...]:
     )
 
 
+STANDARDS_RUN_ATTRIBUTE = "standards"
+"""The attribute a standards run is carried on, and the one thing `_offered` asks about.
+
+Named here rather than in `tools/standards_checks.py` so that the predicate below needs no
+import at all: `checks/rules/run.py` imports this module, so this module cannot import the
+standards family at the top of the file without a cycle. `attach_standards_run` reads the
+name from here, so the setter and the reader cannot disagree about it.
+"""
+
+
+def standards_tools() -> tuple[Callable[..., Any], ...]:
+    """The standards family's one review-only check tool: a standards run only (FR-035).
+
+    Deliberately outside `REGISTRATIONS`, exactly as `remodel_tools` is: it is added by
+    `ToolRegistry._offered` when the context carries a standards run, which only
+    `checks/standards/run.py` arranges. A review, a general-chat session and every other
+    tab carry none, so none of them can see it - which is what keeps `TOOL_FUNCTIONS`,
+    `MCP_TOOL_FUNCTIONS` and the terminal profile's `enabled_tools` genuinely unmoved, and
+    a test asserts all three.
+
+    The import is local because `checks/rules/run.py` imports this module: the standards
+    family reaches it through `checks/standards/traversal.py`, so importing the tool at the
+    top of this file would close the cycle. It is called only when a standards run is in
+    flight, by which time every module is loaded.
+    """
+    from swreview.tools import standards_checks
+
+    return (standards_checks.check_standards,)
+
+
 REGISTRATIONS: tuple[Registration, ...] = (
     query_tools,
     measurement_tools,
@@ -717,9 +747,10 @@ class ToolRegistry:
     ) -> tuple[Callable[..., Any], ...]:
         """`functions_for` with the tier already decided, so `dispatch` decides it once.
 
-        The two conditional groups are appended in the order they were added to the product
-        and neither is subject to a tier: a tier withholds a *review* tool on the evidence
-        the package carries, and neither a bridge call nor a proposal into a plan is one.
+        The three conditional groups are appended in the order they were added to the
+        product and none is subject to a tier: a tier withholds a *review* tool on the
+        evidence the package carries, and a bridge call, a proposal into a plan and a
+        standards check over an already-decided graded set are none of them.
         """
         functions = self.functions
         if tier is not None:
@@ -728,6 +759,8 @@ class ToolRegistry:
             functions = (*functions, *self.bridge_functions)
         if context.remodel is not None:
             functions = (*functions, *self.remodel_functions)
+        if getattr(context, STANDARDS_RUN_ATTRIBUTE, None) is not None:
+            functions = (*functions, *standards_tools())
         return functions
 
     def dispatch(

@@ -244,10 +244,18 @@ def _record(
     consumers, and neither of them parses the display string in `inputs`.
 
     `component_ids` is empty for a document-scoped result, and the finding is bound by the
-    document instead - which is why the exception record carries a `document_id`.
+    document instead - which is why the exception record carries a `document_id`. The
+    emptiness is decided by the document's **kind**, not by the package happening to carry
+    no row for it: a drawing-rooted dump writes one synthesized forest-root instance to
+    hang the referenced models under, and that row does not *reach* the drawing, so naming
+    it would bind a drawing's waiver to a pseudo-instance. `document_ids` carries that
+    binding into the finding, so one whose subjects have no persistent reference - a
+    data-card property name on a drawing - still names the document it was read from
+    rather than being refused for naming nothing.
     """
     package = context.ir
-    component_ids = _component_ids(package, result.document_id)
+    document_scoped = _is_document_scoped(package, result.document_id)
+    component_ids = [] if document_scoped else _component_ids(package, result.document_id)
     check_result = _with_configuration_limit(package, result.document_id, body)
 
     exception = _exception_for(context, result, component_ids)
@@ -263,6 +271,7 @@ def _record(
         drawing_locations=_source_refs(result),
         exception_id=None if exception is None else exception.id,
         tool_result_ids=[context.current_step_id],
+        document_ids=[result.document_id] if document_scoped else [],
     )
     if "error" in recorded:
         return recorded
