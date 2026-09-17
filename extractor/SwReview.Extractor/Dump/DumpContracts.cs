@@ -105,7 +105,16 @@ public sealed class DumpOptions
 /// </summary>
 public sealed class ComponentNode
 {
-    /// <summary>Full instance path, e.g. "sub-2/bracket-3". Unique within the assembly.</summary>
+    /// <summary>
+    /// Full instance path, e.g. "sub-2/bracket-3". Unique within the assembly.
+    ///
+    /// A node the dump SYNTHESIZES for a document rather than reading from an
+    /// <c>IComponent2</c> - a drawing's forest root and each model its views reference
+    /// (<see cref="ComponentTreeDumper.DrawingRootNode"/>,
+    /// <see cref="ComponentTreeDumper.ReferencedModelNode"/>) - is keyed on its document path
+    /// instead, because a file base name is not unique across a forest and
+    /// <see cref="DumpScope.AddComponent"/> keeps the last write for a key.
+    /// </summary>
     public string Key { get; set; } = string.Empty;
 
     /// <summary>The parent's <see cref="Key"/>; null for the root component.</summary>

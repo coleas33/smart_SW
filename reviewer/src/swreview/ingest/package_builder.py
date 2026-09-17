@@ -265,7 +265,12 @@ def _drawings(
     native: EvidencePackage | None,
     gaps: list[Gap],
 ) -> list[DrawingSheet]:
-    """Parse the drawing PDFs the native package has no sheets for."""
+    """Parse the drawing PDFs the native package has no sheets for.
+
+    Every sheet this path adds is stamped `pdf_ingest` by `parse_drawing_pdf`
+    (`pdf_drawing.SOURCE`, FR-024); a sheet carried over from the native package keeps the
+    source it already recorded, because this function did not write it.
+    """
     sheets = list(native.drawings) if native else []
     covered = {sheet.document_id for sheet in sheets}
 

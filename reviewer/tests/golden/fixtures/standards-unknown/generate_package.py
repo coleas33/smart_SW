@@ -1,4 +1,4 @@
-"""Generate the `standards-unknown` golden: unknown stays unknown (T055, model half).
+"""Generate the `standards-unknown` golden: unknown stays unknown (T055, T070a).
 
 Run once, from `reviewer/`, and commit what it writes:
 
@@ -25,11 +25,22 @@ suppressed or lightweight instance was never opened, so what the package records
 document it names is not a reading of that document, and every check says so instead of
 grading it (FR-005, `results.document_evidence_unresolved`).
 
-**The fixture carries no drawing.** The drawing half - a note whose text could not be read -
-arrives with T070a, for the same reason T056 is split: the drawing checks and the drawing
-dump do not exist until US2, and the golden is byte-compared, so a drawing added here would
-have its coverage rows rewritten at US2 anyway. So the four drawing checks are
-`out_of_scope` rows here and the headline carries the "no drawing graded" note.
+**The drawing half (T070a)**: the root is now the drawing `MR-93001`, whose sheet-format
+view carries **a note whose text could not be read**, with the `note_text` gap the dump
+records beside it. `standards.drawing.no_itar_statement` is therefore unresolved naming that
+note: an unread note cannot be shown *not* to carry the export-control statement, and
+presence is what that check looks for (FR-021). The other three drawing checks are answered
+- no dimension and no annotation to grade, and a revision table that agrees with the
+drawing's property and with the model it references - so the unresolved row this fixture
+exists to prove is the note's and nothing else's.
+
+The sheet records a **type-1 sheet-format view**, without which the unresolved row would
+come from the missing pseudo-view rather than from the unread note, and the fixture would
+not prove what it exists to prove (`contracts/rules.md`).
+
+The root is the drawing for the same reason it is in `standards-compliant`: a standards run
+grades a drawing only when it is the document that was opened (FR-003), and the model half
+above is reached through the assembly its one view references.
 
 The verdict is `ready_coverage_incomplete`: zero errors, and coverage that is not complete.
 """
@@ -47,16 +58,22 @@ from tests.support.features import FeatureSpec, SketchSpec  # noqa: E402
 from tests.support.standards import (  # noqa: E402
     AssemblySpec,
     ComponentSpec,
+    DrawingSpec,
     MateEntitySpec,
     MateSpec,
+    NoteSpec,
     PartSpec,
+    RevisionTableSpec,
+    SheetSpec,
+    ViewSpec,
     standards_package,
 )
 
-from swreview.ir.models import EvidencePackage  # noqa: E402
+from swreview.ir.models import EvidencePackage, Gap  # noqa: E402
 
 PROFILE = fixture_profile()
 
+DRAWING = "MR-93001"
 ROOT_ASSEMBLY = "MR-30001"
 SUB_ASSEMBLY = "MR-30002"
 PLAIN_PART = "MR-13001"
@@ -71,6 +88,18 @@ JOB_FOLDER = "jobs/probe"
 LIBRARY_FOLDER = "catalog/screws"
 MATERIAL = "Fictional Alloy 4"
 CONFIGURATION = PROFILE.material.configuration
+REVISION = PROFILE.revision.initial
+"""The drawing, its table and the model its view references all state this, so the one
+thing `standards.drawing.revision_matches` cannot answer is nothing at all."""
+
+UNREAD_NOTE_GAP = (
+    "SOLIDWORKS gave no value for GetText when asked to read the text of note {note} on "
+    "sheet 'Sheet1' of {drawing}."
+)
+"""What the drawing dumper records beside a note whose text came back null: a
+`not_extracted` gap of kind `note_text` (`Dump/DrawingDumper.ReadText`). The reading is
+missing **and** the dump said why, which is the case the export-control check must report
+rather than clear."""
 
 DEFINED = 3
 UNDER_DEFINED = 2
@@ -107,14 +136,95 @@ def part(
     )
 
 
+def drawing() -> DrawingSpec:
+    """One sheet: a sheet-format view carrying one readable note and one unreadable one.
+
+    The view of the assembly carries no dimension and no annotation, so those two checks are
+    skipped with a stated reason rather than adding rows this fixture is not about.
+    """
+    return DrawingSpec(
+        name=DRAWING,
+        folder=JOB_FOLDER,
+        properties=card(PROFILE, revision=REVISION),
+        active_sheet="Sheet1",
+        sheets=(
+            SheetSpec(
+                name="Sheet1",
+                was_active=True,
+                views=(
+                    ViewSpec(
+                        name="Sheet Format",
+                        view_type_raw=1,
+                        notes=(
+                            NoteSpec("FINISH: AS MACHINED"),
+                            NoteSpec(None),
+                        ),
+                    ),
+                    ViewSpec(name="Drawing View1", references=ROOT_ASSEMBLY),
+                ),
+                revision_tables=(
+                    RevisionTableSpec(
+                        rows=(
+                            ("ZONE", "REV", "DESCRIPTION"),
+                            ("A1", REVISION, "Initial release"),
+                        ),
+                        current_revision_raw=REVISION,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+def with_the_unread_note_gap(package: EvidencePackage) -> EvidencePackage:
+    """`package` with the `note_text` gap the dump records beside its one unread note.
+
+    The note's id is looked up rather than typed, because the builder allocates `dnt:` ids
+    in traversal order and a hand-written id would name whichever note that order put there
+    next. No other gap is invented: the rest of this fixture's missing readings deliberately
+    record none (`tests/support/standards.py`).
+    """
+    unread = [
+        note
+        for record in package.drawing_records
+        for sheet in record.sheets
+        for view in sheet.views
+        for note in view.notes
+        if note.text is None
+    ]
+    if len(unread) != 1:
+        raise ValueError(f"expected exactly one unread note, found {len(unread)}")
+    return package.model_copy(
+        update={
+            "gaps": [
+                *package.gaps,
+                Gap(
+                    kind="not_extracted",
+                    entity_kind="note_text",
+                    entity_id=unread[0].id,
+                    reason=UNREAD_NOTE_GAP.format(
+                        note=unread[0].id, drawing=f"{DRAWING}.SLDDRW"
+                    ),
+                    error=None,
+                ),
+            ]
+        }
+    )
+
+
 def build() -> EvidencePackage:
+    return with_the_unread_note_gap(_package())
+
+
+def _package() -> EvidencePackage:
     return standards_package(
         profile=PROFILE,
         documents=(
+            drawing(),
             AssemblySpec(
                 name=ROOT_ASSEMBLY,
                 folder=JOB_FOLDER,
-                properties=card(PROFILE),
+                properties=card(PROFILE, revision=REVISION),
                 components=(
                     ComponentSpec(
                         name=f"{SUB_ASSEMBLY}-1",

@@ -27,26 +27,32 @@ public static class SwDump
 
         var refs = new PersistRefService(session.Gate);
 
+        // One reader for both drawing seams: the drawing phase reads through
+        // IDrawingReader, and the component traversal asks the same object which models the
+        // drawing's views reference (IDrawingReferenceSource). Two readers would be two sets
+        // of interop expressions that could disagree about what a view references.
+        var drawings = new SwDrawingReader(session, refs);
+
         // A face's persistent reference is scoped to its owning PART document, so the face
         // dumper needs to turn a path back into an open document.
         Func<string, IModelDoc2?> openDocument = path =>
             session.Gate.Call("GetOpenDocumentByName", () => swApp.GetOpenDocumentByName(path)) as IModelDoc2;
 
         return new PackageWriter(
-            new ComponentTreeDumper(session, refs),
+            new ComponentTreeDumper(session, refs, drawings),
             new PropertyDumper(session, swApp),
             new ManifestBuilder(session.Gate),
             new MateDumper(session, refs),
             new FeatureDumper(session.Gate, new SwFeatureReader(session.Gate, refs)),
             new EquationDumper(session.Gate, new SwEquationReader()),
 
-            // The cut-list phase runs under the Standards and Full profiles and is recorded
-            // `skipped` under ModelCheck, which PackageWriter decides. No interop reader is
-            // wired for the DRAWING phase in this build, so it is recorded `skipped` rather
-            // than silently returning nothing - which is the row `swreview check standards`
-            // refuses a package on (FR-043).
+            // The cut-list phase runs under the Standards and Full profiles, and the drawing
+            // phase under those two when the root document is a drawing; both are recorded
+            // `skipped` otherwise, which PackageWriter decides. A source left null here would
+            // record the phase `skipped` in a dump that could have run it, which is the row
+            // `swreview check standards` refuses a package on (FR-043).
             cutList: new CutListDumper(session.Gate, new SwCutListReader(session.Gate, refs)),
-            drawings: null,
+            drawings: new DrawingDumper(session.Gate, drawings),
             new HoleDumper(session, refs),
             new FastenerDumper(session, refs),
             new FaceDumper(session, refs, openDocument),

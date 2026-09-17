@@ -66,11 +66,20 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
 
     private readonly ISwSession _session;
     private readonly PersistRefService _refs;
+    private readonly IDrawingReferenceSource? _drawings;
 
-    public ComponentTreeDumper(ISwSession session, PersistRefService refs)
+    /// <summary>
+    /// <paramref name="drawings"/> is the seam the drawing-rooted forest takes its
+    /// referenced-model list from (schema 1.4.0, FR-025). Null - a caller with no drawing
+    /// reader wired - traverses a drawing root as a forest root and nothing under it, with a
+    /// gap saying so, rather than pretending the drawing references nothing.
+    /// </summary>
+    public ComponentTreeDumper(
+        ISwSession session, PersistRefService refs, IDrawingReferenceSource? drawings = null)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _refs = refs ?? throw new ArgumentNullException(nameof(refs));
+        _drawings = drawings;
     }
 
     public ComponentTreeResult Traverse(GapCollector gaps, DumpOptions options)
@@ -122,6 +131,14 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             return tree;
         }
 
+        // A drawing root is a forest, not a tree: it has no component of its own, and what a
+        // reviewer means by "grade this drawing" is the models its views reference (FR-025).
+        if (rootKind == DocumentKind.Drawing)
+        {
+            TraverseDrawing(tree, gaps);
+            return tree;
+        }
+
         // GetRootComponent3(false) is used rather than GetRootComponent: it returns the
         // modern Component2 the rest of this code needs, and false means "do not resolve",
         // so lightweight components stay lightweight (resolving them changes the session).
@@ -154,12 +171,14 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             return tree;
         }
 
-        Dictionary<string, string> patternByComponent = ReadPatternMembership(gaps, rootPath);
+        var scope = new SubtreeScope(document, rootPath);
+        Dictionary<string, string> patternByComponent =
+            ReadPatternMembership(gaps, document, rootPath);
 
         // The root component of an assembly is the assembly itself and carries no
         // persistent reference of its own, so it is recorded from the document.
         tree.Nodes.Add(RootNode(tree, root, rootKind.Value));
-        Visit(root, tree.Nodes[0].Key, tree, gaps, patternByComponent, depth: 0);
+        Visit(root, tree.Nodes[0].Key, tree, gaps, patternByComponent, depth: 0, scope: scope);
 
         return tree;
     }
@@ -233,7 +252,7 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             "component",
             null,
             $"read Toolbox identity for the part root of '{tree.DesignName}'",
-            () => isToolbox = ReadIsToolbox(document));
+            () => isToolbox = ReadIsToolbox(document, _session.Gate));
 
         return new ComponentNode
         {
@@ -258,6 +277,500 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
         };
     }
 
+    /// <summary>
+    /// T064. The forest a drawing root is traversed as (FR-025, contracts/ir-additions.md
+    /// section 7): the drawing itself as a synthesized forest root, and one subtree under it
+    /// per model a view on any sheet references.
+    ///
+    /// The referenced-model list comes from <see cref="IDrawingReferenceSource"/>, the seam
+    /// beside <see cref="DrawingTraversal"/>, and not from the drawing phase: the traversal
+    /// runs before any phase, and the phases that matter here - document, manifest, mate,
+    /// feature, equation and cut list - all read the tree this produces.
+    ///
+    /// <b>Nothing is opened, loaded, resolved or activated</b> to do it. A model that is not
+    /// loaded is a <c>drawing_referenced_document</c> gap naming it and no subtree, so its
+    /// checks come back unresolved rather than absent.
+    /// </summary>
+    private void TraverseDrawing(ComponentTreeResult tree, GapCollector gaps)
+    {
+        ScopedPersistRef? reference = gaps.TryStep(
+            "component",
+            null,
+            $"read a persistent reference for the drawing '{tree.DesignName}'",
+            () => _refs.TryGet(_session.Document, _session.Document));
+
+        ComponentNode root = DrawingRootNode(tree, reference);
+
+        if (_drawings == null)
+        {
+            // No drawing reader is wired in this build. The forest root is still recorded -
+            // the drawing IS a document of this package - and the absence is stated, because
+            // an empty forest and no word about it reads as a drawing that references nothing.
+            tree.Nodes.Add(root);
+            gaps.Add(
+                GapKind.NotExtracted,
+                "drawing_referenced_document",
+                null,
+                $"'{tree.RootDocumentPath}' was traversed with no drawing reader, so the "
+                + "models its views reference were not identified and none of them was graded.",
+                null);
+            return;
+        }
+
+        IReadOnlyList<DrawingReference>? references = gaps.TryStep(
+            "drawing_referenced_document",
+            null,
+            $"read the models the views of '{tree.DesignName}' reference",
+            () => _drawings.ReferencedModels());
+
+        AddDrawingForest(
+            tree,
+            gaps,
+            root,
+            references ?? new List<DrawingReference>(),
+            (model, parentKey) => WalkReferencedModel(model, parentKey, tree, gaps));
+    }
+
+    /// <summary>
+    /// The synthesized forest root of a drawing: the drawing document itself, with no parent,
+    /// so every referenced model's subtree hangs somewhere (research R9).
+    ///
+    /// Python walks it through and never grades it as a component of itself - an instance
+    /// whose <c>document_id</c> is the root's is not one - which is why it can be synthesized
+    /// without inventing a component nobody modelled. Nothing about it is guessed: a drawing
+    /// is resolved, it is fixed because there is no parent to be under-constrained in, and
+    /// there is no <c>GetConstrainedStatus</c> to read, which describes how an instance sits
+    /// inside its parent and this node has none.
+    ///
+    /// <b>The key is the drawing's path, not its file name</b>, and so is a referenced model's
+    /// (<see cref="ReferencedModelNode"/>). SOLIDWORKS names a drawing after the model it
+    /// documents, so <c>housing.SLDDRW</c> over <c>housing.SLDPRT</c> is the ordinary case and
+    /// not the odd one: two nodes keyed "housing" would collide in
+    /// <c>DumpScope.AddComponent</c>, whose last write wins, and the model's
+    /// <c>ParentKey</c> would then resolve to the model itself - a package shipping an
+    /// instance that is its own parent, a forest root with no children, and two instances
+    /// with one <c>full_path</c>. A path is unique per document by construction, so no pair
+    /// of synthesized nodes can collide however the files are named. Keys inside an assembly
+    /// stay <c>Name2</c>, because a mate names its components by <c>Name2</c>.
+    /// </summary>
+    public static ComponentNode DrawingRootNode(
+        ComponentTreeResult tree, ScopedPersistRef? reference)
+    {
+        if (tree == null)
+        {
+            throw new ArgumentNullException(nameof(tree));
+        }
+
+        return new ComponentNode
+        {
+            Key = tree.RootDocumentPath,
+            ParentKey = null,
+            Name = tree.DesignName,
+            DocumentPath = tree.RootDocumentPath,
+            DocumentKind = DocumentKind.Drawing,
+            ReferencedConfiguration = tree.ActiveConfiguration,
+            Transform = Ir.Transform.Identity(),
+            Suppression = SuppressionState.Resolved,
+            IsFixed = true,
+            PatternId = null,
+            IsToolbox = false,
+            ConstrainedStatusRaw = null,
+            PersistRef = reference?.Base64,
+            PersistRefScopePath = reference?.ScopeDocumentPath ?? tree.RootDocumentPath,
+        };
+    }
+
+    /// <summary>
+    /// The forest root and one <paramref name="walkSubtree"/> call per referenced model, in
+    /// sheet and view order, each model once however many views reference it - walking it
+    /// twice would grade its parts twice and double every finding on them (SC-006).
+    ///
+    /// Static and free of interop, so the rules a package depends on - what is walked, what
+    /// becomes a gap, what hangs under what - are tested on a machine with no seat. A model
+    /// that is not loaded is named in a gap and is not walked: <b>nothing is opened or
+    /// resolved to close that gap</b> (FR-044).
+    /// </summary>
+    public static void AddDrawingForest(
+        ComponentTreeResult tree,
+        GapCollector gaps,
+        ComponentNode forestRoot,
+        IReadOnlyList<DrawingReference> references,
+        Action<DrawingReference, string> walkSubtree)
+    {
+        if (tree == null)
+        {
+            throw new ArgumentNullException(nameof(tree));
+        }
+
+        if (gaps == null)
+        {
+            throw new ArgumentNullException(nameof(gaps));
+        }
+
+        if (forestRoot == null)
+        {
+            throw new ArgumentNullException(nameof(forestRoot));
+        }
+
+        if (walkSubtree == null)
+        {
+            throw new ArgumentNullException(nameof(walkSubtree));
+        }
+
+        // First, so cmp:0001 is the drawing and a reader can follow the forest by id exactly
+        // as they follow a tree under an assembly root.
+        tree.Nodes.Add(forestRoot);
+
+        foreach (DrawingReference model in DrawingTraversal.ReferencedModels(references))
+        {
+            if (model.Document == null)
+            {
+                gaps.Add(
+                    GapKind.NotExtracted,
+                    "drawing_referenced_document",
+                    null,
+                    $"'{model.Path}' is referenced by a view of '{tree.DesignName}' and is not "
+                    + "loaded, so its component tree was not walked and its checks are "
+                    + "unresolved. It was not opened to look.",
+                    null);
+                continue;
+            }
+
+            walkSubtree(model, forestRoot.Key);
+        }
+    }
+
+    /// <summary>
+    /// One referenced model's subtree, walked exactly as an assembly root is walked: its own
+    /// node under the forest root, then - for an assembly - its component tree.
+    ///
+    /// The interop lives in <see cref="SwReferencedModelReader"/> and the decisions live in
+    /// <see cref="AddReferencedSubtree"/>, so every rule a package depends on here is tested
+    /// on a machine with no seat - the same split <see cref="IDrawingReader"/> is to
+    /// <see cref="DrawingDumper"/>.
+    /// </summary>
+    private void WalkReferencedModel(
+        DrawingReference reference, string parentKey, ComponentTreeResult tree, GapCollector gaps)
+    {
+        AddReferencedSubtree(
+            tree,
+            gaps,
+            parentKey,
+            reference,
+            new SwReferencedModelReader(_session, _refs),
+            (rootComponent, node) => WalkReferencedAssembly(rootComponent, node, tree, gaps));
+    }
+
+    /// <summary>
+    /// The component tree of a referenced ASSEMBLY, from its own root component down.
+    ///
+    /// The scope is the referenced model, never the drawing (<see cref="SubtreeScope"/>): a
+    /// component of a referenced assembly has no persistent reference in the DRAWING's
+    /// extension, and asking for one there would return nothing and cost that component its
+    /// place in <c>components[]</c>. <c>depth: 1</c> because the referenced model's own node
+    /// is level 0 of this subtree, as the root assembly's is under an assembly root.
+    /// </summary>
+    private void WalkReferencedAssembly(
+        object rootComponent, ComponentNode node, ComponentTreeResult tree, GapCollector gaps)
+    {
+        var model = (IModelDoc2)node.Handle!;
+        var scope = new SubtreeScope(model, node.DocumentPath);
+        Dictionary<string, string> patternByComponent =
+            ReadPatternMembership(gaps, model, node.DocumentPath);
+
+        Visit(
+            (IComponent2)rootComponent,
+            node.Key,
+            tree,
+            gaps,
+            patternByComponent,
+            depth: 1,
+            scope: scope);
+    }
+
+    /// <summary>
+    /// T064. What one entry of the drawing's referenced-model list becomes: the node, the
+    /// refusals that produce a coverage row instead of one, and whether a component tree is
+    /// walked under it. Returns the node, or null when nothing could be recorded.
+    ///
+    /// A referenced <b>part</b> is one node and no more, the same shape a part opened alone
+    /// gets: it has no component tree, and without the node its features, equations and cut
+    /// list would never be dumped, because every later phase walks
+    /// <see cref="DumpScope.Components"/>. A referenced <b>assembly</b> is that node plus its
+    /// tree, walked by <paramref name="walkSubtree"/>.
+    ///
+    /// <b>Nothing is opened, loaded, resolved or activated</b> (FR-044): every question is
+    /// asked of the handle a view already held. A model whose kind, path or configuration
+    /// will not answer is an unresolved coverage row naming it, never a guess and never a
+    /// silent skip - "part" would walk a tree that may be an assembly's, and "assembly" would
+    /// drop a part's whole feature tree without a word.
+    ///
+    /// Static and interop-free, like <see cref="AddDrawingForest"/> above it, so these rules
+    /// are tested without a SOLIDWORKS seat.
+    /// </summary>
+    public static ComponentNode? AddReferencedSubtree(
+        ComponentTreeResult tree,
+        GapCollector gaps,
+        string parentKey,
+        DrawingReference reference,
+        IReferencedModelReader reader,
+        Action<object, ComponentNode> walkSubtree)
+    {
+        if (tree == null)
+        {
+            throw new ArgumentNullException(nameof(tree));
+        }
+
+        if (gaps == null)
+        {
+            throw new ArgumentNullException(nameof(gaps));
+        }
+
+        if (reference == null)
+        {
+            throw new ArgumentNullException(nameof(reference));
+        }
+
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
+        if (walkSubtree == null)
+        {
+            throw new ArgumentNullException(nameof(walkSubtree));
+        }
+
+        object? model = reference.Document;
+        if (model == null || !reader.IsModel(model))
+        {
+            gaps.Add(
+                GapKind.NotExtracted,
+                "drawing_referenced_document",
+                null,
+                $"'{reference.Path}' came back as something other than a model document, so "
+                + "its component tree was not walked.",
+                null);
+            return null;
+        }
+
+        string? path = reader.Path(model);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            // The view named it, so the gap can too; but with no path there is no document id
+            // to record it under and nothing later could resolve it.
+            gaps.Add(
+                GapKind.NotExtracted,
+                "drawing_referenced_document",
+                null,
+                $"The model a view of '{tree.DesignName}' references reports no file path "
+                + $"(the view named it '{reference.Path}'), so it could not be identified.",
+                null);
+            return null;
+        }
+
+        DocumentKind? kind = null;
+        gaps.TryStep(
+            "component",
+            null,
+            $"read the document type of '{path}'",
+            () => kind = reader.Kind(model));
+
+        if (kind == null)
+        {
+            // The same refusal the root gets: "part" would walk a tree that may be an
+            // assembly's, and "assembly" would drop a part's whole feature tree in silence.
+            gaps.Add(
+                GapKind.NotExtracted,
+                "component",
+                null,
+                $"The type of '{path}' could not be read, so no subtree was recorded for it "
+                + "and the document kind is not assumed.",
+                null);
+            return null;
+        }
+
+        object? configuration = reader.Configuration(model);
+        string configurationName = configuration == null
+            ? string.Empty
+            : reader.ConfigurationName(configuration) ?? string.Empty;
+
+        ComponentNode node = ReferencedModelNode(
+            gaps, reader, model, path!, kind.Value, configurationName, parentKey);
+
+        tree.Nodes.Add(node);
+
+        if (kind != DocumentKind.Assembly)
+        {
+            return node;
+        }
+
+        if (configuration == null)
+        {
+            gaps.Add(
+                GapKind.NotExtracted,
+                "component",
+                null,
+                $"'{path}' reports no active configuration, so its component tree was not "
+                + "walked and the parts under it were not graded.",
+                null);
+            return node;
+        }
+
+        object? rootComponent = reader.RootComponent(configuration);
+        if (rootComponent == null)
+        {
+            gaps.Add(
+                GapKind.NotExtracted,
+                "component",
+                null,
+                $"'{path}' returned no root component, so nothing under it was traversed.",
+                null);
+            return node;
+        }
+
+        walkSubtree(rootComponent, node);
+        return node;
+    }
+
+    /// <summary>
+    /// The node for a model a drawing view references. It is an instance of nothing - the
+    /// drawing does not instance it - so, like a part opened alone, it is resolved and fixed,
+    /// carries no constrained status, and takes its persistent reference from its own
+    /// document rather than from an <c>IComponent2</c> that does not exist.
+    ///
+    /// <b>The key is the document's path.</b> A file base name is not unique across a forest:
+    /// SOLIDWORKS names a drawing after the model it documents, so <c>housing.SLDDRW</c> and
+    /// its <c>housing.SLDPRT</c> would share the key "housing", and two models named alike in
+    /// different vault folders would share theirs. <c>DumpScope.AddComponent</c> keeps the
+    /// last write for a key, so a collision makes this node's <c>ParentKey</c> resolve to
+    /// this node - a package shipping an instance that is its own parent and a forest root
+    /// with no children. The path cannot collide, and <see cref="ComponentNode.Name"/> keeps
+    /// the base name a report reads out. Keys INSIDE an assembly stay <c>Name2</c>: a mate
+    /// names its components by <c>Name2</c>, so making those unique would break the one thing
+    /// they are for.
+    /// </summary>
+    public static ComponentNode ReferencedModelNode(
+        GapCollector gaps,
+        IReferencedModelReader reader,
+        object model,
+        string path,
+        DocumentKind kind,
+        string configuration,
+        string parentKey)
+    {
+        if (gaps == null)
+        {
+            throw new ArgumentNullException(nameof(gaps));
+        }
+
+        if (reader == null)
+        {
+            throw new ArgumentNullException(nameof(reader));
+        }
+
+        string name = Path.GetFileNameWithoutExtension(path);
+
+        ScopedPersistRef? reference = gaps.TryStep(
+            "component",
+            null,
+            $"read a persistent reference for the referenced model '{name}'",
+            () => reader.PersistRef(model));
+
+        bool isToolbox = false;
+        gaps.TryStep(
+            "component",
+            null,
+            $"read Toolbox identity for the referenced model '{name}'",
+            () => isToolbox = reader.IsToolbox(model));
+
+        return new ComponentNode
+        {
+            Key = path,
+            ParentKey = parentKey,
+            Name = name,
+            DocumentPath = path,
+            DocumentKind = kind,
+            ReferencedConfiguration = configuration,
+            Transform = Ir.Transform.Identity(),
+            Suppression = SuppressionState.Resolved,
+            IsFixed = true,
+            PatternId = null,
+            IsToolbox = isToolbox,
+            ConstrainedStatusRaw = null,
+            PersistRef = reference?.Base64,
+            PersistRefScopePath = reference?.ScopeDocumentPath ?? path,
+            Handle = model,
+        };
+    }
+
+    /// <summary>
+    /// The SOLIDWORKS side of <see cref="IReferencedModelReader"/>: interop expressions and
+    /// nothing else, each one gated under its own member name.
+    /// </summary>
+    private sealed class SwReferencedModelReader : IReferencedModelReader
+    {
+        private readonly ISwSession _session;
+        private readonly PersistRefService _refs;
+
+        public SwReferencedModelReader(ISwSession session, PersistRefService refs)
+        {
+            _session = session;
+            _refs = refs;
+        }
+
+        private SwGate Gate => _session.Gate;
+
+        /// <summary>A type test, not a call: <c>IView.ReferencedDocument</c> is typed object.</summary>
+        public bool IsModel(object document) => document is IModelDoc2;
+
+        public string? Path(object model) =>
+            Gate.Call("GetPathName", () => ((IModelDoc2)model).GetPathName());
+
+        public DocumentKind Kind(object model) => SwSession.KindOf((IModelDoc2)model, Gate);
+
+        public object? Configuration(object model) => Gate.Call(
+            "ConfigurationManager.ActiveConfiguration",
+            () => ((IModelDoc2)model).ConfigurationManager?.ActiveConfiguration) as IConfiguration;
+
+        public string? ConfigurationName(object configuration) =>
+            Gate.Call("Configuration.Name", () => ((IConfiguration)configuration).Name);
+
+        /// <summary>
+        /// <c>false</c> is "do not resolve": a lightweight component stays lightweight,
+        /// because resolving it would change the session (FR-044).
+        /// </summary>
+        public object? RootComponent(object configuration) => Gate.Call(
+            "GetRootComponent3",
+            () => ((IConfiguration)configuration).GetRootComponent3(false)) as IComponent2;
+
+        public bool IsToolbox(object model) => ReadIsToolbox((IModelDoc2)model, Gate);
+
+        public ScopedPersistRef? PersistRef(object model) =>
+            _refs.TryGet((IModelDoc2)model, model);
+    }
+
+    /// <summary>
+    /// The document one subtree's persistent references are scoped to, and its path.
+    ///
+    /// Under an assembly root that is the root assembly for every node. Under a drawing root
+    /// there is one per referenced model: a component of a referenced assembly has no
+    /// reference in the DRAWING's extension, and asking for one there would return nothing
+    /// and cost that component its place in <c>components[]</c>.
+    /// </summary>
+    private sealed class SubtreeScope
+    {
+        public SubtreeScope(IModelDoc2 document, string path)
+        {
+            Document = document;
+            Path = path;
+        }
+
+        public IModelDoc2 Document { get; }
+
+        public string Path { get; }
+    }
+
     /// <summary>Depth-first, immediate children at each level (GetChildren does not recurse).</summary>
     private void Visit(
         IComponent2 parent,
@@ -265,7 +778,8 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
         ComponentTreeResult tree,
         GapCollector gaps,
         IReadOnlyDictionary<string, string> patternByComponent,
-        int depth)
+        int depth,
+        SubtreeScope scope)
     {
         // A cyclic reference would be a corrupt assembly, but the traversal must not hang
         // on one; 64 levels is far deeper than any real product structure.
@@ -296,7 +810,7 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             ComponentNode? node = null;
             gaps.TryStep("component", null, $"read a child of '{parentKey}'", () =>
             {
-                node = ReadNode(component, parentKey, tree, gaps, patternByComponent);
+                node = ReadNode(component, parentKey, gaps, patternByComponent, scope);
             });
 
             if (node == null)
@@ -305,16 +819,16 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             }
 
             tree.Nodes.Add(node);
-            Visit(component, node.Key, tree, gaps, patternByComponent, depth + 1);
+            Visit(component, node.Key, tree, gaps, patternByComponent, depth + 1, scope);
         }
     }
 
     private ComponentNode ReadNode(
         IComponent2 component,
         string parentKey,
-        ComponentTreeResult tree,
         GapCollector gaps,
-        IReadOnlyDictionary<string, string> patternByComponent)
+        IReadOnlyDictionary<string, string> patternByComponent,
+        SubtreeScope scope)
     {
         SwGate gate = _session.Gate;
 
@@ -337,7 +851,7 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             IsFixed = gate.Call("IsFixed", () => component.IsFixed()),
             PatternId = patternByComponent.TryGetValue(key, out string pattern) ? pattern : null,
             IsToolbox = ReadIsToolbox(component, gaps, key),
-            PersistRefScopePath = tree.RootDocumentPath,
+            PersistRefScopePath = scope.Path,
             Handle = component,
         };
 
@@ -367,8 +881,10 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             node.Transform = transform;
         }
 
-        // Component references are scoped to the ASSEMBLY's extension, not the part's.
-        ScopedPersistRef? reference = _refs.TryGet(_session.Document, component);
+        // Component references are scoped to the ASSEMBLY's extension, not the part's - and
+        // for a drawing root that assembly is the referenced model whose tree this is, not
+        // the drawing the dump is attached to.
+        ScopedPersistRef? reference = _refs.TryGet(scope.Document, component);
         if (reference == null)
         {
             gaps.Add(
@@ -586,16 +1102,16 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             return false;
         }
 
-        return ReadIsToolbox(model);
+        return ReadIsToolbox(model, _session.Gate);
     }
 
     /// <summary>
     /// The same read, from a document that is already in hand. Separate so the component
-    /// path and the part-root path ask SOLIDWORKS the same question under the same gated
-    /// member name rather than each spelling it out.
+    /// path, the part-root path and the drawing's referenced models ask SOLIDWORKS the same
+    /// question under the same gated member name rather than each spelling it out.
     /// </summary>
-    private bool ReadIsToolbox(IModelDoc2 model) =>
-        _session.Gate.Call("ToolboxPartType", () => model.Extension.ToolboxPartType) != 0;
+    private static bool ReadIsToolbox(IModelDoc2 model, SwGate gate) =>
+        gate.Call("ToolboxPartType", () => model.Extension.ToolboxPartType) != 0;
 
     /// <summary>
     /// <c>GetConstrainedStatus</c> verbatim (swConstrainedStatus_e). The extractor does not
@@ -637,13 +1153,14 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
     /// feature's tree children ARE its instances, so the feature tree is walked once and
     /// the answer cached; there is no per-component question to ask in 2024.
     /// </summary>
-    private Dictionary<string, string> ReadPatternMembership(GapCollector gaps, string rootDocumentPath)
+    private Dictionary<string, string> ReadPatternMembership(
+        GapCollector gaps, IModelDoc2 document, string rootDocumentPath)
     {
         var byComponent = new Dictionary<string, string>(StringComparer.Ordinal);
         var sightings = new List<TypeNameSighting>();
         SwGate gate = _session.Gate;
 
-        var feature = gate.Call("FirstFeature", () => _session.Document.FirstFeature()) as IFeature;
+        var feature = gate.Call("FirstFeature", () => document.FirstFeature()) as IFeature;
         while (feature != null)
         {
             IFeature current = feature;
@@ -719,4 +1236,60 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
                 null);
         }
     }
+}
+
+
+/// <summary>
+/// What <see cref="ComponentTreeDumper.AddReferencedSubtree"/> needs SOLIDWORKS to answer
+/// about one model a drawing view references, so that every decision it makes - what is
+/// refused, what becomes a gap, what hangs under what, and which document a subtree's
+/// persistent references are scoped to - is tested on a machine with no seat. The same seam
+/// <see cref="IDrawingReader"/> is to <see cref="DrawingDumper"/>, and
+/// <c>ComponentTreeDumper.SwReferencedModelReader</c> is the SOLIDWORKS side.
+///
+/// Everything is typed <c>object</c>, because the handle comes from
+/// <see cref="DrawingReference.Document"/> - which <c>IView.ReferencedDocument</c> fills in
+/// and which this contract must not name an interop type for.
+///
+/// <b>Nothing here opens, loads, resolves or activates anything</b> (FR-044): every member
+/// is a question asked of a handle a view already held.
+/// </summary>
+public interface IReferencedModelReader
+{
+    /// <summary>Whether the handle is a model document at all, before anything is asked of it.</summary>
+    bool IsModel(object document);
+
+    /// <summary><c>IModelDoc2.GetPathName()</c>, verbatim.</summary>
+    string? Path(object model);
+
+    /// <summary>
+    /// The document's kind. It throws rather than answering null when it cannot be read: the
+    /// caller records that as an unresolved coverage row, because a defaulted kind would walk
+    /// an assembly's tree as a part's or drop a part's feature tree in silence.
+    /// </summary>
+    DocumentKind Kind(object model);
+
+    /// <summary>
+    /// <c>IModelDoc2.ConfigurationManager.ActiveConfiguration</c>, or null when the document
+    /// reports none. The ACTIVE one: no configuration is switched, because switching rebuilds.
+    /// </summary>
+    object? Configuration(object model);
+
+    /// <summary><c>IConfiguration.Name</c>.</summary>
+    string? ConfigurationName(object configuration);
+
+    /// <summary>
+    /// <c>IConfiguration.GetRootComponent3(false)</c> - "do not resolve", so a lightweight
+    /// component stays lightweight. Null for a document that has no component tree.
+    /// </summary>
+    object? RootComponent(object configuration);
+
+    /// <summary><c>IModelDocExtension.ToolboxPartType</c> is not 0.</summary>
+    bool IsToolbox(object model);
+
+    /// <summary>
+    /// The document's own persistent reference, scoped to itself: a referenced model is an
+    /// instance of nothing, so there is no <c>IComponent2</c> to ask.
+    /// </summary>
+    ScopedPersistRef? PersistRef(object model);
 }

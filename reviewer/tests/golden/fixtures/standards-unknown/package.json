@@ -44,8 +44,8 @@
       },
       {
         "name": "drawing",
-        "elapsed_ms": null,
-        "status": "skipped"
+        "elapsed_ms": 1,
+        "status": "ok"
       },
       {
         "name": "hole",
@@ -73,7 +73,7 @@
     "entries": [
       {
         "document_id": "doc:1",
-        "vault_path": "/srv/meridian-vault/jobs/probe/MR-30001.SLDASM",
+        "vault_path": "/srv/meridian-vault/jobs/probe/MR-93001.SLDDRW",
         "vault_version": 1,
         "revision": "A",
         "configuration": "Default",
@@ -82,7 +82,7 @@
       },
       {
         "document_id": "doc:2",
-        "vault_path": "/srv/meridian-vault/jobs/probe/MR-30002.SLDASM",
+        "vault_path": "/srv/meridian-vault/jobs/probe/MR-30001.SLDASM",
         "vault_version": 1,
         "revision": "A",
         "configuration": "Default",
@@ -91,6 +91,15 @@
       },
       {
         "document_id": "doc:3",
+        "vault_path": "/srv/meridian-vault/jobs/probe/MR-30002.SLDASM",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:4",
         "vault_path": "/srv/meridian-vault/jobs/probe/MR-13001.SLDPRT",
         "vault_version": 1,
         "revision": "A",
@@ -99,7 +108,7 @@
         "export_method": "native"
       },
       {
-        "document_id": "doc:4",
+        "document_id": "doc:5",
         "vault_path": "/srv/meridian-vault/jobs/probe/MR-13002.SLDPRT",
         "vault_version": 1,
         "revision": "A",
@@ -108,7 +117,7 @@
         "export_method": "native"
       },
       {
-        "document_id": "doc:5",
+        "document_id": "doc:6",
         "vault_path": "/srv/meridian-vault/jobs/probe/MR-13003.SLDPRT",
         "vault_version": 1,
         "revision": "A",
@@ -117,7 +126,7 @@
         "export_method": "native"
       },
       {
-        "document_id": "doc:6",
+        "document_id": "doc:7",
         "vault_path": "/srv/meridian-vault/jobs/probe/MR-13004.SLDPRT",
         "vault_version": 1,
         "revision": "A",
@@ -126,7 +135,7 @@
         "export_method": "native"
       },
       {
-        "document_id": "doc:7",
+        "document_id": "doc:8",
         "vault_path": "/srv/meridian-vault/jobs/probe/MR-13005.SLDPRT",
         "vault_version": 1,
         "revision": "A",
@@ -135,7 +144,7 @@
         "export_method": "native"
       },
       {
-        "document_id": "doc:8",
+        "document_id": "doc:9",
         "vault_path": "/srv/meridian-vault/catalog/screws/MR-13006.SLDPRT",
         "vault_version": 1,
         "revision": "A",
@@ -144,7 +153,7 @@
         "export_method": "native"
       },
       {
-        "document_id": "doc:9",
+        "document_id": "doc:10",
         "vault_path": "/srv/meridian-vault/jobs/probe/MR-13007.SLDPRT",
         "vault_version": 1,
         "revision": "A",
@@ -157,14 +166,36 @@
   },
   "design": {
     "design_id": "dsn:1",
-    "name": "MR-30001",
+    "name": "MR-93001",
     "root_assembly_document_id": "doc:1",
     "active_configuration": "Default",
-    "drawing_document_ids": []
+    "drawing_document_ids": [
+      "doc:1"
+    ]
   },
   "documents": [
     {
       "document_id": "doc:1",
+      "kind": "drawing",
+      "file_name": "MR-93001.SLDDRW",
+      "path": "/srv/meridian-vault/jobs/probe/MR-93001.SLDDRW",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4",
+        "MeridianRev": "AA"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:2",
       "kind": "assembly",
       "file_name": "MR-30001.SLDASM",
       "path": "/srv/meridian-vault/jobs/probe/MR-30001.SLDASM",
@@ -176,7 +207,8 @@
         "Meridian Item Id": "fixture value 1",
         "Short Note": "fixture value 2",
         "Plating Spec": "fixture value 3",
-        "Raw Stock Code": "fixture value 4"
+        "Raw Stock Code": "fixture value 4",
+        "MeridianRev": "AA"
       },
       "config_properties": {},
       "material": null,
@@ -185,7 +217,7 @@
       "rebuild_error_count": 0
     },
     {
-      "document_id": "doc:2",
+      "document_id": "doc:3",
       "kind": "assembly",
       "file_name": "MR-30002.SLDASM",
       "path": "/srv/meridian-vault/jobs/probe/MR-30002.SLDASM",
@@ -206,7 +238,7 @@
       "rebuild_error_count": 0
     },
     {
-      "document_id": "doc:3",
+      "document_id": "doc:4",
       "kind": "part",
       "file_name": "MR-13001.SLDPRT",
       "path": "/srv/meridian-vault/jobs/probe/MR-13001.SLDPRT",
@@ -228,7 +260,7 @@
       "material_configuration": "Fabricated"
     },
     {
-      "document_id": "doc:4",
+      "document_id": "doc:5",
       "kind": "part",
       "file_name": "MR-13002.SLDPRT",
       "path": "/srv/meridian-vault/jobs/probe/MR-13002.SLDPRT",
@@ -250,7 +282,7 @@
       "material_configuration": "Fabricated"
     },
     {
-      "document_id": "doc:5",
+      "document_id": "doc:6",
       "kind": "part",
       "file_name": "MR-13003.SLDPRT",
       "path": "/srv/meridian-vault/jobs/probe/MR-13003.SLDPRT",
@@ -272,7 +304,7 @@
       "material_configuration": "Fabricated"
     },
     {
-      "document_id": "doc:6",
+      "document_id": "doc:7",
       "kind": "part",
       "file_name": "MR-13004.SLDPRT",
       "path": "/srv/meridian-vault/jobs/probe/MR-13004.SLDPRT",
@@ -293,7 +325,7 @@
       "material_configuration": "Fabricated"
     },
     {
-      "document_id": "doc:7",
+      "document_id": "doc:8",
       "kind": "part",
       "file_name": "MR-13005.SLDPRT",
       "path": "/srv/meridian-vault/jobs/probe/MR-13005.SLDPRT",
@@ -315,7 +347,7 @@
       "material_configuration": "Fabricated"
     },
     {
-      "document_id": "doc:8",
+      "document_id": "doc:9",
       "kind": "part",
       "file_name": "MR-13006.SLDPRT",
       "path": "/srv/meridian-vault/catalog/screws/MR-13006.SLDPRT",
@@ -337,7 +369,7 @@
       "material_configuration": "Fabricated"
     },
     {
-      "document_id": "doc:9",
+      "document_id": "doc:10",
       "kind": "part",
       "file_name": "MR-13007.SLDPRT",
       "path": "/srv/meridian-vault/jobs/probe/MR-13007.SLDPRT",
@@ -364,7 +396,7 @@
       "id": "cmp:0001",
       "persist_ref": "Y21wOjAwMDE=",
       "persist_ref_scope": "doc:1",
-      "name": "MR-30001",
+      "name": "MR-93001",
       "document_id": "doc:1",
       "parent_id": null,
       "referenced_configuration": "Default",
@@ -398,7 +430,7 @@
       "is_fixed": true,
       "pattern_id": null,
       "is_toolbox": false,
-      "full_path": "MR-30001",
+      "full_path": "MR-93001",
       "constrained_status_raw": null,
       "has_appearance_override": false,
       "visibility_raw": 1,
@@ -408,9 +440,53 @@
       "id": "cmp:0002",
       "persist_ref": "Y21wOjAwMDI=",
       "persist_ref_scope": "doc:1",
-      "name": "MR-30002-1",
+      "name": "MR-30001",
       "document_id": "doc:2",
       "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-93001/MR-30001",
+      "constrained_status_raw": null,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:2",
+      "name": "MR-30002-1",
+      "document_id": "doc:3",
+      "parent_id": "cmp:0002",
       "referenced_configuration": "Default",
       "transform": [
         [
@@ -449,12 +525,12 @@
       "is_pattern_instance": false
     },
     {
-      "id": "cmp:0003",
-      "persist_ref": "Y21wOjAwMDM=",
-      "persist_ref_scope": "doc:1",
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:2",
       "name": "MR-13001-1",
-      "document_id": "doc:3",
-      "parent_id": "cmp:0001",
+      "document_id": "doc:4",
+      "parent_id": "cmp:0002",
       "referenced_configuration": "Fabricated",
       "transform": [
         [
@@ -493,12 +569,12 @@
       "is_pattern_instance": false
     },
     {
-      "id": "cmp:0004",
-      "persist_ref": "Y21wOjAwMDQ=",
-      "persist_ref_scope": "doc:1",
+      "id": "cmp:0005",
+      "persist_ref": "Y21wOjAwMDU=",
+      "persist_ref_scope": "doc:2",
       "name": "MR-13002-1",
-      "document_id": "doc:4",
-      "parent_id": "cmp:0001",
+      "document_id": "doc:5",
+      "parent_id": "cmp:0002",
       "referenced_configuration": "Fabricated",
       "transform": [
         [
@@ -537,12 +613,12 @@
       "is_pattern_instance": false
     },
     {
-      "id": "cmp:0005",
-      "persist_ref": "Y21wOjAwMDU=",
-      "persist_ref_scope": "doc:1",
+      "id": "cmp:0006",
+      "persist_ref": "Y21wOjAwMDY=",
+      "persist_ref_scope": "doc:2",
       "name": "MR-13003-1",
-      "document_id": "doc:5",
-      "parent_id": "cmp:0001",
+      "document_id": "doc:6",
+      "parent_id": "cmp:0002",
       "referenced_configuration": "Fabricated",
       "transform": [
         [
@@ -581,12 +657,12 @@
       "is_pattern_instance": false
     },
     {
-      "id": "cmp:0006",
-      "persist_ref": "Y21wOjAwMDY=",
-      "persist_ref_scope": "doc:1",
+      "id": "cmp:0007",
+      "persist_ref": "Y21wOjAwMDc=",
+      "persist_ref_scope": "doc:2",
       "name": "MR-13004-1",
-      "document_id": "doc:6",
-      "parent_id": "cmp:0001",
+      "document_id": "doc:7",
+      "parent_id": "cmp:0002",
       "referenced_configuration": "Fabricated",
       "transform": [
         [
@@ -625,12 +701,12 @@
       "is_pattern_instance": false
     },
     {
-      "id": "cmp:0007",
-      "persist_ref": "Y21wOjAwMDc=",
-      "persist_ref_scope": "doc:1",
+      "id": "cmp:0008",
+      "persist_ref": "Y21wOjAwMDg=",
+      "persist_ref_scope": "doc:2",
       "name": "MR-13005-1",
-      "document_id": "doc:7",
-      "parent_id": "cmp:0001",
+      "document_id": "doc:8",
+      "parent_id": "cmp:0002",
       "referenced_configuration": "Fabricated",
       "transform": [
         [
@@ -669,12 +745,12 @@
       "is_pattern_instance": false
     },
     {
-      "id": "cmp:0008",
-      "persist_ref": "Y21wOjAwMDg=",
-      "persist_ref_scope": "doc:2",
+      "id": "cmp:0009",
+      "persist_ref": "Y21wOjAwMDk=",
+      "persist_ref_scope": "doc:3",
       "name": "MR-13007-1",
-      "document_id": "doc:9",
-      "parent_id": "cmp:0002",
+      "document_id": "doc:10",
+      "parent_id": "cmp:0003",
       "referenced_configuration": "Fabricated",
       "transform": [
         [
@@ -713,12 +789,12 @@
       "is_pattern_instance": false
     },
     {
-      "id": "cmp:0009",
-      "persist_ref": "Y21wOjAwMDk=",
-      "persist_ref_scope": "doc:2",
+      "id": "cmp:0010",
+      "persist_ref": "Y21wOjAwMTA=",
+      "persist_ref_scope": "doc:3",
       "name": "MR-13006-1",
-      "document_id": "doc:8",
-      "parent_id": "cmp:0002",
+      "document_id": "doc:9",
+      "parent_id": "cmp:0003",
       "referenced_configuration": "Fabricated",
       "transform": [
         [
@@ -761,17 +837,17 @@
     {
       "id": "mate:0001",
       "persist_ref": "bWF0ZTowMDAx",
-      "persist_ref_scope": "doc:1",
+      "persist_ref_scope": "doc:2",
       "type": "COINCIDENT",
       "entities": [
         {
-          "component_id": "cmp:0002",
+          "component_id": "cmp:0003",
           "persist_ref": "bWF0ZTowMDAxL01SLTMwMDAyLTE=",
           "entity_kind": "swSelDATUMPLANES",
           "resolution_status": "resolved"
         },
         {
-          "component_id": "cmp:0003",
+          "component_id": "cmp:0004",
           "persist_ref": "bWF0ZTowMDAxL01SLTEzMDAxLTE=",
           "entity_kind": "swSelDATUMPLANES",
           "resolution_status": "resolved"
@@ -791,12 +867,91 @@
   "interferences": [],
   "captures": [],
   "drawings": [],
+  "drawing_records": [
+    {
+      "document_id": "doc:1",
+      "source": "native",
+      "active_sheet_name": "Sheet1",
+      "sheets": [
+        {
+          "id": "dsh:0001",
+          "source": "native",
+          "name": "Sheet1",
+          "index": 0,
+          "sheet_format_name": "Sheet Format",
+          "was_active": true,
+          "views": [
+            {
+              "id": "dvw:0001",
+              "sheet_id": "dsh:0001",
+              "name": "Sheet Format",
+              "view_type_raw": 1,
+              "notes": [
+                {
+                  "id": "dnt:0001",
+                  "owner_id": "dvw:0001",
+                  "text": "FINISH: AS MACHINED",
+                  "persist_ref": "ZG50OjAwMDE="
+                },
+                {
+                  "id": "dnt:0002",
+                  "owner_id": "dvw:0001",
+                  "persist_ref": "ZG50OjAwMDI="
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDE="
+            },
+            {
+              "id": "dvw:0002",
+              "sheet_id": "dsh:0001",
+              "name": "Drawing View1",
+              "view_type_raw": 2,
+              "referenced_document_id": "doc:2",
+              "referenced_model_path": "/srv/meridian-vault/jobs/probe/MR-30001.SLDASM",
+              "persist_ref": "ZHZ3OjAwMDI="
+            }
+          ],
+          "revision_tables": [
+            {
+              "id": "drv:0001",
+              "sheet_id": "dsh:0001",
+              "current_revision_raw": "AA",
+              "row_count": 2,
+              "column_count": 3,
+              "rows": [
+                {
+                  "index": 0,
+                  "cells": [
+                    "ZONE",
+                    "REV",
+                    "DESCRIPTION"
+                  ],
+                  "is_header": true
+                },
+                {
+                  "index": 1,
+                  "cells": [
+                    "A1",
+                    "AA",
+                    "Initial release"
+                  ],
+                  "is_header": false
+                }
+              ],
+              "persist_ref": "ZHJ2OjAwMDE="
+            }
+          ],
+          "persist_ref": "ZHNoOjAwMDE="
+        }
+      ]
+    }
+  ],
   "features": [
     {
       "id": "feat:0001",
-      "persist_ref": "ZG9jOjMvQm9zcy1FeHRydWRlMQ==",
-      "persist_ref_scope": "doc:3",
-      "document_id": "doc:3",
+      "persist_ref": "ZG9jOjQvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
       "configuration": "Fabricated",
       "name": "Boss-Extrude1",
       "type_name": "Extrude",
@@ -813,9 +968,9 @@
     },
     {
       "id": "feat:0002",
-      "persist_ref": "ZG9jOjMvU2tldGNoMQ==",
-      "persist_ref_scope": "doc:3",
-      "document_id": "doc:3",
+      "persist_ref": "ZG9jOjQvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:4",
+      "document_id": "doc:4",
       "configuration": "Fabricated",
       "name": "Sketch1",
       "type_name": "ProfileFeature",
@@ -836,9 +991,9 @@
     },
     {
       "id": "feat:0003",
-      "persist_ref": "ZG9jOjQvQm9zcy1FeHRydWRlMQ==",
-      "persist_ref_scope": "doc:4",
-      "document_id": "doc:4",
+      "persist_ref": "ZG9jOjUvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
       "configuration": "Fabricated",
       "name": "Boss-Extrude1",
       "type_name": "Extrude",
@@ -855,9 +1010,9 @@
     },
     {
       "id": "feat:0004",
-      "persist_ref": "ZG9jOjQvU2tldGNoMQ==",
-      "persist_ref_scope": "doc:4",
-      "document_id": "doc:4",
+      "persist_ref": "ZG9jOjUvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:5",
+      "document_id": "doc:5",
       "configuration": "Fabricated",
       "name": "Sketch1",
       "type_name": "ProfileFeature",
@@ -878,9 +1033,9 @@
     },
     {
       "id": "feat:0005",
-      "persist_ref": "ZG9jOjUvQm9zcy1FeHRydWRlMQ==",
-      "persist_ref_scope": "doc:5",
-      "document_id": "doc:5",
+      "persist_ref": "ZG9jOjYvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:6",
+      "document_id": "doc:6",
       "configuration": "Fabricated",
       "name": "Boss-Extrude1",
       "type_name": "Extrude",
@@ -897,9 +1052,9 @@
     },
     {
       "id": "feat:0006",
-      "persist_ref": "ZG9jOjUvU2tldGNoMQ==",
-      "persist_ref_scope": "doc:5",
-      "document_id": "doc:5",
+      "persist_ref": "ZG9jOjYvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:6",
+      "document_id": "doc:6",
       "configuration": "Fabricated",
       "name": "Sketch1",
       "type_name": "ProfileFeature",
@@ -920,9 +1075,9 @@
     },
     {
       "id": "feat:0007",
-      "persist_ref": "ZG9jOjYvQm9zcy1FeHRydWRlMQ==",
-      "persist_ref_scope": "doc:6",
-      "document_id": "doc:6",
+      "persist_ref": "ZG9jOjcvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:7",
+      "document_id": "doc:7",
       "configuration": "Fabricated",
       "name": "Boss-Extrude1",
       "type_name": "Extrude",
@@ -939,9 +1094,9 @@
     },
     {
       "id": "feat:0008",
-      "persist_ref": "ZG9jOjYvU2tldGNoMQ==",
-      "persist_ref_scope": "doc:6",
-      "document_id": "doc:6",
+      "persist_ref": "ZG9jOjcvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:7",
+      "document_id": "doc:7",
       "configuration": "Fabricated",
       "name": "Sketch1",
       "type_name": "ProfileFeature",
@@ -962,9 +1117,9 @@
     },
     {
       "id": "feat:0009",
-      "persist_ref": "ZG9jOjcvQm9zcy1FeHRydWRlMQ==",
-      "persist_ref_scope": "doc:7",
-      "document_id": "doc:7",
+      "persist_ref": "ZG9jOjgvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:8",
+      "document_id": "doc:8",
       "configuration": "Fabricated",
       "name": "Boss-Extrude1",
       "type_name": "Extrude",
@@ -981,9 +1136,9 @@
     },
     {
       "id": "feat:0010",
-      "persist_ref": "ZG9jOjcvU2tldGNoMQ==",
-      "persist_ref_scope": "doc:7",
-      "document_id": "doc:7",
+      "persist_ref": "ZG9jOjgvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:8",
+      "document_id": "doc:8",
       "configuration": "Fabricated",
       "name": "Sketch1",
       "type_name": "ProfileFeature",
@@ -1004,9 +1159,9 @@
     },
     {
       "id": "feat:0011",
-      "persist_ref": "ZG9jOjgvQm9zcy1FeHRydWRlMQ==",
-      "persist_ref_scope": "doc:8",
-      "document_id": "doc:8",
+      "persist_ref": "ZG9jOjkvQm9zcy1FeHRydWRlMQ==",
+      "persist_ref_scope": "doc:9",
+      "document_id": "doc:9",
       "configuration": "Fabricated",
       "name": "Boss-Extrude1",
       "type_name": "Extrude",
@@ -1023,9 +1178,9 @@
     },
     {
       "id": "feat:0012",
-      "persist_ref": "ZG9jOjgvU2tldGNoMQ==",
-      "persist_ref_scope": "doc:8",
-      "document_id": "doc:8",
+      "persist_ref": "ZG9jOjkvU2tldGNoMQ==",
+      "persist_ref_scope": "doc:9",
+      "document_id": "doc:9",
       "configuration": "Fabricated",
       "name": "Sketch1",
       "type_name": "ProfileFeature",
@@ -1046,9 +1201,9 @@
     },
     {
       "id": "feat:0013",
-      "persist_ref": "ZG9jOjkvQm9zcy1FeHRydWRlMQ==",
-      "persist_ref_scope": "doc:9",
-      "document_id": "doc:9",
+      "persist_ref": "ZG9jOjEwL0Jvc3MtRXh0cnVkZTE=",
+      "persist_ref_scope": "doc:10",
+      "document_id": "doc:10",
       "configuration": "Fabricated",
       "name": "Boss-Extrude1",
       "type_name": "Extrude",
@@ -1065,9 +1220,9 @@
     },
     {
       "id": "feat:0014",
-      "persist_ref": "ZG9jOjkvU2tldGNoMQ==",
-      "persist_ref_scope": "doc:9",
-      "document_id": "doc:9",
+      "persist_ref": "ZG9jOjEwL1NrZXRjaDE=",
+      "persist_ref_scope": "doc:10",
+      "document_id": "doc:10",
       "configuration": "Fabricated",
       "name": "Sketch1",
       "type_name": "ProfileFeature",
@@ -1089,5 +1244,13 @@
   ],
   "equations": [],
   "rms_suppress_test": null,
-  "gaps": []
+  "gaps": [
+    {
+      "kind": "not_extracted",
+      "entity_kind": "note_text",
+      "entity_id": "dnt:0002",
+      "reason": "SOLIDWORKS gave no value for GetText when asked to read the text of note dnt:0002 on sheet 'Sheet1' of MR-93001.SLDDRW.",
+      "error": null
+    }
+  ]
 }

@@ -90,10 +90,10 @@ result:
     - bucket: unresolved
       document_ids:
       - doc:2
-      reason: '1 document(s): doc:2: cmp:0003 MR-12001-1: the transparency polarity
+      reason: '1 document(s): doc:2: cmp:0003 MR-10401-1: the transparency polarity
         is unsettled: PROBE-2 has not settled which recorded value means transparent
         on this build, so no component of any assembly can be graded against this
-        check and none is reported as compliant; cmp:0004 MR-12002-1: the transparency
+        check and none is reported as compliant; cmp:0004 MR-10402-1: the transparency
         polarity is unsettled: PROBE-2 has not settled which recorded value means
         transparent on this build, so no component of any assembly can be graded against
         this check and none is reported as compliant'
@@ -178,13 +178,12 @@ result:
   - buckets:
     - bucket: skipped
       document_ids:
-      - doc:4
-      reason: '1 document(s): doc:4: the part records no cut-list items, which is
-        not the same as every item being excluded (difference aa)'
-    - bucket: checked
-      document_ids:
       - doc:3
-      reason: 1 document(s)
+      - doc:4
+      reason: '2 document(s): doc:3: the part records no cut-list items, which is
+        not the same as every item being excluded (difference aa); doc:4: the part
+        records no cut-list items, which is not the same as every item being excluded
+        (difference aa)'
     - bucket: out_of_scope
       document_ids:
       - doc:1
@@ -213,10 +212,10 @@ result:
     statement: No display dimension carries a manual override.
     worst_bucket: checked
   - buckets:
-    - bucket: checked
+    - bucket: skipped
       document_ids:
       - doc:1
-      reason: 1 document(s)
+      reason: '1 document(s): doc:1: the drawing''s native sheets record no annotation'
     - bucket: out_of_scope
       document_ids:
       - doc:2
@@ -228,12 +227,12 @@ result:
     check: standards.drawing.annotations_not_dangling
     severity: error
     statement: No annotation is dangling.
-    worst_bucket: checked
+    worst_bucket: skipped
   - buckets:
-    - bucket: checked
+    - bucket: warned
       document_ids:
       - doc:1
-      reason: 1 document(s)
+      reason: 'doc:1: F-001'
     - bucket: out_of_scope
       document_ids:
       - doc:2
@@ -246,7 +245,7 @@ result:
     severity: warning
     statement: The revision table, the drawing's revision property and every referenced
       model's revision property agree.
-    worst_bucket: checked
+    worst_bucket: warned
   - buckets:
     - bucket: checked
       document_ids:
@@ -280,28 +279,6 @@ result:
   coverage:
   - bucket: checked
     check: standards.drawing.dimensions_not_overridden
-    error: null
-    reason: 1 document(s)
-    scope:
-      component_ids: []
-      configuration: Default
-      document_ids:
-      - doc:1
-      pairs: []
-      positions: []
-  - bucket: checked
-    check: standards.drawing.annotations_not_dangling
-    error: null
-    reason: 1 document(s)
-    scope:
-      component_ids: []
-      configuration: Default
-      document_ids:
-      - doc:1
-      pairs: []
-      positions: []
-  - bucket: checked
-    check: standards.drawing.revision_matches
     error: null
     reason: 1 document(s)
     scope:
@@ -438,36 +415,39 @@ result:
       - doc:4
       pairs: []
       positions: []
-  - bucket: checked
-    check: standards.part.cut_list_excluded
+  - bucket: skipped
+    check: standards.drawing.annotations_not_dangling
     error: null
-    reason: 1 document(s)
+    reason: '1 document(s): doc:1: the drawing''s native sheets record no annotation'
     scope:
       component_ids: []
       configuration: Default
       document_ids:
-      - doc:3
+      - doc:1
       pairs: []
       positions: []
   - bucket: skipped
     check: standards.part.cut_list_excluded
     error: null
-    reason: '1 document(s): doc:4: the part records no cut-list items, which is not
-      the same as every item being excluded (difference aa)'
+    reason: '2 document(s): doc:3: the part records no cut-list items, which is not
+      the same as every item being excluded (difference aa); doc:4: the part records
+      no cut-list items, which is not the same as every item being excluded (difference
+      aa)'
     scope:
       component_ids: []
       configuration: Default
       document_ids:
+      - doc:3
       - doc:4
       pairs: []
       positions: []
   - bucket: unresolved
     check: standards.assembly.not_transparent
     error: null
-    reason: '1 document(s): doc:2: cmp:0003 MR-12001-1: the transparency polarity
+    reason: '1 document(s): doc:2: cmp:0003 MR-10401-1: the transparency polarity
       is unsettled: PROBE-2 has not settled which recorded value means transparent
       on this build, so no component of any assembly can be graded against this check
-      and none is reported as compliant; cmp:0004 MR-12002-1: the transparency polarity
+      and none is reported as compliant; cmp:0004 MR-10402-1: the transparency polarity
       is unsettled: PROBE-2 has not settled which recorded value means transparent
       on this build, so no component of any assembly can be graded against this check
       and none is reported as compliant'
@@ -481,8 +461,8 @@ result:
   - bucket: unresolved
     check: standards.release
     error: null
-    reason: 'ready_coverage_incomplete; 0 error, 0 warning and 0 waived finding(s);
-      21 checked, 1 skipped, 1 unresolved and 41 out-of-scope (check, document) pair(s);
+    reason: 'ready_coverage_incomplete; 0 error, 1 warning and 0 waived finding(s);
+      18 checked, 3 skipped, 1 unresolved and 41 out-of-scope (check, document) pair(s);
       unresolved: standards.assembly.not_transparent'
     scope:
       component_ids: []
@@ -727,20 +707,68 @@ result:
     reason: no run root was named for this run, so no earlier run was looked at and
       nothing was carried forward; the directory above a package is a run root only
       when a caller says it is
-  findings: []
+  findings:
+  - calculation: null
+    capture_ids: []
+    check: standards.drawing.revision_matches
+    component_ids: []
+    configuration: Default
+    coverage_limits:
+    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - configuration Default
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-001
+    inputs:
+    - document doc:1 MR-90401.SLDDRW persist_ref=none scope=doc:1
+    observed: 'the revision MR-90401.SLDDRW shows does not agree everywhere: the MeridianRev
+      property of MR-90401.SLDDRW states ''AA'', and MR-20401.SLDASM, which it references,
+      states ''AB''; the MeridianRev property of MR-90401.SLDDRW states ''AA'', and
+      MR-10401.SLDPRT, which it references, states ''AB'''
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /srv/meridian-vault/jobs/drawings/MR-90401.SLDDRW
+      vault_version: 1
+    recommended_action: Bring the revision table, the drawing's revision property
+      and the revision property of every model it references into agreement.
+    requirement: The revision table, the drawing's revision property and every referenced
+      model's revision property agree.
+    severity: low
+    status: suspected
+    title: 'the revision MR-90401.SLDDRW shows does not agree everywhere: the MeridianRev
+      p…'
+    tool_result_ids:
+    - 0
   profile:
     path: <profile-a.yaml>
     sha256: <sha256 of profile-a.yaml>
-  subjects: {}
+  subjects:
+    F-001:
+    - component_ids: []
+      id: doc:1
+      kind: document
+      name: MR-90401.SLDDRW
+      parent_chain: []
+      persist_ref: null
+      persist_ref_scope: null
+      reason: no persistent reference was read for this subject, so it cannot be selected
+        in SOLIDWORKS
+      showable: false
   unavailable_checks: []
   verdict:
     counts:
-      checked: 21
+      checked: 18
       error: 0
       out_of_scope: 41
-      skipped: 1
+      skipped: 3
       unresolved: 1
-      warning: 0
+      warning: 1
     notes: []
     state: ready_coverage_incomplete
     unresolved_check_ids:

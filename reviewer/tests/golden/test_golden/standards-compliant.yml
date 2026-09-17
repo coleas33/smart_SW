@@ -275,12 +275,10 @@ result:
     statement: Every cut-list item is excluded from the cut list.
     worst_bucket: skipped
   - buckets:
-    - bucket: unresolved
+    - bucket: checked
       document_ids:
       - doc:1
-      reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.dimensions_not_overridden
-        is in the catalogue and no evaluator runs it yet, so nothing was evaluated
-        for it and nothing about it is claimed'
+      reason: 1 document(s)
     - bucket: out_of_scope
       document_ids:
       - doc:2
@@ -298,14 +296,12 @@ result:
     check: standards.drawing.dimensions_not_overridden
     severity: error
     statement: No display dimension carries a manual override.
-    worst_bucket: unresolved
+    worst_bucket: checked
   - buckets:
-    - bucket: unresolved
+    - bucket: checked
       document_ids:
       - doc:1
-      reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.annotations_not_dangling
-        is in the catalogue and no evaluator runs it yet, so nothing was evaluated
-        for it and nothing about it is claimed'
+      reason: 1 document(s)
     - bucket: out_of_scope
       document_ids:
       - doc:2
@@ -323,14 +319,12 @@ result:
     check: standards.drawing.annotations_not_dangling
     severity: error
     statement: No annotation is dangling.
-    worst_bucket: unresolved
+    worst_bucket: checked
   - buckets:
-    - bucket: unresolved
+    - bucket: checked
       document_ids:
       - doc:1
-      reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.revision_matches
-        is in the catalogue and no evaluator runs it yet, so nothing was evaluated
-        for it and nothing about it is claimed'
+      reason: 1 document(s)
     - bucket: out_of_scope
       document_ids:
       - doc:2
@@ -349,14 +343,12 @@ result:
     severity: warning
     statement: The revision table, the drawing's revision property and every referenced
       model's revision property agree.
-    worst_bucket: unresolved
+    worst_bucket: checked
   - buckets:
-    - bucket: unresolved
+    - bucket: checked
       document_ids:
       - doc:1
-      reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.no_itar_statement
-        is in the catalogue and no evaluator runs it yet, so nothing was evaluated
-        for it and nothing about it is claimed'
+      reason: 1 document(s)
     - bucket: out_of_scope
       document_ids:
       - doc:2
@@ -374,7 +366,7 @@ result:
     check: standards.drawing.no_itar_statement
     severity: warning
     statement: No export-control statement appears in the drawing's notes.
-    worst_bucket: unresolved
+    worst_bucket: checked
   - buckets:
     - bucket: checked
       document_ids:
@@ -392,6 +384,50 @@ result:
       the part-number convention.
     worst_bucket: checked
   coverage:
+  - bucket: checked
+    check: standards.drawing.dimensions_not_overridden
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.drawing.annotations_not_dangling
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.drawing.revision_matches
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      pairs: []
+      positions: []
+  - bucket: checked
+    check: standards.drawing.no_itar_statement
+    error: null
+    reason: 1 document(s)
+    scope:
+      component_ids: []
+      configuration: Default
+      document_ids:
+      - doc:1
+      pairs: []
+      positions: []
   - bucket: checked
     check: standards.document.data_card_complete
     error: null
@@ -562,58 +598,6 @@ result:
       pairs: []
       positions: []
   - bucket: unresolved
-    check: standards.drawing.dimensions_not_overridden
-    error: null
-    reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.dimensions_not_overridden
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-    scope:
-      component_ids: []
-      configuration: Default
-      document_ids:
-      - doc:1
-      pairs: []
-      positions: []
-  - bucket: unresolved
-    check: standards.drawing.annotations_not_dangling
-    error: null
-    reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.annotations_not_dangling
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-    scope:
-      component_ids: []
-      configuration: Default
-      document_ids:
-      - doc:1
-      pairs: []
-      positions: []
-  - bucket: unresolved
-    check: standards.drawing.revision_matches
-    error: null
-    reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.revision_matches
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-    scope:
-      component_ids: []
-      configuration: Default
-      document_ids:
-      - doc:1
-      pairs: []
-      positions: []
-  - bucket: unresolved
-    check: standards.drawing.no_itar_statement
-    error: null
-    reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.no_itar_statement
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-    scope:
-      component_ids: []
-      configuration: Default
-      document_ids:
-      - doc:1
-      pairs: []
-      positions: []
-  - bucket: unresolved
     check: standards.assembly.not_transparent
     error: null
     reason: '2 document(s): doc:2: cmp:0003 MR-21002-1: the transparency polarity
@@ -671,10 +655,9 @@ result:
     check: standards.release
     error: null
     reason: 'ready_coverage_incomplete; 0 error, 0 warning and 0 waived finding(s);
-      30 checked, 4 skipped, 8 unresolved and 71 out-of-scope (check, document) pair(s);
-      unresolved: standards.drawing.dimensions_not_overridden, standards.drawing.annotations_not_dangling,
-      standards.drawing.revision_matches, standards.drawing.no_itar_statement, standards.assembly.not_transparent,
-      standards.assembly.mate_references, standards.assembly.fully_mated'
+      34 checked, 4 skipped, 4 unresolved and 71 out-of-scope (check, document) pair(s);
+      unresolved: standards.assembly.not_transparent, standards.assembly.mate_references,
+      standards.assembly.fully_mated'
     scope:
       component_ids: []
       configuration: Default
@@ -992,38 +975,18 @@ result:
     path: <profile-a.yaml>
     sha256: <sha256 of profile-a.yaml>
   subjects: {}
-  unavailable_checks:
-  - check: standards.drawing.dimensions_not_overridden
-    reason: 'not yet available in this build: standards.drawing.dimensions_not_overridden
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-  - check: standards.drawing.annotations_not_dangling
-    reason: 'not yet available in this build: standards.drawing.annotations_not_dangling
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-  - check: standards.drawing.revision_matches
-    reason: 'not yet available in this build: standards.drawing.revision_matches is
-      in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-  - check: standards.drawing.no_itar_statement
-    reason: 'not yet available in this build: standards.drawing.no_itar_statement
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
+  unavailable_checks: []
   verdict:
     counts:
-      checked: 30
+      checked: 34
       error: 0
       out_of_scope: 71
       skipped: 4
-      unresolved: 8
+      unresolved: 4
       warning: 0
     notes: []
     state: ready_coverage_incomplete
     unresolved_check_ids:
-    - standards.drawing.dimensions_not_overridden
-    - standards.drawing.annotations_not_dangling
-    - standards.drawing.revision_matches
-    - standards.drawing.no_itar_statement
     - standards.assembly.not_transparent
     - standards.assembly.mate_references
     - standards.assembly.fully_mated

@@ -90,10 +90,10 @@ result:
     - bucket: unresolved
       document_ids:
       - doc:2
-      reason: '1 document(s): doc:2: cmp:0003 MR-12001-1: the transparency polarity
+      reason: '1 document(s): doc:2: cmp:0003 MR-10201-1: the transparency polarity
         is unsettled: PROBE-2 has not settled which recorded value means transparent
         on this build, so no component of any assembly can be graded against this
-        check and none is reported as compliant; cmp:0004 MR-12002-1: the transparency
+        check and none is reported as compliant; cmp:0004 MR-10202-1: the transparency
         polarity is unsettled: PROBE-2 has not settled which recorded value means
         transparent on this build, so no component of any assembly can be graded against
         this check and none is reported as compliant'
@@ -178,13 +178,12 @@ result:
   - buckets:
     - bucket: skipped
       document_ids:
-      - doc:4
-      reason: '1 document(s): doc:4: the part records no cut-list items, which is
-        not the same as every item being excluded (difference aa)'
-    - bucket: checked
-      document_ids:
       - doc:3
-      reason: 1 document(s)
+      - doc:4
+      reason: '2 document(s): doc:3: the part records no cut-list items, which is
+        not the same as every item being excluded (difference aa); doc:4: the part
+        records no cut-list items, which is not the same as every item being excluded
+        (difference aa)'
     - bucket: out_of_scope
       document_ids:
       - doc:1
@@ -438,36 +437,28 @@ result:
       - doc:4
       pairs: []
       positions: []
-  - bucket: checked
+  - bucket: skipped
     check: standards.part.cut_list_excluded
     error: null
-    reason: 1 document(s)
+    reason: '2 document(s): doc:3: the part records no cut-list items, which is not
+      the same as every item being excluded (difference aa); doc:4: the part records
+      no cut-list items, which is not the same as every item being excluded (difference
+      aa)'
     scope:
       component_ids: []
       configuration: Default
       document_ids:
       - doc:3
-      pairs: []
-      positions: []
-  - bucket: skipped
-    check: standards.part.cut_list_excluded
-    error: null
-    reason: '1 document(s): doc:4: the part records no cut-list items, which is not
-      the same as every item being excluded (difference aa)'
-    scope:
-      component_ids: []
-      configuration: Default
-      document_ids:
       - doc:4
       pairs: []
       positions: []
   - bucket: unresolved
     check: standards.assembly.not_transparent
     error: null
-    reason: '1 document(s): doc:2: cmp:0003 MR-12001-1: the transparency polarity
+    reason: '1 document(s): doc:2: cmp:0003 MR-10201-1: the transparency polarity
       is unsettled: PROBE-2 has not settled which recorded value means transparent
       on this build, so no component of any assembly can be graded against this check
-      and none is reported as compliant; cmp:0004 MR-12002-1: the transparency polarity
+      and none is reported as compliant; cmp:0004 MR-10202-1: the transparency polarity
       is unsettled: PROBE-2 has not settled which recorded value means transparent
       on this build, so no component of any assembly can be graded against this check
       and none is reported as compliant'
@@ -482,7 +473,7 @@ result:
     check: standards.release
     error: null
     reason: 'ready_coverage_incomplete; 0 error, 0 warning and 0 waived finding(s);
-      21 checked, 1 skipped, 1 unresolved and 41 out-of-scope (check, document) pair(s);
+      20 checked, 2 skipped, 1 unresolved and 41 out-of-scope (check, document) pair(s);
       unresolved: standards.assembly.not_transparent'
     scope:
       component_ids: []
@@ -735,10 +726,10 @@ result:
   unavailable_checks: []
   verdict:
     counts:
-      checked: 21
+      checked: 20
       error: 0
       out_of_scope: 41
-      skipped: 1
+      skipped: 2
       unresolved: 1
       warning: 0
     notes: []

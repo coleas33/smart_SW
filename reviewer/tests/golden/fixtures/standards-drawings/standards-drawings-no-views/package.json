@@ -1,0 +1,224 @@
+{
+  "schema_version": "1.4.0",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "created_at": "2026-09-12T12:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0",
+    "sw_version": null,
+    "machine": "test",
+    "profile": "standards",
+    "phases": [
+      {
+        "name": "document",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "manifest",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "mate",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "feature",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "equation",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "cutlist",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "drawing",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "hole",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "fastener",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "face",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "body",
+        "elapsed_ms": null,
+        "status": "skipped"
+      }
+    ]
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:1",
+        "vault_path": "/srv/meridian-vault/jobs/drawings/MR-90501.SLDDRW",
+        "vault_version": 1,
+        "revision": "A",
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:1",
+    "name": "MR-90501",
+    "root_assembly_document_id": "doc:1",
+    "active_configuration": "Default",
+    "drawing_document_ids": [
+      "doc:1"
+    ]
+  },
+  "documents": [
+    {
+      "document_id": "doc:1",
+      "kind": "drawing",
+      "file_name": "MR-90501.SLDDRW",
+      "path": "/srv/meridian-vault/jobs/drawings/MR-90501.SLDDRW",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Item Id": "fixture value 1",
+        "Short Note": "fixture value 2",
+        "Plating Spec": "fixture value 3",
+        "Raw Stock Code": "fixture value 4",
+        "MeridianRev": "AA"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:1",
+      "name": "MR-90501",
+      "document_id": "doc:1",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "MR-90501",
+      "constrained_status_raw": null,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    }
+  ],
+  "mates": [],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "drawing_records": [
+    {
+      "document_id": "doc:1",
+      "source": "native",
+      "active_sheet_name": "Sheet1",
+      "sheets": [
+        {
+          "id": "dsh:0001",
+          "source": "native",
+          "name": "Sheet1",
+          "index": 0,
+          "sheet_format_name": "Sheet Format",
+          "was_active": true,
+          "revision_tables": [
+            {
+              "id": "drv:0001",
+              "sheet_id": "dsh:0001",
+              "current_revision_raw": "AA",
+              "row_count": 2,
+              "column_count": 3,
+              "rows": [
+                {
+                  "index": 0,
+                  "cells": [
+                    "ZONE",
+                    "REV",
+                    "DESCRIPTION"
+                  ],
+                  "is_header": true
+                },
+                {
+                  "index": 1,
+                  "cells": [
+                    "A1",
+                    "AA",
+                    "Initial release"
+                  ],
+                  "is_header": false
+                }
+              ],
+              "persist_ref": "ZHJ2OjAwMDE="
+            }
+          ],
+          "persist_ref": "ZHNoOjAwMDE="
+        }
+      ]
+    }
+  ],
+  "features": [],
+  "equations": [],
+  "rms_suppress_test": null,
+  "gaps": []
+}

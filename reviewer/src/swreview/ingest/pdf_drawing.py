@@ -41,9 +41,21 @@ from swreview.ingest.dimension_grammar import (
 )
 from swreview.ir.models import Dimension, DrawingSheet, Gap, Note, SourceRef
 
-__all__ = ["NOTE_PREFIXES", "parse_drawing_pdf"]
+__all__ = ["NOTE_PREFIXES", "SOURCE", "parse_drawing_pdf"]
 
 PARSER = f"pymupdf/{pymupdf.pymupdf_version}"
+
+SOURCE = "pdf_ingest"
+"""What every sheet this module writes records as its `DrawingSheet.source` (FR-024).
+
+The per-sheet half of the evidence-source rule: the standards family's four drawing checks
+grade **native** sheets only, because a parser with known limits may not produce a
+demonstrated finding, and a sheet has to say which path produced it rather than leave a
+consumer to infer it from `parser` or from which array it landed in. A sheet written before
+this field existed carries null and is read exactly as one stamped here
+(`contracts/ir-additions.md` section 4), which is what keeps the field additive and the
+golden fixtures that carry unstamped sheets byte-identical.
+"""
 
 NOTE_PREFIXES: tuple[tuple[str, str], ...] = (
     ("UNLESS OTHERWISE SPECIFIED", "general_tolerance"),
@@ -223,6 +235,7 @@ def _parse_page(
         views=[],
         parse_status="text",
         parser=PARSER,
+        source=SOURCE,
     )
 
 
@@ -364,6 +377,7 @@ def _empty_sheet(
         views=[],
         parse_status=status,
         parser=PARSER,
+        source=SOURCE,
     )
 
 

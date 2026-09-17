@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using SwReview.Extractor.Dump;
 using SwReview.Extractor.Guard;
+using SwReview.Extractor.Ids;
 using SwReview.Extractor.Ir;
 using Xunit;
 
@@ -781,6 +782,150 @@ public class PackageWriterTests : IDisposable
         IrContract.AssertValid(PackageSerializer.Serialize(NewWriter(sources).Build(Options())));
     }
 
+    // ---- the package a drawing root produces (T061, schema 1.4.0) -----------------
+
+    /// <summary>
+    /// T061. The drawing itself becomes a document of the package, with a manifest entry -
+    /// which no native dump has ever produced. Before this, a drawing could only reach a
+    /// package through the Python PDF ingest, so its own custom properties were unreadable
+    /// and <c>standards.drawing.revision_matches</c> had nothing to compare the revision
+    /// table against (contracts/ir-additions.md section 7, FR-024).
+    /// </summary>
+    [Fact]
+    public void Build_DrawingRoot_PutsTheDrawingItselfInDocumentsAndInTheManifest()
+    {
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        string drawingId = DocumentIds.For(sources.RootDocumentPath);
+        Document drawing = Assert.Single(
+            package.Documents, document => document.DocumentId == drawingId);
+
+        Assert.Equal(DocumentKind.Drawing, drawing.Kind);
+        Assert.Contains(package.Manifest.Entries, entry => entry.DocumentId == drawingId);
+    }
+
+    /// <summary>
+    /// T061. And so does every model its views reference: the drawing-rooted traversal hangs
+    /// one subtree per referenced model, so the document, manifest, mate, feature, equation
+    /// and cut-list phases run over them exactly as they do under an assembly root (FR-025).
+    /// </summary>
+    [Fact]
+    public void Build_DrawingRoot_PutsEveryReferencedModelInDocumentsToo()
+    {
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.Contains(
+            package.Documents,
+            document => document.DocumentId == DocumentIds.For(sources.Nodes[0].DocumentPath));
+        Assert.Equal(
+            package.Documents.Select(document => document.DocumentId).OrderBy(id => id),
+            package.Manifest.Entries.Select(entry => entry.DocumentId).OrderBy(id => id));
+    }
+
+    /// <summary>
+    /// The forest has real parents. A drawing is normally named after the model it documents,
+    /// so housing.SLDDRW over housing.SLDPRT is the ordinary case, and two nodes keyed on the
+    /// file's base name would collide in <c>DumpScope</c> - whose last write for a key wins -
+    /// leaving the referenced model resolving its own ParentKey to itself. An instance that
+    /// names itself is what <c>checks/standards/traversal.py</c> calls a defect in whatever
+    /// wrote the package; Python survives it, and the package is still wrong.
+    /// </summary>
+    [Fact]
+    public void Build_DrawingRootWhoseModelSharesItsName_HangsTheModelUnderTheForestRoot()
+    {
+        var sources = new FakeSources();
+        sources.UseNamesakeDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.DoesNotContain(package.Components, component => component.ParentId == component.Id);
+
+        Assert.Equal(2, package.Components.Count);
+        ComponentInstance forestRoot = package.Components[0];
+        ComponentInstance model = package.Components[1];
+
+        Assert.Null(forestRoot.ParentId);
+        Assert.Equal(forestRoot.Id, model.ParentId);
+        Assert.NotEqual(forestRoot.DocumentId, model.DocumentId);
+
+        // And one full_path per instance: two instances sharing one is the same collision
+        // seen from the reader's side.
+        Assert.Equal(2, package.Components.Select(component => component.FullPath).Distinct().Count());
+    }
+
+    /// <summary>
+    /// T061. <c>design.drawing_document_ids</c> has existed in the IR since feature 001 and
+    /// has never been set by a native dump. It is what tells a consumer which document of the
+    /// package is the drawing, without inferring it from a file extension.
+    /// </summary>
+    [Fact]
+    public void Build_DrawingRoot_PopulatesTheDesignsDrawingDocumentIds()
+    {
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.Equal(
+            new[] { DocumentIds.For(sources.RootDocumentPath) },
+            package.Design.DrawingDocumentIds);
+    }
+
+    /// <summary>
+    /// T061. <c>root_assembly_document_id</c> holds the ROOT document's id whatever its kind -
+    /// already true for a part opened alone since feature 003, and now for a drawing. The
+    /// field's name is a misnomer feature 003 made, and it is deliberately <b>not</b> renamed:
+    /// renaming a required IR field is a breaking change, and the value is unambiguous.
+    /// </summary>
+    [Fact]
+    public void Build_DrawingRoot_HoldsTheDrawingsIdAsTheRootDocumentId()
+    {
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.Equal(
+            DocumentIds.For(sources.RootDocumentPath), package.Design.RootAssemblyDocumentId);
+        Assert.Equal(
+            DocumentIds.DesignId(sources.RootDocumentPath), package.Design.DesignId);
+    }
+
+    [Theory]
+    [InlineData(DumpProfile.Full)]
+    [InlineData(DumpProfile.ModelCheck)]
+    [InlineData(DumpProfile.Standards)]
+    public void Build_OfAPartOrAssemblyRoot_NamesNoDrawingDocument(DumpProfile profile)
+    {
+        // The dump does not discover the drawings of an open model: a drawing enters a package
+        // when it is itself the dumped document, and not otherwise (FR-025). An empty list
+        // here is the statement, not an oversight.
+        DumpOptions options = Options();
+        options.Profile = profile;
+
+        Assert.Empty(NewWriter().Build(options).Design.DrawingDocumentIds);
+    }
+
+    [Fact]
+    public void Build_StandardsProfileOverADrawingRoot_EmitsNoDrawingGapAtAll()
+    {
+        // The standards half of the conditional gap. The tab runs this profile, so a package
+        // carrying both the sheets and a gap saying the sheets were never read would be the
+        // one a reviewer actually sees (contracts/ir-additions.md section 5).
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(StandardsOptions());
+
+        Assert.DoesNotContain(package.Gaps, g => g.EntityKind == "drawing");
+    }
+
     [Fact]
     public void Build_StandardsProfilePackage_ValidatesAgainstTheContract()
     {
@@ -1183,6 +1328,7 @@ public class PackageWriterTests : IDisposable
         private const string HousingPath = @"C:\vault\bracket-assy\housing.SLDPRT";
         private const string ScrewPath = @"C:\vault\toolbox\hex-cap-screw.SLDPRT";
         private const string DrawingPath = @"C:\vault\bracket-assy\bracket-assy.SLDDRW";
+        private const string NamesakeDrawingPath = @"C:\vault\bracket-assy\housing.SLDDRW";
 
         private readonly List<TypeNameSighting> _holePass = new List<TypeNameSighting>();
 
@@ -1273,6 +1419,35 @@ public class PackageWriterTests : IDisposable
 
             Nodes.Clear();
             Nodes.Add(root);
+        }
+
+        /// <summary>
+        /// The ordinary SOLIDWORKS naming convention: a drawing named after the model it
+        /// documents. Both synthesized nodes are keyed on their own document path, which is
+        /// what keeps them apart in <c>DumpScope</c>, so the model hangs under the forest root
+        /// instead of overwriting it and becoming its own parent.
+        /// </summary>
+        public void UseNamesakeDrawingRootTree()
+        {
+            RootDocumentPath = NamesakeDrawingPath;
+            RootDocumentKind = DocumentKind.Drawing;
+            DesignName = "housing";
+
+            ComponentNode root = NewNode(
+                NamesakeDrawingPath, null, NamesakeDrawingPath, DocumentKind.Drawing);
+            root.Name = "housing";
+            root.IsFixed = true;
+            root.PersistRefScopePath = NamesakeDrawingPath;
+
+            ComponentNode model = NewNode(
+                HousingPath, NamesakeDrawingPath, HousingPath, DocumentKind.Part);
+            model.Name = "housing";
+            model.IsFixed = true;
+            model.PersistRefScopePath = HousingPath;
+
+            Nodes.Clear();
+            Nodes.Add(root);
+            Nodes.Add(model);
         }
 
         /// <summary>

@@ -161,6 +161,44 @@ public sealed class ManifestBuilderTests : IDisposable
         Assert.False(gate.Breaker.IsOpen);
     }
 
+    /// <summary>
+    /// T061. A drawing document gets a manifest entry, which no native dump has ever produced:
+    /// before schema 1.4.0 a drawing never entered <c>documents[]</c> at all, so there was
+    /// nothing for the manifest to describe and the provenance of the sheet a finding cites
+    /// could not be stated.
+    ///
+    /// Nothing about the builder is special-cased for it - the entry is built from the
+    /// document row the same way a part's is - and this test is what says so, because a
+    /// drawing-shaped branch here would be a second provenance rule to keep in step with the
+    /// first.
+    /// </summary>
+    [Fact]
+    public void ADrawingDocument_GetsAManifestEntryLikeAnyOtherDocument()
+    {
+        string path = WriteFile("bracket-assy.slddrw", 4096);
+
+        var drawing = new Document
+        {
+            DocumentId = "doc:drawing",
+            Kind = DocumentKind.Drawing,
+            FileName = "bracket-assy.slddrw",
+            Path = path,
+            ActiveConfiguration = "Default",
+            CustomProperties = { { "Revision", "B" }, { "PDM Version", "7" } },
+        };
+
+        Manifest manifest = new ManifestBuilder().Build(
+            NewScope(), new List<Document> { drawing });
+
+        ManifestEntry entry = Assert.Single(manifest.Entries);
+        Assert.Equal("doc:drawing", entry.DocumentId);
+        Assert.Equal(path, entry.VaultPath);
+        Assert.Equal("B", entry.Revision);
+        Assert.Equal(7, entry.VaultVersion);
+        Assert.Equal(ExportMethod.Native, entry.ExportMethod);
+        Assert.Equal(4096, entry.FileSizeBytes);
+    }
+
     private static DateTime Truncate(DateTime value) =>
         new DateTime(value.Ticks - (value.Ticks % 10), value.Kind);
 

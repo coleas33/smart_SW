@@ -1091,23 +1091,7 @@ result:
       reason: no persistent reference was read for this subject, so it cannot be selected
         in SOLIDWORKS
       showable: false
-  unavailable_checks:
-  - check: standards.drawing.dimensions_not_overridden
-    reason: 'not yet available in this build: standards.drawing.dimensions_not_overridden
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-  - check: standards.drawing.annotations_not_dangling
-    reason: 'not yet available in this build: standards.drawing.annotations_not_dangling
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-  - check: standards.drawing.revision_matches
-    reason: 'not yet available in this build: standards.drawing.revision_matches is
-      in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-  - check: standards.drawing.no_itar_statement
-    reason: 'not yet available in this build: standards.drawing.no_itar_statement
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
+  unavailable_checks: []
   verdict:
     counts:
       checked: 29

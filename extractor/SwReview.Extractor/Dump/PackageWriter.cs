@@ -513,7 +513,19 @@ public sealed class PackageWriter
         }
     }
 
-    /// <summary>Every distinct document the tree referenced, root first.</summary>
+    /// <summary>
+    /// Every distinct document the tree referenced, root first.
+    ///
+    /// For a <b>drawing</b> root that is the drawing's own path plus every referenced model
+    /// the traversal hung a subtree for, so a drawing document enters <c>documents[]</c> and
+    /// the manifest for the first time (schema 1.4.0, contracts/ir-additions.md section 7).
+    /// No drawing-shaped branch is needed for it: the root is the root whatever its kind, and
+    /// the referenced models arrive as nodes, which is exactly why
+    /// <see cref="ComponentTreeDumper"/> hangs them under a synthesized forest root rather
+    /// than reporting them some other way. The drawing's own custom properties then come from
+    /// the document phase, which is what <c>standards.drawing.revision_matches</c> compares a
+    /// revision table against.
+    /// </summary>
     private static IReadOnlyList<string> DocumentPaths(ComponentTreeResult tree)
     {
         var paths = new List<string>();
@@ -535,13 +547,36 @@ public sealed class PackageWriter
         return paths;
     }
 
-    private static Design BuildDesign(ComponentTreeResult tree) => new Design
+    /// <summary>
+    /// The design block. <c>root_assembly_document_id</c> holds the ROOT document's id
+    /// whatever its kind - already true for a part opened alone since feature 003, and for a
+    /// drawing root it is the drawing's. The field's name is a misnomer feature 003 made and
+    /// this feature does not rename it: renaming a required IR field is a breaking change and
+    /// the value is unambiguous.
+    ///
+    /// <c>drawing_document_ids</c> has existed in the IR since feature 001 and has never been
+    /// set by a native dump (schema 1.4.0). It carries the drawing root and nothing else,
+    /// because the dump does not go looking for the drawings of an open model: a drawing
+    /// enters a package when it is itself the dumped document, and not otherwise (FR-025). An
+    /// empty list is therefore a statement rather than an omission.
+    /// </summary>
+    private static Design BuildDesign(ComponentTreeResult tree)
     {
-        DesignId = DocumentIds.DesignId(tree.RootDocumentPath),
-        Name = tree.DesignName,
-        RootAssemblyDocumentId = DocumentIds.For(tree.RootDocumentPath),
-        ActiveConfiguration = tree.ActiveConfiguration,
-    };
+        var design = new Design
+        {
+            DesignId = DocumentIds.DesignId(tree.RootDocumentPath),
+            Name = tree.DesignName,
+            RootAssemblyDocumentId = DocumentIds.For(tree.RootDocumentPath),
+            ActiveConfiguration = tree.ActiveConfiguration,
+        };
+
+        if (tree.RootDocumentKind == DocumentKind.Drawing)
+        {
+            design.DrawingDocumentIds.Add(DocumentIds.For(tree.RootDocumentPath));
+        }
+
+        return design;
+    }
 
     private ExtractorInfo BuildExtractorInfo(DumpOptions options) => new ExtractorInfo
     {

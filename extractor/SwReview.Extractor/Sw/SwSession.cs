@@ -101,6 +101,27 @@ public sealed class SwSession : ISwSession
         }
     }
 
+    /// <summary>
+    /// The open document as an <c>IDrawingDoc</c>, or null when it is not a drawing (schema
+    /// 1.4.0, feature 006). The drawing handle the <c>drawing</c> phase reads through, beside
+    /// <see cref="KindOf"/>, which is the kind question the same document answers.
+    ///
+    /// A COM cast, not a call: nothing is opened, and no sheet or view is activated to get it
+    /// (FR-044). It is <c>as</c> rather than a hard cast because "this document is not a
+    /// drawing" is an answer the caller records, not an exception - the phase runs only for a
+    /// drawing root, so a null here is the dump disagreeing with itself and
+    /// <see cref="Dump.DrawingDumper"/> writes a gap saying so.
+    /// </summary>
+    public static IDrawingDoc? DrawingOf(IModelDoc2 document)
+    {
+        if (document == null)
+        {
+            throw new ArgumentNullException(nameof(document));
+        }
+
+        return document as IDrawingDoc;
+    }
+
     private static IModelDoc2 FindDocument(ISldWorks swApp, string? documentPath, SwGate gate)
     {
         if (string.IsNullOrWhiteSpace(documentPath))

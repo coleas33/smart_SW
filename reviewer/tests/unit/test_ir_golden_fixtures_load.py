@@ -91,15 +91,62 @@ catch. Naming the five costs one line each and expires on its own - once they ar
 committed the tree is clean and the gate is the absolute one again.
 """
 
+DRAWING_GOLDEN_GROUP = "standards-drawings"
+"""The case **group** T069 adds: `fixtures/standards-drawings/` holds one case directory
+per root drawing, the way `fixtures/remodel-plan/` holds feature 004's.
+
+A group and not a single case because a standards run grades the drawing that was opened
+and no other (`checks/standards/traversal.py`), so the five relationships T069 enumerates
+are five root drawings and therefore five packages.
+"""
+
+DRAWING_GOLDEN_CASES: tuple[str, ...] = (
+    "standards-drawings-seeded",
+    "standards-drawings-compliant",
+    "standards-drawings-ingested",
+    "standards-drawings-two-models",
+    "standards-drawings-no-views",
+)
+"""The five cases inside that group, named one by one for the same reason the five above
+are: a `standards-drawings` substring filter would go on excusing a **modified** baseline
+of this feature's own for ever."""
+
+REWRITTEN_BY_THE_DRAWING_CHECKS: frozenset[str] = frozenset(
+    {
+        "fixtures/standards-unknown/package.json",
+        "fixtures/standards-unknown/generate_package.py",
+    }
+    | {f"test_golden/{case}.yml" for case in NEW_GOLDEN_CASES}
+)
+"""The goldens of this feature's own that T069a, T070 and T070a rewrite, named one by one.
+
+Round B committed the five `standards-*` goldens while the four drawing checks were still
+unbound, so every one of their baselines carries `unavailable_checks` naming those four -
+and the two compliant fixtures, the seeded one and the unknown one carry their four
+`unresolved` drawing rows. Binding the evaluators (T066) moves all five baselines, and
+T070a additionally rewrites `standards-unknown`'s package to carry the drawing whose note
+could not be read.
+
+This is the **same** allowance the `??` rule above is, said for a golden that is now
+tracked rather than new: every path is one of this feature's own, each is named rather than
+matched, and the list expires on its own the moment the round is committed. Nothing outside
+`standards-*` may move, which is what SC-004 measures.
+"""
+
 NEW_GOLDEN_PATHS: frozenset[str] = frozenset(
     [f"fixtures/{case}/" for case in NEW_GOLDEN_CASES]
     + [f"test_golden/{case}.yml" for case in NEW_GOLDEN_CASES]
+    + [f"fixtures/{DRAWING_GOLDEN_GROUP}/"]
+    + [f"test_golden/{case}.yml" for case in DRAWING_GOLDEN_CASES]
 )
-"""The ten paths under `tests/golden/` this feature adds, as `git status --short` prints
-them while they are new: five untracked fixture directories and their five baselines.
+"""The paths under `tests/golden/` this feature adds, as `git status --short` prints them
+while they are new: the five round-B fixture directories and their baselines, plus T069's
+one case-group directory - git collapses a wholly untracked directory to a single line -
+and the five baselines its cases write.
 
-They are allowed **only** as untracked (`??`). A line naming one of them in any other
-state is a golden of this feature's own that moved after it was written, and fails.
+They are allowed **only** as untracked (`??`), unless they are named in
+`REWRITTEN_BY_THE_DRAWING_CHECKS` above. A line naming one of them in any other state is a
+golden of this feature's own that moved after it was written, and fails.
 """
 
 GOLDEN_HARNESS: frozenset[str] = frozenset({"test_golden.py", "test_standards_goldens.py"})
@@ -291,23 +338,24 @@ def test_the_golden_tree_holds_only_this_feature_s_new_goldens() -> None:
     regenerated them - `uv run pytest tests/golden` alongside this module, which is what
     quickstart Scenario 0 runs.
 
-    The gate is absolute over the **whole** of that tree: every line it prints must be one
-    of the ten goldens this feature adds (T053 to T056), still untracked, or one of the two
-    harness modules named above. A feature 001, 002 or 003 baseline that drifted prints a
-    line that is none of those, and so does a `standards-*` baseline of this feature's own
-    that stopped being new - which is SC-004 measured rather than asserted by inspection.
+    The gate is absolute over the **whole** of that tree: every line it prints must be a
+    golden this feature adds (T053 to T056, T069) and still untracked, one of this
+    feature's own goldens that T069a, T070 and T070a rewrite and that
+    `REWRITTEN_BY_THE_DRAWING_CHECKS` names, or one of the two harness modules named above.
+    A feature 001, 002 or 003 baseline that drifted prints a line that is none of those, and
+    so does a `standards-*` baseline of this feature's own that stopped being new and is not
+    named - which is SC-004 measured rather than asserted by inspection.
     """
     changed = golden_tree_status()
 
-    stray = [
-        f"{status} {path}"
-        for status, path in changed
-        if path not in NEW_GOLDEN_PATHS and path not in GOLDEN_HARNESS
-    ]
+    allowed = NEW_GOLDEN_PATHS | GOLDEN_HARNESS | REWRITTEN_BY_THE_DRAWING_CHECKS
+    stray = [f"{status} {path}" for status, path in changed if path not in allowed]
     drifted = [
         f"{status} {path}"
         for status, path in changed
-        if path in NEW_GOLDEN_PATHS and status != "??"
+        if path in NEW_GOLDEN_PATHS
+        and status != "??"
+        and path not in REWRITTEN_BY_THE_DRAWING_CHECKS
     ]
 
     assert stray == [], f"the golden tree moved outside this feature: {stray}"

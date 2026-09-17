@@ -4,7 +4,7 @@ result:
     - bucket: failed
       document_ids:
       - doc:2
-      reason: 'doc:2: F-001'
+      reason: 'doc:2: F-005'
     - bucket: out_of_scope
       document_ids:
       - doc:1
@@ -23,7 +23,7 @@ result:
     - bucket: failed
       document_ids:
       - doc:2
-      reason: 'doc:2: F-002'
+      reason: 'doc:2: F-006'
     - bucket: out_of_scope
       document_ids:
       - doc:1
@@ -42,7 +42,7 @@ result:
     - bucket: failed
       document_ids:
       - doc:2
-      reason: 'doc:2: F-003'
+      reason: 'doc:2: F-007'
     - bucket: out_of_scope
       document_ids:
       - doc:1
@@ -61,7 +61,7 @@ result:
     - bucket: failed
       document_ids:
       - doc:2
-      reason: 'doc:2: F-004'
+      reason: 'doc:2: F-008'
     - bucket: out_of_scope
       document_ids:
       - doc:1
@@ -80,7 +80,7 @@ result:
     - bucket: failed
       document_ids:
       - doc:2
-      reason: 'doc:2: F-005'
+      reason: 'doc:2: F-009'
     - bucket: out_of_scope
       document_ids:
       - doc:1
@@ -194,7 +194,7 @@ result:
     - bucket: failed
       document_ids:
       - doc:2
-      reason: 'doc:2: F-006'
+      reason: 'doc:2: F-010'
     - bucket: out_of_scope
       document_ids:
       - doc:1
@@ -213,7 +213,7 @@ result:
     - bucket: failed
       document_ids:
       - doc:3
-      reason: 'doc:3: F-007'
+      reason: 'doc:3: F-011'
     - bucket: skipped
       document_ids:
       - doc:3
@@ -240,7 +240,7 @@ result:
     - bucket: failed
       document_ids:
       - doc:3
-      reason: 'doc:3: F-008'
+      reason: 'doc:3: F-012'
     - bucket: checked
       document_ids:
       - doc:4
@@ -260,7 +260,7 @@ result:
     - bucket: failed
       document_ids:
       - doc:3
-      reason: 'doc:3: F-009'
+      reason: 'doc:3: F-013'
     - bucket: checked
       document_ids:
       - doc:4
@@ -281,7 +281,7 @@ result:
     - bucket: failed
       document_ids:
       - doc:3
-      reason: 'doc:3: F-010'
+      reason: 'doc:3: F-014'
     - bucket: skipped
       document_ids:
       - doc:4
@@ -301,12 +301,10 @@ result:
     statement: Every cut-list item is excluded from the cut list.
     worst_bucket: failed
   - buckets:
-    - bucket: unresolved
+    - bucket: failed
       document_ids:
       - doc:1
-      reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.dimensions_not_overridden
-        is in the catalogue and no evaluator runs it yet, so nothing was evaluated
-        for it and nothing about it is claimed'
+      reason: 'doc:1: F-001'
     - bucket: out_of_scope
       document_ids:
       - doc:2
@@ -320,14 +318,12 @@ result:
     check: standards.drawing.dimensions_not_overridden
     severity: error
     statement: No display dimension carries a manual override.
-    worst_bucket: unresolved
+    worst_bucket: failed
   - buckets:
-    - bucket: unresolved
+    - bucket: failed
       document_ids:
       - doc:1
-      reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.annotations_not_dangling
-        is in the catalogue and no evaluator runs it yet, so nothing was evaluated
-        for it and nothing about it is claimed'
+      reason: 'doc:1: F-002'
     - bucket: out_of_scope
       document_ids:
       - doc:2
@@ -341,14 +337,12 @@ result:
     check: standards.drawing.annotations_not_dangling
     severity: error
     statement: No annotation is dangling.
-    worst_bucket: unresolved
+    worst_bucket: failed
   - buckets:
-    - bucket: unresolved
+    - bucket: warned
       document_ids:
       - doc:1
-      reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.revision_matches
-        is in the catalogue and no evaluator runs it yet, so nothing was evaluated
-        for it and nothing about it is claimed'
+      reason: 'doc:1: F-003'
     - bucket: out_of_scope
       document_ids:
       - doc:2
@@ -363,14 +357,12 @@ result:
     severity: warning
     statement: The revision table, the drawing's revision property and every referenced
       model's revision property agree.
-    worst_bucket: unresolved
+    worst_bucket: warned
   - buckets:
-    - bucket: unresolved
+    - bucket: warned
       document_ids:
       - doc:1
-      reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.no_itar_statement
-        is in the catalogue and no evaluator runs it yet, so nothing was evaluated
-        for it and nothing about it is claimed'
+      reason: 'doc:1: F-004'
     - bucket: out_of_scope
       document_ids:
       - doc:2
@@ -384,12 +376,12 @@ result:
     check: standards.drawing.no_itar_statement
     severity: warning
     statement: No export-control statement appears in the drawing's notes.
-    worst_bucket: unresolved
+    worst_bucket: warned
   - buckets:
     - bucket: failed
       document_ids:
       - doc:4
-      reason: 'doc:4: F-011'
+      reason: 'doc:4: F-015'
     - bucket: checked
       document_ids:
       - doc:1
@@ -483,58 +475,6 @@ result:
       pairs: []
       positions: []
   - bucket: unresolved
-    check: standards.drawing.dimensions_not_overridden
-    error: null
-    reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.dimensions_not_overridden
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-    scope:
-      component_ids: []
-      configuration: Default
-      document_ids:
-      - doc:1
-      pairs: []
-      positions: []
-  - bucket: unresolved
-    check: standards.drawing.annotations_not_dangling
-    error: null
-    reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.annotations_not_dangling
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-    scope:
-      component_ids: []
-      configuration: Default
-      document_ids:
-      - doc:1
-      pairs: []
-      positions: []
-  - bucket: unresolved
-    check: standards.drawing.revision_matches
-    error: null
-    reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.revision_matches
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-    scope:
-      component_ids: []
-      configuration: Default
-      document_ids:
-      - doc:1
-      pairs: []
-      positions: []
-  - bucket: unresolved
-    check: standards.drawing.no_itar_statement
-    error: null
-    reason: '1 document(s): doc:1: not yet available in this build: standards.drawing.no_itar_statement
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-    scope:
-      component_ids: []
-      configuration: Default
-      document_ids:
-      - doc:1
-      pairs: []
-      positions: []
-  - bucket: unresolved
     check: standards.assembly.not_transparent
     error: null
     reason: '1 document(s): doc:2: cmp:0003 MR-10001-1: the transparency polarity
@@ -623,10 +563,9 @@ result:
   - bucket: unresolved
     check: standards.release
     error: null
-    reason: 'not_ready; 11 error, 0 warning and 0 waived finding(s); 9 checked, 4
-      skipped, 5 unresolved and 52 out-of-scope (check, document) pair(s); unresolved:
-      standards.drawing.dimensions_not_overridden, standards.drawing.annotations_not_dangling,
-      standards.drawing.revision_matches, standards.drawing.no_itar_statement, standards.assembly.not_transparent'
+    reason: 'not_ready; 13 error, 2 warning and 0 waived finding(s); 9 checked, 4
+      skipped, 1 unresolved and 52 out-of-scope (check, document) pair(s); unresolved:
+      standards.assembly.not_transparent'
     scope:
       component_ids: []
       configuration: Default
@@ -898,6 +837,223 @@ result:
   findings:
   - calculation: null
     capture_ids: []
+    check: standards.drawing.dimensions_not_overridden
+    component_ids: []
+    configuration: Default
+    coverage_limits:
+    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - configuration Default
+    disposition: null
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: ZGRtOjAwMDE=
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: ZGRtOjAwMDI=
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: ZGRtOjAwMDM=
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: ZGRtOjAwMDQ=
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: ZGRtOjAwMDU=
+      sheet: null
+      view: null
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: ZGRtOjAwMDY=
+      sheet: null
+      view: null
+    exception_id: null
+    group: null
+    id: F-001
+    inputs:
+    - dimension ddm:0001 Sheet1/Drawing View1/D1@Drawing View1 persist_ref=ZGRtOjAwMDE=
+      scope=doc:1
+    - dimension ddm:0002 Sheet1/Drawing View1/D2@Drawing View1 persist_ref=ZGRtOjAwMDI=
+      scope=doc:1
+    - dimension ddm:0003 Sheet1/Drawing View1/D3@Drawing View1 persist_ref=ZGRtOjAwMDM=
+      scope=doc:1
+    - dimension ddm:0004 Sheet1/Drawing View1/D4@Drawing View1 persist_ref=ZGRtOjAwMDQ=
+      scope=doc:1
+    - dimension ddm:0005 Sheet1/Drawing View1/D5@Drawing View1 persist_ref=ZGRtOjAwMDU=
+      scope=doc:1
+    - dimension ddm:0006 Sheet1/Drawing View1/D6@Drawing View1 persist_ref=ZGRtOjAwMDY=
+      scope=doc:1
+    observed: '6 display dimension(s) of MR-90001.SLDDRW carry a manual override,
+      so the drawing states a value the geometry does not: D1@Drawing View1 (sheet
+      ''Sheet1'', view ''Drawing View1'') is overridden to 100 mm, where the model
+      computes 11 mm; D2@Drawing View1 (sheet ''Sheet1'', view ''Drawing View1'')
+      is overridden to 101 mm, where the model computes 12 mm; D3@Drawing View1 (sheet
+      ''Sheet1'', view ''Drawing View1'') is overridden to 102 mm, where the model
+      computes 13 mm; D4@Drawing View1 (sheet ''Sheet1'', view ''Drawing View1'')
+      is overridden to 103 mm, where the model computes 14 mm; D5@Drawing View1 (sheet
+      ''Sheet1'', view ''Drawing View1'') is overridden to 104 mm, where the model
+      computes 15 mm; D6@Drawing View1 (sheet ''Sheet1'', view ''Drawing View1'')
+      is overridden to 105 mm, where the model computes 16 mm'
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /srv/meridian-vault/jobs/main/MR-90001.SLDDRW
+      vault_version: 1
+    recommended_action: Remove the manual override in SOLIDWORKS so the dimension
+      reports the modelled value, or change the model.
+    requirement: No display dimension carries a manual override.
+    severity: high
+    status: demonstrated
+    title: 6 display dimension(s) of MR-90001.SLDDRW carry a manual override, so the
+      drawi…
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: standards.drawing.annotations_not_dangling
+    component_ids: []
+    configuration: Default
+    coverage_limits:
+    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - configuration Default
+    disposition: null
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: ZGFuOjAwMDI=
+      sheet: null
+      view: null
+    exception_id: null
+    group: null
+    id: F-002
+    inputs:
+    - annotation dan:0002 Sheet1/Drawing View1/Datum1 persist_ref=ZGFuOjAwMDI= scope=doc:1
+    observed: '1 annotation(s) of MR-90001.SLDDRW are dangling, so they no longer
+      attach to the geometry they describe: Datum1 (type 5, sheet ''Sheet1'', view
+      ''Drawing View1'') is dangling'
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /srv/meridian-vault/jobs/main/MR-90001.SLDDRW
+      vault_version: 1
+    recommended_action: Reattach each dangling annotation in SOLIDWORKS, or delete
+      it if what it described is gone.
+    requirement: No annotation is dangling.
+    severity: medium
+    status: demonstrated
+    title: 1 annotation(s) of MR-90001.SLDDRW are dangling, so they no longer attach
+      to th…
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: standards.drawing.revision_matches
+    component_ids: []
+    configuration: Default
+    coverage_limits:
+    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - configuration Default
+    disposition: null
+    drawing_locations: []
+    exception_id: null
+    group: null
+    id: F-003
+    inputs:
+    - document doc:1 MR-90001.SLDDRW persist_ref=none scope=doc:1
+    observed: 'the revision MR-90001.SLDDRW shows does not agree everywhere: the revision
+      table drv:0001 on sheet ''Sheet1'' states ''AC'' in the cell revision.cell names
+      (row 0 from the end, column 1), and the MeridianRev property of MR-90001.SLDDRW
+      states ''AB''; the MeridianRev property of MR-90001.SLDDRW states ''AB'', and
+      MR-20001.SLDASM, which it references, states no MeridianRev property'
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /srv/meridian-vault/jobs/main/MR-90001.SLDDRW
+      vault_version: 1
+    recommended_action: Bring the revision table, the drawing's revision property
+      and the revision property of every model it references into agreement.
+    requirement: The revision table, the drawing's revision property and every referenced
+      model's revision property agree.
+    severity: low
+    status: suspected
+    title: 'the revision MR-90001.SLDDRW shows does not agree everywhere: the revision
+      tabl…'
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
+    check: standards.drawing.no_itar_statement
+    component_ids: []
+    configuration: Default
+    coverage_limits:
+    - profile:<profile-a.yaml> sha256:<sha256 of profile-a.yaml>
+    - configuration Default
+    disposition: null
+    drawing_locations:
+    - annotation: null
+      bbox: null
+      document_id: doc:1
+      page: null
+      persist_ref: ZG50OjAwMDE=
+      sheet: null
+      view: null
+    exception_id: null
+    group: null
+    id: F-004
+    inputs:
+    - note dnt:0001 Sheet1/Sheet Format/dnt:0001 persist_ref=ZG50OjAwMDE= scope=doc:1
+    observed: '1 note(s) of MR-90001.SLDDRW carry the export-control phrase the profile''s
+      export_control.phrase names: note dnt:0001 (sheet ''Sheet1'', view ''Sheet Format'')'
+    provenance:
+    - configuration: Default
+      document_id: doc:1
+      export_method: native
+      local_modified: false
+      revision: A
+      vault_path: /srv/meridian-vault/jobs/main/MR-90001.SLDDRW
+      vault_version: 1
+    recommended_action: Remove the export-control statement from the drawing's notes,
+      or confirm with the release process that this drawing should carry it.
+    requirement: No export-control statement appears in the drawing's notes.
+    severity: low
+    status: suspected
+    title: 1 note(s) of MR-90001.SLDDRW carry the export-control phrase the profile's
+      expo…
+    tool_result_ids:
+    - 0
+  - calculation: null
+    capture_ids: []
     check: standards.assembly.not_exploded
     component_ids:
     - cmp:0002
@@ -909,7 +1065,7 @@ result:
     drawing_locations: []
     exception_id: null
     group: null
-    id: F-001
+    id: F-005
     inputs:
     - document doc:2 MR-20001.SLDASM persist_ref=none scope=doc:2
     observed: MR-20001.SLDASM is left in an exploded state
@@ -943,7 +1099,7 @@ result:
     drawing_locations: []
     exception_id: null
     group: null
-    id: F-002
+    id: F-006
     inputs:
     - document doc:2 MR-20001.SLDASM persist_ref=none scope=doc:2
     observed: MR-20001.SLDASM carries 3 rebuild error(s); the count is as the document
@@ -985,7 +1141,7 @@ result:
       view: null
     exception_id: null
     group: null
-    id: F-003
+    id: F-007
     inputs:
     - mate mate:0002 CONCENTRIC persist_ref=bWF0ZTowMDAy scope=doc:2
     observed: CONCENTRIC mate mate:0002 resolves 1 of 2 entities; swSelFACES on MR-10002-1
@@ -1041,7 +1197,7 @@ result:
       view: null
     exception_id: null
     group: null
-    id: F-004
+    id: F-008
     inputs:
     - component cmp:0003 MR-10001-1 persist_ref=Y21wOjAwMDM= scope=doc:2
     - component cmp:0004 MR-10001-2 persist_ref=Y21wOjAwMDQ= scope=doc:2
@@ -1085,7 +1241,7 @@ result:
       view: null
     exception_id: null
     group: null
-    id: F-005
+    id: F-009
     inputs:
     - component cmp:0024 MR-10002-2 persist_ref=Y21wOjAwMjQ= scope=doc:2
     observed: MR-10002-2 is under-constrained and matches no mate-count library prefix,
@@ -1128,7 +1284,7 @@ result:
       view: null
     exception_id: null
     group: null
-    id: F-006
+    id: F-010
     inputs:
     - component cmp:0026 MR-10002-4 persist_ref=Y21wOjAwMjY= scope=doc:2
     observed: MR-10002-4 is hidden
@@ -1187,7 +1343,7 @@ result:
       view: null
     exception_id: null
     group: null
-    id: F-007
+    id: F-011
     inputs:
     - sketch feat:0004 Sketch2 persist_ref=ZG9jOjMvU2tldGNoMg== scope=doc:3
     observed: Sketch2 is under-defined, under Derived-Pocket
@@ -1247,7 +1403,7 @@ result:
       view: null
     exception_id: null
     group: null
-    id: F-008
+    id: F-012
     inputs:
     - feature feat:0006 Rib1 persist_ref=ZG9jOjMvUmliMQ== scope=doc:3
     - document doc:3 MR-10001.SLDPRT persist_ref=none scope=doc:3
@@ -1303,7 +1459,7 @@ result:
     drawing_locations: []
     exception_id: null
     group: null
-    id: F-009
+    id: F-013
     inputs:
     - document doc:3 MR-10001.SLDPRT persist_ref=none scope=doc:3
     observed: no material is assigned in configuration Fabricated and the mass is
@@ -1365,7 +1521,7 @@ result:
       view: null
     exception_id: null
     group: null
-    id: F-010
+    id: F-014
     inputs:
     - cut_list_item cut:0001 Cut-List-Item1/Tube 40 x 40 x 3 persist_ref=Y3V0OjAwMDE=
       scope=doc:3
@@ -1404,7 +1560,7 @@ result:
     drawing_locations: []
     exception_id: null
     group: null
-    id: F-011
+    id: F-015
     inputs:
     - property property:Short Note Short Note persist_ref=none scope=doc:4
     - property property:Raw Stock Code Raw Stock Code persist_ref=none scope=doc:4
@@ -1435,18 +1591,92 @@ result:
     sha256: <sha256 of profile-a.yaml>
   subjects:
     F-001:
-    - component_ids:
-      - cmp:0002
-      id: doc:2
-      kind: document
-      name: MR-20001.SLDASM
+    - component_ids: []
+      id: ddm:0001
+      kind: dimension
+      name: Sheet1/Drawing View1/D1@Drawing View1
       parent_chain: []
-      persist_ref: null
-      persist_ref_scope: null
-      reason: no persistent reference was read for this subject, so it cannot be selected
-        in SOLIDWORKS
+      persist_ref: ZGRtOjAwMDE=
+      persist_ref_scope: doc:1
+      reason: null
+      showable: false
+    - component_ids: []
+      id: ddm:0002
+      kind: dimension
+      name: Sheet1/Drawing View1/D2@Drawing View1
+      parent_chain: []
+      persist_ref: ZGRtOjAwMDI=
+      persist_ref_scope: doc:1
+      reason: null
+      showable: false
+    - component_ids: []
+      id: ddm:0003
+      kind: dimension
+      name: Sheet1/Drawing View1/D3@Drawing View1
+      parent_chain: []
+      persist_ref: ZGRtOjAwMDM=
+      persist_ref_scope: doc:1
+      reason: null
+      showable: false
+    - component_ids: []
+      id: ddm:0004
+      kind: dimension
+      name: Sheet1/Drawing View1/D4@Drawing View1
+      parent_chain: []
+      persist_ref: ZGRtOjAwMDQ=
+      persist_ref_scope: doc:1
+      reason: null
+      showable: false
+    - component_ids: []
+      id: ddm:0005
+      kind: dimension
+      name: Sheet1/Drawing View1/D5@Drawing View1
+      parent_chain: []
+      persist_ref: ZGRtOjAwMDU=
+      persist_ref_scope: doc:1
+      reason: null
+      showable: false
+    - component_ids: []
+      id: ddm:0006
+      kind: dimension
+      name: Sheet1/Drawing View1/D6@Drawing View1
+      parent_chain: []
+      persist_ref: ZGRtOjAwMDY=
+      persist_ref_scope: doc:1
+      reason: null
       showable: false
     F-002:
+    - component_ids: []
+      id: dan:0002
+      kind: annotation
+      name: Sheet1/Drawing View1/Datum1
+      parent_chain: []
+      persist_ref: ZGFuOjAwMDI=
+      persist_ref_scope: doc:1
+      reason: null
+      showable: false
+    F-003:
+    - component_ids: []
+      id: doc:1
+      kind: document
+      name: MR-90001.SLDDRW
+      parent_chain: []
+      persist_ref: null
+      persist_ref_scope: null
+      reason: no persistent reference was read for this subject, so it cannot be selected
+        in SOLIDWORKS
+      showable: false
+    F-004:
+    - component_ids: []
+      id: dnt:0001
+      kind: note
+      name: Sheet1/Sheet Format/dnt:0001
+      parent_chain: []
+      persist_ref: ZG50OjAwMDE=
+      persist_ref_scope: doc:1
+      reason: null
+      showable: false
+    F-005:
     - component_ids:
       - cmp:0002
       id: doc:2
@@ -1458,7 +1688,19 @@ result:
       reason: no persistent reference was read for this subject, so it cannot be selected
         in SOLIDWORKS
       showable: false
-    F-003:
+    F-006:
+    - component_ids:
+      - cmp:0002
+      id: doc:2
+      kind: document
+      name: MR-20001.SLDASM
+      parent_chain: []
+      persist_ref: null
+      persist_ref_scope: null
+      reason: no persistent reference was read for this subject, so it cannot be selected
+        in SOLIDWORKS
+      showable: false
+    F-007:
     - component_ids:
       - cmp:0002
       id: mate:0002
@@ -1469,7 +1711,7 @@ result:
       persist_ref_scope: doc:2
       reason: null
       showable: true
-    F-004:
+    F-008:
     - component_ids:
       - cmp:0002
       id: cmp:0003
@@ -1500,7 +1742,7 @@ result:
       persist_ref_scope: doc:2
       reason: null
       showable: true
-    F-005:
+    F-009:
     - component_ids:
       - cmp:0002
       id: cmp:0024
@@ -1511,7 +1753,7 @@ result:
       persist_ref_scope: doc:2
       reason: null
       showable: true
-    F-006:
+    F-010:
     - component_ids:
       - cmp:0002
       id: cmp:0026
@@ -1522,7 +1764,7 @@ result:
       persist_ref_scope: doc:2
       reason: null
       showable: true
-    F-007:
+    F-011:
     - component_ids:
       - cmp:0003
       - cmp:0004
@@ -1552,7 +1794,7 @@ result:
       persist_ref_scope: doc:3
       reason: null
       showable: true
-    F-008:
+    F-012:
     - component_ids:
       - cmp:0003
       - cmp:0004
@@ -1612,7 +1854,7 @@ result:
       reason: no persistent reference was read for this subject, so it cannot be selected
         in SOLIDWORKS
       showable: false
-    F-009:
+    F-013:
     - component_ids:
       - cmp:0003
       - cmp:0004
@@ -1643,7 +1885,7 @@ result:
       reason: no persistent reference was read for this subject, so it cannot be selected
         in SOLIDWORKS
       showable: false
-    F-010:
+    F-014:
     - component_ids:
       - cmp:0003
       - cmp:0004
@@ -1673,7 +1915,7 @@ result:
       persist_ref_scope: doc:3
       reason: null
       showable: true
-    F-011:
+    F-015:
     - component_ids:
       - cmp:0023
       - cmp:0024
@@ -1702,37 +1944,17 @@ result:
       reason: no persistent reference was read for this subject, so it cannot be selected
         in SOLIDWORKS
       showable: false
-  unavailable_checks:
-  - check: standards.drawing.dimensions_not_overridden
-    reason: 'not yet available in this build: standards.drawing.dimensions_not_overridden
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-  - check: standards.drawing.annotations_not_dangling
-    reason: 'not yet available in this build: standards.drawing.annotations_not_dangling
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-  - check: standards.drawing.revision_matches
-    reason: 'not yet available in this build: standards.drawing.revision_matches is
-      in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
-  - check: standards.drawing.no_itar_statement
-    reason: 'not yet available in this build: standards.drawing.no_itar_statement
-      is in the catalogue and no evaluator runs it yet, so nothing was evaluated for
-      it and nothing about it is claimed'
+  unavailable_checks: []
   verdict:
     counts:
       checked: 9
-      error: 11
+      error: 13
       out_of_scope: 52
       skipped: 4
-      unresolved: 5
-      warning: 0
+      unresolved: 1
+      warning: 2
     notes: []
     state: not_ready
     unresolved_check_ids:
-    - standards.drawing.dimensions_not_overridden
-    - standards.drawing.annotations_not_dangling
-    - standards.drawing.revision_matches
-    - standards.drawing.no_itar_statement
     - standards.assembly.not_transparent
     waived: 0
