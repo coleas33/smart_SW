@@ -20,8 +20,9 @@ namespace SwReview.AddIn.Review;
 /// (`docs/pane-backend-proxy.md`).
 ///
 /// <b>What it does not do.</b> It does not parse. A frame is passed on as the text between
-/// blank lines, because the page already has a parser that reads `id:` and `data:` and tracks
-/// `seq`, and two parsers that can disagree about what an event is would be one too many. It
+/// blank lines, because the page already has a parser that reads `id:`, `event:` and `data:`
+/// and tracks `seq`, and two parsers that can disagree about what an event is would be one too
+/// many. It
 /// does not reconnect either: the page owns the backoff and the `Last-Event-ID` it reopens
 /// with, because the page is the thing that knows what it has already shown.
 ///

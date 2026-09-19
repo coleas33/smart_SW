@@ -1,0 +1,8 @@
+id: 19
+event: turn.ended
+data: {"reason":"end"}
+
+id: 20
+event: session.ended
+data: {"ended_at":"2026-09-16T10:20:00+00:00","timing":{"baseline_minutes":null,"assisted_supervision_minutes":0.0,"assisted_verification_minutes":0.0,"false_alarm_handling_minutes":0.0,"unattended_runtime_minutes":1.6,"net_saved_minutes":null}}
+

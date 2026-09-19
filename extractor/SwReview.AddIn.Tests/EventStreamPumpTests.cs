@@ -53,8 +53,8 @@ public sealed class EventStreamPumpTests
             pump.Open(ChatId, null);
             SseConnection stream = backend.FirstConnection();
 
-            stream.Send("id: 1\ndata: {\"seq\":1,\"type\":\"session.started\"}");
-            stream.Send("id: 2\ndata: {\"seq\":2,\"type\":\"text.delta\"}");
+            stream.Send("id: 1\nevent: session.started\ndata: {\"provider\":\"fake\"}");
+            stream.Send("id: 2\nevent: text.delta\ndata: {\"text\":\"one\"}");
             stream.Send(": keep-alive comment");
 
             recorded.WaitForFrames(3);
@@ -62,8 +62,8 @@ public sealed class EventStreamPumpTests
             Assert.Equal(
                 new[]
                 {
-                    "id: 1\ndata: {\"seq\":1,\"type\":\"session.started\"}",
-                    "id: 2\ndata: {\"seq\":2,\"type\":\"text.delta\"}",
+                    "id: 1\nevent: session.started\ndata: {\"provider\":\"fake\"}",
+                    "id: 2\nevent: text.delta\ndata: {\"text\":\"one\"}",
                     ": keep-alive comment",
                 },
                 recorded.Frames);
@@ -84,12 +84,12 @@ public sealed class EventStreamPumpTests
         using (var pump = backend.Pump(out Recorder recorded))
         {
             pump.Open(ChatId, null);
-            backend.FirstConnection().Send("id: 9\ndata: {\"seq\":9,\n data: \"text\":\"two\\nlines\"}");
+            backend.FirstConnection().Send("id: 9\nevent: text.delta\ndata: {\"text\":\n data: \"two\\nlines\"}");
 
             recorded.WaitForFrames(1);
 
             Assert.Equal(
-                "id: 9\ndata: {\"seq\":9,\n data: \"text\":\"two\\nlines\"}", recorded.Frames.Single());
+                "id: 9\nevent: text.delta\ndata: {\"text\":\n data: \"two\\nlines\"}", recorded.Frames.Single());
         }
     }
 
@@ -243,11 +243,11 @@ public sealed class EventStreamPumpTests
         using (var world = new PumpWorld(backend.Endpoint))
         {
             world.Receive("events.open", new { chat_id = ChatId, last_event_id = (string?)null });
-            backend.FirstConnection().Send("id: 1\ndata: {\"seq\":1,\"type\":\"text.delta\"}");
+            backend.FirstConnection().Send("id: 1\nevent: text.delta\ndata: {\"text\":\"one\"}");
 
             JsonElement frame = world.WaitFor("events.frame");
             Assert.Equal(ChatId, frame.GetProperty("chat_id").GetString());
-            Assert.Equal("id: 1\ndata: {\"seq\":1,\"type\":\"text.delta\"}", frame.GetProperty("frame").GetString());
+            Assert.Equal("id: 1\nevent: text.delta\ndata: {\"text\":\"one\"}", frame.GetProperty("frame").GetString());
 
             world.AssertNothingPostedContains(Token);
         }

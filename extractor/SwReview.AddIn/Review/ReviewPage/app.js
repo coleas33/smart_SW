@@ -75,6 +75,9 @@
     startPending: false,
     lastSeq: 0,
     events: [],
+    // The reasons this page has already said it dropped something from the stream, so a
+    // whole review of one kind of unreadable frame is one card rather than thousands.
+    unreadable: Object.create(null),
     coverage: [],
 
     // One entry per model round trip, as the `usage` events carry them. The running usage
@@ -179,7 +182,11 @@
           // reconnect timer calls - undoes the doubling on every retry, and a backend that is
           // down is then reopened once a second for the life of the pane.
           state.reconnectDelay = RECONNECT_MIN;
-          showStreamState('Streaming.');
+          // The stream state is not written here: "Streaming." means an event was read, not
+          // that bytes arrived, and `onFrame` is where that is known. A keep-alive comment
+          // proves the socket and nothing else, and a page that said "Streaming." on any
+          // frame looked healthy for three whole reviews in which it understood nothing
+          // (docs/pane-findings-2026-09-18.md).
           onFrame(payload.frame || '');
         }
         return;
@@ -288,10 +295,24 @@
   }
 
   /** One SSE frame: `id:`, `data:` (possibly several lines), and comments to ignore. */
+  /**
+   * One SSE frame, the text between blank lines, as `_sse` in chat/server.py writes it and
+   * the host hands it on: `id` is the `seq`, `event` is the `type` and `data` is the body
+   * alone (contracts/chat-api.md, the events row). The `{seq, type, body}` envelope the
+   * transcript keeps is built here from those three fields - it is not in the frame. Until
+   * 2026-09-18 this parser expected the envelope inside `data` and threw `event:` away, so
+   * every real frame read as an event with no type and fell through `onChatEvent`.
+   *
+   * "Streaming." is written here, once a chat event has been read out of the frame and before
+   * it is handled, so a handler that has something more specific to say ("The session
+   * ended.") has the last word. A keep-alive comment, a frame with no `data`, and data that
+   * is not JSON leave the stream state alone.
+   */
   function onFrame(frame) {
     var lines = frame.split(/\r?\n/);
     var data = [];
     var id = null;
+    var type = null;
 
     for (var index = 0; index < lines.length; index++) {
       var line = lines[index];
@@ -303,35 +324,40 @@
       var value = colon < 0 ? '' : line.substring(colon + 1).replace(/^ /, '');
       if (name === 'id') {
         id = value;
+      } else if (name === 'event') {
+        type = value;
       } else if (name === 'data') {
         data.push(value);
       }
-      // `event:` is ignored on purpose: the body carries its own `type` and one source of
-      // truth for what an event is beats two that can disagree.
     }
 
     if (!data.length) {
       return;
     }
 
-    var event;
+    var body;
     try {
-      event = JSON.parse(data.join('\n'));
+      body = JSON.parse(data.join('\n'));
     } catch (error) {
-      // A frame this page cannot parse is a frame it cannot act on; the stream continues.
+      reportUnreadable('the data of an event, which was not JSON');
       return;
     }
 
-    var seq = typeof event.seq === 'number' ? event.seq : parseInt(id || '0', 10);
+    var seq = parseInt(id || '0', 10);
+    if (!(seq > 0)) {
+      seq = 0;
+    }
     if (seq > state.lastSeq) {
       state.lastSeq = seq;
     }
 
+    var event = { seq: seq, type: type, body: body };
     state.events.push(event);
     if (state.events.length > EVENT_LIMIT) {
       state.events.splice(0, state.events.length - EVENT_LIMIT);
     }
 
+    showStreamState('Streaming.');
     onChatEvent(event);
   }
 
@@ -417,8 +443,25 @@
         appendCard(render.errorCard(body));
         return;
       default:
+        reportUnreadable('an event of type "' + (event.type || '') + '"');
         return;
     }
+  }
+
+  /**
+   * One card per distinct reason, saying the page dropped something from the stream. A
+   * review whose every event is dropped must not look like a healthy one: that is how the
+   * envelope mismatch fixed on 2026-09-18 shipped past three workstation runs.
+   */
+  function reportUnreadable(what) {
+    if (state.unreadable[what]) {
+      return;
+    }
+    state.unreadable[what] = true;
+    appendCard(render.textBlock(
+      'system',
+      'This page could not read ' + what + ' from the event stream and ignored it. '
+        + 'report.md in the run folder is written by the backend and is unaffected.'));
   }
 
   function describeStart(body) {
@@ -628,6 +671,7 @@
     render.clear(ui.coverage);
     ui.coverage.hidden = true;
     state.events = [];
+    state.unreadable = Object.create(null);
     state.coverage = [];
     state.usage = [];
     renderUsage();

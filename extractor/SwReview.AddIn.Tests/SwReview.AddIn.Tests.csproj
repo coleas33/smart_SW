@@ -120,6 +120,15 @@
     <Content Include="..\..\specs\006-standards-check\contracts\standards-check.md" Link="standards-check.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!--
+      And for the page-side event-stream tests (SseFrames), which feed the page the very
+      frames the Python producer test pins byte for byte (tests/unit/test_chat_server.py), so
+      the two ends of the stream cannot drift apart again without one suite going red
+      (docs/pane-findings-2026-09-18.md).
+    -->
+    <Content Include="..\..\specs\002-task-pane-assistant\contracts\event-stream.sample.sse" Link="event-stream.sample.sse">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

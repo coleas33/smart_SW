@@ -37,6 +37,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -45,14 +46,15 @@ import anyio
 import pytest
 from starlette.testclient import TestClient
 
-from swreview.agent.providers import AgentProvider, ProviderName
+from swreview.agent.providers import AgentEvent, AgentProvider, ProviderName
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import PROFILE_CHECK
 from swreview.agent.settings import MASK, ProviderSettings
-from swreview.chat.server import create_app
+from swreview.chat.server import _sse, create_app
 from swreview.chat.sessions import ChatState
 from swreview.ir.loader import save_package
-from swreview.report.session import load_session
+from swreview.report.session import Timing, load_session
+from tests.support.contracts import contract_path, contract_validator
 from tests.support.packages import build_package
 
 ORIGIN = "https://swreview.invalid"
@@ -954,6 +956,56 @@ def test_the_stream_replays_the_file_and_then_the_live_events(
     assert "text.delta" in [event["event"] for event in events]
     assert events[0]["data"]["provider"] == "fake"
     assert events[0]["data"]["model"] == MODEL
+
+    # The body alone travels in `data`. The page builds its `{seq, type, body}` envelope from
+    # the three SSE fields (app.js `onFrame`), so a `data` that carried the envelope would be
+    # read as a body with a `type` key and rendered as an event about nothing - the shape the
+    # add-in tests fabricated until 2026-09-18 (docs/pane-findings-2026-09-18.md).
+    for event in events:
+        assert "type" not in event["data"]
+        assert "seq" not in event["data"]
+
+
+def test_the_contract_sample_is_what_the_producer_writes_byte_for_byte() -> None:
+    """The recorded closing pair, `turn.ended` then `session.ended`, exactly as `_sse` writes it.
+
+    The add-in's page tests feed this same file to the real page (SseFrames.cs), so the
+    producer here and the consumer there are pinned to one artifact, and a change to either
+    side's idea of a frame goes red in one suite or the other. Until 2026-09-18 nothing pinned
+    them to each other: the C# tests fabricated an envelope-in-`data` frame this server never
+    writes, and every real frame fell through the page's parser
+    (docs/pane-findings-2026-09-18.md).
+    """
+    at = datetime(2026, 9, 16, 10, 20, tzinfo=UTC)
+    timing = Timing(
+        baseline_minutes=None,
+        assisted_supervision_minutes=0.0,
+        assisted_verification_minutes=0.0,
+        false_alarm_handling_minutes=0.0,
+        unattended_runtime_minutes=1.6,
+    )
+    events = [
+        AgentEvent(seq=19, at=at, type="turn.ended", body={"reason": "end"}),
+        AgentEvent(
+            seq=20,
+            at=at,
+            type="session.ended",
+            body={"ended_at": at.isoformat(), "timing": timing.model_dump(mode="json")},
+        ),
+    ]
+    for event in events:
+        contract_validator("chat-events.schema.json").validate(event.model_dump(mode="json"))
+
+    sample = contract_path("event-stream.sample.sse").read_bytes()
+
+    assert b"".join(_sse(event).encode() for event in events) == sample
+    # And in words a reader can check against chat-api.md: `id` is the seq, `event` is the
+    # type, and `data` is the body and nothing else.
+    frames = [block for block in sample.decode("utf-8").split("\r\n\r\n") if block]
+    assert [parse_sse(frame) for frame in frames] == [
+        {"id": "19", "event": "turn.ended", "data": {"reason": "end"}},
+        {"id": "20", "event": "session.ended", "data": events[1].body},
+    ]
 
 
 def test_the_stream_resumes_after_the_last_event_id_it_was_given(
