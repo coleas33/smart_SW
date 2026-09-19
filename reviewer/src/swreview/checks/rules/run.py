@@ -48,6 +48,8 @@ from swreview.agent.runner import load_exceptions
 from swreview.checks.rules.family import CheckFamily
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.ir.loader import PACKAGE_FILE_NAME, LoadedPackage
+from swreview.report.attention import rank
+from swreview.report.attention_record import write_attention_record
 from swreview.report.markdown import render_report
 
 # `CHECK_FILE_NAME` - what a check records beside its session, and why the folder needs a
@@ -231,9 +233,18 @@ def close_session(context: ToolContext, started: float) -> ReviewSession:
 
 
 def write_report(directory: Path, session: ReviewSession, package: Any) -> Path:
-    """Render `session` into the run folder and return the file."""
+    """Render `session` into the run folder with its ranking, and return the report file.
+
+    One `rank` call serves both writes, so `report.md`'s "Start here" section and
+    `attention.json` beside it are the same order rather than two orders that happen to
+    agree today (research R2.7). The record is written here, at the one place the check's
+    report is rendered, rather than in the route: Accept re-runs the whole check and lands
+    back here, so the folder never keeps a record of the run it replaced.
+    """
+    ranking = rank(session)
     report_file = directory / REPORT_FILE_NAME
-    report_file.write_text(render_report(session, package), encoding="utf-8")
+    report_file.write_text(render_report(session, package, ranking=ranking), encoding="utf-8")
+    write_attention_record(directory, ranking, session.session_id)
     return report_file
 
 

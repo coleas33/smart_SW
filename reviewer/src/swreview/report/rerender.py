@@ -10,11 +10,14 @@ prepends outside the renderer and a plain re-render therefore deletes.
 
 So the re-render is **one** function that reads the folder for everything the renderer
 needs, and the three commands call it rather than each rendering a little differently
-(research R2.7). At this phase it writes `report.md`; T028 adds `attention.json` beside it.
+(research R2.7). It writes `report.md` and `attention.json` from one `Ranking`, so the
+"Start here" section and the record beside it are the same order by construction.
 
-This module also owns the names of the files a run folder holds, because it is the one
-module that has to know all of them at once. `report/dispositions.py` and
-`checks/rules/run.py` re-export the names their own callers already import.
+This module also names the files a run folder holds, because it is the one module that has
+to know all of them at once. `report/dispositions.py` and `checks/rules/run.py` re-export
+the names their own callers already import. Two of the four are defined elsewhere and
+re-exported here rather than restated: `session.json` beside `load_session`, and
+`attention.json` beside the record's reader and writer, which this module calls.
 """
 
 from __future__ import annotations
@@ -25,10 +28,13 @@ from typing import NoReturn
 
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
 from swreview.ir.models import EvidencePackage
+from swreview.report.attention import rank
+from swreview.report.attention_record import ATTENTION_FILE_NAME, write_attention_record
 from swreview.report.markdown import render_report
-from swreview.report.session import ReviewSession, load_session
+from swreview.report.session import SESSION_FILE_NAME, ReviewSession, load_session
 
 __all__ = [
+    "ATTENTION_FILE_NAME",
     "BENCHMARK_RUN_ROOT",
     "CHECK_FILE_NAME",
     "NO_SESSION",
@@ -39,7 +45,6 @@ __all__ = [
     "run_folder_session",
 ]
 
-SESSION_FILE_NAME = "session.json"
 REPORT_FILE_NAME = "report.md"
 CHECK_FILE_NAME = "check.json"
 
@@ -62,11 +67,17 @@ UNREADABLE_CHECK_RECORD = (
 
 
 def rerender_run_folder(run_dir: Path | str) -> Path:
-    """Re-render `<run_dir>/report.md` from the folder's own files; return the report path.
+    """Re-render a run folder's report and record from its own files; return the report path.
 
     Reads `session.json` (required), `package.json` (when the folder holds one) and
-    `check.json` (for a standards folder's verdict header). Nothing else in the folder is
-    touched, and nothing at all is written when any of the three refuses.
+    `check.json` (for a standards folder's verdict header), ranks the session once, and
+    writes `report.md` and `attention.json` from that one `Ranking` - the same object, so
+    the section the report prints and the record beside it can never disagree (research
+    R2.7). Nothing else in the folder is touched, and nothing at all is written when any of
+    the three reads refuses.
+
+    Only the report path is returned: every caller re-renders in order to serve or name
+    `report.md`, and the record's path is `<run_dir>/attention.json` by construction.
 
     Raises:
         FileNotFoundError: the folder holds no `session.json`; a benchmark run root, whose
@@ -79,9 +90,13 @@ def rerender_run_folder(run_dir: Path | str) -> Path:
     session = _session_of(directory)
     package = _package_of(directory)
     header = _header_of(directory, session)
+    ranking = rank(session)
 
     report_file = directory / REPORT_FILE_NAME
-    report_file.write_text(header + render_report(session, package), encoding="utf-8")
+    report_file.write_text(
+        header + render_report(session, package, ranking=ranking), encoding="utf-8"
+    )
+    write_attention_record(directory, ranking, session.session_id)
     return report_file
 
 

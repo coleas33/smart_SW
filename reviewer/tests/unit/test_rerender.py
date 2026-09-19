@@ -7,7 +7,8 @@ Manifest Discrepancies to the "not supplied" placeholder, and deletes a standard
 verdict header outright. `rerender_run_folder` is the one function that reads the folder
 for everything the renderer needs, so none of the three can lose any of it.
 
-At this phase it writes `report.md` and nothing else; T028 adds `attention.json`.
+It writes `report.md` and `attention.json` (T028), both from one `Ranking`, so the section
+the report opens its findings with and the record beside the session cannot disagree.
 """
 
 from __future__ import annotations
@@ -21,6 +22,8 @@ import pytest
 
 from swreview.checks.standards.run import CHECK_FILE_NAME, run_standards_check
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
+from swreview.report.attention import rank
+from swreview.report.attention_record import ATTENTION_FILE_NAME, read_attention_record
 from swreview.report.markdown import render_report
 from swreview.report.rerender import rerender_run_folder
 from swreview.report.session import load_session
@@ -99,7 +102,7 @@ def test_a_review_folder_with_a_package_renders_its_component_names(tmp_path: Pa
     assert PLACEHOLDER not in report
     assert "No discrepancies between the manifest and the reviewed documents." in report
     session = load_session(run_dir / "session.json")
-    assert report == render_report(session, load_package(run_dir).package)
+    assert report == render_report(session, load_package(run_dir).package, ranking=rank(session))
 
 
 def test_a_review_folder_without_a_package_renders_the_placeholder(tmp_path: Path) -> None:
@@ -111,19 +114,38 @@ def test_a_review_folder_without_a_package_renders_the_placeholder(tmp_path: Pat
 
     assert PLACEHOLDER in report
     assert NAMED_COMPONENT not in report
-    assert report == render_report(load_session(run_dir / "session.json"))
+    session = load_session(run_dir / "session.json")
+    assert report == render_report(session, ranking=rank(session))
 
 
-def test_it_writes_report_md_and_nothing_else(tmp_path: Path) -> None:
-    """At this phase there is no `attention.json`; T028 lands it deliberately."""
+def test_it_writes_the_report_and_the_record_and_nothing_else(tmp_path: Path) -> None:
+    """Two files, and not one byte of the session, the package or the check record."""
     run_dir = copied(REVIEW_FOLDER, tmp_path)
     before = files_in(run_dir)
 
     rerender_run_folder(run_dir)
 
     after = files_in(run_dir)
-    assert set(after) - set(before) == {"report.md"}
-    assert {name: body for name, body in after.items() if name != "report.md"} == before
+    written = {"report.md", ATTENTION_FILE_NAME}
+    assert set(after) - set(before) == written
+    assert {name: body for name, body in after.items() if name not in written} == before
+
+
+def test_the_record_it_writes_is_the_ranking_the_report_was_rendered_from(
+    tmp_path: Path,
+) -> None:
+    """One `rank` call serves both writes; a record that named a different order from the
+    section above `## Findings` is the defect a second call would eventually cause."""
+    run_dir = copied(REVIEW_FOLDER, tmp_path)
+
+    report = rerender_run_folder(run_dir).read_text(encoding="utf-8")
+
+    session = load_session(run_dir / "session.json")
+    record = read_attention_record(run_dir)
+    assert record.session_id == session.session_id
+    assert record.rows == rank(session).rows
+    for row in record.rows[: record.top_n]:
+        assert row.finding_id in report.split("## Findings")[0]
 
 
 # --- 2. a check folder ------------------------------------------------------------------
@@ -137,7 +159,7 @@ def test_an_rms_check_folder_gets_no_verdict_header(tmp_path: Path) -> None:
 
     assert report.startswith(REPORT_TITLE)
     session = load_session(run_dir / "session.json")
-    assert report == render_report(session, load_package(run_dir).package)
+    assert report == render_report(session, load_package(run_dir).package, ranking=rank(session))
 
 
 def test_a_standards_folder_keeps_its_verdict_header_byte_for_byte(tmp_path: Path) -> None:

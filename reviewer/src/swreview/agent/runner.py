@@ -74,6 +74,8 @@ from swreview.findings import Finding
 from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import prerun_checks
+from swreview.report.attention import rank
+from swreview.report.attention_record import write_attention_record
 from swreview.report.session import (
     CLOSEOUT_CHECK,
     CoverageItem,
@@ -717,12 +719,20 @@ class ReviewRun:
         return self.finalize()
 
     def finalize(self) -> ReviewSession:
-        """Close the session out, write `session.json`, and say so on the stream."""
+        """Close the session out, write `session.json` and `attention.json`, and say so.
+
+        The record is written here, from the finalized session, rather than beside
+        whichever caller renders `report.md`: `finalize` runs on the failure path too
+        (`_run_turn`), and a run that ended badly is exactly the one an engineer needs the
+        ranking of. It writes only what `rank` derives from the session just saved, so the
+        folder never holds a record naming a session it no longer has (research R2.7).
+        """
         session = finalize_session(self.context, self.started, written=self._finalized)
         # Before `save_session`, and recomputed from the whole ledger on every call, the
         # same rule finalization itself follows: finalizing twice is finalizing once.
         session.usage = self.usage_ledger.usage()
         save_session(session, self.session_path)
+        write_attention_record(self.out_dir, rank(session), session.session_id)
         ended_at = session.ended_at
         body: dict[str, Any] = {
             "ended_at": ended_at.isoformat() if ended_at is not None else None,

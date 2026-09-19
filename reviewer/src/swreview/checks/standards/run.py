@@ -87,6 +87,8 @@ from swreview.checks.standards.verdict import (
 from swreview.exceptions import ExceptionStore
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
+from swreview.report.attention import rank
+from swreview.report.attention_record import write_attention_record
 from swreview.report.dispositions import REPORT_FILE_NAME, SESSION_FILE_NAME
 from swreview.report.markdown import render_report
 from swreview.report.session import ReviewSession, save_session
@@ -387,10 +389,18 @@ def _write_report(
     The header is `verdict.verdict_header` over the same `verdict_json` block
     `_write_check_record` writes into `check.json`, so `report/rerender.py` rebuilds it byte
     for byte from the folder when an offline command re-renders this report (research R2.7).
+
+    `attention.json` is written here too, from the one `Ranking` the body is rendered with,
+    so the "Start here" section under the header and the record beside the session are the
+    same order by construction rather than by two calls agreeing.
     """
+    ranking = rank(session)
     header = verdict_header(session.design_id, verdict_json(verdict))
     report_file = directory / REPORT_FILE_NAME
-    report_file.write_text(header + render_report(session, package), encoding="utf-8")
+    report_file.write_text(
+        header + render_report(session, package, ranking=ranking), encoding="utf-8"
+    )
+    write_attention_record(directory, ranking, session.session_id)
     return report_file
 
 

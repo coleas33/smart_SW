@@ -56,6 +56,7 @@ from swreview.checks.rms.run import (
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
 from swreview.ir.models import EvidencePackage
+from swreview.report.attention_record import ATTENTION_FILE_NAME
 from swreview.report.dispositions import apply_disposition, find_finding
 from swreview.report.session import load_session, save_session
 from tests.support.features import (
@@ -276,6 +277,7 @@ class TestRunFolder:
         assert run.report_file == out / REPORT_FILE
         assert run.check_file == out / CHECK_FILE_NAME
         assert sorted(item.name for item in out.iterdir()) == [
+            ATTENTION_FILE_NAME,
             CHECK_FILE_NAME,
             REPORT_FILE,
             SESSION_FILE,
