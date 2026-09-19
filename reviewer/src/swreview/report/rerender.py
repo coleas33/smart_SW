@@ -66,7 +66,7 @@ UNREADABLE_CHECK_RECORD = (
 )
 
 
-def rerender_run_folder(run_dir: Path | str) -> Path:
+def rerender_run_folder(run_dir: Path | str, *, package: EvidencePackage | None = None) -> Path:
     """Re-render a run folder's report and record from its own files; return the report path.
 
     Reads `session.json` (required), `package.json` (when the folder holds one) and
@@ -79,6 +79,16 @@ def rerender_run_folder(run_dir: Path | str) -> Path:
     Only the report path is returned: every caller re-renders in order to serve or name
     `report.md`, and the record's path is `<run_dir>/attention.json` by construction.
 
+    Args:
+        run_dir: The folder holding `session.json`.
+        package: The package to render with, when the caller is already holding it. There
+            is exactly one such caller, `swreview exceptions accept` and `accept-<family>`
+            through `cli._save_run`: they are pointed at the package with `--package`, and
+            a check folder written by `check rms --out <dir>` holds **no** `package.json`
+            of its own, so reading the folder would render component ids and the "not
+            supplied" placeholder - the very loss this function exists to prevent. Default
+            `None` reads the folder, which is what the folder-only commands want.
+
     Raises:
         FileNotFoundError: the folder holds no `session.json`; a benchmark run root, whose
             sessions sit one level down, is named as such and pointed at `benchmark time`
@@ -88,7 +98,7 @@ def rerender_run_folder(run_dir: Path | str) -> Path:
     """
     directory = Path(run_dir)
     session = _session_of(directory)
-    package = _package_of(directory)
+    package = package if package is not None else _package_of(directory)
     header = _header_of(directory, session)
     ranking = rank(session)
 

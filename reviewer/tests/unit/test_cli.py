@@ -2134,6 +2134,46 @@ def test_exceptions_accept_records_the_exception_on_the_finding(
     assert (joint_run_dir / "report.md").is_file()
 
 
+def test_exceptions_accept_re_renders_the_start_here_section_and_the_record(
+    joint_run_dir: Path, tmp_package_dir: Path
+) -> None:
+    """FR-019: the waiver path re-renders through `rerender_run_folder` like the other two
+    offline commands, so the report it leaves behind still opens its findings with the
+    ranking and `attention.json` beside it describes the session as it now stands."""
+    from swreview.report.attention import rank
+    from swreview.report.attention_record import read_attention_record
+    from swreview.report.session import load_session
+
+    accept(joint_run_dir, tmp_package_dir)
+
+    report = (joint_run_dir / "report.md").read_text(encoding="utf-8")
+    assert "## Start here" in report
+    assert report.index("## Start here") < report.index("## Findings")
+    session = load_session(joint_run_dir / "session.json")
+    record = read_attention_record(joint_run_dir)
+    assert record.session_id == session.session_id
+    assert [row.finding_id for row in record.rows] == [
+        row.finding_id for row in rank(session).rows
+    ]
+
+
+def test_exceptions_accept_re_renders_with_the_package_it_was_pointed_at(
+    joint_run_dir: Path, tmp_package_dir: Path
+) -> None:
+    """A review run folder holds no `package.json`, so the folder cannot supply it.
+
+    `--package` is where this command was told to find the evidence, and the re-render is
+    handed it: reading the folder instead would turn every component name back into an id
+    and degrade Manifest Discrepancies to the placeholder (research R2.7).
+    """
+    assert not (joint_run_dir / "package.json").exists()
+
+    accept(joint_run_dir, tmp_package_dir)
+
+    report = (joint_run_dir / "report.md").read_text(encoding="utf-8")
+    assert "_The evidence package was not supplied to the renderer._" not in report
+
+
 def test_a_second_acceptance_gets_the_next_id(
     joint_run_dir: Path, tmp_package_dir: Path
 ) -> None:

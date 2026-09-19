@@ -16,6 +16,8 @@ import pytest
 from swreview.agent.providers import EffortMapping
 from swreview.findings import Calculation, Disposition, FindingGroup, build_finding
 from swreview.ir.models import Dimension, Discrepancy, Manifest, Quantity, SourceRef, Tolerance
+from swreview.report.attention import rank
+from swreview.report.attention_record import read_attention_record
 from swreview.report.dispositions import apply_disposition
 from swreview.report.markdown import render_report
 from swreview.report.session import (
@@ -31,6 +33,7 @@ from swreview.report.session import (
     save_session,
 )
 from tests.support.packages import build_package, persist_ref
+from tests.unit.test_rerender import REPORT_TITLE, standards_run_folder
 
 PACKAGE = build_package()
 
@@ -444,6 +447,79 @@ def test_apply_disposition_unknown_finding_id_raises_key_error(tmp_path: Path) -
             note="n/a",
             by="engineer@example.com",
         )
+
+
+# --- dispositions re-render through the one folder function (T031, FR-019) ------------
+
+
+def test_apply_disposition_re_renders_the_start_here_section(tmp_path: Path) -> None:
+    """FR-019: a section one writer renders and the next erases is worse than none.
+
+    `apply_disposition` used to render from the session alone, so a decision recorded on
+    any run folder silently removed "Start here" from the report until something else
+    re-rendered it.
+    """
+    run_dir = tmp_path / "run"
+    save_session(build_session(), run_dir / "session.json")
+
+    apply_disposition(
+        run_dir,
+        finding_id="F-002",
+        decision="accepted",
+        note="reviewed and fine",
+        by="engineer@example.com",
+    )
+
+    report = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert "## Start here" in report
+    assert report.index("## Start here") < report.index("## Findings")
+
+
+def test_apply_disposition_writes_the_ranking_record_beside_the_session(
+    tmp_path: Path,
+) -> None:
+    """The record is the order the engineer was shown, so it moves when the session does."""
+    run_dir = tmp_path / "run"
+    save_session(build_session(), run_dir / "session.json")
+
+    apply_disposition(
+        run_dir,
+        finding_id="F-002",
+        decision="accepted",
+        note="reviewed and fine",
+        by="engineer@example.com",
+    )
+
+    record = read_attention_record(run_dir)
+    assert record.policy_version == "attention_policy_v1"
+    assert record.session_id == load_session(run_dir / "session.json").session_id
+    assert [row.finding_id for row in record.rows] == [
+        row.finding_id for row in rank(load_session(run_dir / "session.json")).rows
+    ]
+
+
+def test_apply_disposition_on_a_standards_folder_keeps_its_verdict_header(
+    tmp_path: Path,
+) -> None:
+    """The second half of the same defect: the header `_write_report` prepends is outside
+    the renderer, so a re-render that called the renderer directly deleted it."""
+    run_dir = standards_run_folder(tmp_path)
+    before = (run_dir / "report.md").read_text(encoding="utf-8")
+    header, _, _ = before.partition(REPORT_TITLE)
+    assert header, "the fixture folder is not a standards folder with a verdict header"
+    finding_id = load_session(run_dir / "session.json").findings[0].id
+
+    apply_disposition(
+        run_dir,
+        finding_id=finding_id,
+        decision="accepted",
+        note="the owner accepted this at the desk",
+        by="engineer@example.com",
+    )
+
+    after = (run_dir / "report.md").read_text(encoding="utf-8")
+    assert after.startswith(header)
+    assert "## Start here" in after
 
 
 # --- feature 002: the optional provider fields (T016) --------------------------------

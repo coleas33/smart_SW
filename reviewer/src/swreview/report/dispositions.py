@@ -14,8 +14,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from swreview.findings import Disposition, Finding
-from swreview.report.markdown import render_report
-from swreview.report.rerender import REPORT_FILE_NAME, SESSION_FILE_NAME
+from swreview.report.rerender import (
+    REPORT_FILE_NAME,
+    SESSION_FILE_NAME,
+    rerender_run_folder,
+)
 from swreview.report.session import ReviewSession, load_session, save_session
 
 __all__ = [
@@ -106,6 +109,13 @@ def apply_disposition(
 ) -> ReviewSession:
     """Set the disposition of `finding_id` in `run_dir/session.json` and re-render the report.
 
+    The re-render goes through `report/rerender.rerender_run_folder`, the one function the
+    three offline commands share: rendering from the session alone - which is what this
+    function used to do - turned every component name back into an id, degraded Manifest
+    Discrepancies to the "not supplied" placeholder, and deleted a standards folder's
+    verdict header, and it wrote no `attention.json`, so a decision recorded here left the
+    folder's ranking describing the run as it stood before the decision (research R2.7).
+
     Raises `ValueError` for an unknown decision or a transition the state machine forbids,
     and `KeyError` for a finding id that is not in the session.
     """
@@ -115,6 +125,6 @@ def apply_disposition(
     set_disposition(session, finding_id, decision, note, by, at)
 
     save_session(session, run_dir / SESSION_FILE_NAME)
-    (run_dir / REPORT_FILE_NAME).write_text(render_report(session), encoding="utf-8")
+    rerender_run_folder(run_dir)
 
     return session
