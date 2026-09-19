@@ -2,154 +2,472 @@
   The family-neutral half of a check page's stylesheet (T030), extracted from
   `Model/ModelCheckPage/check.css`.
 
-  Everything a check tab shows the same way: the document bar, the banner, the session row, the
-  bucket chips and the rule list with its subjects and its Accept control. What stays with a
-  page is the block its own header renders into - a grade on the Model check tab, a verdict on
-  the Standards check tab.
+  Everything a check tab shows the same way: the status strip, the banner, the session row, the
+  ranked rows, the bucket chips and the rule list with its subjects and its Accept control. What
+  stays with a page is the block its own header renders into - a grade on the Model check tab, a
+  verdict on the Standards check tab.
+
+  Loaded after `shared/tokens.css`, which is the one palette and type scale every tab in the
+  pane draws from. There is no literal colour, face or size below: a hex value here would be a
+  value that cannot follow the theme the workstation is in, and a second definition of a colour
+  the rest of the pane already names.
+
+  Three tiers of ink, and the whole layout is that idea:
+
+    1. The Start here block - numbered cards, the title in bold, and a stripe restating the
+       class the backend already gave the row.
+    2. Every rule as one line and a fold: what it is, what was seen, and one press for the
+       recommended action and the acceptance.
+    3. What folds to a count until it is wanted - the roster on the Standards tab, and the
+       buckets an engineer turned off.
 
   A separate file rather than a `<style>` block because the CSP is `style-src 'self'`: the pages
   it is served with refuse an inline one, which is the point of the policy. Nothing here is
-  generated and nothing is set from script, so a hostile feature name cannot reach a declaration.
+  generated and nothing is set from script, so a hostile feature name cannot reach a
+  declaration.
 
-  The pane is a narrow strip docked beside a model, so everything below stacks and wraps rather
-  than assuming a width.
+  The pane is a narrow strip docked beside a model - 260 px at its narrowest, which the host
+  enforces - so everything below stacks and wraps rather than assuming a width.
 */
 
-:root {
-  color-scheme: light dark;
+* {
+  box-sizing: border-box;
 }
 
 body {
-  margin: 0;
-  padding: 8px;
-  font-family: "Segoe UI", Tahoma, sans-serif;
-  font-size: 12px;
-  line-height: 1.45;
+  padding: 0 0 16px;
+  background: var(--pane);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--text);
+  line-height: var(--line);
 }
+
+/* ---- the status strip ---------------------------------------------------------------------- */
+
+/* One line, one truth: which document, and what the backend is doing about it. The badge's text
+   is the host's own sentence and is never rewritten here; the dot beside it is a pseudo-element
+   so it adds nothing to what the element reads as. */
 
 .bar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  padding: 10px 12px 6px;
 }
 
 .document {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.badge {
-  border: 1px solid #999;
-  border-radius: 9px;
-  padding: 0 6px;
-  font-size: 11px;
+.bar .badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  white-space: nowrap;
 }
 
-.badge.warn {
-  border-color: #b35c00;
+.bar .badge::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--good);
 }
+
+.bar .badge.warn {
+  color: var(--warn);
+}
+
+.bar .badge.warn::before {
+  background: var(--warn);
+}
+
+/* ---- the banner ---------------------------------------------------------------------------- */
 
 .banner {
-  margin: 6px 0;
-  padding: 6px;
-  border: 1px solid #b35c00;
-  border-radius: 3px;
+  margin: 0 12px 10px;
+  padding: 7px 10px;
+  border-left: 3px solid var(--critical);
+  border-radius: var(--radius);
+  background: var(--critical-bg);
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+/* ---- the session row ------------------------------------------------------------------------ */
+
+/* The meta lines are ordered above the buttons here rather than in the HTML, so a page that
+   gained another line does not have to move a button to keep the reading order: what a press
+   would do reads before the press. */
+
+.session {
+  display: flex;
+  flex-direction: column;
+}
+
+.session .note {
+  order: 1;
+  display: block;
+  margin: 0 12px 3px;
+  color: var(--muted);
+  font-size: var(--text-small);
+
+  /* Not `break-all`: a run folder and a profile path used to break mid-word on every line, which
+     made five different kinds of information look like one ragged block. */
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .session .row {
+  order: 2;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 7px;
+  padding: 0 12px 12px;
 }
 
-.note {
-  display: block;
-  margin-top: 4px;
-  opacity: 0.85;
-  word-break: break-all;
+.session .row button {
+  padding: 5px 11px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  background: var(--pane);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-small);
+  cursor: pointer;
 }
 
-/* ---- what to start with ------------------------------------------------------------------ */
+.session .row .primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
 
-/* The ranked rows, above the chips on both tabs. Nothing here is conditional on a row's
-   severity or its place in the list: the order is the whole statement, and a colour per row
-   would be a second ranking beside it. */
+.session .row button:disabled {
+  border-color: var(--hair-2);
+  background: var(--quiet-bg);
+  color: var(--quiet);
+  cursor: default;
+}
+
+/* ---- tier 1: what to start with -------------------------------------------------------------- */
+
+/* The rows the backend ranked, above the chips on both tabs, in the order it supplied them.
+   Nothing here is conditional on a row's place in the list: the order is the whole statement.
+   The stripe is not a second ranking either - it restates the consequence class the policy
+   already recorded on the row, and the judgement stripe is the policy's own tenth lever. */
 
 .attention {
   display: block;
-  margin: 6px 0;
+  padding: 12px 12px 4px;
+  border-top: 1px solid var(--hair-2);
 }
 
 .attention-heading {
-  margin: 0 0 2px;
-  font-size: 12px;
+  margin: 0 0 8px;
+  color: var(--ink-2);
+  font-size: var(--text-label);
   font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .attention-rows {
+  display: grid;
+  gap: 6px;
   margin: 0;
-  padding-left: 20px;
+  padding: 0;
+  list-style: none;
+  counter-reset: rank;
 }
 
 .attention-row {
-  margin-bottom: 2px;
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 6px;
+  margin: 0;
+  padding: 8px 10px 8px 28px;
+  border: 1px solid var(--hair);
+  border-left: 4px solid var(--quiet);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.attention-row::before {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  counter-increment: rank;
+  content: counter(rank);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--text-label);
+}
+
+/* Only the three borders that are not the stripe, so hovering a row never restates its class as
+   something else. */
+.attention-row:hover {
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.attention-row.stripe-critical {
+  border-left-color: var(--critical);
+}
+
+.attention-row.stripe-warn {
+  border-left-color: var(--warn);
+}
+
+.attention-row.stripe-judge {
+  border-left-color: var(--judge);
+}
+
+.attention-row.stripe-quiet {
+  border-left-color: var(--quiet);
 }
 
 .attention-id {
+  flex: 0 0 auto;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: var(--text-label);
   font-weight: 600;
 }
 
-.attention-check {
-  margin-left: 6px;
-  font-family: Consolas, "Courier New", monospace;
+/* The reason the policy placed the row, as the chip. It is the shortest thing on the row and the
+   only one that says why, so it is the one that gets the colour. */
+.attention-reason {
+  flex: 0 1 auto;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: var(--quiet-bg);
+  color: var(--ink-2);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
-.attention-reason {
-  margin-left: 6px;
-  opacity: 0.85;
-  word-break: break-word;
+.attention-row.stripe-critical .attention-reason {
+  background: var(--critical-bg);
+  color: var(--critical);
+}
+
+.attention-row.stripe-warn .attention-reason {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.attention-row.stripe-judge .attention-reason {
+  background: var(--judge-bg);
+  color: var(--judge);
+}
+
+.attention-row.stripe-quiet .attention-reason {
+  background: var(--quiet-bg);
+  color: var(--quiet);
+}
+
+/* Full width, so the id and the reason sit on the line above it and the facts wrap under it. */
+.attention-title {
+  flex: 1 1 100%;
+  font-size: var(--text);
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.attention-check {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.attention-meta {
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.attention-components {
+  color: var(--muted);
 }
 
 .attention-empty {
   margin: 0;
-  opacity: 0.85;
+  color: var(--muted);
+  font-size: var(--text-small);
 }
 
-/* ---- the chips ------------------------------------------------------------------------- */
+/* ---- the chips ------------------------------------------------------------------------------- */
+
+/* A chip is a count first and a filter second: the number is what an engineer reads off the tab
+   before deciding what to open, and the label reads after it. Pressed is a fill in the bucket's
+   own colour; unpressed is the same shape, outlined. */
 
 .filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin: 6px 0;
+  gap: 6px;
+  padding: 12px 12px 8px;
+  border-top: 1px solid var(--hair-2);
 }
 
 .chip {
-  border: 1px solid #999;
-  border-radius: 10px;
-  padding: 1px 8px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
   background: transparent;
-  cursor: pointer;
+  color: var(--ink-2);
   font: inherit;
+  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.chip-count {
+  color: var(--ink);
+  font-size: var(--text-lead);
+  font-weight: 600;
+}
+
+.chip.bucket-skipped,
+.chip.bucket-out_of_scope {
+  color: var(--quiet);
+}
+
+.chip.bucket-skipped .chip-count,
+.chip.bucket-out_of_scope .chip-count {
+  color: var(--quiet);
 }
 
 .chip[aria-pressed="true"] {
-  border-color: #205493;
-  font-weight: 600;
+  border-color: transparent;
 }
 
-/* ---- the rules ------------------------------------------------------------------------- */
+.chip.bucket-failed[aria-pressed="true"] {
+  background: var(--critical-bg);
+  color: var(--critical);
+}
+
+.chip.bucket-failed[aria-pressed="true"] .chip-count {
+  color: var(--critical);
+}
+
+.chip.bucket-warned[aria-pressed="true"] {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.chip.bucket-warned[aria-pressed="true"] .chip-count {
+  color: var(--warn);
+}
+
+.chip.bucket-checked[aria-pressed="true"] {
+  background: var(--good-bg);
+  color: var(--good);
+}
+
+.chip.bucket-checked[aria-pressed="true"] .chip-count {
+  color: var(--good);
+}
+
+.chip.bucket-unresolved[aria-pressed="true"] {
+  background: var(--open-bg);
+  color: var(--open);
+}
+
+.chip.bucket-unresolved[aria-pressed="true"] .chip-count {
+  color: var(--open);
+}
+
+.chip.bucket-skipped[aria-pressed="true"],
+.chip.bucket-out_of_scope[aria-pressed="true"] {
+  background: var(--quiet-bg);
+  color: var(--ink-2);
+}
+
+.chip.bucket-skipped[aria-pressed="true"] .chip-count,
+.chip.bucket-out_of_scope[aria-pressed="true"] .chip-count {
+  color: var(--ink-2);
+}
+
+/* ---- tier 2: the rules ------------------------------------------------------------------------ */
 
 .document-name {
-  margin: 10px 0 2px;
-  font-size: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 12px 0 2px;
+  padding: 0 12px;
+  font-size: var(--text);
+  font-weight: 600;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+/* How much of the document is on screen, recomputed after every chip: a count that only moved on
+   a render would be wrong the moment one was pressed. */
+.document-count {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: var(--text-label);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .bucket-name {
-  margin: 8px 0 2px;
-  font-size: 12px;
+  margin: 10px 12px 2px;
+  color: var(--muted);
+  font-size: var(--text-label);
   font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bucket-group.bucket-failed .bucket-name {
+  color: var(--critical);
+}
+
+.bucket-group.bucket-warned .bucket-name {
+  color: var(--warn);
+}
+
+.bucket-group.bucket-checked .bucket-name {
+  color: var(--good);
+}
+
+.bucket-group.bucket-unresolved .bucket-name {
+  color: var(--open);
+}
+
+.bucket-group.bucket-skipped .bucket-name,
+.bucket-group.bucket-out_of_scope .bucket-name {
+  color: var(--quiet);
 }
 
 .bucket-rules,
@@ -160,80 +478,245 @@ body {
 }
 
 .rule {
-  margin: 0 0 8px;
-  padding: 6px;
-  border: 1px solid #ccc;
-  border-radius: 3px;
+  margin: 0;
+  padding: 7px 12px 8px 9px;
+  border-bottom: 1px solid var(--hair-2);
+  border-left: 3px solid var(--quiet);
 }
 
-/* The rule the engineer has just accepted, so the row they were looking at is findable in the
-   list the acceptance re-rendered. */
-.rule.just-accepted {
-  border-color: #205493;
+.rule.bucket-failed {
+  border-left-color: var(--critical);
+}
+
+.rule.bucket-warned {
+  border-left-color: var(--warn);
+}
+
+.rule.bucket-checked {
+  border-left-color: var(--good);
+}
+
+.rule.bucket-unresolved {
+  border-left-color: var(--open);
+}
+
+.rule.bucket-skipped,
+.rule.bucket-out_of_scope {
+  border-left-color: var(--hair);
+}
+
+/* The row the engineer has just accepted, and the row a ranked line was just pointed at: a
+   tinted ground rather than a border colour, because the border is already saying which bucket
+   the row is in. */
+.rule.just-accepted,
+.rule.flash {
+  background: var(--accent-bg);
 }
 
 .rule-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
+}
+
+.badge.bucket {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--quiet-bg);
+  color: var(--quiet);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.badge.bucket.bucket-failed {
+  background: var(--critical-bg);
+  color: var(--critical);
+}
+
+.badge.bucket.bucket-warned {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.badge.bucket.bucket-checked {
+  background: var(--good-bg);
+  color: var(--good);
+}
+
+.badge.bucket.bucket-unresolved {
+  background: var(--open-bg);
+  color: var(--open);
 }
 
 .rule-id {
-  font-family: Consolas, "Courier New", monospace;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
-.statement,
+.statement {
+  margin: 3px 0 0;
+  font-size: var(--text);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .observed,
-.reason,
-.exception {
+.reason {
   margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
-.observed {
-  word-break: break-word;
+.exception {
+  margin: 6px 0 0;
+  color: var(--good);
+  font-size: var(--text-small);
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
-.subject {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 4px;
+/* ---- the fold on a rule ------------------------------------------------------------------------ */
+
+/* One press for the recommended action, the note an acceptance left, and the Accept control.
+   Closed, because a list where every row states its remedy is a list nobody skims. */
+
+.rule-fold {
+  margin-top: 7px;
 }
 
-.subject-name {
-  font-weight: 600;
-  background: transparent;
-  border: none;
-  border-bottom: 1px dotted currentColor;
-  padding: 0;
+.rule-fold > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: var(--text-small);
+  list-style: none;
   cursor: pointer;
-  font: inherit;
-  font-weight: 600;
 }
 
-.subject-meta,
-.subject-note {
-  opacity: 0.85;
+.rule-fold > summary::-webkit-details-marker {
+  display: none;
 }
 
-.row.accept {
+.rule-fold > summary::before {
+  content: "\25b8";
+  font-size: var(--text-label);
+}
+
+.rule-fold[open] > summary::before {
+  content: "\25be";
+}
+
+/* ---- the subjects ------------------------------------------------------------------------------ */
+
+/* What the row is about, as pills with the Show control inside each one, so a row that names six
+   features is six things on two lines rather than six stacked lines. */
+
+.subjects {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 6px;
 }
 
+.subject {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 4px 2px 7px;
+  border: 1px solid var(--hair);
+  border-radius: 3px;
+  color: var(--ink-2);
+  font-size: var(--text-label);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.subject-name {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+button.subject-name {
+  padding: 0;
+  border: none;
+  border-bottom: 1px dotted currentColor;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.subject-meta,
+.subject-note {
+  color: var(--muted);
+}
+
+.subject .action {
+  padding: 1px 7px;
+  border: 1px solid var(--hair);
+  border-radius: 3px;
+  background: var(--pane);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
+/* ---- the Accept control -------------------------------------------------------------------------- */
+
+.row.accept {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.row.accept .note,
+.row.accept .by {
+  min-width: 0;
+  padding: 4px 7px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  background: var(--pane);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-small);
+}
+
 .row.accept .note {
   flex: 1 1 14em;
-  margin-top: 0;
 }
 
 .row.accept .by {
   flex: 0 1 9em;
 }
 
+.row.accept .action {
+  padding: 4px 10px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  background: var(--pane);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-small);
+  cursor: pointer;
+}
+
+/* Neutral rather than red: this line says "Accepting..." as often as it says why a waiver was
+   refused, and a colour that is wrong half the time is a colour nobody reads. */
 .accept-state {
   flex-basis: 100%;
+  color: var(--ink-2);
+  font-size: var(--text-small);
 }

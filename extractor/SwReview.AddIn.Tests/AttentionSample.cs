@@ -45,6 +45,20 @@ internal static class AttentionSample
     /// <summary>The five rows a page shows, in the order the ranking supplied them.</summary>
     public static readonly string[] ShownFindingIds = { "F-007", "F-008", "F-003", "F-002", "F-004" };
 
+    /// <summary>
+    /// Their titles, in the same order. The check tabs render these; the row already carried
+    /// them and the pages used to drop them, which is why they are named here rather than
+    /// written out again inside <see cref="Build"/>.
+    /// </summary>
+    public static readonly string[] ShownTitles =
+    {
+        "The pin interferes with the bore it is pressed into",
+        "The second pin interferes with its bore",
+        "Two components mate to reference geometry",
+        "A sketch is not fully defined",
+        "A content feature is in no group",
+    };
+
     /// <summary>Their checks, in the same order.</summary>
     public static readonly string[] ShownChecks =
     {
@@ -108,7 +122,7 @@ internal static class AttentionSample
             Row(
                 "F-007",
                 "interference.static",
-                "The pin interferes with the bore it is pressed into",
+                ShownTitles[0],
                 "demonstrated",
                 "medium",
                 new[] { "cmp:0002", "cmp:0003" },
@@ -118,7 +132,7 @@ internal static class AttentionSample
             Row(
                 "F-008",
                 "interference.static",
-                "The second pin interferes with its bore",
+                ShownTitles[1],
                 "demonstrated",
                 "medium",
                 new[] { "cmp:0004", "cmp:0005" },
@@ -128,7 +142,7 @@ internal static class AttentionSample
             Row(
                 "F-003",
                 "rms.assembly.mates_to_reference_geometry",
-                "Two components mate to reference geometry",
+                ShownTitles[2],
                 "demonstrated",
                 "medium",
                 new[] { "cmp:0001", "cmp:0002" },
@@ -138,7 +152,7 @@ internal static class AttentionSample
             Row(
                 "F-002",
                 "rms.sketches.fully_defined",
-                "A sketch is not fully defined",
+                ShownTitles[3],
                 "demonstrated",
                 "medium",
                 new[] { "cmp:0002" },
@@ -148,7 +162,7 @@ internal static class AttentionSample
             Row(
                 "F-004",
                 "rms.grouping.all_features_in_a_group",
-                "A content feature is in no group",
+                ShownTitles[4],
                 "demonstrated",
                 "medium",
                 new[] { "cmp:0002" },

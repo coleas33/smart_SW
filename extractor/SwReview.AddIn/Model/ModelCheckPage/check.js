@@ -111,7 +111,14 @@
 
   // ---- the grade header ----------------------------------------------------------------------
 
-  /** The grade, into the slot the shared half has just cleared. */
+  /**
+   * The grade, into the slot the shared half has just cleared.
+   *
+   * A summary rather than a headline: the thing to act on is the list below, not the score. So
+   * the heading is an eyebrow, the six counts are one muted inline row, and the fraction sets
+   * only its own number in ink. Every element and every string the contract and the tests pin
+   * is unchanged - what moved is which of them the eye lands on first.
+   */
   function renderGrade(result, node) {
     if (!result || !result.grade) {
       return;
@@ -126,7 +133,12 @@
       var bucket = BUCKETS[index];
       var count = Number(grade[bucket] || 0);
       total += count;
-      var item = dom.el('li', 'count', count + ' ' + BUCKET_LABELS[bucket]);
+
+      // The number leads, in its own element, and the label reads after it - so the row still
+      // says "<n> <label>" and a reader's eye still lands on the number.
+      var item = dom.el('li', 'count');
+      item.appendChild(dom.el('b', 'count-n', count));
+      item.appendChild(dom.el('span', 'count-label', ' ' + BUCKET_LABELS[bucket]));
       item.setAttribute('data-bucket', bucket);
       counts.appendChild(item);
     }
@@ -138,22 +150,37 @@
       return;
     }
 
-    node.appendChild(dom.el(
-      'p',
-      'fraction',
-      typeof grade.fraction === 'number'
-        ? grade.fraction.toFixed(2) + ' of the rules that reached a verdict were checked'
-        : 'No fraction: no rule reached a verdict.'));
+    node.appendChild(fractionLine(grade));
 
     // The unresolved rules travel with the counts, by name. A score with the missing rules
     // named beside it is a grade; a score on its own is a claim.
-    var unresolved = grade.unresolved_rule_ids || [];
-    node.appendChild(dom.el(
-      'p',
-      'unresolved-rules',
-      unresolved.length
-        ? 'Unresolved, so not graded: ' + dom.list(unresolved)
-        : 'Every rule reached a verdict.'));
+    node.appendChild(unresolvedLine(grade.unresolved_rule_ids || []));
+  }
+
+  /** The fraction, with the number itself in its own element and the sentence around it. */
+  function fractionLine(grade) {
+    var line = dom.el('p', 'fraction');
+    if (typeof grade.fraction === 'number') {
+      line.appendChild(dom.el('b', 'fraction-n', grade.fraction.toFixed(2)));
+      dom.write(line, ' of the rules that reached a verdict were checked');
+      return line;
+    }
+
+    dom.write(line, 'No fraction: no rule reached a verdict.');
+    return line;
+  }
+
+  /** The rules that reached no verdict, named in the mono face so they read as names. */
+  function unresolvedLine(unresolved) {
+    var line = dom.el('p', 'unresolved-rules');
+    if (!unresolved.length) {
+      dom.write(line, 'Every rule reached a verdict.');
+      return line;
+    }
+
+    dom.write(line, 'Unresolved, so not graded: ');
+    line.appendChild(dom.el('span', 'mono', dom.list(unresolved)));
+    return line;
   }
 
   function gradeHeading(result) {

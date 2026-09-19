@@ -479,6 +479,82 @@ public sealed class SharedCheckPageTests
     }
 
     /// <summary>
+    /// `web/shared/tokens.css` is the one palette and type scale every tab in the pane draws
+    /// from, and both check pages link it <b>before</b> the stylesheets that name it.
+    ///
+    /// The order is the assertion. A page that loaded its own rules first would resolve every
+    /// `var()` against nothing - which is not an error, it is a page with no colours at all -
+    /// and the CSP allows no inline `<style>` to patch it up afterwards.
+    /// </summary>
+    [Fact]
+    public void BothCheckPagesLinkTheSharedTokensBeforeTheStylesheetsThatNameThem()
+    {
+        Assert.True(
+            File.Exists(Path.Combine(ModelCheckPageFiles.SharedFolder, "tokens.css")),
+            "tokens.css was not copied to " + ModelCheckPageFiles.SharedFolder
+                + "; check the Content items in SwReview.AddIn.csproj.");
+
+        foreach (KeyValuePair<string, string> page in new[]
+                 {
+                     new KeyValuePair<string, string>("Model check", ModelCheckPageFiles.IndexHtml()),
+                     new KeyValuePair<string, string>("Standards", StandardsPageFiles.IndexHtml()),
+                 })
+        {
+            int tokens = page.Value.IndexOf("shared/tokens.css", StringComparison.Ordinal);
+            int shared = page.Value.IndexOf("shared/check-page.css", StringComparison.Ordinal);
+
+            Assert.True(tokens >= 0, $"The {page.Key} page does not link shared/tokens.css.");
+            Assert.True(shared >= 0, $"The {page.Key} page does not link shared/check-page.css.");
+            Assert.True(
+                tokens < shared,
+                $"The {page.Key} page links shared/tokens.css after shared/check-page.css; every "
+                    + "rule in that file names a token defined in this one.");
+        }
+    }
+
+    /// <summary>
+    /// No stylesheet either check tab loads spells out a colour of its own.
+    ///
+    /// There is one palette, it is in `web/shared/tokens.css`, and it is defined three times
+    /// there on purpose - once for light, once for `prefers-color-scheme: dark` and once for an
+    /// explicit `data-theme`. A literal anywhere else is a colour that cannot follow the theme
+    /// the workstation is in, and a second definition of a colour the rest of the pane already
+    /// names. This is the rule the six hard-coded hexes these two tabs used to carry broke.
+    /// </summary>
+    [Theory]
+    [InlineData("check-page.css")]
+    [InlineData("check.css")]
+    [InlineData("standards.css")]
+    public void NoCheckStylesheetSpellsOutAColourOfItsOwn(string name)
+    {
+        string[] literals = ColourLiteral.Matches(Stylesheet(name)).Cast<Match>()
+            .Select(match => match.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        Assert.True(
+            literals.Length == 0,
+            $"{name} spells out " + string.Join(", ", literals)
+                + ". Every colour on these tabs is a token from web/shared/tokens.css, because a "
+                + "literal here cannot follow the theme the workstation is in.");
+    }
+
+    /// <summary>A hex colour, or a function that builds one. Not an id selector.</summary>
+    private static readonly Regex ColourLiteral = new Regex(
+        @"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b|\b(?:rgba?|hsla?)\s*\(",
+        RegexOptions.Compiled);
+
+    private static string Stylesheet(string name)
+    {
+        if (name == "check.css")
+        {
+            return ModelCheckPageFiles.Read(name);
+        }
+
+        return name == "standards.css" ? StandardsPageFiles.Read(name) : ReadShared(name);
+    }
+
+    /// <summary>
     /// Both stylesheets are files rather than `<style>` blocks, because the CSP is
     /// `style-src 'self'` and the page it is served with refuses an inline one. Nothing in
     /// either is generated or set from script, so a hostile feature name cannot reach a
