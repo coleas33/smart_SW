@@ -22,6 +22,11 @@ public interface IApplicationThread
 /// <summary>What one in-process dump produced, as the pane reports it.</summary>
 public sealed class DumpSummary
 {
+    /// <param name="unexamined">Component instances whose suppression state is not `Resolved` -
+    /// lightweight or suppressed, so the extractor never opened them and nothing downstream can
+    /// see them either. Null when the caller did not count them; the Review, Model check and
+    /// Standards hosts all do, off the same package
+    /// (docs/feature-request-resolve-lightweight.md).</param>
     /// <param name="documents">Documents in the package, or null when the caller did not count
     /// them. Null rather than zero throughout: a zero is a statement about the design - "this
     /// part has no equations" - and the constitution forbids writing a default for engineering
@@ -36,6 +41,7 @@ public sealed class DumpSummary
         string packageFilePath,
         int components,
         int gaps,
+        int? unexamined = null,
         int? documents = null,
         int? features = null,
         int? equations = null,
@@ -45,6 +51,7 @@ public sealed class DumpSummary
         PackageFilePath = packageFilePath ?? throw new ArgumentNullException(nameof(packageFilePath));
         Components = components;
         Gaps = gaps;
+        Unexamined = unexamined;
         Documents = documents;
         Features = features;
         Equations = equations;
@@ -60,6 +67,12 @@ public sealed class DumpSummary
     /// <summary>Gaps are normal and are reported, never hidden (constitution Principle I).</summary>
     public int Gaps { get; }
 
+    /// <summary>
+    /// Component instances the dump never read - lightweight or suppressed - or null when the
+    /// caller did not count them.
+    /// </summary>
+    public int? Unexamined { get; }
+
     /// <summary>Documents in the package; null when the dump did not report a count.</summary>
     public int? Documents { get; }
 
@@ -74,6 +87,19 @@ public sealed class DumpSummary
 
     /// <summary>Drawing sheets in the package; null when the dump did not report a count.</summary>
     public int? DrawingSheets { get; }
+
+    /// <summary>
+    /// The clause a ready status appends for component instances a dump never read - lightweight
+    /// or suppressed, so interference, fit and the feature-tree rules cannot see them
+    /// (docs/feature-request-resolve-lightweight.md). Empty when <paramref name="unexamined"/>
+    /// is zero or null, so a run with nothing unread reads exactly as it did before this
+    /// feature. The Review, Model check and Standards hosts all post a ready status after a
+    /// dump and all reach for this one method, so the wording is one string rather than three.
+    /// </summary>
+    public static string UnexaminedClause(int? unexamined) =>
+        unexamined.HasValue && unexamined.Value > 0
+            ? $", {unexamined.Value} not read (lightweight or suppressed)"
+            : string.Empty;
 }
 
 /// <summary>

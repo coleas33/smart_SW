@@ -51,8 +51,9 @@ public sealed class SharedCheckPageTests
         "showSubject", "cycleSubject",
 
         // rendering
-        "renderAttention", "renderCarriedForward", "renderFilters", "countByBucket",
-        "documentSection", "bucketGroup", "subjectList", "subjectLine", "subjectMeta",
+        "renderNotExamined", "renderAttention", "renderCarriedForward", "renderFilters",
+        "countByBucket", "documentSection", "bucketGroup", "subjectList", "subjectLine",
+        "subjectMeta",
 
         // the chips and the page's chrome
         "toggleBucket", "applyFilter", "renderBackendState", "showStatus", "folderName",
@@ -446,6 +447,10 @@ public sealed class SharedCheckPageTests
     [InlineData(".banner")]
     [InlineData(".filters")]
     [InlineData(".document-name")]
+
+    // What was never read (feature: resolve-lightweight). Both tabs render the same block from
+    // the same `not_examined` key through the same shared function, so its rule is shared too.
+    [InlineData(".not-examined")]
 
     // The ranked rows (T038). Both tabs render the same block from the same `attention` key
     // through the same shared function, so its rules are shared too - a copy in one page's own

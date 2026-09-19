@@ -256,9 +256,9 @@ public sealed class ModelCheckHost : IDisposable
 
         PostStatus(
             "ready",
-            summary.Gaps == 0
-                ? "Extracted. Checking the model..."
-                : $"Extracted with {summary.Gaps} gaps. Checking the model...");
+            (summary.Gaps == 0 ? "Extracted" : $"Extracted with {summary.Gaps} gaps")
+                + DumpSummary.UnexaminedClause(summary.Unexamined)
+                + ". Checking the model...");
 
         actions.Send("check.extracted", id, new Dictionary<string, object?>
         {

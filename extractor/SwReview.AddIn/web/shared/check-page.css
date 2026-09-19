@@ -105,6 +105,24 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* ---- what was never read ---------------------------------------------------------------------- */
+
+/* Which component instances the check never read - lightweight or suppressed, so interference,
+   fit and the feature-tree rules cannot see them. The warn hue, because it is a coverage gap
+   rather than a failure: hidden and empty carries no ground and no stripe at all. */
+
+.not-examined {
+  margin: 0 12px 10px;
+  padding: 7px 10px;
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: var(--text-small);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
 /* ---- the session row ------------------------------------------------------------------------ */
 
 /* The meta lines are ordered above the buttons here rather than in the HTML, so a page that

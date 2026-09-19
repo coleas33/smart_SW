@@ -753,6 +753,82 @@ public sealed class ModelCheckPageTests
         Assert.Single(Strings(rendered, "heading"));
     }
 
+    // ---- what was never read (feature: resolve-lightweight) --------------------------------------
+
+    /// <summary>
+    /// A body carrying `not_examined` prints its sentence, unhidden, above the ranked rows -
+    /// the first thing under the header block, so an engineer reads it before the buckets
+    /// (docs/feature-request-resolve-lightweight.md).
+    /// </summary>
+    [Fact]
+    public void ANotExaminedResultPrintsItsSentenceUnhiddenAboveTheRankedRows()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.not_examined = " + NotExaminedSample.Json() + ";",
+            "var node = document.getElementById('not-examined');"
+            + "var attention = document.getElementById('attention');"
+            + "return JSON.stringify({ok: true, "
+            + "text: node.textContent, "
+            + "hidden: !!node.hidden, "
+            + "before: !!(node.compareDocumentPosition(attention) "
+            + "& Node.DOCUMENT_POSITION_FOLLOWING)});");
+
+        Assert.Equal(NotExaminedSample.Sentence, rendered.GetProperty("text").GetString());
+        Assert.False(rendered.GetProperty("hidden").GetBoolean(), "#not-examined stayed hidden.");
+        Assert.True(
+            rendered.GetProperty("before").GetBoolean(),
+            "#not-examined must come before #attention in the document.");
+    }
+
+    /// <summary>`null` means every instance was read, so the block says nothing and stays hidden.</summary>
+    [Fact]
+    public void ANotExaminedKeyOfNullLeavesTheBlockHiddenAndEmpty()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.not_examined = null;",
+            "var node = document.getElementById('not-examined');"
+            + "return JSON.stringify({ok: true, text: node.textContent, hidden: !!node.hidden});");
+
+        Assert.Equal(string.Empty, rendered.GetProperty("text").GetString());
+        Assert.True(rendered.GetProperty("hidden").GetBoolean());
+    }
+
+    /// <summary>
+    /// A body from before this feature carries no `not_examined` key at all, which reads the
+    /// same as `null`: nothing is said and the block stays hidden.
+    /// </summary>
+    [Fact]
+    public void ABodyWithNoNotExaminedKeyLeavesTheBlockHiddenAndEmpty()
+    {
+        JsonElement rendered = RenderMutated(
+            "delete result.not_examined;",
+            "var node = document.getElementById('not-examined');"
+            + "return JSON.stringify({ok: true, text: node.textContent, hidden: !!node.hidden});");
+
+        Assert.Equal(string.Empty, rendered.GetProperty("text").GetString());
+        Assert.True(rendered.GetProperty("hidden").GetBoolean());
+    }
+
+    /// <summary>
+    /// The sentence is untrusted the same way an `observed` string is - it is assembled out of
+    /// component names, and a component in a supplied model may have been renamed by anyone who
+    /// has ever been able to open it - so it reaches the screen as characters, never as markup.
+    /// </summary>
+    [Fact]
+    public void AHostileNotExaminedSentenceRendersAsLiteralTextWithNothingInjected()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.not_examined = "
+                + NotExaminedSample.Json(CheckResultSample.HostileNotExaminedSentence) + ";",
+            "return JSON.stringify(describe(document.getElementById('not-examined')));");
+
+        string text = Text(rendered);
+        Assert.Contains(CheckResultSample.HostileNotExaminedSentence, text);
+        Assert.Equal(0, rendered.GetProperty("injected").GetInt32());
+        Assert.Equal(0, rendered.GetProperty("handlers").GetInt32());
+        Assert.DoesNotContain("<img", rendered.GetProperty("html").GetString()!);
+    }
+
     // ---- what happens when the engineer accepts a rule -----------------------------------------
 
     /// <summary>
@@ -1200,6 +1276,9 @@ internal static class CheckResultSample
     /// <summary>An observed string, which is assembled out of the model's own names.</summary>
     public const string HostileObserved =
         "</script><script>alert(2)</script><img src=x onerror=alert(3)>";
+
+    /// <summary>A `not_examined.sentence`, hostile the same way a feature name can be.</summary>
+    public const string HostileNotExaminedSentence = "<img src=x onerror=alert(1)>";
 
     public static string Json(string featureName = "Cut-Extrude1", string? observed = null) =>
         JsonSerializer.Serialize(

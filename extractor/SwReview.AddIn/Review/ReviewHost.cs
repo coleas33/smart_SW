@@ -966,11 +966,7 @@ public sealed class ReviewHost : IDisposable
 
         TrackSession(handle.ChatId, runDirectory);
 
-        PostStatus(
-            "ready",
-            summary.Gaps == 0
-                ? $"Reviewing {summary.Components} components."
-                : $"Reviewing {summary.Components} components ({summary.Gaps} gaps).");
+        PostStatus("ready", ReadyMessage(summary.Components, summary.Gaps, summary.Unexamined));
 
         Send("review.started", id, new Dictionary<string, object?>
         {
@@ -992,6 +988,19 @@ public sealed class ReviewHost : IDisposable
     /// call site has to remember (FR-015).
     /// </summary>
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
+
+    /// <summary>
+    /// The ready status a review posts once the dump and the chat session both exist: how many
+    /// components, how many of them were never read - lightweight or suppressed
+    /// (<see cref="DumpSummary.UnexaminedClause"/>) - and how many gaps. Each clause after the
+    /// count is present only when it says something, so a run with nothing unread and no gaps
+    /// reads exactly as it did before this feature.
+    /// </summary>
+    internal static string ReadyMessage(int components, int gaps, int? unexamined)
+    {
+        string message = $"Reviewing {components} components{DumpSummary.UnexaminedClause(unexamined)}";
+        return gaps == 0 ? $"{message}." : $"{message} ({gaps} gaps).";
+    }
 
     private static Dictionary<string, object?>? DocumentPayload(PageDocument? document) =>
         document == null

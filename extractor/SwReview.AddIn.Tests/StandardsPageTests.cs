@@ -576,6 +576,82 @@ public sealed class StandardsPageTests
         Assert.Equal(16, rendered.GetProperty("checks").GetInt32());
     }
 
+    // ---- what was never read (feature: resolve-lightweight) ----------------------------------
+
+    /// <summary>
+    /// A body carrying `not_examined` prints its sentence, unhidden, above the ranked rows - the
+    /// same block the Model check tab renders, from the same shared function
+    /// (docs/feature-request-resolve-lightweight.md).
+    /// </summary>
+    [Fact]
+    public void ANotExaminedResultPrintsItsSentenceUnhiddenAboveTheRankedRows()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.not_examined = " + NotExaminedSample.Json() + ";",
+            "var node = document.getElementById('not-examined');"
+            + "var attention = document.getElementById('attention');"
+            + "return JSON.stringify({ok: true, "
+            + "text: node.textContent, "
+            + "hidden: !!node.hidden, "
+            + "before: !!(node.compareDocumentPosition(attention) "
+            + "& Node.DOCUMENT_POSITION_FOLLOWING)});");
+
+        Assert.Equal(NotExaminedSample.Sentence, rendered.GetProperty("text").GetString());
+        Assert.False(rendered.GetProperty("hidden").GetBoolean(), "#not-examined stayed hidden.");
+        Assert.True(
+            rendered.GetProperty("before").GetBoolean(),
+            "#not-examined must come before #attention in the document.");
+    }
+
+    /// <summary>`null` means every instance was read, so the block says nothing and stays hidden.</summary>
+    [Fact]
+    public void ANotExaminedKeyOfNullLeavesTheBlockHiddenAndEmpty()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.not_examined = null;",
+            "var node = document.getElementById('not-examined');"
+            + "return JSON.stringify({ok: true, text: node.textContent, hidden: !!node.hidden});");
+
+        Assert.Equal(string.Empty, rendered.GetProperty("text").GetString());
+        Assert.True(rendered.GetProperty("hidden").GetBoolean());
+    }
+
+    /// <summary>
+    /// A body from before this feature carries no `not_examined` key at all, which reads the
+    /// same as `null`: nothing is said and the block stays hidden.
+    /// </summary>
+    [Fact]
+    public void ABodyWithNoNotExaminedKeyLeavesTheBlockHiddenAndEmpty()
+    {
+        JsonElement rendered = RenderMutated(
+            "delete result.not_examined;",
+            "var node = document.getElementById('not-examined');"
+            + "return JSON.stringify({ok: true, text: node.textContent, hidden: !!node.hidden});");
+
+        Assert.Equal(string.Empty, rendered.GetProperty("text").GetString());
+        Assert.True(rendered.GetProperty("hidden").GetBoolean());
+    }
+
+    /// <summary>
+    /// The sentence is untrusted the same way an `observed` string is - assembled out of
+    /// component names a supplier's model may have renamed - so it reaches the screen as
+    /// characters, never as markup.
+    /// </summary>
+    [Fact]
+    public void AHostileNotExaminedSentenceRendersAsLiteralTextWithNothingInjected()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.not_examined = "
+                + NotExaminedSample.Json(StandardsResultSample.HostileNotExaminedSentence) + ";",
+            "return JSON.stringify(describe(document.getElementById('not-examined')));");
+
+        string text = Text(rendered);
+        Assert.Contains(StandardsResultSample.HostileNotExaminedSentence, text);
+        Assert.Equal(0, rendered.GetProperty("injected").GetInt32());
+        Assert.Equal(0, rendered.GetProperty("handlers").GetInt32());
+        Assert.DoesNotContain("<img", rendered.GetProperty("html").GetString()!);
+    }
+
     // ---- all sixteen checks ------------------------------------------------------------------
 
     /// <summary>
@@ -1553,6 +1629,9 @@ internal static class StandardsResultSample
 
     /// <summary>A revision-table cell, which is whatever a draughtsman typed into it.</summary>
     public const string HostileCell = "<iframe src=javascript:alert(4)></iframe>";
+
+    /// <summary>A `not_examined.sentence`, hostile the same way a feature name can be.</summary>
+    public const string HostileNotExaminedSentence = "<img src=x onerror=alert(1)>";
 
     /// <summary>The sixteen checks, in `contracts/rules.md` order.</summary>
     public static readonly string[] CheckIds =
