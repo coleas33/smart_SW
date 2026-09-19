@@ -47,11 +47,12 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any
 
-from swreview.agent.providers import ToolCallRequest, call_tool
+from swreview.agent.providers import ToolCallRequest, ToolCallResult, call_tool
 from swreview.agent.settings import EfficiencySettings
 from swreview.findings import Finding
 from swreview.geometry.axis import axis_distance
 from swreview.ir.models import EvidencePackage
+from swreview.report.attention import Ranking, coverage_line, load_policy, start_here_lines
 from swreview.report.session import CoverageItem, CoverageScope
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import ToolContext
@@ -60,15 +61,23 @@ from swreview.tools.registry import ToolDispatch
 __all__ = [
     "DIGEST_HEADER",
     "EVALUATED_HEADER",
+    "GATE_BLIND_SPOT_HEADER",
+    "GATE_INSTRUCTION",
+    "GATE_JUDGEMENT_HEADER",
+    "GATE_NONE",
+    "GATE_NOT_REACHED_HEADER",
+    "GATE_START_HERE_HEADER",
     "INTERFERENCE_TOOL",
     "NOT_EVALUATED_HEADER",
     "PRERUN_CHECK_PREFIX",
     "PRERUN_TOOLS",
     "RMS_PRERUN_TOOLS",
+    "UNNAMED_ERROR",
     "NotEvaluated",
     "PrerunCall",
     "PrerunResult",
     "coaxial_hole_pairs",
+    "gate_brief",
     "not_evaluated_families",
     "planned_calls",
     "prerun_checks",
@@ -110,6 +119,35 @@ DIGEST_HEADER = (
 EVALUATED_HEADER = "Evaluated:"
 NOT_EVALUATED_HEADER = "NOT evaluated, and why:"
 NOTHING_EVALUATED = "  nothing: no pre-run check was available this run."
+
+UNNAMED_ERROR = "the tool reported a failure without naming it"
+"""What a failed call's line says when its envelope carries no `error` key.
+
+Every tool of feature 001 puts one there, and `check_standards` - which the pre-run reaches
+only with lever 11 on - is the first envelope this module has been handed that it did not
+write the contract for. An unguarded read would turn one tool's shape into a `KeyError` in
+*setup*, which is the one place a review cannot recover from (research R2.11).
+"""
+
+GATE_START_HERE_HEADER = "Start here:"
+GATE_JUDGEMENT_HEADER = "Needs your judgement:"
+GATE_NOT_REACHED_HEADER = "Not reached in this run:"
+GATE_BLIND_SPOT_HEADER = "Not visible to any rule:"
+"""The four headers the gate's brief adds, in the order `contracts/gate.md` section 3
+lists them. Plain lines rather than Markdown headings: the brief is a chat message and the
+report is a document, and only the report has a table of contents to be in."""
+
+GATE_NONE = "  none"
+"""What a list with nothing in it says. Never an omitted header: a brief that dropped
+"Needs your judgement" when nothing did would read as a brief that forgot to ask."""
+
+GATE_INSTRUCTION = (
+    "These verdicts are computed from checked code. Do not re-derive them; spend your "
+    "rounds on what was not reached."
+)
+"""The last line, verbatim (FR-029). The whole gate rests on it: a model handed five ranked
+verdicts and no instruction may spend its rounds confirming them, which is the expensive
+failure this lever is measured against."""
 
 
 def _plural(count: int, noun: str) -> str:
@@ -234,6 +272,76 @@ class PrerunResult:
         ]
 
 
+def gate_brief(prerun: PrerunResult, ranking: Ranking) -> str:
+    """The procedural gate's first user message (`contracts/gate.md` section 3, FR-029).
+
+    Six parts, in order: lever 5's digest byte-identical, the ranked rows, the rows only the
+    engineer can settle, what the run did not reach, what no rule can see, and the
+    instruction. Everything but the two lists this function owns is rendered by somebody
+    else - `attention.start_here_lines` and `attention.coverage_line`, the same two functions
+    `report/markdown.py` calls - so the ids the model reads and the ids the engineer reads
+    are one list by construction rather than by two renderers agreeing (FR-031).
+
+    **The caps are the renderers' own.** `start_here_lines` amplifies `ranking.top_n` rows
+    and `coverage_line` prints `MAX_NOT_CLOSED` close-out sentences; what falls past either
+    is still counted, by the not-amplified line and by the bucket counts above the bullets.
+    Nothing is dropped silently here, because nothing is dropped here at all.
+
+    Args:
+        prerun: What the pre-run ran and what it counted. Part 1 is its digest and part 5
+            is one sentence per family it counted.
+        ranking: The session the pre-run just wrote, ranked. The caller ranks it, because
+            the report's caller ranks the same session the same way and a second `rank()`
+            inside here would be a second place the policy is applied.
+
+    Returns:
+        The brief, ending with the instruction. The opening instruction is appended by the
+        caller, exactly as it is to the digest, because `OPENING_MESSAGE` lives in
+        `agent/runner.py` and this module is imported *by* it.
+    """
+    policy = load_policy()
+    parts: tuple[list[str], ...] = (
+        [prerun.digest()],
+        [GATE_START_HERE_HEADER, *start_here_lines(ranking)],
+        [GATE_JUDGEMENT_HEADER, *_judgement_lines(ranking)],
+        [GATE_NOT_REACHED_HEADER, *coverage_line(ranking)],
+        [GATE_BLIND_SPOT_HEADER, *_blind_spot_lines(prerun, policy.blind_spots)],
+        [GATE_INSTRUCTION],
+    )
+    return "\n\n".join("\n".join(part) for part in parts)
+
+
+def _judgement_lines(ranking: Ranking) -> list[str]:
+    """Part 3: the rows key 2 placed, which no tool this product has can settle.
+
+    The title rather than the reason, because the reason of a needs-judgement row *is*
+    "needs your judgement" - the row is already in "Start here" saying that, and what this
+    list adds is what each judgement is about.
+    """
+    rows = [row for row in ranking.rows if not row.key.judgement]
+    return [f"  {row.finding_id} `{row.check}` - {row.title}" for row in rows] or [GATE_NONE]
+
+
+def _blind_spot_lines(prerun: PrerunResult, blind_spots: Mapping[str, str]) -> list[str]:
+    """Part 5: one sentence per family the policy file names a blind spot for.
+
+    Backed one-to-one: the families walked are exactly the `NotEvaluated`s the pre-run
+    wrote as `coverage.prerun.<family>` skipped items, so every sentence the model reads is
+    a claim the report carries too.
+
+    A family the table has no sentence for is skipped rather than given a made-up one. The
+    only ones today are the withheld pre-run tools (lever 4), whose family name is a *tool*
+    name and whose sentence is the tier's own - already in the digest, and a statement about
+    this run rather than about what no rule can ever see.
+    """
+    lines = [
+        f"  {family.label}: {blind_spots[name]}"
+        for family in prerun.not_evaluated
+        if (name := family.check.removeprefix(PRERUN_CHECK_PREFIX)) in blind_spots
+    ]
+    return lines or [GATE_NONE]
+
+
 def planned_calls(
     context: ToolContext, tools: ToolDispatch
 ) -> tuple[tuple[str, dict[str, Any]], ...]:
@@ -356,13 +464,13 @@ def prerun_checks(
         tools: The dispatch this session will hand the provider. The same object, not a
             second one built for the pre-run: the steps, findings and events have to be the
             ones a model-driven call would have produced.
-        efficiency: This run's levers. Only `prerun_checks` is read.
+        efficiency: This run's levers. Only `prerun_checks` and `procedural_gate` are read.
 
     Returns:
-        What was run and what was not, so the caller can render the digest, or `None` when
-        the lever is off and there is no digest to render.
+        What was run and what was not, so the caller can render the digest or the brief, or
+        `None` when both levers are off and there is nothing to render.
     """
-    if not efficiency.prerun_checks:
+    if not (efficiency.prerun_checks or efficiency.procedural_gate):
         return None
 
     session = context.require_session()
@@ -385,7 +493,7 @@ def prerun_checks(
                 arguments=dict(arguments),
                 step_index=step_index,
                 findings=tuple(session.findings[before:]),
-                error=str(result.payload["error"]) if result.is_error else None,
+                error=_error_of(result),
             )
         )
 
@@ -396,3 +504,17 @@ def prerun_checks(
     for family in families:
         context.record_coverage("skipped", family.coverage_item())
     return PrerunResult(calls=tuple(calls), not_evaluated=families)
+
+
+def _error_of(result: ToolCallResult) -> str | None:
+    """What a call's line says about its failure, or `None` for a call that succeeded.
+
+    `ToolCallResult.payload` is a plain dict and the `error` key is a convention every tool
+    of feature 001 keeps; `call_tool` reads it with `.get` for that reason. The pre-run read
+    it by subscript until lever 11 widened the set of tools it dispatches, and a `KeyError`
+    here would be raised inside `start_review`, which is the one place a review has no way
+    to recover from (research R2.11).
+    """
+    if not result.is_error:
+        return None
+    return str(result.payload.get("error", UNNAMED_ERROR))
