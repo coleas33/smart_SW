@@ -108,6 +108,10 @@ The same sequence as one command, stopping at the first step that fails, is
 `.\extractor\tools\update-workstation.ps1` (add `-Register` on a first install, `-SkipTests`
 only when a test failure has already been reported and the owner asked for the build anyway).
 It refuses to run while SOLIDWORKS is open or the checkout is dirty, for the reasons below.
+It pulls only on `main`. A seat that keeps its own documentation commits on a lane (the pilot
+workstation's `local`) merges GitHub in by hand, `git fetch origin` then `git merge origin/main`,
+and runs the script with `-NoPull` to build and gate what is checked out; on a lane without
+`-NoPull` the script stops and says so rather than failing a fast-forward.
 
 Then start SOLIDWORKS and run the health checks (section 6).
 

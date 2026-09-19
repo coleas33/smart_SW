@@ -169,3 +169,42 @@ No decisions: no run directories were compared.
 `wall clock s` is the session's own `started_at` to `ended_at`, **not** `unattended_runtime_minutes`, which the benchmark runner overwrites with a span that also covers package load and adapter construction.
 
 <!-- ledger:end -->
+
+## Measurements outside the ledger
+
+Rows the generated ledger cannot carry: every run below was made on the one-package pilot
+set with `--i-know-the-set-is-too-small`, so `compare` computes no decision and the study
+folders stay outside `benchmarks/studies/` (a committed override row fails the check test).
+They are evidence, not gates; the pane default changes nothing on their account. Recorded
+from the workstation packet of 2026-09-19 (`docs/pane-findings-2026-09-19.md`).
+
+**Token baseline, pilot workstation, 2026-09-19.** One review of the 810-11249 dowel-pin
+assembly with every lever off, openai `gpt-5.6-luna` at high effort: 1,215,720 tokens, of
+which 95.3 percent of the input was served from the implicit cache; 32 round trips, one tool
+call each; 84 s. Uncached input was 57,030 tokens. Two negative results follow from it and
+are recorded so they are not tried first: lever 3's explicit cache has about 5 percent of
+headroom left on this seat, and lowering the reasoning effort attacks 0.5 percent of the
+bill. The multiplier to attack is the round count.
+
+**Lever 6 (`parallel_tool_calls`), two studies, three repetitions per arm, alternated.**
+
+| Package | Metric | Off (median) | On (median) | Change |
+|---|---|---|---|---|
+| 810-11249 dump (real design, provisional key of the six pane-baseline findings) | total tokens | 1,428,464 | 463,951 | -67.5 percent |
+| | round trips | 35 | 11 | -68.6 percent |
+| | tool calls | 34 | 42 | +23.5 percent |
+| | wall clock s | 87 | 65 | -25.1 percent |
+| | valid / missed / false alarms | 6 / 0 / 0 | 6 / 0 / 0 | unchanged on every rep |
+| cover-blind-tap (fixture; both arms miss both keyed defects on every rep) | total tokens | 795,651 | 166,090 | -79.1 percent |
+| | round trips | 44 | 8 | -81.8 percent |
+| | wall clock s | 116 | 64 | -45.0 percent |
+
+Reading: lever 6 batches calls into fewer rounds; the steps stay, the rounds collapse, and
+on the real design no defect was lost and no false alarm appeared. The tool-call rise is
+more work per cheaper round, not a thinner review. The cover-blind-tap rows say nothing
+about quality: that package's key is not met by either arm.
+
+**Decision taken 2026-09-19, outside the ledger:** command-line studies of this workload may
+hold `--lever parallel_tool_calls` on in both arms from here (it becomes the "other levers
+on" column of the next study). The pane default stays off until the set holds a held-out
+package with an engineer's answer key and the ledger carries a signed-off row.

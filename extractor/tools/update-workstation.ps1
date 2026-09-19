@@ -42,6 +42,7 @@
 param(
     [switch] $Register,
     [switch] $SkipTests,
+    [switch] $NoPull,
     [string] $Configuration = "Release"
 )
 
@@ -80,11 +81,29 @@ try {
 
     $before = git rev-parse --short HEAD
 
-    # 3. Pull, fast-forward only.
+    # 3. Pull, fast-forward only - and only on main. A workstation that keeps its own
+    #    documentation commits on a lane (the two-lane arrangement the pilot seat uses)
+    #    cannot fast-forward onto origin/main; it merges origin/main into the lane by hand
+    #    and runs this script with -NoPull to build and gate what is checked out.
+    $branch = git rev-parse --abbrev-ref HEAD
     Invoke-Step "git fetch origin" { git fetch origin }
     Write-Host "arriving:"
     git log --oneline HEAD..origin/main
-    Invoke-Step "git pull --ff-only origin main" { git pull --ff-only origin main }
+    if ($branch -ne 'main') {
+        if (-not $NoPull) {
+            throw ("The checkout is on '$branch', not main, so this script will not pull: a lane " +
+                   "with its own commits cannot fast-forward onto origin/main. Merge it yourself " +
+                   "(git merge origin/main), then run this again with -NoPull to build and test " +
+                   "what is checked out.")
+        }
+        Write-Host "on '$branch' with -NoPull: building what is checked out"
+    }
+    elseif ($NoPull) {
+        Write-Host "-NoPull: building what is checked out"
+    }
+    else {
+        Invoke-Step "git pull --ff-only origin main" { git pull --ff-only origin main }
+    }
     $after = git rev-parse --short HEAD
     Write-Host "checkout: $before -> $after"
 }
