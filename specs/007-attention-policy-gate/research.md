@@ -111,7 +111,10 @@ sentence an engineer can act on; three open evidence requests; one `coverage.clo
 twenty-three RMS rules. A count by family would have said "rms 39" and hidden all of that. The
 close-out rows need no checklist lookup: their `check` equals an item id, which is exactly the
 equality `Checklist.bucket_of` uses for coverage (`agent/checklist.py:45-53`), and the policy
-module can carry the nine item ids as data. The gate's brief lists the pre-run's
+module can carry the item ids as data. One item is excluded by name: `coverage.closeout` is
+itself a checklist item id, and its unresolved row is the run's own close-out summary ("the
+package has 24 recorded gaps…"), not an unreached family; the fixtures carry it last and the
+block never prints it (found by the Phase 1 builder, 2026-09-19). The gate's brief lists the pre-run's
 not-evaluated families separately from their own objects (R2.13).
 
 ### R2.6 One renderer, one keyword, one golden that proves it
