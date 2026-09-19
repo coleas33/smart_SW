@@ -21,11 +21,20 @@ namespace SwReview.AddIn.Tests;
 /// host end of the bridge played by the test exactly as <see cref="ReviewPageTurnStateTests"/>
 /// plays it.
 ///
+/// <b>The frames are the backend's, not the test's.</b> Every frame pushed here has the wire
+/// shape `_sse` in chat/server.py writes - `id`, `event`, `data` with the body alone - through
+/// <see cref="SseFrames"/>, and the closing pair is read from the contract sample the Python
+/// producer test pins byte for byte. This class once fabricated its own frames with a whole
+/// envelope inside `data`, and the page's parser, which expected exactly that, stayed green
+/// here while three reviews on the workstation ended without the page ever noticing
+/// (docs/pane-findings-2026-09-18.md).
+///
 /// <b>One boot, one scripted conversation.</b> Every assertion below reads the same run. A
 /// WebView2 with the real page in it costs seconds to start, the conversation is a single
-/// ordered script (open, frames, a frame for another chat, two closures, a session end), and
-/// splitting it into six boots would be six times the wall clock to observe the same six facts.
-/// The script is deterministic and nothing in it depends on wall-clock time, because
+/// ordered script (open, a keep-alive, frames, a frame for another chat, an unknown type, a
+/// usage round, two closures, the contract sample's session end), and splitting it into as
+/// many boots would be that many times the wall clock to observe the same facts. The script
+/// is deterministic and nothing in it depends on wall-clock time, because
 /// <see cref="TimerPatch"/> records the delay the page asked for and fires at once.
 /// </summary>
 public sealed class ReviewPageEventStreamTests
@@ -45,6 +54,20 @@ public sealed class ReviewPageEventStreamTests
         Assert.Equal(
             JsonValueKind.Null,
             open.GetProperty("last_event_id").ValueKind);
+    }
+
+    /// <summary>
+    /// "Streaming." means an event was read, not that bytes arrived. A keep-alive comment is
+    /// proof of the socket and nothing else, and a page that said "Streaming." on any frame
+    /// looked healthy for three whole reviews in which it understood nothing.
+    /// </summary>
+    [Fact]
+    public void AKeepAliveProvesTheSocketButIsNotStreaming()
+    {
+        Conversation run = Scripted.Value;
+
+        Assert.NotEqual("Streaming.", run.StreamStateAfterKeepAlive);
+        Assert.Equal("Streaming.", run.StreamStateAfterFrames);
     }
 
     [Fact]
@@ -70,17 +93,44 @@ public sealed class ReviewPageEventStreamTests
     }
 
     /// <summary>
-    /// `events.closed` reopens from the highest `seq` the page actually showed, which is what
-    /// stops a reconnect replaying the whole transcript on screen.
+    /// An event type this page has no case for is said once, on screen, and then counted
+    /// silently. The envelope mismatch this class was rewritten for made <i>every</i> event an
+    /// unknown one, and the page said nothing about any of them.
     /// </summary>
     [Fact]
-    public void AClosedStreamIsReopenedFromTheHighestSeqThePageShowed()
+    public void AnEventOfAnUnknownTypeIsReportedOnceRatherThanDroppedSilently()
+    {
+        Conversation run = Scripted.Value;
+
+        Assert.Equal(1, Occurrences(run.TranscriptAfterUnknownType, "not.a.type"));
+    }
+
+    /// <summary>
+    /// The body of a `usage` frame reaches the usage line through the parser, not only through
+    /// `render.usageLine` in isolation, which <see cref="ReviewPageUsageLineTests"/> covers.
+    /// </summary>
+    [Fact]
+    public void AUsageFrameReachesTheUsageLine()
+    {
+        Conversation run = Scripted.Value;
+
+        Assert.Contains("1 round trip", run.UsageLineAfterUsageFrame);
+        Assert.DoesNotContain("No model round trips", run.UsageLineAfterUsageFrame);
+    }
+
+    /// <summary>
+    /// `events.closed` reopens from the highest `seq` the page actually read, which is what
+    /// stops a reconnect replaying the whole transcript on screen. The unknown-type frames
+    /// count - they were read - and the frame for another chat does not.
+    /// </summary>
+    [Fact]
+    public void AClosedStreamIsReopenedFromTheHighestSeqThePageRead()
     {
         Conversation run = Scripted.Value;
 
         JsonElement reopened = run.Payload("events.open", 1);
         Assert.Equal(ChatId, reopened.GetProperty("chat_id").GetString());
-        Assert.Equal("12", reopened.GetProperty("last_event_id").GetString());
+        Assert.Equal("16", reopened.GetProperty("last_event_id").GetString());
     }
 
     /// <summary>
@@ -96,6 +146,27 @@ public sealed class ReviewPageEventStreamTests
         Conversation run = Scripted.Value;
 
         Assert.Equal(new[] { 1000, 2000 }, run.Delays);
+    }
+
+    /// <summary>
+    /// The bug of 2026-09-18, against the backend's own bytes: the closing `turn.ended` /
+    /// `session.ended` pair from the contract sample ends the session on screen and hands the
+    /// controls back - Review enabled, Stop disabled, the follow-up box open. Before the fix
+    /// the pane showed "Streaming." and "No model round trips yet" after every finished review,
+    /// Review stayed disabled, and the only way to start another was to restart SOLIDWORKS.
+    /// </summary>
+    [Fact]
+    public void TheContractSampleEndsTheSessionAndReleasesTheControls()
+    {
+        Conversation run = Scripted.Value;
+
+        Assert.Contains("The session ended at 2026-09-16T10:20:00", run.TranscriptAfterSessionEnded);
+        Assert.Equal("The session ended.", run.StreamStateAfterSessionEnded);
+
+        JsonElement controls = run.ControlsAfterSessionEnded;
+        Assert.False(controls.GetProperty("startDisabled").GetBoolean(), "Review stayed disabled after the session ended.");
+        Assert.True(controls.GetProperty("stopDisabled").GetBoolean(), "Stop stayed enabled after the session ended.");
+        Assert.False(controls.GetProperty("followUpDisabled").GetBoolean(), "The follow-up box stayed disabled after the session ended.");
     }
 
     /// <summary>
@@ -171,22 +242,43 @@ public sealed class ReviewPageEventStreamTests
                 await page.ExecuteScriptAsync("document.getElementById('start-review').click()");
                 await OffscreenReviewPage.Settled(page);
 
-                await Push(page, Frame(7, "text.delta", @"{""text"":""first""}"));
-                await Push(page, Frame(12, "text.delta", @"{""text"":""second""}"));
+                await Push(page, SseFrames.KeepAlive);
                 await OffscreenReviewPage.Settled(page);
-                run.TranscriptAfterFrames = await Transcript(page);
+                run.StreamStateAfterKeepAlive = await TextOf(page, "stream-state");
 
-                await Push(page, Frame(13, "text.delta", @"{""text"":""ghost""}"), "chat-9");
+                await Push(page, SseFrames.Frame(7, "text.delta", @"{""text"":""first""}"));
+                await Push(page, SseFrames.Frame(12, "text.delta", @"{""text"":""second""}"));
                 await OffscreenReviewPage.Settled(page);
-                run.TranscriptAfterGhostFrame = await Transcript(page);
+                run.TranscriptAfterFrames = await TextOf(page, "transcript");
+                run.StreamStateAfterFrames = await TextOf(page, "stream-state");
+
+                await Push(page, SseFrames.Frame(99, "text.delta", @"{""text"":""ghost""}"), "chat-9");
+                await OffscreenReviewPage.Settled(page);
+                run.TranscriptAfterGhostFrame = await TextOf(page, "transcript");
+
+                await Push(page, SseFrames.Frame(14, "not.a.type", @"{""text"":""unknown""}"));
+                await Push(page, SseFrames.Frame(15, "not.a.type", @"{""text"":""unknown again""}"));
+                await OffscreenReviewPage.Settled(page);
+                run.TranscriptAfterUnknownType = await TextOf(page, "transcript");
+
+                await Push(page, SseFrames.Frame(16, "usage", UsageBody));
+                await OffscreenReviewPage.Settled(page);
+                run.UsageLineAfterUsageFrame = await TextOf(page, "usage-line");
 
                 await Closed(page);
                 await OffscreenReviewPage.Settled(page);
                 await Closed(page);
                 await OffscreenReviewPage.Settled(page);
 
-                await Push(page, Frame(20, "session.ended", @"{""ended_at"":""2026-09-16T10:20:00Z""}"));
+                foreach (string frame in SseFrames.ContractSampleFrames())
+                {
+                    await Push(page, frame);
+                }
+
                 await OffscreenReviewPage.Settled(page);
+                run.TranscriptAfterSessionEnded = await TextOf(page, "transcript");
+                run.StreamStateAfterSessionEnded = await TextOf(page, "stream-state");
+                run.ControlsAfterSessionEnded = await Controls(page);
 
                 run.Delays = await Delays(page);
             });
@@ -194,29 +286,48 @@ public sealed class ReviewPageEventStreamTests
         return run;
     }
 
-    /// <summary>One `events.frame` from the host, as the pump posts it.</summary>
+    /// <summary>
+    /// One model round trip, every field the `usage` event carries
+    /// (specs/005-llm-efficiency/contracts/usage.md section 5).
+    /// </summary>
+    private const string UsageBody =
+        @"{""round_index"":0,""provider"":""openai"",""model"":""gpt-5.6"",""input_tokens"":10,"
+        + @"""cached_input_tokens"":5,""cache_write_tokens"":null,""output_tokens"":8,"
+        + @"""reasoning_tokens"":4,""tool_result_input_tokens"":null,""total_tokens"":18,"
+        + @"""latency_s"":1.5,""cache_diagnostic"":null}";
+
     private static Task<string> Push(CoreWebView2 page, string frame, string chatId = ChatId) =>
-        Post(page, "events.frame", new { chat_id = chatId, frame });
+        SseFrames.Push(page, chatId, frame);
 
-    private static Task<string> Closed(CoreWebView2 page) =>
-        Post(page, "events.closed", new { chat_id = ChatId, reason = "the backend closed the event stream." });
-
-    private static Task<string> Post(CoreWebView2 page, string type, object payload)
+    private static Task<string> Closed(CoreWebView2 page)
     {
-        page.PostWebMessageAsJson(JsonSerializer.Serialize(
-            new { type, id = (string?)null, payload }));
+        page.PostWebMessageAsJson(JsonSerializer.Serialize(new
+        {
+            type = "events.closed",
+            id = (string?)null,
+            payload = new { chat_id = ChatId, reason = "the backend closed the event stream." },
+        }));
         return page.ExecuteScriptAsync("0");
     }
 
-    /// <summary>One raw SSE frame, the text between blank lines, exactly as the host hands it on.</summary>
-    private static string Frame(int seq, string type, string body) =>
-        "id: " + seq + "\ndata: {\"seq\":" + seq + ",\"type\":\"" + type + "\",\"body\":" + body + "}";
-
-    private static async Task<string> Transcript(CoreWebView2 page)
+    private static async Task<string> TextOf(CoreWebView2 page, string elementId)
     {
         string raw = await page.ExecuteScriptAsync(
-            "document.getElementById('transcript').textContent");
+            "document.getElementById('" + elementId + "').textContent");
         return JsonDocument.Parse(raw).RootElement.GetString() ?? string.Empty;
+    }
+
+    /// <summary>The three controls the turn owns, read from the DOM the way the engineer reads them.</summary>
+    private static async Task<JsonElement> Controls(CoreWebView2 page)
+    {
+        string raw = await page.ExecuteScriptAsync(@"JSON.stringify({
+  startDisabled: document.getElementById('start-review').disabled,
+  stopDisabled: document.getElementById('stop-turn').disabled,
+  followUpDisabled: document.getElementById('followup-text').disabled
+})");
+        string json = JsonDocument.Parse(raw).RootElement.GetString()
+            ?? throw new InvalidOperationException("the page reported nothing about its controls");
+        return JsonDocument.Parse(json).RootElement.Clone();
     }
 
     private static async Task<IReadOnlyList<int>> Delays(CoreWebView2 page)
@@ -227,6 +338,19 @@ public sealed class ReviewPageEventStreamTests
         return JsonDocument.Parse(json).RootElement.EnumerateArray()
             .Select(value => value.GetInt32())
             .ToList();
+    }
+
+    private static int Occurrences(string text, string needle)
+    {
+        int count = 0;
+        for (int at = text.IndexOf(needle, StringComparison.Ordinal);
+             at >= 0;
+             at = text.IndexOf(needle, at + needle.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 
     private static string Reply(string type, string id, object payload) =>
@@ -302,9 +426,23 @@ public sealed class ReviewPageEventStreamTests
 
         public Conversation(List<Posted> posted) => _posted = posted;
 
+        public string StreamStateAfterKeepAlive { get; set; } = string.Empty;
+
         public string TranscriptAfterFrames { get; set; } = string.Empty;
 
+        public string StreamStateAfterFrames { get; set; } = string.Empty;
+
         public string TranscriptAfterGhostFrame { get; set; } = string.Empty;
+
+        public string TranscriptAfterUnknownType { get; set; } = string.Empty;
+
+        public string UsageLineAfterUsageFrame { get; set; } = string.Empty;
+
+        public string TranscriptAfterSessionEnded { get; set; } = string.Empty;
+
+        public string StreamStateAfterSessionEnded { get; set; } = string.Empty;
+
+        public JsonElement ControlsAfterSessionEnded { get; set; }
 
         public IReadOnlyList<int> Delays { get; set; } = new int[0];
 

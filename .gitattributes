@@ -25,3 +25,6 @@
 
 # Vendored npm artifacts are pinned by SHA-256; never normalise their line endings.
 extractor/SwReview.AddIn/Terminal/TerminalPage/vendor/* -text
+
+# A recorded event-stream sample pinned byte for byte by both test suites; never normalise it.
+*.sse -text
