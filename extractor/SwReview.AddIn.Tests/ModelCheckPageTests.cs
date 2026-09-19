@@ -215,6 +215,115 @@ public sealed class ModelCheckPageTests
             rendered.GetProperty("rules").EnumerateArray().Select(value => value.GetString()));
     }
 
+    // ---- the ranked rows ---------------------------------------------------------------------
+
+    /// <summary>
+    /// The first `top_n` rows of `result.attention`, in the order the backend supplied them,
+    /// each naming the finding, the check and the reason it was placed (FR-023).
+    ///
+    /// The order is the assertion that matters. <see cref="AttentionSample"/>'s ids run
+    /// F-007, F-008, F-003, F-002, F-004 and its checks are not alphabetical, so a page that
+    /// sorted anything - by id, by check, by severity - renders a different list and fails
+    /// here. The ranking is computed once, in `report/attention.py`, and rendered everywhere;
+    /// a page that could reorder it would be a second policy nobody could point at.
+    /// </summary>
+    [Fact]
+    public void TheRankedRowsRenderInTheOrderTheRankingSuppliedThem()
+    {
+        JsonElement rendered = Render(
+            "return JSON.stringify({ok: true, "
+            + "ids: attrs('#attention .attention-row', 'data-finding-id'), "
+            + "checks: texts('#attention .attention-check'), "
+            + "reasons: texts('#attention .attention-reason'), "
+            + "heading: texts('#attention .attention-heading')[0], "
+            + "text: document.getElementById('attention').textContent});");
+
+        Assert.Equal(AttentionSample.ShownFindingIds, Strings(rendered, "ids"));
+        Assert.Equal(AttentionSample.ShownChecks, Strings(rendered, "checks"));
+        Assert.Equal(AttentionSample.ShownReasons, Strings(rendered, "reasons"));
+        Assert.Equal(AttentionSample.Heading, rendered.GetProperty("heading").GetString());
+
+        // The sixth row is beyond `top_n`: the page shows what the policy chose to amplify and
+        // no more, and the rest is still in the rule list below in full.
+        Assert.DoesNotContain(AttentionSample.BeyondTopN, rendered.GetProperty("text").GetString()!);
+    }
+
+    /// <summary>
+    /// The block sits above the bucket chips, which is where "start here" has to be for anyone
+    /// to read it first (contracts/attention.md section 6, research R2.14).
+    /// </summary>
+    [Fact]
+    public void TheRankedRowsSitAboveTheBucketChips()
+    {
+        JsonElement rendered = Render(
+            "var attention = document.getElementById('attention');"
+            + "var filters = document.getElementById('filters');"
+            + "return JSON.stringify({ok: true, before: !!(attention.compareDocumentPosition(filters) "
+            + "& Node.DOCUMENT_POSITION_FOLLOWING)});");
+
+        Assert.True(
+            rendered.GetProperty("before").GetBoolean(),
+            "#attention must come before #filters in the document.");
+    }
+
+    /// <summary>
+    /// A run that produced nothing to amplify says so in words rather than showing an empty
+    /// list, and the sentence is the backend's - the page neither composes it nor decides when
+    /// it applies (FR-024).
+    /// </summary>
+    [Fact]
+    public void ARankingWithNoRowsPrintsItsOwnSentenceAndNoList()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.attention = " + AttentionSample.EmptyJson() + ";",
+            "return JSON.stringify({ok: true, "
+            + "text: document.getElementById('attention').textContent, "
+            + "rows: attrs('#attention .attention-row', 'data-finding-id'), "
+            + "lists: document.querySelectorAll('#attention ol').length});");
+
+        Assert.Contains(AttentionSample.EmptyReason, rendered.GetProperty("text").GetString()!);
+        Assert.Empty(Strings(rendered, "rows"));
+        Assert.Equal(0, rendered.GetProperty("lists").GetInt32());
+    }
+
+    /// <summary>
+    /// A body from before this feature carries no `attention` at all, and a page that read one
+    /// off it would print an empty heading over nothing on every re-read of an older check
+    /// folder. Nothing is rendered, and the rest of the page is untouched.
+    /// </summary>
+    [Fact]
+    public void ABodyWithNoRankingRendersNothingInTheSection()
+    {
+        JsonElement rendered = RenderMutated(
+            "delete result.attention;",
+            "return JSON.stringify({ok: true, "
+            + "text: document.getElementById('attention').textContent, "
+            + "children: document.getElementById('attention').childNodes.length, "
+            + "rules: document.querySelectorAll('#rules .rule').length});");
+
+        Assert.Equal(string.Empty, rendered.GetProperty("text").GetString());
+        Assert.Equal(0, rendered.GetProperty("children").GetInt32());
+        Assert.True(rendered.GetProperty("rules").GetInt32() > 0, "the rest of the page stopped rendering.");
+    }
+
+    /// <summary>
+    /// Rendering is a function of the result: a second render replaces the rows rather than
+    /// appending to them, which is what every other block on this page does and what an Accept
+    /// re-read depends on.
+    /// </summary>
+    [Fact]
+    public void ASecondRenderReplacesTheRowsRatherThanAppendingThem()
+    {
+        JsonElement rendered = Render(
+            "check(" + CheckResultSample.Json() + ");"
+            + "return JSON.stringify({ok: true, "
+            + "ids: attrs('#attention .attention-row', 'data-finding-id'), "
+            + "headings: texts('#attention .attention-heading')});");
+
+        Assert.Equal(AttentionSample.ShownFindingIds, Strings(rendered, "ids"));
+        Assert.Single(Strings(rendered, "headings"));
+    }
+
     [Fact]
     public void TheBucketChipsStartOnFailAndWarnAndTurnAnotherBucketOn()
     {
@@ -986,6 +1095,11 @@ internal static class CheckResultSample
             count = 1,
             reason = (string?)null,
         },
+
+        // The ranking the backend computed for this run, carried on the body so the tab renders
+        // it without a second call (contracts/attention.md section 5). It is one shape on every
+        // surface, so it is one fixture: <see cref="AttentionSample"/>.
+        attention = AttentionSample.Ranking(),
     };
 
     /// <summary>

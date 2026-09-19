@@ -51,8 +51,8 @@ public sealed class SharedCheckPageTests
         "showSubject", "cycleSubject",
 
         // rendering
-        "renderCarriedForward", "renderFilters", "countByBucket", "documentSection",
-        "bucketGroup", "subjectList", "subjectLine", "subjectMeta",
+        "renderAttention", "renderCarriedForward", "renderFilters", "countByBucket",
+        "documentSection", "bucketGroup", "subjectList", "subjectLine", "subjectMeta",
 
         // the chips and the page's chrome
         "toggleBucket", "applyFilter", "renderBackendState", "showStatus", "folderName",
@@ -446,6 +446,19 @@ public sealed class SharedCheckPageTests
     [InlineData(".banner")]
     [InlineData(".filters")]
     [InlineData(".document-name")]
+
+    // The ranked rows (T038). Both tabs render the same block from the same `attention` key
+    // through the same shared function, so its rules are shared too - a copy in one page's own
+    // stylesheet would be the copy that stops matching the other the first time either is
+    // touched.
+    [InlineData(".attention")]
+    [InlineData(".attention-heading")]
+    [InlineData(".attention-rows")]
+    [InlineData(".attention-row")]
+    [InlineData(".attention-id")]
+    [InlineData(".attention-check")]
+    [InlineData(".attention-reason")]
+    [InlineData(".attention-empty")]
     public void TheSharedRulesAreInTheSharedStylesheetAndNotInThePages(string selector)
     {
         Assert.Contains(selector, SharedStyles(), StringComparison.Ordinal);

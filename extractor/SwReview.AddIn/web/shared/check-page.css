@@ -70,6 +70,52 @@ body {
   word-break: break-all;
 }
 
+/* ---- what to start with ------------------------------------------------------------------ */
+
+/* The ranked rows, above the chips on both tabs. Nothing here is conditional on a row's
+   severity or its place in the list: the order is the whole statement, and a colour per row
+   would be a second ranking beside it. */
+
+.attention {
+  display: block;
+  margin: 6px 0;
+}
+
+.attention-heading {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.attention-rows {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.attention-row {
+  margin-bottom: 2px;
+}
+
+.attention-id {
+  font-weight: 600;
+}
+
+.attention-check {
+  margin-left: 6px;
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.attention-reason {
+  margin-left: 6px;
+  opacity: 0.85;
+  word-break: break-word;
+}
+
+.attention-empty {
+  margin: 0;
+  opacity: 0.85;
+}
+
 /* ---- the chips ------------------------------------------------------------------------- */
 
 .filters {

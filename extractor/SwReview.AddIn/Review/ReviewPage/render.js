@@ -47,6 +47,21 @@
   var compact = dom.compact;
   var seconds = dom.seconds;
 
+  /**
+   * The heading over the ranked rows. The same words the report's own section uses, and the
+   * same words the two check tabs print, because it is the same ranking: an engineer who reads
+   * the pane and then opens `report.md` must find the same rows under the same name
+   * (contracts/attention.md section 3).
+   */
+  var ATTENTION_HEADING = 'Start here';
+
+  /**
+   * The fallback when a ranking arrives with no rows and no sentence of its own. The backend
+   * always sends one (FR-024); this is what the panel says rather than standing empty if it
+   * ever does not.
+   */
+  var NOTHING_TO_START_WITH = 'Nothing to start with.';
+
   // ---- formatting ---------------------------------------------------------------------
 
   function location(reference) {
@@ -414,6 +429,71 @@
     return panel;
   }
 
+  /**
+   * What to start with: the rows the backend ranked, in the order it supplied them.
+   *
+   * Rebuilt from the whole ranking on every call, like `coverageSummary` beside it and for the
+   * same reason - the ranking is the whole truth about what to look at first, and a panel that
+   * only grew would show a re-run's rows twice.
+   *
+   * This amplifies; it never filters. Every finding is still in the transcript above and in
+   * `report.md`, and the rows here are the ones `report/attention.py` placed first, with the
+   * same ids and the same reasons the report's "Start here" section prints
+   * (contracts/attention.md sections 3 and 6). So nothing here reads a severity, compares two
+   * rows or knows how many there ought to be: it reads `rows`, takes the first `top_n`, and
+   * prints three of each row's fields. `PageRuleScanTests` is the test that keeps it that way.
+   *
+   * The same three states the two check tabs render, deliberately built the same way in the
+   * same words. They cannot be one function: this page loads `render.js` and `shared/dom.js`
+   * and the check tabs load `shared/check-page.js`, which is the larger half of a check page
+   * and has no business on a chat transcript. What is shared is `dom.js` - the one place a
+   * string becomes a text node - and the class names, so the two look alike because they are
+   * styled from the same vocabulary rather than because someone matched them by eye.
+   */
+  function attentionPanel(ranking) {
+    var panel = el('section', 'attention');
+    panel.appendChild(el('h3', 'attention-heading', ATTENTION_HEADING));
+
+    var rows = (ranking && !ranking.empty_reason) ? amplified(ranking) : [];
+    if (!rows.length) {
+      panel.appendChild(el(
+        'p', 'attention-empty', (ranking && ranking.empty_reason) || NOTHING_TO_START_WITH));
+      return panel;
+    }
+
+    var list = el('ol', 'attention-rows');
+    for (var index = 0; index < rows.length; index++) {
+      list.appendChild(attentionRow(rows[index] || {}));
+    }
+    panel.appendChild(list);
+    return panel;
+  }
+
+  /**
+   * The first `top_n` rows. `rows` holds every row the policy ranked, suppressed ones last,
+   * and `top_n` is how many of them it chose to amplify - a page that printed the whole array
+   * would be overruling that choice. A ranking carrying no usable `top_n` prints what it was
+   * given rather than nothing.
+   */
+  function amplified(ranking) {
+    var rows = ranking.rows || [];
+    var count = ranking.top_n;
+    return (typeof count === 'number' && count >= 0 && count < rows.length)
+      ? rows.slice(0, count)
+      : rows;
+  }
+
+  /** One ranked row: which finding, which check, and the reason the policy placed it. */
+  function attentionRow(row) {
+    var item = el('li', 'attention-row');
+    item.setAttribute('data-finding-id', String(row.finding_id || ''));
+    return append(item, [
+      el('span', 'attention-id', row.finding_id || ''),
+      el('span', 'attention-check', row.check || ''),
+      el('span', 'attention-reason', row.reason || '')
+    ]);
+  }
+
   function coverageBucket(name, items) {
     var group = el('div', 'coverage-bucket bucket-' + name);
     group.appendChild(el('h4', 'bucket-name', name + ' (' + items.length + ')'));
@@ -510,6 +590,7 @@
     evidenceCard: evidenceCard,
     errorCard: errorCard,
     coverageSummary: coverageSummary,
+    attentionPanel: attentionPanel,
     entityRequest: entityRequest,
     usageLine: usageLine
   };

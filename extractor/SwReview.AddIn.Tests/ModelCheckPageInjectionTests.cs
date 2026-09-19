@@ -60,6 +60,38 @@ public sealed class ModelCheckPageInjectionTests
         Assert.DoesNotContain("<script", html);
     }
 
+    /// <summary>
+    /// A reason line on a ranked row renders as characters too (T038).
+    ///
+    /// The reason is assembled by `report/attention.py` out of a check id and a finding's own
+    /// fields, and a finding's `title` is written by a language model reading a reviewed
+    /// assembly. It arrives on the check body like everything else and it is untrusted like
+    /// everything else, so the new block is held to the same rule as the rule list.
+    /// </summary>
+    [Fact]
+    public void AHostileReasonOnARankedRowRendersAsLiteralText()
+    {
+        JsonElement rendered = OffscreenModelCheckPage.Evaluate(
+            "var result = " + CheckResultSample.Json() + ";"
+            + "result.attention = " + AttentionSample.Json(AttentionSample.HostileReason) + ";"
+            + "check(result);"
+            + "return JSON.stringify(describe(document.getElementById('attention')));");
+
+        Assert.True(
+            rendered.GetProperty("ok").GetBoolean(),
+            rendered.TryGetProperty("error", out JsonElement error)
+                ? error.GetString()
+                : "the page did not render");
+
+        Assert.Contains(AttentionSample.HostileReason, rendered.GetProperty("text").GetString()!);
+        Assert.Equal(0, rendered.GetProperty("injected").GetInt32());
+        Assert.Equal(0, rendered.GetProperty("handlers").GetInt32());
+
+        string html = rendered.GetProperty("html").GetString()!;
+        Assert.Contains("&lt;", html);
+        Assert.DoesNotContain("<img", html);
+    }
+
     // ---- the static half: the page's own rules ------------------------------------------------
 
     [Fact]

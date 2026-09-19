@@ -65,6 +65,34 @@ public sealed class StandardsPageInjectionTests
         Assert.DoesNotContain("<iframe", html);
     }
 
+    /// <summary>
+    /// A reason line on a ranked row renders as characters too (T038): the same block, the same
+    /// shared renderer and the same rule as on the Model check tab.
+    /// </summary>
+    [Fact]
+    public void AHostileReasonOnARankedRowRendersAsLiteralText()
+    {
+        JsonElement rendered = OffscreenStandardsPage.Evaluate(
+            "var result = " + StandardsResultSample.Json() + ";"
+            + "result.attention = " + AttentionSample.Json(AttentionSample.HostileReason) + ";"
+            + "check(result);"
+            + "return JSON.stringify(describe(document.getElementById('attention')));");
+
+        Assert.True(
+            rendered.GetProperty("ok").GetBoolean(),
+            rendered.TryGetProperty("error", out JsonElement error)
+                ? error.GetString()
+                : "the page did not render");
+
+        Assert.Contains(AttentionSample.HostileReason, rendered.GetProperty("text").GetString()!);
+        Assert.Equal(0, rendered.GetProperty("injected").GetInt32());
+        Assert.Equal(0, rendered.GetProperty("handlers").GetInt32());
+
+        string html = rendered.GetProperty("html").GetString()!;
+        Assert.Contains("&lt;", html);
+        Assert.DoesNotContain("<img", html);
+    }
+
     // ---- the static half: the page's own rules ------------------------------------------------
 
     [Fact]

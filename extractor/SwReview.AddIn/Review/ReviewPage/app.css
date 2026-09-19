@@ -409,6 +409,50 @@ body {
   white-space: pre-wrap;
 }
 
+/* ---- what to start with ------------------------------------------------------------------ */
+
+/* The ranked rows, pinned above the transcript. Nothing here is conditional on a row's
+   severity or its place in the list: the order is the whole statement, and a colour per row
+   would be a second ranking beside it. The class names are the two check tabs' - see
+   web/shared/check-page.css - so the same block reads the same way on all three tabs. */
+
+.attention-heading {
+  margin: 0 0 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.attention-rows {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.attention-row {
+  margin-bottom: 2px;
+}
+
+.attention-id {
+  font-weight: 600;
+}
+
+.attention-check {
+  margin-left: 6px;
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.attention-reason {
+  margin-left: 6px;
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.attention-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
 /* ---- coverage ------------------------------------------------------------------------- */
 
 .coverage-heading {
