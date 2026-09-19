@@ -1,0 +1,152 @@
+/* The one palette and type scale every Task Pane page draws from.
+
+   Loaded before each page's own stylesheet, so a page styles its parts through these
+   names and never through a literal colour. The pane is a narrow strip docked beside a
+   model (260 to 420 px), inside a WebView2 whose CSP loads no webfont: the faces below are
+   the ones Windows 11 ships, with the ones Windows 10 ships behind them.
+
+   Colour says one of two things and never both: an accent for what can be pressed, and a
+   semantic hue for what the backend already says about a row - failed or error, warned,
+   checked, unresolved, skipped, and the one class only an engineer can settle. A page
+   never invents a hue for a rank it computed, because it computes none.
+
+   Three states, not two: an explicit theme stamps data-theme on the root, and the default
+   stamps nothing, so the dark tokens are defined once under prefers-color-scheme (guarded
+   so an explicit light choice wins) and once under data-theme="dark". */
+
+:root {
+  color-scheme: light dark;
+
+  --ground: #f3f5f8;
+  --pane: #ffffff;
+  --chrome: #e7ebf0;
+  --ink: #1c2128;
+  --ink-2: #444c56;
+  --muted: #6f7883;
+  --hair: #dbe1e8;
+  --hair-2: #eceff3;
+
+  --accent: #1f5c9e;
+  --accent-ink: #ffffff;
+  --accent-bg: #e8f0f9;
+
+  --critical: #b42626;
+  --critical-bg: #fbeeee;
+  --warn: #9a5f0a;
+  --warn-bg: #fbf2e2;
+  --good: #2b7248;
+  --good-bg: #e9f4ed;
+  --judge: #5a3db3;
+  --judge-bg: #efeafb;
+  --open: #4f6072;
+  --open-bg: #eef1f5;
+  --quiet: #8a95a1;
+  --quiet-bg: #f4f6f8;
+
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+
+  --text: 13px;
+  --text-small: 12px;
+  --text-label: 11px;
+  --text-lead: 15px;
+  --text-head: 17px;
+  --line: 1.45;
+  --radius: 4px;
+  --shadow: 0 1px 2px rgba(20, 30, 40, 0.06), 0 8px 24px rgba(20, 30, 40, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #13171c;
+    --pane: #1a1f25;
+    --chrome: #232a32;
+    --ink: #e7ebf0;
+    --ink-2: #c6cdd5;
+    --muted: #909ba7;
+    --hair: #303842;
+    --hair-2: #252c34;
+    --accent: #78b0ea;
+    --accent-ink: #0f1a26;
+    --accent-bg: #1f2c3c;
+    --critical: #f19292;
+    --critical-bg: #3b2222;
+    --warn: #e8b968;
+    --warn-bg: #362b17;
+    --good: #86cc9f;
+    --good-bg: #1d3427;
+    --judge: #bfa9f5;
+    --judge-bg: #2b2444;
+    --open: #b3bec9;
+    --open-bg: #262d35;
+    --quiet: #7f8a96;
+    --quiet-bg: #20262d;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground: #13171c;
+  --pane: #1a1f25;
+  --chrome: #232a32;
+  --ink: #e7ebf0;
+  --ink-2: #c6cdd5;
+  --muted: #909ba7;
+  --hair: #303842;
+  --hair-2: #252c34;
+  --accent: #78b0ea;
+  --accent-ink: #0f1a26;
+  --accent-bg: #1f2c3c;
+  --critical: #f19292;
+  --critical-bg: #3b2222;
+  --warn: #e8b968;
+  --warn-bg: #362b17;
+  --good: #86cc9f;
+  --good-bg: #1d3427;
+  --judge: #bfa9f5;
+  --judge-bg: #2b2444;
+  --open: #b3bec9;
+  --open-bg: #262d35;
+  --quiet: #7f8a96;
+  --quiet-bg: #20262d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+/* The pages hide with the `hidden` property, and the tests read it. Nothing a page
+   stylesheet sets on display may win over it. */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--pane);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: var(--text);
+  line-height: var(--line);
+}
+
+code,
+.mono {
+  font-family: var(--mono);
+  font-size: var(--text-label);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
