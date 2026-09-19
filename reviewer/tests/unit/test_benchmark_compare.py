@@ -598,6 +598,63 @@ def test_the_lever_specific_counter_is_named_on_every_row(tmp_path: Path) -> Non
     assert row.lever_counter.off is not None
 
 
+# --- how the counter column renders (T054, FR-034) ----------------------------------------
+
+
+def gate_packages(fit_calls: int) -> dict[str, Any]:
+    """One package of a gate study, calling `check_fit` `fit_calls` times."""
+    return {
+        "packages": (
+            PackageSpec(tool_names=("check_fit", "list_holes"), tool_calls=fit_calls * 2),
+        )
+    }
+
+
+def counter_cell(tmp_path: Path, lever: str, off: int, on: int) -> str:
+    dirs = write_study(
+        tmp_path,
+        study_specs(lever=lever, off=gate_packages(off), on=gate_packages(on)),
+    )
+
+    return lever_cells_of(render_ledger_md(compare_runs(dirs)), lever)["Lever-specific counter"]
+
+
+def test_the_counter_cell_holds_the_name_and_the_two_medians(tmp_path: Path) -> None:
+    cell = counter_cell(tmp_path, "procedural_gate", off=9, on=9)
+
+    assert cell == "check_fit and check_axial_stack calls per run (must not fall): 9 -> 9"
+
+
+def test_the_runs_that_fell_are_rendered_after_the_medians(tmp_path: Path) -> None:
+    """The same shape lever 2's `dropped_tools` renders in: the numbers, then the names,
+    so a reader who scans the column sees the gate's verdict without opening the JSON."""
+    cell = counter_cell(tmp_path, "procedural_gate", off=9, on=4)
+
+    assert cell.startswith("check_fit and check_axial_stack calls per run (must not fall): 9 -> 4")
+    assert cell.endswith("; fell below the off arm in: on-1, on-2, on-3")
+
+
+def test_lever_five_s_cell_computes_rather_than_naming_a_missing_number(
+    tmp_path: Path,
+) -> None:
+    """It read "check_fit and check_axial_stack call counts (arrives with lever 5)": a
+    column saying which number was missing. Lever 11 brought the number with it."""
+    cell = counter_cell(tmp_path, "prerun_checks", off=6, on=6)
+
+    assert "arrives with" not in cell
+    assert cell.endswith(": 6 -> 6")
+
+
+def test_another_lever_s_counter_cell_names_no_fallen_run(tmp_path: Path) -> None:
+    dirs = write_study(tmp_path, study_specs(on=CHEAPER))
+
+    cell = lever_cells_of(render_ledger_md(compare_runs(dirs)), "parallel_tool_calls")[
+        "Lever-specific counter"
+    ]
+
+    assert "fell below" not in cell
+
+
 def test_a_baseline_study_renders_a_distribution_and_no_decision(tmp_path: Path) -> None:
     specs = [
         RunSpec(run=f"baseline-{rep}", arm="baseline", rep=rep, lever="none") for rep in (1, 2, 3)

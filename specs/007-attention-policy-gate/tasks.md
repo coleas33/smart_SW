@@ -171,8 +171,8 @@ description: "Task list for the attention policy and the procedural gate"
 
 ### The counter
 
-- [ ] T054 [P] [US4] Extend `reviewer/tests/unit/test_tool_histogram.py` and `test_benchmark_compare.py` with `PackageSpec(tool_names=...)` runs: for `--study procedural_gate` and for `--study prerun_checks` the row's `lever_counter` is named "check_fit and check_axial_stack calls per run (must not fall)", `off`/`on` are the arm medians of the per-run sums, and `fell_in_runs` names every on-arm run whose sum fell below the off arm's minimum and is empty otherwise; `_counter_cell` renders the list after the medians the way `dropped_tools` renders (FR-034, SC-010)
-- [ ] T055 [US4] Implement the branch in `reviewer/src/swreview/benchmark/compare.py` `_counter`, `LeverCounter.fell_in_runs`, the `_counter_cell` clause, and the two `LEVER_COUNTERS` entries (lever 5's placeholder replaced). Acceptance: T054 green
+- [x] T054 [P] [US4] Extend `reviewer/tests/unit/test_tool_histogram.py` and `test_benchmark_compare.py` with `PackageSpec(tool_names=...)` runs: for `--study procedural_gate` and for `--study prerun_checks` the row's `lever_counter` is named "check_fit and check_axial_stack calls per run (must not fall)", `off`/`on` are the arm medians of the per-run sums, and `fell_in_runs` names every on-arm run whose sum fell below the off arm's minimum and is empty otherwise; `_counter_cell` renders the list after the medians the way `dropped_tools` renders (FR-034, SC-010)
+- [x] T055 [US4] Implement the branch in `reviewer/src/swreview/benchmark/compare.py` `_counter`, `LeverCounter.fell_in_runs`, the `_counter_cell` clause, and the two `LEVER_COUNTERS` entries (lever 5's placeholder replaced). Acceptance: T054 green
 
 **Checkpoint**: the gate exists behind its lever, is off by default, produces a brief whose ids match the report, fails into lines rather than refusals, guards the one path where model text becomes a claim, and the ledger can compute the regression it is gated on.
 
