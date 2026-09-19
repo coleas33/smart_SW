@@ -312,9 +312,9 @@ public sealed class StandardsHost : IDisposable
 
         PostStatus(
             "ready",
-            summary.Gaps == 0
-                ? "Extracted. Grading against the profile..."
-                : $"Extracted with {summary.Gaps} gaps. Grading against the profile...");
+            (summary.Gaps == 0 ? "Extracted" : $"Extracted with {summary.Gaps} gaps")
+                + DumpSummary.UnexaminedClause(summary.Unexamined)
+                + ". Grading against the profile...");
 
         actions.Send("standards.extracted", id, new Dictionary<string, object?>
         {

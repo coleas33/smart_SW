@@ -483,12 +483,36 @@
       dom.clear(ui.header);
       page.renderHeader(state.result, ui.header, api);
 
+      renderNotExamined(state.result);
       renderAttention(state.result);
 
       var rows = rowsOf(state.result);
       renderFilters(rows);
       renderRules(rows);
       renderCarriedForward(state.result);
+    }
+
+    // ---- rendering: what was never read -----------------------------------------------------
+
+    /**
+     * The sentence naming the component instances the check never read - lightweight or
+     * suppressed, so the extractor never opened them and interference, fit and the feature-tree
+     * rules cannot see them either (docs/feature-request-resolve-lightweight.md). `null` means
+     * every instance was read, and a body from before this feature carries no key at all, which
+     * reads the same way: the block says nothing and stays hidden, exactly as it did before the
+     * key existed.
+     */
+    function renderNotExamined(result) {
+      dom.clear(ui.notExamined);
+
+      var notExamined = result && result.not_examined;
+      if (!notExamined) {
+        ui.notExamined.hidden = true;
+        return;
+      }
+
+      dom.write(ui.notExamined, notExamined.sentence || '');
+      ui.notExamined.hidden = false;
     }
 
     // ---- rendering: what to start with -----------------------------------------------------------
@@ -1255,6 +1279,7 @@
       ui.runDir = byId('run-dir');
       ui.checkState = byId('check-state');
       ui.carried = byId('carried-forward');
+      ui.notExamined = byId('not-examined');
       ui.attention = byId('attention');
       ui.filters = byId('filters');
       ui.rules = byId('rules');

@@ -339,6 +339,27 @@ public sealed class ModelCheckHostTests
         }
     }
 
+    /// <summary>
+    /// The extracted status names components the dump could not read, the same clause the
+    /// Review and Standards hosts' ready statuses use
+    /// (docs/feature-request-resolve-lightweight.md).
+    /// </summary>
+    [Fact]
+    public void TheExtractedStatusNamesHowManyComponentsWereNeverRead()
+    {
+        using (var world = new CheckWorld())
+        {
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDPRT", "Default");
+            world.Dump.Unexamined = 2;
+            world.Open();
+
+            world.Receive("check.start", "c1", new { scope = "part" });
+
+            string message = world.LastPosted("status").GetProperty("message").GetString()!;
+            Assert.Contains("2 not read (lightweight or suppressed)", message);
+        }
+    }
+
     [Fact]
     public void TwoChecksInTheSameSecondGetDistinctFoldersAndTheSecondBecomesTheLatest()
     {
@@ -612,6 +633,8 @@ public sealed class ModelCheckHostTests
 
         public int Gaps { get; set; }
 
+        public int? Unexamined { get; set; }
+
         public DumpSummary Run(
             string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)
         {
@@ -632,6 +655,7 @@ public sealed class ModelCheckHostTests
                 Path.Combine(outputDirectory, "package.json"),
                 components: 1,
                 gaps: Gaps,
+                unexamined: Unexamined,
                 documents: Documents,
                 features: Features,
                 equations: Equations);

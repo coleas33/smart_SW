@@ -149,6 +149,68 @@ public sealed class ReviewHostTests
         }
     }
 
+    // ---- the ready status names what was never read (feature: resolve-lightweight) --------
+
+    /// <summary>
+    /// The ready status names the lightweight and suppressed component instances the dump could
+    /// not read, before a review spends a single token on the ones it could
+    /// (docs/feature-request-resolve-lightweight.md, docs/task-a-2026-09-19.md issue 3).
+    /// </summary>
+    [Fact]
+    public void TheReadyStatusNamesHowManyComponentsWereNeverRead()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\parts\bracket.sldasm", "Default");
+            world.Dump.Unexamined = 2;
+            world.Open();
+
+            world.Receive("review.start", "r1", new { });
+
+            string message = world.LastPosted("status").GetProperty("message").GetString()!;
+            Assert.Equal(
+                "Reviewing 12 components, 2 not read (lightweight or suppressed).", message);
+        }
+    }
+
+    /// <summary>Zero and null both mean nothing was left unread, so the sentence is unchanged.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    public void AnUnexaminedCountOfZeroOrNullLeavesTheReadyStatusUnchanged(int? unexamined)
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\parts\bracket.sldasm", "Default");
+            world.Dump.Unexamined = unexamined;
+            world.Open();
+
+            world.Receive("review.start", "r1", new { });
+
+            string message = world.LastPosted("status").GetProperty("message").GetString()!;
+            Assert.Equal("Reviewing 12 components.", message);
+        }
+    }
+
+    /// <summary>
+    /// The four combinations of a gap count and an unexamined count, plus the singular "1 not
+    /// read": <see cref="ReviewHost.ReadyMessage"/> is the one place this sentence is composed,
+    /// and every one of the Review, Model check and Standards hosts' ready statuses reaches for
+    /// the same <see cref="DumpSummary.UnexaminedClause"/> it uses.
+    /// </summary>
+    [Theory]
+    [InlineData(0, null, "Reviewing 4 components.")]
+    [InlineData(23, null, "Reviewing 4 components (23 gaps).")]
+    [InlineData(0, 2, "Reviewing 4 components, 2 not read (lightweight or suppressed).")]
+    [InlineData(
+        23, 2, "Reviewing 4 components, 2 not read (lightweight or suppressed) (23 gaps).")]
+    [InlineData(0, 1, "Reviewing 4 components, 1 not read (lightweight or suppressed).")]
+    public void ReadyMessageComposesTheGapsAndUnexaminedClauses(
+        int gaps, int? unexamined, string expected)
+    {
+        Assert.Equal(expected, ReviewHost.ReadyMessage(components: 4, gaps, unexamined));
+    }
+
     [Fact]
     public void ADumpThatFailsIsReportedAndNoSessionIsPosted()
     {
@@ -1072,6 +1134,10 @@ public sealed class ReviewHostTests
         /// <summary>The profile the host asked for; the review path must stay on Full.</summary>
         public DumpProfile? LastProfile { get; private set; }
 
+        public int Gaps { get; set; }
+
+        public int? Unexamined { get; set; }
+
         public DumpSummary Run(
             string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)
         {
@@ -1091,7 +1157,8 @@ public sealed class ReviewHostTests
             return new DumpSummary(
                 Path.Combine(outputDirectory, "package.json"),
                 components: 12,
-                gaps: 0);
+                gaps: Gaps,
+                unexamined: Unexamined);
         }
     }
 

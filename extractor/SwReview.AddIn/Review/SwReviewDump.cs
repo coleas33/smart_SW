@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using SolidWorks.Interop.sldworks;
 using SwReview.Extractor.Dump;
+using SwReview.Extractor.Ir;
 using SwReview.Extractor.Sw;
 
 namespace SwReview.AddIn.Review;
@@ -77,6 +78,12 @@ public sealed class SwReviewDump : IReviewDump
                 result.PackageFilePath,
                 result.Package.Components.Count,
                 result.Gaps.Count,
+
+                // Lightweight or suppressed: SOLIDWORKS itself never resolved them, so the
+                // extractor read nothing off them and nothing downstream can see them either
+                // (docs/feature-request-resolve-lightweight.md).
+                result.Package.Components.Count(
+                    component => component.Suppression != SuppressionState.Resolved),
                 result.Package.Documents.Count,
                 result.Package.Features.Count,
                 result.Package.Equations.Count,
