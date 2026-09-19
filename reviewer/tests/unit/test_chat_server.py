@@ -50,10 +50,17 @@ from swreview.agent.providers import AgentEvent, AgentProvider, ProviderName
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import PROFILE_CHECK
 from swreview.agent.settings import MASK, ProviderSettings
-from swreview.chat.server import _sse, create_app
+from swreview.chat.server import SESSION_FILES, _sse, create_app
 from swreview.chat.sessions import ChatState
 from swreview.ir.loader import save_package
+from swreview.report.attention import rank
+from swreview.report.attention_record import (
+    ATTENTION_FILE_NAME,
+    read_attention_record,
+    write_attention_record,
+)
 from swreview.report.session import Timing, load_session
+from tests.support.attention import CHECK_FOLDER as ATTENTION_CHECK_FOLDER
 from tests.support.contracts import contract_path, contract_validator
 from tests.support.packages import build_package
 
@@ -632,6 +639,84 @@ def test_a_retry_into_the_same_run_dir_starts_a_clean_stream_and_keeps_the_old_o
     assert str(load_session(run_dir / "session.json").session_id) == second["review_session_id"]
     superseded = app.state.server.chats[UUID(first["chat_id"])]
     assert superseded.events_path == rotated
+
+
+def test_a_retry_moves_the_attention_record_to_the_same_index_as_the_session(
+    client: TestClient, run_dir: Path
+) -> None:
+    """`attention.json` is the ranking of the session beside it, so it travels with it.
+
+    Left where it was, the record would name `session.1.json` while sitting beside the
+    retry's `session.json`, which is exactly the staleness `read_attention_record` refuses
+    - and the predecessor's ranking, which is what an engineer comparing two attempts
+    wants, would have been written over (FR-021).
+    """
+    first = start_session(client, run_dir)
+    settle(client, first["chat_id"])
+    assert (run_dir / ATTENTION_FILE_NAME).is_file(), "the run wrote its own record"
+    before = (run_dir / ATTENTION_FILE_NAME).read_bytes()
+
+    second = start_session(client, run_dir, retry_of=first["chat_id"])
+    settle(client, second["chat_id"])
+
+    assert (run_dir / "attention.1.json").read_bytes() == before
+    assert str(read_attention_record(run_dir).session_id) == second["review_session_id"]
+
+
+@pytest.fixture
+def check_run_dir(run_root: Path) -> Path:
+    """An RMS check folder inside the run root, holding its own `attention.json`.
+
+    The committed fixture rather than a live `run_rms_check`: this module's package has no
+    feature rows to grade, and what is under test is the rotation, not the rules.
+    """
+    target = run_root / "20260918-220310-check"
+    shutil.copytree(ATTENTION_CHECK_FOLDER, target)
+    session = load_session(target / "session.json")
+    write_attention_record(target, rank(session), session.session_id)
+    return target
+
+
+def test_a_review_claiming_a_check_folder_rotates_its_record_beside_its_session(
+    client: TestClient, check_run_dir: Path
+) -> None:
+    """User Story 6 scenario 11, with the fourth file: the check's record survives as
+    `attention.1.json` beside `session.1.json` rather than being written over."""
+    check_session_id = load_session(check_run_dir / "session.json").session_id
+    check_record = (check_run_dir / ATTENTION_FILE_NAME).read_bytes()
+
+    settle(client, start_session(client, check_run_dir)["chat_id"])
+
+    assert (check_run_dir / "attention.1.json").read_bytes() == check_record
+    assert load_session(check_run_dir / "session.1.json").session_id == check_session_id
+    assert read_attention_record(check_run_dir).session_id != check_session_id
+
+
+def test_a_folder_holding_only_a_record_is_not_a_folder_that_already_holds_a_review(
+    client: TestClient, check_run_dir: Path
+) -> None:
+    """`SESSION_FILES` is also the claim rule's truthiness test, and the record is
+    deliberately not in it: a folder with a record and no session is claimable."""
+    (check_run_dir / "session.json").unlink()
+    (check_run_dir / "check.json").unlink()
+    assert [path.name for path in sorted(check_run_dir.iterdir())] == [
+        ATTENTION_FILE_NAME,
+        "package.json",
+    ]
+
+    response = client.post("/sessions", json=session_body(check_run_dir))
+
+    assert response.status_code == 201, response.text
+    assert not (check_run_dir / "attention.1.json").exists(), (
+        "nothing was rotated: the folder held no session for the record to travel with"
+    )
+    settle(client, response.json()["chat_id"])
+
+
+def test_the_record_is_not_in_session_files(run_dir: Path) -> None:
+    """Pinned by name, because adding it there would look like tidiness and would turn
+    every check folder into "a folder that already holds a review"."""
+    assert ATTENTION_FILE_NAME not in SESSION_FILES
 
 
 def test_the_provider_settings_come_from_the_request_and_the_environment(

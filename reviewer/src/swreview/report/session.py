@@ -372,6 +372,16 @@ def was_cut_short(session: ReviewSession) -> bool:
     )
 
 
+SESSION_FILE_NAME = "session.json"
+"""What the file this module reads and writes is called in a run folder.
+
+Beside the two functions rather than in each caller: `report/rerender.py` re-exports it for
+the callers that already take their run-folder file names from there, and
+`report/attention_record.py` reads it to decide whether the record beside a session is
+still that session's.
+"""
+
+
 def load_session(path: Path | str) -> ReviewSession:
     """Read a `session.json` file."""
     return ReviewSession.model_validate_json(Path(path).read_bytes())

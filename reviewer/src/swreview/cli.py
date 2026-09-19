@@ -123,6 +123,7 @@ from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
 from swreview.ir.summary import summarize
 from swreview.remodel.plan import part_document_ids, plan_reorganize
 from swreview.remodel.summary import plan_lines, plan_summary_row
+from swreview.report.attention import coverage_line, rank, start_here_lines
 from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition, find_finding
 from swreview.report.markdown import render_report
 from swreview.report.rerender import rerender_run_folder, run_folder_session
@@ -709,6 +710,53 @@ def timing(
         f"net saved: {recorded.net_saved_minutes}",
         f"report: {payload['report_file']}",
     ]
+    _emit(payload, lines, json_output)
+
+
+# --- attention -------------------------------------------------------------------
+
+
+@app.command()
+def attention(
+    run_dir: Annotated[Path, typer.Argument(help="Directory holding session.json.")],
+    json_output: JsonFlag = False,
+) -> None:
+    """Print the attention ranking of a finished run. Reads the folder and writes nothing.
+
+    The reader the policy is argued with: it ranks `<run_dir>/session.json` with the
+    current policy and prints what the report's "Start here" section prints, plus the nine
+    key values behind every row - including the rows below the amplified five, because a
+    placement is settled by reading the keys rather than by re-deriving the order.
+
+    `contracts/cli.md` deliberately offers no `--top` and no `--class`: the rule amplifies
+    and never filters, and a reader that showed a different top five from `report.md`
+    would be a second policy. It writes nothing at all, for the same reason
+    `GET /checks/{check_id}` writes nothing (contracts/attention.md section 4).
+    """
+    with _errors_as_exit_1():
+        session_file = run_folder_session(run_dir)
+        ranking = rank(load_session(session_file))
+
+    resolved = Path(run_dir).resolve()
+    payload = {
+        "run_dir": str(resolved),
+        "session_file": str(session_file.resolve()),
+        "attention": to_jsonable_python(ranking),
+    }
+    lines = [
+        f"policy: {ranking.policy_version}",
+        "",
+        *start_here_lines(ranking),
+        "",
+        *coverage_line(ranking),
+        "",
+        f"every row in order, with the keys that placed it ({len(ranking.rows)} row(s)):",
+    ]
+    for number, row in enumerate(ranking.rows, start=1):
+        lines.append(f"{number}. {row.finding_id} {row.check} - {row.reason}")
+        lines.append(
+            "   " + ", ".join(f"{name} {value}" for name, value in row.key.model_dump().items())
+        )
     _emit(payload, lines, json_output)
 
 

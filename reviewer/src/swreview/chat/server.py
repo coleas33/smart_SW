@@ -121,6 +121,8 @@ from swreview.checks.standards.run import (
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore, ReviewException
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage, UnsupportedSchemaVersionError
+from swreview.report.attention import rank
+from swreview.report.attention_record import ATTENTION_FILE_NAME, write_attention_record
 from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
 from swreview.report.markdown import render_report
 from swreview.report.session import load_session
@@ -1763,6 +1765,14 @@ class ChatServer:
         chat still pointing at the old stream is moved along with it, so a pane
         reconnecting to it is replayed what that chat wrote rather than what took its
         place.
+
+        `attention.json` travels with them, at the same index and explicitly rather than by
+        joining `SESSION_FILES`: that tuple is also the claim rule's truthiness test, and a
+        folder holding only a record must not read as "a folder that already holds a
+        review" (contracts/attention.md section 4). It is moved only when there is a
+        session to move it with, because the record is the ranking *of* that session; left
+        behind it would name the session that just went aside while sitting beside the one
+        that replaced it, which is the staleness `read_attention_record` refuses.
         """
         existing = _session_files(chat.run_dir)
         if not existing:
@@ -1774,6 +1784,9 @@ class ChatServer:
             for other in self.chats.values():
                 if other.events_path == path:
                     other.events_file = moved
+        record = chat.run_dir / ATTENTION_FILE_NAME
+        if record.is_file():
+            record.rename(_rotated(record, index))
 
     # --- the review ------------------------------------------------------------------
 
@@ -1910,14 +1923,24 @@ class ChatServer:
             run.finalize()
 
     def _render_report(self, chat: ChatSession) -> None:
-        """Re-render `report.md` from the session the run holds (`GET /report` serves it)."""
+        """Re-render `report.md` and `attention.json` from the session the run holds.
+
+        `GET /report` serves the Markdown. The ranking is computed inside this `try` and
+        both files are written from it, so the pane's report opens its findings with
+        "Start here" after every turn and the record beside the session is never older
+        than the report next to it. A ranking that would not compute is caught by the same
+        rule as a report that would not render, below: this is the pane's every-turn
+        render, and losing the session over it would be the wrong trade.
+        """
         run = chat.run
         if run is None:
             return
         try:
+            ranking = rank(run.session)
             chat.report_path.write_text(
-                render_report(run.session, run.context.ir), encoding="utf-8"
+                render_report(run.session, run.context.ir, ranking=ranking), encoding="utf-8"
             )
+            write_attention_record(chat.run_dir, ranking, run.session.session_id)
         except Exception as exc:  # noqa: BLE001 - see below
             # A report that would not render is not a reason to lose the session: the
             # session file is already written and `report` answers 404 until it is there.

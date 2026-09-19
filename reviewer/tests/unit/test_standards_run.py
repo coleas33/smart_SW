@@ -51,6 +51,7 @@ from swreview.checks.standards.run import (
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, fingerprint
 from swreview.ir.loader import PACKAGE_FILE_NAME, save_package
 from swreview.ir.models import DumpPhase, EvidencePackage
+from swreview.report.attention_record import ATTENTION_FILE_NAME
 from swreview.report.dispositions import REPORT_FILE_NAME, SESSION_FILE_NAME
 from swreview.report.session import load_session
 from tests.support.standards import (
@@ -272,7 +273,7 @@ def test_it_writes_the_run_folder_and_not_one_byte_into_the_package(tmp_path: Pa
     after = {path.name: path.read_bytes() for path in directory.iterdir() if path.is_file()}
     assert after == before
     assert sorted(path.name for path in run.session_file.parent.iterdir()) == sorted(
-        [SESSION_FILE_NAME, REPORT_FILE_NAME, CHECK_FILE_NAME]
+        [SESSION_FILE_NAME, REPORT_FILE_NAME, CHECK_FILE_NAME, ATTENTION_FILE_NAME]
     )
     assert run.session_file.parent == tmp_path / "run"
     assert PACKAGE_FILE_NAME not in {path.name for path in (tmp_path / "run").iterdir()}

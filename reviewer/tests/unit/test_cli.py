@@ -1903,6 +1903,7 @@ def test_check_rms_writes_the_run_folder_into_out_and_not_the_package(
     )
 
     assert sorted(item.name for item in rms_out.iterdir()) == [
+        "attention.json",
         "check.json",
         "report.md",
         "session.json",
@@ -1993,6 +1994,7 @@ def test_check_rms_does_not_carry_forward_from_a_sibling_run_folder_of_its_own(
     earlier = rms_out.parent / "20260915-090000-check"
     assert check_rms(str(rms_dir), "--scope", "part", out=earlier).exit_code == 0
     assert sorted(item.name for item in earlier.iterdir()) == [
+        "attention.json",
         "check.json",
         "report.md",
         "session.json",
@@ -2417,6 +2419,7 @@ def test_the_top_level_help_lists_every_command_group() -> None:
         "report",
         "disposition",
         "timing",
+        "attention",
         "check",
         "exceptions",
         "benchmark",
