@@ -65,6 +65,9 @@ audit-secrets <run> <logs>` is the check that it never reached a file.
 
 Command-line contracts: `specs/001-agentic-design-review/contracts/cli.md`.
 
+Installing, updating and checking the add-in on the pilot workstation, including where the
+per-machine files live and how findings come back: `docs/workstation-runbook.md`.
+
 ## Resilient Modeling checks
 
 A second family of findings, deterministic like the first and with no language model
