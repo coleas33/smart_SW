@@ -73,7 +73,7 @@ from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.findings import Finding
 from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
-from swreview.prerun import prerun_checks
+from swreview.prerun import PrerunResult, gate_brief, prerun_checks
 from swreview.report.attention import rank
 from swreview.report.attention_record import write_attention_record
 from swreview.report.session import (
@@ -618,11 +618,14 @@ class ReviewRun:
         self.tools = tools
         self.system = system
         self.opening_message = opening_message
-        """What `start()` says first: `OPENING_MESSAGE`, or lever 5's digest above it.
+        """What `start()` says first: `OPENING_MESSAGE`, with lever 5's digest or lever 11's
+        brief above it (`_opening_message`).
 
         A per-package digest belongs here and not in `system`, which is the cacheable
         prefix: anything per-package put into the system prompt invalidates that prefix for
-        the whole session (contracts/levers.md, lever 3).
+        the whole session (contracts/levers.md, lever 3). The gate's brief carries the
+        session's ranked findings, which is even more per-package than the digest, so the
+        same rule puts it in the same place (FR-029).
         """
         self.sink = sink
         self.out_dir = Path(out_dir)
@@ -995,12 +998,31 @@ def start_review(
         effort=effort,
         max_steps=max_steps,
         efficiency=session.efficiency,
-        opening_message=(
-            OPENING_MESSAGE if prerun is None else f"{prerun.digest()}\n\n{OPENING_MESSAGE}"
-        ),
+        opening_message=_opening_message(prerun, session),
         bridge=bridge_client,
         redact=redact,
     )
+
+
+def _opening_message(prerun: PrerunResult | None, session: ReviewSession) -> str:
+    """The first user message: the opening instruction, and what the pre-run put above it.
+
+    The one branch between lever 5 and lever 11, and it is **here** rather than inside
+    `PrerunResult` so that `digest()` renders the same bytes whichever lever ran the
+    pre-run (FR-030). With the gate on the brief replaces the digest as the body - the
+    brief's own first part is that digest - and the opening instruction still closes the
+    message, exactly as it does with lever 5 alone.
+
+    The ranking is computed from the session the pre-run has just finished writing, which
+    is the same `rank(session)` the report is rendered with at the end of the run: the
+    ranked ids the model is handed and the ranked ids the engineer reads come off one
+    function over one session (FR-031).
+    """
+    if prerun is None:
+        return OPENING_MESSAGE
+    gated = session.efficiency is not None and session.efficiency.procedural_gate
+    body = gate_brief(prerun, rank(session)) if gated else prerun.digest()
+    return f"{body}\n\n{OPENING_MESSAGE}"
 
 
 def run_review(

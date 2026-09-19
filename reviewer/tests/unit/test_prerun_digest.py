@@ -18,25 +18,38 @@ report. Both are counted into the digest instead.
 
 from __future__ import annotations
 
+import re
+from collections.abc import Sequence
 from typing import Any
 
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.agent.runner import OPENING_MESSAGE, PROFILE_CHECK, ReviewRun, start_review
 from swreview.ir.loader import save_package
 from swreview.prerun import (
+    DIGEST_HEADER,
+    GATE_INSTRUCTION,
+    GATE_JUDGEMENT_HEADER,
+    GATE_START_HERE_HEADER,
     NOT_EVALUATED_HEADER,
     PRERUN_CHECK_PREFIX,
     NotEvaluated,
+    PrerunResult,
+    gate_brief,
     not_evaluated_families,
 )
-from swreview.report.session import ReviewSession
+from swreview.report.attention import rank
+from swreview.report.markdown import render_report
+from swreview.report.session import ReviewSession, load_session
+from tests.support.attention import REVIEW_SESSION_FILE
 from tests.support.prerun import (
+    GATE_ON,
     MODEL_DRIVEN_CALLS,
     OFF,
     ON,
     empty_model_check_package,
     prerun_package,
 )
+from tests.unit.test_report_start_here import section_of
 
 
 def started(
@@ -198,3 +211,75 @@ def test_a_not_evaluated_family_renders_the_same_sentence_into_both_places() -> 
 
     assert family.coverage_item().check == family.check
     assert family.coverage_item().reason == family.reason
+
+
+# --- the gate off, and the gate on (T044, FR-030, FR-031) --------------------------------
+
+
+def digest_of(run: ReviewRun) -> str:
+    """Lever 5's message with the opening instruction taken back off: the digest itself."""
+    message = opening_of(run)
+    assert message.endswith(f"\n\n{OPENING_MESSAGE}")
+    return message.removesuffix(f"\n\n{OPENING_MESSAGE}")
+
+
+def test_with_the_gate_off_lever_5_still_sends_the_digest_and_nothing_else(
+    tmp_path: Any,
+) -> None:
+    """FR-030. The off arm of lever 11's A/B is a build with lever 5 on and nothing added:
+    the message is the digest, a blank line and the opening instruction, which is what every
+    assertion above this line is written against."""
+    run, _ = started(tmp_path, "lever5", efficiency=ON)
+
+    message = opening_of(run)
+
+    assert message == f"{digest_of(run)}\n\n{OPENING_MESSAGE}"
+    assert message.startswith(DIGEST_HEADER)
+    for header in (GATE_START_HERE_HEADER, GATE_JUDGEMENT_HEADER, GATE_INSTRUCTION):
+        assert header not in message
+
+
+def test_the_gate_alone_runs_the_pre_run_and_opens_with_the_unchanged_digest(
+    tmp_path: Any,
+) -> None:
+    """Lever 11 implies lever 5's pre-run (`contracts/gate.md` section 1) and prepends the
+    same bytes to it, so the two arms differ by what the brief *adds* and by nothing else."""
+    lever5, lever5_session = started(tmp_path, "lever5", efficiency=ON)
+    gated, gated_session = started(tmp_path, "gated", efficiency=GATE_ON)
+
+    assert [step.tool for step in gated_session.steps] == [
+        step.tool for step in lever5_session.steps
+    ]
+    assert opening_of(gated).startswith(f"{digest_of(lever5)}\n\n{GATE_START_HERE_HEADER}\n")
+    assert opening_of(gated) != opening_of(lever5)
+    assert gated.system == lever5.system, "the brief is a user message, never the prefix"
+
+
+def test_the_briefs_start_here_ids_are_the_reports_start_here_ids_in_order() -> None:
+    """FR-031, and structurally: both sides read `ranking.rows` through
+    `attention.start_here_lines`, so this fails only if one of them stops doing that.
+
+    The committed 2026-09-18 review session is the fixture, because it is the one whose
+    ordering was argued over: eight findings, two of them needing judgement, and a sixth row
+    that the cap leaves out of both renderings.
+    """
+    session = load_session(REVIEW_SESSION_FILE)
+    ranking = rank(session)
+
+    brief = gate_brief(PrerunResult(calls=(), not_evaluated=()), ranking)
+    report = render_report(session, ranking=ranking)
+
+    in_brief = finding_ids(brief.splitlines())
+    in_report = finding_ids(section_of(report, "## Start here"))
+    assert in_brief == in_report
+    assert len(in_brief) == ranking.top_n
+
+
+FINDING_ID = re.compile(r"\*\*(F-\d+)\*\*")
+"""How both renderings spell an amplified row's finding id: `attention.start_here_lines`
+writes `**F-001**` and neither caller rewrites it."""
+
+
+def finding_ids(lines: Sequence[str]) -> list[str]:
+    """Every amplified finding id in one rendering, in the order it appears."""
+    return [match.group(1) for line in lines for match in FINDING_ID.finditer(line)]

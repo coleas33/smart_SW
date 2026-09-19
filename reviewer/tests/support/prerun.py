@@ -39,6 +39,14 @@ ON = EfficiencySettings(prerun_checks=True)
 OFF = EfficiencySettings()
 """The lever under test, and the default every shipped run still has."""
 
+GATE_ON = EfficiencySettings(procedural_gate=True)
+"""Lever 11 **alone**: it implies the pre-run and refuses to share an arm with lever 5.
+
+`efficiency_from_levers` rejects `procedural_gate` together with `prerun_checks` until each
+has been gated by itself (`contracts/gate.md` section 1), so this is the only spelling of
+"the gate is on" there is, and the gate arm's pre-run is the same pre-run lever 5 runs.
+"""
+
 PART_DOCUMENT = "doc:3"
 FIRST_INSTANCE = "cmp:0002"
 SECOND_INSTANCE = "cmp:0003"
