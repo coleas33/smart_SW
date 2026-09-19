@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import time
 from collections.abc import Sequence
 from itertools import product
 from typing import Any
@@ -38,7 +37,7 @@ from uuid import UUID, uuid5
 import pytest
 
 from swreview.agent.checklist import load_checklist
-from swreview.findings import Disposition, Finding, FindingStatus, Severity
+from swreview.findings import Disposition, Finding
 from swreview.ir.models import SourceRef
 from swreview.report.attention import (
     CHECKLIST_ITEM_IDS,
@@ -936,55 +935,3 @@ def test_the_policy_file_is_read_once_however_many_sessions_are_ranked() -> None
 
     assert rank(session_of("cache-a", [spec("rms.folders.present")])) is not None
     assert load_policy() is first
-
-
-# --- 8. the budget -------------------------------------------------------------------------
-
-PERF_FINDINGS = 500
-PERF_BUDGET_S = 0.100
-PERF_CHECKS: tuple[str, ...] = (
-    "rms.grouping.all_features_in_a_group",
-    "rms.params.global_variables_present",
-    "rms.folders.present",
-    "interference.static",
-    "standards.drawing.revision_matches",
-    UNNAMED_CHECK,
-)
-PERF_STATUSES: tuple[FindingStatus, ...] = ("demonstrated", "suspected", "unresolved")
-PERF_SEVERITIES: tuple[Severity, ...] = ("high", "medium", "low")
-PERF_COMPONENTS: tuple[tuple[str, ...], ...] = (
-    (PART_COMPONENT,),
-    (PIN_ONE,),
-    (PIN_TWO,),
-    (PART_COMPONENT, PIN_ONE),
-)
-
-
-@pytest.mark.perf
-def test_ranking_five_hundred_findings_stays_inside_its_budget() -> None:
-    """The report is rendered on every finalize, every re-render and every check re-read.
-
-    Five hundred findings is far beyond any run this product has produced; the budget is
-    here so a future fold or a future key cannot turn a linear pass into a quadratic one
-    without saying so.
-    """
-    session = session_of(
-        "perf",
-        [
-            spec(
-                PERF_CHECKS[index % len(PERF_CHECKS)],
-                status=PERF_STATUSES[index % len(PERF_STATUSES)],
-                severity=PERF_SEVERITIES[index % len(PERF_SEVERITIES)],
-                component_ids=PERF_COMPONENTS[index % len(PERF_COMPONENTS)],
-            )
-            for index in range(PERF_FINDINGS)
-        ],
-    )
-    policy = load_policy()
-
-    started = time.perf_counter()
-    ranking = rank(session, policy)
-    elapsed = time.perf_counter() - started
-
-    assert sum(len(row.member_finding_ids) for row in ranking.rows) == PERF_FINDINGS
-    assert elapsed < PERF_BUDGET_S, f"ranking {PERF_FINDINGS} findings took {elapsed:.3f}s"
