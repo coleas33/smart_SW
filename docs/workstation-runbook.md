@@ -99,6 +99,11 @@ dotnet build extractor\SwReview.sln -c Release
 dotnet test  extractor\SwReview.sln -c Release
 ```
 
+The same sequence as one command, stopping at the first step that fails, is
+`.\extractor\tools\update-workstation.ps1` (add `-Register` on a first install, `-SkipTests`
+only when a test failure has already been reported and the owner asked for the build anyway).
+It refuses to run while SOLIDWORKS is open or the checkout is dirty, for the reasons below.
+
 Then start SOLIDWORKS and run the health checks (section 6).
 
 - **If `git status --porcelain` prints anything**, do not pull over it. Local edits on the
@@ -209,7 +214,8 @@ the versions from section 2, so the owner can reproduce the machine's state.
 ## 9. Quick reference
 
 ```powershell
-# update (SOLIDWORKS closed)
+# update (SOLIDWORKS closed); the script is the same steps as the lines after it
+.\extractor\tools\update-workstation.ps1
 cd <repo>; git status --porcelain; git pull --ff-only origin main
 cd reviewer; uv sync --all-extras; uv run pytest -q; cd ..
 dotnet build extractor\SwReview.sln -c Release; dotnet test extractor\SwReview.sln -c Release
