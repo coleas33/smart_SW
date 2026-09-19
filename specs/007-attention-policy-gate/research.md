@@ -323,6 +323,27 @@ records); `20260916-003612-<redacted-design-1>` is a review cut off mid-turn wit
 the same evening; and every session carries `efficiency` all-off and no baseline minutes,
 which is User Story 1's premise measured rather than assumed.
 
+**The confirmation run (T022), 2026-09-19, with the shipped command.** `swreview attention`
+was run over the ten handover folders that hold a `session.json`, each folder hashed before
+and after. Every folder was byte-identical afterwards and every order was the one the table
+above records:
+
+| Folder(s) | Top of the ranking |
+|---|---|
+| `20260918-215755-<redacted-design-5>` (review, eight findings) | `F-007`, `F-008` `interference.static` (needs your judgement); `rms.assembly.mates_to_reference_geometry`; `rms.sketches.fully_defined`; `rms.grouping.all_features_in_a_group`; three not amplified, `rms.folders.present` last |
+| `20260918-214702` and `-215624-<redacted-design-5>` (reviews, six findings, no interference call) | mates to reference geometry, the under-defined sketch, grouping, the two equation rules; `rms.folders.present` the one not amplified |
+| `20260918-214545` and `-220310-<redacted-design-5>-check` (Model check, three findings) | `rms.sketches.fully_defined`, grouping, folders |
+| `20260918-204543-<redacted-design-4>` and its check | grouping first (the part has no sketch or mate finding), folders last |
+| The three `20260916-*-<redacted-design-2>` reviews (two findings) | `rms.assembly.first_component_fixed`, then `rms.assembly.mates_to_reference_geometry` |
+
+One thing the preview had not made visible: on the <redacted-design-2> reviews the two rows tie on all
+seven leading keys (both rebuild breakers, demonstrated, medium, reach two, not carried), so
+the check-id key decides and the unfixed first component prints first. That is the contract's
+eighth key doing its job, not a class question; T022's acceptance sentence, which had guessed
+the other order, was corrected rather than the policy. The "not reached" block prints each
+run's own close-out sentences on the reviews and only the rule counts on the check folders,
+which hold no checklist items - as R2.5 intends.
+
 ## R3. Verified facts the plan relies on
 
 The eight production `render_report` call expressions: `cli.py:563`, `cli.py:607`,
