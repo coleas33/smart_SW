@@ -72,6 +72,15 @@ public sealed class SwSession : ISwSession
         SwGate g = gate ?? new SwGate();
         IModelDoc2 document = FindDocument(swApp, documentPath, g);
 
+        // Before the configuration is asked for, because a drawing has none and the sentence
+        // that says so is a symptom rather than an action. Asked of the document rather than of
+        // the path: the path is null when the active document is the one being attached to.
+        string? refusal = AttachRefusal(KindOf(document, g), document.GetPathName());
+        if (refusal != null)
+        {
+            throw new InvalidOperationException(refusal);
+        }
+
         IConfiguration configuration = ActiveConfiguration(document, g);
         if (!string.IsNullOrWhiteSpace(configurationName)
             && !string.Equals(configuration.Name, configurationName, StringComparison.OrdinalIgnoreCase))
@@ -85,6 +94,27 @@ public sealed class SwSession : ISwSession
         string? version = ReadVersion(swApp, g);
         return new SwSession(document, configuration, version, g);
     }
+
+    /// <summary>
+    /// Why <see cref="Attach"/> will not open a session on a document of this kind, or null when
+    /// it will.
+    ///
+    /// One kind is refused: a drawing. Every drawing answers null to
+    /// <c>ConfigurationManager.ActiveConfiguration</c>, and a session is bound to a
+    /// configuration - the manifest, the reuse key and every dumper are written per
+    /// configuration - so the attach cannot succeed. It used to fail as "reports no active
+    /// configuration", which names what was missing and not what to do about it, and the add-in
+    /// logs a failed tool-service start rather than showing it, so the engineer was left with a
+    /// pane whose features were all quietly off.
+    ///
+    /// Pure, and separate from the call that discovers the kind, so both the sentence and the
+    /// rule are testable on a machine with no SOLIDWORKS.
+    /// </summary>
+    public static string? AttachRefusal(DocumentKind kind, string documentPath) =>
+        kind == DocumentKind.Drawing
+            ? $"'{documentPath}' is a drawing, which has no configuration to bind a session to; "
+                + "open the part or assembly it documents."
+            : null;
 
     /// <summary>The document kind, for the IR's <see cref="DocumentKind"/>.</summary>
     public static DocumentKind KindOf(IModelDoc2 document, SwGate gate)

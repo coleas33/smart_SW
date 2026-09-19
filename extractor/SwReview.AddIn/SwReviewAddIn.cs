@@ -864,8 +864,14 @@ public class SwReviewAddIn : ISwAddin
     /// The review secret goes into <see cref="ReviewHostOptions.Bridge"/>, which is the
     /// `bridge` field of the next `POST /sessions` - so a review started before the first
     /// document simply has no bridge, and the Python side falls back to its own attach. The
-    /// general-chat secret stays on the gate and is read by the terminal through
-    /// <see cref="ToolService"/>; it never reaches the backend.
+    /// same field is cleared when the gate hands over null, which is what it does whenever a
+    /// service stops: a review started right after a document change would otherwise carry a
+    /// pipe that has been closed. The general-chat secret stays on the gate and is read by the
+    /// terminal through <see cref="ToolService"/>; it never reaches the backend.
+    ///
+    /// The first delegate is <see cref="CurrentDocument"/> itself rather than a "is one open"
+    /// question, because the gate refuses a drawing - it has no configuration to attach a
+    /// session to - and that decision needs the document, not a yes/no.
     ///
     /// Nothing here runs on the application thread: <see cref="ToolServiceHost.Start"/>
     /// marshals its attach onto that thread and waits, and <see cref="ToolServiceGate"/>
@@ -877,9 +883,9 @@ public class SwReviewAddIn : ISwAddin
         ISldWorks app = _swApp!;
 
         return new ToolServiceGate(
-            () => CurrentDocument() != null,
+            CurrentDocument,
             () => ToolServiceHost.Start(new ToolServiceOptions(app, new ControlAppThreadInvoker(pane))),
-            service => reviewOptions.Bridge = service.ReviewBridge,
+            service => reviewOptions.Bridge = service?.ReviewBridge,
             Report,
             schedule: null,
             // What holds the bridge, and so what stops it being re-attached to another document
@@ -1103,29 +1109,36 @@ public class SwReviewAddIn : ISwAddin
     /// Records a failure the engineer cannot otherwise see: in the pane when there is one, and
     /// in the add-in log either way. Never throws - it is called from the catch blocks that
     /// exist to keep SOLIDWORKS running.
+    ///
+    /// <paramref name="failure"/> is null when nothing threw. The tool service's gate refuses
+    /// to attach to a drawing rather than failing on one, and a refusal is just as invisible as
+    /// the failure it replaced unless it reaches the same two places.
     /// </summary>
-    private void Report(string what, Exception failure)
+    private void Report(string what, Exception? failure)
     {
         // Both sinks below are masked (FR-015). `Exception.ToString()` carries every inner
         // exception's message, and the inner exception is where the unredacted launcher failure
         // sits: BackendProcess masks only the outer BackendStartException. A key must never be
         // written to a log file or shown in the panel.
-        string summary = Redact(failure.Message);
-        string detail = Redact(failure.ToString());
+        //
+        // A line with nothing after it when nothing threw, rather than the word "null" or a
+        // trailing space: `what` is already a whole sentence.
+        string summary = failure == null ? string.Empty : " " + Redact(failure.Message);
+        string detail = failure == null ? string.Empty : " " + Redact(failure.ToString());
 
         try
         {
             ActionsPanel? panel = _panel;
             if (panel != null)
             {
-                panel.ShowProgress(what + " " + summary);
+                panel.ShowProgress(what + summary);
             }
         }
         catch (Exception)
         {
         }
 
-        Log(what + " " + detail);
+        Log(what + detail);
     }
 
     /// <summary>

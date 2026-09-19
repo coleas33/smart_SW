@@ -52,6 +52,23 @@ public sealed class PageDocument
             return null;
         }
     }
+
+    /// <summary>
+    /// Whether a scope can be attached to this document - which is to say, whether it is a part
+    /// or an assembly.
+    ///
+    /// A drawing is not: it has no configuration, and <c>SwSession.Attach</c> binds the session
+    /// to the active one. Attaching to one therefore throws, and the tool service swallows a
+    /// failed start into addin.log, so a SOLIDWORKS loaded with a drawing active used to leave
+    /// the bridge, the terminal's tools and the Remodel tab off for the whole session. The
+    /// document is refused here instead, where the refusal can be said out loud.
+    ///
+    /// Read from <see cref="Kind"/> rather than from a second extension table, so the pane and
+    /// the tool service can never disagree about what a path is; null - a path whose extension
+    /// names no kind - is not attachable, for the reason <see cref="Kind"/> gives for not
+    /// guessing.
+    /// </summary>
+    public bool IsAttachable => Kind == "part" || Kind == "assembly";
 }
 
 /// <summary>
