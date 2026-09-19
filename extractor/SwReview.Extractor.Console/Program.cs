@@ -64,6 +64,16 @@ public static class Program
     internal static readonly string[] ProbeOptionNames = { "doc" };
 
     /// <summary>
+    /// T031. <c>probe remodel</c> is a mutating command, unlike <c>probe rms</c> and
+    /// <c>probe standards</c> above, so its options are its own list rather than
+    /// <see cref="ProbeOptionNames"/>: it takes no <c>--doc</c> (it never addresses a document
+    /// the engineer opened) and needs <c>--out</c>, the probe selection and the acknowledgement
+    /// flag <c>--suppress-test</c>'s <c>--acknowledge-rebuild</c> precedent requires.
+    /// </summary>
+    internal static readonly string[] RemodelProbeOptionNames =
+        { "probe", "out", "keep-part", "acknowledge-throwaway-part" };
+
+    /// <summary>
     /// T055. The one mutating command (contracts/cli.md). <c>--doc</c> is required rather
     /// than defaulting to the active document: this command suppresses features, and
     /// "whatever happens to be on screen" is not a model anyone chose to have modified.
@@ -80,6 +90,13 @@ public static class Program
     /// </summary>
     internal const string SuppressTestLogFileName = "suppress-test.log";
 
+    /// <summary>
+    /// <c>probe remodel</c>'s own log (tasks.md T032), the same reason
+    /// <see cref="SuppressTestLogFileName"/> is separate from <c>extract.log</c>: it is the
+    /// record the capabilities ledger's interop members are audited against.
+    /// </summary>
+    internal const string RemodelProbeLogFileName = "remodel-probe.log";
+
     /// <summary>The feature 003 probe subject.</summary>
     private const string RmsProbe = "rms";
 
@@ -90,12 +107,21 @@ public static class Program
     private const string StandardsProbe = "standards";
 
     /// <summary>
+    /// The feature 004 Phase 2 probe subject (tasks.md T031, T032): the stage-1 blocking and
+    /// non-blocking probes of research.md R10, run against a throwaway part this command
+    /// builds itself. Named <c>RemodelProbeSubject</c> rather than <c>RemodelProbe</c> so it
+    /// cannot be confused with <see cref="RemodelProbe"/>, the pure logic class this subject
+    /// dispatches to.
+    /// </summary>
+    private const string RemodelProbeSubject = "remodel";
+
+    /// <summary>
     /// The subjects <c>probe</c> accepts (contracts/cli.md). <see cref="RunProbe"/> validates
     /// against THIS list and names it in the usage error, so a subject the switch handles and
     /// the list does not - or the reverse - is a failing test rather than an "Unknown probe"
     /// discovered at the workstation.
     /// </summary>
-    internal static readonly string[] ProbeSubjects = { RmsProbe, StandardsProbe };
+    internal static readonly string[] ProbeSubjects = { RmsProbe, StandardsProbe, RemodelProbeSubject };
 
     /// <summary>
     /// The interop members <c>probe rms</c> reads per feature, by the name each is gated
@@ -1156,7 +1182,7 @@ public static class Program
     ///
     /// Read-only: every call goes through the session's gate, and the probe writes no file.
     /// </summary>
-    private static int RunProbe(string[] args)
+    internal static int RunProbe(string[] args)
     {
         CommandLine parsed;
         bool allowStart;
@@ -1168,7 +1194,8 @@ public static class Program
             {
                 throw new UsageError(
                     "probe needs a subject: probe "
-                    + string.Join("|", ProbeSubjects) + " --doc <document>.");
+                    + string.Join("|", ProbeSubjects) + " --doc <document> (rms, standards), "
+                    + "or probe remodel --out <dir>.");
             }
 
             subject = args[1];
@@ -1178,7 +1205,13 @@ public static class Program
                     $"Unknown probe '{subject}'; the probes are {string.Join(", ", ProbeSubjects)}.");
             }
 
-            parsed = CommandLine.Parse(args, 2, KnownOptions(ProbeOptionNames));
+            // probe remodel is the one mutating probe (tasks.md T031) and takes none of
+            // ProbeOptionNames' --doc: it never addresses a document the engineer opened.
+            string[] optionNames = string.Equals(subject, RemodelProbeSubject, StringComparison.Ordinal)
+                ? RemodelProbeOptionNames
+                : ProbeOptionNames;
+
+            parsed = CommandLine.Parse(args, 2, KnownOptions(optionNames));
             allowStart = parsed.Flag("allow-start");
         }
         catch (UsageError error)
@@ -1187,9 +1220,221 @@ public static class Program
             return ExitError;
         }
 
+        if (string.Equals(subject, RemodelProbeSubject, StringComparison.Ordinal))
+        {
+            return RunRemodelProbe(parsed, allowStart);
+        }
+
         return string.Equals(subject, StandardsProbe, StringComparison.Ordinal)
             ? ExecuteProbeStandards(parsed.Value("doc"), allowStart)
             : ExecuteProbeRms(parsed.Value("doc"), allowStart);
+    }
+
+    /// <summary>
+    /// T032. <c>probe remodel</c>'s own refusal (contracts/cli.md's "refuses, before touching
+    /// anything" pattern, the <c>suppress-test</c> precedent): a missing
+    /// <c>--acknowledge-throwaway-part</c> is caught here, before <see cref="Connect"/> ever
+    /// runs, so a refused run never asks SOLIDWORKS for anything.
+    /// </summary>
+    private static int RunRemodelProbe(CommandLine parsed, bool allowStart)
+    {
+        RemodelProbeSettings settings;
+        try
+        {
+            settings = RemodelProbeSettingsFrom(parsed);
+        }
+        catch (UsageError error)
+        {
+            Error.WriteLine($"swreview-extract probe remodel: {error.Message}");
+            return ExitError;
+        }
+
+        if (!settings.Acknowledged)
+        {
+            Error.WriteLine($"swreview-extract probe remodel: {RemodelProbe.AcknowledgementRequiredMessage}");
+            return ExitError;
+        }
+
+        return ExecuteProbeRemodel(settings, allowStart);
+    }
+
+    /// <summary>
+    /// The command line as the run settings, defaults included (the
+    /// <see cref="SuppressTestSettingsFrom"/> precedent): the option tests assert against THIS
+    /// method rather than a copy of the defaults.
+    /// </summary>
+    internal static RemodelProbeSettings RemodelProbeSettingsFrom(CommandLine parsed)
+    {
+        if (parsed == null)
+        {
+            throw new ArgumentNullException(nameof(parsed));
+        }
+
+        IReadOnlyList<string> rawProbeValues = parsed.Values("probe");
+        IReadOnlyList<string> probeIds = rawProbeValues.Count == 0
+            ? RemodelProbeCatalog.AllIds
+            : SplitProbeIds(rawProbeValues);
+
+        var settings = new RemodelProbeSettings
+        {
+            OutputDirectory = parsed.Required("out"),
+            KeepPart = parsed.Flag("keep-part"),
+            Acknowledged = parsed.Flag("acknowledge-throwaway-part"),
+            ProbeIds = probeIds,
+        };
+
+        return settings;
+    }
+
+    /// <summary>
+    /// <c>--probe id,id,...</c>, one or more tokens each holding a comma-separated list, the
+    /// same shape <c>--pairs</c> already accepts. Every id is upper-cased and checked against
+    /// <see cref="RemodelProbeCatalog.AllIds"/> here, at parse time, so a typo is a usage
+    /// error rather than a silently unresolved row (contracts/cli.md).
+    /// </summary>
+    private static IReadOnlyList<string> SplitProbeIds(IReadOnlyList<string> rawValues)
+    {
+        var ids = new List<string>();
+        foreach (string raw in rawValues)
+        {
+            foreach (string piece in raw.Split(','))
+            {
+                string id = piece.Trim().ToUpperInvariant();
+                if (id.Length == 0)
+                {
+                    continue;
+                }
+
+                if (!RemodelProbeCatalog.IsKnown(id))
+                {
+                    throw new UsageError(
+                        $"--probe names an unknown probe '{id}'; the probes are "
+                        + string.Join(", ", RemodelProbeCatalog.AllIds) + ".");
+                }
+
+                ids.Add(id);
+            }
+        }
+
+        if (ids.Count == 0)
+        {
+            throw new UsageError("--probe needs at least one probe id.");
+        }
+
+        return ids;
+    }
+
+    /// <summary>
+    /// The guard <c>probe remodel</c> builds its gate with: <see cref="RemodelProbeGuard"/>,
+    /// never the stage-1 <see cref="RemodelGuard"/> allowlist, which refuses the whole
+    /// feature-creation family this probe deliberately builds (contracts/guard-allowlist.md).
+    /// </summary>
+    internal static SwGate RemodelProbeGate(RecordingGateObserver observer) =>
+        new SwGate(new CircuitBreaker(), new RemodelProbeGuard()) { Observer = observer };
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static int ExecuteProbeRemodel(RemodelProbeSettings settings, bool allowStart)
+    {
+        var observer = new RecordingGateObserver();
+
+        using (var log = new ExtractLog(settings.OutputDirectory, RemodelProbeLogFileName))
+        {
+            try
+            {
+                log.Write($"probe remodel --probe {string.Join(",", settings.ProbeIds)} "
+                    + $"--out \"{settings.OutputDirectory}\""
+                    + (settings.KeepPart ? " --keep-part" : string.Empty));
+
+                ISldWorks swApp = Connect(allowStart, log);
+                SwGate gate = RemodelProbeGate(observer);
+                var host = new SwRemodelProbeHost(swApp, gate);
+
+                if (host.AnyDocumentOpen())
+                {
+                    throw new RemodelProbeRefusedError(RemodelProbe.DocumentAlreadyOpenMessage);
+                }
+
+                string swVersion = host.SwVersion();
+                string partPath = Path.Combine(
+                    settings.OutputDirectory, "probe-part", "remodel-probe.SLDPRT");
+                RemodelProbe.AssertPartSavePath(partPath, settings.OutputDirectory);
+
+                IReadOnlyList<RemodelProbeRecord>? records = null;
+                RemodelSystemToggles.Within(host, gate, () =>
+                {
+                    // If BuildPart itself throws partway through the recipe, SOLIDWORKS may be
+                    // left holding an unsaved, unreferenced document: there is nothing to close
+                    // or delete from here, because no RemodelProbePart was ever produced. The
+                    // next run's AnyDocumentOpen() check will refuse rather than proceed against
+                    // it, which is the safe failure - not a silent one - for a build failure
+                    // this early is itself evidence for whichever probe was building.
+                    RemodelProbePart part = host.BuildPart(RemodelProbePartRecipe.Default(), partPath);
+                    try
+                    {
+                        var context = new RemodelProbeContext(part, gate, swVersion);
+                        records = RemodelProbeRunner.RunAll(settings.ProbeIds, context);
+                    }
+                    finally
+                    {
+                        host.ClosePart(part);
+                        if (!settings.KeepPart)
+                        {
+                            TryDeleteProbePart(part.Path);
+                        }
+                    }
+                });
+
+                string ledgerPath = RemodelProbeLedger.Write(settings.OutputDirectory, swVersion, records!);
+
+                foreach (string line in RemodelProbe.LogLines(records!, observer.Members, ledgerPath))
+                {
+                    log.Write(line);
+                }
+
+                Out.WriteLine(ledgerPath);
+                return ExitSuccess;
+            }
+            catch (RemodelProbeRefusedError refusal)
+            {
+                log.WriteError("probe remodel refused, and nothing was built.", refusal);
+                return ExitError;
+            }
+            catch (Exception error)
+            {
+                log.WriteError("probe remodel failed.", error);
+                return ExitError;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Deletes the throwaway part's file (and its now-empty <c>probe-part/</c> directory)
+    /// unless <c>--keep-part</c> was given. Never throws: a part that could not be deleted is
+    /// reported in the log, not turned into a run the engineer thinks failed to measure
+    /// anything.
+    /// </summary>
+    private static void TryDeleteProbePart(string partPath)
+    {
+        try
+        {
+            if (File.Exists(partPath))
+            {
+                File.Delete(partPath);
+            }
+
+            string? directory = Path.GetDirectoryName(partPath);
+            if (!string.IsNullOrEmpty(directory) && Directory.Exists(directory)
+                && Directory.GetFileSystemEntries(directory).Length == 0)
+            {
+                Directory.Delete(directory);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     /// <summary>Is this one of the subjects <see cref="ProbeSubjects"/> lists?</summary>
@@ -3016,6 +3261,15 @@ public static class Program
         writer.WriteLine("                this run opens nothing, activates no sheet and changes no");
         writer.WriteLine("                display state, and prints its own gate log to prove it.");
         writer.WriteLine("                Writes nothing.");
+        writer.WriteLine("  probe remodel [--probe <id,...>] --out <dir> [--keep-part]");
+        writer.WriteLine("                --acknowledge-throwaway-part");
+        writer.WriteLine("                Build a throwaway part in --out and run the selected feature 004");
+        writer.WriteLine("                Phase 2 probes against it (default: every probe). Refuses without");
+        writer.WriteLine("                the flag and while any document is open in SOLIDWORKS - it never");
+        writer.WriteLine("                touches a document you have open. Writes");
+        writer.WriteLine("                capabilities/remodel-<sw-version>.yaml with one verdict per probe");
+        writer.WriteLine("                (verified, refuted or unresolved) and deletes the throwaway part");
+        writer.WriteLine("                afterwards unless --keep-part is given.");
         writer.WriteLine("  suppress-test --doc <part> --plan <suppress-plan.json> --acknowledge-rebuild");
         writer.WriteLine("                --out <package dir> [--limit <n>] [--timeout-seconds <n>]");
         writer.WriteLine("                Suppress each planned Detail feature in turn, rebuild, record");
