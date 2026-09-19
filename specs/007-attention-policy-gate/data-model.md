@@ -68,7 +68,7 @@ integer or a string so two rankings compare byte-identically.
 | `rows` | list[AttentionRow] | Every row, in order, suppressed last; the report and the pane show the first `top_n` |
 | `top_n` | int | 5 |
 | `not_amplified` | NotAmplified | `total`, `checked_within_scope`, `dispositioned`, `info`, `beyond_top_n` |
-| `coverage` | CoverageBlock | The five bucket counts; `not_closed: list[NotClosed]` - the unresolved items whose `check` is a checklist item id (the close-out rows `finalize` writes), each `{item, reason}` with the reason verbatim, at most five in the order the session holds them; `open_evidence_requests: int` (the `coverage.evidence_request` rows); `rules: {unresolved, skipped}` for every other unresolved and skipped item. A check folder has no checklist rows, so `not_closed` is empty there |
+| `coverage` | CoverageBlock | The five bucket counts; `not_closed: list[NotClosed]` - the unresolved items whose `check` is a checklist item id other than `coverage.closeout` (the close-out rows `finalize` writes for the items the run did not reach), each `{item, reason}` with the reason verbatim, at most five in the order the session holds them; `open_evidence_requests: int` (the `coverage.evidence_request` rows); `rules: {unresolved, skipped}` for every other unresolved and skipped item. A check folder has no checklist rows, so `not_closed` is empty there |
 | `empty_reason` | str \| None | Set when `rows` is empty: "no findings were recorded" or "every finding is informational or already decided" |
 
 `rank(session, policy) -> Ranking` is total: it never raises on any `ReviewSession`, which the

@@ -49,8 +49,8 @@ writes the live session, survives the next turn, and refuses `net_saved_minutes`
 ## Scenario 2 (US2): the 2026-09-18 order
 
 ```powershell
-uv run swreview attention tests/fixtures/attention/session-20260918-review-folder
-uv run swreview attention tests/fixtures/attention/session-20260918-check-folder
+uv run swreview attention tests/fixtures/attention/review-folder
+uv run swreview attention tests/fixtures/attention/check-folder
 ```
 
 Expected, review: rows 1 and 2 are the two `interference.static` findings, then
