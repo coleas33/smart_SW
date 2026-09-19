@@ -933,7 +933,8 @@ public class CommandLineOptionsTests
     {
         // A separate guard from RemodelGuard on purpose: the probe builds a throwaway part and
         // needs the feature-creation family RemodelGuard refuses outright
-        // (contracts/guard-allowlist.md), but nothing else the read-only guard denies.
+        // (contracts/guard-allowlist.md), plus PROBE-9's one suppression exemption, and nothing
+        // else the read-only guard denies.
         var observer = new RecordingGateObserver();
         SwGate gate = Program.RemodelProbeGate(observer);
 
@@ -950,9 +951,12 @@ public class CommandLineOptionsTests
         // FeatureFillet3 needs no exemption: it is not on ReadOnlyGuard's denylist at all.
         Assert.True(gate.Call("FeatureFillet3", () => true));
 
+        // PROBE-9 (tasks.md T038): the only deterministic way to force a real rebuild error on
+        // the throwaway part to inspect GetWhatsWrong's element kind.
+        Assert.True(gate.Call("SetSuppression2", () => true));
+
         Assert.Throws<MutatingCallError>(() => gate.Call("Save3", () => true));
         Assert.Throws<MutatingCallError>(() => gate.Call("EditDelete", () => true));
-        Assert.Throws<MutatingCallError>(() => gate.Call("SetSuppression2", () => true));
         Assert.Throws<MutatingCallError>(() => gate.Call("ForceRebuildAll", () => true));
 
         // A FeatureExtrusion* variant this probe never calls stays refused: the exemption is

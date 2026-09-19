@@ -1371,7 +1371,7 @@ public static class Program
                     RemodelProbePart part = host.BuildPart(RemodelProbePartRecipe.Default(), partPath);
                     try
                     {
-                        var context = new RemodelProbeContext(part, gate, swVersion);
+                        var context = new RemodelProbeContext(part, gate, swVersion, host, settings.OutputDirectory);
                         records = RemodelProbeRunner.RunAll(settings.ProbeIds, context);
                     }
                     finally

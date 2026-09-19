@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using SwReview.Extractor.Rms;
 using SwReview.Extractor.Sw;
+using SwReview.Extractor.Tests.Fakes;
 using Xunit;
 
 namespace SwReview.Extractor.Tests;
@@ -220,7 +221,7 @@ public class RemodelProbeTests
     private static RemodelProbeContext Context(string swVersion = "32.5.0.48")
     {
         var part = new RemodelProbePart(new object(), @"C:\out\probe-part\remodel-probe.SLDPRT", Array.Empty<object>());
-        return new RemodelProbeContext(part, new SwGate(), swVersion);
+        return new RemodelProbeContext(part, new SwGate(), swVersion, new FakeRemodelProbeHost(), @"C:\out");
     }
 
     [Fact]
