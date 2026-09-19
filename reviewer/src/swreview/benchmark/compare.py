@@ -101,17 +101,34 @@ TIER_LEVER = "tool_tiers"
 """Lever 4, whose counter is the withheld half of the unresolved count (FR-054). Also not
 one of `adoption.METRICS`: both halves are per package, and `Aggregate` carries neither."""
 
+GATE_LEVERS: tuple[str, ...] = ("prerun_checks", "procedural_gate")
+"""Levers 5 and 11, which share one counter because lever 11 implies lever 5.
+
+An arm of either runs the deterministic checks before the first turn, so both carry the
+same risk, and it is the one thing the token columns cannot show: a model handed a list of
+what has already been checked stops reaching for the two tools no rule can enumerate
+(feature 007 FR-034, SC-010)."""
+
+GATE_TOOLS: tuple[str, ...] = ("check_fit", "check_axial_stack")
+"""The two checks only the model can set up, and therefore the two it can quietly stop
+setting up. Nothing enumerates a bore and a shaft, or an ordered stack with a target gap
+(`contracts/levers.md` lever 5), so a run that stops calling them loses coverage that no
+other column moves."""
+
+GATE_COUNTER = "check_fit and check_axial_stack calls per run (must not fall)"
+
 LEVER_COUNTERS: dict[str, str] = {
     TRIM_LEVER: "distinct tool names called",
     "tool_tiers": "unresolved because withheld",
     "prompt_cache_key": "cache miss reasons and cache_missed_tokens (arrives with lever 3)",
     "gemini_explicit_cache": "cached-content hit rate (arrives with lever 3, Gemini)",
-    "prerun_checks": "check_fit and check_axial_stack call counts (arrives with lever 5)",
+    "prerun_checks": GATE_COUNTER,
     "parallel_tool_calls": "tool calls beside round trips",
     "coverage_stop": "stop fire rate (arrives with lever 7)",
     "package_reuse": "dump wall clock, cold against reused (workstation harness)",
     "lazy_meshes": "bodies_swept per arm (workstation harness)",
     "carry_over_rms": "carried against re-run counts (workstation harness)",
+    "procedural_gate": GATE_COUNTER,
     NO_LEVER: "none: a baseline study has no lever to counter",
 }
 """The number **this** lever's gate needs and no other's (ab-harness section 6).
@@ -120,7 +137,9 @@ Every lever is named here even when the counter itself lands with that lever's o
 so the column says *which* number is missing rather than going blank. Levers 2 and 6 are
 the two that compute today: lever 6's from `tool_calls`, lever 2's from the tool-name
 histogram `PackageScore` carries (`_histogram_counter`). Lever 4's landed with it: the
-withheld half of the unresolved count (`_withheld_counter`)."""
+withheld half of the unresolved count (`_withheld_counter`). Levers 5 and 11 landed with
+lever 11, and lever 5's entry stopped being a placeholder in the same change: it named a
+number nobody could compute, and it is the same number (`_gate_counter`)."""
 
 COUNTER_METRIC: dict[str, str] = {"parallel_tool_calls": "tool_calls"}
 """The counters that are already a metric in `adoption.METRICS`; the rest render unknown
@@ -187,6 +206,17 @@ class LeverCounter(ReviewModel):
     A list and not a count, because "the repertoire lost one tool" is not a sentence an
     owner can act on. Empty means measured and clean; an arm that never ran leaves `off`
     and `on` unknown and this empty too, which is why the gate reads all three."""
+
+    fell_in_runs: list[str] = Field(default_factory=list)
+    """Levers 5 and 11 (feature 007 FR-034): every on-run whose gate-tool count fell below
+    the off arm's **minimum**.
+
+    A worst case beside the two medians, because SC-010 is a worst-case statement: "per-run
+    fit and axial-stack call counts do not fall" is failed by one run that stopped checking
+    fits, whatever the arm median says and whatever the token saving is. Against the off
+    arm's minimum rather than its median, so the comparison is "worse than the worst run
+    that did not have the lever" and not "worse than average". Empty means measured and
+    clean, the same way an empty `dropped_tools` does."""
 
 
 class LeverDecision(ReviewModel):
@@ -507,6 +537,8 @@ def _counter(lever: str, off: Sequence[ArmRun], on: Sequence[ArmRun]) -> LeverCo
         return _histogram_counter(name, off, on)
     if lever == TIER_LEVER:
         return _withheld_counter(name, off, on)
+    if lever in GATE_LEVERS:
+        return _gate_counter(name, off, on)
     metric_name = COUNTER_METRIC.get(lever)
     if metric_name is None:
         return LeverCounter(name=name, off=None, on=None)
@@ -560,6 +592,47 @@ def _histogram_counter(
         off=float(len(off_tools)) if off else None,
         on=float(len(on_tools)) if on else None,
         dropped_tools=sorted(off_tools - on_tools) if off and on else [],
+    )
+
+
+def _gate_calls(run: ArmRun) -> float:
+    """How many `check_fit` and `check_axial_stack` calls one run made, over its packages.
+
+    Read from `PackageScore.tool_calls_by_name`, the same histogram lever 2's counter
+    reads, so the gate's number and the repertoire's come from one record of what the model
+    picked rather than from two.
+    """
+    return float(
+        sum(
+            count
+            for score in run.scorecard.per_package
+            for tool, count in score.tool_calls_by_name.items()
+            if tool in GATE_TOOLS
+        )
+    )
+
+
+def _gate_counter(name: str, off: Sequence[ArmRun], on: Sequence[ArmRun]) -> LeverCounter:
+    """Levers 5 and 11: the arm medians, and the on-runs that fell below the off arm's floor.
+
+    Both halves are needed and neither is the other. The medians say what the lever did to
+    the two arms; `fell_in_runs` is the gate, because a lever that leaves the median alone
+    and costs one run its fit checks has cost coverage the report cannot get back
+    (feature 007 FR-034, SC-010).
+    """
+    off_totals = [_gate_calls(run) for run in off]
+    on_totals = [_gate_calls(run) for run in on]
+    stat = off_on(list(off_totals), list(on_totals))
+    floor = min(off_totals) if off_totals else None
+    return LeverCounter(
+        name=name,
+        off=stat.off_median,
+        on=stat.on_median,
+        fell_in_runs=(
+            [run.run for run, total in zip(on, on_totals, strict=True) if total < floor]
+            if floor is not None
+            else []
+        ),
     )
 
 
@@ -844,10 +917,17 @@ def _run_line(row: RunRow) -> str:
 
 
 def _counter_cell(counter: LeverCounter) -> str:
-    """The counter column: the name, the two numbers, and what the on arm stopped calling."""
+    """The counter column: the name, the two numbers, then whichever worst case applies.
+
+    Lever 2's is the tools the on arm stopped calling; levers 5 and 11's is the runs whose
+    fit and stack counts fell. Both render the same way - after the medians, by name - so
+    a reader scanning the column sees the gate's verdict without opening the JSON.
+    """
     cell = f"{counter.name}: {_count(counter.off)} -> {_count(counter.on)}"
     if counter.dropped_tools:
         cell += "; no longer called: " + ", ".join(counter.dropped_tools)
+    if counter.fell_in_runs:
+        cell += "; fell below the off arm in: " + ", ".join(counter.fell_in_runs)
     return cell
 
 
