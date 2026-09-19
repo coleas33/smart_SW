@@ -1149,6 +1149,31 @@ class ChatServer:
     async def get_session(self, request: Request) -> Response:
         return JSONResponse(self._chat(request).public())
 
+    async def attention(self, request: Request) -> Response:
+        """`GET /sessions/{chat_id}/attention`: the ranking of this review, right now.
+
+        What the Review tab pins above the transcript when the session ends. It exists
+        because the tab has nowhere else to read it from: `get_session` above answers
+        `ChatSession.public()`, which carries no findings, and `report` answers markdown
+        (research R2.8).
+
+        **It computes and it never writes.** The ranking is derived from the session the
+        run is holding - not from `session.json`, which is the run as it stood at the last
+        write - on every call. The record beside the session is written where the session
+        is written; a page refresh must not refresh the record of the order the engineer
+        was actually shown (`contracts/attention.md` sections 4 and 5).
+
+        Inline rather than through the thread pool, unlike `timing` and `disposition`
+        beside it: `rank` is a pure in-memory sort over one session's findings with no I/O
+        of its own, well inside what a route may do on the loop (SC: under 100 ms at 500
+        findings), and a thread hop would buy nothing. For a review that produced no
+        findings the answer is `200` with `rows: []` and `empty_reason` set, because
+        "nothing to start with" and "the panel failed to load" must not look the same
+        (FR-024).
+        """
+        run = self._run_of(self._chat(request))
+        return JSONResponse(to_jsonable_python(rank(run.session)))
+
     async def events(self, request: Request) -> Response:
         """Replay `events.jsonl` after `Last-Event-ID`, then stream what happens next.
 
@@ -2126,6 +2151,9 @@ def create_app(
         Route("/sessions/{chat_id}/timing", server.timing, methods=["POST"]),
         Route("/sessions/{chat_id}/stop", server.stop, methods=["POST"]),
         Route("/sessions/{chat_id}/report", server.report, methods=["GET"]),
+        # Every `/sessions/{chat_id}/...` row is a literal last segment, so none of them
+        # shadows another: `{chat_id}` matches one path segment and never the tail.
+        Route("/sessions/{chat_id}/attention", server.attention, methods=["GET"]),
         # The Model check tab (`contracts/model-check.md`) and the Standards tab
         # (`contracts/standards-check.md`). The two literal paths are listed first so they
         # are matched before the `{check_id}` pattern that follows them; the read and the
