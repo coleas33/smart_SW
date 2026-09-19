@@ -273,6 +273,9 @@ def agree(left: Any, right: Any) -> bool:
 PRUNED_DIRS: frozenset[str] = frozenset(
     {
         ".git",
+        # Claude Code's own folder: skills and workflows, and under `worktrees/` a whole second
+        # checkout per background agent, which made the scan find every profile fixture twice.
+        ".claude",
         ".venv",
         "venv",
         "__pycache__",
