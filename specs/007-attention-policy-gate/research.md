@@ -380,7 +380,7 @@ DOM through `dom.js`; the shared script may not name a DOM constructor.
 | Item | Owner | Blocks |
 |---|---|---|
 | ~~Copy the 2026-09-18 run folders off the pilot workstation~~ done 2026-09-19 (R2.15); T022 is now the confirmation run with the real command | owner | nothing |
-| Author the real standards profile (006 T100) | owner | the gate's standards half being measurable |
+| Place the real standards profile on the pilot workstation and confirm `StandardsProfilePath` there (006 T100). The file itself was regenerated from the macro on 2026-09-19 and validated on the development machine; it stays outside this repository | owner | the gate's standards half being measurable |
 | Record the four timing inputs after each pilot run | owner | the checkpoint claim "timing recorded on every run" |
 | Held-out packages in `benchmarks/sets/pilot.json` | owner | any adoption decision (006 and 005 both record this) |
 | The gate's wall clock before the first model token on the pilot assembly | step 6 | step 7 |
