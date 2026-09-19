@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <title>SwReview</title>
+<!--
+  tokens.css first and app.css second, always: the shared file declares the one palette and
+  type scale every tab in the pane draws from (web/shared/tokens.css) and this page's own
+  stylesheet names no colour of its own, only those custom properties. Linked in the other
+  order the page would win its own tokens back and the four tabs would drift apart again.
+-->
+<link rel="stylesheet" href="../../shared/tokens.css">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -93,20 +100,28 @@
 
 <section id="session" class="session">
   <div class="row">
-    <button type="button" id="start-review" disabled>Review</button>
+    <button type="button" id="start-review" class="primary" disabled>Review</button>
     <button type="button" id="stop-turn" disabled>Stop</button>
     <button type="button" id="open-report" disabled>Open report</button>
     <button type="button" id="open-folder" disabled>Open run folder</button>
     <button type="button" id="open-log">View log</button>
   </div>
-  <span id="run-dir" class="note"></span>
-  <span id="stream-state" class="note" role="status"></span>
   <!--
-    What this review has cost so far, summed in the page from the `usage` events on the stream
-    (feature 005 T016a). It moves while the turn is still running, which is why it is here and
-    not in the report.
+    One meta line rather than three stacked grey sentences. The run folder, the stream state and
+    the running cost said the same kind of thing in three identical surfaces, which is how the
+    pane came to show four simultaneous status lines that were all false
+    (docs/pane-findings-2026-09-18.md). Their ids and their wording are unchanged - only the
+    surface is one.
+
+    The usage line is what this review has cost so far, summed in the page from the `usage`
+    events on the stream (feature 005 T016a). It moves while the turn is still running, which is
+    why it is here and not in the report.
   -->
-  <span id="usage-line" class="note" role="status"></span>
+  <div class="meta">
+    <span id="run-dir" class="mono"></span>
+    <span id="stream-state" role="status"></span>
+    <span id="usage-line" role="status"></span>
+  </div>
 </section>
 
 <!--
@@ -117,7 +132,20 @@
 -->
 <section id="attention-panel" class="panel" hidden></section>
 
-<main id="transcript" class="transcript" aria-live="polite"></main>
+<!--
+  The transcript's own header, and the only control that folds it. The transcript is tier three:
+  the tool calls and the model's prose are the record of how the review reached its findings,
+  not the findings themselves, so they fold to a count until an engineer wants them. The fold is
+  a class on #transcript rather than the `hidden` property because the findings, the evidence
+  requests and the error cards stay visible inside it - folded, the transcript reads as the
+  findings ledger. app.js writes the button's label and its counts.
+-->
+<div class="transcript-head">
+  <button type="button" id="transcript-toggle" class="fold-toggle"
+          aria-controls="transcript" aria-expanded="false"></button>
+</div>
+
+<main id="transcript" class="transcript folded" aria-live="polite"></main>
 
 <section id="coverage-panel" class="panel" hidden></section>
 
@@ -129,7 +157,7 @@
   <label for="followup-text" class="visually-hidden">Follow-up question</label>
   <input type="text" id="followup-text" autocomplete="off"
          placeholder="Ask a follow-up about any finding" disabled>
-  <button type="submit" id="followup-send" disabled>Send</button>
+  <button type="submit" id="followup-send" class="primary" disabled>Send</button>
 </form>
 
 <script src="../../shared/dom.js"></script>

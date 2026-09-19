@@ -4,100 +4,180 @@
   would be blocked, silently, and the pane would render unstyled inside SOLIDWORKS with no
   error anywhere.
 
-  The palette follows the SOLIDWORKS Task Pane: a narrow, docked panel at roughly 300-420 px,
-  so everything is one column and nothing assumes width.
-*/
+  Every colour, face and type size here is a custom property of web/shared/tokens.css, which
+  index.html links first. There is no literal colour in this file and a test says so: a hue
+  written here would be a hue the other three tabs do not have, and the palette would fork the
+  first time one of them was touched.
 
-:root {
-  --ink: #1b1b1b;
-  --muted: #5d6672;
-  --line: #d4d9e0;
-  --surface: #ffffff;
-  --panel: #f5f7fa;
-  --accent: #1f5c9e;
-  --bad: #a12a2a;
-}
+  The pane is a narrow strip docked beside a model (260 to 420 px), so everything is one column
+  and nothing assumes width.
+
+  THREE TIERS OF INK, and the whole layout is that idea:
+
+    tier 1  the Start here panel - numbered cards, a bold headline, and a stripe that restates
+            a field the backend already sent (the consequence class, or the judgement key).
+    tier 2  every finding as one line and a fold.
+    tier 3  what folds to a count until it is wanted: the transcript's tool calls and prose,
+            and the coverage list.
+*/
 
 * {
   box-sizing: border-box;
 }
 
+/*
+  One column that fills the pane: the strip, the buttons, the panels and the follow-up box keep
+  their height and the transcript takes what is left and scrolls, so a long review never pushes
+  the follow-up box off the bottom of a docked 300 px pane. html/body height and the base face
+  come from tokens.css.
+*/
 body {
-  margin: 0;
-  padding: 0;
-  font-family: "Segoe UI", Tahoma, sans-serif;
-  font-size: 13px;
-  color: var(--ink);
-  background: var(--surface);
+  display: flex;
+  flex-direction: column;
 }
+
+/* ---- the status strip: one line, one truth --------------------------------------------- */
 
 .bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  padding: 10px 12px 6px;
 }
 
 .document {
   flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--muted);
 }
 
-.badge {
-  flex: 0 0 auto;
-  padding: 1px 6px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  font-size: 11px;
-  color: var(--muted);
+/*
+  The backend's own sentence, as a dot and a line of text. It is capped and clipped because the
+  host posts whole sentences into it ("Reviewing 4 components (23 gaps)."), and an uncapped
+  badge beside a flexible name squeezes the document out of its own header.
+*/
+.bar .badge {
+  flex: 0 1 auto;
+  display: inline-block;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.badge.ready {
-  border-color: #2f7a3f;
-  color: #2f7a3f;
+.bar .badge::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--quiet);
+  vertical-align: middle;
 }
 
-.badge.bad {
-  border-color: var(--bad);
-  color: var(--bad);
+.bar .badge.ready::before {
+  background: var(--good);
+}
+
+.bar .badge.bad::before {
+  background: var(--critical);
 }
 
 .link {
   flex: 0 0 auto;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  cursor: pointer;
-  font: inherit;
-  text-decoration: underline;
+  padding: 3px 8px;
+  font-size: var(--text-label);
 }
 
 .banner {
   margin: 0;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-  background: #fdf3f3;
-  color: var(--bad);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--hair);
+  background: var(--critical-bg);
+  color: var(--critical);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.panel {
-  padding: 8px;
-  border-bottom: 1px solid var(--line);
+/* ---- the session bar ------------------------------------------------------------------- */
+
+.session {
+  display: flex;
+  flex-direction: column;
 }
 
+.session .row {
+  flex-wrap: wrap;
+  padding: 0 12px 10px;
+}
+
+/*
+  The run folder, the stream state and the running cost, on one muted line. Three stacked grey
+  sentences of equal weight is what let the pane report four contradictory things at once
+  (docs/pane-findings-2026-09-18.md); an empty one takes no room at all.
+*/
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding: 0 12px 10px;
+  color: var(--muted);
+  font-size: var(--text-small);
+  word-break: break-word;
+}
+
+.meta > span:empty {
+  display: none;
+}
+
+/* ---- buttons ---------------------------------------------------------------------------- */
+
+button {
+  padding: 5px 11px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  background: var(--pane);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-small);
+  cursor: pointer;
+}
+
+button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+button:disabled {
+  border-color: var(--hair-2);
+  background: var(--quiet-bg);
+  color: var(--quiet);
+  cursor: default;
+}
+
+/* ---- settings ---------------------------------------------------------------------------- */
+
+.panel {
+  padding: 12px 12px 8px;
+  border-top: 1px solid var(--hair-2);
+}
+
+.eyebrow,
 .panel h2 {
   margin: 0 0 8px;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
   color: var(--muted);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .field {
@@ -110,24 +190,26 @@ body {
   display: block;
   margin-bottom: 2px;
   color: var(--muted);
+  font-size: var(--text-small);
 }
 
 .field select,
 .field input[type="text"],
 .field input[type="password"] {
   width: 100%;
-  padding: 3px 4px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  font: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  background: var(--pane);
   color: var(--ink);
-  background: var(--surface);
+  font: inherit;
+  font-size: var(--text-small);
 }
 
 .row {
   display: flex;
-  gap: 6px;
   align-items: center;
+  gap: 6px;
 }
 
 .row select {
@@ -139,6 +221,7 @@ body {
   display: block;
   margin-top: 4px;
   color: var(--muted);
+  font-size: var(--text-small);
 }
 
 .check input {
@@ -146,96 +229,28 @@ body {
 }
 
 fieldset.field {
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  padding: 6px;
+  padding: 8px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
 }
 
 .note {
   display: block;
   margin-top: 2px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-small);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .note.bad {
-  color: var(--bad);
+  color: var(--critical);
 }
 
 .actions {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-button {
-  padding: 3px 10px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  background: var(--panel);
-  color: var(--ink);
-  font: inherit;
-  cursor: pointer;
-}
-
-button:disabled {
-  color: var(--muted);
-  cursor: default;
-}
-
-/* ---- the chat view (T041) ------------------------------------------------------------ */
-
-/*
-  One column that fills the pane: the header, the session bar and the follow-up box keep
-  their height and the transcript takes what is left and scrolls, so a long review never
-  pushes the follow-up box off the bottom of a docked 300 px pane.
-*/
-html,
-body {
-  height: 100%;
-}
-
-body {
-  display: flex;
-  flex-direction: column;
-}
-
-.session {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.session .row {
-  flex-wrap: wrap;
-}
-
-.transcript {
-  flex: 1 1 auto;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-.followup {
-  display: flex;
-  gap: 6px;
-  padding: 6px 8px;
-  border-top: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.followup input {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 3px 4px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  font: inherit;
 }
 
 .visually-hidden {
@@ -247,7 +262,249 @@ body {
   white-space: nowrap;
 }
 
-/* ---- blocks and cards ---------------------------------------------------------------- */
+/* ---- tier 1: what to start with ---------------------------------------------------------- */
+
+/*
+  The ranked rows, pinned above the transcript. Nothing here ranks: the order is the backend's
+  and the stripe restates a field it sent - `consequence_class`, or the judgement key that says
+  only an engineer can settle this row. The class names are the two check tabs' - see
+  web/shared/check-page.css - so the same block reads the same way on all three tabs.
+*/
+.attention-rows {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: rank;
+}
+
+.attention-row {
+  display: grid;
+  grid-template-columns: 18px auto 1fr;
+  gap: 2px 6px;
+  align-items: baseline;
+  padding: 8px 10px 8px 8px;
+  border: 1px solid var(--hair);
+  border-left: 4px solid var(--quiet);
+  border-radius: var(--radius);
+  background: var(--pane);
+  cursor: pointer;
+}
+
+/* Only the three hairlines light up on hover: the left edge is the row's own statement. */
+.attention-row:hover {
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.attention-row::before {
+  grid-column: 1;
+  grid-row: 1;
+  counter-increment: rank;
+  content: counter(rank);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--text-label);
+}
+
+.attention-id {
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  font-weight: 600;
+}
+
+.attention-reason {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: start;
+}
+
+.attention-title {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.attention-check {
+  grid-column: 2 / -1;
+  grid-row: 3;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.attention-meta {
+  grid-column: 2 / -1;
+  grid-row: 4;
+  color: var(--muted);
+  font-size: var(--text-small);
+}
+
+.attention-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.attention-row.stripe-judge {
+  border-left-color: var(--judge);
+}
+
+.attention-row.stripe-critical {
+  border-left-color: var(--critical);
+}
+
+.attention-row.stripe-warn {
+  border-left-color: var(--warn);
+}
+
+.attention-row.stripe-quiet {
+  border-left-color: var(--quiet);
+}
+
+/* The reason chip restates the stripe rather than adding a second colour beside it. */
+.stripe-judge .attention-reason {
+  background: var(--judge-bg);
+  color: var(--judge);
+}
+
+.stripe-critical .attention-reason {
+  background: var(--critical-bg);
+  color: var(--critical);
+}
+
+.stripe-warn .attention-reason {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.stripe-quiet .attention-reason {
+  background: var(--quiet-bg);
+  color: var(--quiet);
+}
+
+/* ---- chips ------------------------------------------------------------------------------- */
+
+.chip,
+.attention-reason {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: var(--hair-2);
+  color: var(--ink-2);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+
+/* A status word is short; a policy's reason sentence is not, so only the chip refuses to wrap. */
+.chip {
+  white-space: nowrap;
+}
+
+.chip.status-demonstrated {
+  background: var(--critical-bg);
+  color: var(--critical);
+}
+
+.chip.status-suspected,
+.chip.status-unresolved {
+  background: var(--open-bg);
+  color: var(--open);
+}
+
+.chip.status-checked_within_scope {
+  background: var(--good-bg);
+  color: var(--good);
+}
+
+.chip.sev-high {
+  background: var(--critical-bg);
+  color: var(--critical);
+}
+
+.chip.sev-medium {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.chip.sev-low,
+.chip.sev-info {
+  background: var(--quiet-bg);
+  color: var(--quiet);
+}
+
+.chip.evidence-status {
+  background: var(--judge-bg);
+  color: var(--judge);
+}
+
+.chip.error-class {
+  background: var(--critical-bg);
+  color: var(--critical);
+}
+
+/* ---- tier 3: the transcript, folded to a count ------------------------------------------- */
+
+.transcript-head {
+  padding: 10px 12px 6px;
+  border-top: 1px solid var(--hair-2);
+}
+
+.fold-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.fold-toggle .fold-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.fold-toggle::after {
+  content: "\25b8";
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.fold-toggle[aria-expanded="true"]::after {
+  content: "\25be";
+}
+
+.fold-toggle .eyebrow {
+  margin: 0;
+}
+
+.transcript {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px 12px 12px;
+}
+
+/*
+  Folded, the transcript is the findings ledger: the model's prose and its tool calls go, and
+  the findings, the evidence requests and the error cards stay. A class rather than the `hidden`
+  property, because nothing here is hidden from the tests that read the transcript's text.
+*/
+.transcript.folded .block,
+.transcript.folded .card.tool {
+  display: none;
+}
+
+/* ---- text blocks --------------------------------------------------------------------------- */
 
 .block {
   margin: 0 0 8px;
@@ -259,38 +516,68 @@ body {
   word-break: break-word;
 }
 
-.block.system .text,
-.block.engineer .text {
+/* Prose is read, so it is given a measure rather than the whole pane's width. */
+.block.assistant .text {
+  max-width: 60ch;
+  color: var(--ink);
+}
+
+.block.system .text {
   color: var(--muted);
+  font-size: var(--text-small);
+  font-style: italic;
 }
 
 .block.engineer .text {
-  padding: 4px 6px;
+  padding: 4px 8px;
   border-left: 3px solid var(--accent);
-  background: var(--panel);
+  background: var(--accent-bg);
+  color: var(--ink-2);
 }
+
+/* ---- tier 2: one line and a fold ------------------------------------------------------------ */
 
 .card {
-  margin: 0 0 8px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-left-width: 3px;
-  border-radius: 2px;
-  background: var(--surface);
+  margin: 0;
+  padding: 7px 4px 7px 10px;
+  border-left: 3px solid var(--quiet);
+  border-bottom: 1px solid var(--hair-2);
   word-break: break-word;
 }
 
-.card-head {
+/* Where a ranked row lands when it is followed into the transcript. */
+.card.flash {
+  background: var(--accent-bg);
+}
+
+.card-line {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
 }
 
 .card-head .title {
-  flex: 1 1 100%;
   margin: 2px 0 0;
-  font-size: 13px;
+  font-size: var(--text);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.finding-id {
+  color: var(--ink-2);
+}
+
+.finding-check {
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.facts {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  white-space: pre-wrap;
 }
 
 .card .row {
@@ -298,88 +585,21 @@ body {
   margin-top: 6px;
 }
 
-.card .note,
-.card .answer {
-  flex: 1 1 120px;
-  min-width: 0;
-  padding: 3px 4px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  font: inherit;
-}
-
-.card-status {
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  white-space: pre-wrap;
-}
-
-.card-status.bad {
-  color: var(--bad);
-}
-
-.field-row {
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.field-label {
-  flex: 0 0 90px;
-  color: var(--muted);
-}
-
-.field-value {
-  flex: 1 1 auto;
-  min-width: 0;
-  white-space: pre-wrap;
-}
-
-.details {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--line);
-}
-
-.calculation {
-  margin-top: 6px;
-  padding: 4px 6px;
-  background: var(--panel);
-}
-
-/* Tool cards stay quiet; findings carry the colour. */
-.card.tool {
-  border-left-color: var(--line);
-  color: var(--muted);
-}
-
-.card.tool .tool-name {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.card.tool .tool-arguments,
-.card.tool .tool-summary,
-.card.tool .tool-error {
-  margin: 4px 0 0;
-  white-space: pre-wrap;
-}
-
-.card.tool .tool-error {
-  color: var(--bad);
-}
-
-.card.tool.status-error {
-  border-left-color: var(--bad);
+/* The Details toggle reads as a link, because it is the one thing on the line that opens. */
+.action.expand {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--text-small);
 }
 
 .card.finding.severity-high {
-  border-left-color: var(--bad);
+  border-left-color: var(--critical);
 }
 
 .card.finding.severity-medium {
-  border-left-color: #b7791f;
+  border-left-color: var(--warn);
 }
 
 .card.finding.severity-low {
@@ -387,98 +607,341 @@ body {
 }
 
 .card.finding.severity-info {
-  border-left-color: var(--line);
+  border-left-color: var(--quiet);
 }
 
+/* ---- the fold of a finding ------------------------------------------------------------------ */
+
+.details {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--hair-2);
+}
+
+/*
+  One two-column shape for every labelled row on the page, whether it came from a <dl> in a
+  finding's fold or from `dom.field` on an evidence card: 92 px is the widest label the fold
+  prints ("Drawing locations", "Carried over from") without the gutter overflowing.
+*/
+.kv,
+.field-row {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 3px 10px;
+  margin: 4px 0;
+  font-size: var(--text-small);
+}
+
+.kv dt,
+.field-label {
+  color: var(--muted);
+}
+
+.kv dd,
+.field-value {
+  margin: 0;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.calculation {
+  margin: 6px 0;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: var(--quiet-bg);
+}
+
+.calculation .kv {
+  margin: 0;
+}
+
+.card-tools {
+  align-items: center;
+  margin-top: 8px;
+}
+
+/* Honest rather than hopeful: a finding with no persistent reference cannot be shown. */
+.action.show[data-reference="none"] {
+  border-color: var(--hair-2);
+  background: var(--quiet-bg);
+  color: var(--quiet);
+}
+
+/* The three dispositions are one choice, so they are one control. */
+.seg {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+}
+
+.seg button {
+  padding: 3px 9px;
+  border: 0;
+  border-right: 1px solid var(--hair);
+  border-radius: 0;
+  background: var(--pane);
+  color: var(--ink-2);
+  font-size: var(--text-label);
+}
+
+.seg button:last-child {
+  border-right: 0;
+}
+
+.card .note,
+.card .answer {
+  flex: 1 1 120px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  background: var(--pane);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-small);
+}
+
+.card-status {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--text-small);
+  white-space: pre-wrap;
+}
+
+/* A settled finding says so in the one colour the palette keeps for a closed thing. */
+.card-status.decided {
+  color: var(--good);
+}
+
+.card-status.bad {
+  color: var(--critical);
+}
+
+/* ---- tool calls ------------------------------------------------------------------------------ */
+
+/* A tool call is one line: what it was, what came back, how long it took. */
+.card.tool {
+  border-left-color: var(--hair);
+  color: var(--muted);
+}
+
+.card.tool .card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--text-small);
+}
+
+/*
+  The status is a glyph, not a word and not an icon file: the page's CSP loads no image and the
+  injection test refuses an inline <svg> inside a card, so generated content is the only way a
+  mark reaches this line.
+*/
+.tool-status {
+  flex: 0 0 auto;
+  width: 12px;
+  font-weight: 600;
+}
+
+.tool-status::before {
+  content: "\2022";
+  color: var(--muted);
+}
+
+.card.tool.status-ok .tool-status::before {
+  content: "\2713";
+  color: var(--good);
+}
+
+.card.tool.status-error .tool-status::before {
+  content: "\00d7";
+  color: var(--critical);
+}
+
+.card.tool.status-running .tool-status::before {
+  content: "\2026";
+  color: var(--accent);
+}
+
+.card.tool .tool-name {
+  color: var(--ink-2);
+}
+
+.card.tool .tool-summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ink-2);
+}
+
+.card.tool .elapsed {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.card.tool.status-error {
+  border-left-color: var(--critical);
+}
+
+.tool-fold {
+  margin-top: 4px;
+}
+
+.tool-fold > summary {
+  color: var(--accent);
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
+.tool-arguments,
+.tool-error {
+  margin: 4px 0 0;
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tool-error {
+  color: var(--critical);
+}
+
+/* ---- evidence and errors ----------------------------------------------------------------------- */
+
 .card.evidence {
-  border-left-color: #6b46c1;
+  border-left-color: var(--judge);
 }
 
 .card.evidence .question {
   margin: 4px 0 0;
+  color: var(--ink);
   white-space: pre-wrap;
 }
 
 .card.error {
-  border-left-color: var(--bad);
-  background: #fdf3f3;
+  border-left-color: var(--critical);
+  background: var(--critical-bg);
 }
 
 .card.error .message {
   margin: 4px 0 0;
+  color: var(--critical);
   white-space: pre-wrap;
 }
 
-/* ---- what to start with ------------------------------------------------------------------ */
+/* ---- tier 3: what the review did not reach ------------------------------------------------------ */
 
-/* The ranked rows, pinned above the transcript. Nothing here is conditional on a row's
-   severity or its place in the list: the order is the whole statement, and a colour per row
-   would be a second ranking beside it. The class names are the two check tabs' - see
-   web/shared/check-page.css - so the same block reads the same way on all three tabs. */
-
-.attention-heading {
-  margin: 0 0 4px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+.coverage-fold > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  list-style: none;
+  cursor: pointer;
 }
 
-.attention-rows {
+.coverage-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.coverage-fold > summary::after {
+  content: "\25b8";
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.coverage-fold[open] > summary::after {
+  content: "\25be";
+}
+
+.coverage-fold .coverage-heading {
   margin: 0;
-  padding-left: 20px;
 }
 
-.attention-row {
-  margin-bottom: 2px;
-}
-
-.attention-id {
-  font-weight: 600;
-}
-
-.attention-check {
-  margin-left: 6px;
-  font-family: Consolas, "Courier New", monospace;
-}
-
-.attention-reason {
-  margin-left: 6px;
+.coverage-fold .fold-count {
   color: var(--muted);
-  word-break: break-word;
-}
-
-.attention-empty {
-  margin: 0;
-  color: var(--muted);
-}
-
-/* ---- coverage ------------------------------------------------------------------------- */
-
-.coverage-heading {
-  margin: 0 0 4px;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
 }
 
 .coverage-bucket {
-  margin-bottom: 6px;
+  margin-top: 10px;
 }
 
 .bucket-name {
-  margin: 0;
-  font-size: 12px;
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bucket-unresolved .bucket-name {
+  color: var(--open);
+}
+
+.bucket-failed .bucket-name {
+  color: var(--critical);
+}
+
+.bucket-checked .bucket-name {
+  color: var(--good);
+}
+
+.bucket-skipped .bucket-name,
+.bucket-out_of_scope .bucket-name {
+  color: var(--quiet);
 }
 
 .bucket-items {
-  margin: 2px 0 0;
-  padding-left: 16px;
-  color: var(--muted);
+  margin: 0;
+  padding: 0;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  list-style: none;
 }
 
-.bucket-failed .bucket-name,
-.bucket-unresolved .bucket-name {
-  color: var(--bad);
+.bucket-item {
+  margin: 2px 0;
+  padding: 3px 0 3px 10px;
+  border-left: 2px solid var(--hair);
+  word-break: break-word;
+}
+
+.coverage-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-small);
+}
+
+/* ---- the follow-up ------------------------------------------------------------------------------- */
+
+/*
+  Sticky rather than merely last: the transcript scrolls under it, so the box an engineer types
+  a follow-up into is never the thing they have to scroll to find.
+*/
+.followup {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--hair);
+  background: var(--pane);
+}
+
+.followup input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  background: var(--pane);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-small);
 }

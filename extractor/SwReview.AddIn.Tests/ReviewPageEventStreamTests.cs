@@ -119,6 +119,52 @@ public sealed class ReviewPageEventStreamTests
     }
 
     /// <summary>
+    /// The transcript arrives folded and the one control over it unfolds it.
+    ///
+    /// The tool calls and the model's prose are the record of how the review reached its
+    /// findings, not the findings themselves, so they fold to a count until they are wanted. The
+    /// fold is a class rather than the `hidden` property because the findings, the evidence
+    /// requests and the error cards stay on screen inside a folded transcript - folded, it reads
+    /// as the findings ledger.
+    /// </summary>
+    [Fact]
+    public void TheTranscriptArrivesFoldedAndItsHeaderUnfoldsIt()
+    {
+        Conversation run = Scripted.Value;
+
+        Assert.Equal("transcript folded", run.TranscriptClassFolded);
+        Assert.Equal("transcript", run.TranscriptClassUnfolded);
+    }
+
+    /// <summary>
+    /// The folded transcript's header counts what it is hiding, and says what is running while
+    /// it runs.
+    ///
+    /// The count is the whole point of the fold: a transcript folded to nothing is one an
+    /// engineer cannot tell from an empty one, and "I cannot tell a finished review from a hung
+    /// one" is the complaint this page already has on record
+    /// (docs/pane-findings-2026-09-18.md). The two numbers come from two different events - a
+    /// round trip from `usage`, a call from `tool.finished` - so both are watched moving.
+    /// </summary>
+    [Fact]
+    public void TheTranscriptHeaderCountsTheRoundsTheCallsAndWhatIsRunning()
+    {
+        Conversation run = Scripted.Value;
+
+        Assert.Contains("Transcript", run.TranscriptHeadAfterUsage);
+        Assert.Contains("0 tool calls", run.TranscriptHeadAfterUsage);
+        Assert.Contains("1 round", run.TranscriptHeadAfterUsage);
+
+        // While the call is in flight the header is the only place it is visible at all.
+        Assert.Contains("check_rms_part", run.TranscriptHeadWhileToolRuns);
+        Assert.Contains("0 tool calls", run.TranscriptHeadWhileToolRuns);
+
+        Assert.Contains("1 tool call", run.TranscriptHeadAfterTool);
+        Assert.DoesNotContain("1 tool calls", run.TranscriptHeadAfterTool);
+        Assert.DoesNotContain("check_rms_part", run.TranscriptHeadAfterTool);
+    }
+
+    /// <summary>
     /// `events.closed` reopens from the highest `seq` the page actually read, which is what
     /// stops a reconnect replaying the whole transcript on screen. The unknown-type frames
     /// count - they were read - and the frame for another chat does not.
@@ -264,6 +310,24 @@ public sealed class ReviewPageEventStreamTests
                 await Push(page, SseFrames.Frame(16, "usage", UsageBody));
                 await OffscreenReviewPage.Settled(page);
                 run.UsageLineAfterUsageFrame = await TextOf(page, "usage-line");
+                run.TranscriptHeadAfterUsage = await TextOf(page, "transcript-toggle");
+
+                // One tool call, started and finished, so the folded transcript's header can be
+                // watched moving. Their `seq` is below the highest already read, so the
+                // reconnect assertion above still sees 16 as the high-water mark: the page
+                // appends in arrival order and only ever raises `lastSeq`.
+                await Push(page, SseFrames.Frame(8, "tool.started", ToolStarted));
+                await OffscreenReviewPage.Settled(page);
+                run.TranscriptHeadWhileToolRuns = await TextOf(page, "transcript-toggle");
+
+                await Push(page, SseFrames.Frame(9, "tool.finished", ToolFinished));
+                await OffscreenReviewPage.Settled(page);
+                run.TranscriptHeadAfterTool = await TextOf(page, "transcript-toggle");
+                run.TranscriptClassFolded = await ClassOf(page, "transcript");
+
+                await page.ExecuteScriptAsync("document.getElementById('transcript-toggle').click()");
+                await OffscreenReviewPage.Settled(page);
+                run.TranscriptClassUnfolded = await ClassOf(page, "transcript");
 
                 await Closed(page);
                 await OffscreenReviewPage.Settled(page);
@@ -296,6 +360,14 @@ public sealed class ReviewPageEventStreamTests
         + @"""reasoning_tokens"":4,""tool_result_input_tokens"":null,""total_tokens"":18,"
         + @"""latency_s"":1.5,""cache_diagnostic"":null}";
 
+    /// <summary>One tool call, as `tool.started` and then `tool.finished` carry it.</summary>
+    private const string ToolStarted =
+        @"{""step_index"":1,""tool"":""check_rms_part"",""arguments"":{""component_id"":""cmp:0003""}}";
+
+    private const string ToolFinished =
+        @"{""step_index"":1,""status"":""ok"",""result_summary"":""3 findings, 11 skipped"","
+        + @"""elapsed_s"":0.14}";
+
     private static Task<string> Push(CoreWebView2 page, string frame, string chatId = ChatId) =>
         SseFrames.Push(page, chatId, frame);
 
@@ -314,6 +386,13 @@ public sealed class ReviewPageEventStreamTests
     {
         string raw = await page.ExecuteScriptAsync(
             "document.getElementById('" + elementId + "').textContent");
+        return JsonDocument.Parse(raw).RootElement.GetString() ?? string.Empty;
+    }
+
+    private static async Task<string> ClassOf(CoreWebView2 page, string elementId)
+    {
+        string raw = await page.ExecuteScriptAsync(
+            "document.getElementById('" + elementId + "').className");
         return JsonDocument.Parse(raw).RootElement.GetString() ?? string.Empty;
     }
 
@@ -437,6 +516,16 @@ public sealed class ReviewPageEventStreamTests
         public string TranscriptAfterUnknownType { get; set; } = string.Empty;
 
         public string UsageLineAfterUsageFrame { get; set; } = string.Empty;
+
+        public string TranscriptHeadAfterUsage { get; set; } = string.Empty;
+
+        public string TranscriptHeadWhileToolRuns { get; set; } = string.Empty;
+
+        public string TranscriptHeadAfterTool { get; set; } = string.Empty;
+
+        public string TranscriptClassFolded { get; set; } = string.Empty;
+
+        public string TranscriptClassUnfolded { get; set; } = string.Empty;
 
         public string TranscriptAfterSessionEnded { get; set; } = string.Empty;
 

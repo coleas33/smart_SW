@@ -51,6 +51,20 @@
   var RECONNECT_MIN = 1000;
   var RECONNECT_MAX = 15000;
 
+  /**
+   * How long a finding card stays lit after a ranked row was followed into the transcript.
+   * Long enough to find with the eye after the scroll, short enough that the transcript is not
+   * left with a permanently highlighted row nobody asked about any more.
+   */
+  var FLASH_MS = 2000;
+
+  /**
+   * The separator between the facts that share the transcript header's one line. An escape
+   * rather than the character itself, so this file stays ASCII like every other page file in
+   * the pane.
+   */
+  var DOT = ' · ';
+
   var pending = Object.create(null);
   var nextId = 0;
 
@@ -87,6 +101,17 @@
     findings: Object.create(null),
     evidence: Object.create(null),
     tools: Object.create(null),
+
+    // What the transcript's own header says about itself: how many calls have finished, and
+    // which one is running right now. The rounds are `state.usage.length` and are not counted
+    // twice here.
+    toolsFinished: 0,
+    runningTool: '',
+
+    // Whether the transcript is folded to its header. It starts folded - index.html says so -
+    // because the tool calls and the model's prose are the record of how the review reached
+    // its findings rather than the findings themselves.
+    transcriptFolded: true,
     textBlock: null,
     stream: null,
     reconnectTimer: null,
@@ -512,10 +537,17 @@
   function startTool(body) {
     var card = appendCard(render.toolCard(body));
     state.tools['s' + body.step_index] = { body: body, card: card };
+    // Folded, the transcript's header is the only place a running call is visible at all.
+    state.runningTool = body.tool || '';
+    renderTranscriptHead();
   }
 
   /** The finished body is merged onto the started one, so the card shows the whole call. */
   function finishTool(body) {
+    state.toolsFinished += 1;
+    state.runningTool = '';
+    renderTranscriptHead();
+
     var entry = state.tools['s' + body.step_index];
     if (!entry) {
       appendCard(render.toolCard(body));
@@ -577,11 +609,24 @@
     if (!entry) {
       return;
     }
-    var status = entry.card.querySelector('.card-status');
-    if (status) {
-      status.className = 'card-status';
-      status.textContent = render.dispositionText(body.disposition);
+    showDisposition(entry.card, body.disposition);
+  }
+
+  /**
+   * The disposition sentence on one card, and the class that says there is one.
+   *
+   * Both writers go through here - the `disposition` event from the stream and the reply to the
+   * engineer's own press - so a decided finding looks the same whichever recorded it, and the
+   * "decided" class agrees with the one `render.findingCard` puts on a card it builds fresh.
+   */
+  function showDisposition(card, disposition) {
+    var status = card ? card.querySelector('.card-status') : null;
+    if (!status) {
+      return;
     }
+    var text = render.dispositionText(disposition);
+    status.className = render.dispositionClass(text);
+    status.textContent = text;
   }
 
   function renderCoverage() {
@@ -598,11 +643,55 @@
   function renderUsage() {
     render.clear(ui.usage);
     ui.usage.appendChild(render.usageLine(state.usage));
+    // A round trip is one of the two numbers the transcript's header counts.
+    renderTranscriptHead();
+  }
+
+  // ---- the transcript's header (the fold) ----------------------------------------------------
+
+  /**
+   * What the folded transcript says about itself: how many tool calls have finished, how many
+   * model round trips there have been, and - while one is in flight - which tool is running.
+   *
+   * The count is the whole point of the fold. A transcript folded to nothing would be a
+   * transcript an engineer could not tell from an empty one, and "a hung review looks exactly
+   * like a finished one" is the complaint this page already has on record
+   * (docs/pane-findings-2026-09-18.md).
+   */
+  function renderTranscriptHead() {
+    var tools = state.toolsFinished;
+    var rounds = state.usage.length;
+
+    var counted = tools + ' tool call' + (tools === 1 ? '' : 's')
+      + DOT + rounds + ' round' + (rounds === 1 ? '' : 's');
+    if (state.runningTool) {
+      counted += DOT + state.runningTool;
+    }
+
+    render.clear(ui.transcriptToggle);
+    ui.transcriptToggle.appendChild(render.el('span', 'eyebrow', 'Transcript'));
+    ui.transcriptToggle.appendChild(render.el('span', 'fold-count', counted));
+  }
+
+  /**
+   * Folds or unfolds the transcript. A class rather than the `hidden` property, because the
+   * findings, the evidence requests and the error cards stay on screen inside a folded
+   * transcript - what folds is the model's prose and its tool calls.
+   */
+  function foldTranscript(folded) {
+    state.transcriptFolded = folded;
+    ui.transcript.className = folded ? 'transcript folded' : 'transcript';
+    ui.transcriptToggle.setAttribute('aria-expanded', folded ? 'false' : 'true');
+    if (!folded) {
+      scrollToEnd();
+    }
   }
 
   function endTurn(body) {
     setTurnRunning(false);
     state.textBlock = null;
+    state.runningTool = '';
+    renderTranscriptHead();
     if (body.reason && body.reason !== 'end') {
       appendCard(render.textBlock('system', 'The turn ended: ' + body.reason + '.'));
     }
@@ -611,6 +700,8 @@
   function endSession(body) {
     setTurnRunning(false);
     state.textBlock = null;
+    state.runningTool = '';
+    renderTranscriptHead();
     appendCard(render.textBlock('system', 'The session ended at ' + (body.ended_at || 'now') + '.'));
     // Nothing further will be streamed; a follow-up reopens the stream from the same seq.
     closeStream();
@@ -726,6 +817,9 @@
     state.findings = Object.create(null);
     state.evidence = Object.create(null);
     state.tools = Object.create(null);
+    state.toolsFinished = 0;
+    state.runningTool = '';
+    renderTranscriptHead();
     state.textBlock = null;
   }
 
@@ -811,7 +905,7 @@
         showInSolidWorks(card);
         return;
       case 'expand':
-        expand(card, target);
+        expand(card);
         return;
       case 'accept':
         decide(card, 'accepted');
@@ -842,6 +936,54 @@
     }
   }
 
+  /**
+   * A ranked row is a way into the transcript.
+   *
+   * The Start here panel amplifies findings that are already below it; until now the rows were
+   * inert, so an engineer read "F-007, interference.static, needs your judgement" and then went
+   * looking for F-007 by eye through a whole review's transcript. One listener on the panel,
+   * matching `render.js`'s one listener on the transcript, so a rebuilt panel keeps working.
+   *
+   * Nothing here ranks, filters or reorders: it scrolls to a card that is already on screen.
+   */
+  function onAttentionClick(event) {
+    var target = event.target;
+    var row = (target && target.closest) ? target.closest('.attention-row') : null;
+    if (!row) {
+      return;
+    }
+    revealFinding(row.getAttribute('data-finding-id'));
+  }
+
+  /**
+   * Scrolls a finding's card into view, opens its fold and lights it up.
+   *
+   * A row whose finding is not in the transcript does nothing rather than scrolling somewhere
+   * arbitrary: a ranking is read once the session ends and the transcript holds every finding
+   * of that session, but a reconnect that missed a `finding` event is exactly the case where
+   * the page must not pretend.
+   */
+  function revealFinding(findingId) {
+    var entry = findingId ? state.findings[findingId] : null;
+    var card = entry ? entry.card : null;
+    if (!card) {
+      return;
+    }
+
+    setDetails(card, true);
+    card.scrollIntoView();
+    flash(card);
+  }
+
+  /** Lights a card for a moment, then puts its classes back exactly as they were. */
+  function flash(card) {
+    var settled = card.className.replace(/\s*\bflash\b/g, '');
+    card.className = settled + ' flash';
+    window.setTimeout(function () {
+      card.className = settled;
+    }, FLASH_MS);
+  }
+
   function cardStatus(card, message, bad) {
     if (!card) {
       return;
@@ -854,13 +996,29 @@
     status.textContent = message;
   }
 
-  function expand(card, target) {
+  function expand(card) {
     var details = card && card.querySelector('.details');
+    if (details) {
+      setDetails(card, details.hidden);
+    }
+  }
+
+  /**
+   * Opens or closes one card's fold and says so on its button. One function, because the
+   * button's label and the panel's state are one fact: a ranked row that opened the panel
+   * without flipping the label would leave a card reading "Details" over an open one.
+   */
+  function setDetails(card, open) {
+    var details = card.querySelector('.details');
     if (!details) {
       return;
     }
-    details.hidden = !details.hidden;
-    target.textContent = details.hidden ? 'Details' : 'Hide details';
+    details.hidden = !open;
+
+    var toggle = card.querySelector('[data-action="expand"]');
+    if (toggle) {
+      toggle.textContent = open ? 'Hide details' : 'Details';
+    }
   }
 
   function showInSolidWorks(card) {
@@ -913,7 +1071,7 @@
       'POST',
       { decision: decision, note: note ? note.value : '' }
     ).then(function (finding) {
-      cardStatus(card, render.dispositionText(finding && finding.disposition), false);
+      showDisposition(card, finding && finding.disposition);
     }).catch(function (error) {
       cardStatus(card, error.errorClass + ': ' + error.message, true);
     });
@@ -1218,6 +1376,7 @@
     ui.streamState = document.getElementById('stream-state');
     ui.usage = document.getElementById('usage-line');
     ui.attention = document.getElementById('attention-panel');
+    ui.transcriptToggle = document.getElementById('transcript-toggle');
     ui.transcript = document.getElementById('transcript');
     ui.coverage = document.getElementById('coverage-panel');
     ui.followup = document.getElementById('followup');
@@ -1267,6 +1426,15 @@
       sendFollowUp();
     });
     ui.transcript.addEventListener('click', onTranscriptClick);
+    ui.transcriptToggle.addEventListener('click', function () {
+      foldTranscript(!state.transcriptFolded);
+    });
+    ui.attention.addEventListener('click', onAttentionClick);
+
+    // The header states its counts before a single event has arrived, so a pane that has just
+    // opened says "0 tool calls" rather than showing a control with no label on it.
+    renderTranscriptHead();
+    foldTranscript(state.transcriptFolded);
 
     if (bridge) {
       bridge.addEventListener('message', onHostMessage);
