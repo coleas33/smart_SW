@@ -470,13 +470,51 @@ public sealed class RemodelProbePart
 }
 
 /// <summary>
+/// What <c>GetWhatsWrong</c> answered (PROBE-9): the count, whether the call itself succeeded,
+/// and what kind of element its <c>Features</c> array actually held - a name, a live
+/// <c>IFeature</c>, or something this build does not recognise. The element-kind inspection
+/// happens inside <see cref="SwRemodelProbeHost"/>, which is allowed to know what an
+/// <c>IFeature</c> is; nothing outside it needs to.
+/// </summary>
+public sealed class RemodelWhatsWrongReading
+{
+    public RemodelWhatsWrongReading(int count, bool callSucceeded, string elementKind)
+    {
+        Count = count;
+        CallSucceeded = callSucceeded;
+        ElementKind = elementKind ?? throw new ArgumentNullException(nameof(elementKind));
+    }
+
+    /// <summary><c>IModelDocExtension.GetWhatsWrongCount()</c>.</summary>
+    public int Count { get; }
+
+    /// <summary><c>IModelDocExtension.GetWhatsWrong</c>'s own Boolean return.</summary>
+    public bool CallSucceeded { get; }
+
+    /// <summary>
+    /// One of <c>"feature_names"</c>, <c>"feature_objects"</c>, <c>"empty"</c>, or
+    /// <c>"unknown:&lt;runtime type name&gt;"</c> for anything else (PROBE-9's own answer:
+    /// "unknown gives unresolved rather than a guess", research.md R10).
+    /// </summary>
+    public string ElementKind { get; }
+}
+
+/// <summary>
 /// What <c>probe remodel</c> needs from SOLIDWORKS: whether a document is already open, the
 /// version, and building and closing the throwaway part. <see cref="SwRemodelProbeHost"/> is
 /// the one real implementation; a fake stands in for every decision this command makes, so
 /// those decisions - the already-open refusal, the save-path check, the ledger it writes -
 /// are testable without a seat (tasks.md T031).
+///
+/// <see cref="IRemodelToggleHost"/> because PROBE-1 needs to flip <c>CommandInProgress</c> on
+/// and off mid-run to compare an illegal reorder's behaviour under both settings - the same
+/// two members <see cref="RemodelSystemToggles"/> already uses to suppress it for the whole run.
+///
+/// The members below <see cref="ClosePart"/> are tasks.md T033 to T039's additions: exactly
+/// what a probe body needs to answer its own research.md R10 question, each one a thin wrapper
+/// over a single VERIFIED interop call, gated the same way <see cref="BuildPart"/> already is.
 /// </summary>
-public interface IRemodelProbeHost
+public interface IRemodelProbeHost : IRemodelToggleHost
 {
     /// <summary><c>ISldWorks.GetFirstDocument()</c> returning non-null.</summary>
     bool AnyDocumentOpen();
@@ -493,6 +531,146 @@ public interface IRemodelProbeHost
 
     /// <summary>Closes <paramref name="part"/>'s document. The file on disk is untouched; the caller deletes it.</summary>
     void ClosePart(RemodelProbePart part);
+
+    /// <summary>
+    /// <c>IModelDocExtension.ReorderFeature(FeatureToMove, TargetFeature, Location)</c>
+    /// (VERIFIED signature). PROBE-1, 3, 4 and 5 (with <c>Location = swMoveToFolder = 5</c> for
+    /// PROBE-5's into-an-existing-folder case). May block indefinitely if SOLIDWORKS raises the
+    /// "Cannot reorder" message box (PROBE-1) - callers never await it directly; see
+    /// <see cref="RemodelProbeWatchdog"/>.
+    /// </summary>
+    bool ReorderFeature(RemodelProbePart part, string featureToMove, string targetFeature, int location);
+
+    /// <summary>
+    /// The feature tree's names, walked fresh (<c>IModelDoc2.FirstFeature()</c>,
+    /// <c>IFeature.GetNextFeature()</c>, <c>get_Name()</c>, all VERIFIED) rather than read off
+    /// <see cref="RemodelProbePart.Features"/>, so a probe sees the tree exactly as it stands
+    /// right now - after whatever an earlier probe in the same run did to it.
+    /// </summary>
+    IReadOnlyList<string> GetFeatureNames(RemodelProbePart part);
+
+    /// <summary><c>IFeature.GetTypeName2()</c> (VERIFIED). PROBE-11's census. Null is unreadable.</summary>
+    string? GetFeatureTypeName(RemodelProbePart part, string featureName);
+
+    /// <summary><c>IFeature.get_Description()</c> (VERIFIED). PROBE-20. Null is unreadable.</summary>
+    string? GetFeatureDescription(RemodelProbePart part, string featureName);
+
+    /// <summary><c>IFeature.set_Description(Text)</c> (VERIFIED). PROBE-20.</summary>
+    void SetFeatureDescription(RemodelProbePart part, string featureName, string text);
+
+    /// <summary><c>IFeature.set_Name(Name)</c> (VERIFIED). PROBE-10's folder rename.</summary>
+    void SetFeatureName(RemodelProbePart part, string currentName, string newName);
+
+    /// <summary>
+    /// Selects each of <paramref name="memberNames"/> in order (<c>IFeature.Select2</c>,
+    /// VERIFIED, append after the first) and calls
+    /// <c>IFeatureManager.InsertFeatureTreeFolder2(swFeatureTreeFolder_Containing = 2)</c>
+    /// (VERIFIED). Null is "no folder created" - PROBE-4's non-contiguous case.
+    /// </summary>
+    object? TryInsertFeatureTreeFolder(RemodelProbePart part, IReadOnlyList<string> memberNames);
+
+    /// <summary>
+    /// <c>IFeatureManager.MoveToFolder(MoveToFeat, MoveFromFeat, IsFolder)</c> (VERIFIED).
+    /// PROBE-5.
+    /// </summary>
+    bool MoveToFolder(RemodelProbePart part, string moveToFeatureOrFolder, string moveFromFeature, bool isFolder);
+
+    /// <summary><c>IFeature.MakeSubFeature(SubFeature)</c> (VERIFIED). PROBE-5.</summary>
+    bool MakeSubFeature(RemodelProbePart part, string parentFeatureName, string subFeatureName);
+
+    /// <summary>
+    /// <c>IModelDoc2.GetEquationMgr()</c> (VERIFIED), wrapped as the same
+    /// <see cref="IEquationTarget"/> the stage-1 executor will address it through. PROBE-2, 6
+    /// and 7 all read or write through this one manager.
+    /// </summary>
+    IEquationTarget GetEquationManager(RemodelProbePart part);
+
+    /// <summary>
+    /// <c>IEquationMgr.get_Value(Index)</c> (VERIFIED). PROBE-2's whole question: whether this
+    /// comes back in the document's length unit or in metres.
+    /// </summary>
+    double GetEquationValue(RemodelProbePart part, int index);
+
+    /// <summary>
+    /// <c>IFeature.SetSuppression2(SuppressionState, swThisConfiguration, null)</c> (VERIFIED,
+    /// the same call <c>SwSuppressTarget.Suppress</c> already makes). PROBE-9's deterministic
+    /// way to force a real rebuild error on the throwaway part: suppressing the box every other
+    /// feature depends on. Never un-suppressed afterward - the part is discarded either way.
+    /// </summary>
+    bool SetFeatureSuppression(RemodelProbePart part, string featureName, bool suppress);
+
+    /// <summary><c>IModelDoc2.ForceRebuild3(TopOnly = false)</c> (VERIFIED). PROBE-9.</summary>
+    bool ForceRebuild(RemodelProbePart part);
+
+    /// <summary>
+    /// <c>IModelDocExtension.GetWhatsWrongCount()</c> and <c>GetWhatsWrong</c> (both VERIFIED).
+    /// PROBE-9.
+    /// </summary>
+    RemodelWhatsWrongReading ReadWhatsWrong(RemodelProbePart part);
+
+    /// <summary>
+    /// <c>ICustomPropertyManager.Add3(FieldName, swCustomInfoText = 30, FieldValue,
+    /// swCustomPropertyReplaceValue = 2)</c> (VERIFIED), reached through
+    /// <c>IModelDocExtension.get_CustomPropertyManager("")</c> for the document-level (not
+    /// configuration-specific) property set. PROBE-12.
+    /// </summary>
+    int AddCustomProperty(RemodelProbePart part, string key, string value);
+
+    /// <summary>
+    /// <c>ICustomPropertyManager.Get4(FieldName, UseCached = false, out ValOut, out
+    /// ResolvedValOut)</c> (VERIFIED, returns <c>Boolean</c>). PROBE-12.
+    /// </summary>
+    bool GetCustomProperty(RemodelProbePart part, string key, out string? value, out string? resolvedValue);
+
+    /// <summary>
+    /// <c>IModelDoc2.Extension.SaveAs3</c> again, to the path <paramref name="part"/> already
+    /// has - a re-save, not a new file, so it uses the same exempted <c>SaveAs3</c> member
+    /// PROBE-12's dedicated part was first written with. PROBE-12's "save" step, ahead of the
+    /// close-and-reopen round trip.
+    /// </summary>
+    bool SaveExistingPart(RemodelProbePart part);
+
+    /// <summary>
+    /// <c>ISldWorks.OpenDoc7</c> with <c>Silent | LoadModel = 17</c> (VERIFIED, the same
+    /// composition research R2.4 requires of stage 1), reopening a part this probe closed.
+    /// Its <see cref="RemodelProbePart.Features"/> is empty: PROBE-12 only needs the reopened
+    /// document and its path back.
+    /// </summary>
+    RemodelProbePart ReopenPart(string path);
+
+    /// <summary>
+    /// A brand-new, unsaved, empty part document - no recipe, no save - so PROBE-21 can ask
+    /// <c>IEquationMgr.GetCount()</c> before any equation has ever existed on it. Opaque,
+    /// exactly as <see cref="RemodelProbePart.Document"/> is.
+    /// </summary>
+    object BuildBlankDocument();
+
+    /// <summary><c>IModelDoc2.GetEquationMgr().GetCount()</c> on whatever <see cref="BuildBlankDocument"/> returned.</summary>
+    int GetEquationCount(object blankDocument);
+
+    /// <summary>
+    /// Closes a document <see cref="BuildBlankDocument"/> returned, discarding it - it was
+    /// never saved, so there is no file to delete.
+    /// </summary>
+    void DiscardBlankDocument(object blankDocument);
+
+    /// <summary>
+    /// Builds a single solid body of exactly known analytic shape - a box or a cylinder,
+    /// centred on the origin so its analytic centre of mass is <c>(0, 0, 0)</c> regardless of
+    /// how "Front Plane" maps its sketch axes onto the document's global ones - and saves it at
+    /// <paramref name="savePath"/>. PROBE-8's tolerance calibration.
+    /// </summary>
+    RemodelProbePart BuildAnalyticSolid(AnalyticSolidSpec spec, string savePath);
+
+    /// <summary>
+    /// <c>IModelDocExtension.CreateMassProperty2()</c> (VERIFIED) over <paramref name="part"/>'s
+    /// one solid body, with <c>SelectedItems</c> already set. Null is a failed create. The
+    /// caller still sets <c>AccuracyLevel</c>, sets <c>UseSystemUnits</c> and calls
+    /// <c>Recalculate()</c> itself, exactly as <see cref="RemodelGeometry.Read"/> does with the
+    /// same typed interface - PROBE-8 measures with the identical sequence the stage-1 gate
+    /// will use, not a probe-only shortcut.
+    /// </summary>
+    IMassPropertyReading? MeasureMassProperties(RemodelProbePart part);
 }
 
 /// <summary>
@@ -522,18 +700,27 @@ public sealed class RemodelProbeReading
 }
 
 /// <summary>
-/// What a probe's <c>Execute</c> body is handed: the built throwaway part, the gate it must
-/// route every interop call through, and the SOLIDWORKS version the ledger records beside
-/// every row. Plain data - no per-probe logic - so a future probe body (tasks.md T033 to
-/// T039) needs nothing else to reach the part <see cref="RemodelProbe"/> already built.
+/// What a probe's <c>Execute</c> body is handed: the built throwaway part, the host it reaches
+/// SOLIDWORKS through for anything the recipe did not already build, the gate every interop
+/// call goes through, the SOLIDWORKS version the ledger records beside every row, and the run
+/// folder a probe that needs a scratch file of its own (PROBE-8, PROBE-12) may write inside.
 /// </summary>
 public sealed class RemodelProbeContext
 {
-    public RemodelProbeContext(RemodelProbePart part, SwGate gate, string swVersion)
+    public RemodelProbeContext(
+        RemodelProbePart part,
+        SwGate gate,
+        string swVersion,
+        IRemodelProbeHost host,
+        string outputDirectory = "",
+        TimeSpan? watchdogTimeout = null)
     {
         Part = part ?? throw new ArgumentNullException(nameof(part));
         Gate = gate ?? throw new ArgumentNullException(nameof(gate));
         SwVersion = swVersion ?? string.Empty;
+        Host = host ?? throw new ArgumentNullException(nameof(host));
+        OutputDirectory = outputDirectory ?? string.Empty;
+        WatchdogTimeout = watchdogTimeout ?? RemodelProbeWatchdog.DefaultTimeout;
     }
 
     /// <summary>The throwaway part every probe in this run measures.</summary>
@@ -544,6 +731,27 @@ public sealed class RemodelProbeContext
 
     /// <summary><c>ISldWorks.RevisionNumber()</c>, read once per run.</summary>
     public string SwVersion { get; }
+
+    /// <summary>
+    /// What a probe body calls for anything <see cref="Part"/>'s own recipe did not already
+    /// build (tasks.md T033 to T039).
+    /// </summary>
+    public IRemodelProbeHost Host { get; }
+
+    /// <summary>
+    /// The run folder <see cref="Part"/> was built inside. Empty for a context built only to
+    /// exercise <see cref="RemodelProbeRunner"/>'s own rules, where no probe needs a scratch
+    /// path of its own.
+    /// </summary>
+    public string OutputDirectory { get; }
+
+    /// <summary>
+    /// PROBE-1's watchdog bound (<see cref="RemodelProbeWatchdog"/>): how long its two reorder
+    /// attempts each wait before reporting "blocked" rather than the call's own answer.
+    /// Defaults to <see cref="RemodelProbeWatchdog.DefaultTimeout"/>; a test shortens it so a
+    /// host whose <c>ReorderFeature</c> never returns does not make the test slow.
+    /// </summary>
+    public TimeSpan WatchdogTimeout { get; }
 }
 
 /// <summary>
@@ -555,16 +763,14 @@ public sealed class RemodelProbeContext
 public delegate RemodelProbeReading RemodelProbeExecutor(RemodelProbeContext context);
 
 /// <summary>
-/// The probe bodies tasks.md T033 to T039 add, by id. Empty here: those tasks are outside
-/// T031/T032's scope, and a selected id with no entry is not a usage error - it is a real
-/// probe from the research backlog that this build has not implemented yet - so
+/// The probe bodies tasks.md T033 to T039 add, by id, in <c>RemodelProbeExecutors.cs</c> beside
+/// the pure decision logic each one needs. A selected id with no entry is not a usage error -
+/// it is a real probe from the research backlog this build has not implemented - so
 /// <see cref="RemodelProbeRunner"/> records it <c>unresolved</c> with a raw result that says
 /// so, exactly as it would a probe body that threw.
 /// </summary>
-public static class RemodelProbeExecutors
+public static partial class RemodelProbeExecutors
 {
-    public static readonly IReadOnlyDictionary<string, RemodelProbeExecutor> ByProbeId =
-        new Dictionary<string, RemodelProbeExecutor>(StringComparer.Ordinal);
 }
 
 /// <summary>

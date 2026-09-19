@@ -65,6 +65,14 @@ public sealed class RemodelProbeGuard : ICallGuard
         // than duplicated so the two guards cannot spell them differently.
         RemodelSystemToggles.ToggleMember,
         RemodelSystemToggles.CommandInProgressMember,
+
+        // PROBE-9 (tasks.md T038): IFeature.SetSuppression2, the same call SwSuppressTarget
+        // makes, exempted here for exactly one purpose - suppressing the throwaway part's box
+        // feature so every downstream feature fails to rebuild, which is the only deterministic
+        // way to force a real GetWhatsWrong reading without guessing at one. Never called on
+        // anything but a feature this probe run itself built, and never un-suppressed
+        // afterward: the part is discarded (or kept for inspection with --keep-part) either way.
+        "SetSuppression2",
     };
 
     /// <inheritdoc />

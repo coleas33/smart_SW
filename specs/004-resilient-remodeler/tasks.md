@@ -117,6 +117,8 @@ A part opened alone dumps zero features until the part-root node lands, and the 
 
 **Checkpoint**: the capabilities ledger names a verdict for PROBE-1, 2, 3, 4, 8, 12 and 13; every blocking probe is `verified` or the owner has decided what to do about it.
 
+Code note (2026-09-19): all fifteen probe executors are implemented and fake-tested; the real verdicts, and T033 to T039's checkboxes, await the workstation run.
+
 ---
 
 ## Phase 3: Guard and scope (US5)
