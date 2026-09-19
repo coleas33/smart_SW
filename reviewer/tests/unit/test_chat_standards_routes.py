@@ -282,6 +282,7 @@ class TestRunStandardsCheck:
             "exceptions_carried_forward",
             "rebuilt",
             "attention",
+            "not_examined",
         }
         assert result["check_id"] == STANDARDS_CHECK_ID
         assert Path(result["run_dir"]) == standards_dir

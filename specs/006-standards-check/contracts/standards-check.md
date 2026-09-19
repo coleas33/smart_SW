@@ -128,7 +128,9 @@ configuration); the profile itself is never reproduced.
   "rebuilt": false,
   "attention": { /* the Ranking of feature 007 `contracts/attention.md` section 4,
                     minus session_id: policy_version, rows, top_n, not_amplified,
-                    coverage, empty_reason */ }
+                    coverage, empty_reason */ },
+  "not_examined": null   /* or {"sentence": "...", "instances": [{"id": "cmp:0002",
+                            "name": "DOWEL PIN", "state": "lightweight"}, ...]} */
 }
 ```
 
@@ -174,6 +176,7 @@ so are the last two.
   drawing entity while the shared resolver reads model entities only, are `showable: false`,
   and the page renders **no** control rather than one that reports `ok: false` every time
   (FR-031).
+- **[D] `not_examined`** is the lightweight warning of 2026-09-19 (`docs/feature-request-resolve-lightweight.md`): `null` when every component instance was read, otherwise one sentence naming each instance the extractor did not read with its recorded state (`lightweight`, `suppressed`, `unloaded`) and the families that therefore cannot see it, plus the instances behind it in package order. Composed by `reviewer/src/swreview/report/unexamined.py`, the same module that writes the report's `- Not examined:` Summary line, and identical on the Model check body. The page shows the sentence above "Start here" and computes nothing from it.
 - **[D] `rebuilt` is always `false`**, and it is in the payload rather than left implicit
   because the check it backs (`standards.assembly.rebuild_errors`,
   `standards.part.rebuild_errors`) reports counts the macro would have refreshed. The page

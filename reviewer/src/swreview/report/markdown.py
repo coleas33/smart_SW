@@ -32,6 +32,7 @@ from swreview.report.session import (
     ReviewSession,
     SessionUsage,
 )
+from swreview.report.unexamined import not_examined
 
 _SEVERITY_ORDER = ("high", "medium", "low", "info")
 _SEVERITY_HEADINGS = {
@@ -72,7 +73,7 @@ def render_report(
     lines.append("")
     lines.extend(_render_discrepancies(package))
     lines.append("")
-    lines.extend(_render_summary(session))
+    lines.extend(_render_summary(session, package))
     lines.append("")
     if ranking is not None:
         lines.extend(_render_start_here(ranking))
@@ -166,7 +167,15 @@ def _render_discrepancies(package: EvidencePackage | None) -> list[str]:
 # --- summary -----------------------------------------------------------------------
 
 
-def _render_summary(session: ReviewSession) -> list[str]:
+def _render_summary(session: ReviewSession, package: EvidencePackage | None) -> list[str]:
+    """The counts, and - when the package is in hand - what the run never read.
+
+    The not-examined line is the report's half of the lightweight warning
+    (`report/unexamined.py`): an assembly whose pins were lightweight reads as clean
+    without it. It needs the package, so a render from the session alone prints nothing
+    rather than guessing, and a package whose every instance was read prints nothing
+    rather than a zero the eye learns to skip.
+    """
     lines = ["## Summary", ""]
 
     by_status: dict[str, int] = {}
@@ -192,6 +201,10 @@ def _render_summary(session: ReviewSession) -> list[str]:
         f"{heading}: {len(getattr(session.coverage, key))}" for key, heading in _COVERAGE_BUCKETS
     )
     lines.append(f"- Coverage: {coverage_counts}")
+
+    unread = not_examined(package) if package is not None else None
+    if unread is not None:
+        lines.append(f"- Not examined: {unread.sentence}")
 
     return lines
 
