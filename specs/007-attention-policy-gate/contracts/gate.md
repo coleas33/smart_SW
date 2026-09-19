@@ -44,14 +44,14 @@ The pre-run's `error` read is guarded against an envelope without an `error` key
 2. `Start here:` - the same lines `render_report` renders for the top rows, from the same
    `Ranking` object, then the same not-amplified line;
 3. `Needs your judgement:` - the rows whose judgement key is 0, or `none`;
-4. `Not reached in this run:` - the top five families with their unresolved and skipped counts;
+4. `Not reached in this run:` - the close-out rows with their recorded reasons (at most five), the open evidence requests, and the rule counts, as the report's coverage block prints them;
 5. `Not visible to any rule:` - one sentence per `NotEvaluated` family from the policy file's
    `blind_spots`, backed one-to-one by the family's skipped coverage item;
 6. the instruction: "These verdicts are computed from checked code. Do not re-derive them; spend
    your rounds on what was not reached."
 
-Caps: five rows, five families. Rows and families beyond the caps are counted in the
-not-amplified line, never silently dropped. The anti-drift test asserts the brief's finding ids
+Caps: five rows, five close-out items. Rows and items beyond the caps are counted, never
+silently dropped. The anti-drift test asserts the brief's finding ids
 equal the report's "Start here" ids in order for one fixture session, and it is structural:
 both come from `ranking.rows`.
 

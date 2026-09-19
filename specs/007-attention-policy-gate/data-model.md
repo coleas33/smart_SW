@@ -68,7 +68,7 @@ integer or a string so two rankings compare byte-identically.
 | `rows` | list[AttentionRow] | Every row, in order, suppressed last; the report and the pane show the first `top_n` |
 | `top_n` | int | 5 |
 | `not_amplified` | NotAmplified | `total`, `checked_within_scope`, `dispositioned`, `info`, `beyond_top_n` |
-| `coverage` | CoverageBlock | The five bucket counts and `families: list[tuple[str, int]]` (top five first-segment families among unresolved and skipped, by count then name) |
+| `coverage` | CoverageBlock | The five bucket counts; `not_closed: list[NotClosed]` - the unresolved items whose `check` is a checklist item id (the close-out rows `finalize` writes), each `{item, reason}` with the reason verbatim, at most five in the order the session holds them; `open_evidence_requests: int` (the `coverage.evidence_request` rows); `rules: {unresolved, skipped}` for every other unresolved and skipped item. A check folder has no checklist rows, so `not_closed` is empty there |
 | `empty_reason` | str \| None | Set when `rows` is empty: "no findings were recorded" or "every finding is informational or already decided" |
 
 `rank(session, policy) -> Ranking` is total: it never raises on any `ReviewSession`, which the
@@ -146,7 +146,8 @@ Needs your judgement:
   <one line per row whose judgement key is 0, or "none">
 
 Not reached in this run:
-  <family>: <count> unresolved, <count> skipped   (top 5 families)
+  <checklist item>: <the reason the run recorded>   (the close-out rows, up to 5)
+  <n> evidence requests open; <n> RMS rules unresolved, <n> skipped
 
 Not visible to any rule:
   <blind-spot sentence per NotEvaluated family, from the policy file>

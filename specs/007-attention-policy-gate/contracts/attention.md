@@ -60,7 +60,13 @@ supplied, immediately above `## Findings`:
 
 Not amplified: 3 findings (0 checked within scope, 0 already decided, 0 informational, 3 beyond the top five).
 
-What this run could not reach: 39 unresolved, 11 skipped, 0 failed, 7 out of scope; most in fastener (12), hole (9), fit (8), rms (6), standards (4).
+What this run could not reach: 39 unresolved, 11 skipped, 0 failed, 7 out of scope.
+- fasteners: list_fasteners returned zero instances, so no screw or bolt joint could be checked.
+- holes.alignment: only cmp:0003 holes were extracted; the two lightweight pin components have none.
+- interfaces.fit: pin geometry was not extracted, so the 3.0 mm dowel fit could not be computed.
+- interfaces.stack: no drawing dimensions, target gap or stack contributors were extracted.
+- drawing.manufacturing_inputs: no drawing documents or sheets were included.
+- 3 evidence requests are still open; 23 RMS rules unresolved and 11 skipped.
 
 Ranked by attention_policy_v1; the rule is in reviewer/src/swreview/report/attention.py.
 ```
@@ -69,6 +75,11 @@ Points the section exists to enforce:
 
 - **Amplify, never filter.** Every finding still renders in full below, in its severity
   section, in recording order. A folded row's members are all still there.
+- **The coverage block is the run's own close-out.** Its lines are the unresolved coverage
+  items whose check is a checklist item id - the rows `finalize` writes for the items the
+  run did not close - each with the reason the run recorded, at most five, then the count of
+  open evidence requests, then the rule counts. Nothing is recomputed or reworded; a check
+  folder, which has no checklist rows, prints the bucket counts and the rule counts only.
 - **The empty case is words.** A session with no findings prints "Nothing to start with: no
   findings were recorded." and still prints the coverage line; a session whose findings are all
   informational or already decided prints "Nothing to start with: every finding is
@@ -105,7 +116,12 @@ standards check's `_write_report`, and by `rerender_run_folder` for the offline 
   ],
   "top_n": 5,
   "not_amplified": {"total": 3, "checked_within_scope": 0, "dispositioned": 0, "info": 0, "beyond_top_n": 3},
-  "coverage": {"checked": 5, "skipped": 11, "unresolved": 39, "failed": 0, "out_of_scope": 7, "families": [["fastener", 12], ["hole", 9], ["fit", 8], ["rms", 6], ["standards", 4]]},
+  "coverage": {
+    "checked": 5, "skipped": 11, "unresolved": 39, "failed": 0, "out_of_scope": 7,
+    "not_closed": [{"item": "fasteners", "reason": "list_fasteners returned zero instances, so no screw or bolt joint could be checked."}, {"item": "holes.alignment", "reason": "…"}],
+    "open_evidence_requests": 3,
+    "rules": {"unresolved": 23, "skipped": 11}
+  },
   "empty_reason": null
 }
 ```
