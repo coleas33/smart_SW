@@ -400,7 +400,7 @@ def _enterprise_switch(env: Mapping[str, str]) -> str | None:
 class EfficiencySettings(BaseModel):
     """Which efficiency levers this run has on. Every field defaults to off.
 
-    One object for all ten flags rather than one plumbed argument per lever (OQ-1):
+    One object for all eleven flags rather than one plumbed argument per lever (OQ-1):
     threaded as one keyword argument through `start_review`, `ReviewRun`, `run_benchmark`
     and `cli._review_fn` exactly as `effort` and `max_steps` already are, and recorded
     whole on `session.efficiency`. Without that record no results row can be attributed to
@@ -447,6 +447,14 @@ class EfficiencySettings(BaseModel):
 
     carry_over_rms: bool = False
     """Lever 11a, workstation: unchanged `rms.*` findings are carried over."""
+
+    procedural_gate: bool = False
+    """Lever 11: the deterministic checks run first and the model opens on their brief.
+
+    Appended last, and appended rather than inserted, because `LEVER_NAMES` is the field
+    order and a name in the middle would reorder every refusal message that iterates it
+    (feature 007 research R2.10). It **implies** lever 5: the pre-run runs when either
+    flag is on, which is why the two never share an arm."""
 
 
 MeshMode = Literal["eager", "lazy", "off"]
@@ -501,7 +509,7 @@ class ExtractionSettings(BaseModel):
 
 
 LEVER_NAMES: tuple[str, ...] = tuple(EfficiencySettings.model_fields)
-"""The ten lever names, taken from the model so nothing has to retype them.
+"""The eleven lever names, taken from the model so nothing has to retype them.
 
 Every refusal message below, the `--lever` option and the pane guard iterate this, so a
 lever added to the model is covered by all of them without a second edit anywhere.
@@ -523,7 +531,22 @@ NO_STUDY = "none"
 
 
 def _levers_sentence() -> str:
-    return "the ten levers are " + ", ".join(LEVER_NAMES)
+    return "the eleven levers are " + ", ".join(LEVER_NAMES)
+
+
+GATED_ALONE: tuple[tuple[str, int, str, int], ...] = (
+    ("coverage_stop", 7, "prerun_checks", 5),
+    ("procedural_gate", 11, "prerun_checks", 5),
+    ("procedural_gate", 11, "coverage_stop", 7),
+)
+"""The lever pairs no arm may carry together, each with the two lever numbers.
+
+All three share one failure and therefore one sentence: a pre-run that closes every
+checklist item, combined with a stop predicate or with a second pre-run, ends the review
+before the first turn, and the arm measures nothing that can be attributed to either lever
+(contracts/ab-harness.md section 2, feature 007 contracts/gate.md section 1). Written as a
+table rather than as three hand-typed `raise`s so the three messages cannot drift apart.
+"""
 
 
 def efficiency_from_levers(
@@ -554,11 +577,13 @@ def efficiency_from_levers(
     if unknown:
         raise ValueError(f"unknown lever(s) {', '.join(unknown)}: {_levers_sentence()}")
 
-    if "coverage_stop" in chosen and "prerun_checks" in chosen:
-        raise ValueError(
-            "--lever coverage_stop with --lever prerun_checks: levers 5 and 7 never share "
-            "an arm until each has been gated alone"
-        )
+    for first, first_number, second, second_number in GATED_ALONE:
+        if first in chosen and second in chosen:
+            low, high = sorted((first_number, second_number))
+            raise ValueError(
+                f"--lever {first} with --lever {second}: levers {low} and {high} never "
+                f"share an arm until each has been gated alone"
+            )
 
     if "parallel_tool_calls" in chosen and provider is ProviderName.GEMINI:
         raise ValueError(

@@ -226,6 +226,68 @@ def test_the_session_contract_defines_the_two_new_types_it_refs() -> None:
         assert name in SESSION_SCHEMA["$defs"]
 
 
+# --- lever 11 in the session contract (feature 007 FR-026) ---------------------------------
+
+LEVER_11 = "procedural_gate"
+
+
+def efficiency_block() -> dict[str, Any]:
+    return SESSION_SCHEMA["$defs"]["EfficiencySettings"]
+
+
+def test_the_eleventh_lever_is_in_properties_and_not_in_required() -> None:
+    """The one edit that could break every committed session at once.
+
+    `EfficiencySettings` is `additionalProperties: false`, so the name has to be in
+    `properties` or a session that records it cannot be written; and it has to stay out of
+    `required` or every session written before it existed stops validating (research
+    R2.10, the fourth pinned place)."""
+    block = efficiency_block()
+
+    assert LEVER_11 in block["properties"]
+    assert LEVER_11 not in block["required"]
+
+
+def test_a_session_carrying_all_eleven_levers_validates(tmp_path: Path) -> None:
+    from swreview.agent.settings import EfficiencySettings
+
+    session = build_session()
+    session.efficiency = EfficiencySettings()
+    path = tmp_path / "session.json"
+    save_session(session, path)
+
+    written = json.loads(path.read_text(encoding="utf-8"))
+
+    assert len(written["efficiency"]) == 11
+    assert written["efficiency"][LEVER_11] is False
+    session_validator().validate(written)
+
+
+def test_a_session_written_before_lever_eleven_existed_still_validates(
+    tmp_path: Path,
+) -> None:
+    """A run folder from before this feature carries ten booleans and no eleventh."""
+    from swreview.agent.settings import EfficiencySettings
+
+    session = build_session()
+    session.efficiency = EfficiencySettings()
+    path = tmp_path / "session.json"
+    save_session(session, path)
+    written = json.loads(path.read_text(encoding="utf-8"))
+    del written["efficiency"][LEVER_11]
+
+    assert len(written["efficiency"]) == 10
+    session_validator().validate(written)
+
+
+def test_the_efficiency_block_and_the_model_carry_exactly_the_same_levers() -> None:
+    """`extra="forbid"` on one side and `additionalProperties: false` on the other: the
+    two can only be right together, and this is the assertion that says so out loud."""
+    from swreview.agent.settings import EfficiencySettings
+
+    assert set(efficiency_block()["properties"]) == set(EfficiencySettings.model_fields)
+
+
 def test_the_two_contracts_spell_token_usage_the_same_way() -> None:
     """The scorecard carries the same record; two spellings of it would be two records."""
     assert (

@@ -18,7 +18,8 @@
     "coverage_stop": false,
     "package_reuse": false,
     "lazy_meshes": false,
-    "carry_over_rms": false
+    "carry_over_rms": false,
+    "procedural_gate": false
   },
   "usage": null,
   "withheld_checks": [],

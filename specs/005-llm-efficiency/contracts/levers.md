@@ -69,6 +69,7 @@ own numbers unreadable, and an adopted lever becomes a default in code, not a ch
 | 9 | `package_reuse` | `False` | Extraction, not the review; needs `swreview-extract dump --reuse` | Dump time | **Invisible to `swreview benchmark run`**; a workstation harness comparing dump wall clock, gated first on byte-identity |
 | 10a | `lazy_meshes` | `False` | Extraction plus a bridge fetch during review | Dump time and `start_review` | Dump wall clock, bridge `elapsed_ms` per `tessellate`, review wall clock; gated on identical `bodies_swept` |
 | 11a | `carry_over_rms` | `False` | Provider-neutral; the second and later reviews of one design | `start_review` | Tokens and tool calls on the second review; gated on every finding touching an edited part being re-run |
+| 11 | `procedural_gate` | `False` | Provider-neutral; the pre-run and the first user message (feature 007, `contracts/gate.md`) | `start_review`; implies lever 5, and never shares an arm with lever 5 or lever 7 | Tokens, round trips and seconds to first finding; **gated on the per-run `check_fit` and `check_axial_stack` call counts not falling** |
 
 ## 3. The interaction matrix
 
