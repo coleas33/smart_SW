@@ -59,6 +59,12 @@ result:
       in coverage.
     id: coverage.closeout
     title: Coverage close-out
+  - bucket: open
+    check_prefix: standards.
+    description: The company's release checklist as the standards profile configures
+      it. Closed by a standards finding, or by the family's summary coverage item.
+    id: standards.release
+    title: Release standards
   drawing_finding:
     finding:
       calculation: null

@@ -60,3 +60,9 @@ items:
     check_prefix: coverage.
     description: >
       Every gap in the package and every open evidence request is reflected in coverage.
+  - id: standards.release
+    title: Release standards
+    check_prefix: standards.
+    description: >
+      The company's release checklist as the standards profile configures it. Closed by a
+      standards finding, or by the family's summary coverage item.
