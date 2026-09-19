@@ -44,6 +44,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic_core import to_jsonable_python
 from starlette.testclient import TestClient
 
 from swreview.agent import providers
@@ -54,6 +55,8 @@ from swreview.chat.server import create_app
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
 from swreview.ir.models import EvidencePackage
+from swreview.report.attention import rank
+from swreview.report.attention_record import read_attention_record
 from swreview.report.dispositions import apply_disposition, find_finding
 from swreview.report.session import load_session
 from tests.support.features import AssemblySpec, PartSpec, equation, feature, folder, rms_package
@@ -79,6 +82,7 @@ WARN_RULE = "rms.folders.present"
 
 SESSION_FILE = "session.json"
 REPORT_FILE = "report.md"
+ATTENTION_FILE = "attention.json"
 CHECK_FILE = "check.json"
 """What the check records beside its session: the scope, the documents it graded, the
 subjects of each finding and what the carry-forward did - everything a `GET` needs that
@@ -230,6 +234,32 @@ def sibling_run(run_root: Path, name: str, *, exceptions: str | None = None) -> 
 
 
 class TestRunCheck:
+    def test_the_check_result_carries_exactly_the_keys_the_contract_names(
+        self, client: TestClient, check_dir: Path
+    ) -> None:
+        """The mirror image of `test_chat_standards_routes.py`'s strict set (T033).
+
+        Strict on both sides, so a key added to one family's body and forgotten on the
+        other's is a failure and not a difference nobody wrote down: the two bodies share
+        `attention`, which is why `contracts/standards-check.md` adds no difference row
+        for it.
+        """
+        result = start_check(client, check_dir)
+
+        assert set(result) == {
+            "check_id",
+            "run_dir",
+            "document",
+            "extracted_at",
+            "profile",
+            "grade",
+            "findings",
+            "coverage",
+            "subjects",
+            "exceptions_carried_forward",
+            "attention",
+        }
+
     def test_the_check_result_carries_everything_the_contract_names(
         self, client: TestClient, check_dir: Path
     ) -> None:
@@ -406,6 +436,39 @@ class TestRunCheck:
         assert carried["from_run"] is None
         assert carried["count"] == 0
         assert "no earlier run" in carried["reason"]
+
+    def test_attention_is_the_ranking_of_the_run_s_own_session(
+        self, client: TestClient, check_dir: Path
+    ) -> None:
+        """FR-022: the tab renders the ranking from the body it already holds.
+
+        The value is `rank()` over the session the run just wrote, minus `session_id` -
+        the body already names the check - which is the same block `attention.json` holds
+        and the same block the Standards body carries (`contracts/attention.md` section 5).
+        """
+        result = start_check(client, check_dir)
+
+        assert result["attention"] == to_jsonable_python(
+            rank(load_session(check_dir / SESSION_FILE))
+        )
+        assert result["attention"]["policy_version"] == "attention_policy_v1"
+        assert "session_id" not in result["attention"]
+        assert [row["finding_id"] for row in result["attention"]["rows"]] == [
+            row.finding_id for row in read_attention_record(check_dir).rows
+        ]
+
+    def test_every_amplified_row_names_a_finding_the_body_carries(
+        self, client: TestClient, check_dir: Path
+    ) -> None:
+        """Amplify, never filter: the rows are an index into `findings`, not a selection."""
+        result = start_check(client, check_dir)
+
+        known = {row["finding"]["id"] for row in result["findings"]}
+        assert known
+        for row in result["attention"]["rows"]:
+            assert set(row["member_finding_ids"]) <= known
+            assert row["reason"]
+            assert "%" not in row["reason"]
 
 
 # --- 2. what POST /checks/rms refuses ---------------------------------------------
@@ -643,6 +706,7 @@ class TestReadCheck:
         assert rows_by_rule(got).keys() == rows_by_rule(posted).keys()
         assert got["subjects"] == posted["subjects"]
         assert got["coverage"] == posted["coverage"]
+        assert got["attention"] == posted["attention"]
 
     def test_the_carry_forward_reports_the_folder_s_own_store_on_a_re_read(
         self, client: TestClient, check_dir: Path
@@ -664,12 +728,14 @@ class TestReadCheck:
 
         A re-evaluation would write a new `session.json` - a new session id, a new
         `report.md` - every time a page was refreshed, over evidence `swreview exceptions
-        accept` reads by name.
+        accept` reads by name. `attention.json` is in the list for the same reason and one
+        more: the ranking a `GET` answers with is recomputed in memory, so a read must not
+        refresh the record of the order the engineer was actually shown (FR-022, R2.7).
         """
         posted = start_check(client, check_dir)
         before = {
             name: (check_dir / name).read_bytes()
-            for name in (SESSION_FILE, REPORT_FILE, CHECK_FILE)
+            for name in (SESSION_FILE, REPORT_FILE, CHECK_FILE, ATTENTION_FILE)
         }
 
         response = client.get(f"/checks/{CHECK_ID}")
@@ -790,6 +856,31 @@ class TestAcceptException:
         session = load_session(check_dir / SESSION_FILE)
         assert {item.exception_id for item in session.findings} == {None, exception_id}
 
+    def test_the_re_read_after_an_accept_carries_the_re_ranked_attention(
+        self, client: TestClient, check_dir: Path
+    ) -> None:
+        """Accept re-runs the whole check, so it lands back on `write_report` and the
+        record is rewritten with it; the waived rule now sorts last as checked within
+        scope, and the body a page re-reads says so (FR-022)."""
+        before = start_check(client, check_dir)
+        finding_id = finding_id_of(before, FAIL_RULE)
+
+        accept(client, CHECK_ID, finding_id)
+
+        after = client.get(f"/checks/{CHECK_ID}").json()["attention"]
+        assert after == to_jsonable_python(rank(load_session(check_dir / SESSION_FILE)))
+        assert after != before["attention"]
+        waived = next(row for row in after["rows"] if row["check"] == FAIL_RULE)
+        assert waived["status"] == "checked_within_scope"
+        assert waived["key"]["suppressed"] == 1, "a waived rule sorts into the last bucket"
+        assert after["rows"][-1]["check"] == FAIL_RULE
+        assert (
+            next(row for row in before["attention"]["rows"] if row["check"] == FAIL_RULE)["key"][
+                "suppressed"
+            ]
+            == 0
+        )
+
     def test_the_by_defaults_to_the_workstation_user(
         self, client: TestClient, check_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -879,6 +970,7 @@ class TestNoLanguageModel:
             monkeypatch.delenv(name, raising=False)
 
         posted = start_check(client, check_dir)
+        assert posted["attention"]["rows"], "the ranking is computed on this keyless path"
         finding_id = finding_id_of(posted, FAIL_RULE)
         assert accept(client, CHECK_ID, finding_id).status_code == 200
         assert client.get(f"/checks/{CHECK_ID}").status_code == 200

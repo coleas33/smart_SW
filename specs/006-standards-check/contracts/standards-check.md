@@ -123,8 +123,12 @@ configuration); the profile itself is never reproduced.
        "parent_chain": [], "showable": true}
     ]
   },
-  "exceptions_carried_forward": {"from_run": "20260916-173001-top-plate-standards", "count": 2},
-  "rebuilt": false
+  "exceptions_carried_forward": {"from_run": "20260916-173001-top-plate-standards", "count": 2,
+                                 "reason": null},
+  "rebuilt": false,
+  "attention": { /* the Ranking of feature 007 `contracts/attention.md` section 4,
+                    minus session_id: policy_version, rows, top_n, not_amplified,
+                    coverage, empty_reason */ }
 }
 ```
 
@@ -135,7 +139,8 @@ that bucket, so a check landing in two buckets over three documents contributes 
 four do not sum to sixteen. The page labels them so, and SC-002's and SC-003's "zero unresolved
 checks" means zero checks with an `unresolved` pair.
 
-Seven points the shape exists to enforce. The first three are feature 003's, unchanged.
+Nine points the shape exists to enforce. The first three are feature 003's, unchanged, and
+so are the last two.
 
 - The result **never carries a letter grade**, and no single number stands alone. The
   unresolved check ids travel with the counts so a page cannot show a score without them.
@@ -174,6 +179,22 @@ Seven points the shape exists to enforce. The first three are feature 003's, unc
   `standards.part.rebuild_errors`) reports counts the macro would have refreshed. The page
   renders it as a sentence beside those findings, and `report.md` carries the same sentence in
   its header (FR-033, difference g).
+- `exceptions_carried_forward` carries a third field, **`reason`**: `null` when a store was
+  carried, and the sentence saying why not - no earlier run of this design under the run
+  root, or the folder already carrying this check's own evidence on a re-read - when none
+  was. It has been in the payload since the route landed and was missing from this block, as
+  it was from feature 003's; feature 007 research R3 named the drift and both are corrected
+  in the same change. Not a difference: the two families answer identically.
+- `attention` is feature 007's ranking of **this run's own session**, computed by
+  `report/attention.rank` and carried so the Standards tab can render the rows an engineer
+  should read first without computing an order of its own (feature 007 FR-022, FR-023). It
+  is the `attention.json` block minus `session_id` - the body already names the check - and
+  it is **byte-for-byte the block `CheckResult` carries**, which is why section 6 adds no
+  difference row for it: one rule, one block, two tabs. Present on the POST, on the
+  `GET /checks/{check_id}` re-read (recomputed in memory, byte-equal to the POST's, and the
+  folder including `attention.json` is not written by the read) and after an Accept, whose
+  re-run of the checks rewrites the record through the entry point. No path that produces
+  it constructs a provider or reads a key (FR-045).
 
 ## 2. Standards page to host
 
@@ -230,7 +251,11 @@ suffix, so two records never share an id and the page always reads back the run 
 package.json      the Standards-profile dump; extractor.profile == "standards"
 exceptions.json   carried forward from the newest same-design run, before the checks run
 session.json      the recorded tool steps, so tool_result_ids name steps that exist
-report.md         the check-by-check result, headed by the verdict and the no-rebuild sentence
+report.md         the check-by-check result, headed by the verdict and the no-rebuild
+                  sentence, with "Start here" as the section above Findings
+attention.json    the ranking the report was rendered from, and the session id it
+                  describes (feature 007 `contracts/attention.md` section 4). Not a
+                  session file, and identical in shape to the one a model check writes
 check.json        the record, carrying family: "standards"
 ```
 
@@ -322,6 +347,13 @@ drawing, which is exactly what SC-008 forbids.
 | D11 | `kind` tells the page whether a check can run | `kind` tells the page **what** will be graded | All three kinds are gradable; a drawing-rooted run fans out and the engineer should not be surprised by it |
 | D12 | Accept label "for this part" | "for this document"; and a drawing exception is bound by `document_id` alone | Drawings are graded and have no component instances |
 | D13 | The reduced profile's partial-evidence rule is stated for `model_check` | The same rule, **generalized over the profile name** | Two reduced profiles now exist; a rule written per profile name would need a third copy next time |
+
+**`attention` is deliberately not a row.** Feature 007 adds the key to both result bodies and
+the two blocks are byte-for-byte identical - the same `report/attention.rank` over each run's
+own session, the same fields, the same order rule. A difference row for it would record a
+difference that does not exist, and the next reader would go looking for it (feature 007
+`contracts/attention.md` section 5). The same is true of `exceptions_carried_forward.reason`,
+which both bodies have always carried and neither block wrote down until now.
 
 ## 7. The family's one check tool
 
