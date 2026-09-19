@@ -19,6 +19,12 @@ ICONS = Path(__file__).resolve().parents[1] / "SwReview.AddIn" / "Icons"
 SOURCE = ICONS / "taskpane-source-512.png"
 SIZES = (20, 32, 40, 64, 96, 128)
 
+# The colour the artwork is painted in. The source is one flat colour (the teal it was
+# drawn in) plus alpha, so the icon's colour is a swap here rather than a second source
+# file: every pixel with any coverage takes this colour and keeps its alpha. The
+# background stays transparent, so the pane's own tab strip shows through it.
+COLOUR = (190, 38, 38)  # red, since 2026-09-19
+
 # The smallest size only: how far (in source pixels) each stroke grows on either side, and
 # the factor the downscaled alpha is multiplied by.
 THICKEN_20_PX = 4
@@ -35,8 +41,15 @@ def thickened(source: Image.Image) -> Image.Image:
     return Image.alpha_composite(under, source)
 
 
+def recoloured(source: Image.Image) -> Image.Image:
+    """The artwork painted in `COLOUR`, alpha untouched."""
+    painted = Image.new("RGBA", source.size, COLOUR + (0,))
+    painted.putalpha(source.getchannel("A"))
+    return painted
+
+
 def main() -> None:
-    source = Image.open(SOURCE).convert("RGBA")
+    source = recoloured(Image.open(SOURCE).convert("RGBA"))
     for size in SIZES:
         artwork = thickened(source) if size == 20 else source
         icon = artwork.resize((size, size), Image.LANCZOS)
