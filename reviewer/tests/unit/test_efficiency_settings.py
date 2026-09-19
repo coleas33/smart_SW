@@ -1,6 +1,6 @@
 """The lever flags and the one carrier that threads them (T017, for T018).
 
-`EfficiencySettings` is the whole of this feature's configuration surface: ten booleans,
+`EfficiencySettings` is the whole of this feature's configuration surface: eleven booleans,
 every one of them off, one object threaded as one keyword argument through `start_review`,
 `ReviewRun`, `run_benchmark` and `cli._review_fn` exactly as `effort` and `max_steps`
 already are. The alternative - one plumbed parameter per lever - is ten signature changes
@@ -63,9 +63,14 @@ EXPECTED_LEVERS: tuple[str, ...] = (
     "package_reuse",
     "lazy_meshes",
     "carry_over_rms",
+    "procedural_gate",
 )
-"""The ten levers of data-model.md section 7, written out once so the model cannot lose
-one without this module noticing. Every other test here takes the names from the model."""
+"""The eleven levers of data-model.md section 7, written out once so the model cannot lose
+one without this module noticing. Every other test here takes the names from the model.
+
+Lever 11 is **appended**, never inserted: `LEVER_NAMES` is this tuple, and a name inserted
+in the middle would reorder every refusal message and every `--help` listing that iterates
+it (feature 007 research R2.10)."""
 
 
 SCRIPT: tuple[ScriptedTurn, ...] = (
@@ -87,7 +92,7 @@ def test_every_lever_is_a_field_and_every_field_defaults_to_off() -> None:
     settings = EfficiencySettings()
 
     assert tuple(EfficiencySettings.model_fields) == EXPECTED_LEVERS
-    assert [getattr(settings, name) for name in EXPECTED_LEVERS] == [False] * 10
+    assert [getattr(settings, name) for name in EXPECTED_LEVERS] == [False] * 11
 
 
 def test_lever_names_come_from_the_model() -> None:
@@ -129,12 +134,13 @@ def test_no_levers_resolve_to_every_flag_off() -> None:
     assert efficiency_from_levers(()) == EfficiencySettings()
 
 
-def test_an_unknown_lever_name_names_the_ten_valid_ones() -> None:
+def test_an_unknown_lever_name_names_the_eleven_valid_ones() -> None:
     with pytest.raises(ValueError) as caught:
         efficiency_from_levers(["turbo_mode"])
 
     message = str(caught.value)
     assert "turbo_mode" in message
+    assert "the eleven levers" in message
     for name in LEVER_NAMES:
         assert name in message
 
@@ -142,6 +148,35 @@ def test_an_unknown_lever_name_names_the_ten_valid_ones() -> None:
 def test_coverage_stop_with_prerun_checks_is_refused() -> None:
     with pytest.raises(ValueError, match="gated alone"):
         efficiency_from_levers(["coverage_stop", "prerun_checks"])
+
+
+def test_procedural_gate_with_prerun_checks_is_refused_naming_both_levers() -> None:
+    """Lever 11 implies the pre-run, so an arm carrying both measures one thing twice and
+    can attribute nothing to either (feature 007 contracts/gate.md section 1)."""
+    with pytest.raises(ValueError) as caught:
+        efficiency_from_levers(["procedural_gate", "prerun_checks"])
+
+    message = str(caught.value)
+    assert "levers 5 and 11 never share an arm until each has been gated alone" in message
+    assert "procedural_gate" in message
+    assert "prerun_checks" in message
+
+
+def test_procedural_gate_with_coverage_stop_is_refused_for_lever_five_s_reason() -> None:
+    """The same failure `prerun_checks` + `coverage_stop` has: a pre-run that closes every
+    checklist item plus a stop predicate ends the review before the first turn."""
+    with pytest.raises(ValueError) as caught:
+        efficiency_from_levers(["procedural_gate", "coverage_stop"])
+
+    message = str(caught.value)
+    assert "levers 7 and 11 never share an arm until each has been gated alone" in message
+    assert "procedural_gate" in message
+    assert "coverage_stop" in message
+
+
+def test_procedural_gate_alone_is_allowed() -> None:
+    """It is the arm the study is for; only the two combinations above are refused."""
+    assert efficiency_from_levers(["procedural_gate"]).procedural_gate is True
 
 
 def test_parallel_tool_calls_with_gemini_is_refused() -> None:
@@ -205,10 +240,11 @@ def test_study_none_refuses_an_off_or_on_arm(arm: str) -> None:
         check_study_arm(study="none", arm=arm, efficiency=EfficiencySettings())
 
 
-def test_an_unknown_study_name_names_the_ten_levers() -> None:
+def test_an_unknown_study_name_names_the_eleven_levers() -> None:
     with pytest.raises(ValueError) as caught:
         check_study_arm(study="turbo_mode", arm="on", efficiency=EfficiencySettings())
 
+    assert "the eleven levers" in str(caught.value)
     for name in LEVER_NAMES:
         assert name in str(caught.value)
 

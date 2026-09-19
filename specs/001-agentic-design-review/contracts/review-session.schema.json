@@ -92,7 +92,8 @@
         "coverage_stop": { "type": "boolean" },
         "package_reuse": { "type": "boolean" },
         "lazy_meshes": { "type": "boolean" },
-        "carry_over_rms": { "type": "boolean" }
+        "carry_over_rms": { "type": "boolean" },
+        "procedural_gate": { "type": "boolean", "description": "Lever 11, added in feature 007. Declared here and deliberately left out of `required`: a session written before it existed carries ten booleans and must still validate." }
       }
     },
     "InvestigationStep": {
