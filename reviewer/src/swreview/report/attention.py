@@ -146,6 +146,7 @@ CHECKLIST_ITEM_IDS: tuple[str, ...] = (
     "interference",
     "modeling.resilience",
     "coverage.closeout",
+    "standards.release",
 )
 """The ids of `agent/checklist_v1.yaml`, in its order.
 
@@ -154,7 +155,7 @@ A coverage item whose `check` equals one of these is a **close-out row**: the ro
 sentence an engineer can act on (research R2.5). They are copied here rather than loaded,
 because `agent/checklist.py` imports `report/session.py` and would drag the provider port
 into a module FR-015 requires to stay pure; the copy is asserted against the checklist's
-own file in `tests/unit/test_attention.py`.
+own file in `tests/unit/test_attention.py` and in `tests/unit/test_checklist.py`.
 """
 
 CLOSEOUT_ITEM_ID = "coverage.closeout"
