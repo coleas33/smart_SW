@@ -19,9 +19,10 @@ that say so. Read it whole once, then use the Quick reference at the end.
 ---
 
 **The current work for this machine** is in a dated handover beside this file; the latest is
-`docs/workstation-handover-2026-09-19.md` (the checks and measurements feature 007 needs a
-seat or a key for). This runbook does not change per handover; the handover says what to do
-with a given build.
+`docs/workstation-handover-2026-09-20.md` (round 2: the reworked tabs, the lightweight
+warning, the gate, the re-modeler probes), which builds on
+`docs/workstation-handover-2026-09-19.md` for the command lines it reuses. This runbook does
+not change per handover; the handover says what to do with a given build.
 
 ## 1. Where everything is
 
