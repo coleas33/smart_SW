@@ -32,6 +32,8 @@ from swreview.prerun import (
     GATE_START_HERE_HEADER,
     NOT_EVALUATED_HEADER,
     PRERUN_CHECK_PREFIX,
+    STANDARDS_FAMILY_NAME,
+    STANDARDS_NO_PROFILE,
     NotEvaluated,
     PrerunResult,
     gate_brief,
@@ -242,16 +244,30 @@ def test_with_the_gate_off_lever_5_still_sends_the_digest_and_nothing_else(
 def test_the_gate_alone_runs_the_pre_run_and_opens_with_the_unchanged_digest(
     tmp_path: Any,
 ) -> None:
-    """Lever 11 implies lever 5's pre-run (`contracts/gate.md` section 1) and prepends the
-    same bytes to it, so the two arms differ by what the brief *adds* and by nothing else."""
+    """Lever 11 implies lever 5's pre-run (`contracts/gate.md` section 1), renders the same
+    digest from it, and puts the brief's second part immediately after it.
+
+    The one line the gate's digest carries that lever 5's does not is the standards family:
+    with the gate on and no `--standards-profile`, "no profile was configured for this
+    review" is a gap the gate reports (FR-027), and lever 5 has never asked the question.
+    Asserted as a whole-list equality rather than as a substring, so a *second* difference
+    between the two arms' digests could not slip past.
+    """
     lever5, lever5_session = started(tmp_path, "lever5", efficiency=ON)
     gated, gated_session = started(tmp_path, "gated", efficiency=GATE_ON)
+
+    message = opening_of(gated)
+    head, separator, _ = message.partition(f"\n\n{GATE_START_HERE_HEADER}\n")
 
     assert [step.tool for step in gated_session.steps] == [
         step.tool for step in lever5_session.steps
     ]
-    assert opening_of(gated).startswith(f"{digest_of(lever5)}\n\n{GATE_START_HERE_HEADER}\n")
-    assert opening_of(gated) != opening_of(lever5)
+    assert separator, "the brief's second part follows the digest"
+    assert head.splitlines() == [
+        *digest_of(lever5).splitlines(),
+        f"  {STANDARDS_FAMILY_NAME}: {STANDARDS_NO_PROFILE}",
+    ]
+    assert message != opening_of(lever5)
     assert gated.system == lever5.system, "the brief is a user message, never the prefix"
 
 

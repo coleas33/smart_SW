@@ -115,6 +115,7 @@ __all__ = [
     "StandardsRunError",
     "UngradableRootError",
     "UnreadableExceptionsError",
+    "missing_standards_phases",
     "read_standards_check",
     "run_standards_check",
 ]
@@ -320,19 +321,29 @@ def run_standards_check(
 # --- 1. the refusals ----------------------------------------------------------------------
 
 
-def _refuse_missing_phases(directory: Path, package: EvidencePackage) -> None:
-    """Refuse a package whose phase rows show the standards phases never ran (FR-043).
+def missing_standards_phases(package: EvidencePackage) -> list[str]:
+    """The phases the standards checks read whose rows say they never ran, in wanted order.
 
-    The rows and not the profile name, so a `full` extract that ran them is graded and a
-    `standards` extract from a build that did not is refused. A phase the package records no
-    row for at all is missing too: a row is how a package says a phase ran, and inferring
-    "it must have" from an empty array is the assumption this test exists to remove.
+    The rows and not the profile name, so a `full` extract that ran them is gradable and a
+    `standards` extract from a build that did not is not. A phase the package records no row
+    for at all is missing too: a row is how a package says a phase ran, and inferring "it
+    must have" from an empty array is the assumption this test exists to remove.
+
+    Public because two callers ask the same question and must not answer it twice: this
+    family's own entry point **refuses** a package that fails it (`_refuse_missing_phases`),
+    and the gate's `prerun.attach_standards` turns the same condition into a not-evaluated
+    line rather than losing the review over it (`contracts/gate.md` section 2).
     """
     wanted = [*STANDARDS_PHASES]
     if _root_kind(package) == "drawing":
         wanted.append(DRAWING_PHASE)
     ran = {row.name: row.status for row in package.extractor.phases}
-    missing = [name for name in wanted if ran.get(name, NEVER_RAN) == NEVER_RAN]
+    return [name for name in wanted if ran.get(name, NEVER_RAN) == NEVER_RAN]
+
+
+def _refuse_missing_phases(directory: Path, package: EvidencePackage) -> None:
+    """Refuse a package whose phase rows show the standards phases never ran (FR-043)."""
+    missing = missing_standards_phases(package)
     if not missing:
         return
     raise MissingStandardsPhasesError(

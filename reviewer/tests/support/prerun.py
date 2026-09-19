@@ -14,6 +14,7 @@ fails, which is the point.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
@@ -22,6 +23,7 @@ from swreview.agent.settings import EfficiencySettings
 from swreview.ir.loader import save_package
 from swreview.ir.models import (
     Axis,
+    DumpPhase,
     EvidencePackage,
     Fastener,
     Hole,
@@ -51,6 +53,13 @@ PART_DOCUMENT = "doc:3"
 FIRST_INSTANCE = "cmp:0002"
 SECOND_INSTANCE = "cmp:0003"
 GROUP_KEY = "cmp:0002|cmp:0003"
+
+PART_NAME = "housing"
+STANDARDS_PART_NAME = "MR-10042"
+"""What the part document is called, and what it is called when the standards checks grade
+it. The second is shaped like `STANDARDS_PROFILE`'s fictional part-number convention -
+`MR-` and five digits - so `standards.document.data_card_complete` applies to the document
+rather than recording it out of scope. Both are invented; neither is a company value."""
 
 INTERFERENCE_SETTINGS = InterferenceSettings(
     treat_coincident_as_interference=False,
@@ -96,21 +105,26 @@ def _hole(hole_id: str, component_id: str, axis: Axis) -> Hole:
     )
 
 
-def prerun_package() -> EvidencePackage:
+def prerun_package(part_name: str = PART_NAME) -> EvidencePackage:
     """An assembly with a graded part tree, one interference group, two holes and a screw.
 
     Every one of the four self-enumerating checks has something to say about it, and the
     two families that are never pre-run - fastener joints and hole alignment - have
     something to be counted in the digest: the two holes share an axis, so they are one
     candidate pair, and the screw is one fastener with no derivable clamped stack.
+
+    `part_name` names the part document, and so its file name and its instances.
+    `standards_prerun_package` passes `STANDARDS_PART_NAME`, which is shaped like
+    `STANDARDS_PROFILE`'s part-number convention so the data-card check applies to it; every
+    other caller takes the default and is unchanged by the parameter.
     """
     package = rms_package(
         parts=[
             PartSpec(
                 document_id=PART_DOCUMENT,
-                name="housing",
+                name=part_name,
                 features=[feature("Boss-Extrude1", "Extrusion")],
-                instances=[InstanceSpec("housing-1"), InstanceSpec("housing-2")],
+                instances=[InstanceSpec(f"{part_name}-1"), InstanceSpec(f"{part_name}-2")],
             )
         ],
         assembly=AssemblySpec(),
@@ -158,6 +172,26 @@ def prerun_package() -> EvidencePackage:
     )
 
 
+STANDARDS_PROFILE = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "standards" / "profile-a.yaml"
+)
+"""The fictional standards profile feature 006's goldens are graded against (FR-001).
+
+Reused rather than copied: every value in it - the vault root, the four data-card property
+names, the part-number convention, the revision property, the export-control phrase - is
+invented for the suite, and a second fixture profile here would be a second set of invented
+values free to disagree with it.
+"""
+
+CUTLIST_PHASE = DumpPhase(name="cutlist", elapsed_ms=1, status="ok")
+"""The row that tells a standards extract from a model-check one.
+
+`run_standards_checks` refuses a package whose `cutlist` row is missing or `skipped`
+(`checks/standards/run.py::_refuse_missing_phases`), which is the third of the gate's three
+not-evaluated cases, so a fixture for the *happy* path has to carry it.
+"""
+
+
 def empty_model_check_package() -> EvidencePackage:
     """The Model check tab's dump of a part nobody could read a tree out of.
 
@@ -173,6 +207,34 @@ def empty_model_check_package() -> EvidencePackage:
             "extractor": package.extractor.model_copy(update={"profile": "model_check"}),
             "features": [],
             "equations": [],
+        }
+    )
+
+
+def standards_prerun_package(*, cutlist: bool = True) -> EvidencePackage:
+    """`prerun_package()` dumped by the `standards` profile, so the gate can grade it.
+
+    The same assembly the four self-enumerating checks already have something to say about,
+    plus the one thing the standards half needs: the `cutlist` phase row. With `cutlist`
+    false the row is `skipped`, which is a package dumped by a profile that never ran the
+    phase - the third of the gate's three not-evaluated cases, and the one a review of a
+    `model_check` dump hits in real life.
+
+    No value here is a company value. The documents keep the fixture's own fictional names
+    and paths, and the profile they are graded against is `STANDARDS_PROFILE`, which owns
+    every string the checks read.
+    """
+    package = prerun_package(STANDARDS_PART_NAME)
+    phase = (
+        CUTLIST_PHASE
+        if cutlist
+        else CUTLIST_PHASE.model_copy(update={"status": "skipped", "elapsed_ms": None})
+    )
+    return package.model_copy(
+        update={
+            "extractor": package.extractor.model_copy(
+                update={"profile": "standards", "phases": [phase]}
+            )
         }
     )
 
