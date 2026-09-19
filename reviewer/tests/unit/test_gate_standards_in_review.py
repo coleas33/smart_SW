@@ -52,6 +52,7 @@ from swreview.prerun import (
     STANDARDS_UNREADABLE,
 )
 from swreview.report.session import ReviewSession
+from tests.support.console import plain_one_line
 from tests.support.prerun import (
     GATE_ON,
     MODEL_DRIVEN_CALLS,
@@ -458,4 +459,4 @@ def test_the_option_is_on_the_review_commands_help() -> None:
     result = runner.invoke(cli.app, ["review", "--help"])
 
     assert result.exit_code == 0
-    assert "--standards-profile" in result.stdout.replace("\n", "")
+    assert "--standards-profile" in plain_one_line(result.stdout)

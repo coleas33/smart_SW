@@ -28,7 +28,6 @@ Every package here is built by `tests/support/standards.py` and graded against a
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -42,6 +41,7 @@ from swreview.exceptions import EXCEPTIONS_FILE_NAME, fingerprint
 from swreview.ir.loader import PACKAGE_FILE_NAME, save_package
 from swreview.ir.models import DumpPhase, EvidencePackage
 from swreview.report.dispositions import REPORT_FILE_NAME, SESSION_FILE_NAME
+from tests.support.console import plain
 from tests.support.standards import (
     AssemblySpec,
     ComponentSpec,
@@ -150,15 +150,6 @@ def stderr(result: Any) -> str:
 # --- 1. the output: the verdict, its counts, the findings and the coverage ------------------
 
 
-ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
-
-
-def plain(text: str) -> str:
-    """Typer renders help and usage errors through Rich, which under a colour-forcing
-    terminal (CI sets one) wraps each dash of an option name in its own escape sequence,
-    so `--package` is never a contiguous substring of the raw output. Strip the codes
-    before asserting on the words."""
-    return ANSI_ESCAPE.sub("", text)
 
 def test_the_human_output_is_headed_by_the_verdict_and_its_counts(
     graded: tuple[Path, Path],
