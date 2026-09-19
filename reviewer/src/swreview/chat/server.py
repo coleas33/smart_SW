@@ -59,6 +59,7 @@ from uuid import UUID
 
 import anyio
 from pydantic import ValidationError
+from pydantic_core import to_jsonable_python
 from sse_starlette import EventSourceResponse, ServerSentEvent
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
@@ -706,6 +707,15 @@ def check_result(check_dir: Path, run: RmsCheckRun) -> dict[str, Any]:
     document, when it was extracted and which dump profile wrote it - are the package's
     own evidence and not the run's conclusion. One extra read of a model-check dump is the
     cheaper half of that trade.
+
+    `attention` is `rank()` over the run's own session, minus `session_id` - the body
+    already names the check - which is the block `attention.json` holds and the block the
+    Standards body carries, unchanged (`contracts/attention.md` section 5, FR-022). It is
+    built **here**, on the one function that serves the POST, the `GET` re-read and the
+    Accept re-render, so those three can never disagree; the `GET` recomputes it in memory
+    and writes nothing, because a read must not refresh the record of the order the
+    engineer was shown. Ranking is a pure in-memory sort over one session and constructs
+    no provider and reads no key (FR-015, FR-025).
     """
     package = load_package(check_dir).package
     exceptions = _exceptions_by_id(check_dir, run.findings)
@@ -725,6 +735,7 @@ def check_result(check_dir: Path, run: RmsCheckRun) -> dict[str, Any]:
             "count": carried.count,
             "reason": carried.reason,
         },
+        "attention": to_jsonable_python(rank(run.session)),
     }
 
 
@@ -846,6 +857,11 @@ def standards_result(check_dir: Path, run: StandardsCheckRun) -> dict[str, Any]:
       two rebuild-error checks report counts the macro this feature replaces would have
       refreshed by force-rebuilding.
 
+    A fifth thing, and the one that is **not** a difference from the Model check: the
+    `attention` block is byte-for-byte the shape `check_result` returns, for the reason
+    given there. One rule, one block, two tabs - which is why feature 006's difference
+    table gains no row for it (`contracts/attention.md` section 5, FR-022).
+
     The package is read again here for the same reason `check_result` reads it: the root
     document, when it was extracted and which dump profile wrote it are the package's own
     evidence and not the run's conclusion.
@@ -882,6 +898,7 @@ def standards_result(check_dir: Path, run: StandardsCheckRun) -> dict[str, Any]:
             "reason": carried.reason,
         },
         "rebuilt": False,
+        "attention": to_jsonable_python(rank(run.session)),
     }
 
 

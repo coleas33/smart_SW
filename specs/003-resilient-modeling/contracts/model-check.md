@@ -35,9 +35,14 @@ normative source for both.
 addressable after a restart without any server-side registry, and `GET` resolves it under the
 configured run root through the same path rule the `run_dir` body field goes through.
 
-`scope` is `"part"` in this increment. `"assembly"` is not offered by the tab until the
-assembly rules have landed and been calibrated; a request naming it is answered 400 with
-`error_class: "ScopeNotAvailable"` rather than silently evaluating nothing.
+`scope` is one of `"part"`, `"equations"` and `"all"` - the three the route offers, as
+`OFFERED_SCOPES` in `chat/server.py` names them; `"all"` means every offered family and not
+every family in the catalogue. `"assembly"` is not offered by the tab until the assembly
+rules have landed and been calibrated; a request naming it is answered 400 with
+`error_class: "ScopeNotAvailable"` rather than silently evaluating nothing, and `"all"`
+does not run it by alias. (The sentence used to read "`scope` is `"part"` in this
+increment", which stopped being true when the equations family landed; feature 007 research
+R3 named the drift and this is the correction.)
 
 ### `CheckResult`
 
@@ -78,11 +83,15 @@ assembly rules have landed and been calibrated; a request naming it is answered 
        "component_ids": ["cmp:0003", "cmp:0009"]}
     ]
   },
-  "exceptions_carried_forward": {"from_run": "20260915-173001-bracket-check", "count": 2}
+  "exceptions_carried_forward": {"from_run": "20260915-173001-bracket-check", "count": 2,
+                                 "reason": null},
+  "attention": { /* the Ranking of feature 007 `contracts/attention.md` section 4,
+                    minus session_id: policy_version, rows, top_n, not_amplified,
+                    coverage, empty_reason */ }
 }
 ```
 
-Three points the shape exists to enforce:
+Six points the shape exists to enforce:
 
 - `grade` never carries a letter, and `fraction` is never the only number rendered. The
   unresolved rule ids travel with the counts so a page cannot show a score without them.
@@ -98,6 +107,22 @@ Three points the shape exists to enforce:
   **`scope`** and not at the top level. `document` is null whenever the run graded more than
   one document, so a page that read the ids anywhere else would lose every coverage row in a
   multi-document check and show a grade counting rules it was no longer listing.
+- `exceptions_carried_forward` carries a third field, **`reason`**: `null` when a store was
+  carried, and the sentence saying why not - "no earlier run of this design", or "the folder
+  already carries this check's own evidence" on a re-read - when none was. It has been in
+  the payload since the route landed and was missing from this block; feature 007 research
+  R3 named the drift and this is the correction. A count of zero with no reason beside it
+  reads as a failure rather than as the ordinary first run of a design.
+- `attention` is feature 007's ranking of **this run's own session**, computed by
+  `report/attention.rank` and carried so the tab can render the rows it should read first
+  without computing an order of its own (feature 007 FR-022, FR-023). It is the
+  `attention.json` block minus `session_id` - the body already names the check - and it is
+  **identical to the `StandardsResult`'s**, which is why feature 006's difference table
+  adds no row for it. It is present on the POST, on the `GET /checks/{check_id}` re-read
+  (recomputed in memory, byte-equal to the POST's, and the folder including
+  `attention.json` is not written by the read) and after an Accept, whose re-run of the
+  check rewrites the record through the entry point. No path that produces it constructs a
+  provider or reads a key.
 
 ## 2. Model check page to host
 
@@ -142,7 +167,11 @@ means the folders sort beside the review they belong to and are obviously dispos
 package.json      the ModelCheck-profile dump; extractor.profile == "model_check"
 exceptions.json   carried forward from the newest same-design run, before the rules run
 session.json      the recorded tool steps, so tool_result_ids name steps that exist
-report.md         the rule-by-rule result
+report.md         the rule-by-rule result, opened by the "Start here" section
+attention.json    the ranking the report was rendered from, and the session id it
+                  describes (feature 007 `contracts/attention.md` section 4). Not a
+                  session file: a folder holding only this one is not "a folder that
+                  already holds a review"
 check.json        the check record, carrying family: "rms"
 ```
 

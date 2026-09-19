@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic_core import to_jsonable_python
 from starlette.testclient import TestClient
 
 from swreview.agent import providers
@@ -49,6 +50,8 @@ from swreview.checks.standards.registry import STANDARDS_FAMILY
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
 from swreview.ir.models import DumpPhase, EvidencePackage
+from swreview.report.attention import rank
+from swreview.report.attention_record import read_attention_record
 from swreview.report.session import load_session
 from tests.support.features import AssemblySpec, PartSpec, feature, folder, rms_package
 
@@ -86,6 +89,7 @@ SUMMARY_CHECK = "standards.release"
 
 SESSION_FILE = "session.json"
 REPORT_FILE = "report.md"
+ATTENTION_FILE = "attention.json"
 CHECK_FILE = "check.json"
 
 PROFILE_B_VALUES: tuple[str, ...] = (
@@ -277,6 +281,7 @@ class TestRunStandardsCheck:
             "subjects",
             "exceptions_carried_forward",
             "rebuilt",
+            "attention",
         }
         assert result["check_id"] == STANDARDS_CHECK_ID
         assert Path(result["run_dir"]) == standards_dir
@@ -517,6 +522,37 @@ class TestRunStandardsCheck:
         assert carried["count"] == 0
         assert "no earlier run" in carried["reason"]
 
+    def test_attention_is_the_ranking_of_the_run_s_own_session(
+        self, client: TestClient, standards_dir: Path
+    ) -> None:
+        """FR-022. Byte-identical in shape to the Model check body's `attention`, which is
+        why `contracts/standards-check.md` adds no difference row for it: one block, one
+        rule, two tabs (`contracts/attention.md` section 5)."""
+        result = start_standards(client, standards_dir)
+
+        assert result["attention"] == to_jsonable_python(
+            rank(load_session(standards_dir / SESSION_FILE))
+        )
+        assert result["attention"]["policy_version"] == "attention_policy_v1"
+        assert "session_id" not in result["attention"]
+        assert [row["finding_id"] for row in result["attention"]["rows"]] == [
+            row.finding_id for row in read_attention_record(standards_dir).rows
+        ]
+
+    def test_every_amplified_row_names_a_finding_the_body_carries(
+        self, client: TestClient, standards_dir: Path
+    ) -> None:
+        """Amplify, never filter, and no percent sign: the Standards page's body scan
+        forbids one and the rows are rendered straight into it (research R2.14)."""
+        result = start_standards(client, standards_dir)
+
+        known = {row["finding"]["id"] for row in result["findings"]}
+        assert known
+        for row in result["attention"]["rows"]:
+            assert set(row["member_finding_ids"]) <= known
+            assert row["reason"]
+            assert "%" not in row["reason"]
+
 
 # --- 2. what POST /checks/standards refuses ---------------------------------------
 
@@ -742,17 +778,23 @@ class TestReadCheck:
         self, client: TestClient, standards_dir: Path
     ) -> None:
         """The folder name is the whole registry: a restarted pane reads its last check
-        back by name, and a read evaluates nothing."""
+        back by name, and a read evaluates nothing.
+
+        `attention.json` is in the unchanged list because the ranking a `GET` answers with
+        is recomputed in memory: a read must not refresh the record of the order the
+        engineer was shown (FR-022, research R2.7).
+        """
         posted = start_standards(client, standards_dir)
         before = {
             name: (standards_dir / name).read_bytes()
-            for name in (SESSION_FILE, REPORT_FILE, CHECK_FILE)
+            for name in (SESSION_FILE, REPORT_FILE, CHECK_FILE, ATTENTION_FILE)
         }
 
         response = client.get(f"/checks/{STANDARDS_CHECK_ID}")
 
         assert response.status_code == 200, response.text
         assert response.json() == posted
+        assert response.json()["attention"] == posted["attention"]
         assert {name: (standards_dir / name).read_bytes() for name in before} == before
 
     def test_an_rms_folder_answers_the_model_check_shape(
@@ -912,6 +954,9 @@ class TestAcceptException:
         assert client.get(f"/checks/{STANDARDS_CHECK_ID}").json()["check_id"] == (
             STANDARDS_CHECK_ID
         )
+        assert client.get(f"/checks/{STANDARDS_CHECK_ID}").json()["attention"] == (
+            to_jsonable_python(rank(load_session(standards_dir / SESSION_FILE)))
+        )
 
     def test_a_blank_note_is_refused(self, client: TestClient, standards_dir: Path) -> None:
         finding_id = finding_id_of(start_standards(client, standards_dir), ERROR_CHECK)
@@ -1012,6 +1057,7 @@ class TestNoLanguageModel:
             monkeypatch.delenv(name, raising=False)
 
         posted = start_standards(client, standards_dir)
+        assert posted["attention"]["rows"], "the ranking is computed on this keyless path"
         finding_id = finding_id_of(posted, ERROR_CHECK)
         assert accept(client, STANDARDS_CHECK_ID, finding_id).status_code == 200
         assert client.get(f"/checks/{STANDARDS_CHECK_ID}").status_code == 200
