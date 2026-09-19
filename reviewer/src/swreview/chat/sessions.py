@@ -44,10 +44,11 @@ from pydantic import ValidationError
 
 from swreview.agent.providers import AgentEvent, EventType
 from swreview.agent.runner import EVENTS_FILE_NAME, EventSink, ReviewRun
+from swreview.benchmark.timing import timing_with
 from swreview.findings import Finding
 from swreview.report.dispositions import REPORT_FILE_NAME, set_disposition
 from swreview.report.markdown import render_report
-from swreview.report.session import save_session
+from swreview.report.session import Timing, save_session
 
 __all__ = [
     "ChatSession",
@@ -57,6 +58,7 @@ __all__ = [
     "Subscriber",
     "TRANSITIONS",
     "record_disposition",
+    "record_timing_live",
     "replay_events",
 ]
 
@@ -356,3 +358,41 @@ def record_disposition(
         },
     )
     return finding
+
+
+# --- the engineer's minutes -----------------------------------------------------------
+
+
+def record_timing_live(
+    run: ReviewRun,
+    *,
+    baseline: float | None = None,
+    supervision: float | None = None,
+    verification: float | None = None,
+    false_alarms: float | None = None,
+) -> Timing:
+    """Record the four human inputs on a **live** review and re-render its report.
+
+    `benchmark.timing.record_timing_at` is the offline form, and it is exactly wrong for a
+    chat for the reason `record_disposition` above gives: the run holds the session in
+    memory and writes it again at the end of every turn, so minutes written only to disk
+    would be gone after the engineer's next message. The values are applied to the session
+    the run is holding, and the file and the report are rendered from that.
+
+    No event is emitted: timing is the engineer's own bookkeeping, not something the review
+    did (`contracts/timing.md` section 3). Raises `pydantic.ValidationError` for a negative
+    value, naming the field, having written nothing.
+    """
+    session = run.session
+    session.timing = timing_with(
+        session.timing,
+        baseline=baseline,
+        supervision=supervision,
+        verification=verification,
+        false_alarms=false_alarms,
+    )
+    save_session(session, run.session_path)
+    (run.out_dir / REPORT_FILE_NAME).write_text(
+        render_report(session, run.context.ir), encoding="utf-8"
+    )
+    return session.timing

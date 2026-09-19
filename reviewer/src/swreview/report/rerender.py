@@ -36,6 +36,7 @@ __all__ = [
     "SESSION_FILE_NAME",
     "UNREADABLE_CHECK_RECORD",
     "rerender_run_folder",
+    "run_folder_session",
 ]
 
 SESSION_FILE_NAME = "session.json"
@@ -84,11 +85,23 @@ def rerender_run_folder(run_dir: Path | str) -> Path:
     return report_file
 
 
-def _session_of(directory: Path) -> ReviewSession:
+def run_folder_session(run_dir: Path | str) -> Path:
+    """The `session.json` `run_dir` holds, or the refusal that says why it holds none.
+
+    Public because `swreview timing` has to resolve and refuse the folder *before* it
+    writes anything to it, and the two refusals - "this folder holds no run" and "this is a
+    benchmark run root, use `benchmark time`" - are written once, here, rather than again
+    in the command (contract timing.md section 2).
+    """
+    directory = Path(run_dir)
     session_file = directory / SESSION_FILE_NAME
     if not session_file.is_file():
         _refuse_without_a_session(directory, session_file)
-    return load_session(session_file)
+    return session_file
+
+
+def _session_of(directory: Path) -> ReviewSession:
+    return load_session(run_folder_session(directory))
 
 
 def _refuse_without_a_session(directory: Path, session_file: Path) -> NoReturn:

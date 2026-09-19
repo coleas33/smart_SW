@@ -167,6 +167,7 @@ METRICS: dict[str, Callable[[ArmRun], float | None]] = {
     "false_alarms": lambda run: run.scorecard.aggregate.false_alarms,
     "unresolved_count": lambda run: run.scorecard.aggregate.unresolved_count,
     "recall_held_out": lambda run: run.scorecard.aggregate.recall,
+    "median_net_saved_minutes": lambda run: run.scorecard.aggregate.median_net_saved_minutes,
 }
 """Every metric the ledger compares, each read from its **one** source.
 
@@ -174,6 +175,9 @@ METRICS: dict[str, Callable[[ArmRun], float | None]] = {
 threshold rests on, so the ledger and the gate can never disagree about what a number is.
 `dump_wall_clock_s` is `None` until the workstation harness writes it (FR-030a): the
 column exists so the row says "unknown" rather than leaving levers 9 and 10 unrepresented.
+`median_net_saved_minutes` is the number the pilot is judged on and the one metric here
+that is **reported and never gated on** (feature 007 FR-006): `decide` names the metrics
+it reads, so adding an entry to this table gates nothing by construction.
 """
 
 

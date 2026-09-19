@@ -271,6 +271,7 @@ ROUTES: tuple[tuple[str, str], ...] = (
     ("POST", "/sessions/{chat}/messages"),
     ("POST", "/sessions/{chat}/evidence/ER-001"),
     ("POST", "/sessions/{chat}/findings/F-001/disposition"),
+    ("POST", "/sessions/{chat}/timing"),
     ("POST", "/sessions/{chat}/stop"),
     ("GET", "/sessions/{chat}/report"),
 )

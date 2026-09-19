@@ -20,6 +20,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from statistics import median
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
@@ -82,6 +83,24 @@ class PackageSpec:
     """How many of `coverage_unresolved` a withheld tool wrote (lever 4, FR-054). The
     session names those checks in `withheld_checks` and the score splits on them, so the
     two artifacts agree about the same items rather than holding two opinions."""
+
+    baseline_minutes: float | None = None
+    assisted_minutes: float = 0.0
+    """The engineer's minutes on this package, as `swreview timing` would have recorded
+    them. `None` is the default because no run has ever carried timing, which is what the
+    ledger's median column has to report as `unknown` rather than as a number. `Timing`
+    derives the net from them, here and in the session below, so the score and the session
+    cannot hold two opinions about what was saved."""
+
+    def timing(self) -> Timing:
+        """This package's `Timing`, with the net derived by the model as everywhere else."""
+        return Timing(
+            baseline_minutes=self.baseline_minutes,
+            assisted_supervision_minutes=self.assisted_minutes,
+            assisted_verification_minutes=0.0,
+            false_alarm_handling_minutes=0.0,
+            unattended_runtime_minutes=9.0,
+        )
 
     def usage(self) -> TokenUsage | None:
         if self.total_tokens is None and self.input_tokens is None:
@@ -161,6 +180,7 @@ def _sum_or_none(values: Iterable[int | None]) -> int | None:
 
 def package_score(spec: PackageSpec) -> PackageScore:
     usage = spec.usage()
+    timing = spec.timing()
     return PackageScore(
         package_id=spec.package_id,
         held_out=spec.held_out,
@@ -169,10 +189,10 @@ def package_score(spec: PackageSpec) -> PackageScore:
         missed_known_defects=len(spec.missed),
         false_alarms=spec.false_alarms,
         unresolved_count=spec.unresolved,
-        baseline_minutes=None,
-        assisted_minutes=0.0,
-        unattended_runtime_minutes=9.0,
-        net_saved_minutes=None,
+        baseline_minutes=timing.baseline_minutes,
+        assisted_minutes=spec.assisted_minutes,
+        unattended_runtime_minutes=timing.unattended_runtime_minutes,
+        net_saved_minutes=timing.net_saved_minutes,
         usage=usage,
         round_trips=spec.rounds,
         cached_input_share=usage.cached_input_share if usage is not None else None,
@@ -197,6 +217,11 @@ def scorecard(spec: RunSpec) -> Scorecard:
     known = matched + sum(len(score.missed_defect_ids) for score in held_out)
     valid = sum(score.valid_findings for score in per_package)
     false_alarms = sum(score.false_alarms for score in per_package)
+    timed = [
+        score.net_saved_minutes
+        for score in per_package
+        if score.net_saved_minutes is not None
+    ]
     return Scorecard(
         run_id=spec.run,
         benchmark_set=SET_NAME,
@@ -213,8 +238,8 @@ def scorecard(spec: RunSpec) -> Scorecard:
             false_alarm_rate=(
                 false_alarms / (valid + false_alarms) if (valid + false_alarms) else None
             ),
-            median_net_saved_minutes=None,
-            packages_with_timing=0,
+            median_net_saved_minutes=median(timed) if timed else None,
+            packages_with_timing=len(timed),
             input_tokens=_sum_or_none(package.input_tokens for package in spec.packages),
             cached_input_tokens=_sum_or_none(
                 package.cached_input_tokens for package in spec.packages
@@ -226,7 +251,7 @@ def scorecard(spec: RunSpec) -> Scorecard:
             median_seconds_to_first_finding=None,
             packages_with_usage=sum(1 for score in per_package if score.usage is not None),
         ),
-        distribution=[None for _ in per_package],
+        distribution=[score.net_saved_minutes for score in per_package],
     )
 
 
@@ -314,13 +339,7 @@ def session_of(spec: RunSpec, package: PackageSpec) -> ReviewSession:
                 _coverage_item(f"open-{index}") for index in range(package.coverage_unresolved)
             ],
         ),
-        timing=Timing(
-            baseline_minutes=None,
-            assisted_supervision_minutes=0.0,
-            assisted_verification_minutes=0.0,
-            false_alarm_handling_minutes=0.0,
-            unattended_runtime_minutes=9.0,
-        ),
+        timing=package.timing(),
     )
 
 

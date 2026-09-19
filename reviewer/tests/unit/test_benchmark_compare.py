@@ -522,6 +522,73 @@ def test_a_lever_that_pays_for_itself_is_computed_adopt_and_stays_unsigned(
     assert row.owner_signed_off_at is None
 
 
+def test_the_median_net_saved_minutes_column_reads_the_scorecard_aggregate(
+    tmp_path: Path,
+) -> None:
+    """FR-006, research R2.9: the cell is the median across the arm's runs of each run's
+    own per-package median, and `n=` says how many runs carried timing at all."""
+    timed = PackageSpec(total_tokens=209_000, wall_clock_s=250.0, baseline_minutes=90.0)
+    specs = study_specs(on={"packages": (timed,)})
+    specs[0] = replace(
+        specs[0],
+        packages=(PackageSpec(baseline_minutes=90.0, assisted_minutes=85.0),),
+    )
+    dirs = write_study(tmp_path, specs)
+
+    ledger = compare_runs(dirs)
+
+    row = lever_row(ledger, "parallel_tool_calls")
+    assert row.median_net_saved_minutes.off_median == 5.0
+    assert row.median_net_saved_minutes.off_rows == 1
+    assert row.median_net_saved_minutes.on_median == 90.0
+    assert row.median_net_saved_minutes.on_rows == 3
+    cell = lever_cells_of(render_ledger_md(ledger), "parallel_tool_calls")[
+        "Median net saved minutes off -> on"
+    ]
+    assert "n=1" in cell
+    assert "n=3" in cell
+
+
+def test_a_study_that_carried_no_timing_renders_the_median_as_unknown(
+    tmp_path: Path,
+) -> None:
+    """No real run has ever recorded a baseline; `unknown` is the honest cell, never `0`."""
+    dirs = write_study(tmp_path, study_specs(on=CHEAPER))
+
+    ledger = compare_runs(dirs)
+
+    row = lever_row(ledger, "parallel_tool_calls")
+    assert row.median_net_saved_minutes.off_median is None
+    assert row.median_net_saved_minutes.off_rows == 0
+    cell = lever_cells_of(render_ledger_md(ledger), "parallel_tool_calls")[
+        "Median net saved minutes off -> on"
+    ]
+    assert UNKNOWN in cell
+    assert "n=0" in cell
+
+
+def test_the_median_net_saved_minutes_column_turns_no_decision(tmp_path: Path) -> None:
+    """The column is read, never gated on (FR-006): the same runs decide the same way
+    whether or not they carried timing."""
+    plain = write_study(tmp_path / "plain", study_specs(on=CHEAPER))
+    cheaper_and_timed = PackageSpec(
+        total_tokens=209_000, wall_clock_s=250.0, baseline_minutes=90.0
+    )
+    timed = write_study(
+        tmp_path / "timed", study_specs(on={"packages": (cheaper_and_timed,)})
+    )
+
+    plain_row = lever_row(compare_runs(plain), "parallel_tool_calls")
+    timed_row = lever_row(compare_runs(timed), "parallel_tool_calls")
+
+    assert plain_row.median_net_saved_minutes.on_median is None
+    assert timed_row.median_net_saved_minutes.on_median == 90.0
+    assert (timed_row.decision, timed_row.decision_reason) == (
+        plain_row.decision,
+        plain_row.decision_reason,
+    )
+
+
 def test_the_lever_specific_counter_is_named_on_every_row(tmp_path: Path) -> None:
     dirs = write_study(tmp_path, study_specs(on=CHEAPER))
 

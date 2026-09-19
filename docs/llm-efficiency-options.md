@@ -110,8 +110,8 @@ No runs: no run directories were compared.
 
 ### Decisions
 
-| Lever | Provider and model | Commit | Reps | Other levers on | Input tokens off -> on (median, min-max) | Cached input off -> on | Output off -> on | Reasoning or thoughts off -> on | Total tokens off -> on | Round trips off -> on | Tool calls off -> on | Wall clock off -> on | Dump wall clock off -> on | Valid / missed / false alarms / unresolved off -> on | Recall (held out) off -> on | Worst-case defects lost | Lever-specific counter | Decision | Owner signed off | Owner signed off at | Decision reason | Link to run dirs |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Lever | Provider and model | Commit | Reps | Other levers on | Input tokens off -> on (median, min-max) | Cached input off -> on | Output off -> on | Reasoning or thoughts off -> on | Total tokens off -> on | Round trips off -> on | Tool calls off -> on | Wall clock off -> on | Dump wall clock off -> on | Valid / missed / false alarms / unresolved off -> on | Recall (held out) off -> on | Median net saved minutes off -> on | Worst-case defects lost | Lever-specific counter | Decision | Owner signed off | Owner signed off at | Decision reason | Link to run dirs |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 No decisions: no run directories were compared.
 
