@@ -376,6 +376,90 @@ public sealed class StandardsPageTests
         Assert.Empty(Strings(header, "headings"));
     }
 
+    // ---- the ranked rows ---------------------------------------------------------------------
+
+    /// <summary>
+    /// The first `top_n` rows of `result.attention`, in the order the backend supplied them,
+    /// each naming the finding, the check and the reason it was placed (FR-023).
+    ///
+    /// The same block the Model check tab renders, from the same key, through the same shared
+    /// function - which is the point: the ranking is computed once and rendered everywhere.
+    /// The order is the assertion that bites, because <see cref="AttentionSample"/>'s ids and
+    /// checks are in no order a page could have produced for itself.
+    /// </summary>
+    [Fact]
+    public void TheRankedRowsRenderInTheOrderTheRankingSuppliedThem()
+    {
+        JsonElement rendered = Render(
+            "return JSON.stringify({ok: true, "
+            + "ids: attrs('#attention .attention-row', 'data-finding-id'), "
+            + "checks: texts('#attention .attention-check'), "
+            + "reasons: texts('#attention .attention-reason'), "
+            + "heading: texts('#attention .attention-heading')[0], "
+            + "text: document.getElementById('attention').textContent});");
+
+        Assert.Equal(AttentionSample.ShownFindingIds, Strings(rendered, "ids"));
+        Assert.Equal(AttentionSample.ShownChecks, Strings(rendered, "checks"));
+        Assert.Equal(AttentionSample.ShownReasons, Strings(rendered, "reasons"));
+        Assert.Equal(AttentionSample.Heading, rendered.GetProperty("heading").GetString());
+
+        Assert.DoesNotContain(AttentionSample.BeyondTopN, rendered.GetProperty("text").GetString()!);
+    }
+
+    /// <summary>
+    /// On this tab the block goes above the sixteen-check roster, so it is above the bucket
+    /// chips on both tabs and the roster does not sit between the release headline and the
+    /// rows an engineer is being asked to start with (research R2.14).
+    /// </summary>
+    [Fact]
+    public void TheRankedRowsSitAboveTheCheckRosterAndAboveTheBucketChips()
+    {
+        JsonElement rendered = Render(
+            "var attention = document.getElementById('attention');"
+            + "function after(id) {"
+            + "  return !!(attention.compareDocumentPosition(document.getElementById(id))"
+            + "    & Node.DOCUMENT_POSITION_FOLLOWING);"
+            + "}"
+            + "return JSON.stringify({ok: true, checks: after('checks'), filters: after('filters')});");
+
+        Assert.True(
+            rendered.GetProperty("checks").GetBoolean(),
+            "#attention must come before #checks in the document.");
+        Assert.True(
+            rendered.GetProperty("filters").GetBoolean(),
+            "#attention must come before #filters in the document.");
+    }
+
+    [Fact]
+    public void ARankingWithNoRowsPrintsItsOwnSentenceAndNoList()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.attention = " + AttentionSample.EmptyJson() + ";",
+            "return JSON.stringify({ok: true, "
+            + "text: document.getElementById('attention').textContent, "
+            + "rows: attrs('#attention .attention-row', 'data-finding-id'), "
+            + "lists: document.querySelectorAll('#attention ol').length});");
+
+        Assert.Contains(AttentionSample.EmptyReason, rendered.GetProperty("text").GetString()!);
+        Assert.Empty(Strings(rendered, "rows"));
+        Assert.Equal(0, rendered.GetProperty("lists").GetInt32());
+    }
+
+    [Fact]
+    public void ABodyWithNoRankingRendersNothingInTheSection()
+    {
+        JsonElement rendered = RenderMutated(
+            "delete result.attention;",
+            "return JSON.stringify({ok: true, "
+            + "text: document.getElementById('attention').textContent, "
+            + "children: document.getElementById('attention').childNodes.length, "
+            + "checks: document.querySelectorAll('#checks .check').length});");
+
+        Assert.Equal(string.Empty, rendered.GetProperty("text").GetString());
+        Assert.Equal(0, rendered.GetProperty("children").GetInt32());
+        Assert.Equal(16, rendered.GetProperty("checks").GetInt32());
+    }
+
     // ---- all sixteen checks ------------------------------------------------------------------
 
     /// <summary>
@@ -1462,6 +1546,11 @@ internal static class StandardsResultSample
             reason = (string?)null,
         },
         rebuilt = false,
+
+        // The ranking the backend computed for this run, carried on the body so the tab renders
+        // it without a second call (contracts/attention.md section 5). The two check bodies
+        // carry the identical block, which is why there is one fixture for both.
+        attention = AttentionSample.Ranking(),
     };
 
     /// <summary>

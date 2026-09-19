@@ -615,6 +615,52 @@
     // Nothing further will be streamed; a follow-up reopens the stream from the same seq.
     closeStream();
     showStreamState('The session ended.');
+    loadAttention();
+  }
+
+  /**
+   * What to start with, read once the session has ended.
+   *
+   * The ranking is not on the stream and not on the session view: it is computed from the
+   * finished session by `GET /sessions/{chat_id}/attention`, which writes nothing, so the page
+   * asks for it here rather than accumulating anything of its own (contracts/attention.md
+   * section 5, research R2.8). Nothing is ranked or reordered on this side - the rows are
+   * rendered in the order they arrive.
+   *
+   * Two rules, and both are about a page that has moved on.
+   *
+   * The chat is captured before the call and checked after it. `sessionPath` reads
+   * `state.chatId`, and it is read here, synchronously, so the path and `chatId` name the same
+   * chat; what can change while the request is in flight is `state.chatId`, and an answer for a
+   * chat that is no longer on screen belongs to a transcript `resetTranscript` has already
+   * cleared. Showing it would open a fresh review under the previous review's rows.
+   *
+   * A failed read shows nothing new. The rows amplify findings that are already in the
+   * transcript and in `report.md`, so a banner about them at the moment the session ends would
+   * be noise about a panel nobody has missed. The rejection handler is the second argument of
+   * `then` rather than a `catch` after it, so it answers the fetch and only the fetch: a throw
+   * inside the render is a defect and is not swallowed here.
+   */
+  function loadAttention() {
+    var chatId = state.chatId;
+    if (!chatId) {
+      return;
+    }
+
+    call(sessionPath('/attention'), 'GET').then(
+      function (ranking) {
+        if (!ranking || state.chatId !== chatId) {
+          return;
+        }
+
+        render.clear(ui.attention);
+        ui.attention.appendChild(render.attentionPanel(ranking));
+        ui.attention.hidden = false;
+      },
+      function () {
+        // Nothing new: the panel stays as it is, which for a review that has just ended is
+        // hidden.
+      });
   }
 
   // ---- the review ----------------------------------------------------------------------------
@@ -670,6 +716,8 @@
     render.clear(ui.transcript);
     render.clear(ui.coverage);
     ui.coverage.hidden = true;
+    render.clear(ui.attention);
+    ui.attention.hidden = true;
     state.events = [];
     state.unreadable = Object.create(null);
     state.coverage = [];
@@ -1169,6 +1217,7 @@
     ui.runDir = document.getElementById('run-dir');
     ui.streamState = document.getElementById('stream-state');
     ui.usage = document.getElementById('usage-line');
+    ui.attention = document.getElementById('attention-panel');
     ui.transcript = document.getElementById('transcript');
     ui.coverage = document.getElementById('coverage-panel');
     ui.followup = document.getElementById('followup');

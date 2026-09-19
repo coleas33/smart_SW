@@ -109,6 +109,14 @@
   <span id="usage-line" class="note" role="status"></span>
 </section>
 
+<!--
+  What to start with: the rows the backend ranked, read from `GET /sessions/{chat_id}/attention`
+  when the session ends and pinned above the transcript, because a panel under a transcript that
+  has just grown by a whole review is a panel nobody scrolls to (contracts/attention.md
+  section 6). Hidden until there is something to show.
+-->
+<section id="attention-panel" class="panel" hidden></section>
+
 <main id="transcript" class="transcript" aria-live="polite"></main>
 
 <section id="coverage-panel" class="panel" hidden></section>

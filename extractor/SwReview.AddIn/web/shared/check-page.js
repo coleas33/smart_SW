@@ -67,6 +67,13 @@
   /** The heading of the section holding rules that named no document. */
   var UNGROUPED_LABEL = 'Rules that name no document';
 
+  /**
+   * The heading over the ranked rows. The same words the report's own section uses, because it
+   * is the same ranking: an engineer who reads the tab and then opens `report.md` must find the
+   * same five rows under the same name (contracts/attention.md section 3).
+   */
+  var ATTENTION_HEADING = 'Start here';
+
   /** The last segment of a Windows or POSIX path; a check page shows names, not paths. */
   function fileName(path) {
     var text = String(path || '');
@@ -451,10 +458,80 @@
       dom.clear(ui.header);
       page.renderHeader(state.result, ui.header, api);
 
+      renderAttention(state.result);
+
       var rows = rowsOf(state.result);
       renderFilters(rows);
       renderRules(rows);
       renderCarriedForward(state.result);
+    }
+
+    // ---- rendering: what to start with -----------------------------------------------------------
+
+    /**
+     * The rows the backend ranked, above the chips, exactly as it supplied them.
+     *
+     * This block amplifies; it never filters. Every finding is still in the rule list below in
+     * full, in its own bucket - the rows here are the ones `report/attention.py` placed first,
+     * with the same ids and the same reasons the report's "Start here" section prints
+     * (contracts/attention.md sections 3 and 6). A tab that ranked for itself would be a second
+     * policy, arguable from nothing, disagreeing with the report an engineer opens beside it.
+     *
+     * So nothing here reads a severity, compares two rows, or knows how many there ought to be:
+     * it reads `rows`, takes the first `top_n` of them, and prints three of each row's fields.
+     * `PageRuleScanTests` is the test that keeps it that way.
+     *
+     * Three states, and the third is the one that matters on an older check folder: a body from
+     * before this feature carries no ranking at all, and the section stays empty rather than
+     * printing a heading over nothing.
+     */
+    function renderAttention(result) {
+      dom.clear(ui.attention);
+
+      var ranking = result && result.attention;
+      if (!ranking) {
+        return;
+      }
+
+      ui.attention.appendChild(dom.el('h2', 'attention-heading', ATTENTION_HEADING));
+
+      if (ranking.empty_reason) {
+        ui.attention.appendChild(dom.el('p', 'attention-empty', ranking.empty_reason));
+        return;
+      }
+
+      var rows = amplified(ranking);
+      var list = dom.el('ol', 'attention-rows');
+      for (var index = 0; index < rows.length; index++) {
+        list.appendChild(attentionRow(rows[index] || {}));
+      }
+      ui.attention.appendChild(list);
+    }
+
+    /**
+     * The first `top_n` rows. `rows` holds every row the policy ranked, suppressed ones last,
+     * and `top_n` is how many of them the policy chose to amplify - a page that printed the
+     * whole array would be overruling that choice. A body carrying no usable `top_n` prints
+     * what it was given rather than nothing.
+     */
+    function amplified(ranking) {
+      var rows = ranking.rows || [];
+      var count = ranking.top_n;
+      return (typeof count === 'number' && count >= 0 && count < rows.length)
+        ? rows.slice(0, count)
+        : rows;
+    }
+
+    /** One ranked row: which finding, which check, and the reason the policy placed it. */
+    function attentionRow(row) {
+      var item = dom.el('li', 'attention-row');
+      item.setAttribute('data-finding-id', String(row.finding_id || ''));
+      dom.append(item, [
+        dom.el('span', 'attention-id', row.finding_id || ''),
+        dom.el('span', 'attention-check', row.check || ''),
+        dom.el('span', 'attention-reason', row.reason || '')
+      ]);
+      return item;
     }
 
     function renderCarriedForward(result) {
@@ -938,6 +1015,7 @@
       ui.runDir = byId('run-dir');
       ui.checkState = byId('check-state');
       ui.carried = byId('carried-forward');
+      ui.attention = byId('attention');
       ui.filters = byId('filters');
       ui.rules = byId('rules');
 
