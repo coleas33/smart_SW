@@ -101,17 +101,28 @@ amendments: hold `--lever parallel_tool_calls` on in **both** arms of Task D (th
 recorded from your packet), and keep the study folder under the handover folder, not under
 `benchmarks/studies/`. Task C needs the real profile from section 3.
 
-## 7. Task F: the re-modeler probes (only if the build carries the command)
+## 7. Task F: the re-modeler probes
 
 Feature 004 stops at its Phase 2 probes, which nobody has run: whether SOLIDWORKS 2024 lets
 the executor reorder a feature without a message box, what units the equation manager
 returns, whether a custom-property tag round-trips, and how accurately mass properties
-measure a known solid. The command is `swreview-extract probe remodel`; if
-`swreview-extract probe --help` does not list `remodel`, skip this task and say so. When it
-does, follow `specs/004-resilient-remodeler/quickstart.md` Scenario 4 exactly: it builds a
-throwaway part in a run folder, never touches an open document, and writes a capabilities
-ledger. Put the ledger in the packet; every blocking probe's verdict is what decides whether
-stage 1 can run on a real part next round.
+measure a known solid. This build carries the command and all fifteen probe bodies. With
+SOLIDWORKS running and **no document open**:
+
+```powershell
+cd <repo>\reviewer
+swreview-extract probe remodel --out "$env:LOCALAPPDATA\SwReview\handover\<date>\remodel-probes" --acknowledge-throwaway-part
+```
+
+It builds a throwaway part in that folder, never touches a document of yours, runs the
+fifteen probes and writes `capabilities\remodel-<version>.yaml` with one verdict each
+(`verified`, `refuted`, `unresolved`) and the raw readings behind it. Follow
+`specs/004-resilient-remodeler/quickstart.md` Scenario 4 for what each verdict means. Put
+the ledger and the command's console output in the packet; the seven blocking probes
+(1, 2, 3, 4, 8, 12, 13) are what decide whether stage 1 can run on a real part next round.
+If a probe hangs, the watchdog reports it as unresolved after its timeout; say so rather
+than killing SOLIDWORKS. Add `--keep-part` if you want the throwaway part left behind for
+the owner to look at.
 
 ## 8. What to send back
 
