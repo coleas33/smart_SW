@@ -44,6 +44,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from time import perf_counter
 from typing import Any
 
@@ -72,10 +73,16 @@ __all__ = [
     "PRERUN_CHECK_PREFIX",
     "PRERUN_TOOLS",
     "RMS_PRERUN_TOOLS",
+    "STANDARDS_FAMILY_NAME",
+    "STANDARDS_NOT_DUMPED",
+    "STANDARDS_NO_PROFILE",
+    "STANDARDS_UNGRADABLE_ROOT",
+    "STANDARDS_UNREADABLE",
     "UNNAMED_ERROR",
     "NotEvaluated",
     "PrerunCall",
     "PrerunResult",
+    "attach_standards",
     "coaxial_hole_pairs",
     "gate_brief",
     "not_evaluated_families",
@@ -148,6 +155,31 @@ GATE_INSTRUCTION = (
 """The last line, verbatim (FR-029). The whole gate rests on it: a model handed five ranked
 verdicts and no instruction may spend its rounds confirming them, which is the expensive
 failure this lever is measured against."""
+
+STANDARDS_FAMILY_NAME = "standards"
+"""The family the standards half is counted under: `coverage.prerun.standards`, and the
+label every line below is rendered behind by `NotEvaluated.line()`."""
+
+STANDARDS_NO_PROFILE = "no profile was configured for this review"
+STANDARDS_UNREADABLE = "the profile at {path} could not be loaded: {error}"
+STANDARDS_NOT_DUMPED = (
+    "the package was not dumped with the standards profile (missing phases: {phases})"
+)
+STANDARDS_UNGRADABLE_ROOT = "the root document cannot be graded, so no document was: {error}"
+"""Why a review carries no standards grading (`contracts/gate.md` section 2).
+
+Four rather than the table's three: the root a traversal cannot grade is named in research
+R2.11 as a failure of the same path, and giving it the "unreadable profile" line would say
+the profile was the problem when it was not. Each renders as the contract's line through
+`NotEvaluated.line()`, whose label is `STANDARDS_FAMILY_NAME` - "standards: no profile was
+configured for this review".
+
+**Every one of them is a line and none of them is a refusal.** `run_standards_check` refuses
+a package whose phases did not run, because a release gate that graded an extract which
+never read the evidence would report a clean result on unread data. A review has fifteen
+other things to do and must not be lost to that, so the same condition is reported here and
+the review starts (FR-027).
+"""
 
 
 def _plural(count: int, noun: str) -> str:
@@ -355,7 +387,17 @@ def planned_calls(
     A group key that appears in two configurations is called once. `check_interference_group`
     resolves the active configuration itself and refuses anything still ambiguous, so a
     second call would ask it the same question twice.
+
+    `check_standards` is planned last, and only when the context carries a standards run -
+    the same attribute `ToolRegistry._offered` reads to decide whether to register the tool
+    at all (research R2.11). Asking the context rather than taking a parameter is what keeps
+    the plan and the tool array from being two answers to one question: a plan that named a
+    tool the dispatch never offered would call something that is not there.
     """
+    # Deferred: see `_deferred` below.
+    from swreview.checks.standards.registry import CHECK_TOOL
+    from swreview.tools.standards_checks import standards_run
+
     withheld = {tool.name for tool in tools.withheld}
     planned: list[tuple[str, dict[str, Any]]] = [
         (name, {}) for name in RMS_PRERUN_TOOLS if name not in withheld
@@ -363,23 +405,102 @@ def planned_calls(
     if INTERFERENCE_TOOL not in withheld:
         keys = dict.fromkeys(group.group_key for group in groups_of(context.ir))
         planned.extend((INTERFERENCE_TOOL, {"group_key": key}) for key in keys)
+    if CHECK_TOOL not in withheld and standards_run(context) is not None:
+        planned.append((CHECK_TOOL, {}))
     return tuple(planned)
 
 
+def _deferred() -> None:
+    """Why every import of a standards module in this file is made inside a function.
+
+    `checks/rules/run.py` imports `agent/runner.py`, which imports this module, and every
+    module under `checks/standards/` reaches `checks/rules/` - so importing any of them at
+    the top of this file closes the cycle at interpreter start.
+    `ToolRegistry.standards_tools` defers its own import of the tool for the same reason and
+    says so; by the time a review calls anything here, every module is loaded.
+
+    A function rather than a comment repeated four times, so there is one place to correct
+    if the cycle is ever broken and the imports can come up to the top.
+    """
+
+
+def attach_standards(
+    context: ToolContext, profile_path: Path | str | None
+) -> NotEvaluated | None:
+    """Attach a standards run to `context`, or say why this review has no grading (FR-027).
+
+    Called by `start_review` **between** `build_context` and the dispatch, because
+    `ToolRegistry._offered` registers `check_standards` only when the context already
+    carries a run, and the tool array never changes again once the dispatch is built
+    (research R2.11, and lever 3's prefix guarantee).
+
+    Args:
+        context: The run being set up. The run is attached to it, and its package is what
+            the graded set and the phase rows are read from.
+        profile_path: The standards profile this design is graded against, or `None` when
+            the review was started without one.
+
+    Returns:
+        `None` when the run is attached and the checks will run, or the one `NotEvaluated`
+        the pre-run counts and the brief prints. **Never raises**: every refusal the
+        standards machinery can make is turned into a line here, because a review that
+        cannot grade the release checklist is still a review (`contracts/gate.md` section 2).
+    """
+    # Deferred: see `_deferred` above.
+    from swreview.checks.standards.profile import ProfileError, load_profile
+    from swreview.checks.standards.run import missing_standards_phases
+    from swreview.checks.standards.traversal import UngradableRootError, graded_documents
+    from swreview.tools.standards_checks import StandardsRun, attach_standards_run
+
+    if profile_path is None:
+        return _standards_gap(STANDARDS_NO_PROFILE)
+    try:
+        profile = load_profile(profile_path)
+    except ProfileError as error:
+        return _standards_gap(STANDARDS_UNREADABLE.format(path=profile_path, error=error))
+
+    missing = missing_standards_phases(context.ir)
+    if missing:
+        return _standards_gap(STANDARDS_NOT_DUMPED.format(phases=", ".join(missing)))
+    try:
+        documents = graded_documents(context.ir, profile)
+    except UngradableRootError as error:
+        return _standards_gap(STANDARDS_UNGRADABLE_ROOT.format(error=error))
+
+    attach_standards_run(context, StandardsRun(profile=profile, documents=documents))
+    return None
+
+
+def _standards_gap(reason: str) -> NotEvaluated:
+    """One `NotEvaluated` for the standards family, whichever of the four reasons it is."""
+    return NotEvaluated(
+        check=f"{PRERUN_CHECK_PREFIX}{STANDARDS_FAMILY_NAME}",
+        label=STANDARDS_FAMILY_NAME,
+        reason=reason,
+    )
+
+
 def not_evaluated_families(
-    package: EvidencePackage, withheld: Sequence[tuple[str, str]]
+    package: EvidencePackage,
+    withheld: Sequence[tuple[str, str]],
+    standards: NotEvaluated | None = None,
 ) -> tuple[NotEvaluated, ...]:
     """Every line of the "NOT evaluated" block, counted against `package`.
 
     Four families are here on every run, because no enumerator can decide their scope, and
-    two more appear conditionally: a pre-run tool a tier withheld, which carries the tier's
-    own sentence rather than a second one written here (contracts/levers.md, levers 4 and
-    5), and interference when the package reports none, so "no group was checked" is a
-    statement about the package rather than a silence.
+    three more appear conditionally: a pre-run tool a tier withheld, which carries the
+    tier's own sentence rather than a second one written here (contracts/levers.md, levers 4
+    and 5); interference when the package reports none, so "no group was checked" is a
+    statement about the package rather than a silence; and the standards family when
+    `attach_standards` could not attach a run.
 
     Args:
         package: The package under review; every count comes off it.
         withheld: `(tool name, reason)` for each pre-run tool this run did not offer.
+        standards: What `attach_standards` returned, or `None` when the standards run is
+            attached and the checks will run - which is also what a review that never asked
+            for one passes, because a family nobody asked about is not a gap this block
+            reports (FR-030: lever 5's digest is unchanged by lever 11 existing).
     """
     families = [
         NotEvaluated(check=f"{PRERUN_CHECK_PREFIX}{name}", label=name, reason=reason)
@@ -440,11 +561,17 @@ def not_evaluated_families(
             ),
         ]
     )
+    if standards is not None:
+        families.append(standards)
     return tuple(families)
 
 
 def prerun_checks(
-    context: ToolContext, tools: ToolDispatch, *, efficiency: EfficiencySettings
+    context: ToolContext,
+    tools: ToolDispatch,
+    *,
+    efficiency: EfficiencySettings,
+    standards: NotEvaluated | None = None,
 ) -> PrerunResult | None:
     """Run the self-enumerating checks into `context`'s session, or `None` with the flag off.
 
@@ -465,6 +592,9 @@ def prerun_checks(
             second one built for the pre-run: the steps, findings and events have to be the
             ones a model-driven call would have produced.
         efficiency: This run's levers. Only `prerun_checks` and `procedural_gate` are read.
+        standards: What `attach_standards` returned, so the family it could not grade is
+            counted and printed beside the four the pre-run never grades. `None` when the
+            run is attached, and when the review never asked for one.
 
     Returns:
         What was run and what was not, so the caller can render the digest or the brief, or
@@ -500,7 +630,7 @@ def prerun_checks(
     withheld_prerun_tools = [
         (tool.name, tool.reason) for tool in tools.withheld if tool.name in PRERUN_TOOLS
     ]
-    families = not_evaluated_families(context.ir, withheld_prerun_tools)
+    families = not_evaluated_families(context.ir, withheld_prerun_tools, standards)
     for family in families:
         context.record_coverage("skipped", family.coverage_item())
     return PrerunResult(calls=tuple(calls), not_evaluated=families)

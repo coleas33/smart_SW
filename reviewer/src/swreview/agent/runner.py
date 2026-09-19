@@ -73,7 +73,7 @@ from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.findings import Finding
 from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
-from swreview.prerun import PrerunResult, gate_brief, prerun_checks
+from swreview.prerun import PrerunResult, attach_standards, gate_brief, prerun_checks
 from swreview.report.attention import rank
 from swreview.report.attention_record import write_attention_record
 from swreview.report.session import (
@@ -833,6 +833,7 @@ def start_review(
     max_steps: int = DEFAULT_MAX_STEPS,
     efficiency: EfficiencySettings | None = None,
     previous_session: Path | str | None = None,
+    standards_profile: Path | str | None = None,
     fail_tool: Iterable[str] = (),
     bridge: bool = False,
     pipe_name: str = DEFAULT_PIPE_NAME,
@@ -870,6 +871,12 @@ def start_review(
             lever 11a to carry unchanged `rms.*` verdicts from. Read only when
             `efficiency.carry_over_rms` is on; a path that is not there raises, because a
             run that silently carried nothing would be an off arm wearing an on label.
+        standards_profile: The standards profile this design is graded against, so the
+            sixteen release checks run inside the review (FR-027). `None` - the default,
+            and every caller that predates lever 11 - attaches no standards run, and
+            `check_standards` is then not registered at all. A profile that cannot be
+            used, or a package that was not dumped with the standards phases, is a
+            not-evaluated line and never a refusal: see `prerun.attach_standards`.
         fail_tool: Tool names forced to fail; the `--fail-tool` test hook. An unknown
             name raises.
         bridge: Open the live SOLIDWORKS bridge and add the three bridge tools (US3).
@@ -956,6 +963,17 @@ def start_review(
             previous_session=previous_session,
             efficiency=session.efficiency,
         )
+        # Before the dispatch and after the context, which is the only window there is:
+        # `ToolRegistry._offered` registers `check_standards` when the context carries a
+        # standards run, and the tool array it builds never changes again for the life of
+        # the session (research R2.11, and lever 3's prefix guarantee). What comes back is
+        # `None` when the run is attached, and otherwise the one family the pre-run counts
+        # instead - never an exception, because a review is not lost over one of sixteen.
+        standards_gap = (
+            attach_standards(context, standards_profile)
+            if standards_profile is not None or session.efficiency.procedural_gate
+            else None
+        )
         tools = ToolRegistry().dispatch(
             context, fail_tool=fail_tool, efficiency=session.efficiency
         )
@@ -963,7 +981,9 @@ def start_review(
         # here, through the dispatch the provider is about to be handed, so their steps,
         # findings and events are the ones a model-driven call would have produced. `None`
         # with the flag off, and then nothing above is different either.
-        prerun = prerun_checks(context, tools, efficiency=session.efficiency)
+        prerun = prerun_checks(
+            context, tools, efficiency=session.efficiency, standards=standards_gap
+        )
         if session.steps:
             # Setup wrote steps - today only the pre-run does - so the adapter numbers its
             # own calls from there rather than from 0. `tool.started.step_index` identifies
@@ -1047,9 +1067,10 @@ def run_review(
         model: Model id; the provider's own model when omitted.
         effort: What the engineer asked for; the adapter maps it or fails fast.
         options: The rest of `start_review`'s keyword arguments - `key_source`,
-            `retry_of`, `max_steps`, `efficiency`, `previous_session`, `fail_tool`,
-            `bridge`, `pipe_name`, `bridge_secret`, `bridge_factory`, `callbacks`,
-            `redact` - documented there rather than restated here.
+            `retry_of`, `max_steps`, `efficiency`, `previous_session`,
+            `standards_profile`, `fail_tool`, `bridge`, `pipe_name`, `bridge_secret`,
+            `bridge_factory`, `callbacks`, `redact` - documented there rather than
+            restated here.
     """
     run = start_review(
         package_dir, out_dir, provider=provider, model=model, effort=effort, **options

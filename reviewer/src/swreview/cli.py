@@ -531,6 +531,13 @@ def review(
     checklist: Annotated[
         Path | None, typer.Option("--checklist", help="A checklist YAML file.")
     ] = None,
+    standards_profile: Annotated[
+        Path | None,
+        typer.Option(
+            "--standards-profile",
+            help="Grade the release standards checks in this review, against this profile.",
+        ),
+    ] = None,
     fail_tool: Annotated[
         list[str] | None,
         typer.Option("--fail-tool", help="Force a tool to fail; test hook. Repeatable."),
@@ -555,6 +562,7 @@ def review(
                 key_source=settings.key_source,
                 max_steps=max_steps,
                 efficiency=efficiency,
+                standards_profile=standards_profile,
                 fail_tool=tuple(fail_tool or ()),
                 bridge=bridge,
                 redact=redactor,
