@@ -1,0 +1,575 @@
+{
+  "session_id": "6f1c0a2e-9b6d-4a51-9f30-0b1f5a7c2d11",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "design_id": "dsn:1",
+  "started_at": "2026-09-18T22:03:10Z",
+  "ended_at": "2026-09-18T22:03:11Z",
+  "model": "gpt-fixture",
+  "provider_info": null,
+  "retry_of": null,
+  "reused_from": null,
+  "efficiency": {
+    "trim_tool_descriptions": false,
+    "tool_tiers": false,
+    "prompt_cache_key": false,
+    "gemini_explicit_cache": false,
+    "prerun_checks": false,
+    "parallel_tool_calls": false,
+    "coverage_stop": false,
+    "package_reuse": false,
+    "lazy_meshes": false,
+    "carry_over_rms": false
+  },
+  "usage": null,
+  "withheld_checks": [],
+  "steps": [
+    {
+      "index": 0,
+      "tool": "check_rms_part",
+      "arguments": {
+        "configuration": "Default"
+      },
+      "result_summary": "check_rms_part returned its result",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.25
+    }
+  ],
+  "evidence_requests": [],
+  "findings": [
+    {
+      "id": "F-001",
+      "check": "rms.folders.present",
+      "title": "Three of the six groups are missing from the part tree",
+      "status": "suspected",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:2",
+          "vault_path": "/Designs/housing.SLDPRT",
+          "vault_version": 3,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "housing-1 carries three of the six groups as folders.",
+      "requirement": "Every one of the six groups exists as a folder.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        0
+      ],
+      "coverage_limits": [],
+      "recommended_action": "add the missing group folders before the next release.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-002",
+      "check": "rms.grouping.all_features_in_a_group",
+      "title": "Content features sit outside every group",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0003"
+      ],
+      "drawing_locations": [
+        {
+          "document_id": "doc:2",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "ZmVhdDowMDA3",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:2",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "ZmVhdDowMDEx",
+          "page": null,
+          "bbox": null
+        }
+      ],
+      "provenance": [
+        {
+          "document_id": "doc:2",
+          "vault_path": "/Designs/housing.SLDPRT",
+          "vault_version": 3,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "two content features of housing-1 sit outside any group folder.",
+      "requirement": "Every content feature lives inside a group.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        0
+      ],
+      "coverage_limits": [],
+      "recommended_action": "move both features into the group their intent belongs to.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-003",
+      "check": "rms.sketches.fully_defined",
+      "title": "An under-defined sketch drives a Core feature",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0003"
+      ],
+      "drawing_locations": [
+        {
+          "document_id": "doc:2",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "ZmVhdDowMDAz",
+          "page": null,
+          "bbox": null
+        }
+      ],
+      "provenance": [
+        {
+          "document_id": "doc:2",
+          "vault_path": "/Designs/housing.SLDPRT",
+          "vault_version": 3,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "one sketch of housing-1 is under defined.",
+      "requirement": "Every sketch is fully defined. Only under_defined fails.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        0
+      ],
+      "coverage_limits": [],
+      "recommended_action": "fully define the sketch before the geometry is relied on.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    }
+  ],
+  "coverage": {
+    "checked": [
+      {
+        "check": "modeling.resilience",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "4 checked, 11 skipped, 5 unresolved rule result(s) over 1 document(s); 3 finding(s).",
+        "error": null
+      },
+      {
+        "check": "rms.refs.direction",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.intent.every_feature_described",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.not_over_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.one_sketch_per_feature",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      }
+    ],
+    "skipped": [
+      {
+        "check": "rms.folders.ordered",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: fewer than two groups.",
+        "error": null
+      },
+      {
+        "check": "rms.groups.no_solids_in_ref_or_construction",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Reference or Construction group.",
+        "error": null
+      },
+      {
+        "check": "rms.core.shell_last",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Core group.",
+        "error": null
+      },
+      {
+        "check": "rms.detail.holes_last",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Detail group.",
+        "error": null
+      },
+      {
+        "check": "rms.detail.no_internal_references",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Detail group.",
+        "error": null
+      },
+      {
+        "check": "rms.detail.individually_suppressible",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Detail group.",
+        "error": null
+      },
+      {
+        "check": "rms.modify.transform_before_replicate",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Modify group.",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.chamfers_before_fillets",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Quarantine group.",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.largest_fillet_first",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Quarantine group.",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.only_fillets_and_chamfers",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Quarantine group.",
+        "error": null
+      },
+      {
+        "check": "rms.refs.quarantine_has_no_children",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Quarantine group.",
+        "error": null
+      }
+    ],
+    "unresolved": [
+      {
+        "check": "rms.assembly.no_sibling_in_context_refs",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "external references not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.positions_driven_by_globals",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "assembly equations not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.mates_described",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "mate descriptions not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.subassemblies",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "subassembly mates not extracted; assembly rules evaluated for the root document only",
+        "error": null
+      },
+      {
+        "check": "rms.types.unknown",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "feature type names not in the calibrated table: 3 feature(s) on the pin document.",
+        "error": null
+      }
+    ],
+    "failed": [],
+    "out_of_scope": [
+      {
+        "check": "rms.drawing.model_items_preferred",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "drawing-owned vs model dimensions not extracted; advisory by decision",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.structural_vs_cosmetic_fillets",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.core_shaping_cuts",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.description_quality",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.sketch_plane_choice",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "judgement-only; sketch planes not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.avoid_multibody",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "judgement-only; body intent not decidable",
+        "error": null
+      }
+    ]
+  },
+  "timing": {
+    "baseline_minutes": null,
+    "assisted_supervision_minutes": 0.0,
+    "assisted_verification_minutes": 0.0,
+    "false_alarm_handling_minutes": 0.0,
+    "unattended_runtime_minutes": 0.02,
+    "net_saved_minutes": null
+  }
+}

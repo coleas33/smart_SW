@@ -1,0 +1,1411 @@
+{
+  "session_id": "6f1c0a2e-9b6d-4a51-9f30-0b1f5a7c2d10",
+  "package_id": "11111111-2222-4333-8444-555555555555",
+  "design_id": "dsn:1",
+  "started_at": "2026-09-18T21:57:55Z",
+  "ended_at": "2026-09-18T21:59:32Z",
+  "model": "gpt-fixture",
+  "provider_info": {
+    "provider": "openai",
+    "model": "gpt-fixture",
+    "effort_mapping": {
+      "requested": "high",
+      "provider_param": "reasoning.effort",
+      "provider_value": "high"
+    },
+    "key_source": "env"
+  },
+  "retry_of": null,
+  "reused_from": null,
+  "efficiency": {
+    "trim_tool_descriptions": false,
+    "tool_tiers": false,
+    "prompt_cache_key": false,
+    "gemini_explicit_cache": false,
+    "prerun_checks": false,
+    "parallel_tool_calls": false,
+    "coverage_stop": false,
+    "package_reuse": false,
+    "lazy_meshes": false,
+    "carry_over_rms": false
+  },
+  "usage": {
+    "rounds": 2,
+    "turns": 1,
+    "totals": {
+      "input_tokens": 27000,
+      "cached_input_tokens": 11000,
+      "cache_write_tokens": 0,
+      "output_tokens": 1600,
+      "reasoning_tokens": 960,
+      "tool_result_input_tokens": null,
+      "total_tokens": 28600,
+      "latency_s": 39.5
+    },
+    "by_turn": [
+      {
+        "input_tokens": 27000,
+        "cached_input_tokens": 11000,
+        "cache_write_tokens": 0,
+        "output_tokens": 1600,
+        "reasoning_tokens": 960,
+        "tool_result_input_tokens": null,
+        "total_tokens": 28600,
+        "latency_s": 39.5
+      }
+    ]
+  },
+  "withheld_checks": [],
+  "steps": [
+    {
+      "index": 0,
+      "tool": "check_rms_part",
+      "arguments": {
+        "configuration": "Default"
+      },
+      "result_summary": "check_rms_part returned its result",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.25
+    },
+    {
+      "index": 1,
+      "tool": "check_rms_assembly",
+      "arguments": {
+        "configuration": "Default"
+      },
+      "result_summary": "check_rms_assembly returned its result",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.5
+    },
+    {
+      "index": 2,
+      "tool": "check_rms_equations",
+      "arguments": {
+        "configuration": "Default"
+      },
+      "result_summary": "check_rms_equations returned its result",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.75
+    },
+    {
+      "index": 3,
+      "tool": "check_interference",
+      "arguments": {
+        "configuration": "Default"
+      },
+      "result_summary": "check_interference returned its result",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 1.0
+    }
+  ],
+  "evidence_requests": [
+    {
+      "id": "ER-001",
+      "what": "The vault version and the local-modification state of every reviewed document",
+      "why": "provenance cannot be confirmed from the manifest as dumped",
+      "entity_ids": [
+        "doc:1",
+        "doc:2",
+        "doc:3"
+      ],
+      "status": "open",
+      "answer": null,
+      "answered_at": null
+    },
+    {
+      "id": "ER-002",
+      "what": "A part drawing for the housing carrying material, tolerance and thread notes",
+      "why": "drawing.manufacturing_inputs has no sheet to read",
+      "entity_ids": [
+        "doc:2"
+      ],
+      "status": "open",
+      "answer": null,
+      "answered_at": null
+    },
+    {
+      "id": "ER-003",
+      "what": "The pin geometry and the hole each pin seats in",
+      "why": "interfaces.fit and holes.alignment cannot be computed without them",
+      "entity_ids": [
+        "cmp:0002",
+        "cmp:0004"
+      ],
+      "status": "open",
+      "answer": null,
+      "answered_at": null
+    }
+  ],
+  "findings": [
+    {
+      "id": "F-001",
+      "check": "rms.folders.present",
+      "title": "Three of the six groups are missing from the part tree",
+      "status": "suspected",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:2",
+          "vault_path": "/Designs/housing.SLDPRT",
+          "vault_version": 3,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "housing-1 carries three of the six groups as folders.",
+      "requirement": "Every one of the six groups exists as a folder.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        0
+      ],
+      "coverage_limits": [],
+      "recommended_action": "add the missing group folders before the next release.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-002",
+      "check": "rms.grouping.all_features_in_a_group",
+      "title": "Content features sit outside every group",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0003"
+      ],
+      "drawing_locations": [
+        {
+          "document_id": "doc:2",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "ZmVhdDowMDA3",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:2",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "ZmVhdDowMDEx",
+          "page": null,
+          "bbox": null
+        }
+      ],
+      "provenance": [
+        {
+          "document_id": "doc:2",
+          "vault_path": "/Designs/housing.SLDPRT",
+          "vault_version": 3,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "two content features of housing-1 sit outside any group folder.",
+      "requirement": "Every content feature lives inside a group.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        0
+      ],
+      "coverage_limits": [],
+      "recommended_action": "move both features into the group their intent belongs to.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-003",
+      "check": "rms.sketches.fully_defined",
+      "title": "An under-defined sketch drives a Core feature",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0003"
+      ],
+      "drawing_locations": [
+        {
+          "document_id": "doc:2",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "ZmVhdDowMDAz",
+          "page": null,
+          "bbox": null
+        }
+      ],
+      "provenance": [
+        {
+          "document_id": "doc:2",
+          "vault_path": "/Designs/housing.SLDPRT",
+          "vault_version": 3,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "one sketch of housing-1 is under defined.",
+      "requirement": "Every sketch is fully defined. Only under_defined fails.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        0
+      ],
+      "coverage_limits": [],
+      "recommended_action": "fully define the sketch before the geometry is relied on.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-004",
+      "check": "rms.assembly.mates_to_reference_geometry",
+      "title": "Two mates reference faces rather than reference geometry",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:1",
+          "vault_path": "/Designs/cover-assy.SLDASM",
+          "vault_version": 7,
+          "revision": "B",
+          "configuration": "Default",
+          "local_modified": false,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "two mates of the root assembly reference a face of housing-1 and a face of dowel-pin-1.",
+      "requirement": "Mates reference planes, axes, points, or coordinate systems, not faces, edges, or vertices.",
+      "inputs": [
+        "housing-1",
+        "dowel-pin-1"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        1
+      ],
+      "coverage_limits": [],
+      "recommended_action": "remate both to planes or axes so an edit cannot orphan them.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-005",
+      "check": "rms.params.global_variables_present",
+      "title": "The part declares no global variable",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:2",
+          "vault_path": "/Designs/housing.SLDPRT",
+          "vault_version": 3,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "housing-1 declares no global variable.",
+      "requirement": "At least one global variable exists.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        2
+      ],
+      "coverage_limits": [],
+      "recommended_action": "name the driving sizes as global variables.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-006",
+      "check": "rms.params.dimensions_driven_by_equations",
+      "title": "No dimension is driven by an equation",
+      "status": "suspected",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:2",
+          "vault_path": "/Designs/housing.SLDPRT",
+          "vault_version": 3,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "no dimension of housing-1 is driven by an equation.",
+      "requirement": "At least one dimension is driven by an equation.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        2
+      ],
+      "coverage_limits": [],
+      "recommended_action": "drive the sizes that must move together from one equation.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-007",
+      "check": "interference.static",
+      "title": "Static interference between the housing and the second pin",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0003",
+        "cmp:0004"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:2",
+          "vault_path": "/Designs/housing.SLDPRT",
+          "vault_version": 3,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        },
+        {
+          "document_id": "doc:3",
+          "vault_path": "/Designs/dowel-pin.SLDPRT",
+          "vault_version": 2,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "housing-1 and dowel-pin-2 overlap by 0.8 mm^3 in the Default configuration.",
+      "requirement": "Components do not occupy the same volume unless the fit is intended.",
+      "inputs": [
+        "housing-1",
+        "dowel-pin-2"
+      ],
+      "calculation": {
+        "model": "interference.static",
+        "inputs": {
+          "configuration": "Default",
+          "pair": "cmp:0003 and cmp:0004",
+          "volume_as_reported": "0.8 mm^3"
+        },
+        "assumptions": [
+          "the pins are modelled at nominal diameter"
+        ],
+        "excluded_effects": [
+          "thermal expansion",
+          "press-fit deformation"
+        ],
+        "result": {
+          "member_count": 2.0,
+          "max_volume_mm3": 0.8
+        },
+        "units_out": "mm^3",
+        "function": "swreview.checks.interference.static",
+        "function_version": "1"
+      },
+      "tool_result_ids": [],
+      "coverage_limits": [
+        "measured in the Default configuration only."
+      ],
+      "recommended_action": "confirm whether the overlap is the intended press fit, or open the bore.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-008",
+      "check": "interference.static",
+      "title": "Static interference between the housing and the first pin",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:3",
+          "vault_path": "/Designs/dowel-pin.SLDPRT",
+          "vault_version": 2,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        },
+        {
+          "document_id": "doc:2",
+          "vault_path": "/Designs/housing.SLDPRT",
+          "vault_version": 3,
+          "revision": "A",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native"
+        }
+      ],
+      "configuration": "Default",
+      "observed": "housing-1 and dowel-pin-1 overlap by 0.5 mm^3 in the Default configuration.",
+      "requirement": "Components do not occupy the same volume unless the fit is intended.",
+      "inputs": [
+        "housing-1",
+        "dowel-pin-1"
+      ],
+      "calculation": {
+        "model": "interference.static",
+        "inputs": {
+          "configuration": "Default",
+          "pair": "cmp:0003 and cmp:0002",
+          "volume_as_reported": "0.5 mm^3"
+        },
+        "assumptions": [
+          "the pins are modelled at nominal diameter"
+        ],
+        "excluded_effects": [
+          "thermal expansion",
+          "press-fit deformation"
+        ],
+        "result": {
+          "member_count": 2.0,
+          "max_volume_mm3": 0.5
+        },
+        "units_out": "mm^3",
+        "function": "swreview.checks.interference.static",
+        "function_version": "1"
+      },
+      "tool_result_ids": [],
+      "coverage_limits": [
+        "measured in the Default configuration only."
+      ],
+      "recommended_action": "confirm whether the overlap is the intended press fit, or open the bore.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    }
+  ],
+  "coverage": {
+    "checked": [
+      {
+        "check": "rms.refs.direction",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.intent.every_feature_described",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.not_over_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.one_sketch_per_feature",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.first_component_fixed",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      }
+    ],
+    "skipped": [
+      {
+        "check": "rms.folders.ordered",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: fewer than two groups.",
+        "error": null
+      },
+      {
+        "check": "rms.groups.no_solids_in_ref_or_construction",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Reference or Construction group.",
+        "error": null
+      },
+      {
+        "check": "rms.core.shell_last",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Core group.",
+        "error": null
+      },
+      {
+        "check": "rms.detail.holes_last",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Detail group.",
+        "error": null
+      },
+      {
+        "check": "rms.detail.no_internal_references",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Detail group.",
+        "error": null
+      },
+      {
+        "check": "rms.detail.individually_suppressible",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Detail group.",
+        "error": null
+      },
+      {
+        "check": "rms.modify.transform_before_replicate",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Modify group.",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.chamfers_before_fillets",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Quarantine group.",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.largest_fillet_first",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Quarantine group.",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.only_fillets_and_chamfers",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Quarantine group.",
+        "error": null
+      },
+      {
+        "check": "rms.refs.quarantine_has_no_children",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "1 document(s): doc:2: no Quarantine group.",
+        "error": null
+      }
+    ],
+    "unresolved": [
+      {
+        "check": "rms.folders.present",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.folders.ordered",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.grouping.all_features_in_a_group",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.groups.no_solids_in_ref_or_construction",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.core.shell_last",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.detail.holes_last",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.modify.transform_before_replicate",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.chamfers_before_fillets",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.largest_fillet_first",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.only_fillets_and_chamfers",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.refs.direction",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.refs.quarantine_has_no_children",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.detail.no_internal_references",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.intent.every_feature_described",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.fully_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.not_over_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.one_sketch_per_feature",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.detail.individually_suppressible",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.params.global_variables_present",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.params.dimensions_driven_by_equations",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "1 document(s): doc:3: both pin instances are lightweight, so the tree was not read.",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.mates_to_reference_geometry",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "1 document(s): doc:1: one mate's entity kinds could not be read.",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.mate_chain_depth",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "1 document(s): doc:1: no fixed child of the root assembly.",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.toolbox_parts_not_configurations",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "1 document(s): doc:1: toolbox identity not readable.",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.no_sibling_in_context_refs",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "external references not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.positions_driven_by_globals",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "assembly equations not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.mates_described",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "mate descriptions not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.subassemblies",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "subassembly mates not extracted; assembly rules evaluated for the root document only",
+        "error": null
+      },
+      {
+        "check": "rms.types.unknown",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:3"
+          ]
+        },
+        "reason": "feature type names not in the calibrated table: 3 feature(s) on the pin document.",
+        "error": null
+      },
+      {
+        "check": "fasteners",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "list_fasteners returned zero instances, so no screw or bolt joint could be checked.",
+        "error": null
+      },
+      {
+        "check": "holes.alignment",
+        "scope": {
+          "component_ids": [
+            "cmp:0002",
+            "cmp:0004"
+          ],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "no hole was extracted from either pin, so no coaxial pair could be checked.",
+        "error": null
+      },
+      {
+        "check": "interfaces.fit",
+        "scope": {
+          "component_ids": [
+            "cmp:0002",
+            "cmp:0004"
+          ],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "pin geometry was not extracted, so the dowel fit could not be computed.",
+        "error": null
+      },
+      {
+        "check": "interfaces.stack",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "no drawing dimensions, target gap or stack contributors were extracted.",
+        "error": null
+      },
+      {
+        "check": "drawing.manufacturing_inputs",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "no drawing documents or sheets were included.",
+        "error": null
+      },
+      {
+        "check": "provenance",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2",
+            "doc:3"
+          ]
+        },
+        "reason": "the local-modification state is unavailable for two of the three documents.",
+        "error": null
+      },
+      {
+        "check": "modeling.resilience",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "5 checked, 11 skipped, 28 unresolved rule result(s) over 3 document(s); 6 finding(s).",
+        "error": null
+      },
+      {
+        "check": "coverage.closeout",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "the package carries no hole, fastener or drawing evidence, so four checklist items closed out unresolved.",
+        "error": null
+      },
+      {
+        "check": "coverage.evidence_request",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1",
+            "doc:2",
+            "doc:3"
+          ]
+        },
+        "reason": "ER-001 is still open: The vault version and the local-modification state of every reviewed document.",
+        "error": null
+      },
+      {
+        "check": "coverage.evidence_request",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:2"
+          ]
+        },
+        "reason": "ER-002 is still open: A part drawing for the housing carrying material, tolerance and thread notes.",
+        "error": null
+      },
+      {
+        "check": "coverage.evidence_request",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "ER-003 is still open: The pin geometry and the hole each pin seats in.",
+        "error": null
+      }
+    ],
+    "failed": [],
+    "out_of_scope": [
+      {
+        "check": "rms.drawing.model_items_preferred",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "drawing-owned vs model dimensions not extracted; advisory by decision",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.structural_vs_cosmetic_fillets",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.core_shaping_cuts",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.description_quality",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.sketch_plane_choice",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "judgement-only; sketch planes not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.avoid_multibody",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:1"
+          ]
+        },
+        "reason": "judgement-only; body intent not decidable",
+        "error": null
+      },
+      {
+        "check": "interference",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "the assembly holds no mechanism, so no position other than Default was checked.",
+        "error": null
+      }
+    ]
+  },
+  "timing": {
+    "baseline_minutes": null,
+    "assisted_supervision_minutes": 0.0,
+    "assisted_verification_minutes": 0.0,
+    "false_alarm_handling_minutes": 0.0,
+    "unattended_runtime_minutes": 1.62,
+    "net_saved_minutes": null
+  }
+}

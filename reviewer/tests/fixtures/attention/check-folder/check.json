@@ -1,0 +1,58 @@
+{
+  "family": "rms",
+  "session_id": "6f1c0a2e-9b6d-4a51-9f30-0b1f5a7c2d11",
+  "scope": "part",
+  "documents": [
+    "doc:2"
+  ],
+  "assembly_document": null,
+  "subjects": {
+    "F-001": [],
+    "F-002": [
+      {
+        "feature_id": "feat:0007",
+        "name": "Boss-Extrude2",
+        "type_name": "ExtrudeFeature",
+        "group": null,
+        "persist_ref": "ZmVhdDowMDA3",
+        "persist_ref_scope": "doc:2",
+        "component_ids": [
+          "cmp:0003"
+        ],
+        "reason": null
+      },
+      {
+        "feature_id": "feat:0011",
+        "name": "Fillet1",
+        "type_name": "FilletFeature",
+        "group": null,
+        "persist_ref": "ZmVhdDowMDEx",
+        "persist_ref_scope": "doc:2",
+        "component_ids": [
+          "cmp:0003"
+        ],
+        "reason": null
+      }
+    ],
+    "F-003": [
+      {
+        "feature_id": "feat:0003",
+        "name": "Sketch3",
+        "type_name": "ProfileFeature",
+        "group": null,
+        "persist_ref": "ZmVhdDowMDAz",
+        "persist_ref_scope": "doc:2",
+        "component_ids": [
+          "cmp:0003"
+        ],
+        "reason": null
+      }
+    ]
+  },
+  "exceptions_carried_forward": {
+    "from_run": null,
+    "count": 0,
+    "reason": "no run root was named for this run, so no earlier run was looked at and nothing was carried forward; the directory above a package is a run root only when a caller says it is"
+  },
+  "unavailable_scopes": []
+}
