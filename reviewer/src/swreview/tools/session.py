@@ -8,7 +8,8 @@ the model must not be able to talk its way around:
   layer, which writes it when a tool actually failed (contracts/agent-tools.md);
 - `record_drawing_finding` cannot claim `demonstrated` or `checked_within_scope`: no
   calculation stands behind a drawing reading, so the strongest status it may take is
-  `suspected` (constitution Principle II, FR-009);
+  `suspected` (constitution Principle II, FR-009), and it cannot carry a number the cited
+  drawing evidence does not state (feature 007 FR-033, `contracts/gate.md` section 5);
 - `request_capture` returns a capture that already exists or, with the live bridge wired,
   asks the bridge for one and records it; without a bridge it says `unresolved` and never
   invents a view (US3).
@@ -16,12 +17,14 @@ the model must not be able to talk its way around:
 
 from __future__ import annotations
 
+import re
+from decimal import Decimal
 from typing import Literal, get_args
 
 from pydantic import ValidationError
 
 from swreview.findings import build_finding
-from swreview.ir.models import SourceRef
+from swreview.ir.models import DrawingSheet, SourceRef
 from swreview.report.session import CoverageItem, CoverageScope, EvidenceRequest
 from swreview.tools.context import (
     current_context,
@@ -141,6 +144,11 @@ def record_drawing_finding(
         nothing numeric backs it, the strongest status available is `suspected`;
         `demonstrated` and `checked_within_scope` are not.
     """
+    # The number guard below is deliberately **not** described in this docstring. The
+    # docstring is the tool description on the wire, pinned to the byte in
+    # `test_tool_payload.py` and quoted in feature 005's `contracts/levers.md`; a sentence
+    # here would move every one of those measurements. The model meets the rule as an
+    # `error_result` it can answer, which is the shape the other five refusals already use.
     context = current_context()
     if context.document(document_id) is None:
         return unknown_id("document", document_id)
@@ -160,6 +168,10 @@ def record_drawing_finding(
         if context.document(location.document_id) is None:
             return unknown_id("document", location.document_id)
         locations.append(location)
+
+    invented = _unsourced_numbers(document_id, sheet, locations, observed, requirement)
+    if invented is not None:
+        return error_result(invented)
 
     try:
         finding = build_finding(
@@ -183,18 +195,178 @@ def record_drawing_finding(
     return {"status": "recorded", "finding": as_json(finding)}
 
 
+def _ingested_sheets(document_id: str, sheet: str | None) -> list[DrawingSheet]:
+    """The ingested sheets of `document_id`, narrowed to `sheet` when one is named.
+
+    `sheet is None` is a citation that reached the document without naming a sheet - a
+    `page` or `persist_ref` locator - and cannot honestly be narrowed to one of them.
+    """
+    context = current_context()
+    return [
+        extracted
+        for extracted in context.ir.drawings
+        if extracted.document_id == document_id
+        and (sheet is None or extracted.sheet_name == sheet)
+    ]
+
+
 def _drawing_coverage_limits(document_id: str, sheet: str, status: str) -> list[str]:
     """Why an unresolved drawing finding could not be settled, from the sheet itself."""
     if status != "unresolved":
         return []
     context = current_context()
-    for extracted in context.ir.drawings:
-        if extracted.document_id == document_id and extracted.sheet_name == sheet:
-            reason = sheet_reason(context.ir, extracted)
-            if reason is not None:
-                return [f"{document_id} sheet {sheet}: {reason}"]
-            break
+    for extracted in _ingested_sheets(document_id, sheet):
+        reason = sheet_reason(context.ir, extracted)
+        if reason is not None:
+            return [f"{document_id} sheet {sheet}: {reason}"]
+        break
     return [f"{document_id} sheet {sheet}: the drawing does not state the required value"]
+
+
+_UNIT = r"mm|cm|um|in|ft|deg|rad|m|°|\""
+"""The trailing units a value may carry, longest spelling first so `mm` beats `m`.
+
+They are part of the **token**, so a refusal says `0.05 mm` rather than `0.05`, and they
+are not part of what is compared: `text_as_read` is a callout, and callouts state the unit
+once on the sheet rather than on every dimension.
+"""
+
+_NUMBER_SCANNER = re.compile(
+    r"""
+      (?P<date>   \d{4}-\d{2}-\d{2})
+    | (?P<ident>  [A-Za-z][A-Za-z0-9_]*[-:.]?\d[A-Za-z0-9_.]*)
+    | (?P<place>  (?:sheet|view|page|annotation)\s+\d+)
+    | (?P<thread> \d+/\d+-\d+)
+    | (?P<value>  (?:[±+-])?(?P<core>\d+(?:\.\d+)?)(?:\s?(?:"""
+    + _UNIT
+    + r""")(?![A-Za-z]))?)
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+"""One pass over a piece of prose, in which the first three groups are things to walk past.
+
+The order is the whole of the rule (`contracts/gate.md` section 5). An ISO date, an
+identifier and a locator (`Sheet 2`) are matched **first** and consumed, so the digits
+inside them never reach the two groups that mean "a value": a thread callout, and a decimal
+with an optional sign and an optional unit. Matching them rather than testing the
+characters around a number is what keeps `2026-09-18` from being read as three values.
+
+"Identifier" is *anything that starts with a letter and goes on to contain a digit*, with
+`-`, `:` and `.` allowed inside it - `F-003`, `cmp:0002`, `dnt:0007`, `M6x1.0`, `Y14.5`.
+Written that widely on purpose: the narrow version, which required the digit to follow a
+`-` or a `:`, read the standard reference in "ASME Y14.5 hole callout practice" as a claim
+that the drawing says `5`, and refused a finding whose only real number was correct.
+"""
+
+
+def _magnitude(core: str) -> str:
+    """One key for one value, so `5`, `5.0` and `5.00` are the same number.
+
+    The guard asks whether the drawing states the value, not whether the prose spells it
+    the way the callout does; a sheet reading `40.0` backs a sentence reading `40 mm`, and
+    refusing that would send the model round again to change nothing that matters. `Decimal`
+    rather than `float` because the keys are compared for equality.
+    """
+    return str(Decimal(core).normalize())
+
+
+def _numbers_in(text: str) -> list[tuple[str, str]]:
+    """Every value `text` states, as (the token as written, the key it is compared on).
+
+    The key drops the sign as well as the spelling: a sheet writes a tolerance as
+    `+0.025/0` or `±0.1` and the prose restates the same magnitude with whichever sign the
+    sentence needs, so it is the magnitude that has to have been read off the drawing. A
+    thread callout is compared as written, because `1/4-20` is a designation and its three
+    numbers mean nothing apart.
+    """
+    found: list[tuple[str, str]] = []
+    for match in _NUMBER_SCANNER.finditer(text):
+        if match.group("thread") is not None:
+            found.append((match.group("thread"), match.group("thread")))
+        elif match.group("value") is not None:
+            found.append((match.group("value"), _magnitude(match.group("core"))))
+    return found
+
+
+def _cited_places(
+    document_id: str, sheet: str, locations: list[SourceRef]
+) -> list[tuple[str, str | None]]:
+    """The finding's own place, then each citation's, in order and without repeats."""
+    places: list[tuple[str, str | None]] = [(document_id, sheet)]
+    for location in locations:
+        place = (location.document_id, location.sheet)
+        if place not in places:
+            places.append(place)
+    return places
+
+
+def _place_label(place: tuple[str, str | None]) -> str:
+    document_id, sheet = place
+    return f"{document_id} sheet {sheet}" if sheet is not None else f"{document_id} (every sheet)"
+
+
+def _drawing_evidence(place: tuple[str, str | None]) -> list[str]:
+    """Every piece of drawing text one cited place reaches, from both extraction paths.
+
+    The ingested sheet's dimension callouts and general notes, and the native sheet's note
+    and annotation text. Nothing else is evidence of what a drawing *says*: a display
+    dimension's computed value is the model's number, not the sheet's, and a finding backed
+    by it would be a finding backed by the thing under review.
+    """
+    document_id, sheet = place
+    context = current_context()
+    texts: list[str] = []
+    for extracted in _ingested_sheets(document_id, sheet):
+        texts.extend(item.text_as_read for item in extracted.dimensions)
+        texts.extend(note.text for note in extracted.general_notes)
+    for record in context.ir.drawing_records:
+        if record.document_id != document_id:
+            continue
+        for native in record.sheets:
+            if sheet is not None and native.name != sheet:
+                continue
+            for view in native.views:
+                texts.extend(note.text for note in view.notes if note.text is not None)
+                texts.extend(
+                    annotation.name
+                    for annotation in view.annotations
+                    if annotation.name is not None
+                )
+    return texts
+
+
+def _unsourced_numbers(
+    document_id: str, sheet: str, locations: list[SourceRef], *fields: str
+) -> str | None:
+    """The sixth refusal, or None: a value no cited sheet states (FR-033).
+
+    The one path on which model prose becomes a claim in the report. The numeric tools put
+    a calculation's own result in the finding; this one records what it was handed, so a
+    number that was never on a drawing is indistinguishable in `report.md` from one that
+    was. Returning a reason rather than raising is deliberate: the model answers it once,
+    with a citation or with different words, and the turn continues.
+    """
+    places = _cited_places(document_id, sheet, locations)
+    sourced = {
+        value
+        for place in places
+        for text in _drawing_evidence(place)
+        for _, value in _numbers_in(text)
+    }
+    unsourced: list[str] = []
+    for text in fields:
+        for token, value in _numbers_in(text):
+            if value not in sourced and token not in unsourced:
+                unsourced.append(token)
+    if not unsourced:
+        return None
+    searched = ", ".join(_place_label(place) for place in places)
+    return (
+        f"not stated by any cited drawing evidence: {', '.join(unsourced)}. The "
+        f"dimensions, notes and annotations of {searched} were searched. A drawing "
+        f"finding may only carry a number the drawing says: cite the sheet that states "
+        f"it, or say what the drawing does say."
+    )
 
 
 def get_review_checklist() -> list[dict[str, str]]:
