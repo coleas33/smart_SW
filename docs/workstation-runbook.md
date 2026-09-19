@@ -48,7 +48,7 @@ Run these first on a fresh machine and after any Windows or SOLIDWORKS update.
 | `uv` (Python 3.11+ environments; the add-in launches the backend through it) | `uv --version` **from a fresh, non-elevated PowerShell**, because SOLIDWORKS inherits the same PATH | install uv for the user, then log out and in so PATH is refreshed for SOLIDWORKS |
 | SOLIDWORKS 2024 SP5 | `Test-Path "C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\api\redist\SolidWorks.Interop.sldworks.dll"` | the seat is not where the script expects; pass `-SolidWorksRoot` to the register script |
 | WebView2 runtime (the Review, Model check, Standards and Remodel tabs) | `Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" -Name pv` prints a version | install the Evergreen WebView2 runtime |
-| Codex CLI (the Ask tab's terminal) | `codex --version` | `npm install -g @openai/codex`, then sign in once |
+| Codex CLI (the Ask tab's terminal) | not needed: the Ask tab is hidden in this build (`TaskPaneControl.AskTabShown` is false) | when the tab is shown again: `npm install -g @openai/codex`, then sign in once |
 | A provider key, for the Review tab only | entered in the pane's Settings; never in a file you write | the Model check and Standards tabs need no key |
 
 ## 3. First install
@@ -164,8 +164,9 @@ silently disabled every bridge-backed feature).
    "No model round trips yet" after `report.md` has been written, the page's event parser has
    regressed; that exact failure was fixed on 2026-09-18 and is pinned by a shared sample
    frame in both test suites, so a recurrence is a real regression to report.
-6. **The Ask tab starts.** Its terminal opens with the Codex banner. A message about an npm
-   shim means Codex is installed but not startable from the pane; reinstall it for the user.
+6. **There is no Ask tab.** Five tabs: Review, Extract, Model check, Remodel, Standards. The
+   Ask tab is hidden by design in this build; a pane showing one is running a build that
+   turned it back on, which is a change to report.
 7. **Nothing landed in the repository.** `git status --porcelain` in the checkout prints
    nothing.
 

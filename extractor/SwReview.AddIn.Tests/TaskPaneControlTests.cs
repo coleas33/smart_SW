@@ -58,14 +58,32 @@ public sealed class TaskPaneControlTests
             string[] captions = Tabs(pane).Select(tab => tab.Text).ToArray();
 
             Assert.Equal(
-                new[] { "Review", "Ask", "Extract", "Model check", "Remodel", "Standards" },
+                new[] { "Review", "Extract", "Model check", "Remodel", "Standards" },
                 captions);
         });
     }
 
     /// <summary>
-    /// No existing tab moves and none is hidden. The first five are asserted as a prefix rather
-    /// than by count, so a seventh tab added later does not silently reorder these five.
+    /// The Ask tab is hidden, not removed: the pane has no tab by that name, loads no terminal
+    /// page, and the switch that decides it is the one documented on the control. Turning the
+    /// terminal back on is that one value, and this test is the one that changes with it.
+    /// </summary>
+    [Fact]
+    public void TheAskTabIsHiddenWhileTheTerminalIsNotPartOfThePilot()
+    {
+        Assert.False(TaskPaneControl.AskTabShown, "AskTabShown is on; update the tab inventories.");
+
+        WithPane(pane =>
+        {
+            Assert.DoesNotContain("Ask", Tabs(pane).Select(tab => tab.Text));
+            Assert.False(pane.TerminalPageReady, "The terminal page was loaded for a hidden tab.");
+        });
+    }
+
+    /// <summary>
+    /// No existing tab moves and none is hidden. The first four are asserted as a prefix rather
+    /// than by count, so a tab added later does not silently reorder these four. (Ask is the
+    /// one deliberate exception, hidden by <see cref="TaskPaneControl.AskTabShown"/>.)
     /// </summary>
     [Fact]
     public void NoExistingTabMovedAndNoneIsHidden()
@@ -75,8 +93,8 @@ public sealed class TaskPaneControlTests
             TabPage[] tabs = Tabs(pane).ToArray();
 
             Assert.Equal(
-                new[] { "Review", "Ask", "Extract", "Model check", "Remodel" },
-                tabs.Take(5).Select(tab => tab.Text).ToArray());
+                new[] { "Review", "Extract", "Model check", "Remodel" },
+                tabs.Take(4).Select(tab => tab.Text).ToArray());
 
             // None of them is hidden or switched off: the sixth tab is added beside the five,
             // never in place of one (FR-035).

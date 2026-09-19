@@ -295,7 +295,7 @@ public sealed class WebViewFallbackTests
                 .ToArray();
 
             Assert.Equal(
-                new[] { "Review", "Ask", "Extract", "Model check", "Remodel", "Standards" },
+                new[] { "Review", "Extract", "Model check", "Remodel", "Standards" },
                 captions);
         });
     }
@@ -368,7 +368,8 @@ public sealed class WebViewFallbackTests
             // failed attempt is the whole story: two would mean two environments on a machine
             // where the runtime is present, over the same user data folder.
             Assert.NotNull(TabNamed(control, "Review"));
-            Assert.NotNull(TabNamed(control, "Ask"));
+            // Ask is hidden (TaskPaneControl.AskTabShown), so it neither exists nor asks.
+            Assert.DoesNotContain("Ask", Descendants(control).OfType<TabPage>().Select(tab => tab.Text));
             Assert.NotNull(TabNamed(control, "Model check"));
             Assert.NotNull(TabNamed(control, "Remodel"));
             Assert.NotNull(TabNamed(control, "Standards"));

@@ -85,7 +85,7 @@ public sealed class TaskPaneGuidanceTests
             // (contracts/pane-remodel-messages.md); Standards is tab 6
             // (contracts/standards-check.md), and none of the five before it moved.
             Assert.Equal(
-                new[] { "Review", "Ask", "Extract", "Model check", "Remodel", "Standards" },
+                new[] { "Review", "Extract", "Model check", "Remodel", "Standards" },
                 captions);
         });
     }
@@ -102,7 +102,6 @@ public sealed class TaskPaneGuidanceTests
             var expected = new Dictionary<string, string>
             {
                 { "Review", ReviewPurpose },
-                { "Ask", AskPurpose },
                 { "Extract", ExtractPurpose },
                 { "Model check", ModelCheckPurpose },
                 { "Remodel", RemodelPurpose },
