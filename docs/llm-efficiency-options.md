@@ -68,6 +68,55 @@ provider actually billed.
 | 11 | **Incremental re-review**: carry findings on parts whose feature-tree and geometry fingerprints are unchanged since the last run as "unchanged since <run>" | Re-review pays only for what moved | Carry-over must be visible, never silent; fingerprints must cover every input the check reads | Tokens on a re-run |
 | 12 | **Rules over tokens**: every finding class the model keeps producing that a rule can express becomes a deterministic check | Zero tokens per part for that class | Only classes that are genuinely deterministic | Count of findings by check kind over time |
 
+### Tier 4 (added 2026-09-19): the agent inside the pane uses what we built
+
+The numbers above are the option numbers of 2026-09-16; feature 005's flag table
+(`specs/005-llm-efficiency/contracts/levers.md`) keys its flags by them, with option 11
+(incremental re-review) carried as flag `11a carry_over_rms`. Feature 007's `procedural_gate`
+took the bare number: it is **lever 11** in that table and in `EfficiencySettings`, its own
+contract is `specs/007-attention-policy-gate/contracts/gate.md`, and its behaviour is being
+implemented as this section is written.
+
+The question asked on 2026-09-19: when an agentic model runs inside the add-in, how does it
+use the checks, commands and scripts this repository already has, automatically, instead of
+re-deriving them in prose or sending the engineer to another tab? What is true today:
+
+- **The Review tab's model has no way not to.** Its whole API is the tool array: 32
+  in-process functions (`tools/registry.py`), 35 in the pane, which always attaches the three
+  bridge tools that are pipe calls into SOLIDWORKS; the eight deterministic checks are among
+  them, and `check_standards` joins only when a standards run is attached. The system prompt
+  says there is no shell, no file access and no way to run code
+  (`agent/prompts/system_v1.md`). Lever 5, off by default, makes code call the four
+  self-enumerating checks before the first turn; the procedural gate widens that; and lever 12
+  is the standing practice of moving a finding class into a rule.
+- **The Ask tab's CLI is registered by the host, not by the model.** On every launch the
+  add-in writes a whole Codex home (`Terminal/CliProfileWriter.cs`, with a copy of the
+  engineer's own Codex login) whose profile replaces the CLI's system prompt with ours,
+  registers `swreview mcp` over the run folder with a 22-tool allowlist, turns the shell and
+  web search off and the sandbox read-only (Codex's own `apply_patch` stays loaded and the
+  sandbox refuses its writes), and refuses to start until a probe shows exactly those tools
+  and that built-in loaded. The 22 are the query and measurement tools, capture, and two
+  bridge tools. The allowlist is not the boundary, because the CLI can read its own generated
+  profile: the boundary is the general-chat bridge secret, scoped to `ping`, `capture` and
+  `measure`, and the tools the MCP server is built without. None of the eight deterministic
+  checks, `check_standards`, or any `swreview` command is reachable from it, by construction:
+  the terminal must create no finding (feature 002 FR-025), and the constitution forbids a
+  generic execution tool.
+- **The tab is hidden** (`TaskPaneControl.AskTabShown`); nothing below is measurable until it
+  is part of the pilot, and only the Codex profile exists (the Gemini one is deferred).
+
+| # | Lever | Expected effect | Trade-off or risk | How to measure |
+|---|---|---|---|---|
+| 13a | **Checks as Ask-tab tools**: add the deterministic checks (`check_rms_part`, `check_rms_assembly`, `check_rms_equations`, `check_interference_group`, `check_fit`, `check_axial_stack`, `check_fastener_joint`, `check_hole_alignment`, and `check_standards` when a profile is configured) to the stdio MCP toolset the generated profile registers, recorded in `chat-log.jsonl` and never in a session | A question about a fit, a stack or a clash is answered by the code the Review tab runs, in one call, instead of the CLI reading holes, mates and dimensions and reasoning about them; no "press Review" redirect | The MCP payload grows from 20 tools to 29 (22 to 31 with the bridge) on a path that levers 2 and 4 do not reach (feature 005 FR-077; FR-039b asks for lever 2 to reach it); `check_standards` dispatches only when a standards run is attached, which the MCP context has no way to do today; a check result in a chat log is not evidence, nothing in `report.md` cites it, and the persona has to say so; `check_interference_group` reads the package, but `bridge_interference` stays withheld because the general-chat secret scopes `ping`, `capture` and `measure` only; each tool moves the five pinned places of feature 003 `contracts/tools.md` plus `MCP_TOOL_FUNCTIONS`, the withheld list in `contracts/mcp-toolset.md` and its test mirror | Per Ask session, from `chat-log.jsonl`: check calls per question and questions answered with no tool call at all; the same ten questions on the 810-11249 folder with the checks off and on; payload bytes from `test_tool_payload.py`; zero findings or dispositions created from the terminal |
+| 13b | **Commands as tools and prompts, never a shell**: the keyless commands with a fixed argument shape as MCP tools (`attention`, `rms suppress-plan`, `remodel plan`, `check rms`, `check standards`) and MCP prompts that open on the folder's ranking and report (`swreview://report` exists; add `swreview://attention`); the shell stays off | The CLI starts from what the run already found and what the policy put first, and answers "what do I fix first" without any model computing an order | A command that writes (a check run; `remodel plan` and `attention` write nothing) needs a scratch folder under the terminal's own run folder and a rule that it never claims a review folder; the server registers no prompts today ("none in v1") | Share of Ask sessions whose first call is a resource or prompt read; tokens to the first useful answer, where the CLI reports them |
+| 13c | **Tool-first persona and a brief at start**: the generated prompt already says "Never answer from memory"; add that anything a tool can compute is computed, and hand the CLI the folder's "Start here" rows and coverage as its first resource, the way lever 5's digest and the gate's brief open a review | The CLI spends its turns on what the checks could not reach | Nothing types into the CLI today (the page forwards keystrokes only), so the brief is a resource plus an instruction, not a first message; every persona byte, and the MCP server's own `instructions` string on top of it, is resent on every turn | Feature 007's anti-drift check extended: the ids the CLI is handed equal `attention.json`'s |
+
+Not this lever: `extractor/tools/update-workstation.ps1`, `register-addin.ps1`, the benchmark
+package recipe (`benchmarks/README.md`) and the fixture generators are operator scripts. The
+model that should run them is the assistant on the workstation, through
+`docs/workstation-runbook.md`, which names the two scripts; an agent inside SOLIDWORKS must
+never build, register or update the add-in it is running in.
+
 ## Proposed feature 005 phases
 
 1. Instrumentation (lever 1) and the benchmark metrics; a baseline table for both providers.
