@@ -15,10 +15,17 @@ from pathlib import Path
 
 from swreview.findings import Disposition, Finding
 from swreview.report.markdown import render_report
+from swreview.report.rerender import REPORT_FILE_NAME, SESSION_FILE_NAME
 from swreview.report.session import ReviewSession, load_session, save_session
 
-SESSION_FILE_NAME = "session.json"
-REPORT_FILE_NAME = "report.md"
+__all__ = [
+    "DECISIONS",
+    "REPORT_FILE_NAME",
+    "SESSION_FILE_NAME",
+    "apply_disposition",
+    "find_finding",
+    "set_disposition",
+]
 
 DECISIONS: frozenset[str] = frozenset({"accepted", "rejected", "deferred"})
 """The three decisions an engineer can record. Public because the chat server validates a
@@ -111,6 +118,3 @@ def apply_disposition(
     (run_dir / REPORT_FILE_NAME).write_text(render_report(session), encoding="utf-8")
 
     return session
-
-
-__all__ = ["DECISIONS", "apply_disposition", "find_finding", "set_disposition"]
