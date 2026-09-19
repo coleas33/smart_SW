@@ -127,6 +127,7 @@ from swreview.report.attention_record import ATTENTION_FILE_NAME, write_attentio
 from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
 from swreview.report.markdown import render_report
 from swreview.report.session import load_session
+from swreview.report.unexamined import not_examined
 
 __all__ = [
     "DEFAULT_ALLOW_ORIGIN",
@@ -736,6 +737,7 @@ def check_result(check_dir: Path, run: RmsCheckRun) -> dict[str, Any]:
             "reason": carried.reason,
         },
         "attention": to_jsonable_python(rank(run.session)),
+        "not_examined": to_jsonable_python(not_examined(package)),
     }
 
 
@@ -899,6 +901,7 @@ def standards_result(check_dir: Path, run: StandardsCheckRun) -> dict[str, Any]:
         },
         "rebuilt": False,
         "attention": to_jsonable_python(rank(run.session)),
+        "not_examined": to_jsonable_python(not_examined(package)),
     }
 
 

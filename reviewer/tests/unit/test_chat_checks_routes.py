@@ -258,6 +258,7 @@ class TestRunCheck:
             "subjects",
             "exceptions_carried_forward",
             "attention",
+            "not_examined",
         }
 
     def test_the_check_result_carries_everything_the_contract_names(

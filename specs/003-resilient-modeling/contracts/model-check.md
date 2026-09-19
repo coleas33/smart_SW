@@ -87,7 +87,9 @@ R3 named the drift and this is the correction.)
                                  "reason": null},
   "attention": { /* the Ranking of feature 007 `contracts/attention.md` section 4,
                     minus session_id: policy_version, rows, top_n, not_amplified,
-                    coverage, empty_reason */ }
+                    coverage, empty_reason */ },
+  "not_examined": null   /* or {"sentence": "...", "instances": [{"id": "cmp:0002",
+                            "name": "DOWEL PIN", "state": "lightweight"}, ...]} */
 }
 ```
 
@@ -113,6 +115,7 @@ Six points the shape exists to enforce:
   the payload since the route landed and was missing from this block; feature 007 research
   R3 named the drift and this is the correction. A count of zero with no reason beside it
   reads as a failure rather than as the ordinary first run of a design.
+- `not_examined` is the lightweight warning of 2026-09-19 (`docs/feature-request-resolve-lightweight.md`): `null` when every component instance was read, otherwise one sentence naming each instance the extractor did not read with its recorded state (`lightweight`, `suppressed`, `unloaded`) and the families that therefore cannot see it, plus the instances behind it in package order. Composed by `reviewer/src/swreview/report/unexamined.py`, the same module that writes the report's `- Not examined:` Summary line, and identical on the Standards body. The page shows the sentence above "Start here" and computes nothing from it.
 - `attention` is feature 007's ranking of **this run's own session**, computed by
   `report/attention.rank` and carried so the tab can render the rows it should read first
   without computing an order of its own (feature 007 FR-022, FR-023). It is the
