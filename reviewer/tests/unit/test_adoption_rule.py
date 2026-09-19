@@ -117,6 +117,44 @@ def test_deciding_writes_no_flag_default() -> None:
     assert not any(EfficiencySettings().model_dump().values())
 
 
+def test_timing_on_the_scorecards_never_moves_a_decision() -> None:
+    """FR-006: the median net saved minutes is **reported** and never gated on.
+
+    `decide` names the metrics it reads, so a new `METRICS` entry gates nothing by
+    construction; this is the assertion that says so out loud. An on arm that saved two
+    hours per package and an off arm that saved none decide exactly as the same two arms
+    with no timing at all - the token threshold is still the only thing that moved.
+    """
+    timed_off = off_arm(
+        packages=(
+            PackageSpec(
+                total_tokens=OFF_TOKENS,
+                wall_clock_s=OFF_WALL_CLOCK,
+                baseline_minutes=90.0,
+                assisted_minutes=85.0,
+            ),
+        )
+    )
+    timed_on = arm(
+        "on",
+        3,
+        packages=(
+            PackageSpec(
+                total_tokens=200_000,
+                wall_clock_s=500.0,
+                baseline_minutes=90.0,
+                assisted_minutes=10.0,
+            ),
+        ),
+    )
+
+    untimed = decide_rule(base_off(), on_arm())
+    timed = decide_rule(timed_off, timed_on)
+
+    assert timed_on[0].scorecard.aggregate.median_net_saved_minutes == 80.0
+    assert timed == untimed
+
+
 # --- rule 1, defects lost, on the worst case -------------------------------------
 
 

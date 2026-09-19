@@ -2416,6 +2416,7 @@ def test_the_top_level_help_lists_every_command_group() -> None:
         "review",
         "report",
         "disposition",
+        "timing",
         "check",
         "exceptions",
         "benchmark",

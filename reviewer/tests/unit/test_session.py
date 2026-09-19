@@ -188,6 +188,39 @@ def test_net_saved_minutes_is_recomputed_when_loaded() -> None:
     assert timing.net_saved_minutes == pytest.approx(50.0)
 
 
+def test_a_negative_baseline_is_refused_by_name() -> None:
+    """T010: `baseline_minutes` was the one input without `ge=0`, so a negative baseline
+    was accepted and derived a negative net saving. The committed schema has said
+    `"minimum": 0` for it all along; the model now agrees with its own contract (FR-003).
+    """
+    with pytest.raises(ValidationError, match="baseline_minutes"):
+        Timing(
+            baseline_minutes=-5.0,
+            assisted_supervision_minutes=10.0,
+            assisted_verification_minutes=8.0,
+            false_alarm_handling_minutes=2.0,
+            unattended_runtime_minutes=25.0,
+        )
+
+
+def test_a_zero_baseline_is_allowed_and_validates_against_the_contract() -> None:
+    """Zero is a recordable answer - an unassisted review that took no time - and the
+    boundary the constraint must not exclude."""
+    timing = Timing(
+        baseline_minutes=0.0,
+        assisted_supervision_minutes=0.0,
+        assisted_verification_minutes=0.0,
+        false_alarm_handling_minutes=0.0,
+        unattended_runtime_minutes=0.0,
+    )
+    assert timing.net_saved_minutes == pytest.approx(0.0)
+
+    payload = build_session(timing=timing).model_dump(mode="json")
+
+    errors = sorted(session_validator().iter_errors(payload), key=lambda e: list(e.absolute_path))
+    assert errors == [], [f"{list(e.absolute_path)}: {e.message}" for e in errors]
+
+
 def test_evidence_request_id_pattern_is_enforced() -> None:
     with pytest.raises(ValidationError, match="pattern"):
         EvidenceRequest(

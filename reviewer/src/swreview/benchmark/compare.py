@@ -213,6 +213,11 @@ class LeverDecision(ReviewModel):
     false_alarms: OffOn
     unresolved_count: OffOn
     recall_held_out: OffOn
+    median_net_saved_minutes: OffOn
+    """The number the pilot is judged on, across runs: the median of each run's own
+    per-package median, with `n=` the runs that carried timing at all. Reported, never
+    gated on - `decide` names its metrics and this is not one (feature 007 FR-006)."""
+
     worst_case_defects_lost: int | None
     """`adoption.Verdict.worst_case_defects_lost`: `0` where the comparison ran and found
     nothing, `None` where it never ran. Rendered through `_count`, so an absent number
@@ -613,6 +618,7 @@ def _decision_row(
         false_alarms=stats["false_alarms"],
         unresolved_count=stats["unresolved_count"],
         recall_held_out=stats["recall_held_out"],
+        median_net_saved_minutes=stats["median_net_saved_minutes"],
         worst_case_defects_lost=verdict.worst_case_defects_lost,
         lost_defect_ids=verdict.lost_defect_ids,
         lever_counter=_counter(lever, off, on),
@@ -787,6 +793,7 @@ LEVER_COLUMNS: tuple[str, ...] = (
     "Dump wall clock off -> on",
     "Valid / missed / false alarms / unresolved off -> on",
     "Recall (held out) off -> on",
+    "Median net saved minutes off -> on",
     "Worst-case defects lost",
     "Lever-specific counter",
     "Decision",
@@ -875,6 +882,7 @@ def _lever_line(row: LeverDecision) -> str:
         _off_on(row.dump_wall_clock_s),
         _quality(row),
         _off_on(row.recall_held_out),
+        _off_on(row.median_net_saved_minutes),
         _count(row.worst_case_defects_lost),
         _counter_cell(row.lever_counter),
         row.decision if row.decision is not None else UNKNOWN,

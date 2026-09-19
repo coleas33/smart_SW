@@ -243,9 +243,19 @@ the four rules of levers.md section 7.
 | Reasoning or thoughts off -> on (named per provider) | Round trips off -> on |
 | Tool calls off -> on | Wall clock off -> on | Dump wall clock off -> on (levers 9, 10) |
 | Valid / missed / false alarms / unresolved off -> on | Recall (held out) off -> on |
-| Worst-case defects lost | Lever-specific counter | Decision |
-| Owner signed off | Owner signed off at | Link to run dirs |
+| Median net saved minutes off -> on | Worst-case defects lost | Lever-specific counter |
+| Decision | Owner signed off | Owner signed off at | Link to run dirs |
 ```
+
+**Median net saved minutes is reported and never gated on** (feature 007 FR-006, and
+`specs/007-attention-policy-gate/contracts/timing.md` section 4, which is normative for it). The
+cell is the median **across the arm's runs** of each run's own per-package median
+(`scorecard.aggregate.median_net_saved_minutes`), rendered like every other off/on cell and
+carrying `n=` the number of runs that carried timing at all - `unknown` with `n=0` where none did,
+which is what every study reads until the owner starts recording the four inputs with `swreview
+timing`. It is the number the pilot is judged on and it is deliberately **not** one of the metrics
+the four rules below read: `decide` names the metrics it reads, so a row can never be turned by a
+figure the engineer typed by hand.
 
 **`Decision` is computed, not typed.** It is derived from the scorecards by the rule below and is
 **one of `adopt`, `keep off`, `re-measure`** and nothing else (FR-027, SC-009). A decision of
@@ -527,6 +537,14 @@ threshold reads, and that a null is never a zero - is fixed in spec.md FR-028.
   the numbers are null, so the column says *which* number is missing rather than going
   blank. Only lever 6's counter - tool calls beside round trips - is computable from what
   the scorecard and the session carry today; every other lever's arrives with that lever.
+- **`median_net_saved_minutes` is a decision-row column as of feature 007** (T015-T016).
+  One `adoption.METRICS` entry reading `scorecard.aggregate.median_net_saved_minutes`, one
+  `OffOn` field, one header title and one `_lever_line` cell; the per-design median keeps
+  printing in `scorecard.md` and is not moved. It is the **only** metric in that table the
+  rule does not read, and it gates nothing by construction rather than by a guard, because
+  `decide` names the two metrics the threshold rests on. Until the owner records the four
+  inputs with `swreview timing`, every cell reads `unknown` with `n=0`, which is the honest
+  answer and never `0`.
 
 ### 10.9 A six-run set is six directories at six repetitions
 

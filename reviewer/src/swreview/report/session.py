@@ -162,7 +162,11 @@ class Timing(ReviewModel):
     Unattended runtime is excluded on purpose: it costs no engineering effort (FR-026).
     """
 
-    baseline_minutes: float | None
+    baseline_minutes: float | None = Field(ge=0)
+    """`ge=0` matches the `"minimum": 0` `review-session.schema.json` has always stated for
+    it: a negative baseline derives a negative net saving, which is a typo and never a
+    measurement (FR-003)."""
+
     assisted_supervision_minutes: float = Field(ge=0)
     assisted_verification_minutes: float = Field(ge=0)
     false_alarm_handling_minutes: float = Field(ge=0)
@@ -173,10 +177,12 @@ class Timing(ReviewModel):
         """A copy with `changes` applied and `net_saved_minutes` derived again.
 
         `model_copy` would carry the old `net_saved_minutes` through untouched, so every
-        update goes back through the constructor and the validator below. The three
-        callers that move a timing forward - the agent loop, the benchmark runner and
-        `swreview.benchmark.timing` - all come through here, so none of them can leave a
-        stale net saving behind (FR-026). An unknown field name raises.
+        update goes back through the constructor and the validator below. The four
+        callers that move a timing forward - the agent loop, the benchmark runner,
+        `swreview.benchmark.timing` (for `swreview timing` and `benchmark time` alike) and
+        `swreview.chat.sessions.record_timing_live` (for a live pane review) - all come
+        through here, so none of them can leave a stale net saving behind (FR-026). An
+        unknown field name raises.
         """
         fields = self.model_dump(exclude={"net_saved_minutes"})
         unknown = sorted(set(changes) - set(fields))

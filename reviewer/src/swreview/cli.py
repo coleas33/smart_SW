@@ -91,7 +91,7 @@ from swreview.benchmark.runner import (
 )
 from swreview.benchmark.scorecard import render_scorecard_md, score_run
 from swreview.benchmark.sets import BenchmarkSet, load_set
-from swreview.benchmark.timing import record_timing
+from swreview.benchmark.timing import record_timing, record_timing_at
 from swreview.chat import DEFAULT_ALLOW_ORIGIN, DEFAULT_RUN_ROOT
 from swreview.checks.golden_interference import interference_case
 from swreview.checks.rms.plan import PLAN_FILE_NAME, build_plan
@@ -125,6 +125,7 @@ from swreview.remodel.plan import part_document_ids, plan_reorganize
 from swreview.remodel.summary import plan_lines, plan_summary_row
 from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition, find_finding
 from swreview.report.markdown import render_report
+from swreview.report.rerender import rerender_run_folder, run_folder_session
 from swreview.report.session import CoverageBucket, ReviewSession, load_session, save_session
 from swreview.tools import checks_fastener, checks_fit
 from swreview.tools.context import ToolContext, build_context, use_context
@@ -652,6 +653,60 @@ def disposition(
     }
     lines = [
         f"{finding_id}: {decision.value} by {decided_by}",
+        f"report: {payload['report_file']}",
+    ]
+    _emit(payload, lines, json_output)
+
+
+# --- timing ----------------------------------------------------------------------
+
+
+@app.command()
+def timing(
+    run_dir: Annotated[Path, typer.Argument(help="Directory holding session.json.")],
+    baseline: Annotated[
+        float | None, typer.Option("--baseline", help="Unassisted review minutes.")
+    ] = None,
+    supervision: Annotated[
+        float | None, typer.Option("--supervision", help="Minutes spent supervising the run.")
+    ] = None,
+    verification: Annotated[
+        float | None, typer.Option("--verification", help="Minutes spent verifying findings.")
+    ] = None,
+    false_alarms: Annotated[
+        float | None, typer.Option("--false-alarms", help="Minutes spent on false alarms.")
+    ] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Record the engineer's minutes against a run folder and re-render the report.
+
+    The four inputs of `contracts/timing.md`; net saved minutes is derived by the model and
+    is deliberately not an option (FR-004). An omitted input keeps the value already
+    recorded, so one number can be corrected without restating the other three.
+    """
+    with _errors_as_exit_1():
+        recorded = record_timing_at(
+            run_folder_session(run_dir),
+            baseline=baseline,
+            supervision=supervision,
+            verification=verification,
+            false_alarms=false_alarms,
+        )
+        report_file = rerender_run_folder(run_dir)
+
+    resolved = Path(run_dir).resolve()
+    payload = {
+        "run_dir": str(resolved),
+        "session_file": str(resolved / SESSION_FILE_NAME),
+        "report_file": str(report_file.resolve()),
+        "timing": to_jsonable_python(recorded),
+    }
+    lines = [
+        f"baseline {recorded.baseline_minutes}, "
+        f"supervision {recorded.assisted_supervision_minutes}, "
+        f"verification {recorded.assisted_verification_minutes}, "
+        f"false alarms {recorded.false_alarm_handling_minutes}",
+        f"net saved: {recorded.net_saved_minutes}",
         f"report: {payload['report_file']}",
     ]
     _emit(payload, lines, json_output)

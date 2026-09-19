@@ -85,6 +85,7 @@ from swreview.agent.runner import (
     start_review,
 )
 from swreview.agent.settings import DEFAULT_PROVIDER, ProviderSettings, default_model, redact
+from swreview.benchmark.timing import TIMING_INPUTS
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient, BridgeError, NamedPipeTransport
 from swreview.chat import DEFAULT_ALLOW_ORIGIN, DEFAULT_RUN_ROOT
 from swreview.chat.sessions import (
@@ -92,6 +93,7 @@ from swreview.chat.sessions import (
     ChatState,
     InvalidTransitionError,
     record_disposition,
+    record_timing_live,
     replay_events,
 )
 from swreview.checks.rms.registry import RMS_FAMILY, RULES
@@ -212,6 +214,17 @@ class UnknownProvider(ChatError):
 
 class InvalidDecision(ChatError):
     error_class = "InvalidDecision"
+
+
+class InvalidTiming(ChatError):
+    """A timing body that is not the four human inputs as numbers.
+
+    Named rather than ignored for every key that is not one of the four, because
+    `Timing.model_validate` would silently accept a supplied `net_saved_minutes` and
+    overwrite the derived figure with it (`contracts/timing.md` section 3, FR-004).
+    """
+
+    error_class = "InvalidTiming"
 
 
 class UnknownChat(ChatError):
@@ -402,6 +415,37 @@ class StoppableTools:
         if self.stop.is_set():
             raise TurnStopped(f"the engineer stopped this turn before {name!r} ran")
         return self.tools.call(name, arguments, call_id)
+
+
+# --- the timing body (`007-attention-policy-gate/contracts/timing.md` section 3) ---------
+
+
+def _timing_inputs(body: Mapping[str, Any]) -> dict[str, float]:
+    """The four human inputs `body` supplies, or `InvalidTiming` naming what was wrong.
+
+    Every key is optional and `null` means "keep what is recorded", so an engineer corrects
+    one number without restating the other three. Anything else is refused **by name**: a
+    key that is not one of the four (`net_saved_minutes` first among them, because the net
+    is derived and never accepted), a value that is not a number, and a negative one. The
+    negative is caught here rather than left to the model so the pane reads one error class
+    for every bad body, and nothing is written on any of the four paths.
+    """
+    unknown = sorted(key for key in body if key not in TIMING_INPUTS)
+    if unknown:
+        raise InvalidTiming(
+            f"a timing body carries only {', '.join(TIMING_INPUTS)}; "
+            f"{', '.join(unknown)} is not one of them"
+        )
+    inputs: dict[str, float] = {}
+    for name, value in body.items():
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise InvalidTiming(f"{name} must be a number or null, got {value!r}")
+        if value < 0:
+            raise InvalidTiming(f"{name} must not be negative, got {value}")
+        inputs[name] = float(value)
+    return inputs
 
 
 # --- the path rule -----------------------------------------------------------------------
@@ -1174,6 +1218,21 @@ class ChatServer:
         except ValueError as exc:
             raise IllegalTransition(str(exc)) from exc
         return JSONResponse(finding.model_dump(mode="json"))
+
+    async def timing(self, request: Request) -> Response:
+        """Record the engineer's minutes against this review (`contracts/timing.md` 3).
+
+        `disposition`'s shape, for the same reason: the run holds the session in memory, so
+        the write has to reach the live one. The body is validated before `_require_idle`
+        so a malformed body is 400 whatever the chat is doing, and the write itself goes to
+        the thread pool because it renders a report.
+        """
+        chat = self._chat(request)
+        inputs = _timing_inputs(await self._json(request))
+        self._require_idle(chat)
+        run = self._run_of(chat)
+        recorded = await run_in_threadpool(partial(record_timing_live, run, **inputs))
+        return JSONResponse(recorded.model_dump(mode="json"))
 
     async def stop(self, request: Request) -> Response:
         """End the turn at the next tool boundary, then end the session (FR-030).
@@ -2024,6 +2083,7 @@ def create_app(
             server.disposition,
             methods=["POST"],
         ),
+        Route("/sessions/{chat_id}/timing", server.timing, methods=["POST"]),
         Route("/sessions/{chat_id}/stop", server.stop, methods=["POST"]),
         Route("/sessions/{chat_id}/report", server.report, methods=["GET"]),
         # The Model check tab (`contracts/model-check.md`) and the Standards tab
