@@ -349,7 +349,28 @@ public class SwReviewAddIn : ISwAddin
             return;
         }
 
-        _taskPane = _swApp.CreateTaskpaneView2(string.Empty, AddInDescription);
+        // The tab icon is the six PNGs beside the add-in (TaskPaneIcons.cs). Without them, or
+        // if SOLIDWORKS declines them, the stock icon: a bad deploy costs the icon, not the tab.
+        string[]? icons = TaskPaneIcons.Resolve(AssemblyRedirect.AddInDirectory);
+        if (icons == null)
+        {
+            Log("Task Pane icons not found under '" + AssemblyRedirect.AddInDirectory
+                + "'; using the stock icon.");
+        }
+        else
+        {
+            _taskPane = _swApp.CreateTaskpaneView3(icons, AddInDescription);
+            if (_taskPane == null)
+            {
+                Log("SOLIDWORKS declined the Task Pane icons; using the stock icon.");
+            }
+        }
+
+        if (_taskPane == null)
+        {
+            _taskPane = _swApp.CreateTaskpaneView2(string.Empty, AddInDescription);
+        }
+
         if (_taskPane == null)
         {
             return;
