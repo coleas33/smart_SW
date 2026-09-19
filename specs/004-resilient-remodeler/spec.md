@@ -270,6 +270,8 @@ Stage 2, the rebuild stage, does **not** ship in this version. It is re-specifie
 
 Also out of scope in this version: assemblies, drawings, in-context and derived parts, multibody, sheet metal, weldments, mesh and graphics bodies, and 3D Interconnect, all refused at preflight; turning a literal sketch dimension into a named parameter, because the intermediate representation carries no dimensions and a separate feature extracts them; any interactive approve-each-change mode; a single-letter grade; dissolving or deleting any folder; and any write to the engineer's file for any reason.
 
+**Back burner (owner decision 2026-09-19):** modelling a STEP or other dumb-solid import with the method. A native part carries a tree to repair; an import carries none, so that path needs feature recognition first (SOLIDWORKS FeatureWorks on a Professional or Premium seat, or a recogniser of our own) before stage 1 has anything to restructure. The re-modeler continues on SOLIDWORKS files only: the Phase 2 probes and the Phase 9 bring-up of this feature, then stage 2 and assemblies re-specified with those numbers. The import path is reopened only by the owner.
+
 ### Key Entities
 
 - **Run**: one remodel attempt: its id, its folder, the source attestation, the scope signals, the configuration count and active configuration, the limits, the toggles it changed, the phases it completed, and its outcome (`completed`, `truncated`, `failed`, `discarded`).
