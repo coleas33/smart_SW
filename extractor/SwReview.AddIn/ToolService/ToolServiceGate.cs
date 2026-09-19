@@ -86,6 +86,13 @@ public interface IToolServiceAccess
 /// every <c>ActiveDocChangeNotify</c>, and this answers "not yet" until there is something to
 /// attach to.
 ///
+/// <b>And not to a drawing.</b> "Something to attach to" is a part or an assembly
+/// (<see cref="PageDocument.IsAttachable"/>). A drawing has no configuration, and a session is
+/// bound to one, so the attach throws - and a throw here is swallowed into addin.log, which is
+/// how a SOLIDWORKS loaded with a drawing active used to leave every bridge-backed feature off
+/// for the session. Both entry points refuse one, and both say so through
+/// <c>report</c>: a refusal nobody can see is the same as the failure it replaced.
+///
 /// <b>Off the application thread.</b> <see cref="ToolServiceHost.Start"/> marshals its attach
 /// onto the application thread and waits for it. Both callers - <c>ConnectToSW</c> and the
 /// document-changed event - <i>are</i> that thread, so starting inline would deadlock
@@ -111,10 +118,10 @@ public interface IToolServiceAccess
 /// </summary>
 public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
 {
-    private readonly Func<bool> _documentAvailable;
+    private readonly Func<PageDocument?> _activeDocument;
     private readonly Func<IToolService> _start;
-    private readonly Action<IToolService> _started;
-    private readonly Action<string, Exception> _report;
+    private readonly Action<IToolService?> _publish;
+    private readonly Action<string, Exception?> _report;
     private readonly Action<Action> _schedule;
     private readonly Func<bool> _busy;
     private readonly object _lock = new object();
@@ -123,28 +130,34 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     private bool _starting;
     private bool _disposed;
 
-    /// <param name="documentAvailable">Whether SOLIDWORKS has a document worth attaching to.
-    /// Asked on the scheduled thread, so it may marshal onto the application thread itself.</param>
+    /// <param name="activeDocument">SOLIDWORKS' active document, or null when nothing is open.
+    /// The document rather than a yes/no, because a drawing is open and is still not something a
+    /// scope can be attached to. Asked on the scheduled thread, so it may marshal onto the
+    /// application thread itself.</param>
     /// <param name="start">Starts the host. Blocks; see the class remarks.</param>
-    /// <param name="started">Publishes the review half - in the add-in, into
-    /// <see cref="ReviewHostOptions.Bridge"/>, which is what <c>POST /sessions</c> carries.</param>
-    /// <param name="report">A failed start, for the pane and the add-in log.</param>
+    /// <param name="publish">Publishes the review half of whichever service is listening - in
+    /// the add-in, into <see cref="ReviewHostOptions.Bridge"/>, which is what
+    /// <c>POST /sessions</c> carries - and is called with null when one stops, so that what is
+    /// published is never a pipe that has been closed.</param>
+    /// <param name="report">A failed start, or a document not attached to, for the pane and the
+    /// add-in log. The exception is null when nothing threw: a refusal is not a failure, but it
+    /// is just as invisible if it is not said.</param>
     /// <param name="schedule">Where the start runs. Defaults to the thread pool.</param>
     /// <param name="busy">Whether work is holding the bridge - in the add-in, a review turn or
     /// a remodel run. Asked by <see cref="FollowDocument"/> only, on the scheduled thread and
     /// off the lock, because the add-in's answer costs an HTTP round trip per open chat.
     /// Defaults to "never busy", which is right for a gate with no work to hold it.</param>
     public ToolServiceGate(
-        Func<bool> documentAvailable,
+        Func<PageDocument?> activeDocument,
         Func<IToolService> start,
-        Action<IToolService> started,
-        Action<string, Exception> report,
+        Action<IToolService?> publish,
+        Action<string, Exception?> report,
         Action<Action>? schedule = null,
         Func<bool>? busy = null)
     {
-        _documentAvailable = documentAvailable ?? throw new ArgumentNullException(nameof(documentAvailable));
+        _activeDocument = activeDocument ?? throw new ArgumentNullException(nameof(activeDocument));
         _start = start ?? throw new ArgumentNullException(nameof(start));
-        _started = started ?? throw new ArgumentNullException(nameof(started));
+        _publish = publish ?? throw new ArgumentNullException(nameof(publish));
         _report = report ?? throw new ArgumentNullException(nameof(report));
         _schedule = schedule ?? (work => ThreadPool.QueueUserWorkItem(_ => work()));
         _busy = busy ?? (() => false);
@@ -228,11 +241,16 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// are the cheap ones (a string compare and a canonicalization), and everything after them
     /// is <see cref="FollowCore"/>, on the scheduled thread.
     ///
-    /// Three cases it deliberately does nothing in:
+    /// Four cases it deliberately does nothing in:
     ///
     /// <b>Nothing open.</b> A null or blank active path means SOLIDWORKS has no document, not
     /// that the attachment is wrong. Dropping the service there would cost a restart for every
     /// close, and a command against the closed document still answers with its name.
+    ///
+    /// <b>A drawing.</b> The same answer for the same reason, and it matters more here than in
+    /// <see cref="EnsureStarted"/>: the re-attach takes the running service down <i>first</i>,
+    /// so before this case existed, opening a drawing to look at it disposed a bridge that was
+    /// working and the attach that would have replaced it threw.
     ///
     /// <b>The same document.</b> Compared canonically and case-insensitively: SOLIDWORKS is
     /// under no obligation to spell a path the way it spelt it at attach time, and a restart
@@ -252,7 +270,8 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
             return;
         }
 
-        IToolService attached;
+        IToolService? attached = null;
+        bool skipped = false;
         lock (_lock)
         {
             if (_disposed || _starting || _service == null)
@@ -267,18 +286,37 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
                 return;
             }
 
-            attached = _service;
+            if (!Attachable(activePath!))
+            {
+                // A drawing, so this is the "nothing open" case above rather than a document
+                // worth re-attaching to: the running service keeps its scope, its pipe and its
+                // secrets, and the engineer who opens a drawing to read it still has a bridge
+                // when they come back. Reported below rather than here, because the report
+                // reaches the pane and nothing that touches the pane may hold this lock.
+                skipped = true;
+            }
+            else
+            {
+                attached = _service;
 
-            // Claimed here, on the caller's thread, rather than in FollowCore: it is what keeps
-            // an EnsureStarted or a second document change arriving in the gap from scheduling
-            // a start of its own. The service stays published until FollowCore takes it down,
-            // so the pane keeps answering about the document it is really attached to.
-            _starting = true;
+                // Claimed here, on the caller's thread, rather than in FollowCore: it is what
+                // keeps an EnsureStarted or a second document change arriving in the gap from
+                // scheduling a start of its own. The service stays published until FollowCore
+                // takes it down, so the pane keeps answering about the document it is really
+                // attached to.
+                _starting = true;
+            }
+        }
+
+        if (skipped)
+        {
+            _report(SkippedMessage(activePath!), null);
+            return;
         }
 
         try
         {
-            _schedule(() => FollowCore(attached, activePath!));
+            _schedule(() => FollowCore(attached!, activePath!));
         }
         catch (Exception failure)
         {
@@ -365,9 +403,21 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         IToolService service;
         try
         {
-            if (!_documentAvailable())
+            PageDocument? document = _activeDocument();
+            if (document == null)
             {
+                // Nothing open, which is an ordinary state and not worth a line: the pane asks
+                // again on every ActiveDocChangeNotify.
                 ClearStarting();
+                return;
+            }
+
+            if (!document.IsAttachable)
+            {
+                // A drawing. Attaching to one throws, and this method turns a throw into a log
+                // line nobody reads, so it is refused before the attempt and said out loud.
+                ClearStarting();
+                _report(SkippedMessage(document.Path), null);
                 return;
             }
 
@@ -401,7 +451,7 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
 
         try
         {
-            _started(service);
+            _publish(service);
         }
         catch (Exception failure)
         {
@@ -409,6 +459,25 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
             _report("The SwReview tool service could not be given to the review backend.", failure);
         }
     }
+
+    /// <summary>
+    /// Whether a path names a document a scope can be attached to: the rule
+    /// <see cref="PageDocument.IsAttachable"/> states, asked of a bare path because
+    /// <c>ActiveDocChangeNotify</c> is what hands <see cref="FollowDocument"/> one. Built rather
+    /// than restated so there is one extension table in the add-in, not two.
+    /// </summary>
+    private static bool Attachable(string activePath) =>
+        new PageDocument(activePath, null).IsAttachable;
+
+    /// <summary>
+    /// The one line a document that is not attached to gets: which document, why, and what to
+    /// open instead. Shared by both entry points, because the engineer's question is the same
+    /// whether the drawing was open at add-in load or opened later - "why are the tools off?".
+    /// </summary>
+    private static string SkippedMessage(string documentPath) =>
+        "The SwReview tool service is not attaching to '" + documentPath
+        + "': a drawing has no configuration to attach to. Open the part or assembly it "
+        + "documents.";
 
     /// <summary>
     /// Whether two paths name the same document. Canonical because SOLIDWORKS hands back
@@ -449,6 +518,20 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
         if (service == null)
         {
             return;
+        }
+
+        // Un-published before it is closed, and from here rather than from each of the three
+        // callers, so the invariant is one sentence: what is published is what is listening. A
+        // `POST /sessions` that goes out carrying a pipe this method has already closed hands
+        // the backend a bridge whose every command fails, where a null bridge makes the Python
+        // side fall back to its own attach - which works.
+        try
+        {
+            _publish(null);
+        }
+        catch (Exception failure)
+        {
+            _report("The SwReview tool service could not be withdrawn from the review backend.", failure);
         }
 
         try

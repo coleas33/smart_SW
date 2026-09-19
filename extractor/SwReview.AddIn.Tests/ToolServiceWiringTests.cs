@@ -146,7 +146,7 @@ public sealed class ToolServiceWiringTests
         Assert.Null(options.Bridge);
 
         var world = new GateWorld();
-        world.Publish = service => options.Bridge = service.ReviewBridge;
+        world.Publish = service => options.Bridge = service?.ReviewBridge;
         ToolServiceGate gate = world.Gate();
 
         gate.EnsureStarted();
@@ -154,6 +154,55 @@ public sealed class ToolServiceWiringTests
         Assert.NotNull(options.Bridge);
         Assert.Equal(world.Services[0].PipeName, options.Bridge!.Pipe);
         Assert.Equal(world.Services[0].ReviewBridge.Secret, options.Bridge.Secret);
+    }
+
+    /// <summary>
+    /// And what it passes once that service is gone: nothing. The bridge is published on a
+    /// successful start and cleared on every stop, because `POST /sessions` carrying a pipe that
+    /// has been closed hands the backend a bridge whose every command fails one at a time -
+    /// where a null bridge makes the Python side fall back to its own attach, which works.
+    /// </summary>
+    [Fact]
+    public void AStoppedToolServiceTakesItsBridgeOutOfTheReviewHostsOptions()
+    {
+        var options = new ReviewHostOptions(
+            new SilentChannel(), new UnusedBackend(), UserSettings.DefaultPath);
+
+        var world = new GateWorld();
+        world.Publish = service => options.Bridge = service?.ReviewBridge;
+        ToolServiceGate gate = world.Gate();
+
+        gate.EnsureStarted();
+        Assert.NotNull(options.Bridge);
+
+        gate.Dispose();
+
+        Assert.Null(options.Bridge);
+    }
+
+    /// <summary>
+    /// The same rule on the path that makes it matter. A document change takes the running
+    /// service down before it attaches the new one, so a restart whose attach fails must leave
+    /// no bridge behind either: the next review would otherwise be handed the dead pipe.
+    /// </summary>
+    [Fact]
+    public void ARestartWhoseAttachFailsLeavesNoBridgePublished()
+    {
+        var options = new ReviewHostOptions(
+            new SilentChannel(), new UnusedBackend(), UserSettings.DefaultPath);
+
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        world.Publish = service => options.Bridge = service?.ReviewBridge;
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        Assert.NotNull(options.Bridge);
+
+        world.Failure = new InvalidOperationException("the component tree could not be walked");
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.True(world.Services[0].Disposed);
+        Assert.Null(options.Bridge);
     }
 
     // ---- entity.show ------------------------------------------------------------------------
@@ -423,7 +472,10 @@ public sealed class ToolServiceWiringTests
         Assert.True(first.Disposed);
         Assert.Equal(1, world.Starts);
         Assert.Null(gate.GeneralChatBridge);
-        Assert.Equal(first.ReviewBridge.Secret, world.Published!.Secret);
+
+        // ...and the bridge it had published goes down with it, rather than outliving the pipe
+        // it names.
+        Assert.Null(world.Published);
     }
 
     /// <summary>
@@ -482,6 +534,119 @@ public sealed class ToolServiceWiringTests
         gate.EnsureStarted();
 
         Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+    }
+
+    // ---- drawings ------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The repro: SOLIDWORKS was loaded with a drawing active, the gate saw a document and
+    /// started an attach, and <c>SwSession.Attach</c> threw - every drawing answers null to
+    /// <c>ConfigurationManager.ActiveConfiguration</c>, and a session is bound to one. The
+    /// failure went into addin.log as "The SwReview tool service did not start." and the service
+    /// stayed null, which turns off the bridge, the terminal's tools and the Remodel tab for the
+    /// whole session.
+    ///
+    /// So a drawing is not a document this may attach to, and the next part is.
+    /// </summary>
+    [Fact]
+    public void ADrawingStartsNothingAndTheFirstModelAfterItStartsExactlyOne()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\sheet.SLDDRW" };
+        ToolServiceGate gate = world.Gate();
+
+        gate.EnsureStarted();
+
+        Assert.Equal(0, world.Starts);
+        Assert.Empty(world.Services);
+        Assert.Null(world.Published);
+        Assert.Null(gate.GeneralChatBridge);
+        Assert.Null(gate.DocumentPath);
+
+        // The engineer opens the part the drawing documents. Nothing was spent on the drawing,
+        // so this is an ordinary first start.
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.EnsureStarted();
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        Assert.Same(world.Services[0].ReviewBridge, world.Published);
+    }
+
+    [Fact]
+    public void ADrawingThatIsSkippedSaysSoWhereTheEngineerWillSeeIt()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\sheet.SLDDRW" };
+
+        world.Gate().EnsureStarted();
+
+        // Through the seam a failed start already uses - the actions panel and addin.log -
+        // because a pane whose tools are all off must not be off silently, and the refusal is
+        // the one line that says which document caused it and what to open instead.
+        string report = Assert.Single(world.Reports);
+        Assert.Contains(@"C:\models\sheet.SLDDRW", report, StringComparison.Ordinal);
+        Assert.Contains("drawing", report, StringComparison.Ordinal);
+        Assert.Contains("part or assembly", report, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The worse half of the same bug: <see cref="ToolServiceGate.FollowDocument"/> disposes the
+    /// running service <i>before</i> it re-attaches, so opening a drawing to look at it took
+    /// down a bridge that was working and the failed re-attach left nothing in its place. A
+    /// drawing is the "nothing worth attaching to" case, which the gate already leaves alone.
+    /// </summary>
+    [Fact]
+    public void GlancingAtADrawingLeavesAWorkingBridgeExactlyAsItWas()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+
+        gate.FollowDocument(@"C:\models\sheet.SLDDRW");
+
+        Assert.Equal(1, world.Starts);
+        Assert.False(world.Services[0].Disposed);
+        Assert.Equal(@"C:\models\deck.SLDASM", gate.DocumentPath);
+        Assert.Same(world.Services[0].ReviewBridge, world.Published);
+        Assert.Contains(
+            @"C:\models\sheet.SLDDRW", Assert.Single(world.Reports), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ADrawingPassedOnTheWayDoesNotStopTheNextModelBeingFollowed()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        FakeToolService first = world.Services[0];
+
+        // Open the drawing, read it, open the part it documents: three ActiveDocChangeNotify
+        // events, and the third is the one that has to re-attach.
+        gate.FollowDocument(@"C:\models\sheet.SLDDRW");
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+
+        Assert.Equal(2, world.Starts);
+        Assert.True(first.Disposed);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        Assert.Equal(world.Services[1].ReviewBridge.Secret, world.Published!.Secret);
+    }
+
+    /// <summary>
+    /// The predicate both entry points read, over the extensions SOLIDWORKS saves under. It is
+    /// <see cref="PageDocument.Kind"/>'s answer narrowed to the two kinds that have a
+    /// configuration, rather than a second extension table beside it.
+    /// </summary>
+    [Theory]
+    [InlineData(@"C:\parts\bracket.sldprt", true)]
+    [InlineData(@"C:\parts\bracket.SLDPRT", true)]
+    [InlineData(@"C:\parts\deck assy.SLDASM", true)]
+    [InlineData(@"C:\parts\sheet.slddrw", false)]
+    [InlineData(@"C:\parts\sheet.SLDDRW", false)]
+    [InlineData(@"C:\parts\bracket.step", false)]
+    [InlineData(@"C:\parts\bracket", false)]
+    public void OnlyAPartOrAnAssemblyIsSomethingAScopeCanBeAttachedTo(string path, bool attachable)
+    {
+        Assert.Equal(attachable, new PageDocument(path, null).IsAttachable);
     }
 
     // ---- the thread it starts on -------------------------------------------------------------
@@ -943,6 +1108,13 @@ public sealed class ToolServiceWiringTests
         /// <summary>What the next start attaches to, as SOLIDWORKS' active document would be.</summary>
         public string DocumentPath { get; set; } = @"C:\models\bracket.sldasm";
 
+        /// <summary>
+        /// The active document as <c>SwReviewAddIn.CurrentDocument</c> reports it - a saved path
+        /// and nothing else - because what the gate decides from is the document, not a bool: a
+        /// drawing is open and is still not something a scope can be attached to.
+        /// </summary>
+        public PageDocument? Active() => DocumentOpen ? new PageDocument(DocumentPath, null) : null;
+
         /// <summary>A review turn or a remodel run is holding the bridge.</summary>
         public bool Busy { get; set; }
 
@@ -959,8 +1131,9 @@ public sealed class ToolServiceWiringTests
         /// <summary>Runs inside the start delegate, on whichever thread it was scheduled onto.</summary>
         public Action? OnStart { get; set; }
 
-        /// <summary>What the add-in does with a started service; the default records it.</summary>
-        public Action<IToolService>? Publish { get; set; }
+        /// <summary>What the add-in does with the service that is running now, or with null when
+        /// none is; the default records it.</summary>
+        public Action<IToolService?>? Publish { get; set; }
 
         public List<FakeToolService> Services { get; } = new List<FakeToolService>();
 
@@ -975,7 +1148,7 @@ public sealed class ToolServiceWiringTests
 
         /// <summary>Null means the gate's own schedule - the one the add-in gets.</summary>
         public ToolServiceGate Gate(Action<Action>? schedule) => new ToolServiceGate(
-            () => DocumentOpen,
+            Active,
             Start,
             service =>
             {
@@ -985,9 +1158,9 @@ public sealed class ToolServiceWiringTests
                     return;
                 }
 
-                Published = service.ReviewBridge;
+                Published = service?.ReviewBridge;
             },
-            (what, failure) => Reports.Add(what + " " + failure.Message),
+            (what, failure) => Reports.Add(failure == null ? what : what + " " + failure.Message),
             schedule,
             Asked);
 
