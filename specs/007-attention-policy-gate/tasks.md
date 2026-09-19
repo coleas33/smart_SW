@@ -180,9 +180,9 @@ description: "Task list for the attention policy and the procedural gate"
 
 ## Phase 7: Polish
 
-- [ ] T056 [P] Update `README.md` (the "Start here" section, `swreview timing`, `swreview attention`, the lever, in the run and check sections) and mark `docs/review-backlog.md`'s stale pre-run ordering entry (`:1164`) resolved with the reason research R3 gives
-- [ ] T057 [P] Run `quickstart.md` Scenarios 0 to 9 and the regression gate (`uv run pytest -q`, `uv run ruff check src tests`, `dotnet build`/`dotnet test SwReview.sln -c Release`); fix anything they surface in the task that owns it
-- [ ] T058 [P] `specs/007-attention-policy-gate/checklists/requirements.md` re-validated against the amended spec; `plan.md`'s Source Code block reconciled with what landed (a file touched that is not listed, or listed and not touched, is corrected there)
+- [x] T056 [P] Update `README.md` (the "Start here" section, `swreview timing`, `swreview attention`, the lever, in the run and check sections) and mark `docs/review-backlog.md`'s stale pre-run ordering entry (`:1164`) resolved with the reason research R3 gives
+- [x] T057 [P] Run `quickstart.md` Scenarios 0 to 9 and the regression gate (`uv run pytest -q`, `uv run ruff check src tests`, `dotnet build`/`dotnet test SwReview.sln -c Release`); fix anything they surface in the task that owns it. Done 2026-09-19: Scenarios 1 and 2 by hand on the fixture folders (net saved 28.0, the negative baseline refused by name, the two orders reproduced with both folders unchanged), Scenarios 0 and 3 to 9 inside the suite; reviewer suite and ruff clean; add-in 1658 + 1208 passed with no warnings
+- [x] T058 [P] `specs/007-attention-policy-gate/checklists/requirements.md` re-validated against the amended spec; `plan.md`'s Source Code block reconciled with what landed (a file touched that is not listed, or listed and not touched, is corrected there)
 
 ---
 

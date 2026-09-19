@@ -134,9 +134,11 @@ specs/007-attention-policy-gate/
 
 Every file this feature adds or changes. A file not named here is not touched; in particular
 `findings.py` (the fold never sets `group`), `checks/rms/*`, `checks/standards/*.py` other than
-`run.py`, `agent/prompts/system_v1.md`, `tools/registry.py`'s `REGISTRATIONS`,
-`web/shared/dom.js`, every C# production file and every IR model are **reused unchanged**.
-The one existing golden of `report/markdown.render_report` does not move.
+`run.py` and `verdict.py`, `agent/prompts/system_v1.md`, `tools/registry.py`'s
+`REGISTRATIONS`, `web/shared/dom.js`, every C# production file and every IR model are
+**reused unchanged**. The one existing golden of `report/markdown.render_report` does not
+move. Reconciled 2026-09-19 against what landed (T058): the entries marked *landed as* below
+differ from the plan as written.
 
 ```text
 reviewer/src/swreview/
@@ -147,13 +149,19 @@ reviewer/src/swreview/
 │                                       #      pre-run family, triage_pass_preconditions
 ├── report/attention_record.py          # NEW: write_attention_record / read_attention_record (attention.json),
 │                                       #      modelled on checks/rules/run.py write_check_record
-├── report/rerender.py                  # NEW: rerender_run_folder(run_dir): session + package when present +
-│                                       #      the standards header from check.json + ranking -> report.md and
-│                                       #      attention.json; the one offline re-render (research R2.7)
+├── report/rerender.py                  # NEW: rerender_run_folder(run_dir, *, package=None): session + package
+│                                       #      when present + the standards header from check.json + ranking ->
+│                                       #      report.md and attention.json; the one offline re-render (research
+│                                       #      R2.7). Landed as: the `package=` keyword, for `_save_run`, whose
+│                                       #      check folders hold no package.json
 ├── report/markdown.py                  # CHANGED: render_report(session, package=None, *, ranking=None);
 │                                       #      "## Start here" between Summary and Findings; the footer line
 ├── report/dispositions.py              # CHANGED: apply_disposition re-renders through rerender_run_folder (site 8)
-├── report/session.py                   # CHANGED: Timing.baseline_minutes gains Field(ge=0)
+├── report/session.py                   # CHANGED: Timing.baseline_minutes gains Field(ge=0). Landed as: also owns
+│                                       #      SESSION_FILE_NAME (rerender.py re-exports it), so attention_record
+│                                       #      can read it without a cycle
+├── checks/standards/verdict.py         # CHANGED (landed as): verdict_header(design_id, verdict_json), the header
+│                                       #      rerender_run_folder rebuilds from check.json
 ├── benchmark/timing.py                 # CHANGED: record_timing_at extracted; record_timing is a wrapper; docstrings
 ├── benchmark/adoption.py               # CHANGED: METRICS["median_net_saved_minutes"]
 ├── benchmark/compare.py                # CHANGED: LeverDecision.median_net_saved_minutes, LEVER_COLUMNS, _lever_line;
@@ -165,11 +173,14 @@ reviewer/src/swreview/
 ├── chat/server.py                      # CHANGED: POST /sessions/{chat_id}/timing; GET /sessions/{chat_id}/attention;
 │                                       #      `attention` on check_result (:655) and standards_result (:785);
 │                                       #      _render_report passes a ranking (site 4); _rotate_previous moves
-│                                       #      attention.json; _start_review passes efficiency (last task)
+│                                       #      attention.json; _start_review passes efficiency (T063, behind the
+│                                       #      ledger row; not landed)
 ├── chat/sessions.py                    # CHANGED: record_disposition passes a ranking (site 5); record_timing_live
 ├── checks/rules/run.py                 # CHANGED: write_report passes a ranking (site 6) and writes attention.json
 ├── checks/standards/run.py             # CHANGED: _write_report passes a ranking (site 7) and writes attention.json;
-│                                       #      the header renderer exposed for rerender_run_folder
+│                                       #      the header renderer moved to verdict.py; missing_standards_phases
+│                                       #      split out so the gate's not-evaluated line and the family's refusal
+│                                       #      read one rule
 ├── agent/runner.py                     # CHANGED: finalize writes attention.json (including the failure path);
 │                                       #      start_review(standards_profile=); the standards run attached between
 │                                       #      build_context (:892) and the dispatch (:946); the brief at :988-989
@@ -183,7 +194,10 @@ reviewer/src/swreview/
 
 reviewer/tests/
 ├── unit/test_attention.py              # NEW: the nine keys, the cross product, total order, the two fixture sessions,
-│                                       #      the edge cases, no `%`, the no-provider import assertion, the 100 ms mark
+│                                       #      the edge cases, no `%`, the no-provider import assertion
+├── perf/test_attention_perf.py         # NEW (landed as): the 100 ms mark, with the other perf tests (`-m perf`)
+├── unit/test_support_attention.py      # NEW (landed as): the builder reproduces every committed fixture byte for byte
+├── unit/test_attention_policy_file.py  # NEW (landed as): the policy file's shape, classes, blind spots, no `%`
 ├── unit/test_attention_catalogue.py    # NEW: every emittable check id has a class (lands after the read-through)
 ├── unit/test_attention_fold.py         # NEW: the fold rule; session.findings untouched
 ├── unit/test_attention_record.py       # NEW: round-trip; reproducible from session.json; folder-kind; rotation
@@ -207,10 +221,15 @@ reviewer/tests/
 ├── unit/test_gate_same_session.py      # NEW: gate calls are real steps and events; planned_calls with standards
 ├── unit/test_gate_standards_in_review.py  # NEW: two families in one session; the three not-evaluated reasons
 ├── unit/test_drawing_finding_number_guard.py  # NEW
+├── unit/test_checklist.py              # NEW (landed as): the ten items, standards.release closes by prefix and by id
 ├── unit/test_efficiency_settings.py    # CHANGED: eleven levers; the two new refusals
 ├── unit/test_no_lever_in_pane_settings.py  # CHANGED: eleven
 ├── unit/test_usage_contracts.py        # CHANGED: a session carrying the eleventh lever validates
-├── unit/test_prefix_stability.py       # CHANGED: the checklist item moves the prompt prefix fixtures
+├── unit/test_prefix_stability.py       # UNCHANGED (landed as): it computes the prefix digests from start_review and
+│                                       #      reads no fixture, so the checklist item moved nothing there
+├── integration/test_coverage_stop.py   # CHANGED (landed as): the checklist counts nine -> ten
+├── golden/test_golden/cover-blind-tap.yml  # CHANGED (landed as): one more open checklist item
+├── unit/test_tool_histogram.py         # CHANGED (landed as): the fit and axial-stack counter per run
 ├── unit/test_benchmark_compare.py      # CHANGED: the median column; the counter and fell_in_runs; the committed doc
 ├── unit/test_adoption_rule.py          # CHANGED: the new metric changes no verdict
 ├── fixtures/attention/                 # NEW: session-20260918-review.json, session-20260918-check.json, and a
@@ -219,11 +238,15 @@ reviewer/tests/
 ├── support/prerun.py                   # CHANGED: a package with a cutlist phase row; a fictional profile; GATE_ON
 └── support/studies.py                  # CHANGED: PackageSpec / scorecard grow timing fields
 
-docs/llm-efficiency-options.md          # CHANGED: the committed ledger block regenerated (the new column)
+docs/llm-efficiency-options.md          # UNCHANGED by this feature (landed as): the ledger block is generated and no
+                                        #      study is recorded, so the new column changed no committed byte
+README.md                               # CHANGED: "What to read first"; timing and attention in the entry points
+docs/review-backlog.md                  # CHANGED: the pre-run ordering entry marked resolved (research R3)
 
 extractor/SwReview.AddIn/
 ├── web/shared/check-page.js            # CHANGED: renderAttention(result) called from renderResult before renderFilters
 ├── web/shared/check-page.css           # CHANGED: the rows' style
+├── Review/ReviewPage/app.css           # CHANGED (landed as): the same class vocabulary for the Review panel
 ├── Model/ModelCheckPage/index.html     # CHANGED: <section id="attention"> above #filters
 ├── Standards/StandardsPage/index.html  # CHANGED: <section id="attention"> above #checks
 ├── Review/ReviewPage/index.html        # CHANGED: <section id="attention-panel" class="panel" hidden> above #transcript
@@ -234,7 +257,9 @@ extractor/SwReview.AddIn.Tests/
 ├── SharedCheckPageTests.cs             # CHANGED: renderAttention in SharedFunctions; the css selector rows
 ├── ModelCheckPageTests.cs, StandardsPageTests.cs  # CHANGED: the rows render in order; the sample bodies carry attention
 ├── ModelCheckPageInjectionTests.cs, StandardsPageInjectionTests.cs  # CHANGED: a hostile reason line renders as text
-├── ReviewPageContractTests.cs          # CHANGED: the new route path in the vocabulary scan
+├── ReviewPageContractTests.cs          # UNCHANGED (landed as): its scan matches dotted message types only, so
+│                                       #      '/attention' never reaches it
+├── AttentionSample.cs                  # NEW (landed as): the one ranking fixture the three page suites share
 ├── ReviewPageAttentionPanelTests.cs    # NEW: the panel on session.ended from a stubbed fetch; the empty case; cleared
 │                                       #      by a second Review press; a hostile reason line
 └── PageRuleScanTests.cs                # NEW: no .sort(, localeCompare, severity literal list or severity/status
@@ -247,7 +272,8 @@ specs/
 ├── 003-resilient-modeling/contracts/model-check.md      # CHANGED: `attention`; attention.json in the folder listing;
 │                                                        #      the stale "scope is part" sentence and the missing
 │                                                        #      `reason` field corrected (research R3)
-├── 005-llm-efficiency/contracts/levers.md               # CHANGED: the lever 11 row; the checklist byte counts
+├── 005-llm-efficiency/contracts/levers.md               # CHANGED: the lever 11 row (landed as: it quotes no checklist
+│                                                        #      byte counts, only tool-array bytes, so none moved)
 ├── 005-llm-efficiency/contracts/ab-harness.md           # CHANGED: sections 5 and 10.8 record the column
 └── 006-standards-check/contracts/standards-check.md     # CHANGED: `attention`; attention.json; the `reason` field
 ```

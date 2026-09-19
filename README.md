@@ -52,8 +52,9 @@ dotnet test  extractor\SwReview.sln -c Release
 See `specs/001-agentic-design-review/quickstart.md` for the validation scenarios and
 `specs/002-task-pane-assistant/quickstart.md` for the Task Pane ones. The main entry points
 are `swreview` (Python CLI: `validate`, `ingest`, `review`, `report`, `disposition`,
-`check`, `rms`, `benchmark`, plus `chat serve` for the Task Pane backend, `mcp` for the
-read-only toolset an external CLI connects to, and `audit-secrets`) and `swreview-extract`
+`timing`, `attention`, `check`, `rms`, `benchmark`, plus `chat serve` for the Task Pane
+backend, `mcp` for the read-only toolset an external CLI connects to, and `audit-secrets`)
+and `swreview-extract`
 (C# console: `dump`, `interference`, `capture`, `resolve`, `serve`, `probe rms`,
 `suppress-test`).
 
@@ -64,6 +65,22 @@ through its environment block: it is never a command-line argument, and `swrevie
 audit-secrets <run> <logs>` is the check that it never reached a file.
 
 Command-line contracts: `specs/001-agentic-design-review/contracts/cli.md`.
+
+**What to read first.** Every `report.md` opens its findings with a **Start here** section:
+the five findings a fixed rule put first (checks that need engineering judgement, then
+rebuild breakers, then interface, manufacturing, discipline and hygiene classes; waived and
+decided findings last; a total order with no weights), a line accounting for what was not
+amplified, and a block saying what the run could not reach. The rule is
+`reviewer/src/swreview/report/attention.py` with its table in `attention_policy_v1.yaml`;
+`attention.json` beside `session.json` records the order the engineer was shown, and
+`swreview attention <run dir>` prints it with the key values behind every row without
+writing anything. The same rows appear above the chips on the Model check and Standards
+tabs and in a panel above the Review transcript when a session ends; no page computes
+them. `swreview timing <run dir>` records the engineer's minutes (baseline, assisted
+supervision, verification and false-alarm handling) against any run folder, and the report's
+Timing section prints the net figure. `swreview review --lever procedural_gate`, off by
+default, runs the deterministic checks first and opens the model's first user message with
+their ranked brief; `specs/007-attention-policy-gate/` has the contracts.
 
 Installing, updating and checking the add-in on the pilot workstation, including where the
 per-machine files live and how findings come back: `docs/workstation-runbook.md`.
@@ -116,7 +133,9 @@ against is a **profile** - the library folders, part-number pattern and property
 one company - which lives on the workstation at `%LOCALAPPDATA%\SwReview\standards.yaml`
 and is never in this repository; `config/standards.example.yaml` is a fictional example of
 its shape. The checks read the documents as they stand: nothing is opened, rebuilt,
-activated or saved. The catalogue is `specs/006-standards-check/contracts/rules.md`.
+activated or saved. The catalogue is `specs/006-standards-check/contracts/rules.md`. On
+both check tabs the rows above the bucket chips are the report's "Start here" section, sent
+by the backend in the check body's `attention` block and rendered in the order supplied.
 
 ```powershell
 swreview-extract dump --out <package dir> --profile standards
