@@ -166,8 +166,8 @@ description: "Task list for the attention policy and the procedural gate"
 
 ### The number guard
 
-- [ ] T052 [P] [US4] Write `reviewer/tests/unit/test_drawing_finding_number_guard.py` on `test_tools_session.py`'s `context`/`use_context` fixtures with a package carrying one PDF-ingest sheet (`dimensions[].text_as_read`, `general_notes`) and one native drawing (`DrawingNote.text`): an `observed` of "the wall is 0.05 mm thick" is refused as an `error_result` naming `0.05 mm` and the sheets searched when no cited sheet carries it, and accepted when a cited dimension text does; `12`, `12.5 mm`, `1/4-20` and `±0.1` are number-like; `F-003`, `cmp:0002`, `dnt:0007`, `Sheet 2` and `2026-09-18` are not and are accepted; the same rule applies to `requirement`; a refusal is a returned dict, never a raise (FR-033)
-- [ ] T053 [US4] Implement the guard in `reviewer/src/swreview/tools/session.py` `record_drawing_finding` as the sixth refusal before `build_finding`, reusing `_drawing_coverage_limits`'s sheet lookup for the cited sheets' text. Acceptance: T052 green (research R2.13)
+- [x] T052 [P] [US4] Write `reviewer/tests/unit/test_drawing_finding_number_guard.py` on `test_tools_session.py`'s `context`/`use_context` fixtures with a package carrying one PDF-ingest sheet (`dimensions[].text_as_read`, `general_notes`) and one native drawing (`DrawingNote.text`): an `observed` of "the wall is 0.05 mm thick" is refused as an `error_result` naming `0.05 mm` and the sheets searched when no cited sheet carries it, and accepted when a cited dimension text does; `12`, `12.5 mm`, `1/4-20` and `±0.1` are number-like; `F-003`, `cmp:0002`, `dnt:0007`, `Sheet 2` and `2026-09-18` are not and are accepted; the same rule applies to `requirement`; a refusal is a returned dict, never a raise (FR-033)
+- [x] T053 [US4] Implement the guard in `reviewer/src/swreview/tools/session.py` `record_drawing_finding` as the sixth refusal before `build_finding`, reusing `_drawing_coverage_limits`'s sheet lookup for the cited sheets' text. Acceptance: T052 green (research R2.13)
 
 ### The counter
 
