@@ -86,6 +86,15 @@
     <Content Include="web\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!--
+      The Task Pane tab icon, one PNG per size CreateTaskpaneView3 wants (TaskPaneIcons.cs).
+      Read from beside the add-in at load, so copied like the pages; TaskPaneIconsTests
+      opens each one from the output folder, so a size that stopped copying fails the build's
+      tests rather than showing as the stock icon on the workstation.
+    -->
+    <Content Include="Icons\*.png" Exclude="Icons\taskpane-source-512.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
