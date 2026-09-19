@@ -30,15 +30,17 @@ verdict is a function of it.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
 __all__ = [
     "COUNT_UNITS",
     "COVERAGE_BUCKETS",
     "EMPTY_SETTING_NOTE",
     "NO_DRAWING_NOTE",
+    "NO_REBUILD_SENTENCE",
+    "VERDICT_HEADER",
     "WAIVED_NOTE",
     "BucketCounts",
     "CoverageBucketName",
@@ -47,6 +49,7 @@ __all__ = [
     "ReleaseVerdict",
     "VerdictState",
     "release_verdict",
+    "verdict_header",
 ]
 
 VerdictState = Literal["not_ready", "ready", "ready_coverage_incomplete"]
@@ -90,6 +93,57 @@ WAIVED_NOTE = "{count} finding{s} waived by {an}accepted exception{s}"
 EMPTY_SETTING_NOTE = "{count} check{s} skipped because a profile list is empty"
 NO_DRAWING_NOTE = "no drawing graded"
 """The three notes, verbatim as `contracts/standards-check.md` renders them."""
+
+NO_REBUILD_SENTENCE = (
+    "Nothing was rebuilt: every count in this report is as the documents stood when they "
+    "were last rebuilt by an engineer."
+)
+"""The header sentence FR-033 requires, beside the verdict. The two rebuild-error checks
+report counts the macro this feature replaces would have refreshed by force-rebuilding; the
+reviewer never rebuilds (FR-044), so which claim is being made has to be said out loud."""
+
+VERDICT_HEADER = """# Standards Check: {design}
+
+- Verdict: {state}
+- Findings: {error} error, {warning} warning, {waived} waived
+- Coverage: {checked} checked, {skipped} skipped, {unresolved} unresolved, \
+{out_of_scope} out of scope ((check, document) pairs)
+- Unresolved checks: {unresolved_ids}
+- Notes: {notes}
+- {no_rebuild}
+
+"""
+
+
+def verdict_header(design_id: str, verdict: Mapping[str, Any]) -> str:
+    """The header a standards run prepends to its report, from `verdict_json`'s shape.
+
+    Rendered from the JSON rather than from `ReleaseVerdict` because it has two callers
+    that hold different things: `checks/standards/run.py` has the verdict object it just
+    computed, and `report/rerender.py` has only the `verdict` block of the `check.json` the
+    folder holds. One renderer means an offline re-render cannot write a header that drifts
+    from the one the run wrote - or, as it did before this function existed, delete it
+    (research R2.7).
+
+    It lives in this leaf module, beside the verdict it renders, so `report/rerender.py`
+    can reach it without importing `checks/standards/run.py`, which imports
+    `report/dispositions.py` and would close an import cycle.
+    """
+    counts = verdict["counts"]
+    return VERDICT_HEADER.format(
+        design=design_id,
+        state=verdict["state"],
+        error=counts["error"],
+        warning=counts["warning"],
+        waived=verdict["waived"],
+        checked=counts["checked"],
+        skipped=counts["skipped"],
+        unresolved=counts["unresolved"],
+        out_of_scope=counts["out_of_scope"],
+        unresolved_ids=", ".join(verdict["unresolved_check_ids"]) or "none",
+        notes="; ".join(verdict["notes"]) or "none",
+        no_rebuild=NO_REBUILD_SENTENCE,
+    )
 
 
 @dataclass(frozen=True)

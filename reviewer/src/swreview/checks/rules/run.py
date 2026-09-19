@@ -48,8 +48,16 @@ from swreview.agent.runner import load_exceptions
 from swreview.checks.rules.family import CheckFamily
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.ir.loader import PACKAGE_FILE_NAME, LoadedPackage
-from swreview.report.dispositions import REPORT_FILE_NAME, SESSION_FILE_NAME
 from swreview.report.markdown import render_report
+
+# `CHECK_FILE_NAME` - what a check records beside its session, and why the folder needs a
+# second file - is re-exported from here: `report/rerender.py` names every file a run folder
+# holds, so the one offline re-render can read all of them (research R2.7).
+from swreview.report.rerender import (
+    CHECK_FILE_NAME,
+    REPORT_FILE_NAME,
+    SESSION_FILE_NAME,
+)
 from swreview.report.session import CoverageBucket, ReviewSession, load_session
 from swreview.tools.context import ToolContext, use_context
 from swreview.tools.query import ToolResult
@@ -82,9 +90,6 @@ __all__ = [
     "write_check_record",
     "write_report",
 ]
-
-CHECK_FILE_NAME = "check.json"
-"""What a check records beside its session, and why the folder needs a second file."""
 
 EMPTY_FEATURE_TREE = (
     "{directory} carries no feature rows: its package was written by the {profile!r} dump "

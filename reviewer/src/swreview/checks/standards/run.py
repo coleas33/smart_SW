@@ -78,7 +78,12 @@ from swreview.checks.standards.traversal import (
     UngradableRootError,
     graded_documents,
 )
-from swreview.checks.standards.verdict import ReleaseVerdict
+from swreview.checks.standards.verdict import (
+    NO_REBUILD_SENTENCE,
+    VERDICT_HEADER,
+    ReleaseVerdict,
+    verdict_header,
+)
 from swreview.exceptions import ExceptionStore
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
@@ -100,6 +105,7 @@ __all__ = [
     "NO_CHECK_TOOL",
     "NO_REBUILD_SENTENCE",
     "STANDARDS_PHASES",
+    "VERDICT_HEADER",
     "CarriedForward",
     "MissingStandardsPhasesError",
     "NotACheckError",
@@ -160,27 +166,6 @@ NOT_THIS_FAMILY = (
     "{directory} holds a {family!r} check and this is the {ours!r} family's reader; one "
     "family never answers for the other's record"
 )
-
-NO_REBUILD_SENTENCE = (
-    "Nothing was rebuilt: every count in this report is as the documents stood when they "
-    "were last rebuilt by an engineer."
-)
-"""The header sentence FR-033 requires, beside the verdict. The two rebuild-error checks
-report counts the macro this feature replaces would have refreshed by force-rebuilding; the
-reviewer never rebuilds (FR-044), so which claim is being made has to be said out loud."""
-
-VERDICT_HEADER = """# Standards Check: {design}
-
-- Verdict: {state}
-- Findings: {error} error, {warning} warning, {waived} waived
-- Coverage: {checked} checked, {skipped} skipped, {unresolved} unresolved, \
-{out_of_scope} out of scope ((check, document) pairs)
-- Unresolved checks: {unresolved_ids}
-- Notes: {notes}
-- {no_rebuild}
-
-"""
-
 
 class MissingStandardsPhasesError(CheckRunError):
     """The package does not record the phases the standards checks read (FR-043)."""
@@ -398,22 +383,12 @@ def _write_report(
     this feature adds is the header a release gate reads first. A reader who sees the counts
     without being told that nothing was rebuilt would read the rebuild-error checks as a
     statement about the design now rather than as it stood (difference g).
+
+    The header is `verdict.verdict_header` over the same `verdict_json` block
+    `_write_check_record` writes into `check.json`, so `report/rerender.py` rebuilds it byte
+    for byte from the folder when an offline command re-renders this report (research R2.7).
     """
-    counts = verdict.counts
-    header = VERDICT_HEADER.format(
-        design=session.design_id,
-        state=verdict.state,
-        error=counts.error,
-        warning=counts.warning,
-        waived=verdict.waived,
-        checked=counts.checked,
-        skipped=counts.skipped,
-        unresolved=counts.unresolved,
-        out_of_scope=counts.out_of_scope,
-        unresolved_ids=", ".join(verdict.unresolved_check_ids) or "none",
-        notes="; ".join(verdict.notes) or "none",
-        no_rebuild=NO_REBUILD_SENTENCE,
-    )
+    header = verdict_header(session.design_id, verdict_json(verdict))
     report_file = directory / REPORT_FILE_NAME
     report_file.write_text(header + render_report(session, package), encoding="utf-8")
     return report_file
