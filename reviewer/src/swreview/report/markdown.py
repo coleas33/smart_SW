@@ -4,10 +4,10 @@
 report is plain Markdown - headings and pipe tables, no HTML (constitution Principle VI):
 an engineer must be able to reproduce any finding from what is printed here.
 
-Section order: title, manifest discrepancies, summary counts, findings grouped by
-severity (high to info), evidence requests, coverage (all five buckets, always), timing,
-tokens (only when the session carries usage), investigation trace (collapsed past 50
-steps).
+Section order: title, manifest discrepancies, summary counts, start here (only when the
+caller supplies a ranking), findings grouped by severity (high to info), evidence
+requests, coverage (all five buckets, always), timing, tokens (only when the session
+carries usage), investigation trace (collapsed past 50 steps).
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from swreview.ir.models import (
     Quantity,
     SourceRef,
 )
+from swreview.report.attention import Ranking, coverage_line, start_here_lines
 from swreview.report.session import (
     CoverageItem,
     CoverageScope,
@@ -52,8 +53,18 @@ _NOT_REPORTED = "not reported"
 not a dash, which a reader can mistake for one (Principle I)."""
 
 
-def render_report(session: ReviewSession, package: EvidencePackage | None = None) -> str:
-    """Render `session` (and optionally the `package` it reviewed) to Markdown text."""
+def render_report(
+    session: ReviewSession,
+    package: EvidencePackage | None = None,
+    *,
+    ranking: Ranking | None = None,
+) -> str:
+    """Render `session` (and optionally the `package` it reviewed) to Markdown text.
+
+    `ranking` is keyword-only and comes after `package`, which six of the eight call sites
+    pass positionally (research R2.6). With no ranking the output is what this renderer
+    produced before "Start here" existed, byte for byte.
+    """
     components_by_id = _components_by_id(package)
     lines: list[str] = []
 
@@ -63,6 +74,9 @@ def render_report(session: ReviewSession, package: EvidencePackage | None = None
     lines.append("")
     lines.extend(_render_summary(session))
     lines.append("")
+    if ranking is not None:
+        lines.extend(_render_start_here(ranking))
+        lines.append("")
     lines.extend(_render_findings(session, package, components_by_id))
     lines.append("")
     lines.extend(_render_evidence_requests(session))
@@ -180,6 +194,31 @@ def _render_summary(session: ReviewSession) -> list[str]:
     lines.append(f"- Coverage: {coverage_counts}")
 
     return lines
+
+
+# --- start here ------------------------------------------------------------------------
+
+
+def _render_start_here(ranking: Ranking) -> list[str]:
+    """The ranking, immediately above Findings (contracts/attention.md section 3).
+
+    Amplify, never filter: this section names at most `ranking.top_n` rows, and every
+    finding still renders in full below in its severity section. The rows, the
+    not-amplified line and the coverage block are `attention.py`'s own words - this
+    function adds the heading, the blank lines between the three blocks and the footer,
+    which names the version the ranking was computed under rather than a literal, so a
+    report rendered from a future policy says which one ranked it.
+    """
+    return [
+        "## Start here",
+        "",
+        *start_here_lines(ranking),
+        "",
+        *coverage_line(ranking),
+        "",
+        f"Ranked by {ranking.policy_version}; the rule is in "
+        "reviewer/src/swreview/report/attention.py.",
+    ]
 
 
 # --- findings ------------------------------------------------------------------------
