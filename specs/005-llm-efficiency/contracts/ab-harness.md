@@ -61,8 +61,12 @@ foreach ($rep in 1,2,3) {
     --study parallel_tool_calls --arm on --rep $rep
   uv run swreview benchmark score "<studies>/lever06-openai/on-$rep" --answer-keys $keys
 }
-uv run swreview benchmark compare "<studies>/lever06-openai/*" --out "<studies>/lever06-openai"
+$runs = Get-ChildItem -Directory "<studies>/lever06-openai" | ForEach-Object { $_.FullName }
+uv run swreview benchmark compare @runs --out "<studies>/lever06-openai"
 ```
+
+(`compare` takes run directories, not a glob, and PowerShell does not expand `*` for a native
+command; `-Directory` also keeps the `ledger.*` files a previous `--out` wrote out of the list.)
 
 **The run order is normative: alternated (off, on, off, on, off, on)**, so provider-side drift
 during the session does not land entirely on one arm. This is protocol, not a code path; the

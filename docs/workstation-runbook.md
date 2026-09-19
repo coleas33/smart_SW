@@ -18,6 +18,11 @@ that say so. Read it whole once, then use the Quick reference at the end.
 
 ---
 
+**The current work for this machine** is in a dated handover beside this file; the latest is
+`docs/workstation-handover-2026-09-19.md` (the checks and measurements feature 007 needs a
+seat or a key for). This runbook does not change per handover; the handover says what to do
+with a given build.
+
 ## 1. Where everything is
 
 | What | Where | In git? |
