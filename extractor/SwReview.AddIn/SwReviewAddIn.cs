@@ -468,15 +468,20 @@ public class SwReviewAddIn : ISwAddin
 
         // The Terminal tab's half of the pane (T060). It subscribes to the Terminal page and
         // drains it on a thread of its own - locating a CLI and probing its tool listing both
-        // block for seconds, and this is the SOLIDWORKS UI thread.
-        _terminalHost = TerminalHost.Attach(
-            _pane,
-            _toolService,
-            () => _reviewHost?.Settings ?? UserSettings.Defaults(),
-            _job,
-            // The Ask tab's Extract evidence button runs the review's own extractor, into the
-            // run folder the CLI is working in (contracts/pane-host-messages.md).
-            reviewOptions.Dump);
+        // block for seconds, and this is the SOLIDWORKS UI thread. Not attached while the Ask
+        // tab is hidden (TaskPaneControl.AskTabShown): with no page to answer, it would only
+        // idle, and nothing should look for a CLI on a workstation the terminal is not part of.
+        if (TaskPaneControl.AskTabShown)
+        {
+            _terminalHost = TerminalHost.Attach(
+                _pane,
+                _toolService,
+                () => _reviewHost?.Settings ?? UserSettings.Defaults(),
+                _job,
+                // The Ask tab's Extract evidence button runs the review's own extractor, into the
+                // run folder the CLI is working in (contracts/pane-host-messages.md).
+                reviewOptions.Dump);
+        }
 
         StartModelCheckHost(reviewOptions);
         StartRemodelHost(reviewOptions);

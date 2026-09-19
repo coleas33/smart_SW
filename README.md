@@ -16,9 +16,9 @@ and the Model check tab in `specs/003-resilient-modeling/`, the Standards check 
 ## Layout
 
 ```text
-extractor/    C# (.NET Framework 4.8, x64): SOLIDWORKS 2024 add-in, Task Pane (Review and
-              Terminal tabs), console host, IR dump, interference, captures. Only this
-              tree touches the SOLIDWORKS API.
+extractor/    C# (.NET Framework 4.8, x64): SOLIDWORKS 2024 add-in, Task Pane (Review,
+              Extract, Model check, Remodel and Standards tabs), console host, IR dump,
+              interference, captures. Only this tree touches the SOLIDWORKS API.
 reviewer/     Python 3.11+ (uv): IR models, units, ingest of exported files, deterministic
               checks, curated agent tools, a provider-neutral tool-runner loop (OpenAI or
               Gemini), the Task Pane chat backend, the read-only MCP toolset, report,
@@ -102,9 +102,11 @@ use it.
 
 ## Standards check
 
-The Task Pane has six tabs - **Review**, **Ask**, **Extract**, **Model check**, **Remodel**
-and **Standards** - and the sixth is the release gate. Press Standards on a part, an
-assembly or a drawing and it dumps the active document with `--profile standards`
+The Task Pane shows five tabs - **Review**, **Extract**, **Model check**, **Remodel** and
+**Standards** - and the last is the release gate. A sixth, **Ask** (the CLI terminal), is
+built but hidden until the terminal is part of the pilot (`TaskPaneControl.AskTabShown`).
+Press Standards on a part, an assembly or a drawing and it dumps the active document with
+`--profile standards`
 (the model check phases plus cut lists, and the drawing sheets when the document is a
 drawing), grades it against sixteen checks, and shows a release verdict with every check
 accounted for as checked, skipped, unresolved or out of scope. Like the Model check tab it

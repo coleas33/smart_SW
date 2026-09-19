@@ -342,6 +342,16 @@ public sealed class TaskPaneControl : UserControl
     /// <summary>The terminal-first run folder this pane created, once it has created one.</summary>
     private string? _terminalRunFolder;
 
+    /// <summary>
+    /// Whether the Ask tab is in the pane. False since 2026-09-19: the CLI terminal is not part
+    /// of the pilot, so the tab is not added, its page is not loaded and its host is not
+    /// attached - nothing probes for a CLI and nothing writes a generated profile. Hidden
+    /// rather than removed, because the page, the host, the channel, the run-folder rule and
+    /// their tests are complete and showing the tab again is this one value. A static field
+    /// rather than a const so the branches on it are ordinary code, not unreachable code.
+    /// </summary>
+    public static readonly bool AskTabShown = false;
+
     public TaskPaneControl(TaskPaneOptions options)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -369,7 +379,11 @@ public sealed class TaskPaneControl : UserControl
 
         _tabs = new TabControl { Dock = DockStyle.Fill, ShowToolTips = true };
         _tabs.TabPages.Add(_reviewTab);
-        _tabs.TabPages.Add(_terminalTab);
+        if (AskTabShown)
+        {
+            _tabs.TabPages.Add(_terminalTab);
+        }
+
         _tabs.TabPages.Add(_actionsTab);
         _tabs.TabPages.Add(_modelCheckTab);
         _tabs.TabPages.Add(_remodelTab);
@@ -554,9 +568,14 @@ public sealed class TaskPaneControl : UserControl
 
             // The Terminal page after the Review page and in the same try: both share the one
             // environment, and a terminal that could not be loaded must end as the same fallback
-            // panel rather than as an exception on the application thread.
-            _terminalView = await AttachPageAsync(
-                environment, _terminalTab, TerminalPageUrl, OnTerminalMessageReceived).ConfigureAwait(true);
+            // panel rather than as an exception on the application thread. Not loaded at all
+            // while the Ask tab is hidden: a page nobody can reach is a renderer process for
+            // nothing.
+            if (AskTabShown)
+            {
+                _terminalView = await AttachPageAsync(
+                    environment, _terminalTab, TerminalPageUrl, OnTerminalMessageReceived).ConfigureAwait(true);
+            }
         }
         catch (Exception failure)
         {
