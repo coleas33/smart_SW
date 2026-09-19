@@ -162,6 +162,585 @@ public sealed class ReviewPageInjectionTests
         exception_id = (string?)null,
     };
 
+    // ---- the shape of the reworked cards ----------------------------------------------------
+
+    /// <summary>
+    /// Every card the rework reshapes, rendered once, in one page.
+    ///
+    /// One boot rather than one per assertion: <see cref="OffscreenReviewPage.Evaluate"/> starts
+    /// a WebView2, serves the real page through the real <see cref="PageFileServer"/> and tears
+    /// it down again on every call, which is seconds each time. The script below renders a
+    /// finding this run carried over, a finding it computed, a tool call, the ranked rows and
+    /// the coverage fold, and reports the shape of each; the facts under it read that one
+    /// report. It is the same arrangement <see cref="ReviewPageAttentionPanelTests"/> uses for
+    /// the page it drives.
+    /// </summary>
+    private static readonly Lazy<JsonElement> Shapes = new Lazy<JsonElement>(RenderShapes);
+
+    /// <summary>
+    /// The finding's line states the three things that decide whether to read further: which
+    /// finding it is, what the backend concluded and how hard, and which check said so. The
+    /// status reaches a class name by interpolation - `status-&lt;status&gt;` - so the stylesheet
+    /// can colour it without any script comparing a status to anything (PageRuleScanTests).
+    /// </summary>
+    [Fact]
+    public void TheFindingsFirstLineNamesTheFindingItsStateAndItsCheck()
+    {
+        JsonElement card = Shapes.Value.GetProperty("carried");
+
+        Assert.Equal(
+            new[] { "finding-id mono", "chip status-unresolved", "chip sev-low", "finding-check mono" },
+            Strings(card, "lineChildren"));
+        Assert.Equal("F-011", card.GetProperty("findingId").GetString());
+        Assert.Equal(new[] { "unresolved", "low" }, Strings(card, "chipTexts"));
+        Assert.Equal("provenance.vault_version", card.GetProperty("check").GetString());
+        Assert.Equal("The vault version of the housing is unknown", card.GetProperty("title").GetString());
+    }
+
+    /// <summary>
+    /// `observed` is the one fact printed before the fold, because it is the evidence the
+    /// verdict rests on and a reader deciding whether to open a finding is deciding about that.
+    /// </summary>
+    [Fact]
+    public void WhatWasObservedIsPrintedBeforeTheFold()
+    {
+        Assert.Equal(
+            "The extract carries no vault version for housing.SLDPRT.",
+            Shapes.Value.GetProperty("carried").GetProperty("facts").GetString());
+    }
+
+    /// <summary>
+    /// The two carry-over fields reach the screen. The Finding schema has defined
+    /// `carried_over_from` and `carried_over_at` since feature 005 lever 11a and this card
+    /// dropped both: a verdict this run did not compute but carried over from an earlier
+    /// session is a different claim from one it computed, and an engineer reading the fold is
+    /// owed that beside the provenance.
+    /// </summary>
+    [Fact]
+    public void TheFoldCarriesTheCarryOverFieldsTheCardUsedToDrop()
+    {
+        JsonElement card = Shapes.Value.GetProperty("carried");
+        string[] labels = Strings(card, "labels");
+
+        Assert.Equal("Affects", labels[0]);
+        Assert.Contains("Carried over from", labels);
+        Assert.Contains("Carried over at", labels);
+        Assert.Contains("2026-09-17T08:00:00Z", Strings(card, "values"));
+    }
+
+    /// <summary>
+    /// A finding with no calculation prints no calculation block, and a finding with one prints
+    /// only the rows that calculation filled. The block used to emit all six rows whatever it
+    /// held, so a model that excluded nothing showed "Excluded effects" against a blank - which
+    /// reads as a question asked and answered with nothing rather than as a field never filled.
+    /// </summary>
+    [Fact]
+    public void TheCalculationBlockAppearsOnlyWithACalculationAndPrintsOnlyItsFilledRows()
+    {
+        Assert.Equal(0, Shapes.Value.GetProperty("carried").GetProperty("calculations").GetInt32());
+
+        JsonElement computed = Shapes.Value.GetProperty("computed");
+        Assert.Equal(1, computed.GetProperty("calculations").GetInt32());
+        Assert.Equal(
+            new[] { "Model", "Function", "Inputs", "Result" },
+            Strings(computed, "calculationLabels"));
+    }
+
+    /// <summary>
+    /// The three dispositions are one choice, so they are one bordered group, and the note
+    /// travels with them: the box comes first and the buttons follow it, inside the fold, beside
+    /// Show in SOLIDWORKS. A finding with no persistent reference draws that button as the
+    /// refusal it would be rather than waiting to fail on press.
+    /// </summary>
+    [Fact]
+    public void TheThreeDispositionsAreOneGroupWithTheNoteBoxBeforeThem()
+    {
+        JsonElement card = Shapes.Value.GetProperty("carried");
+
+        Assert.True(card.GetProperty("toolsInsideDetails").GetBoolean(), "the tools row is not in the fold.");
+        Assert.Equal(new[] { "accept", "reject", "defer" }, Strings(card, "segActions"));
+        Assert.True(card.GetProperty("noteBeforeGroup").GetBoolean(), "input.note is not before the group.");
+        Assert.Equal("none", card.GetProperty("showReference").GetString());
+
+        Assert.Equal(
+            JsonValueKind.Null,
+            Shapes.Value.GetProperty("computed").GetProperty("showReference").ValueKind);
+    }
+
+    /// <summary>
+    /// The fold starts shut and its button says so; a settled finding says so in the class the
+    /// stylesheet colours, so `app.js` and `render.js` agree about what decided looks like.
+    /// </summary>
+    [Fact]
+    public void TheFoldStartsShutAndASettledFindingSaysSo()
+    {
+        JsonElement carried = Shapes.Value.GetProperty("carried");
+        Assert.True(carried.GetProperty("detailsHidden").GetBoolean(), "the fold started open.");
+        Assert.Equal("Details", carried.GetProperty("expandLabel").GetString());
+        Assert.Equal("card-status", carried.GetProperty("statusClass").GetString());
+
+        JsonElement computed = Shapes.Value.GetProperty("computed");
+        Assert.Equal("card-status decided", computed.GetProperty("statusClass").GetString());
+        Assert.Contains("Disposition: accepted", computed.GetProperty("statusText").GetString()!);
+    }
+
+    /// <summary>
+    /// A tool call is one line - a glyph the stylesheet draws, the name, what came back and how
+    /// long it took - and its arguments are behind a fold, indented. A review makes a dozen of
+    /// these and none of them is a finding.
+    /// </summary>
+    [Fact]
+    public void AToolCallIsOneLineWithItsArgumentsInAFold()
+    {
+        JsonElement tool = Shapes.Value.GetProperty("tool");
+
+        Assert.Equal("card tool status-ok", tool.GetProperty("cardClass").GetString());
+        Assert.Equal("3", tool.GetProperty("stepIndex").GetString());
+        Assert.Equal(
+            new[] { "tool-status", "tool-name mono", "tool-summary", "elapsed" },
+            Strings(tool, "headChildren"));
+        Assert.Equal("check_fastener_grip", tool.GetProperty("toolName").GetString());
+        Assert.Equal("1.25 s", tool.GetProperty("elapsed").GetString());
+
+        // The status is a glyph from a CSS ::before, so the element itself carries no word: an
+        // inline <svg> is what the injection assertion below refuses, and the CSP loads no
+        // image file either.
+        Assert.Equal(string.Empty, tool.GetProperty("statusText").GetString());
+
+        Assert.True(tool.GetProperty("argumentsInFold").GetBoolean(), "the arguments are not in a fold.");
+        Assert.Equal(0, tool.GetProperty("argumentsOutsideFold").GetInt32());
+        Assert.Contains("\n  \"component_id\"", tool.GetProperty("argumentsText").GetString()!);
+    }
+
+    /// <summary>
+    /// A ranked row says what the finding is, not only that it exists. The backend sends ten
+    /// fields per row (contracts/attention.md section 4) and the panel that is meant to be read
+    /// first used to print three of them, so it said less about a finding than the finding's own
+    /// card did.
+    /// </summary>
+    [Fact]
+    public void ARankedRowCarriesTheTitleAndTheStateTheRankingSent()
+    {
+        JsonElement start = Shapes.Value.GetProperty("start");
+
+        Assert.Equal("eyebrow attention-heading", start.GetProperty("headingClass").GetString());
+        Assert.Equal(AttentionSample.Heading, start.GetProperty("headingText").GetString());
+
+        string[] titles = Strings(start, "titles");
+        Assert.Equal(AttentionSample.ShownFindingIds.Length, titles.Length);
+        Assert.Equal("The pin interferes with the bore it is pressed into", titles[0]);
+        Assert.All(titles, title => Assert.False(string.IsNullOrWhiteSpace(title)));
+
+        // Status and severity as the words the ranking sent, and the components it reaches in
+        // the face an id is read in.
+        Assert.Equal(
+            "demonstrated · medium · cmp:0002, cmp:0003",
+            Strings(start, "metas")[0]);
+        Assert.Equal("cmp:0002, cmp:0003", Strings(start, "monos")[0]);
+
+        // The three the panel always showed are untouched.
+        Assert.Equal(AttentionSample.ShownChecks, Strings(start, "checks"));
+        Assert.Equal(AttentionSample.ShownReasons, Strings(start, "reasons"));
+    }
+
+    /// <summary>
+    /// The stripe restates a field the backend already sent and invents nothing: the judgement
+    /// key when the policy said only an engineer can settle the row (F-007 and F-008 carry
+    /// `key.judgement` 0), otherwise the consequence class through a map. The rows this fixture
+    /// carries run interface, interface, rebuild_breaker, rebuild_breaker, discipline - so a map
+    /// keyed off the consequence class alone would colour the first two red rather than purple.
+    /// </summary>
+    [Fact]
+    public void TheStripeOnARankedRowComesFromTheJudgementKeyThenTheConsequenceClass()
+    {
+        Assert.Equal(
+            new[]
+            {
+                "attention-row stripe-judge",
+                "attention-row stripe-judge",
+                "attention-row stripe-critical",
+                "attention-row stripe-critical",
+                "attention-row stripe-warn",
+            },
+            Strings(Shapes.Value.GetProperty("start"), "rowClasses"));
+    }
+
+    /// <summary>
+    /// The coverage panel is a fold that is shut when it arrives, and its one line says how much
+    /// is inside. A real run produced 62 of these rows, listed flat and uncollapsed, under a
+    /// transcript - which is 62 lines of "the run did not reach this" between the engineer and
+    /// everything else on the tab.
+    /// </summary>
+    [Fact]
+    public void TheCoveragePanelIsAShutFoldWhoseOneLineCountsTheBuckets()
+    {
+        JsonElement coverage = Shapes.Value.GetProperty("coverage");
+
+        Assert.True(coverage.GetProperty("hasFold").GetBoolean(), "the coverage panel is not a fold.");
+        Assert.False(coverage.GetProperty("open").GetBoolean(), "the coverage fold arrived open.");
+        Assert.Equal("eyebrow coverage-heading", coverage.GetProperty("headingClass").GetString());
+        Assert.Equal("Not reached", coverage.GetProperty("headingText").GetString());
+
+        // The buckets in `coverageSummary`'s own order array, which PageRuleScanTests pins by
+        // its words: checked, skipped, unresolved, failed, out_of_scope. `failed` is empty here
+        // and is therefore named nowhere.
+        Assert.Equal(
+            "5 checked · 11 skipped · 39 unresolved · 7 out of scope",
+            coverage.GetProperty("counts").GetString());
+        Assert.Equal(
+            new[]
+            {
+                "coverage-bucket bucket-checked",
+                "coverage-bucket bucket-skipped",
+                "coverage-bucket bucket-unresolved",
+                "coverage-bucket bucket-out_of_scope",
+            },
+            Strings(coverage, "bucketClasses"));
+        Assert.Equal(62, coverage.GetProperty("items").GetInt32());
+    }
+
+    /// <summary>
+    /// The fence the rework must not have moved: nothing any of these five renderers builds is
+    /// an image, a script, an inline &lt;svg&gt; or a scoped &lt;style&gt;, and nothing carries
+    /// an `on*` attribute. `&lt;details&gt;` and `&lt;summary&gt;` are neither - they are what
+    /// the folds are made of.
+    /// </summary>
+    [Fact]
+    public void NothingTheReworkedCardsBuildIsAnElementTheInjectionFenceRefuses()
+    {
+        foreach (string card in new[] { "carried", "computed", "tool", "start", "coverage" })
+        {
+            JsonElement shape = Shapes.Value.GetProperty(card);
+            Assert.Equal(0, shape.GetProperty("injected").GetInt32());
+            Assert.Equal(0, shape.GetProperty("handlers").GetInt32());
+        }
+    }
+
+    // ---- the stylesheet the rework draws from --------------------------------------------------
+
+    /// <summary>
+    /// The shared palette is linked, and it is linked first. Linked after `app.css` the page
+    /// would win its own tokens back and the four tabs would drift apart again.
+    /// </summary>
+    [Fact]
+    public void IndexHtmlLinksTheSharedTokensBeforeThePageStylesheet()
+    {
+        string index = ReviewPageFiles.IndexHtml();
+
+        int tokens = index.IndexOf("../../shared/tokens.css", StringComparison.Ordinal);
+        int page = index.IndexOf("\"app.css\"", StringComparison.Ordinal);
+
+        Assert.True(tokens >= 0, "index.html does not link web/shared/tokens.css.");
+        Assert.True(page >= 0, "index.html does not link app.css.");
+        Assert.True(tokens < page, "tokens.css must be linked before app.css.");
+    }
+
+    /// <summary>
+    /// Not one literal colour in the page's own stylesheet. Every hue is a custom property of
+    /// `web/shared/tokens.css`, which is what keeps the four tabs one palette: a colour written
+    /// here is a colour the other three do not have, and the next person to touch one of them
+    /// has no way to know it exists.
+    /// </summary>
+    [Fact]
+    public void ThePageStylesheetNamesNoLiteralColour()
+    {
+        string css = ReviewPageFiles.Read("app.css");
+
+        string[] literals = HexColour.Matches(css).Cast<Match>()
+            .Select(match => match.Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        Assert.True(
+            literals.Length == 0,
+            "Review/ReviewPage/app.css names colours of its own: " + string.Join(", ", literals)
+                + Environment.NewLine
+                + "Use a custom property from web/shared/tokens.css instead.");
+
+        foreach (string notation in new[] { "rgb(", "rgba(", "hsl(", "hsla(", "color(" })
+        {
+            Assert.DoesNotContain(notation, css, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// A hex colour, and not an id selector that happens to start with hex digits: `#effort`
+    /// and `#accept` are ids this pane uses and `#eff`/`#acce` are not colours in them.
+    /// </summary>
+    private static readonly Regex HexColour = new Regex(
+        @"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?![0-9A-Za-z_-])",
+        RegexOptions.Compiled);
+
+    // ---- rendering the shapes -------------------------------------------------------------------
+
+    private static JsonElement RenderShapes() => OffscreenReviewPage.Evaluate(
+        ShapeHelpers
+        + "return JSON.stringify({"
+        + "ok: true,"
+        + "carried: findingShape(" + Json(CarriedFinding()) + "),"
+        + "computed: findingShape(" + Json(ComputedFinding()) + "),"
+        + "tool: toolShape(" + Json(SampleTool()) + "),"
+        + "start: startShape(" + AttentionSample.Json() + "),"
+        + "coverage: coverageShape(" + Json(CoverageEntries()) + ")"
+        + "});");
+
+    private static string Json(object value) => JsonSerializer.Serialize(value);
+
+    private static string[] Strings(JsonElement shape, string name) =>
+        shape.GetProperty(name).EnumerateArray().Select(value => value.GetString()!).ToArray();
+
+    /// <summary>
+    /// A finding whose verdict this run carried over rather than computed, with no persistent
+    /// reference and no calculation: the two absences the fold has to handle without printing
+    /// an empty row for either.
+    /// </summary>
+    private static object CarriedFinding() => new
+    {
+        id = "F-011",
+        check = "provenance.vault_version",
+        title = "The vault version of the housing is unknown",
+        status = "unresolved",
+        severity = "low",
+        component_ids = new[] { "cmp:0003" },
+        drawing_locations = Array.Empty<object>(),
+        provenance = Array.Empty<object>(),
+        configuration = "Default",
+        observed = "The extract carries no vault version for housing.SLDPRT.",
+        requirement = "Every document names the vault version it was read at.",
+        inputs = Array.Empty<string>(),
+        calculation = (object?)null,
+        tool_result_ids = Array.Empty<int>(),
+        coverage_limits = Array.Empty<string>(),
+        recommended_action = "Open the document from the vault so the version travels with it.",
+        group = (object?)null,
+        capture_ids = Array.Empty<string>(),
+        disposition = (object?)null,
+        exception_id = (string?)null,
+        carried_over_from = "0b0f6f2e-0f1d-4f3a-9b6c-2f2c7d4a1e55",
+        carried_over_at = "2026-09-17T08:00:00Z",
+    };
+
+    /// <summary>
+    /// A finding this run computed: a calculation that filled four of its six fields, a
+    /// persistent reference, and a disposition an engineer has already recorded.
+    /// </summary>
+    private static object ComputedFinding() => new
+    {
+        id = "F-007",
+        check = "interference.static",
+        title = "Static interference between the housing and the second pin",
+        status = "demonstrated",
+        severity = "medium",
+        component_ids = new[] { "cmp:0003", "cmp:0004" },
+        drawing_locations = new[]
+        {
+            new { document_id = "d-1", sheet = "Sheet1", persist_ref = "AAECAwQ=" },
+        },
+        observed = "Largest overlap 0.012 mm in configuration Default.",
+        requirement = "No two solid bodies share volume in the graded configuration.",
+        calculation = new
+        {
+            model = "static interference, rigid bodies",
+            function = "interference.static",
+            function_version = "1.2",
+            inputs = new { component_id = "cmp:0004" },
+            assumptions = Array.Empty<string>(),
+            excluded_effects = Array.Empty<string>(),
+            result = 0.012,
+            units_out = "mm",
+        },
+        disposition = new
+        {
+            decision = "accepted",
+            by = "C. Sorkness",
+            at = "2026-09-18T22:04:00Z",
+            note = "intended press fit per drawing note 4",
+        },
+    };
+
+    /// <summary>One finished tool call, both bodies merged the way `app.js` merges them.</summary>
+    private static object SampleTool() => new
+    {
+        step_index = 3,
+        tool = "check_fastener_grip",
+        arguments = new { component_id = "c-17" },
+        status = "ok",
+        result_summary = "1 finding",
+        elapsed_s = 1.25,
+        error = (string?)null,
+    };
+
+    /// <summary>
+    /// The coverage a real workstation run produced - 5 checked, 11 skipped, 39 unresolved, 0
+    /// failed, 7 out of scope (docs/pane-findings-2026-09-18.md) - fed in an order no bucket
+    /// order could be read off, so the groups and the counts prove the page walks its own order
+    /// array rather than the order the events arrived in.
+    /// </summary>
+    private static object[] CoverageEntries()
+    {
+        var entries = new List<object>();
+        AddCoverage(entries, "out_of_scope", 7, "drawing.rule");
+        AddCoverage(entries, "unresolved", 39, "rms.open");
+        AddCoverage(entries, "checked", 5, "rms.done");
+        AddCoverage(entries, "skipped", 11, "rms.skip");
+        return entries.ToArray();
+    }
+
+    private static void AddCoverage(List<object> entries, string bucket, int count, string prefix)
+    {
+        for (int index = 1; index <= count; index++)
+        {
+            entries.Add(new
+            {
+                bucket,
+                item = new { check = prefix + index, reason = "the extract carries nothing for it" },
+            });
+        }
+    }
+
+    /// <summary>
+    /// What each card looks like once the browser has built it. Read through the DOM rather than
+    /// through the serialized markup, because the questions here - which element is a child of
+    /// which, whether a fold is shut - are questions only a parsed document answers.
+    /// </summary>
+    private const string ShapeHelpers = @"
+var textOf = function (root, selector) {
+  var node = root.querySelector(selector);
+  return node ? node.textContent : '';
+};
+
+var textsOf = function (root, selector) {
+  var found = root.querySelectorAll(selector);
+  var out = [];
+  for (var i = 0; i < found.length; i++) { out.push(found[i].textContent); }
+  return out;
+};
+
+var classesOf = function (root, selector) {
+  var found = root.querySelectorAll(selector);
+  var out = [];
+  for (var i = 0; i < found.length; i++) { out.push(found[i].className); }
+  return out;
+};
+
+var actionsOf = function (root) {
+  var found = root ? root.querySelectorAll('[data-action]') : [];
+  var out = [];
+  for (var i = 0; i < found.length; i++) { out.push(found[i].getAttribute('data-action')); }
+  return out;
+};
+
+var childClasses = function (node) {
+  var out = [];
+  if (!node) { return out; }
+  for (var i = 0; i < node.children.length; i++) { out.push(node.children[i].className); }
+  return out;
+};
+
+var one = function (name, value, selector) {
+  var host = render(name, value);
+  var node = host.querySelector(selector);
+  if (!node) { throw new Error(name + ' rendered nothing matching ' + selector); }
+  return { host: host, node: node };
+};
+
+var findingShape = function (value) {
+  var got = one('findingCard', value, '.card.finding');
+  var card = got.node;
+  var seen = describe(got.host);
+  var tools = card.querySelector('.details .card-tools');
+  var group = tools ? tools.querySelector('.seg') : null;
+  var note = tools ? tools.querySelector('input.note') : null;
+  var show = card.querySelector('[data-action=""show""]');
+  var status = card.querySelector('.card-status');
+  return {
+    cardClass: card.className,
+    lineChildren: childClasses(card.querySelector('.card-head .card-line')),
+    findingId: textOf(card, '.card-line .finding-id'),
+    chipTexts: textsOf(card, '.card-line .chip'),
+    check: textOf(card, '.card-line .finding-check'),
+    title: textOf(card, '.card-head .title'),
+    facts: textOf(card, '.facts'),
+    labels: textsOf(card, '.details > dl.kv > dt'),
+    values: textsOf(card, '.details > dl.kv > dd'),
+    calculations: card.querySelectorAll('.details .calculation').length,
+    calculationLabels: textsOf(card, '.details .calculation dt'),
+    detailsHidden: card.querySelector('.details').hidden,
+    expandLabel: textOf(card, '[data-action=""expand""]'),
+    toolsInsideDetails: !!tools,
+    segActions: actionsOf(group),
+    noteBeforeGroup: !!(note && group
+      && (note.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING)),
+    showReference: show ? show.getAttribute('data-reference') : null,
+    statusClass: status ? status.className : '',
+    statusText: status ? status.textContent : '',
+    injected: seen.injected,
+    handlers: seen.handlers
+  };
+};
+
+var toolShape = function (value) {
+  var got = one('toolCard', value, '.card.tool');
+  var card = got.node;
+  var seen = describe(got.host);
+  var fold = card.querySelector('details.tool-fold');
+  return {
+    cardClass: card.className,
+    stepIndex: card.getAttribute('data-step-index'),
+    headChildren: childClasses(card.querySelector('.card-head')),
+    toolName: textOf(card, '.tool-name'),
+    summary: textOf(card, '.tool-summary'),
+    elapsed: textOf(card, '.elapsed'),
+    statusText: textOf(card, '.tool-status'),
+    argumentsInFold: !!(fold && fold.querySelector('.tool-arguments')),
+    argumentsOutsideFold: card.querySelectorAll(':scope > .tool-arguments').length,
+    argumentsText: fold ? textOf(fold, '.tool-arguments') : '',
+    injected: seen.injected,
+    handlers: seen.handlers
+  };
+};
+
+var startShape = function (value) {
+  var got = one('attentionPanel', value, 'section.attention');
+  var panel = got.node;
+  var seen = describe(got.host);
+  var heading = panel.querySelector('.attention-heading');
+  return {
+    headingClass: heading ? heading.className : '',
+    headingText: heading ? heading.textContent : '',
+    rowClasses: classesOf(panel, '.attention-row'),
+    ids: textsOf(panel, '.attention-id'),
+    titles: textsOf(panel, '.attention-title'),
+    metas: textsOf(panel, '.attention-meta'),
+    monos: textsOf(panel, '.attention-meta .mono'),
+    checks: textsOf(panel, '.attention-check'),
+    reasons: textsOf(panel, '.attention-reason'),
+    injected: seen.injected,
+    handlers: seen.handlers
+  };
+};
+
+var coverageShape = function (value) {
+  var got = one('coverageSummary', value, 'section.coverage');
+  var panel = got.node;
+  var seen = describe(got.host);
+  var fold = panel.querySelector('details.coverage-fold');
+  var heading = panel.querySelector('.coverage-heading');
+  return {
+    hasFold: !!fold,
+    open: fold ? !!fold.open : true,
+    headingClass: heading ? heading.className : '',
+    headingText: heading ? heading.textContent : '',
+    counts: textOf(panel, 'summary .fold-count'),
+    bucketClasses: classesOf(panel, '.coverage-bucket'),
+    bucketNames: textsOf(panel, '.bucket-name'),
+    items: panel.querySelectorAll('.bucket-items .bucket-item').length,
+    injected: seen.injected,
+    handlers: seen.handlers
+  };
+};
+";
+
     // ---- the static half: the page's own rules --------------------------------------------
 
     [Fact]

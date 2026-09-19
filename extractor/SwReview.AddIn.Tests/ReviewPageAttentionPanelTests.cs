@@ -162,6 +162,50 @@ public sealed class ReviewPageAttentionPanelTests
         Assert.Equal("The session ended.", panel.GetProperty("streamState").GetString());
     }
 
+    // ---- following a row into the transcript ---------------------------------------------------
+
+    /// <summary>
+    /// A ranked row is a way into the transcript, not a sentence about one.
+    ///
+    /// The panel amplifies findings that are already below it, and until now the rows were
+    /// inert: an engineer read "F-007, interference.static, needs your judgement" and then went
+    /// looking for F-007 by eye through a whole review's transcript. Clicking the row scrolls
+    /// its card into view, opens the card's fold - label and all, so the button does not read
+    /// "Details" over an open one - and lights it for a moment so the eye lands on it after the
+    /// scroll.
+    /// </summary>
+    [Fact]
+    public void ClickingARankedRowOpensAndFlashesItsFindingCard()
+    {
+        JsonElement clicked = Scripted.Value.AfterRowClick;
+
+        Assert.True(
+            clicked.GetProperty("beforeHidden").GetBoolean(),
+            "the finding's fold was already open before the ranked row was clicked.");
+        Assert.False(
+            clicked.GetProperty("afterHidden").GetBoolean(),
+            "clicking the ranked row did not open the finding's fold.");
+        Assert.Equal("Hide details", clicked.GetProperty("toggleLabel").GetString());
+        Assert.True(clicked.GetProperty("flashed").GetBoolean(), "the finding card was not lit.");
+    }
+
+    /// <summary>
+    /// A row whose finding is not in the transcript does nothing rather than scrolling
+    /// somewhere arbitrary. A ranking is read once the session has ended and the transcript
+    /// holds every finding of that session - but a reconnect that missed a `finding` event is
+    /// exactly the case where the page must not pretend it knows where to go.
+    /// </summary>
+    [Fact]
+    public void ARankedRowWithNoCardInTheTranscriptDoesNothing()
+    {
+        JsonElement clicked = Scripted.Value.AfterRowClick;
+
+        Assert.True(
+            clicked.GetProperty("strayRowSurvived").GetBoolean(),
+            "clicking a ranked row whose finding is not in the transcript threw.");
+        Assert.Equal(1, clicked.GetProperty("flashedCards").GetInt32());
+    }
+
     // ---- the renderer ------------------------------------------------------------------------
 
     /// <summary>
@@ -283,10 +327,37 @@ public sealed class ReviewPageAttentionPanelTests
                 await page.ExecuteScriptAsync("window.__attention.fail = true;0");
                 await EndSession(page, "chat-5");
                 run.AfterFailedRead = await Read(page);
+
+                // 7. A review whose first ranked row has a card in the transcript, so the row
+                //    can be followed into it - and a second row whose finding never arrived, so
+                //    the click that goes nowhere goes nowhere quietly.
+                await page.ExecuteScriptAsync("window.__attention.fail = false;0");
+                await Body(page, AttentionSample.Json());
+                await StartReview(page);
+                await SseFrames.Push(page, "chat-6", SseFrames.Frame(20, "finding", RankedFinding));
+                await OffscreenReviewPage.Settled(page);
+                await EndSession(page, "chat-6");
+                run.AfterRowClick = await Evaluate(
+                    page,
+                    RowClick
+                        .Replace("@@FOUND@@", AttentionSample.ShownFindingIds[0])
+                        .Replace("@@MISSING@@", AttentionSample.ShownFindingIds[1]));
             });
 
         return run;
     }
+
+    /// <summary>
+    /// The first ranked row's finding, as the stream carries one. Its id is
+    /// <see cref="AttentionSample.ShownFindingIds"/>[0], which is what makes the row above it a
+    /// link rather than a label; the second row's finding is deliberately never sent.
+    /// </summary>
+    private const string RankedFinding =
+        @"{""id"":""F-007"",""check"":""interference.static"","
+        + @"""title"":""The pin interferes with the bore it is pressed into"","
+        + @"""status"":""demonstrated"",""severity"":""medium"","
+        + @"""component_ids"":[""cmp:0002"",""cmp:0003""],"
+        + @"""observed"":""Largest overlap 0.012 mm in configuration Default.""}";
 
     private static async Task StartReview(CoreWebView2 page)
     {
@@ -312,9 +383,16 @@ public sealed class ReviewPageAttentionPanelTests
     private static Task<string> Hold(CoreWebView2 page, bool held) =>
         page.ExecuteScriptAsync("window.__attention.hold = " + (held ? "true" : "false") + ";0");
 
-    private static async Task<JsonElement> Read(CoreWebView2 page)
+    private static Task<JsonElement> Read(CoreWebView2 page) => Evaluate(page, PanelState);
+
+    /// <summary>
+    /// Runs one reporting script in the page and parses what it said. Every script this class
+    /// evaluates answers `{ok: true, ...}` or `{ok: false, error}`, so a page that threw says
+    /// so here rather than failing an assertion about a missing property three frames away.
+    /// </summary>
+    private static async Task<JsonElement> Evaluate(CoreWebView2 page, string script)
     {
-        string raw = await page.ExecuteScriptAsync(PanelState);
+        string raw = await page.ExecuteScriptAsync(script);
 
         Assert.False(
             string.IsNullOrEmpty(raw) || raw == "null",
@@ -432,6 +510,55 @@ public sealed class ReviewPageAttentionPanelTests
 }())
 ";
 
+    /// <summary>
+    /// Clicks two ranked rows and reports what happened: the one whose finding is in the
+    /// transcript, and the one whose finding never arrived.
+    ///
+    /// The click and the reading are one evaluation on purpose. The flash is a class the page
+    /// takes off again after a couple of seconds, and a test that clicked in one round trip and
+    /// looked in the next would be asserting against that timer rather than against the page.
+    /// </summary>
+    private const string RowClick = @"
+(function () {
+  try {
+    var rowOf = function (id) {
+      return document.querySelector('#attention-panel .attention-row[data-finding-id=""' + id + '""]');
+    };
+
+    var found = rowOf('@@FOUND@@');
+    var missing = rowOf('@@MISSING@@');
+    if (!found) { return JSON.stringify({ ok: false, error: 'no ranked row for @@FOUND@@' }); }
+    if (!missing) { return JSON.stringify({ ok: false, error: 'no ranked row for @@MISSING@@' }); }
+
+    var card = document.querySelector(
+      '#transcript .card.finding[data-finding-id=""@@FOUND@@""]');
+    if (!card) { return JSON.stringify({ ok: false, error: 'no finding card for @@FOUND@@' }); }
+    if (document.querySelector('#transcript .card.finding[data-finding-id=""@@MISSING@@""]')) {
+      return JSON.stringify({ ok: false, error: '@@MISSING@@ was in the transcript after all' });
+    }
+
+    var beforeHidden = card.querySelector('.details').hidden;
+    found.click();
+
+    var strayRowSurvived = true;
+    try { missing.click(); } catch (error) { strayRowSurvived = false; }
+
+    var toggle = card.querySelector('[data-action=""expand""]');
+    return JSON.stringify({
+      ok: true,
+      beforeHidden: beforeHidden,
+      afterHidden: card.querySelector('.details').hidden,
+      toggleLabel: toggle ? toggle.textContent : '',
+      flashed: /(^|\s)flash(\s|$)/.test(card.className),
+      flashedCards: document.querySelectorAll('#transcript .card.flash').length,
+      strayRowSurvived: strayRowSurvived
+    });
+  } catch (error) {
+    return JSON.stringify({ ok: false, error: '' + ((error && error.message) || error) });
+  }
+}())
+";
+
     private static string Reply(string type, string id, object payload) =>
         JsonSerializer.Serialize(new { type, id, payload });
 
@@ -475,5 +602,7 @@ public sealed class ReviewPageAttentionPanelTests
         public JsonElement HostileEnd { get; set; }
 
         public JsonElement AfterFailedRead { get; set; }
+
+        public JsonElement AfterRowClick { get; set; }
     }
 }
