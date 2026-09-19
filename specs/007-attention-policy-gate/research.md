@@ -97,15 +97,22 @@ the eight findings was an `rms.refs.*` rule, so the worked order stands; a fixtu
 
 **Decision**: reach is `len(set(component_ids))` capped at 3, descending; a drawing finding has
 reach 0 and competes on its other keys. The coverage block prints the five bucket counts read
-from `session.coverage` and the top five **families** among unresolved and skipped items, where
-a family is the first dotted segment of `CoverageItem.check` (`rms`, `fit`, `fastener`,
-`standards`, `interference`, `coverage`), by count, ties by name.
+from `session.coverage`, then the **close-out rows**: the unresolved items whose `check` is a
+checklist item id, each with the reason the run recorded, at most five; then the count of
+`coverage.evidence_request` rows; then the counts of every other unresolved and skipped item
+as "rules".
 
-**Why**: VERIFIED that `Coverage` has no prefix notion (`report/session.py:88-102`) and that
-`Checklist.bucket_of` matches findings by prefix but coverage entries by id equality
-(`agent/checklist.py:45-53`), so "prefix" had two meanings. The first dotted segment is one
-rule, computable from the session alone, and needs no checklist. The gate's brief lists the
-pre-run's not-evaluated families separately from their own objects (R2.13).
+**Why**: the real 2026-09-18 review (read on 2026-09-19 from the handover folders) shows what
+the 39 unresolved rows are: seven checklist close-out rows written by `finalize` - `fasteners`
+("list_fasteners returned zero instances…"), `holes.alignment` ("only cmp:0003 holes were
+extracted; the two lightweight pins have none"), `interfaces.fit`, `interfaces.stack`,
+`drawing.manufacturing_inputs`, `provenance`, `modeling.resilience` - each already carrying a
+sentence an engineer can act on; three open evidence requests; one `coverage.closeout`; and
+twenty-three RMS rules. A count by family would have said "rms 39" and hidden all of that. The
+close-out rows need no checklist lookup: their `check` equals an item id, which is exactly the
+equality `Checklist.bucket_of` uses for coverage (`agent/checklist.py:45-53`), and the policy
+module can carry the nine item ids as data. The gate's brief lists the pre-run's
+not-evaluated families separately from their own objects (R2.13).
 
 ### R2.6 One renderer, one keyword, one golden that proves it
 
@@ -286,6 +293,33 @@ amended (R4).
   holds on both and the roster does not sit between the verdict and the rows. The element-id
   scans require the literal id in each page's HTML.
 
+### R2.15 The read-through, held 2026-09-19 on the handover folders
+
+The owner handed over the pilot workstation's run folders on 2026-09-19 (fourteen folders,
+2026-09-16 and 2026-09-18; kept at `%LOCALAPPDATA%\SwReview\handover\runs` on the development
+machine and never in this repository, because their packages carry vault paths and property
+names). A throwaway script applied the nine keys of `contracts/attention.md` section 1 to
+every session and the owner read the result. Four decisions, all as the policy proposed:
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | The top five on `20260918-215755-810-11249` | As previewed: the two `interference.static` rows, `rms.assembly.mates_to_reference_geometry`, `rms.sketches.fully_defined`, `rms.grouping.all_features_in_a_group`; `rms.folders.present` last of eight |
+| 2 | The class of `rms.assembly.first_component_fixed`, found on the 810-11450 reviews | `rebuild_breaker`: an unfixed first component leaves every mate without an anchor |
+| 3 | Grouping and the two equation rules | `discipline`, below the reference rules and above hygiene |
+| 4 | The shape of the "not reached" block | The run's own close-out sentences (R2.5), then the evidence-request and rule counts |
+
+What the folders also showed, each recorded so nobody rediscovers it: the real
+`mates_to_reference_geometry` finding is bound to the root assembly's component id with the
+part and the pin in its `inputs`, so its reach is one, and T003's fixture mirrors that; on
+that run the two interference findings sat **fifth and sixth** of six mediums in tool-call
+order, not third and fourth as the workstation record said; the 810-11504 review carries a
+`failed` coverage row from `get_drawing_sheet` on a document with no sheets; the three
+`20260916-2050xx-810-11450-check` folders hold only a `package.json`, the Model check having
+never reached the backend that evening (the web-filter problem `docs/pane-findings-2026-09-16.md`
+records); `20260916-003612-810-10068` is a review cut off mid-turn with no error event, from
+the same evening; and every session carries `efficiency` all-off and no baseline minutes,
+which is User Story 1's premise measured rather than assumed.
+
 ## R3. Verified facts the plan relies on
 
 The eight production `render_report` call expressions: `cli.py:563`, `cli.py:607`,
@@ -345,7 +379,7 @@ DOM through `dom.js`; the shared script may not name a DOM constructor.
 
 | Item | Owner | Blocks |
 |---|---|---|
-| Copy the three 2026-09-18 review folders and the check folder off the pilot workstation | owner | the policy read-through (User Story 2) |
+| ~~Copy the 2026-09-18 run folders off the pilot workstation~~ done 2026-09-19 (R2.15); T022 is now the confirmation run with the real command | owner | nothing |
 | Author the real standards profile (006 T100) | owner | the gate's standards half being measurable |
 | Record the four timing inputs after each pilot run | owner | the checkpoint claim "timing recorded on every run" |
 | Held-out packages in `benchmarks/sets/pilot.json` | owner | any adoption decision (006 and 005 both record this) |
