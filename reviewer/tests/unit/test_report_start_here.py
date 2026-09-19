@@ -28,15 +28,22 @@ so the whole rendered report is scanned rather than the section alone.
 The new golden `test_the_ranked_report_matches_the_golden.md` pins the ranked shape of the
 2026-09-18 review fixture rendered with its package, which is the only place the section's
 exact bytes are written down.
+
+Section 8 is the enumeration (T031, FR-019). A "Start here" section that one render site
+writes and the next erases is worse than none, so the production render sites are counted
+rather than trusted: the source tree is parsed and every call of *this* renderer has to be
+one of the eight named below and has to pass a ranking.
 """
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
 from pytest_regressions.file_regression import FileRegressionFixture
 
+import swreview
 from swreview.ir.loader import load_package
 from swreview.report.attention import TOP_N, Ranking, coverage_line, rank, start_here_lines
 from swreview.report.markdown import render_report
@@ -376,3 +383,171 @@ def test_the_ranking_the_golden_pins_is_the_one_the_policy_produces(
         "rebuild breaker, demonstrated",
         "discipline, demonstrated",
     ]
+
+
+# --- 8. the enumeration of the production render sites (T031, FR-019) -----------------------
+
+SOURCE_ROOT = Path(swreview.__file__).resolve().parent
+"""`reviewer/src/swreview`: every production module, and no test module."""
+
+RENDERER_MODULE = "swreview.report.markdown"
+"""The import a site is matched on.
+
+Matched on the **import** and not on the bare name, because `remodel/report.py` defines a
+`render_report` of its own for the re-modeller's report - a different renderer, with a
+different golden, that never calls this one (research R2.6). A scan keyed on the name
+would count its calls and demand a ranking the re-modeller has no session to compute.
+"""
+
+RENDER_SITES: frozenset[str] = frozenset(
+    {
+        "chat/server.py::_render_report",
+        "chat/sessions.py::record_disposition",
+        "chat/sessions.py::record_timing_live",
+        "checks/rules/run.py::write_report",
+        "checks/standards/run.py::_write_report",
+        "cli.py::report",
+        "cli.py::review",
+        "report/rerender.py::rerender_run_folder",
+    }
+)
+"""Every production call of `swreview.report.markdown.render_report`, by path and function.
+
+The eight places a `report.md` an engineer opens is written from (research R3): the review
+command line, `swreview report`, the pane after every turn and after a stop, a disposition
+recorded on a live review, minutes recorded on a live review, the Model check, the
+standards check, and the one offline folder re-render the three offline commands share.
+Each of them must pass `ranking=`; a ninth fails the first test below and a site that
+renders without a ranking fails the second.
+"""
+
+RERENDER_SITES: frozenset[str] = frozenset(
+    {
+        "cli.py::_save_run",
+        "cli.py::timing",
+        "report/dispositions.py::apply_disposition",
+    }
+)
+"""The offline writers that render through `rerender_run_folder` rather than themselves.
+
+They are pinned for the same reason the eight are: each of them *used* to call the
+renderer directly with nothing but the session, which is how a run folder lost its package
+and a standards folder lost its verdict header (research R2.7). A function that went back
+to rendering its own report would become a ninth entry in `RENDER_SITES` and fail there;
+one that stopped re-rendering at all fails here.
+"""
+
+
+def _module_key(path: Path) -> str:
+    return path.relative_to(SOURCE_ROOT).as_posix()
+
+
+def _parsed_sources() -> list[tuple[str, ast.Module]]:
+    """Every production module under `swreview`, parsed, keyed by its relative path."""
+    return [
+        (_module_key(path), ast.parse(path.read_text(encoding="utf-8"), filename=str(path)))
+        for path in sorted(SOURCE_ROOT.rglob("*.py"))
+    ]
+
+
+def _names_imported_from(tree: ast.Module, module: str, name: str) -> set[str]:
+    """What `name` is bound to by `from <module> import name [as alias]`, if at all."""
+    return {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == module
+        for alias in node.names
+        if alias.name == name
+    }
+
+
+def _calls_of(module: str, name: str) -> dict[str, list[ast.Call]]:
+    """`path::function` -> the call nodes, for every call of `name` imported from `module`.
+
+    The walk is hand-rolled rather than `ast.walk`, because the answer is *which function*
+    holds the call and `ast` records no parent link. A module that does not import the
+    name is skipped whole, which is what keeps the re-modeller's own renderer out.
+    """
+    calls: dict[str, list[ast.Call]] = {}
+
+    def walk(node: ast.AST, key: str, bound: set[str], enclosing: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+                walk(child, key, bound, child.name)
+                continue
+            if (
+                isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Name)
+                and child.func.id in bound
+            ):
+                calls.setdefault(f"{key}::{enclosing}", []).append(child)
+            walk(child, key, bound, enclosing)
+
+    for key, tree in _parsed_sources():
+        bound = _names_imported_from(tree, module, name)
+        if bound:
+            walk(tree, key, bound, "<module>")
+    return calls
+
+
+def test_the_production_render_sites_are_exactly_the_eight_named_here() -> None:
+    """FR-019: a new render site cannot land unwired, because a ninth fails here.
+
+    Add the site to `RENDER_SITES` *and* make it pass a ranking; a site that renders a
+    report an engineer opens without the section is the drift this test exists to stop.
+    """
+    found = set(_calls_of(RENDERER_MODULE, "render_report"))
+
+    assert found == RENDER_SITES, (
+        "the production calls of report.markdown.render_report have moved.\n"
+        f"new: {sorted(found - RENDER_SITES)}\n"
+        f"gone: {sorted(RENDER_SITES - found)}"
+    )
+
+
+def test_every_production_render_passes_a_ranking() -> None:
+    """Each of the eight hands the renderer a `ranking=`; none renders the default shape."""
+    unranked = [
+        site
+        for site, calls in sorted(_calls_of(RENDERER_MODULE, "render_report").items())
+        for call in calls
+        if not any(keyword.arg == "ranking" for keyword in call.keywords)
+    ]
+
+    assert unranked == [], (
+        "these production render sites call render_report without ranking=, so the report "
+        f"they write has no 'Start here' section: {unranked}"
+    )
+
+
+def test_the_offline_writers_re_render_through_the_one_folder_function() -> None:
+    """The three commands that re-render a folder they did not run share one writer.
+
+    A fourth writer that rendered without the folder's package, or without a standards
+    folder's verdict header, is the defect feature 007 removes (research R2.7).
+    """
+    found = set(_calls_of("swreview.report.rerender", "rerender_run_folder"))
+
+    assert found == RERENDER_SITES, (
+        "the offline re-render sites have moved.\n"
+        f"new: {sorted(found - RERENDER_SITES)}\n"
+        f"gone: {sorted(RERENDER_SITES - found)}"
+    )
+
+
+def test_the_re_modellers_own_renderer_is_not_counted() -> None:
+    """The scan matches the import, so `remodel/report.py`'s own `render_report` is out.
+
+    It defines and calls a renderer of the same name that never calls this one; counting
+    it would demand a ranking of a module that holds no review session (research R2.6).
+    """
+    remodel = ast.parse(
+        (SOURCE_ROOT / "remodel" / "report.py").read_text(encoding="utf-8"),
+    )
+
+    assert _names_imported_from(remodel, RENDERER_MODULE, "render_report") == set()
+    assert any(
+        isinstance(node, ast.FunctionDef) and node.name == "render_report"
+        for node in ast.walk(remodel)
+    ), "remodel/report.py no longer defines a renderer of its own; drop this test"
+    assert not any(site.startswith("remodel/") for site in RENDER_SITES)

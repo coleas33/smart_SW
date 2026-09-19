@@ -562,7 +562,13 @@ def review(
             )
             package = load_package(package_dir).package
             report_file = Path(out).resolve() / REPORT_FILE_NAME
-            report_file.write_text(render_report(session, package), encoding="utf-8")
+            # `attention.json` is not written here: `ReviewRun.finalize` already wrote it,
+            # from this same session, on the success and the failure path alike (research
+            # R2.7). One `rank` call per write, and both calls rank the finalized session,
+            # so the record beside it and the section below are the same order.
+            report_file.write_text(
+                render_report(session, package, ranking=rank(session)), encoding="utf-8"
+            )
 
     coverage = session.coverage
     payload = {
@@ -601,12 +607,21 @@ def report(
     ] = None,
     json_output: JsonFlag = False,
 ) -> None:
-    """Re-render the Markdown report from a session."""
+    """Re-render the Markdown report from a session.
+
+    It ranks and renders the section, and it deliberately writes **no** `attention.json`.
+    This command renders one session to one output path, and `--out` may point anywhere -
+    beside another run, into a scratch directory, at a file that is not `report.md` at all
+    - so a record written beside `session_file` would describe a report the caller may
+    have put somewhere else entirely. The record is written where the session is written
+    (research R2.7), and `swreview attention <run_dir>` reproduces this order from the
+    session alone for anyone who wants it.
+    """
     target = Path(out) if out is not None else Path(session_file).parent / REPORT_FILE_NAME
     with _errors_as_exit_1():
         session = load_session(session_file)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(render_report(session), encoding="utf-8")
+        target.write_text(render_report(session, ranking=rank(session)), encoding="utf-8")
 
     payload = {
         "session_file": str(session_file),
@@ -1399,12 +1414,17 @@ def _save_run(run_dir: Path, session: ReviewSession, evidence: EvidencePackage) 
     Both acceptance commands end here. An exception recorded on a finding but not written
     back to `session.json`, or written back without the report being re-rendered, leaves
     one run saying two different things about the same finding.
+
+    The session is saved **before** the re-render, because `rerender_run_folder` reads the
+    folder: it re-prepends a standards folder's verdict header from `check.json` and
+    writes `attention.json` beside the report, neither of which this command used to do
+    (research R2.7). `evidence` is handed to it rather than left to the folder because
+    `--package` is where this command was told to find it and a `check rms --out <dir>`
+    folder holds no `package.json`.
     """
     resolved = Path(run_dir).resolve()
     save_session(session, resolved / SESSION_FILE_NAME)
-    report_file = resolved / REPORT_FILE_NAME
-    report_file.write_text(render_report(session, evidence), encoding="utf-8")
-    return report_file
+    return rerender_run_folder(resolved, package=evidence)
 
 
 @exceptions_app.command("accept")

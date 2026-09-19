@@ -46,6 +46,8 @@ from swreview.agent.providers import AgentEvent, EventType
 from swreview.agent.runner import EVENTS_FILE_NAME, EventSink, ReviewRun
 from swreview.benchmark.timing import timing_with
 from swreview.findings import Finding
+from swreview.report.attention import rank
+from swreview.report.attention_record import write_attention_record
 from swreview.report.dispositions import REPORT_FILE_NAME, set_disposition
 from swreview.report.markdown import render_report
 from swreview.report.session import Timing, save_session
@@ -340,15 +342,24 @@ def record_disposition(
     same validated transition is applied to the session the run is holding, and the file
     and the report are rendered from that.
 
+    The ranking is computed here and handed to both writes rather than the folder being
+    re-rendered through `rerender_run_folder`, for the same reason: the run is holding the
+    package (`run.context.ir`) and the session, and re-reading the folder to recover what
+    is already in hand would be a second read that can only lose. One `rank` call serves
+    the report and the record, so the section the engineer re-opens and `attention.json`
+    beside it are the same order (research R2.7).
+
     Raises `KeyError` for an unknown finding id and `ValueError` for an unknown decision or
     a transition the state machine forbids; nothing is written on either path.
     """
     session = run.session
     finding = set_disposition(session, finding_id, decision, note, by)
     save_session(session, run.session_path)
+    ranking = rank(session)
     (run.out_dir / REPORT_FILE_NAME).write_text(
-        render_report(session, run.context.ir), encoding="utf-8"
+        render_report(session, run.context.ir, ranking=ranking), encoding="utf-8"
     )
+    write_attention_record(run.out_dir, ranking, session.session_id)
     disposition = finding.disposition
     run.sink.emit(
         "disposition",
@@ -379,6 +390,9 @@ def record_timing_live(
     would be gone after the engineer's next message. The values are applied to the session
     the run is holding, and the file and the report are rendered from that.
 
+    The report and `attention.json` are written from one `rank` call over that session,
+    exactly as `record_disposition` writes them and for the reason given there.
+
     No event is emitted: timing is the engineer's own bookkeeping, not something the review
     did (`contracts/timing.md` section 3). Raises `pydantic.ValidationError` for a negative
     value, naming the field, having written nothing.
@@ -392,7 +406,9 @@ def record_timing_live(
         false_alarms=false_alarms,
     )
     save_session(session, run.session_path)
+    ranking = rank(session)
     (run.out_dir / REPORT_FILE_NAME).write_text(
-        render_report(session, run.context.ir), encoding="utf-8"
+        render_report(session, run.context.ir, ranking=ranking), encoding="utf-8"
     )
+    write_attention_record(run.out_dir, ranking, session.session_id)
     return session.timing
