@@ -45,6 +45,9 @@ public class CommandLineOptionsTests
     private static readonly string[] SuppressTestOptions =
         Program.KnownOptions(Program.SuppressTestOptionNames);
 
+    private static readonly string[] RemodelProbeOptions =
+        Program.KnownOptions(Program.RemodelProbeOptionNames);
+
     // ---- switches ----------------------------------------------------------------
 
     [Fact]
@@ -426,7 +429,8 @@ public class CommandLineOptionsTests
         // contracts/cli.md row 20: "probe standards --doc <document>". The subject list is
         // the shipped one, so a subject added to the switch and forgotten here - or the
         // reverse - is a failing test rather than an "Unknown probe" at the workstation.
-        Assert.Equal(new[] { "rms", "standards" }, Program.ProbeSubjects);
+        // "remodel" (tasks.md T031, T032) is the third and the one mutating subject.
+        Assert.Equal(new[] { "rms", "standards", "remodel" }, Program.ProbeSubjects);
     }
 
     [Fact]
@@ -805,6 +809,155 @@ public class CommandLineOptionsTests
             new[] { "SetSuppression2", "ForceRebuild3", "Save3", "SetSaveFlag", "ForceRebuildAll" },
             observer.Members.ToArray());
         Assert.Equal(3, observer.Refusals.Count);
+    }
+
+    // ---- probe remodel (T031) -----------------------------------------------------
+
+    [Fact]
+    public void RemodelProbe_AcceptsExactlyTheContractsOptions()
+    {
+        Assert.Equal(
+            new[] { "probe", "out", "keep-part", "acknowledge-throwaway-part" },
+            Program.RemodelProbeOptionNames);
+
+        Assert.Contains("allow-start", RemodelProbeOptions);
+        Assert.Throws<UsageError>(() =>
+            CommandLine.Parse(new[] { "probe", "remodel", "--doc", @"C:\p.SLDPRT" }, 2, RemodelProbeOptions));
+    }
+
+    [Fact]
+    public void RemodelProbe_OutIsRequired()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "probe", "remodel", "--acknowledge-throwaway-part" }, 2, RemodelProbeOptions);
+
+        Assert.Throws<UsageError>(() => Program.RemodelProbeSettingsFrom(parsed));
+    }
+
+    [Fact]
+    public void RemodelProbe_AcknowledgementIsOffUnlessTheFlagIsGiven()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "probe", "remodel", "--out", @"C:\out" }, 2, RemodelProbeOptions);
+
+        Assert.False(Program.RemodelProbeSettingsFrom(parsed).Acknowledged);
+    }
+
+    [Fact]
+    public void RemodelProbe_KeepPartDefaultsToFalseAndTheBareSwitchIsTrue()
+    {
+        CommandLine absent = CommandLine.Parse(
+            new[] { "probe", "remodel", "--out", @"C:\out" }, 2, RemodelProbeOptions);
+        Assert.False(Program.RemodelProbeSettingsFrom(absent).KeepPart);
+
+        CommandLine given = CommandLine.Parse(
+            new[] { "probe", "remodel", "--out", @"C:\out", "--keep-part" }, 2, RemodelProbeOptions);
+        Assert.True(Program.RemodelProbeSettingsFrom(given).KeepPart);
+    }
+
+    [Fact]
+    public void RemodelProbe_ProbeIdsDefaultToEveryKnownProbeWhenTheOptionIsAbsent()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "probe", "remodel", "--out", @"C:\out" }, 2, RemodelProbeOptions);
+
+        Assert.Equal(RemodelProbeCatalog.AllIds, Program.RemodelProbeSettingsFrom(parsed).ProbeIds);
+    }
+
+    [Fact]
+    public void RemodelProbe_ProbeReadsACommaSeparatedListAndUpperCasesIt()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "probe", "remodel", "--probe", "probe-1,PROBE-3", "--out", @"C:\out" },
+            2,
+            RemodelProbeOptions);
+
+        Assert.Equal(new[] { "PROBE-1", "PROBE-3" }, Program.RemodelProbeSettingsFrom(parsed).ProbeIds);
+    }
+
+    [Fact]
+    public void RemodelProbe_UnknownProbeId_IsAUsageError()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[] { "probe", "remodel", "--probe", "PROBE-99", "--out", @"C:\out" },
+            2,
+            RemodelProbeOptions);
+
+        Assert.Throws<UsageError>(() => Program.RemodelProbeSettingsFrom(parsed));
+    }
+
+    [Fact]
+    public void RemodelProbe_ReadsTheOutputDirectoryAndSwVersionFreeSettings()
+    {
+        CommandLine parsed = CommandLine.Parse(
+            new[]
+            {
+                "probe", "remodel",
+                "--probe", "PROBE-8",
+                "--out", @"C:\out\remodel",
+                "--keep-part",
+                "--acknowledge-throwaway-part",
+            },
+            2,
+            RemodelProbeOptions);
+
+        RemodelProbeSettings settings = Program.RemodelProbeSettingsFrom(parsed);
+
+        Assert.Equal(@"C:\out\remodel", settings.OutputDirectory);
+        Assert.Equal(new[] { "PROBE-8" }, settings.ProbeIds);
+        Assert.True(settings.KeepPart);
+        Assert.True(settings.Acknowledged);
+    }
+
+    [Fact]
+    public void RemodelProbe_WithoutTheFlag_RefusesBeforeTheSessionIsTouched()
+    {
+        // contracts/cli.md's "refuses, before touching anything" pattern (the suppress-test
+        // precedent): the directory ExecuteProbeRemodel would open its log in must not exist
+        // afterwards, proving nothing past the acknowledgement check ran.
+        string directory = Path.Combine(
+            Path.GetTempPath(), "swreview-tests", Guid.NewGuid().ToString("N"));
+
+        int exit = Program.RunProbe(new[] { "probe", "remodel", "--out", directory });
+
+        Assert.Equal(1, exit);
+        Assert.False(Directory.Exists(directory));
+        Assert.Contains(
+            "--acknowledge-throwaway-part",
+            RemodelProbe.AcknowledgementRequiredMessage,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RemodelProbe_BuildsItsGateWithTheRemodelProbeGuard()
+    {
+        // A separate guard from RemodelGuard on purpose: the probe builds a throwaway part and
+        // needs the feature-creation family RemodelGuard refuses outright
+        // (contracts/guard-allowlist.md), but nothing else the read-only guard denies.
+        var observer = new RecordingGateObserver();
+        SwGate gate = Program.RemodelProbeGate(observer);
+
+        Assert.True(gate.Call("FeatureExtrusion3", () => true));
+        Assert.True(gate.Call("FeatureCut4", () => true));
+        Assert.True(gate.Call("InsertFeatureChamfer", () => true));
+        Assert.True(gate.Call("InsertFeatureShell", () => true));
+        Assert.True(gate.Call("InsertFeatureTreeFolder2", () => true));
+        Assert.True(gate.Call("ForceRebuild3", () => true));
+        Assert.True(gate.Call("SaveAs3", () => true));
+        Assert.True(gate.Call(RemodelSystemToggles.ToggleMember, () => true));
+        Assert.True(gate.Call(RemodelSystemToggles.CommandInProgressMember, () => true));
+
+        // FeatureFillet3 needs no exemption: it is not on ReadOnlyGuard's denylist at all.
+        Assert.True(gate.Call("FeatureFillet3", () => true));
+
+        Assert.Throws<MutatingCallError>(() => gate.Call("Save3", () => true));
+        Assert.Throws<MutatingCallError>(() => gate.Call("EditDelete", () => true));
+        Assert.Throws<MutatingCallError>(() => gate.Call("SetSuppression2", () => true));
+        Assert.Throws<MutatingCallError>(() => gate.Call("ForceRebuildAll", () => true));
+
+        // A FeatureExtrusion* variant this probe never calls stays refused: the exemption is
+        // an exact match on the calls the recipe actually makes, not a widened prefix.
+        Assert.Throws<MutatingCallError>(() => gate.Call("FeatureExtrusion2", () => true));
     }
 
     // ---- --fasteners -------------------------------------------------------------

@@ -154,7 +154,7 @@ passed.
 ## Scenario 4 (Phase 2, workstation): the blocking probes
 
 ```powershell
-swreview-extract probe remodel --out ..\benchmarks\native\remodel
+swreview-extract probe remodel --out ..\benchmarks\native\remodel --acknowledge-throwaway-part
 ```
 
 The probe builds its own throwaway part and never touches an engineer's file. Read every line
