@@ -1,0 +1,155 @@
+# The attention policy, version 1: what "read this first" means, as data.
+#
+# `report/attention.py` loads this file once and reads three things from it: the
+# needs-judgement prefixes (key 2), the consequence class of every check the product can
+# emit (key 3), and - for the procedural gate's brief only - one sentence per pre-run
+# family saying what no enumerator can see. Nothing here is a weight or a score: the rank
+# is a tuple of nine named lookups (`contracts/attention.md` section 1), so a placement is
+# arguable by pointing at a line rather than by re-doing arithmetic.
+#
+# Two rules about editing this file:
+#
+# - **No percent sign anywhere.** Everything here can reach the Standards tab, whose body
+#   scan forbids one (research R2.14). Write "30 percent", never the sign.
+# - **A class is an opinion about consequence, not about severity.** Severity is read off
+#   the finding as the check recorded it and is key 5; this table is key 3, and the two
+#   must be free to disagree - an under-defined sketch is `medium` and still breaks a
+#   rebuild.
+#
+# The classes, in the order key 3 sorts them: rebuild_breaker, interface, manufacturing,
+# unclassified, discipline, hygiene. `unclassified` is never assigned here - it is what an
+# id this table does not name sorts as, printed by name so the omission is visible.
+
+version: attention_policy_v1
+
+# Key 2. A finding whose check id starts with one of these sorts first among the undecided:
+# no tool can close it, because only the engineer knows whether the overlap is the intended
+# press fit, which two dimensions are one interface, or what a screw is meant to clamp.
+needs_judgement:
+  - interference.
+  - fit.
+  - fastener.
+  - hole.
+
+# Key 3. Every check id the product can emit, to exactly one class. The classes the owner
+# agreed on 2026-09-19 over the handover folders (research R2.15) are the three
+# rebuild-breaking rms rules, the grouping and equation rules as discipline, the missing
+# folders as hygiene, the numeric families as interface and the drawing checks as
+# manufacturing; the rest are first opinions by the meaning of the rule, confirmed in T022.
+classes:
+  # rms, reference and rebuild stability -> rebuild_breaker: a tree or a mate scheme that
+  # will not survive the next edit, whatever it rebuilds as today.
+  rms.assembly.mates_to_reference_geometry: rebuild_breaker
+  rms.assembly.first_component_fixed: rebuild_breaker
+  rms.assembly.mate_chain_depth: rebuild_breaker
+  rms.assembly.no_sibling_in_context_refs: rebuild_breaker
+  rms.refs.direction: rebuild_breaker
+  rms.refs.quarantine_has_no_children: rebuild_breaker
+  rms.detail.no_internal_references: rebuild_breaker
+  rms.detail.individually_suppressible: rebuild_breaker
+  rms.sketches.fully_defined: rebuild_breaker
+  rms.sketches.not_over_defined: rebuild_breaker
+  rms.sketches.one_sketch_per_feature: rebuild_breaker
+  rms.advisory.sketch_plane_choice: rebuild_breaker
+  # rms, organisation and intent -> discipline: the tree works and is harder to read, to
+  # reuse and to change than it needs to be.
+  rms.grouping.all_features_in_a_group: discipline
+  rms.groups.no_solids_in_ref_or_construction: discipline
+  rms.core.shell_last: discipline
+  rms.detail.holes_last: discipline
+  rms.modify.transform_before_replicate: discipline
+  rms.quarantine.chamfers_before_fillets: discipline
+  rms.quarantine.largest_fillet_first: discipline
+  rms.quarantine.only_fillets_and_chamfers: discipline
+  rms.params.global_variables_present: discipline
+  rms.params.dimensions_driven_by_equations: discipline
+  rms.assembly.positions_driven_by_globals: discipline
+  rms.assembly.subassemblies: discipline
+  rms.assembly.toolbox_parts_not_configurations: discipline
+  rms.advisory.structural_vs_cosmetic_fillets: discipline
+  rms.advisory.core_shaping_cuts: discipline
+  rms.advisory.avoid_multibody: discipline
+  # rms, naming, descriptions and folders -> hygiene: nothing is wrong with the geometry;
+  # the next engineer has to work out what was meant.
+  rms.folders.present: hygiene
+  rms.folders.ordered: hygiene
+  rms.intent.every_feature_described: hygiene
+  rms.assembly.mates_described: hygiene
+  rms.advisory.description_quality: hygiene
+  # rms, what the drawing states -> manufacturing.
+  rms.drawing.model_items_preferred: manufacturing
+  # standards, reference and rebuild stability -> rebuild_breaker: an error or a lost
+  # reference either side, and the anchoring of the assembly.
+  standards.assembly.rebuild_errors: rebuild_breaker
+  standards.assembly.mate_references: rebuild_breaker
+  standards.assembly.one_fixed: rebuild_breaker
+  standards.assembly.fully_mated: rebuild_breaker
+  standards.part.rebuild_errors: rebuild_breaker
+  standards.part.sketches_fully_defined: rebuild_breaker
+  # standards, transparency and hidden state -> hygiene: a display state left behind.
+  standards.assembly.not_exploded: hygiene
+  standards.assembly.not_transparent: hygiene
+  standards.assembly.not_hidden: hygiene
+  # standards, release-readiness and data cards -> manufacturing: what somebody downstream
+  # reads off the document and builds to.
+  standards.part.material_assigned: manufacturing
+  standards.part.cut_list_excluded: manufacturing
+  standards.drawing.dimensions_not_overridden: manufacturing
+  standards.drawing.annotations_not_dangling: manufacturing
+  standards.drawing.revision_matches: manufacturing
+  standards.drawing.no_itar_statement: manufacturing
+  standards.document.data_card_complete: manufacturing
+  # the numeric families -> interface: two parts have to agree, and whether they do is a
+  # judgement the engineer makes with the number in front of them.
+  interference.static: interface
+  fit.size_only: interface
+  fastener.bottoming: interface
+  fastener.engagement: interface
+  fastener.thread_match: interface
+  fastener.head_clearance: interface
+  fastener.unsupported: interface
+  hole.coaxiality: interface
+  stack.worst_case: interface
+  # the drawing finding the model records -> manufacturing.
+  drawing.manufacturing_inputs: manufacturing
+
+# What no enumerator can see, one sentence per pre-run family. Read by the gate's brief
+# only (`prerun.not_evaluated_families`, and the standards half). These are not gaps in
+# this package: they are the shape of the question, which is why the model is asked to
+# spend its rounds here rather than on what the rules already settled.
+blind_spots:
+  fastener_joint: >-
+    Which components a screw clamps, in what order, and against which hole is design
+    intent; the package lists fasteners and holes and can never say which of them form a
+    joint.
+  hole_alignment: >-
+    Which two holes are meant to be one feature across a joint, and the drawing tolerance
+    that governs the pair, are nowhere in the package; coaxial geometry alone does not say
+    which pairs matter.
+  fit: >-
+    Which two dimensions are the bore and the shaft of one interface is a statement the
+    designer makes, not a fact in the model, so no enumerator can propose a fit to check.
+  axial_stack: >-
+    Which dimensions add up to a functional gap, with what signs and to what target, is
+    the design intent itself; nothing in the package orders them into a stack.
+  interference: >-
+    Whether an overlap is a defect or the intended press fit is a judgement about intent;
+    the check reports the pair and the volume and can never settle that question.
+  standards: >-
+    A release standard is a company's own rule, so with no profile configured no check of
+    it exists at all; and with one, the checks read what the documents state and never
+    whether the design is right.
+
+# FR-035. The four preconditions for ever adding an agentic triage pass, written down so
+# the question is answered by a rule rather than re-argued. Build one only when all four
+# hold. ("30 percent" rather than the sign, for the reason at the top of this file.)
+triage_pass_preconditions:
+  - >-
+    The deterministic top five misses the finding that received the first accepted
+    disposition in 30 percent or more of reviews over five designs.
+  - >-
+    The miss cannot be expressed as a new consequence class or a new rule.
+  - >-
+    Assisted verification minutes exceed about ten per design.
+  - >-
+    Net saved minutes is already positive.
