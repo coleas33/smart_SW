@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <title>SwReview Standards check</title>
+<link rel="stylesheet" href="../../shared/tokens.css">
 <link rel="stylesheet" href="../../shared/check-page.css">
 <link rel="stylesheet" href="standards.css">
 </head>
@@ -25,6 +26,12 @@
 
   Nothing on this page needs a provider, a key or a network beyond the loopback backend. That
   is the point of the tab, and the banner on the tab says so.
+
+  Three stylesheets, in this order and no other: `shared/tokens.css` is the one palette and type
+  scale every tab in the pane draws from, `shared/check-page.css` is everything the two check
+  tabs show the same way, and `standards.css` is the release verdict and the sixteen-check
+  roster this tab renders and the other does not. A page rule may only name a token; a literal
+  colour here would be a colour that cannot follow the theme the workstation is in.
 -->
 <header class="bar">
   <span id="document-name" class="document">No document open</span>
@@ -33,19 +40,21 @@
 
 <p id="banner" class="banner" hidden></p>
 
+<!-- The meta lines are ordered above the buttons by the stylesheet, not by this file: the
+     sentences about what a press would do read before the press. -->
 <section id="session" class="session">
   <div class="row">
-    <button type="button" id="run-check" disabled>Standards check</button>
-    <button type="button" id="open-report" disabled>Open report</button>
-    <button type="button" id="open-folder" disabled>Open check folder</button>
-    <button type="button" id="open-log">View log</button>
+    <button type="button" id="run-check" class="primary" disabled>Standards check</button>
+    <button type="button" id="open-report" class="quiet" disabled>Open report</button>
+    <button type="button" id="open-folder" class="quiet" disabled>Open check folder</button>
+    <button type="button" id="open-log" class="quiet">View log</button>
   </div>
   <!-- What would be graded if the button were pressed now, from the document's kind: a
        drawing-rooted run fans out to every model its views reference, and an engineer should
        not be surprised by that (contracts/standards-check.md D11). -->
   <span id="grading" class="note"></span>
   <span id="profile" class="note"></span>
-  <span id="run-dir" class="note"></span>
+  <span id="run-dir" class="note mono"></span>
   <span id="check-state" class="note" role="status"></span>
   <span id="carried-forward" class="note"></span>
 </section>

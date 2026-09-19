@@ -1,10 +1,19 @@
 /*
   The Model check page's own stylesheet: the grade block, and nothing else (T030).
 
-  Everything a check tab shows the same way - the bar, the banner, the session row, the chips
-  and the rule list - is in `shared/check-page.css`, which this page loads first. What is left
-  here is the header this page renders and the Standards check page does not: a grade, with its
-  bucket counts, its fraction and the rules that reached no verdict named beside it.
+  Everything a check tab shows the same way - the status strip, the banner, the session row, the
+  ranked rows, the chips and the list below them - is in `shared/check-page.css`, which this page
+  loads first, after `shared/tokens.css`. What is left here is the header this page renders and
+  the Standards check page does not: a grade, with its bucket counts, its fraction and the rules
+  that reached no verdict named beside it.
+
+  It is a summary, not a headline. The counts are one muted inline row rather than six
+  paragraphs, the fraction sets only its number in ink, and the ids of the rules that reached no
+  verdict are in the mono face so they read as names rather than as prose. The thing an engineer
+  acts on is below this block, not in it.
+
+  Every colour, face and size is a token from `shared/tokens.css`; there is no literal here,
+  because a literal is a value that cannot follow the theme the workstation is in.
 
   A separate file rather than a `<style>` block because the CSP is `style-src 'self'`: the page
   it is served with refuses an inline one, which is the point of the policy. Nothing here is
@@ -12,29 +21,59 @@
 */
 
 .grade {
-  margin: 10px 0 6px;
+  padding: 10px 12px 10px;
+  border-top: 1px solid var(--hair-2);
 }
 
 .grade-heading {
-  margin: 0 0 4px;
-  font-size: 13px;
+  margin: 0 0 6px;
+  color: var(--ink-2);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .counts {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 10px;
+  gap: 1px 10px;
   margin: 0;
   padding: 0;
   list-style: none;
+  color: var(--muted);
+  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
 }
 
 .count {
   white-space: nowrap;
 }
 
+.count-n {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
 .fraction,
 .unresolved-rules,
 .nothing-evaluated {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--text-small);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.fraction-n {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.nothing-evaluated {
+  color: var(--ink-2);
+  font-weight: 600;
 }

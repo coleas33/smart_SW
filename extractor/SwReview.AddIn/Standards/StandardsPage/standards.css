@@ -1,12 +1,31 @@
 /*
-  The Standards page's own stylesheet: the verdict block and the sixteen-check list, and
+  The Standards page's own stylesheet: the release verdict and the sixteen-check roster, and
   nothing else (T079).
 
-  Everything a check tab shows the same way - the bar, the banner, the session row, the chips
-  and the check list below the fold - is in `shared/check-page.css`, which this page loads
-  first. What is left here is the header this page renders and the Model check page does not:
-  a release verdict, with the counts in every bucket and the unit each of them counts, and the
-  roster of all sixteen checks with the buckets each one landed in.
+  Everything a check tab shows the same way - the status strip, the banner, the session row, the
+  ranked rows, the chips and the rule list - is in `shared/check-page.css`, which this page loads
+  first, after `shared/tokens.css`. What is left here is what this page renders and the Model
+  check page does not: a release verdict, with the counts in every bucket and the unit each of
+  them counts, and the roster of all sixteen checks with the buckets each one landed in.
+
+  Two shapes carry the whole block.
+
+  The verdict is a stripe and a tinted ground in the state's own colour, set from a class the
+  page script adds from the headline it rendered - critical for "not ready", warn for "not
+  proven ready", good for "ready". Everything that qualifies the headline - which document, what
+  reached no verdict, and every note - is inside that ground, because each of them is a reason
+  the headline says less than it seems.
+
+  The counts are a two-column grid with the number in its own cell, so seven rows in seven
+  different units read as a table rather than as a paragraph. No count is coloured: a red zero
+  would be a false alarm, and the block above it already carries the state.
+
+  The roster is tier three. It repeats, by design, what the rows below already show, so it is
+  behind one press and each check is one line with the bucket as a dot - open a check and it
+  says which documents landed where, and why.
+
+  Every colour, face and size is a token from `shared/tokens.css`; there is no literal here,
+  because a literal is a value that cannot follow the theme the workstation is in.
 
   A separate file rather than a `<style>` block because the CSP is `style-src 'self'`: the page
   it is served with refuses an inline one, which is the point of the policy. Nothing here is
@@ -15,12 +34,56 @@
 */
 
 .verdict {
-  margin: 10px 0 6px;
+  display: block;
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--hair-2);
+}
+
+.verdict-block {
+  margin: 0 12px 10px;
+  padding: 10px 12px;
+  border-left: 4px solid var(--open);
+  border-radius: var(--radius);
+  background: var(--open-bg);
+}
+
+.verdict-block.verdict-critical {
+  border-left-color: var(--critical);
+  background: var(--critical-bg);
+}
+
+.verdict-block.verdict-warn {
+  border-left-color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.verdict-block.verdict-good {
+  border-left-color: var(--good);
+  background: var(--good-bg);
 }
 
 .verdict-headline {
-  margin: 0 0 4px;
-  font-size: 13px;
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: var(--text-head);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.verdict-critical .verdict-headline {
+  color: var(--critical);
+}
+
+.verdict-warn .verdict-headline {
+  color: var(--warn);
+}
+
+.verdict-good .verdict-headline {
+  color: var(--good);
 }
 
 .verdict-document,
@@ -28,69 +91,180 @@
 .verdict-note,
 .not-rebuilt {
   margin: 4px 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.verdict-document {
+  margin-top: 2px;
 }
 
 .verdict-note {
   font-style: italic;
 }
 
+/* ---- the counts -------------------------------------------------------------------------- */
+
 .counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  margin: 6px 0 0;
-  padding: 0;
+  display: grid;
+  gap: 2px 0;
+  margin: 0;
+  padding: 0 12px 10px;
   list-style: none;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
 }
 
 .count {
-  white-space: nowrap;
+  display: grid;
+  grid-template-columns: 2.6em 1fr;
+  gap: 0 10px;
 }
 
-/* The roster: every check the family has, whether it applied or not. It is a reference list
-   rather than the thing to act on, so it is set smaller than the rows below it - present and
-   readable, and not competing with the findings. */
+.count-n {
+  color: var(--ink);
+  font-weight: 600;
+  text-align: right;
+}
+
+/* ---- tier 3: the roster ------------------------------------------------------------------- */
+
 .checks {
-  margin: 10px 0 6px;
+  display: block;
+}
+
+.checks-fold {
+  border-top: 1px solid var(--hair-2);
+}
+
+.checks-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.checks-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.checks-fold > summary::after {
+  content: "\25b8";
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.checks-fold[open] > summary::after {
+  content: "\25be";
 }
 
 .checks-heading {
-  margin: 0 0 4px;
-  font-size: 12px;
+  color: var(--ink-2);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.checks-tally {
+  color: var(--muted);
+  font-size: var(--text-label);
+  font-variant-numeric: tabular-nums;
 }
 
 .check-list {
+  display: grid;
+  gap: 1px;
   margin: 0;
-  padding: 0;
+  padding: 0 12px 10px;
   list-style: none;
 }
 
 .check {
-  margin: 0 0 6px;
-  padding: 4px 0 0;
-  border-top: 1px solid #e3e3e3;
+  margin: 0;
 }
 
-.check-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: baseline;
+.check-fold > summary {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 2px 0;
+  list-style: none;
+  cursor: pointer;
+}
+
+.check-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.check-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--hair);
+}
+
+.check-dot.bucket-failed {
+  background: var(--critical);
+}
+
+.check-dot.bucket-warned {
+  background: var(--warn);
+}
+
+.check-dot.bucket-checked {
+  background: var(--good);
+}
+
+.check-dot.bucket-unresolved {
+  background: var(--open);
+}
+
+.check-dot.bucket-skipped,
+.check-dot.bucket-out_of_scope {
+  background: var(--quiet);
 }
 
 .check-id {
-  font-family: Consolas, "Courier New", monospace;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: var(--text-label);
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
-.check-severity {
-  color: #666;
+.check-severity,
+.check-worst {
+  color: var(--muted);
+  font-size: var(--text-label);
+  white-space: nowrap;
+}
+
+.check-fold .statement {
+  margin: 2px 0 0 16px;
+  color: var(--muted);
+  font-size: var(--text-label);
+  font-weight: 400;
+  line-height: 1.4;
 }
 
 .check-buckets {
-  margin: 2px 0 0;
-  padding: 0 0 0 14px;
+  margin: 2px 0 6px 16px;
+  padding: 0;
+  list-style: none;
 }
 
 .check-bucket {
   margin: 0;
+  color: var(--muted);
+  font-size: var(--text-label);
+  word-break: normal;
+  overflow-wrap: anywhere;
 }

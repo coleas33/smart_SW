@@ -324,6 +324,265 @@ public sealed class ModelCheckPageTests
         Assert.Single(Strings(rendered, "headings"));
     }
 
+    /// <summary>
+    /// A ranked row prints what the ranking actually sent it.
+    ///
+    /// The row carries `title`, `status`, `severity`, `component_ids` and `consequence_class`
+    /// and the pages rendered three fields of it, so the block that is supposed to be the first
+    /// thing an engineer reads told them a finding id and made them go and look the rest up.
+    /// Every one of those fields is on the row now, and the stripe restates - in the pane's own
+    /// palette - the consequence class the policy already recorded. It is not a second ranking:
+    /// nothing here reorders anything, and a class is a class whatever position it is in.
+    /// </summary>
+    [Fact]
+    public void AStartHereRowCarriesItsTitleItsMetaAndTheStripeOfItsConsequenceClass()
+    {
+        JsonElement rendered = Render(
+            "return JSON.stringify({ok: true, "
+            + "titles: texts('#attention .attention-title'), "
+            + "metas: texts('#attention .attention-meta'), "
+            + "components: texts('#attention .attention-components'), "
+            + "classes: attrs('#attention .attention-row', 'class')});");
+
+        Assert.Equal(AttentionSample.ShownTitles, Strings(rendered, "titles"));
+
+        // Status and severity as plain words, in the order the contract states them. They are
+        // read and printed; nothing on this page compares either of them.
+        foreach (string meta in Strings(rendered, "metas"))
+        {
+            Assert.StartsWith("demonstrated", meta, StringComparison.Ordinal);
+            Assert.EndsWith("medium", meta, StringComparison.Ordinal);
+        }
+
+        Assert.Equal("cmp:0002, cmp:0003", Strings(rendered, "components")[0]);
+
+        string[] classes = Strings(rendered, "classes");
+        Assert.Equal(5, classes.Length);
+        Assert.Contains("stripe-judge", classes[0]);
+        Assert.Contains("stripe-judge", classes[1]);
+        Assert.Contains("stripe-critical", classes[2]);
+        Assert.Contains("stripe-critical", classes[3]);
+        Assert.Contains("stripe-warn", classes[4]);
+    }
+
+    /// <summary>
+    /// The judgement lever wins the stripe, and a consequence class the pane has never heard of
+    /// gets the quiet one rather than none.
+    ///
+    /// `key.judgement` is the policy's own eleventh lever for "only an engineer can settle
+    /// this", published on the row beside the eight it ranks by. A row it placed there wears the
+    /// judgement stripe whatever its consequence class - which is what the mutation below
+    /// proves, because `rebuild_breaker` maps to the critical stripe on its own.
+    /// </summary>
+    [Fact]
+    public void TheJudgementKeyWinsTheStripeAndAnUnknownConsequenceClassFallsBackToQuiet()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.attention.rows[2].key.judgement = 0;"
+            + "result.attention.rows[4].consequence_class = 'a-class-from-next-year';",
+            "return JSON.stringify({ok: true, "
+            + "classes: attrs('#attention .attention-row', 'class')});");
+
+        string[] classes = Strings(rendered, "classes");
+        Assert.Contains("stripe-judge", classes[2]);
+        Assert.DoesNotContain("stripe-critical", classes[2]);
+        Assert.Contains("stripe-quiet", classes[4]);
+    }
+
+    /// <summary>
+    /// A ranked row points at its rule: the press that used to do nothing now scrolls the
+    /// matching row into view and lights it.
+    ///
+    /// Both blocks already carried the same finding id and the engineer was already reading the
+    /// top one. It amplifies and it still does not filter - except that a bucket which was
+    /// hiding the row is turned back on, chip and all, because a press that scrolled to
+    /// something invisible would read as a broken page. Exactly one row is lit at a time: two
+    /// rows both claiming to be the one that was pointed at is worse than none.
+    /// </summary>
+    [Fact]
+    public void PressingARankedRowLightsTheMatchingRuleAndOpensTheBucketThatWasHidingIt()
+    {
+        JsonElement rendered = Render(
+            "var rows = document.querySelectorAll('#attention .attention-row');"
+            + "var before = document.querySelectorAll('#rules .rule.flash').length;"
+            + "rows[0].click();"
+            + "var unranked = document.querySelectorAll('#rules .rule.flash').length;"
+            + "rows[3].click();"
+            + "var warned = attrs('#rules .rule.flash', 'data-finding-id');"
+            + "rows[2].click();"
+            + "return JSON.stringify({ok: true, before: before, unranked: unranked, "
+            + "warned: warned, lit: attrs('#rules .rule.flash', 'data-finding-id'), "
+            + "visible: attrs('#rules .bucket-group:not([hidden])', 'data-bucket'), "
+            + "pressed: attrs('#filters .chip[aria-pressed=\"true\"]', 'data-bucket')});");
+
+        Assert.Equal(0, rendered.GetProperty("before").GetInt32());
+
+        // F-007 is ranked but produced no rule row in this result; the press does nothing rather
+        // than lighting something that is not the row it names.
+        Assert.Equal(0, rendered.GetProperty("unranked").GetInt32());
+
+        // F-002 is in `warned`, which a page opens on.
+        Assert.Equal(new[] { "F-002" }, Strings(rendered, "warned"));
+
+        // F-003 is an accepted rule, so it is in `checked`, which a page opens with closed.
+        Assert.Equal(new[] { "F-003" }, Strings(rendered, "lit"));
+        Assert.Equal(new[] { "failed", "warned", "checked" }, Strings(rendered, "visible"));
+        Assert.Equal(new[] { "failed", "warned", "checked" }, Strings(rendered, "pressed"));
+    }
+
+    /// <summary>
+    /// A chip is a count first and a filter second: the number is what an engineer reads off the
+    /// tab before deciding what to open, so it leads and it is in its own element - which is
+    /// also what lets a pressed chip be filled in its bucket's own colour from the stylesheet,
+    /// with no script setting one (the `.style.` ban).
+    /// </summary>
+    [Fact]
+    public void EveryChipCarriesItsCountInALeadingElementAndItsBucketAsAClass()
+    {
+        JsonElement rendered = Render(
+            "return JSON.stringify({ok: true, "
+            + "buckets: attrs('#filters .chip', 'data-bucket'), "
+            + "classes: attrs('#filters .chip', 'class'), "
+            + "counts: texts('#filters .chip > b.chip-count'), "
+            + "labels: texts('#filters .chip > .chip-label'), "
+            + "pressed: attrs('#filters .chip[aria-pressed=\"true\"]', 'class')});");
+
+        string[] buckets = Strings(rendered, "buckets");
+        Assert.Equal(new[] { "failed", "warned", "checked", "unresolved" }, buckets);
+
+        // The rows in each bucket, not the grade's counts: the chip says how much it will show.
+        Assert.Equal(new[] { "1", "1", "4", "2" }, Strings(rendered, "counts"));
+        Assert.Equal(buckets, Strings(rendered, "labels"));
+
+        string[] classes = Strings(rendered, "classes");
+        for (int index = 0; index < buckets.Length; index++)
+        {
+            Assert.Contains("bucket-" + buckets[index], classes[index]);
+        }
+
+        // Pressed needs both halves: the state the filter reads, and the class the fill comes
+        // from. A chip with one and not the other would be a filter nobody can see the state of.
+        string[] pressed = Strings(rendered, "pressed");
+        Assert.Equal(2, pressed.Length);
+        Assert.Contains("bucket-failed", pressed[0]);
+        Assert.Contains("bucket-warned", pressed[1]);
+    }
+
+    /// <summary>
+    /// The grade is a summary, not a headline: every count, the fraction and the unresolved ids
+    /// still read exactly as they did, and the number of each is in its own element so the
+    /// stylesheet can set it apart from its label.
+    /// </summary>
+    [Fact]
+    public void EveryGradeCountKeepsItsTextAndLeadsWithItsNumberInItsOwnElement()
+    {
+        JsonElement rendered = Render(
+            "return JSON.stringify({ok: true, "
+            + "counts: texts('#grade .counts .count'), "
+            + "numbers: texts('#grade .counts .count > :first-child'), "
+            + "leads: attrs('#grade .counts .count > :first-child', 'class'), "
+            + "fraction: texts('#grade .fraction'), "
+            + "fractionNumber: texts('#grade .fraction > b.fraction-n'), "
+            + "unresolved: texts('#grade .unresolved-rules > .mono')});");
+
+        Assert.Equal(
+            new[]
+            {
+                "2 failed", "1 warned", "3 checked", "0 skipped", "2 unresolved", "0 out of scope",
+            },
+            Strings(rendered, "counts"));
+        Assert.Equal(new[] { "2", "1", "3", "0", "2", "0" }, Strings(rendered, "numbers"));
+        Assert.All(Strings(rendered, "leads"), value => Assert.Equal("count-n", value));
+
+        Assert.Equal(
+            new[] { "0.50 of the rules that reached a verdict were checked" },
+            Strings(rendered, "fraction"));
+        Assert.Equal(new[] { "0.50" }, Strings(rendered, "fractionNumber"));
+
+        // The ids that reached no verdict are set in the mono face, so they read as names rather
+        // than as the end of a sentence.
+        Assert.Equal(
+            new[] { "rms.refs.direction, rms.sketch.fully_defined" },
+            Strings(rendered, "unresolved"));
+    }
+
+    /// <summary>
+    /// What an engineer does about a rule is one press away, and what the rule is stays on the
+    /// line. The Accept control's DOM contract is unchanged by the move - it is still a
+    /// `[data-action="accept"]` with a sibling required `input.note` - and a coverage row, which
+    /// has no statement and no observed, keeps its reason on the line, because folded away it
+    /// would leave a check id and nothing else.
+    /// </summary>
+    [Fact]
+    public void ARulesRecommendedActionAndAcceptControlSitBehindOneClosedFold()
+    {
+        JsonElement rendered = Render(
+            "var fail = document.querySelector('.rule[data-rule-id=\"rms.detail.holes_last\"]');"
+            + "var fold = fail.querySelector('details.rule-fold');"
+            + "var note = fold.querySelector('input.note');"
+            + "var coverage = document.querySelector('.rule[data-rule-id=\"rms.refs.direction\"]');"
+            + "return JSON.stringify({ok: true, "
+            + "open: !!fold.open, "
+            + "summary: fold.querySelector('summary').textContent, "
+            + "reasonsInFold: fold.querySelectorAll('p.reason').length, "
+            + "reasonsOnRow: fail.querySelectorAll('p.reason').length, "
+            + "acceptsInFold: fold.querySelectorAll('[data-action=\"accept\"]').length, "
+            + "acceptsOnRow: fail.querySelectorAll('[data-action=\"accept\"]').length, "
+            + "noteRequired: !!note.required, "
+            + "notePlaceholder: note.getAttribute('placeholder'), "
+            + "statement: fail.querySelector('p.statement').textContent, "
+            + "coverageFolds: coverage.querySelectorAll('details').length, "
+            + "coverageReason: coverage.querySelector('p.reason').textContent});");
+
+        Assert.False(
+            rendered.GetProperty("open").GetBoolean(),
+            "The fold opens by default, so every row states its remedy in full again.");
+        Assert.Equal("Recommended, and accept", rendered.GetProperty("summary").GetString());
+
+        // In the fold and nowhere else: one recommended action and one Accept control per row.
+        Assert.Equal(1, rendered.GetProperty("reasonsInFold").GetInt32());
+        Assert.Equal(1, rendered.GetProperty("reasonsOnRow").GetInt32());
+        Assert.Equal(1, rendered.GetProperty("acceptsInFold").GetInt32());
+        Assert.Equal(1, rendered.GetProperty("acceptsOnRow").GetInt32());
+
+        Assert.True(rendered.GetProperty("noteRequired").GetBoolean(), "The note is not required.");
+        Assert.Contains("required", rendered.GetProperty("notePlaceholder").GetString()!);
+
+        // What the rule is stays on the line.
+        Assert.Equal(
+            "Holes are the last features in the Detail group.",
+            rendered.GetProperty("statement").GetString());
+
+        Assert.Equal(0, rendered.GetProperty("coverageFolds").GetInt32());
+        Assert.Equal(
+            "reference directions are not in the evidence package",
+            rendered.GetProperty("coverageReason").GetString());
+    }
+
+    /// <summary>
+    /// How much of a document is on screen, beside its name - and it moves with the chips.
+    ///
+    /// A chip hides rows rather than re-rendering them, so a count taken only at render time
+    /// would be wrong the moment one was pressed, and a wrong count beside a document heading
+    /// reads as the document having fewer rules than it has.
+    /// </summary>
+    [Fact]
+    public void EachDocumentHeadingSaysHowManyOfItsRulesAreOnScreenAndTheCountMovesWithTheChips()
+    {
+        JsonElement rendered = Render(
+            "var before = texts('#rules .document-group .document-name .document-count');"
+            + "document.querySelector('#filters .chip[data-bucket=\"checked\"]').click();"
+            + "var after = texts('#rules .document-group .document-name .document-count');"
+            + "document.querySelector('#filters .chip[data-bucket=\"failed\"]').click();"
+            + "return JSON.stringify({ok: true, before: before, after: after, "
+            + "closed: texts('#rules .document-group .document-name .document-count')});");
+
+        // Eight rows in the one document; `failed` and `warned` are the two a page opens on.
+        Assert.Equal(new[] { "2 of 8 shown" }, Strings(rendered, "before"));
+        Assert.Equal(new[] { "6 of 8 shown" }, Strings(rendered, "after"));
+        Assert.Equal(new[] { "5 of 8 shown" }, Strings(rendered, "closed"));
+    }
+
     [Fact]
     public void TheBucketChipsStartOnFailAndWarnAndTurnAnotherBucketOn()
     {

@@ -44,6 +44,9 @@
   /** This family's evaluation route. The token goes in the header, never in this URL. */
   var CHECK_ROUTE = '/checks/standards';
 
+  /** What separates two facts inside one line, the same mark the shared half uses. */
+  var DOT = ' · ';
+
   /**
    * The three verdict states and their headlines (FR-032).
    *
@@ -56,6 +59,21 @@
     ready: 'Ready to release',
     not_ready: 'Not ready to release',
     ready_coverage_incomplete: 'Not proven ready: the run left checks without a verdict'
+  };
+
+  /**
+   * The colour each headline is set in, as a class on the block that holds it.
+   *
+   * A map from the state to a class name, beside the map from the state to the words: the two
+   * are the same decision said twice, and the page must never be able to print one headline in
+   * another headline's colour. Nothing here reads a severity or a status - there is no ranking
+   * in a release gate, only which of three things the run concluded. A state this page has
+   * never heard of gets the neutral ground, the same way its headline says so in words.
+   */
+  var HEADLINE_TONES = {
+    ready: 'verdict-good',
+    not_ready: 'verdict-critical',
+    ready_coverage_incomplete: 'verdict-warn'
   };
 
   /**
@@ -171,6 +189,12 @@
   /**
    * The verdict, into the slot the shared half has just cleared, and the sixteen checks into
    * the list beside it - which this page owns, so this page clears it.
+   *
+   * One tinted block holds the headline and everything that qualifies it - which document, what
+   * reached no verdict, every note, and whether anything was rebuilt - because each of those is
+   * a reason the headline says less than it seems, and a note two blocks below a clean headline
+   * is a note nobody reads. The counts sit under that block, as a table rather than a sentence:
+   * the seven do not share a unit and a reader who added them up would be wrong.
    */
   function renderVerdict(result, node) {
     var roster = document.getElementById('checks');
@@ -181,42 +205,43 @@
     }
 
     var verdict = result.verdict;
-    node.appendChild(dom.el('h2', 'verdict-headline', headline(verdict)));
-    node.appendChild(dom.el('p', 'verdict-document', subject(result)));
-
-    var counts = dom.el('ul', 'counts');
-    for (var index = 0; index < COUNTS.length; index++) {
-      var row = COUNTS[index];
-      var item = dom.el(
-        'li', 'count', countOf(verdict, row.key) + ' ' + row.label + ' ' + row.unit);
-      item.setAttribute('data-count', row.key);
-      counts.appendChild(item);
-    }
-    node.appendChild(counts);
+    var block = dom.el('div', 'verdict-block ' + tone(verdict));
+    block.appendChild(dom.el('h2', 'verdict-headline', headline(verdict)));
+    block.appendChild(dom.el('p', 'verdict-document', subject(result)));
 
     // The unresolved checks travel with the counts, by name, in every state. A headline with
     // the missing checks named beside it is a verdict; a headline on its own is a claim.
-    var unresolved = verdict.unresolved_check_ids || [];
-    node.appendChild(dom.el(
-      'p',
-      'unresolved-checks',
-      unresolved.length
-        ? 'Unresolved, so not graded: ' + dom.list(unresolved)
-        : 'Every check reached a verdict.'));
+    block.appendChild(unresolvedLine(verdict.unresolved_check_ids || []));
 
     // What the headline was reached with: a waiver, an empty profile list, a run that graded no
     // drawing. Beside the headline, because each of them is a reason it says less than it seems.
     var notes = verdict.notes || [];
     for (var note = 0; note < notes.length; note++) {
-      node.appendChild(dom.el('p', 'verdict-note', notes[note]));
+      block.appendChild(dom.el('p', 'verdict-note', notes[note]));
     }
 
     if (result.rebuilt === false) {
-      node.appendChild(dom.el(
+      block.appendChild(dom.el(
         'p',
         'not-rebuilt',
         'Nothing was rebuilt: the counts are as the documents stood when they were read.'));
     }
+
+    node.appendChild(block);
+
+    var counts = dom.el('ul', 'counts');
+    for (var index = 0; index < COUNTS.length; index++) {
+      var row = COUNTS[index];
+
+      // The number leads, in its own cell, so seven rows in seven different units line up as a
+      // table; the row still reads "<n> <label> <unit>", which is what the contract pins.
+      var item = dom.el('li', 'count');
+      item.appendChild(dom.el('b', 'count-n', countOf(verdict, row.key)));
+      item.appendChild(dom.el('span', 'count-label', ' ' + row.label + ' ' + row.unit));
+      item.setAttribute('data-count', row.key);
+      counts.appendChild(item);
+    }
+    node.appendChild(counts);
 
     renderChecks(result.checks || [], roster);
   }
@@ -224,6 +249,24 @@
   function headline(verdict) {
     var state = String(verdict.state || '');
     return HEADLINES[state] || ('The run reported a state this page does not know: ' + state);
+  }
+
+  /** Which colour the block is set in, from the same state the headline was chosen by. */
+  function tone(verdict) {
+    return HEADLINE_TONES[String(verdict.state || '')] || 'verdict-unknown';
+  }
+
+  /** The checks that reached no verdict, named in the mono face so they read as names. */
+  function unresolvedLine(unresolved) {
+    var line = dom.el('p', 'unresolved-checks');
+    if (!unresolved.length) {
+      dom.write(line, 'Every check reached a verdict.');
+      return line;
+    }
+
+    dom.write(line, 'Unresolved, so not graded: ');
+    line.appendChild(dom.el('span', 'mono', dom.list(unresolved)));
+    return line;
   }
 
   /** Which document was graded, and against which profile file. Never a profile value. */
@@ -257,30 +300,79 @@
       return;
     }
 
+    // Behind one press, with the tally on the closed summary. The roster repeats, on purpose,
+    // what the rows below already show - so it has to be reachable and it must not be the thing
+    // between the release headline and the rules. Closed, it is one line that says all sixteen
+    // were accounted for; open, it says where each of them landed.
+    var fold = dom.el('details', 'checks-fold');
+    var summary = dom.el('summary', 'checks-summary');
+    summary.appendChild(dom.el('span', 'checks-heading', 'All ' + checks.length + ' checks'));
+    summary.appendChild(dom.el('span', 'checks-tally', tally(checks)));
+    fold.appendChild(summary);
+
     var list = dom.el('ul', 'check-list');
     for (var index = 0; index < checks.length; index++) {
       list.appendChild(checkRow(checks[index] || {}));
     }
+    fold.appendChild(list);
 
-    node.appendChild(dom.el('h2', 'checks-heading', 'All ' + checks.length + ' checks'));
-    node.appendChild(list);
+    node.appendChild(fold);
   }
 
+  /**
+   * How the sixteen landed, as one line on the closed fold.
+   *
+   * Counted, never ordered: the buckets are stated in the check page's own display order and the
+   * numbers are read off the rows. A bucket nothing landed in is left out rather than printed as
+   * a zero, because a line of zeroes is what an engineer stops reading.
+   */
+  function tally(checks) {
+    var counted = Object.create(null);
+    var index;
+    for (index = 0; index < checks.length; index++) {
+      var worst = String((checks[index] || {}).worst_bucket || '');
+      counted[worst] = (counted[worst] || 0) + 1;
+    }
+
+    var parts = [];
+    for (index = 0; index < shared.BUCKETS.length; index++) {
+      var bucket = shared.BUCKETS[index];
+      if (counted[bucket]) {
+        parts.push(counted[bucket] + ' ' + shared.BUCKET_LABELS[bucket]);
+      }
+    }
+    return parts.join(DOT);
+  }
+
+  /**
+   * One check: a line, and a fold of its own.
+   *
+   * The line is a dot in the worst bucket's colour, the check id and its severity - which is as
+   * much as a reference list needs to be read down. The statement and the bucket-by-bucket
+   * detail are one more press away, and still in the DOM either way: the roster's whole job is
+   * that a check which applied to nothing is present rather than absent.
+   */
   function checkRow(check) {
     var worst = String(check.worst_bucket || '');
     var item = dom.el('li', 'check');
     item.setAttribute('data-check', String(check.check || ''));
     item.setAttribute('data-worst-bucket', worst);
 
-    var head = dom.el('div', 'check-head');
-    head.appendChild(dom.el(
-      'span', 'badge bucket', shared.BUCKET_LABELS[worst] || worst || 'not reported'));
+    var fold = dom.el('details', 'check-fold');
+    var head = dom.el('summary', 'check-head');
+    head.appendChild(dom.el('span', 'check-dot bucket-' + (worst || 'none'), ''));
     head.appendChild(dom.el('span', 'check-id', String(check.check || '')));
     head.appendChild(dom.el('span', 'check-severity', String(check.severity || '')));
-    item.appendChild(head);
+
+    // A dot cannot say "the run never told us", and a grey one would read as skipped. Only the
+    // case that has no bucket at all says so in words.
+    if (!worst) {
+      head.appendChild(dom.el('span', 'check-worst', 'not reported'));
+    }
+    fold.appendChild(head);
 
     if (check.statement) {
-      item.appendChild(dom.el('p', 'statement', check.statement));
+      fold.appendChild(dom.el('p', 'statement', check.statement));
     }
 
     var buckets = check.buckets || [];
@@ -288,8 +380,9 @@
     for (var index = 0; index < buckets.length; index++) {
       list.appendChild(bucketRow(buckets[index] || {}));
     }
-    item.appendChild(list);
+    fold.appendChild(list);
 
+    item.appendChild(fold);
     return item;
   }
 

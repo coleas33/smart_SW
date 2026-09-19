@@ -376,7 +376,123 @@ public sealed class StandardsPageTests
         Assert.Empty(Strings(header, "headings"));
     }
 
+    /// <summary>
+    /// Which of the three states the run reached is a colour as well as a sentence, and the two
+    /// are chosen by the same lookup on the same state - so the page can never print one
+    /// headline in another headline's ground.
+    ///
+    /// Everything that qualifies the headline is inside that ground with it: which document,
+    /// what reached no verdict, and every note. A note two blocks under a clean headline is a
+    /// note nobody reads, which is the whole reason `verdict.notes` exists (FR-032).
+    /// </summary>
+    [Theory]
+    [InlineData("ready", "Ready to release", "verdict-good")]
+    [InlineData("not_ready", "Not ready to release", "verdict-critical")]
+    [InlineData(
+        "ready_coverage_incomplete",
+        "Not proven ready: the run left checks without a verdict",
+        "verdict-warn")]
+    public void TheVerdictBlockIsSetInTheColourOfTheHeadlineItRendered(
+        string state, string headline, string tone)
+    {
+        JsonElement rendered = RenderMutated(
+            "result.verdict.state = '" + state + "';",
+            "return JSON.stringify({ok: true, "
+            + "headline: texts('#verdict .verdict-headline')[0], "
+            + "blocks: attrs('#verdict .verdict-block', 'class'), "
+            + "inside: document.querySelectorAll("
+            + "'#verdict .verdict-block .verdict-headline, "
+            + "#verdict .verdict-block .verdict-document, "
+            + "#verdict .verdict-block .unresolved-checks, "
+            + "#verdict .verdict-block .verdict-note, "
+            + "#verdict .verdict-block .not-rebuilt').length});");
+
+        Assert.Equal(headline, rendered.GetProperty("headline").GetString());
+        Assert.Contains(tone, Assert.Single(Strings(rendered, "blocks")));
+
+        // The headline, the document line, the unresolved line, three notes and the
+        // not-rebuilt line: all seven in the one ground.
+        Assert.Equal(7, rendered.GetProperty("inside").GetInt32());
+    }
+
+    /// <summary>
+    /// A state this page has never heard of says so in words and gets the neutral ground, rather
+    /// than borrowing the colour of whichever state happens to be first in the map.
+    /// </summary>
+    [Fact]
+    public void AStateThisPageDoesNotKnowGetsTheNeutralGroundAndSaysSoInWords()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.verdict.state = 'nearly';",
+            "return JSON.stringify({ok: true, "
+            + "headline: texts('#verdict .verdict-headline')[0], "
+            + "blocks: attrs('#verdict .verdict-block', 'class')});");
+
+        Assert.Contains(
+            "The run reported a state this page does not know",
+            rendered.GetProperty("headline").GetString()!);
+
+        string block = Assert.Single(Strings(rendered, "blocks"));
+        Assert.Contains("verdict-unknown", block);
+        Assert.DoesNotContain("verdict-good", block);
+    }
+
+    /// <summary>
+    /// The seven counts are a table rather than a paragraph - the number in its own leading cell
+    /// so seven rows in seven different units line up - and every row still reads exactly what
+    /// <see cref="EveryCountIsRenderedWithTheUnitItCounts"/> pins it to read.
+    /// </summary>
+    [Fact]
+    public void EveryCountLeadsWithItsNumberInItsOwnElementWithoutChangingWhatTheRowReads()
+    {
+        JsonElement rendered = Render(
+            "return JSON.stringify({ok: true, "
+            + "counts: texts('#verdict .count'), "
+            + "numbers: texts('#verdict .count > :first-child'), "
+            + "leads: attrs('#verdict .count > :first-child', 'class'), "
+            + "keys: attrs('#verdict .count', 'data-count')});");
+
+        Assert.Equal(
+            new[]
+            {
+                "0 error findings",
+                "0 warning findings",
+                "1 waived findings",
+                "9 checked (check, document) pairs",
+                "4 skipped (check, document) pairs",
+                "2 unresolved (check, document) pairs",
+                "4 out of scope (check, document) pairs",
+            },
+            Strings(rendered, "counts"));
+
+        Assert.Equal(new[] { "0", "0", "1", "9", "4", "2", "4" }, Strings(rendered, "numbers"));
+        Assert.All(Strings(rendered, "leads"), value => Assert.Equal("count-n", value));
+        Assert.Equal(
+            new[] { "error", "warning", "waived", "checked", "skipped", "unresolved", "out_of_scope" },
+            Strings(rendered, "keys"));
+    }
+
     // ---- the ranked rows ---------------------------------------------------------------------
+
+    /// <summary>
+    /// The ranked rows carry the same title, meta and stripe on this tab as on the Model check
+    /// tab, because it is the same block rendered by the same shared function from the same key.
+    /// </summary>
+    [Fact]
+    public void TheRankedRowsCarryTheirTitlesAndStripesOnThisTabToo()
+    {
+        JsonElement rendered = Render(
+            "return JSON.stringify({ok: true, "
+            + "titles: texts('#attention .attention-title'), "
+            + "classes: attrs('#attention .attention-row', 'class')});");
+
+        Assert.Equal(AttentionSample.ShownTitles, Strings(rendered, "titles"));
+
+        string[] classes = Strings(rendered, "classes");
+        Assert.Contains("stripe-judge", classes[0]);
+        Assert.Contains("stripe-critical", classes[2]);
+        Assert.Contains("stripe-warn", classes[4]);
+    }
 
     /// <summary>
     /// The first `top_n` rows of `result.attention`, in the order the backend supplied them,
@@ -497,6 +613,84 @@ public sealed class StandardsPageTests
         Assert.Contains("doc:ef56", rows[1]);
     }
 
+    /// <summary>
+    /// The roster is behind one closed press, with the tally of where the sixteen landed on the
+    /// summary - and all sixteen are still in the DOM.
+    ///
+    /// It repeats, by design, what the rows below already show: the check id, the statement, the
+    /// bucket, the documents and the reason. Repeating all of that above the rules is what made
+    /// the tab unreadable; dropping it is what would stop a release gate reading "all sixteen
+    /// were accounted for" off one list. So it folds, and it keeps everything.
+    /// </summary>
+    [Fact]
+    public void TheSixteenCheckRosterIsBehindOneClosedFoldAndStillHoldsAllSixteen()
+    {
+        JsonElement rendered = Render(
+            "var fold = document.querySelector('#checks details.checks-fold');"
+            + "return JSON.stringify({ok: true, "
+            + "open: !!fold.open, "
+            + "summary: fold.querySelector('summary').textContent, "
+            + "rows: document.querySelectorAll('#checks details.checks-fold .check').length, "
+            + "buckets: document.querySelectorAll('#checks .check .check-bucket').length, "
+            + "openRows: document.querySelectorAll('#checks .check details[open]').length, "
+            + "dots: attrs('#checks .check .check-dot', 'class'), "
+            + "severities: texts('#checks .check .check-severity')});");
+
+        Assert.False(
+            rendered.GetProperty("open").GetBoolean(),
+            "The roster opens by default, so it is again the thing between the release headline "
+                + "and the rules.");
+
+        string summary = rendered.GetProperty("summary").GetString()!;
+        Assert.Contains("All 16 checks", summary);
+
+        // The tally is counted off the rows, stated in the check page's own bucket order, and
+        // leaves out the buckets nothing landed in - a line of zeroes is a line nobody reads.
+        Assert.Contains("10 checked", summary);
+        Assert.Contains("1 skipped", summary);
+        Assert.Contains("1 unresolved", summary);
+        Assert.Contains("4 out of scope", summary);
+        Assert.DoesNotContain("failed", summary);
+        Assert.DoesNotContain("warned", summary);
+
+        Assert.Equal(16, rendered.GetProperty("rows").GetInt32());
+        Assert.Equal(0, rendered.GetProperty("openRows").GetInt32());
+
+        // Seventeen bucket rows for sixteen checks: `mate_references` landed in two.
+        Assert.Equal(17, rendered.GetProperty("buckets").GetInt32());
+
+        // Each row's dot is coloured from the worst bucket, which is the data attribute the
+        // release gate already reads off the row.
+        string[] dots = Strings(rendered, "dots");
+        Assert.Equal(16, dots.Length);
+        Assert.All(dots, value => Assert.StartsWith("check-dot bucket-", value, StringComparison.Ordinal));
+        Assert.Contains("check-dot bucket-unresolved", dots);
+        Assert.Contains("check-dot bucket-out_of_scope", dots);
+
+        // The roster is still the only place a severity word is printed on either tab.
+        Assert.Equal(16, Strings(rendered, "severities").Length);
+        Assert.Contains("warning", Strings(rendered, "severities"));
+    }
+
+    /// <summary>
+    /// A check the run never reported a bucket for says so in words. A dot cannot say "the run
+    /// never told us", and a grey one would read as skipped.
+    /// </summary>
+    [Fact]
+    public void ACheckWithNoWorstBucketSaysSoInWordsRatherThanWearingAGreyDot()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.checks[0].worst_bucket = null;",
+            "return JSON.stringify({ok: true, "
+            + "worst: attrs('#checks .check', 'data-worst-bucket'), "
+            + "said: texts('#checks .check .check-worst'), "
+            + "dots: attrs('#checks .check .check-dot', 'class')});");
+
+        Assert.Equal(string.Empty, Strings(rendered, "worst")[0]);
+        Assert.Equal(new[] { "not reported" }, Strings(rendered, "said"));
+        Assert.Equal("check-dot bucket-none", Strings(rendered, "dots")[0]);
+    }
+
     // ---- the subjects ------------------------------------------------------------------------
 
     /// <summary>
@@ -560,6 +754,46 @@ public sealed class StandardsPageTests
             "Accept this check for this document", rendered.GetProperty("label").GetString());
         Assert.Contains("required", rendered.GetProperty("hint").GetString()!);
         Assert.Equal(0, rendered.GetProperty("warningAccepts").GetInt32());
+    }
+
+    /// <summary>
+    /// The Accept control is behind one closed press with the recommended action, and its DOM
+    /// contract is unchanged by the move: a `[data-action="accept"]` with a sibling `input.note`
+    /// that is required and says so in its placeholder (D12, FR-041).
+    /// </summary>
+    [Fact]
+    public void AnErrorChecksAcceptControlSitsBehindOneClosedFoldWithItsRecommendedAction()
+    {
+        JsonElement rendered = Render(
+            "var error = document.querySelector("
+            + "'.rule[data-rule-id=\"standards.part.material_assigned\"]');"
+            + "var fold = error.querySelector('details.rule-fold');"
+            + "var note = fold.querySelector('input.note');"
+            + "var warning = document.querySelector("
+            + "'.rule[data-rule-id=\"standards.drawing.revision_matches\"]');"
+            + "return JSON.stringify({ok: true, "
+            + "open: !!fold.open, "
+            + "summary: fold.querySelector('summary').textContent, "
+            + "inFold: fold.querySelectorAll('[data-action=\"accept\"]').length, "
+            + "onRow: error.querySelectorAll('[data-action=\"accept\"]').length, "
+            + "noteRequired: !!note.required, "
+            + "placeholder: note.getAttribute('placeholder'), "
+            + "warningSummary: warning.querySelector('details.rule-fold summary').textContent, "
+            + "warningAccepts: warning.querySelectorAll('[data-action=\"accept\"]').length, "
+            + "warningNotes: warning.querySelectorAll('input.note').length});");
+
+        Assert.False(rendered.GetProperty("open").GetBoolean(), "The fold opens by default.");
+        Assert.Equal("Recommended, and accept", rendered.GetProperty("summary").GetString());
+        Assert.Equal(1, rendered.GetProperty("inFold").GetInt32());
+        Assert.Equal(1, rendered.GetProperty("onRow").GetInt32());
+        Assert.True(rendered.GetProperty("noteRequired").GetBoolean(), "The note is not required.");
+        Assert.Contains("required", rendered.GetProperty("placeholder").GetString()!);
+
+        // A `warning` check is unacceptable, so its fold says only what it opens - and there is
+        // no control at all rather than a disabled one, which would invite a request to enable it.
+        Assert.Equal("Recommended", rendered.GetProperty("warningSummary").GetString());
+        Assert.Equal(0, rendered.GetProperty("warningAccepts").GetInt32());
+        Assert.Equal(0, rendered.GetProperty("warningNotes").GetInt32());
     }
 
     // ---- the run folder controls ----------------------------------------------------------------

@@ -67,6 +67,28 @@
   /** The heading of the section holding rules that named no document. */
   var UNGROUPED_LABEL = 'Rules that name no document';
 
+  /** What separates two facts inside one line. Written once, so every line separates the same. */
+  var DOT = ' · ';
+
+  /**
+   * Which stripe a ranked row wears, by the consequence class the policy recorded on it.
+   *
+   * A map rather than a list, because it is not an order: the rows arrive ranked and the stripe
+   * only restates, in the pane's own palette, the class the policy already wrote down. A page
+   * that invented a hue for a rank it computed would be a second policy, and it computes none.
+   * A class this map has never heard of gets the quiet stripe rather than no stripe at all.
+   */
+  var STRIPES = {
+    rebuild_breaker: 'stripe-critical',
+    manufacturing: 'stripe-critical',
+    interface: 'stripe-judge',
+    discipline: 'stripe-warn',
+    hygiene: 'stripe-quiet'
+  };
+
+  /** How long a pointed-at row stays lit, in milliseconds. */
+  var FLASH_MS = 1500;
+
   /**
    * The heading over the ranked rows. The same words the report's own section uses, because it
    * is the same ranking: an engineer who reads the tab and then opens `report.md` must find the
@@ -128,6 +150,9 @@
 
       /** Which buckets are showing, by bucket name. */
       buckets: Object.create(null),
+
+      /** The row a ranked line last pointed at, and the timer that will unlight it. */
+      flashing: null,
 
       /** Every rendered subject line by its key, with which instance Show will select. */
       subjects: Object.create(null)
@@ -522,16 +547,122 @@
         : rows;
     }
 
-    /** One ranked row: which finding, which check, and the reason the policy placed it. */
+    /**
+     * One ranked row: which finding, what it is, which check, what the policy already knew about
+     * it, and the reason it was placed here.
+     *
+     * Every one of those fields is on the row the backend sent and was being dropped. A row that
+     * prints only an id and a check id asks an engineer to go and look up the thing they were
+     * just told to start with, which is the opposite of amplifying it.
+     */
     function attentionRow(row) {
-      var item = dom.el('li', 'attention-row');
+      var item = dom.el('li', 'attention-row ' + stripeOf(row));
       item.setAttribute('data-finding-id', String(row.finding_id || ''));
       dom.append(item, [
         dom.el('span', 'attention-id', row.finding_id || ''),
+        dom.el('span', 'attention-reason', row.reason || ''),
+        dom.el('span', 'attention-title', row.title || ''),
         dom.el('span', 'attention-check', row.check || ''),
-        dom.el('span', 'attention-reason', row.reason || '')
+        dom.el('span', 'attention-meta', attentionMeta(row)),
+        dom.el('span', 'attention-components mono', dom.list(row.component_ids))
       ]);
       return item;
+    }
+
+    /** What the policy already knew about the finding, as plain text and in its own words. */
+    function attentionMeta(row) {
+      var parts = [];
+      if (row.status) {
+        parts.push(String(row.status));
+      }
+      if (row.severity) {
+        parts.push(String(row.severity));
+      }
+      return parts.join(DOT);
+    }
+
+    /**
+     * Which stripe the row wears.
+     *
+     * `key.judgement` is the policy's own lever for "only an engineer can settle this", and a row
+     * it placed there wears the judgement stripe whatever its consequence class - that is the
+     * lever's whole point, and it is read off the key the backend published rather than decided
+     * here. Everything else is the consequence class, through a map.
+     */
+    function stripeOf(row) {
+      var key = row.key || {};
+      if (key.judgement === 0) {
+        return 'stripe-judge';
+      }
+      return STRIPES[String(row.consequence_class || '')] || 'stripe-quiet';
+    }
+
+    /**
+     * A ranked row points at its rule.
+     *
+     * The two blocks already carry the same finding id and the engineer was already reading the
+     * top one, so the press that used to do nothing now scrolls the matching row into view and
+     * lights it. It amplifies and it still does not filter: the rule list is untouched, except
+     * that a bucket hiding the row is turned back on - a press that scrolled to something
+     * invisible would read as a broken page.
+     */
+    function onAttentionClick(event) {
+      var row = closestClass(event.target, 'attention-row');
+      if (!row) {
+        return;
+      }
+
+      var rule = renderedRule(row.getAttribute('data-finding-id'));
+      if (!rule) {
+        return;
+      }
+
+      revealRule(rule);
+      if (rule.scrollIntoView) {
+        rule.scrollIntoView();
+      }
+      flashRule(rule);
+    }
+
+    /** Turns the bucket holding <var>rule</var> back on, chip and all, if a chip had hidden it. */
+    function revealRule(rule) {
+      var group = closestClass(rule, 'bucket-group');
+      if (!group || !group.hidden) {
+        return;
+      }
+
+      var bucket = group.getAttribute('data-bucket');
+      state.buckets[bucket] = true;
+
+      var chips = ui.filters.querySelectorAll('.chip');
+      for (var index = 0; index < chips.length; index++) {
+        if (chips[index].getAttribute('data-bucket') === bucket) {
+          chips[index].setAttribute('aria-pressed', 'true');
+        }
+      }
+
+      applyFilter();
+    }
+
+    /**
+     * Lights one row for a moment. One at a time: a second press unlights the first row rather
+     * than leaving two rows claiming to be the one that was pointed at.
+     */
+    function flashRule(rule) {
+      if (state.flashing) {
+        window.clearTimeout(state.flashing.timer);
+        state.flashing.rule.classList.remove('flash');
+      }
+
+      var entry = { rule: rule, timer: 0 };
+      state.flashing = entry;
+      rule.classList.add('flash');
+      entry.timer = window.setTimeout(function () {
+        rule.classList.remove('flash');
+        if (state.flashing === entry) {
+          state.flashing = null;
+        }
+      }, FLASH_MS);
     }
 
     function renderCarriedForward(result) {
@@ -654,6 +785,14 @@
       return found.length ? found : fallback;
     }
 
+    /**
+     * One chip per bucket the result actually carries, in bucket order.
+     *
+     * The count leads, in its own element, because the number is what an engineer reads off the
+     * tab before deciding what to open - "2 failed" rather than "failed (2)". The bucket's name
+     * is also a class, which is what lets a pressed chip be filled in that bucket's own colour
+     * without any script setting one.
+     */
     function renderFilters(rows) {
       dom.clear(ui.filters);
 
@@ -664,8 +803,11 @@
           continue;
         }
 
-        var chip = dom.button(
-          BUCKET_LABELS[bucket] + ' (' + counted[bucket] + ')', 'filter', 'chip');
+        var chip = dom.button('', 'filter', 'chip bucket-' + bucket);
+        dom.append(chip, [
+          dom.el('b', 'chip-count', counted[bucket]),
+          dom.el('span', 'chip-label', BUCKET_LABELS[bucket])
+        ]);
         chip.setAttribute('data-bucket', bucket);
         chip.setAttribute('aria-pressed', state.buckets[bucket] ? 'true' : 'false');
         ui.filters.appendChild(chip);
@@ -699,6 +841,32 @@
       if (ungrouped.length) {
         ui.rules.appendChild(documentSection(null, UNGROUPED_LABEL, ungrouped));
       }
+
+      countShown();
+    }
+
+    /**
+     * How much of each document is on screen, beside its name.
+     *
+     * Counted off the DOM after every render and again after every chip, because a chip hides
+     * rows rather than re-rendering them: a number that only moved on a render would be wrong
+     * the moment one was pressed, and a wrong count beside a document heading reads as the
+     * document having fewer rules than it has.
+     */
+    function countShown() {
+      var documents = ui.rules.querySelectorAll('.document-group');
+      for (var index = 0; index < documents.length; index++) {
+        var group = documents[index];
+        var node = group.querySelector('.document-count');
+        if (!node) {
+          continue;
+        }
+
+        var all = group.querySelectorAll('.rule').length;
+        var shown = group.querySelectorAll('.bucket-group:not([hidden]) .rule').length;
+        dom.clear(node);
+        dom.write(node, shown + ' of ' + all + ' shown');
+      }
     }
 
     /** One document's rules, in bucket order. `documentId` null is the ungrouped section. */
@@ -707,7 +875,10 @@
       if (documentId) {
         group.setAttribute('data-document-id', documentId);
       }
-      group.appendChild(dom.el('h2', 'document-name', label));
+
+      var heading = dom.el('h2', 'document-name', label);
+      heading.appendChild(dom.el('span', 'document-count', ''));
+      group.appendChild(heading);
 
       for (var index = 0; index < BUCKETS.length; index++) {
         var bucket = BUCKETS[index];
@@ -767,8 +938,21 @@
       return group;
     }
 
+    /**
+     * One rule: a line, and a fold.
+     *
+     * The line is what the rule is and what was seen - a bucket badge in the bucket's own colour,
+     * the check id, the statement as the title, and the observed string as the facts under it.
+     * What an engineer does about it - the recommended action, the note an acceptance left, and
+     * the Accept control itself - is one press away, because a list where every row states its
+     * remedy in full is a list nobody skims, and the four paragraphs used to be
+     * indistinguishable from one another.
+     *
+     * Nothing is dropped: everything that was on the row before is still on the row, and the
+     * fold is in the DOM whether it is open or not.
+     */
     function ruleRow(row) {
-      var item = dom.el('li', 'rule');
+      var item = dom.el('li', 'rule bucket-' + row.bucket);
       item.setAttribute('data-rule-id', row.ruleId);
       item.setAttribute('data-bucket', row.bucket);
       if (row.findingId) {
@@ -776,7 +960,10 @@
       }
 
       var head = dom.el('div', 'rule-head');
-      head.appendChild(dom.el('span', 'badge bucket', BUCKET_LABELS[row.bucket] || row.bucket));
+      head.appendChild(dom.el(
+        'span',
+        'badge bucket bucket-' + row.bucket,
+        BUCKET_LABELS[row.bucket] || row.bucket));
       head.appendChild(dom.el('span', 'rule-id', row.ruleId));
       item.appendChild(head);
 
@@ -786,20 +973,71 @@
       if (row.observed) {
         item.appendChild(dom.el('p', 'observed', row.observed));
       }
-      if (row.reason) {
+
+      // A coverage row carries no statement and no observed, so its reason IS the row: folded
+      // away it would leave a check id and nothing else, which is how a skipped rule reads
+      // exactly like a rule that was never run. A finding's reason is the recommended action,
+      // and that goes under the fold with the acceptance.
+      var stated = !!(row.statement || row.observed);
+      if (row.reason && !stated) {
         item.appendChild(dom.el('p', 'reason', row.reason));
       }
+
       if (row.subjects.length) {
         item.appendChild(subjectList(row));
       }
-      if (row.exception) {
-        item.appendChild(dom.el('p', 'exception', exceptionText(row.exception)));
-      }
-      if (row.acceptable && !row.exception) {
-        item.appendChild(acceptRow());
+
+      var fold = ruleFold(row, stated);
+      if (fold) {
+        item.appendChild(fold);
       }
 
       return item;
+    }
+
+    /**
+     * What one press on a rule opens, or null when the row has nothing to keep behind one: the
+     * recommended action, the note an acceptance left, and the Accept control.
+     */
+    function ruleFold(row, stated) {
+      var recommended = !!(row.reason && stated);
+      var acceptable = !!(row.acceptable && !row.exception);
+      if (!recommended && !row.exception && !acceptable) {
+        return null;
+      }
+
+      var fold = dom.el('details', 'rule-fold');
+      fold.appendChild(dom.el(
+        'summary', 'rule-fold-summary', foldLabel(recommended, !!row.exception, acceptable)));
+
+      if (recommended) {
+        fold.appendChild(dom.el('p', 'reason', row.reason));
+      }
+      if (row.exception) {
+        fold.appendChild(dom.el('p', 'exception', exceptionText(row.exception)));
+      }
+      if (acceptable) {
+        fold.appendChild(acceptRow());
+      }
+
+      return fold;
+    }
+
+    /** What the press says it opens, named after what is actually behind it. */
+    function foldLabel(recommended, accepted, acceptable) {
+      if (recommended && acceptable) {
+        return 'Recommended, and accept';
+      }
+      if (recommended && accepted) {
+        return 'Recommended, and what was accepted';
+      }
+      if (recommended) {
+        return 'Recommended';
+      }
+      if (acceptable) {
+        return 'Accept';
+      }
+      return 'What was accepted';
     }
 
     function exceptionText(exception) {
@@ -923,6 +1161,8 @@
       for (var index = 0; index < groups.length; index++) {
         groups[index].hidden = !state.buckets[groups[index].getAttribute('data-bucket')];
       }
+
+      countShown();
     }
 
     // ---- the page's own chrome ----------------------------------------------------------------------
@@ -1042,8 +1282,9 @@
         });
       });
 
-      // One listener each for the chips and the rules, reading `data-action` off whatever was
-      // pressed: no inline handler anywhere, which the CSP would refuse in any case.
+      // One listener each for the ranked rows, the chips and the rules, reading what was pressed
+      // off the DOM: no inline handler anywhere, which the CSP would refuse in any case.
+      ui.attention.addEventListener('click', onAttentionClick);
       ui.filters.addEventListener('click', onFilterClick);
       ui.rules.addEventListener('click', onRuleClick);
 
@@ -1052,7 +1293,11 @@
       }
 
       renderDocument();
-      renderBackendState('Backend starting');
+
+      // `warn` from the first paint, because there is no backend yet: the strip's dot says what
+      // the sentence beside it says, and a ready-coloured dot over "Backend starting" would be
+      // the pane's own fourth false status line.
+      renderBackendState('Backend starting', true);
 
       requestInit(true);
     }
