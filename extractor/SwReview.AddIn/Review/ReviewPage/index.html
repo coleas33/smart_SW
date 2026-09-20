@@ -130,6 +130,22 @@
   has just grown by a whole review is a panel nobody scrolls to (contracts/attention.md
   section 6). Hidden until there is something to show.
 -->
+<!-- The extractor's coverage warning is a separate, wrapping surface so a long sentence is
+     readable in the narrow pane instead of being squeezed into the header status badge. -->
+<p id="not-examined" class="not-examined" hidden></p>
+
+<section id="review-preparation" class="panel" aria-labelledby="preparation-heading" hidden>
+  <h2 id="preparation-heading">Before this review</h2>
+  <p id="preparation-summary"></p>
+  <ul id="preparation-instances"></ul>
+  <p class="note">Resolve the components you need in SOLIDWORKS, then check again. Continuing reviews the available evidence and records what could not be examined.</p>
+  <div class="row">
+    <button type="button" id="preparation-check">Check again</button>
+    <button type="button" id="preparation-continue">Review available evidence</button>
+    <button type="button" id="preparation-cancel">Cancel</button>
+  </div>
+</section>
+
 <section id="attention-panel" class="panel" hidden></section>
 
 <!--

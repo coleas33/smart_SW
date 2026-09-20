@@ -93,6 +93,8 @@ class RunProvenance(ReviewModel):
     this run produces, so the row can never be read as a gate (FR-029)."""
 
     efficiency: EfficiencySettings
+    explanations_enabled: bool = False
+    """Presentation setting independent of efficiency flags; old runs did not enable it."""
 
 
 def sha256_of(path: Path | str) -> str:
@@ -152,6 +154,7 @@ def _default_review_fn(
     model: str,
     effort: str,
     efficiency: EfficiencySettings | None = None,
+    explain_findings: bool = False,
 ) -> Any:
     """One package, reviewed on a freshly built adapter.
 
@@ -171,6 +174,7 @@ def _default_review_fn(
         model=model,
         effort=effort,
         efficiency=efficiency,
+        explain_findings=explain_findings,
     )
 
 
@@ -202,6 +206,7 @@ def run_benchmark(
     effort: str,
     review_fn: ReviewFn | None = None,
     efficiency: EfficiencySettings | None = None,
+    explain_findings: bool = False,
 ) -> list[Path]:
     """Review every package of the benchmark set at `set_path` into `out_dir`.
 
@@ -209,6 +214,10 @@ def run_benchmark(
     effort=effort, efficiency=efficiency)` per package (default: `_default_review_fn`),
     then records unattended runtime for that package. Returns the list of per-package
     output directories, in benchmark-set order.
+
+    `explain_findings=True` adds the pane's presentation request, including its usage and
+    runtime. The keyword is forwarded to injected review functions only when enabled,
+    preserving the existing default-off callback contract.
 
     `efficiency` is one object carrying all ten lever flags rather than one argument per
     lever, forwarded unchanged to every package of the set: an arm of an A/B study is one
@@ -238,6 +247,7 @@ def run_benchmark(
             model=model,
             effort=effort,
             efficiency=efficiency,
+            **({"explain_findings": True} if explain_findings else {}),
         )
         elapsed_minutes = (time.perf_counter() - started) / 60.0
 

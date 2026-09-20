@@ -82,6 +82,9 @@ public sealed class RemodelHostTests
             Assert.Equal(20, limits.GetProperty("max_minutes").GetInt32());
             Assert.Equal(120, limits.GetProperty("max_rebuild_seconds").GetInt32());
 
+            Assert.True(init.GetProperty("remodel").GetProperty("available").GetBoolean());
+            Assert.Equal(JsonValueKind.Null, init.GetProperty("remodel").GetProperty("message").ValueKind);
+
             Assert.Equal(JsonValueKind.Null, init.GetProperty("latest_run").ValueKind);
         }
     }
@@ -195,6 +198,97 @@ public sealed class RemodelHostTests
             world.Receive("remodel.plan", "p1", new { });
 
             Assert.Equal("NotAttached", world.ErrorClass("p1"));
+        }
+    }
+
+    [Fact]
+    public void InitExplainsWhenTheAttachedBridgeHasNoRemodelSeat()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.RemodelCapability = RemodelAvailability.Unavailable;
+            world.Open();
+            world.Receive("ready", "r1", new { });
+
+            JsonElement remodel = world.Reply("init", "r1").GetProperty("remodel");
+            Assert.False(remodel.GetProperty("available").GetBoolean());
+            Assert.Equal(RemodelHost.NoSeatMessage, remodel.GetProperty("message").GetString());
+        }
+    }
+
+    [Fact]
+    public void AvailabilityRefreshMovesFromUnknownToUnavailableWithoutAProbe()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.RemodelCapability = RemodelAvailability.Unknown;
+            world.Open();
+            world.Receive("ready", "r1", new { });
+
+            JsonElement initial = world.Reply("init", "r1").GetProperty("remodel");
+            Assert.Equal(JsonValueKind.Null, initial.GetProperty("available").ValueKind);
+            Assert.Equal(RemodelHost.SeatCheckingMessage, initial.GetProperty("message").GetString());
+
+            world.RemodelCapability = RemodelAvailability.Unavailable;
+            world.Host.RefreshAvailability();
+
+            JsonElement changed = world.LastPosted("document.changed");
+            Assert.False(changed.GetProperty("remodel").GetProperty("available").GetBoolean());
+            Assert.Equal(
+                RemodelHost.NoSeatMessage,
+                changed.GetProperty("remodel").GetProperty("message").GetString());
+        }
+    }
+
+    [Fact]
+    public void PlanIsRefusedBeforeTheBridgeWhenTheAttachedBuildHasNoRemodelSeat()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.RemodelCapability = RemodelAvailability.Unavailable;
+            world.Open();
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal("RemodelUnavailable", world.ErrorClass("p1"));
+            Assert.Equal(RemodelHost.NoSeatMessage, world.Reply("error", "p1")
+                .GetProperty("message").GetString());
+            Assert.Empty(world.Pipeline.Calls);
+            world.AssertNothingWasCopied();
+        }
+    }
+
+    [Fact]
+    public void UnknownAvailabilityIsRefusedBeforeThePipelineCanProbe()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.RemodelCapability = RemodelAvailability.Unknown;
+            world.Open();
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal("RemodelUnavailable", world.ErrorClass("p1"));
+            Assert.Equal(
+                RemodelHost.SeatCheckingMessage,
+                world.Reply("error", "p1").GetProperty("message").GetString());
+            Assert.Empty(world.Pipeline.Calls);
+        }
+    }
+
+    [Fact]
+    public void StartIsRefusedBeforeTheBridgeIfTheSeatDisappearsAfterPlanning()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.RemodelCapability = RemodelAvailability.Unavailable;
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            Assert.Equal("RemodelUnavailable", world.ErrorClass("s1"));
+            Assert.DoesNotContain("run", world.Pipeline.Calls);
         }
     }
 
@@ -1456,6 +1550,8 @@ public sealed class RemodelHostTests
 
         public bool UsePipeline { get; set; } = true;
 
+        public RemodelAvailability RemodelCapability { get; set; } = RemodelAvailability.Available;
+
         public FakeResolver Resolver { get; } = new FakeResolver();
 
         public RecordingOpener Opener { get; } = new RecordingOpener();
@@ -1483,6 +1579,7 @@ public sealed class RemodelHostTests
             {
                 Backend = () => Endpoint,
                 CurrentDocument = () => Document,
+                RemodelAvailability = () => RemodelCapability,
                 Pipeline = UsePipeline ? Pipeline : null,
                 EntityResolver = () => Resolver,
                 Opener = () => Opener,

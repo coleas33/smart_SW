@@ -7,6 +7,14 @@
   "additionalProperties": false,
   "required": ["session_id", "package_id", "design_id", "started_at", "ended_at", "model", "steps", "evidence_requests", "findings", "coverage", "timing"],
   "properties": {
+    "explanations_enabled": { "type": "boolean" },
+    "finding_explanations": {
+      "type": "object",
+      "maxProperties": 5,
+      "propertyNames": { "pattern": "^F-[0-9]+$" },
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 480 }
+    },
+    "finding_explanation_fingerprint": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
     "session_id": { "type": "string", "format": "uuid" },
     "package_id": { "type": "string", "format": "uuid" },
     "design_id": { "type": "string" },
@@ -93,7 +101,8 @@
         "package_reuse": { "type": "boolean" },
         "lazy_meshes": { "type": "boolean" },
         "carry_over_rms": { "type": "boolean" },
-        "procedural_gate": { "type": "boolean", "description": "Lever 11, added in feature 007. Declared here and deliberately left out of `required`: a session written before it existed carries ten booleans and must still validate." }
+        "procedural_gate": { "type": "boolean", "description": "Lever 11, added in feature 007. Declared here and deliberately left out of `required`: a session written before it existed carries ten booleans and must still validate." },
+        "compact_queries": { "type": "boolean", "description": "Experimental bounded package discovery pages. Optional and deliberately left out of `required` so sessions written before the experiment still validate." }
       }
     },
     "InvestigationStep": {

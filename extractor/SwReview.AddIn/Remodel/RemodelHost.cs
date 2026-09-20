@@ -39,6 +39,15 @@ public sealed class RemodelHostOptions
     public IRemodelPipeline? Pipeline { get; set; }
 
     /// <summary>
+    /// Whether the attached bridge can execute remodel commands. The add-in reads this from
+    /// the tool service; tests and future seat-backed hosts can provide their own capability.
+    /// Unknown leaves the bridge unavailable check to the pipeline, while Unavailable is
+    /// refused before any bridge call is made.
+    /// </summary>
+    public Func<RemodelAvailability> RemodelAvailability { get; set; } =
+        () => global::SwReview.AddIn.Remodel.RemodelAvailability.Available;
+
+    /// <summary>
     /// Makes the run's folder the pane's latest run, the same way a Model check's folder does
     /// (<see cref="Model.ModelCheckHostOptions.RegisterLatestRun"/>). There is one answer to
     /// "which folder is the pane looking at" and it is not this host's to keep: `entity.show`
@@ -112,6 +121,15 @@ public sealed class RemodelHostOptions
 /// </summary>
 public sealed class RemodelHost : IDisposable
 {
+    /// <summary>The actionable guidance when this build has no in-process remodel seat.</summary>
+    public const string NoSeatMessage =
+        "this build has no remodel seat; run swreview-extract probe remodel "
+        + "--acknowledge-throwaway-part with no document open.";
+
+    /// <summary>What a forged request reads while the service is still attaching.</summary>
+    public const string SeatCheckingMessage =
+        "remodel seat availability is still being checked; wait for the tool service to attach.";
+
     /// <summary>The only scope this feature reorganizes. Parts only, by owner decision.</summary>
     private const string PartKind = "part";
 
@@ -306,6 +324,13 @@ public sealed class RemodelHost : IDisposable
             + "log in the run folder is intact.");
     }
 
+    /// <summary>
+    /// Refreshes the page's capability banner when the tool service finishes attaching or
+    /// detaches. It uses the existing document message so no new page protocol row is needed.
+    /// </summary>
+    public void RefreshAvailability() =>
+        Post("document.changed", DocumentPayloadWithCapability(_options.CurrentDocument()));
+
     public void Dispose()
     {
         _runs.Clear();
@@ -408,6 +433,10 @@ public sealed class RemodelHost : IDisposable
                 }
             },
             {
+                "remodel",
+                RemodelCapabilityPayload()
+            },
+            {
                 "latest_run",
                 latest == null
                     ? null
@@ -419,6 +448,34 @@ public sealed class RemodelHost : IDisposable
                     }
             },
         });
+    }
+
+    private Dictionary<string, object?> RemodelCapabilityPayload()
+    {
+        RemodelAvailability availability = _options.RemodelAvailability();
+        return new Dictionary<string, object?>
+        {
+            { "available", availability == RemodelAvailability.Unknown
+                ? null
+                : (object)(availability == RemodelAvailability.Available) },
+            { "message", availability == RemodelAvailability.Unavailable
+                ? NoSeatMessage
+                : availability == RemodelAvailability.Unknown
+                    ? SeatCheckingMessage
+                    : null },
+        };
+    }
+
+    private Dictionary<string, object?>? DocumentPayloadWithCapability(PageDocument? document)
+    {
+        var payload = DocumentPayload(document);
+        if (payload == null)
+        {
+            return null;
+        }
+
+        payload["remodel"] = RemodelCapabilityPayload();
+        return payload;
     }
 
     // ---- remodel.plan -------------------------------------------------------------------
@@ -450,6 +507,13 @@ public sealed class RemodelHost : IDisposable
                 "open the part you want reorganized in SOLIDWORKS first: the re-modeler copies "
                 + "the active document.",
                 retryable: true);
+            return;
+        }
+
+        RemodelAvailability availability = _options.RemodelAvailability();
+        if (availability != RemodelAvailability.Available)
+        {
+            SendUnavailable(id, availability);
             return;
         }
 
@@ -743,6 +807,13 @@ public sealed class RemodelHost : IDisposable
                 + "never resumed: the copy it left behind was not re-verified. Press Remodel "
                 + "again to start a fresh run.",
                 retryable: false);
+            return;
+        }
+
+        RemodelAvailability availability = _options.RemodelAvailability();
+        if (availability != RemodelAvailability.Available)
+        {
+            SendUnavailable(id, availability);
             return;
         }
 
@@ -1379,6 +1450,13 @@ public sealed class RemodelHost : IDisposable
             "RunNotFound",
             $"this pane did not start a remodel run in '{runDir}', so it will not act on it.",
             retryable: false);
+
+    private void SendUnavailable(string? id, RemodelAvailability availability) =>
+        _actions.SendError(
+            id,
+            "RemodelUnavailable",
+            availability == RemodelAvailability.Unknown ? SeatCheckingMessage : NoSeatMessage,
+            retryable: availability == RemodelAvailability.Unknown);
 
     private static Dictionary<string, object?>? DocumentPayload(PageDocument? document) =>
         document == null

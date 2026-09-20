@@ -352,16 +352,13 @@ def test_a_profile_given_with_the_gate_off_still_attaches_the_run(tmp_path: Any)
     assert standards_findings(session)
 
 
-def test_an_unusable_profile_with_every_lever_off_is_a_tool_that_is_not_offered(
+def test_an_unusable_profile_with_every_lever_off_records_the_missing_standard(
     tmp_path: Any,
 ) -> None:
-    """The deliberate edge of the design, pinned so it is a decision and not a surprise.
+    """A configured standard that cannot load remains visible with all levers off.
 
-    The not-evaluated line is a **pre-run** artefact: it is written as
-    `coverage.prerun.standards` and printed in the digest, and with every lever off there is
-    no pre-run and no digest to write it into. What is left is what the option itself does -
-    it adds a tool - and a profile that cannot be loaded adds none, exactly as no profile
-    adds none. The review is unchanged and does not raise, which is the half that matters.
+    No check runs and no unusable tool is offered, but the review must not silently
+    appear to have evaluated the engineer's configured standard.
     """
     run, session = gated_review(
         tmp_path,
@@ -373,7 +370,9 @@ def test_an_unusable_profile_with_every_lever_off_is_a_tool_that_is_not_offered(
     assert session.ended_at is not None
     assert session.steps == []
     assert CHECK_TOOL not in [tool.name for tool in run.tools]
-    assert STANDARDS_CHECK not in coverage_checks(session, "skipped")
+    assert STANDARDS_CHECK in coverage_checks(session, "skipped")
+    assert "missing.yaml" in skipped_reason(session, STANDARDS_CHECK)
+    assert "configured standards profile could not be loaded" in opening_of(run)
 
 
 # --- 4. the command line ----------------------------------------------------------------------

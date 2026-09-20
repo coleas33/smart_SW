@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using SwReview.AddIn.Remodel;
 using Xunit;
 
 namespace SwReview.AddIn.Tests;
@@ -617,6 +618,65 @@ public sealed class RemodelPageContractTests
         Assert.Equal(1, stub!.Starts);
     }
 
+    [Fact]
+    public void ABridgeWithoutARemodelSeatDisablesActionsAndShowsGuidanceBeforePosting()
+    {
+        HostStub? stub = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: false); },
+            async page =>
+            {
+                await Settled(page);
+
+                Assert.True(await Disabled(page, "plan-run"));
+                Assert.True(await Disabled(page, "start-run"));
+
+                await page.ExecuteScriptAsync("document.getElementById('plan-run').click()");
+                await page.ExecuteScriptAsync("document.getElementById('start-run').click()");
+                await Settled(page);
+            });
+
+        Assert.Equal(0, stub!.Plans);
+        Assert.Equal(0, stub.Starts);
+    }
+
+    [Fact]
+    public void CapabilityBannerClearsWhenUnknownAvailabilityBecomesAvailable()
+    {
+        HostStub? stub = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, emitUnknownCapability: true); },
+            async page =>
+            {
+                await Settled(page);
+                Assert.True(await Disabled(page, "plan-run"));
+                Assert.Contains(
+                    RemodelHost.SeatCheckingMessage,
+                    await page.ExecuteScriptAsync("document.getElementById('banner').textContent"));
+
+                stub!.Post(
+                    "document.changed",
+                    new
+                    {
+                        path = @"C:\\vault\\bracket.sldprt",
+                        configuration = "Default",
+                        kind = "part",
+                        remodel = new { available = true, message = (string?)null },
+                    });
+                await Settled(page);
+
+                Assert.False(await Disabled(page, "plan-run"));
+                Assert.Equal(
+                    "",
+                    JsonDocument.Parse(await page.ExecuteScriptAsync(
+                        "document.getElementById('banner').textContent")).RootElement.GetString());
+            });
+    }
+
     /// <summary>Whether a button is disabled, read off the live page.</summary>
     private static async Task<bool> Disabled(CoreWebView2 page, string elementId)
     {
@@ -635,14 +695,25 @@ public sealed class RemodelPageContractTests
 
         private readonly CoreWebView2 _page;
 
-        public HostStub(CoreWebView2 page)
+        public HostStub(
+            CoreWebView2 page,
+            bool? remodelAvailable = null,
+            bool emitUnknownCapability = false)
         {
             _page = page;
+            RemodelAvailable = remodelAvailable;
+            EmitRemodelCapability = remodelAvailable.HasValue || emitUnknownCapability;
             page.WebMessageReceived += OnMessage;
         }
 
+        private bool? RemodelAvailable { get; }
+
+        private bool EmitRemodelCapability { get; }
+
         /// <summary>How many `remodel.start` messages the page has posted.</summary>
         public int Starts { get; private set; }
+
+        public int Plans { get; private set; }
 
         /// <summary>Posts an unsolicited message, which carries no `id`.</summary>
         public void Post(string type, object payload) =>
@@ -671,10 +742,22 @@ public sealed class RemodelPageContractTests
                             kind = "part",
                         },
                         limits = new { max_changes = 200, max_minutes = 30, max_rebuild_seconds = 60 },
+                        remodel = EmitRemodelCapability
+                            ? (object)new
+                            {
+                                available = RemodelAvailable,
+                                message = RemodelAvailable == false
+                                    ? RemodelHost.NoSeatMessage
+                                    : RemodelAvailable == null
+                                        ? RemodelHost.SeatCheckingMessage
+                                        : null,
+                            }
+                            : null,
                         latest_run = (object?)null,
                     });
                     return;
                 case "remodel.plan":
+                    Plans++;
                     Reply("remodel.planned", id, new
                     {
                         run_dir = RunDir,

@@ -195,9 +195,7 @@ class ChatError(Exception):
     retryable = False
 
     def body(self) -> dict[str, Any]:
-        return error_body(
-            error_class=self.error_class, message=str(self), retryable=self.retryable
-        )
+        return error_body(error_class=self.error_class, message=str(self), retryable=self.retryable)
 
 
 class InvalidRunDir(ChatError):
@@ -413,9 +411,7 @@ class StoppableTools:
     def __len__(self) -> int:
         return len(self.tools)
 
-    def call(
-        self, name: str, arguments: Mapping[str, Any], call_id: str = ""
-    ) -> ToolCallResult:
+    def call(self, name: str, arguments: Mapping[str, Any], call_id: str = "") -> ToolCallResult:
         if self.stop.is_set():
             raise TurnStopped(f"the engineer stopped this turn before {name!r} ran")
         return self.tools.call(name, arguments, call_id)
@@ -642,9 +638,7 @@ def environment_secrets(env: Mapping[str, str] | None = None) -> tuple[str, ...]
     running process does not change (the pane restarts the backend when the key does).
     """
     source = os.environ if env is None else env
-    return tuple(
-        value for name in KEY_VARIABLES if (value := (source.get(name) or "").strip())
-    )
+    return tuple(value for name in KEY_VARIABLES if (value := (source.get(name) or "").strip()))
 
 
 # --- the Model check result (`contracts/model-check.md`) ---------------------------------
@@ -756,9 +750,7 @@ def _checked_document(package: EvidencePackage, documents: Sequence[str]) -> dic
 def _document_row(package: EvidencePackage, document_id: str | None) -> dict[str, Any] | None:
     """One document of `package` as the `{id, path, configuration, kind}` a page titles
     itself with, or `None` when the package records no such document."""
-    found = next(
-        (item for item in package.documents if item.document_id == document_id), None
-    )
+    found = next((item for item in package.documents if item.document_id == document_id), None)
     if found is None:  # pragma: no cover - the run graded it, so the package carries it
         return None
     return {
@@ -782,9 +774,7 @@ def _exceptions_by_id(
     if not wanted:
         return {}
     store = ExceptionStore(check_dir / EXCEPTIONS_FILE_NAME).load()
-    return {
-        exception.id: exception for exception in store.exceptions if exception.id in wanted
-    }
+    return {exception.id: exception for exception in store.exceptions if exception.id in wanted}
 
 
 def _with_exception(
@@ -889,9 +879,7 @@ def standards_result(check_dir: Path, run: StandardsCheckRun) -> dict[str, Any]:
         ],
         "verdict": verdict_json(run.verdict),
         "checks": run.checks,
-        "findings": [
-            _standards_finding_row(finding, exceptions) for finding in run.findings
-        ],
+        "findings": [_standards_finding_row(finding, exceptions) for finding in run.findings],
         "coverage": run.coverage,
         "subjects": run.subjects,
         "exceptions_carried_forward": {
@@ -1121,6 +1109,7 @@ class ChatServer:
         body = await self._json(request)
         run_dir = resolve_run_dir(body.get("run_dir"), self.run_root)
         retry_of = self._uuid(body.get("retry_of"), "retry_of")
+        standards_profile = self._optional_path(body, "standards_profile")
         self._claim_run_dir(run_dir, retry_of)
         settings = self._settings(body)
         bridge = body.get("bridge") or None
@@ -1136,7 +1125,7 @@ class ChatServer:
             created_at=datetime.now(UTC),
         )
         chat.to(ChatState.EXTRACTING)
-        run = await run_in_threadpool(self._start_review, chat, settings)
+        run = await run_in_threadpool(self._start_review, chat, settings, standards_profile)
         chat.attach(run)
         self.chats[chat.chat_id] = chat
         chat.to(ChatState.RUNNING)
@@ -1145,6 +1134,7 @@ class ChatServer:
             {
                 "chat_id": str(chat.chat_id),
                 "review_session_id": str(chat.review_session_id),
+                "not_examined": to_jsonable_python(not_examined(run.context.ir)),
             },
             status_code=201,
         )
@@ -1229,8 +1219,7 @@ class ChatServer:
         )
         if found is None:
             raise UnknownEvidenceRequest(
-                f"no evidence request {request_id!r} in this session; open: "
-                f"{chat.open_requests}"
+                f"no evidence request {request_id!r} in this session; open: {chat.open_requests}"
             )
         if found.status != "open":
             raise AlreadyAnswered(f"evidence request {request_id} is already answered")
@@ -1243,9 +1232,7 @@ class ChatServer:
         body = await self._json(request)
         decision = str(body.get("decision", ""))
         if decision not in DECISIONS:
-            raise InvalidDecision(
-                f"decision must be one of {sorted(DECISIONS)}, got {decision!r}"
-            )
+            raise InvalidDecision(f"decision must be one of {sorted(DECISIONS)}, got {decision!r}")
         self._require_idle(chat)
         run = self._run_of(chat)
         finding_id = request.path_params["finding_id"]
@@ -1323,9 +1310,7 @@ class ChatServer:
         scope = _check_scope(body.get("scope"))
         document_id = body.get("document_id")
         if document_id is not None and not isinstance(document_id, str):
-            raise ChatError(
-                "document_id is one part document id, or null for every part document"
-            )
+            raise ChatError("document_id is one part document id, or null for every part document")
         result = await run_in_threadpool(
             partial(self._check, run_dir, scope=scope, document_id=document_id or None)
         )
@@ -1498,9 +1483,7 @@ class ChatServer:
         """
         path = self._profile_path(profile_path)
         try:
-            run = run_standards_check(
-                package_dir, path, package_dir, run_root=self.run_root
-            )
+            run = run_standards_check(package_dir, path, package_dir, run_root=self.run_root)
         except ProfileError as exc:
             raise ProfileRefused(exc) from exc
         except RmsRunError as exc:
@@ -1620,9 +1603,7 @@ class ChatServer:
                 check_dir, self._recorded_standards_check(check_dir).profile.path
             )
         record = self._recorded_check(check_dir)
-        return self._check(
-            check_dir, scope=record.scope, document_id=record.documents or None
-        )
+        return self._check(check_dir, scope=record.scope, document_id=record.documents or None)
 
     def _accept_exception(
         self, check_dir: Path, finding_id: str, *, note: str, by: str, family: str
@@ -1663,9 +1644,7 @@ class ChatServer:
         try:
             finding = find_finding(session, finding_id)
         except KeyError as exc:
-            raise UnknownFinding(
-                f"no finding {finding_id!r} in check {check_dir.name}"
-            ) from exc
+            raise UnknownFinding(f"no finding {finding_id!r} in check {check_dir.name}") from exc
         invalidity = invalidity_of(finding.check)
         if invalidity is not None:
             raise RuleNotAcceptable(
@@ -1682,9 +1661,7 @@ class ChatServer:
         # A standards waiver is bound to the document it was accepted on as well as to the
         # instances, because a drawing finding has no instances at all and two drawings'
         # waivers would otherwise be indistinguishable (FR-041, RK-11).
-        document_id = (
-            document_of(finding) if family == STANDARDS_FAMILY.check_file_family else None
-        )
+        document_id = document_of(finding) if family == STANDARDS_FAMILY.check_file_family else None
         store.refresh(evidence)
         pending = _uncovered(store, evidence, [finding], document_id=document_id)
         if not pending:
@@ -1757,6 +1734,17 @@ class ChatServer:
         except ValueError as exc:
             raise UnknownProvider(self.redact(str(exc))) from exc
 
+    @staticmethod
+    def _optional_path(body: Mapping[str, Any], field: str) -> str | None:
+        """Read an optional path from a host request, with blank values meaning absent."""
+        value = body.get(field)
+        if value in (None, ""):
+            return None
+        if not isinstance(value, str):
+            raise ChatError(f"{field} must be a path string or null")
+        stripped = value.strip()
+        return stripped or None
+
     # --- one chat per run folder -----------------------------------------------------
 
     def _claim_run_dir(self, run_dir: Path, retry_of: UUID | None) -> None:
@@ -1783,11 +1771,7 @@ class ChatServer:
         because its `check.json` no longer names the session that is in it.
         """
         live = next(
-            (
-                chat
-                for chat in self.chats.values()
-                if chat.run_dir == run_dir and not chat.finished
-            ),
+            (chat for chat in self.chats.values() if chat.run_dir == run_dir and not chat.finished),
             None,
         )
         if live is not None:
@@ -1835,7 +1819,12 @@ class ChatServer:
 
     # --- the review ------------------------------------------------------------------
 
-    def _start_review(self, chat: ChatSession, settings: ProviderSettings) -> ReviewRun:
+    def _start_review(
+        self,
+        chat: ChatSession,
+        settings: ProviderSettings,
+        standards_profile: str | None = None,
+    ) -> ReviewRun:
         """Load the package and bind the tools. Blocking, so it runs off the event loop."""
         self._rotate_previous(chat)
         try:
@@ -1852,12 +1841,14 @@ class ChatServer:
                 effort=settings.effort,
                 key_source=settings.key_source,
                 retry_of=self._review_retry_of(chat),
+                standards_profile=standards_profile,
                 bridge=bool(bridge),
                 pipe_name=str(bridge.get("pipe") or DEFAULT_PIPE_NAME),
                 bridge_secret=str(bridge.get("secret") or "") or None,
                 bridge_factory=self.bridge_factory,
                 callbacks=[chat.publish],
                 redact=self.redact,
+                explain_findings=True,
             )
         except PACKAGE_ERRORS as exc:
             raise InvalidPackage(
@@ -1865,6 +1856,12 @@ class ChatServer:
                 f"{type(exc).__name__}: {self.redact(str(exc))}"
             ) from exc
         run.tools = StoppableTools(run.tools, chat.stop_requested)
+
+        def check_presentation_cancelled() -> None:
+            if chat.stop_requested.is_set():
+                raise TurnStopped()
+
+        run.check_presentation_cancelled = check_presentation_cancelled
         return run
 
     def _review_retry_of(self, chat: ChatSession) -> UUID | None:
@@ -1883,9 +1880,7 @@ class ChatServer:
     def _require_idle(self, chat: ChatSession) -> None:
         """Refuse the two states that cannot take an engineer's turn, with the right 409."""
         if chat.state is ChatState.FAILED:
-            raise SessionFailed(
-                f"chat {chat.chat_id} failed; retry it as a new session (retry_of)"
-            )
+            raise SessionFailed(f"chat {chat.chat_id} failed; retry it as a new session (retry_of)")
         if chat.state is ChatState.RUNNING:
             raise TurnRunning(f"chat {chat.chat_id} is running a turn; wait for it to end")
 
@@ -1903,21 +1898,27 @@ class ChatServer:
 
     def _play(self, chat: ChatSession, action: Callable[[], Any]) -> None:
         """One turn, and the state it leaves the chat in. This never raises."""
+        settled: ChatState | None = None
         try:
             action()
         except TurnStopped:
-            self._end_stopped(chat)
+            self._end_stopped(chat, settle=False)
+            settled = ChatState.ENDED
         except Exception as exc:
             logger.warning("chat %s failed: %s", chat.chat_id, self.redact(str(exc)))
             self._close_out(chat, exc)
-            self._settle(chat, ChatState.FAILED)
+            settled = ChatState.FAILED
         else:
-            self._settle(
-                chat, ChatState.WAITING_ENGINEER if chat.open_requests else ChatState.ENDED
-            )
+            settled = ChatState.WAITING_ENGINEER if chat.open_requests else ChatState.ENDED
         finally:
             chat.stop_requested.clear()
+            # Keep the folder claimed until the report and attention record have finished
+            # rendering. A retry that starts after `ended` is published could otherwise
+            # rotate the session while this worker is still writing the predecessor's
+            # attention record back to the canonical path.
             self._render_report(chat)
+            if settled is not None:
+                self._settle(chat, settled)
 
     def _settle(self, chat: ChatSession, state: ChatState) -> None:
         """Move the chat, unless a shutdown already moved it somewhere terminal."""
@@ -1965,6 +1966,7 @@ class ChatServer:
     def _finalize_run(self, chat: ChatSession) -> None:
         run = chat.run
         if run is not None:
+            run.cancel_presentation()
             run.finalize()
 
     def _render_report(self, chat: ChatSession) -> None:
@@ -1991,7 +1993,7 @@ class ChatServer:
             # session file is already written and `report` answers 404 until it is there.
             logger.warning("rendering %s failed: %s", chat.report_path, self.redact(str(exc)))
 
-    def _end_stopped(self, chat: ChatSession) -> None:
+    def _end_stopped(self, chat: ChatSession, *, settle: bool = True) -> None:
         """How a stopped chat closes, wherever the stop was noticed.
 
         A turn that raised `TurnStopped` at a tool boundary and a chat that was not
@@ -1999,7 +2001,8 @@ class ChatServer:
         """
         chat.emit("turn.ended", {"reason": "stopped"})
         self._finalize_run(chat)
-        self._settle(chat, ChatState.ENDED)
+        if settle:
+            self._settle(chat, ChatState.ENDED)
 
     def _end_now(self, chat: ChatSession) -> None:
         """Stop a chat that has no turn running: close it, then re-render the report.
@@ -2177,9 +2180,7 @@ def create_app(
         routes=routes,
         lifespan=lifespan,
         exception_handlers={ChatError: on_chat_error},
-        middleware=[
-            Middleware(Guard, token=token, origin=allow_origin, redactor=server.redact)
-        ],
+        middleware=[Middleware(Guard, token=token, origin=allow_origin, redactor=server.redact)],
     )
     app.state.server = server
     app.state.remodel = remodel

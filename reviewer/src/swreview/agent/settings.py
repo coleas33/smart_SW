@@ -400,7 +400,7 @@ def _enterprise_switch(env: Mapping[str, str]) -> str | None:
 class EfficiencySettings(BaseModel):
     """Which efficiency levers this run has on. Every field defaults to off.
 
-    One object for all eleven flags rather than one plumbed argument per lever (OQ-1):
+    One object for all twelve flags rather than one plumbed argument per lever (OQ-1):
     threaded as one keyword argument through `start_review`, `ReviewRun`, `run_benchmark`
     and `cli._review_fn` exactly as `effort` and `max_steps` already are, and recorded
     whole on `session.efficiency`. Without that record no results row can be attributed to
@@ -456,6 +456,9 @@ class EfficiencySettings(BaseModel):
     (feature 007 research R2.10). It **implies** lever 5: the pre-run runs when either
     flag is on, which is why the two never share an arm."""
 
+    compact_queries: bool = False
+    """Experimental bounded package discovery pages; opt-in and default-off."""
+
 
 MeshMode = Literal["eager", "lazy", "off"]
 """Where a body's mesh comes from: the package, the bridge, or nowhere."""
@@ -509,7 +512,7 @@ class ExtractionSettings(BaseModel):
 
 
 LEVER_NAMES: tuple[str, ...] = tuple(EfficiencySettings.model_fields)
-"""The eleven lever names, taken from the model so nothing has to retype them.
+"""The twelve lever names, taken from the model so nothing has to retype them.
 
 Every refusal message below, the `--lever` option and the pane guard iterate this, so a
 lever added to the model is covered by all of them without a second edit anywhere.
@@ -531,7 +534,7 @@ NO_STUDY = "none"
 
 
 def _levers_sentence() -> str:
-    return "the eleven levers are " + ", ".join(LEVER_NAMES)
+    return "the twelve levers are " + ", ".join(LEVER_NAMES)
 
 
 GATED_ALONE: tuple[tuple[str, int, str, int], ...] = (

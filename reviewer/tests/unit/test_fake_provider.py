@@ -118,6 +118,33 @@ def test_effort_mapping_is_recorded_for_every_level() -> None:
     assert mapping.provider_param
 
 
+def test_presentation_clone_uses_its_script_without_mutating_review_state() -> None:
+    primary = FakeProvider(
+        script=(ScriptedTurn(text="review"),),
+        explanation_script=(ScriptedTurn(text="presentation"),),
+        model="fake-scripted",
+        clock=frozen_clock,
+    )
+    presentation = primary.for_presentation(2048)
+
+    assert presentation is not primary
+    assert presentation.model == primary.model
+    result, _ = run(presentation, [], max_steps=0)
+
+    assert result.text == "presentation"
+    assert primary._turn_index == 0
+    assert presentation._turn_index == 1
+
+
+def test_empty_presentation_script_returns_the_normal_empty_fallback() -> None:
+    presentation = provider(ScriptedTurn(text="review")).for_presentation(2048)
+
+    result, _ = run(presentation, [], max_steps=0)
+
+    assert result.reason == "end"
+    assert result.text == ""
+
+
 def test_text_only_turn_streams_deltas_then_one_done() -> None:
     fake = provider(ScriptedTurn(text="Checking the joints now"))
     result, sink = run(fake, [])

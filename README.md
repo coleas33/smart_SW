@@ -13,6 +13,19 @@ and the Model check tab in `specs/003-resilient-modeling/`, the Standards check 
 `.specify/memory/constitution.md`. `README-complete.md` is the original pilot proposal and
 `sw-review-architecture-proposal.md` the architecture decision record.
 
+## Current status and next steps
+
+See [the September 20 project status](docs/project-status-2026-09-20.md) for the
+current baseline, pilot findings, and prioritized next steps. The imported
+[handoff overview](README-START-HERE.md) and
+[detailed findings](docs/pane-findings-2026-09-20.md) preserve the pilot report.
+
+The [pre-test readiness plan](docs/pretest-readiness-plan-2026-09-20.md) records the
+implemented batch; [the testing handoff](docs/testing-handoff-2026-09-20.md) covers
+installation, live checks, and comparable efficiency experiments. A local test run can be collected with
+`swreview handoff <run-dir> --out <new-archive.zip>`; the archive includes a manifest of
+missing artifacts and retains design paths, so inspect it before sharing.
+
 ## Layout
 
 ```text

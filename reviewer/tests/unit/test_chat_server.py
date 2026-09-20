@@ -494,6 +494,46 @@ def test_posting_a_session_starts_the_review_and_returns_both_ids(
     assert types_of(run_dir)[0] == "session.started"
 
 
+def test_configured_standards_profile_reaches_review_setup_and_blank_is_absent(
+    run_root: Path,
+    provider_control: ProviderControl,
+    models: Models,
+    run_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The host's configured path is forwarded, while a blank setting means no profile."""
+    import swreview.chat.server as chat_server
+
+    original = chat_server.start_review
+    received: list[str | None] = []
+
+    def recording_start_review(*args: Any, **kwargs: Any) -> Any:
+        received.append(kwargs.get("standards_profile"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(chat_server, "start_review", recording_start_review)
+    app = create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=provider_control.factory,
+        list_models=models,
+    )
+    headers = {"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}
+    with TestClient(app, headers=headers) as test_client:
+        profile = run_root / "configured-standards.yaml"
+        started = start_session(test_client, run_dir, standards_profile=f"  {profile}  ")
+        settle(test_client, started["chat_id"])
+
+        blank_run = run_root / "20260920-000000-second"
+        blank_run.mkdir()
+        save_package(build_package(), blank_run)
+        blank = start_session(test_client, blank_run, standards_profile="  ")
+        settle(test_client, blank["chat_id"])
+
+    assert received == [str(profile), None]
+
+
 def test_the_session_view_carries_no_token_and_no_bridge(
     client: TestClient, run_dir: Path
 ) -> None:
@@ -661,6 +701,48 @@ def test_a_retry_moves_the_attention_record_to_the_same_index_as_the_session(
     settle(client, second["chat_id"])
 
     assert (run_dir / "attention.1.json").read_bytes() == before
+    assert str(read_attention_record(run_dir).session_id) == second["review_session_id"]
+
+
+def test_a_retry_cannot_claim_a_folder_until_the_previous_render_finishes(
+    app: Any,
+    client: TestClient,
+    run_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A finished turn keeps its run claimed while the final report render is writing.
+
+    The worker publishes ``ended`` only after that render. Holding the render at a known
+    point makes the old race deterministic: Retry must see the live predecessor and wait
+    for the caller to release it, rather than rotate files underneath its writer.
+    """
+    rendering = threading.Event()
+    release = threading.Event()
+    original = app.state.server._render_report
+
+    def held_render(chat: Any) -> None:
+        if not rendering.is_set():
+            rendering.set()
+            assert release.wait(TIMEOUT_S), "the test did not release the final render"
+        original(chat)
+
+    monkeypatch.setattr(app.state.server, "_render_report", held_render)
+    first = start_session(client, run_dir)
+    assert rendering.wait(TIMEOUT_S), "the first session did not reach its final render"
+
+    retry = client.post(
+        "/sessions",
+        json=session_body(run_dir, retry_of=first["chat_id"]),
+    )
+    assert retry.status_code == 409
+    assert retry.json()["error_class"] == "RunDirInUse"
+
+    release.set()
+    assert settle(client, first["chat_id"]) == ChatState.ENDED.value
+
+    second = start_session(client, run_dir, retry_of=first["chat_id"])
+    assert settle(client, second["chat_id"]) == ChatState.ENDED.value
+    assert (run_dir / "attention.1.json").is_file()
     assert str(read_attention_record(run_dir).session_id) == second["review_session_id"]
 
 

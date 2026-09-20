@@ -323,6 +323,34 @@ def test_a_model_outside_the_table_passes_the_requested_effort_through() -> None
     assert mapping.provider_value == "xhigh"
 
 
+@respx.mock
+def test_presentation_clone_isolated_state_reuses_client_and_bounds_output() -> None:
+    route = respx.post(RESPONSES_URL).mock(
+        return_value=stream_response(text_delta("{}"), completed(message_item("{}")))
+    )
+    primary = make_provider()
+    primary.use_prompt_cache("review-session")
+    primary._step_index = 7
+    primary._last_response_id = "resp_review"
+
+    presentation = primary.for_presentation(2048)
+
+    assert presentation is not primary
+    assert presentation._client is primary._client
+    assert presentation.max_output_tokens == 2048
+    assert presentation.parallel_tool_calls is False
+    assert presentation.prompt_cache_key is None
+    assert primary._step_index == 7
+    assert primary._last_response_id == "resp_review"
+    assert primary.prompt_cache_key == "review-session"
+
+    result, _ = run(presentation, max_steps=0)
+    assert result.reason == "end"
+    body = request_bodies(route)[0]
+    assert body["max_output_tokens"] == 2048
+    assert "tools" not in body
+
+
 # --- request shape --------------------------------------------------------------------
 
 

@@ -325,6 +325,9 @@ class _StubProvider:
     def effort_mapping(self, effort: EffortLevel) -> EffortMapping:
         return EffortMapping(requested=effort, provider_param="none", provider_value="none")
 
+    def for_presentation(self, max_output_tokens: int) -> _StubProvider:
+        return _StubProvider()
+
     def run(
         self,
         *,

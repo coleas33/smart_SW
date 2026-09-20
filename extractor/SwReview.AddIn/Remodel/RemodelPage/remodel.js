@@ -72,6 +72,10 @@
     limits: null,
     runDirectory: null,
     result: null,
+    // A missing field keeps compatibility with an older host; an explicit false means the
+    // bridge has attached and deliberately has no remodel seat.
+    remodelAvailable: true,
+    remodelAvailabilityMessage: null,
     planning: false,
     running: false,
 
@@ -145,6 +149,7 @@
         return;
       case 'document.changed':
         state.documentInfo = (payload && payload.path) ? payload : null;
+        applyRemodelCapability(payload && payload.remodel);
         renderDocument();
         return;
       case 'backend.stopped':
@@ -168,6 +173,12 @@
    */
   function planRun() {
     if (state.planning || state.running) {
+      return;
+    }
+
+    if (!state.remodelAvailable) {
+      showBanner(state.remodelAvailabilityMessage
+        || 'Remodel is unavailable until this build has a remodel seat.');
       return;
     }
 
@@ -199,6 +210,12 @@
    */
   function startRun() {
     if (!state.runDirectory || state.running || state.planning) {
+      return;
+    }
+
+    if (!state.remodelAvailable) {
+      showBanner(state.remodelAvailabilityMessage
+        || 'Remodel is unavailable until this build has a remodel seat.');
       return;
     }
 
@@ -869,8 +886,8 @@
     var busy = state.planning || state.running;
     var hasRun = !!state.runDirectory;
 
-    ui.planRun.disabled = busy || !open || !open.path;
-    ui.startRun.disabled = busy || !hasRun;
+    ui.planRun.disabled = busy || !state.remodelAvailable || !open || !open.path;
+    ui.startRun.disabled = busy || !state.remodelAvailable || !hasRun;
     ui.stopRun.disabled = !state.running;
     ui.openCopy.disabled = !hasRun;
     ui.discardCopy.disabled = !hasRun || state.running;
@@ -1044,15 +1061,52 @@
     state.documentInfo = payload.document || null;
     state.limits = payload.limits || null;
 
+    // Older hosts omit this additive capability field; an explicit object is the current
+    // host's capability answer (null means it is still being checked).
+    var remodel = payload.remodel;
+    applyRemodelCapability(remodel);
+
     renderDocument();
     renderLimits();
     renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', !state.backend);
+
+    if (!state.remodelAvailable) {
+      showBanner(state.remodelAvailabilityMessage
+        || 'Remodel is unavailable until this build has a remodel seat.');
+    }
 
     var latest = payload.latest_run;
     if (latest && latest.run_dir) {
       renderRun(latest.run_dir);
       refreshResult();
     }
+  }
+
+  function applyRemodelCapability(remodel) {
+    // Older hosts omit this additive field. An explicit null means capability is still being
+    // checked, so keep actions disabled until the tool service publishes its answer.
+    if (!remodel) {
+      return;
+    }
+
+    var wasAvailable = state.remodelAvailable;
+    var previousMessage = state.remodelAvailabilityMessage;
+    state.remodelAvailable = remodel.available === true;
+    state.remodelAvailabilityMessage = remodel.message
+      ? String(remodel.message)
+      : null;
+
+    if (!state.remodelAvailable && state.remodelAvailabilityMessage) {
+      showBanner(state.remodelAvailabilityMessage);
+    } else if (state.remodelAvailable
+        && !wasAvailable
+        && previousMessage
+        && ui.banner.textContent === previousMessage) {
+      // Clear only the banner this capability check created; an unrelated error that arrived
+      // while the seat was attaching remains visible for the engineer.
+      hideBanner();
+    }
+    renderControls();
   }
 
   function onChangeClick(event) {

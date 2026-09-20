@@ -1,8 +1,24 @@
 # LLM efficiency, speed, and token options
 
-Written 2026-09-16 as the input to feature 005. Nothing here is implemented yet; every
-option is a hypothesis to be measured before it is adopted. The rule for feature 005 is
+Written 2026-09-16 as the input to feature 005. Updated 2026-09-20: instrumentation and
+the original eleven efficiency flags and the new compact-query experiment are implemented
+in `EfficiencySettings`; the flags still default off. Model routing and the Ask-tab
+extensions below remain proposals. Implemented does
+not mean adopted: the rule for feature 005 is
 **instrument first, then one lever at a time behind a flag, adopted only on evidence**.
+
+The next adoption candidate is parallel tool calls (lever 6), based on the pilot
+measurements below. A different held-out real design and its engineer-reviewed answer key
+are still needed before changing the pane default. The current reviewer improvements also
+add a bounded automatic package brief and a compact finding-explanation pass; future A/B
+arms must use the same code version so their overhead is included in both arms. No token
+saving is claimed for those additions until measured on a provider.
+
+For the next test build, `--lever compact_queries` adds bounded, paginated evidence
+discovery without changing the default tool behavior. This is a new experiment, not an
+adopted optimization. Use `--explain-findings` on both benchmark arms to include the
+Review pane's explanation pass; the comparison rejects mismatched explanation modes
+and step budgets. The generated raw ledger displays explanation mode explicitly.
 
 ## Baseline (measured on the tree at commit a0be95f plus the Phase 3 work in progress)
 
@@ -140,11 +156,10 @@ uv run swreview benchmark compare <the same directories> `
   --into ../docs/llm-efficiency-options.md --check   # exits 1 if this file has drifted
 ```
 
-**Nothing has been measured yet.** No agent review has been run against any package on any
-provider, so there is no baseline row and no lever row, and the ledger below is empty
-rather than optimistic. The first thing the harness produces is the baseline study of
-`contracts/ab-harness.md` section 8, three repetitions per provider, and every row after
-that is measured against it.
+**The adoption ledger is still empty.** Pilot measurements are recorded under
+"Measurements outside the ledger" below; they do not satisfy the held-out adoption gate.
+The formal baseline study is defined by `contracts/ab-harness.md` section 8, with three
+repetitions per provider. Each lever row must be compared against its matching baseline.
 
 <!-- ledger:begin -->
 
@@ -152,8 +167,8 @@ that is measured against it.
 
 ### Runs
 
-| run | commit | lever | arm | rep | provider | model | effort | package | input | cached in | uncached in | output | reasoning/thoughts | tool-result in | total | rounds | tool calls | cached share | wall clock s | s to 1st finding | valid | missed | false alarms | unresolved | unresolved withheld | unresolved other | coverage bucket mix |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| run | commit | lever | arm | rep | provider | model | effort | explanations | package | input | cached in | uncached in | output | reasoning/thoughts | tool-result in | total | rounds | tool calls | cached share | wall clock s | s to 1st finding | valid | missed | false alarms | unresolved | unresolved withheld | unresolved other | coverage bucket mix |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 
 No runs: no run directories were compared.
 

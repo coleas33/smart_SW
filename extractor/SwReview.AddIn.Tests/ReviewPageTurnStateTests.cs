@@ -74,6 +74,18 @@ public sealed class ReviewPageTurnStateTests
         Assert.EndsWith("bracket-1", state.RunDir);
     }
 
+    [Fact]
+    public void ReviewStartedCarriesTheFullNotExaminedWarningToItsWrappingBlock()
+    {
+        PageState state = Drive(startReviews: 1);
+
+        Assert.Equal(
+            "2 of 4 component instances were not read: DOWEL PIN cmp:0002 (lightweight).",
+            state.NotExamined);
+        Assert.True(state.WarningBeforeAttention, "the warning must be above Start here.");
+        Assert.Equal("anywhere", state.WarningWrap);
+    }
+
     /// <summary>
     /// Loads the page, answers `ready` and `review.start` as the host does, presses Review
     /// <paramref name="startReviews"/> times, and reports what the page looks like afterwards.
@@ -105,10 +117,18 @@ public sealed class ReviewPageTurnStateTests
                             "review.started",
                             id,
                             new Dictionary<string, object?>
-                            {
-                                { "chat_id", "chat-" + starts },
-                                { "run_dir", @"C:\SwReviewRuns\20260913-142530-bracket-" + starts },
-                            }));
+                                {
+                                    { "chat_id", "chat-" + starts },
+                                    { "run_dir", @"C:\SwReviewRuns\20260913-142530-bracket-" + starts },
+                                    {
+                                        "not_examined", new
+                                        {
+                                            sentence = "2 of 4 component instances were not read: "
+                                                + "DOWEL PIN cmp:0002 (lightweight).",
+                                            instances = new[] { new { id = "cmp:0002" } },
+                                        }
+                                    },
+                                }));
                     }
                 };
             },
@@ -148,6 +168,9 @@ public sealed class ReviewPageTurnStateTests
             FollowUpDisabled = fields.GetProperty("followUpDisabled").GetBoolean(),
             RunDir = fields.GetProperty("runDir").GetString(),
             TurnRunning = fields.GetProperty("turnRunning").GetBoolean(),
+            NotExamined = fields.GetProperty("notExamined").GetString(),
+            WarningBeforeAttention = fields.GetProperty("warningBeforeAttention").GetBoolean(),
+            WarningWrap = fields.GetProperty("warningWrap").GetString(),
         };
     }
 
@@ -164,7 +187,11 @@ public sealed class ReviewPageTurnStateTests
   stopDisabled: document.getElementById('stop-turn').disabled,
   followUpDisabled: document.getElementById('followup-text').disabled,
   runDir: document.getElementById('run-dir').textContent,
-  turnRunning: !document.getElementById('stop-turn').disabled
+  turnRunning: !document.getElementById('stop-turn').disabled,
+  notExamined: document.getElementById('not-examined').textContent,
+  warningBeforeAttention: !!(document.getElementById('not-examined').compareDocumentPosition(
+    document.getElementById('attention-panel')) & Node.DOCUMENT_POSITION_FOLLOWING),
+  warningWrap: getComputedStyle(document.getElementById('not-examined')).overflowWrap
 })";
 
     private static string Reply(string type, string id, object payload) =>
@@ -210,5 +237,12 @@ public sealed class ReviewPageTurnStateTests
         public int StartsRequested { get; set; }
 
         public bool TurnRunning { get; set; }
+
+        public string? NotExamined { get; set; }
+
+        public bool WarningBeforeAttention { get; set; }
+
+        public string? WarningWrap { get; set; }
+
     }
 }

@@ -324,6 +324,8 @@ class EfficiencySettings(BaseModel):
     package_reuse: bool = False            # lever 9
     lazy_meshes: bool = False              # lever 10a
     carry_over_rms: bool = False           # lever 11a
+    procedural_gate: bool = False          # lever 11
+    compact_queries: bool = False          # experimental bounded discovery pages
 ```
 
 | Flag | Lever | What it switches | Read when | Provider |
@@ -338,6 +340,8 @@ class EfficiencySettings(BaseModel):
 | `package_reuse` | 9 | An unchanged package is copied from a prior run folder instead of dumped | at dump time | neither, this is extractor-side |
 | `lazy_meshes` | 10a | Meshes are fetched on demand over the bridge instead of dumped eagerly | at dump and at `check_tool_envelope` | neither |
 | `carry_over_rms` | 11a | `rms.*` findings whose fingerprint is unchanged are carried over instead of re-run | once, at `start_review` | both |
+| `procedural_gate` | 11 | Deterministic opening gate and brief are run before the model's first turn | once, at `start_review` | both |
+| `compact_queries` | 12 | The opt-in compact discovery page is added to the provider tool surface | once, at registry build | both |
 
 ### 7.1 Threading, and why it is one argument
 
@@ -357,7 +361,7 @@ or flips its default in a separate change with its own ledger row.
 
 ### 7.3 Serialization
 
-Serialized onto `session.efficiency` as a plain object of ten booleans. `extra="forbid"` means an
+Serialized onto `session.efficiency` as a plain object of twelve booleans. `extra="forbid"` means an
 old session carrying a flag a later build removed fails loudly rather than being silently ignored,
 which is correct: a results row attributed to a configuration nobody can reconstruct is worse than
 an error.

@@ -1,6 +1,6 @@
 """The lever flags and the one carrier that threads them (T017, for T018).
 
-`EfficiencySettings` is the whole of this feature's configuration surface: eleven booleans,
+`EfficiencySettings` is the whole of this feature's configuration surface: twelve booleans,
 every one of them off, one object threaded as one keyword argument through `start_review`,
 `ReviewRun`, `run_benchmark` and `cli._review_fn` exactly as `effort` and `max_steps`
 already are. The alternative - one plumbed parameter per lever - is ten signature changes
@@ -64,8 +64,9 @@ EXPECTED_LEVERS: tuple[str, ...] = (
     "lazy_meshes",
     "carry_over_rms",
     "procedural_gate",
+    "compact_queries",
 )
-"""The eleven levers of data-model.md section 7, written out once so the model cannot lose
+"""The twelve levers of data-model.md section 7, written out once so the model cannot lose
 one without this module noticing. Every other test here takes the names from the model.
 
 Lever 11 is **appended**, never inserted: `LEVER_NAMES` is this tuple, and a name inserted
@@ -92,7 +93,7 @@ def test_every_lever_is_a_field_and_every_field_defaults_to_off() -> None:
     settings = EfficiencySettings()
 
     assert tuple(EfficiencySettings.model_fields) == EXPECTED_LEVERS
-    assert [getattr(settings, name) for name in EXPECTED_LEVERS] == [False] * 11
+    assert [getattr(settings, name) for name in EXPECTED_LEVERS] == [False] * 12
 
 
 def test_lever_names_come_from_the_model() -> None:
@@ -134,13 +135,13 @@ def test_no_levers_resolve_to_every_flag_off() -> None:
     assert efficiency_from_levers(()) == EfficiencySettings()
 
 
-def test_an_unknown_lever_name_names_the_eleven_valid_ones() -> None:
+def test_an_unknown_lever_name_names_the_twelve_valid_ones() -> None:
     with pytest.raises(ValueError) as caught:
         efficiency_from_levers(["turbo_mode"])
 
     message = str(caught.value)
     assert "turbo_mode" in message
-    assert "the eleven levers" in message
+    assert "the twelve levers" in message
     for name in LEVER_NAMES:
         assert name in message
 
@@ -240,11 +241,11 @@ def test_study_none_refuses_an_off_or_on_arm(arm: str) -> None:
         check_study_arm(study="none", arm=arm, efficiency=EfficiencySettings())
 
 
-def test_an_unknown_study_name_names_the_eleven_levers() -> None:
+def test_an_unknown_study_name_names_the_twelve_levers() -> None:
     with pytest.raises(ValueError) as caught:
         check_study_arm(study="turbo_mode", arm="on", efficiency=EfficiencySettings())
 
-    assert "the eleven levers" in str(caught.value)
+    assert "the twelve levers" in str(caught.value)
     for name in LEVER_NAMES:
         assert name in str(caught.value)
 

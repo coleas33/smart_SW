@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using SwReview.AddIn.Remodel;
 using SwReview.AddIn.Review;
 using SwReview.Extractor.Sw;
 
@@ -35,6 +36,9 @@ public interface IToolService : IDisposable
     /// can read its own generated profile.
     /// </summary>
     BridgeConfig RemodelBridge { get; }
+
+    /// <summary>Whether this service attached a bridge-side SOLIDWORKS remodel seat.</summary>
+    bool RemodelSeatAvailable { get; }
 
     /// <summary>The attached scope, so <c>entity.show</c> resolves against the same one.</summary>
     ISwSession Session { get; }
@@ -187,6 +191,23 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// re-modeler makes to the copy.
     /// </summary>
     public BridgeConfig? RemodelBridge => Service?.RemodelBridge;
+
+    /// <summary>
+    /// The Remodel tab's capability, read from the current service. Before attach completes
+    /// there is no answer yet; once it does, a missing seat is an explicit unavailable state.
+    /// </summary>
+    public RemodelAvailability RemodelCapability
+    {
+        get
+        {
+            IToolService? service = Service;
+            return service == null
+                ? RemodelAvailability.Unknown
+                : service.RemodelSeatAvailable
+                    ? RemodelAvailability.Available
+                    : RemodelAvailability.Unavailable;
+        }
+    }
 
     public string? DocumentPath => Service?.DocumentPath;
 

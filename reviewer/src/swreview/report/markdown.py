@@ -32,6 +32,7 @@ from swreview.report.session import (
     ReviewSession,
     SessionUsage,
 )
+from swreview.report.text import markdown_text
 from swreview.report.unexamined import not_examined
 
 _SEVERITY_ORDER = ("high", "medium", "low", "info")
@@ -78,7 +79,17 @@ def render_report(
     if ranking is not None:
         lines.extend(_render_start_here(ranking))
         lines.append("")
-    lines.extend(_render_findings(session, package, components_by_id))
+    explanations = (
+        {
+            member_id: row.explanation
+            for row in ranking.rows
+            if row.explanation is not None
+            for member_id in row.member_finding_ids
+        }
+        if ranking is not None
+        else {}
+    )
+    lines.extend(_render_findings(session, package, components_by_id, explanations))
     lines.append("")
     lines.extend(_render_evidence_requests(session))
     lines.append("")
@@ -357,6 +368,7 @@ def _render_finding(
     finding: Finding,
     package: EvidencePackage | None,
     components_by_id: dict[str, ComponentInstance],
+    explanations: dict[str, str] | None = None,
 ) -> list[str]:
     heading = f"#### {finding.id}: {finding.title}"
     if finding.carried_over_from is not None:
@@ -364,6 +376,9 @@ def _render_finding(
         # which verdicts were not computed today before reading a word of them (FR-102).
         heading += f" (carried over from session {finding.carried_over_from})"
     lines = [heading, ""]
+    explanation = (explanations or {}).get(finding.id)
+    if explanation is not None:
+        lines.append(f"- Explanation: {markdown_text(explanation)}")
     lines.append(f"- Check: {finding.check}")
     lines.append(f"- Status: {finding.status}")
     lines.append(f"- Severity: {finding.severity}")
@@ -372,9 +387,7 @@ def _render_finding(
     if finding.component_ids:
         if package is not None:
             described = [
-                f"{cid} ({components_by_id[cid].full_path})"
-                if cid in components_by_id
-                else cid
+                f"{cid} ({components_by_id[cid].full_path})" if cid in components_by_id else cid
                 for cid in finding.component_ids
             ]
         else:
@@ -428,6 +441,7 @@ def _render_findings(
     session: ReviewSession,
     package: EvidencePackage | None,
     components_by_id: dict[str, ComponentInstance],
+    explanations: dict[str, str] | None = None,
 ) -> list[str]:
     lines = ["## Findings", ""]
     if not session.findings:
@@ -445,7 +459,7 @@ def _render_findings(
         lines.append(f"### {_SEVERITY_HEADINGS[severity]}")
         lines.append("")
         for finding in findings:
-            lines.extend(_render_finding(finding, package, components_by_id))
+            lines.extend(_render_finding(finding, package, components_by_id, explanations))
             lines.append("")
 
     return lines

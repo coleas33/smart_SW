@@ -11,12 +11,9 @@ One command per row of the contract, and three rules that hold for all of them:
 - diagnostics go to stderr. stdout carries the result and only the result.
 
 This module holds no logic of its own: every command is a thin shell around the library
-(`ingest`, `agent.runner`, `report`, `tools`, `benchmark`). The one exception is
-`audit-secrets`, whose whole subject is this process's environment and the filesystem
-under it - there is no library layer beneath it for a command to be a shell around, and
-inventing one for a single caller would be the abstraction the constitution forbids. Two
-hooks make it testable
-without a network: `provider_factory`, which turns the resolved `ProviderSettings` into
+(`ingest`, `agent.runner`, `report`, `tools`, `benchmark`). Shared secret sources and
+detectors live in `secrets`, used by audit and handoff. Two hooks make it testable without
+a network: `provider_factory`, which turns the resolved `ProviderSettings` into
 the one adapter a run talks to, and `_review_fn`, the per-package review the benchmark
 runner calls.
 
@@ -39,6 +36,7 @@ import inspect
 import json
 import os
 import re
+import zipfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -128,6 +126,14 @@ from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition, fi
 from swreview.report.markdown import render_report
 from swreview.report.rerender import rerender_run_folder, run_folder_session
 from swreview.report.session import CoverageBucket, ReviewSession, load_session, save_session
+from swreview.secrets import KEY_ENV_VARS as KEY_ENV_VARS
+from swreview.secrets import KEY_SHAPES
+from swreview.secrets import (
+    configured_secrets as _configured_secrets,
+)
+from swreview.secrets import (
+    secret_env_names as _secret_env_names,
+)
 from swreview.tools import checks_fastener, checks_fit
 from swreview.tools.context import ToolContext, build_context, use_context
 from swreview.tools.query import ToolResult
@@ -546,6 +552,14 @@ def review(
         int, typer.Option("--max-steps", help="Tool-call budget.")
     ] = DEFAULT_MAX_STEPS,
     lever: LeverOption = None,
+    explain_findings: Annotated[
+        bool,
+        typer.Option(
+            "--explain-findings/--no-explain-findings",
+            help="Include the pane's bounded finding explanations and their usage.",
+            rich_help_panel="Presentation",
+        ),
+    ] = False,
     json_output: JsonFlag = False,
 ) -> None:
     """Run the agent loop over a package; write session.json and report.md."""
@@ -563,6 +577,7 @@ def review(
                 max_steps=max_steps,
                 efficiency=efficiency,
                 standards_profile=standards_profile,
+                explain_findings=explain_findings,
                 fail_tool=tuple(fail_tool or ()),
                 bridge=bridge,
                 redact=redactor,
@@ -1969,6 +1984,7 @@ def _review_fn(
     model: str,
     effort: str,
     efficiency: EfficiencySettings | None = None,
+    explain_findings: bool = False,
 ) -> Any:
     """One package of a benchmark set, reviewed through the same hooks as `review`.
 
@@ -1989,6 +2005,7 @@ def _review_fn(
             effort=settings.effort,
             key_source=settings.key_source,
             efficiency=efficiency,
+            explain_findings=explain_findings,
             redact=redactor,
         )
 
@@ -2025,6 +2042,14 @@ def benchmark_run(
     model: ModelOption = None,
     effort: EffortOption = DEFAULT_EFFORT_CHOICE,
     lever: LeverOption = None,
+    explain_findings: Annotated[
+        bool,
+        typer.Option(
+            "--explain-findings/--no-explain-findings",
+            help="Match pane presentation; include explanation usage in both study arms.",
+            rich_help_panel="Presentation",
+        ),
+    ] = False,
     study: Annotated[
         str,
         typer.Option("--study", help="The lever this run is an arm of, or none."),
@@ -2070,6 +2095,7 @@ def benchmark_run(
                 effort=settings.effort,
                 review_fn=_review_fn,
                 efficiency=efficiency,
+                explain_findings=explain_findings,
             )
         saved_set = Path(out).resolve() / SAVED_SET_FILE
         saved_set.write_text(benchmark_set.model_dump_json(indent=2) + "\n", encoding="utf-8")
@@ -2089,6 +2115,7 @@ def benchmark_run(
                 started_at=started_at,
                 set_too_small_override=set_too_small_override,
                 efficiency=efficiency,
+                explanations_enabled=explain_findings,
             ),
         )
 
@@ -2360,59 +2387,44 @@ def mcp_server(
         mcp.serve(run_dir, bridge_pipe=bridge_pipe, bridge_secret=secret)
 
 
+# --- handoff ---------------------------------------------------------------------
+
+
+@app.command()
+def handoff(
+    run_dir: Annotated[Path, typer.Argument(help="One review run directory to export.")],
+    out: Annotated[Path, typer.Option("--out", help="New local ZIP outside the run folder.")],
+    bridge_secret_env: Annotated[
+        str | None,
+        typer.Option("--bridge-secret-env", help="Variable holding a bridge secret to mask."),
+    ] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Export run evidence and a manifest; includes design paths, excludes machine settings."""
+    from swreview.benchmark.runner import REPO_ROOT
+    from swreview.handoff import export_handoff
+
+    with _errors_as_exit_1():
+        archive = export_handoff(
+            run_dir,
+            out,
+            secrets=[value for _, value in _configured_secrets(bridge_secret_env)],
+            repo_dir=REPO_ROOT,
+        )
+        with zipfile.ZipFile(archive) as bundle:
+            manifest = json.loads(bundle.read("handoff-manifest.json"))
+    payload = {"archive": str(archive), "manifest": manifest}
+    lines = [
+        f"wrote {archive}",
+        "Local evidence bundle includes design names and paths; inspect before sharing.",
+        "See handoff-manifest.json for included, missing, excluded, and redacted artifacts.",
+    ]
+    if manifest["missing_artifacts"]:
+        lines.append("Missing artifacts: " + ", ".join(manifest["missing_artifacts"]))
+    _emit(payload, lines, json_output)
+
+
 # --- audit-secrets ----------------------------------------------------------------
-
-
-KEY_ENV_VARS: tuple[str, ...] = ("OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY")
-"""Every variable a provider key can be configured in - all of them, deliberately.
-
-`ProviderSettings.from_env` resolves `GOOGLE_API_KEY` ahead of `GEMINI_API_KEY` because a
-run needs exactly one key; an audit wants the opposite, so this list is not built from
-that precedence. A key sitting in the variable the last run did not pick is still a key
-that must not be in a file.
-"""
-
-KEY_SHAPES: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("shape:openai-key", re.compile(r"sk-[A-Za-z0-9_-]{20,}")),
-    ("shape:google-key", re.compile(r"AIza[A-Za-z0-9_-]{35}")),
-)
-"""What a provider key looks like, for the run this command was made for.
-
-On the workstation the key is DPAPI-protected under `%APPDATA%` and is decrypted into the
-backend child's environment block only, so an audit started from a separate shell has no
-key to search for and an environment-only scan would report "none" no matter what is in
-the files. These two patterns are what carry the check there: `sk-` plus at least twenty
-key characters covers both OpenAI key formats, and `AIza` plus thirty-five is the shape
-Google issues. They are a safety net over the verbatim search, not a replacement for it -
-a key from a settings file this shell cannot see has no verbatim value to match.
-"""
-
-
-def _secret_env_names(bridge_secret_env: str | None) -> list[str]:
-    """The variables this audit reads a secret from: the key ones, plus the bridge one.
-
-    The bridge secret is named by its variable rather than passed as a value because a
-    secret on a command line is visible in the process list.
-    """
-    names = [*KEY_ENV_VARS]
-    if bridge_secret_env is not None and bridge_secret_env not in names:
-        names.append(bridge_secret_env)
-    return names
-
-
-def _configured_secrets(bridge_secret_env: str | None) -> list[tuple[str, str]]:
-    """`(source, value)` for every secret this shell actually holds.
-
-    A variable that is set but blank is not a secret - that is the common Windows case,
-    and treating `""` as a value would both match every line of every file and make a
-    vacuous run look armed.
-    """
-    found = []
-    for name in _secret_env_names(bridge_secret_env):
-        value = os.environ.get(name, "").strip()
-        if value:
-            found.append((f"env:{name}", value))
-    return found
 
 
 def _files_under(paths: Sequence[Path]) -> list[Path]:

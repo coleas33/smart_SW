@@ -54,6 +54,7 @@ __all__ = [
     "UncalibratedProfileError",
     "load_profile",
     "require_calibrated",
+    "require_stage_1",
 ]
 
 ProfileName = Literal["IDENTITY", "EQUIVALENCE"]
@@ -143,6 +144,21 @@ def require_calibrated(profile: Tolerances) -> Tolerances:
             f"does not ship."
         )
     return profile
+
+
+def require_stage_1(profile: Tolerances) -> Tolerances:
+    """Validate the only profile stage 1 is allowed to use, before any mutation.
+
+    The executor and the run orchestrator share this deterministic preflight.  Keeping the
+    stage choice here prevents a caller from constructing a provider or applying a change
+    before discovering that the requested profile cannot decide a stage-1 run.
+    """
+    if profile.name != "IDENTITY":
+        raise ValueError(
+            f"this run would be verified under {profile.name!r}; stage 1 creates no "
+            "geometry, so it decides under 'IDENTITY' alone"
+        )
+    return require_calibrated(profile)
 
 
 def load_profile(name: ProfileName) -> Tolerances:

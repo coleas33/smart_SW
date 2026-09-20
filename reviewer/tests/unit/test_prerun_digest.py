@@ -22,6 +22,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
+from swreview.agent.package_brief import package_brief
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.agent.runner import OPENING_MESSAGE, PROFILE_CHECK, ReviewRun, start_review
 from swreview.ir.loader import save_package
@@ -99,7 +100,7 @@ def test_the_digest_is_prepended_to_the_opening_message_and_not_to_the_system_pr
     assert on_run.system == off_run.system
     assert opening_of(on_run).endswith(OPENING_MESSAGE)
     assert opening_of(on_run) != OPENING_MESSAGE
-    assert opening_of(off_run) == OPENING_MESSAGE
+    assert opening_of(off_run) == f"{package_brief(off_run.context.ir)}\n\n{OPENING_MESSAGE}"
 
 
 # --- one source, two renderings ----------------------------------------------------------
@@ -219,10 +220,11 @@ def test_a_not_evaluated_family_renders_the_same_sentence_into_both_places() -> 
 
 
 def digest_of(run: ReviewRun) -> str:
-    """Lever 5's message with the opening instruction taken back off: the digest itself."""
+    """Lever 5's message with the brief and opening instruction taken back off."""
     message = opening_of(run)
     assert message.endswith(f"\n\n{OPENING_MESSAGE}")
-    return message.removesuffix(f"\n\n{OPENING_MESSAGE}")
+    body = message.removesuffix(f"\n\n{OPENING_MESSAGE}")
+    return body.split("\n\n", 1)[1]
 
 
 def test_with_the_gate_off_lever_5_still_sends_the_digest_and_nothing_else(
@@ -235,8 +237,10 @@ def test_with_the_gate_off_lever_5_still_sends_the_digest_and_nothing_else(
 
     message = opening_of(run)
 
-    assert message == f"{digest_of(run)}\n\n{OPENING_MESSAGE}"
-    assert message.startswith(DIGEST_HEADER)
+    assert message == (
+        f"{package_brief(run.context.ir)}\n\n{digest_of(run)}\n\n{OPENING_MESSAGE}"
+    )
+    assert digest_of(run).startswith(DIGEST_HEADER)
     for header in (GATE_START_HERE_HEADER, GATE_JUDGEMENT_HEADER, GATE_INSTRUCTION):
         assert header not in message
 
@@ -263,7 +267,8 @@ def test_the_gate_alone_runs_the_pre_run_and_opens_with_the_unchanged_digest(
         step.tool for step in lever5_session.steps
     ]
     assert separator, "the brief's second part follows the digest"
-    assert head.splitlines() == [
+    gated_digest = head.split("\n\n", 1)[1]
+    assert gated_digest.splitlines() == [
         *digest_of(lever5).splitlines(),
         f"  {STANDARDS_FAMILY_NAME}: {STANDARDS_NO_PROFILE}",
     ]

@@ -93,6 +93,7 @@ __all__ = [
     "part_document_ids",
     "plan_path",
     "plan_reorganize",
+    "require_runnable_plan",
     "record_state",
     "scope_report",
 ]
@@ -1346,6 +1347,33 @@ def _why_changes(
         "order the method wants and every group folder it needs already holds exactly its "
         "features"
     )
+
+
+# --- 8. Run-entry validation and state on disk ----------------------------------------
+
+
+def require_runnable_plan(plan: RemodelPlan) -> RemodelPlan:
+    """Validate the revision-1 hand-off before judgement or document writes begin.
+
+    Dry-run and refused plans are valuable artifacts, but they are not inputs to phases B
+    through D. Keeping this check beside the plan model gives the backend runner one
+    deterministic rule and prevents a caller from bypassing the pane's state check.
+    """
+    if plan.state != "planned":
+        raise ValueError(
+            f"the remodel plan is {plan.state!r}; only a plan in 'planned' state can run"
+        )
+    if plan.scope.verdict != "ok":
+        raise ValueError(
+            f"the remodel plan scope is {plan.scope.verdict!r}; the scope probe must "
+            "finish without refusals before a run can start"
+        )
+    if plan.run_id is None or plan.copy_path is None or plan.source is None:
+        raise ValueError(
+            "the remodel plan has no attested copy; a dry-run plan cannot enter the "
+            "mutation phases"
+        )
+    return plan
 
 
 # --- 8. The run's state on disk ------------------------------------------------------

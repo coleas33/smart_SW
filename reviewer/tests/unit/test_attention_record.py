@@ -35,6 +35,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+import swreview.report.attention_record as attention_record_module
 from swreview.agent import runner
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.checks.rms.run import RmsScope, is_check_folder, run_rms_check
@@ -162,6 +163,28 @@ def test_writing_the_same_ranking_twice_is_byte_identical(
     assert write_attention_record(review_dir, review_ranking, review_session_id).read_bytes() == (
         first
     )
+
+
+def test_a_failed_replacement_keeps_the_previous_record_and_cleans_its_temp_file(
+    review_dir: Path,
+    review_ranking: Ranking,
+    review_session_id: UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed atomic replace must not expose a truncated record or leave debris."""
+    record_file = write_attention_record(review_dir, review_ranking, review_session_id)
+    before = record_file.read_bytes()
+
+    def fail_replace(source: str, destination: Path) -> None:
+        raise OSError(f"cannot replace {destination} from {source}")
+
+    monkeypatch.setattr(attention_record_module.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="cannot replace"):
+        write_attention_record(review_dir, review_ranking, review_session_id)
+
+    assert record_file.read_bytes() == before
+    assert not list(review_dir.glob(f".{ATTENTION_FILE_NAME}.*.tmp"))
+    assert read_attention_record(review_dir).session_id == review_session_id
 
 
 def test_no_percent_sign_reaches_the_record(

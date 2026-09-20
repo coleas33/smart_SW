@@ -675,13 +675,17 @@
   function attentionRow(row) {
     var item = el('li', 'attention-row ' + stripeOf(row));
     item.setAttribute('data-finding-id', String(row.finding_id || ''));
-    return append(item, [
+    append(item, [
       el('span', 'attention-id', row.finding_id || ''),
       el('span', 'attention-reason', row.reason || ''),
       el('span', 'attention-title', row.title || ''),
       el('span', 'attention-check', row.check || ''),
       attentionMeta(row)
     ]);
+    if (typeof row.explanation === 'string' && row.explanation) {
+      item.appendChild(el('p', 'finding-explanation', row.explanation));
+    }
+    return item;
   }
 
   /**

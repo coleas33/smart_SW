@@ -158,6 +158,11 @@ class UsageLedger:
         elif event.type == "turn.ended":
             self._turn_boundaries.append(len(self._rounds))
 
+    @property
+    def current_round_count(self) -> int:
+        """Reported rounds since the most recent turn boundary."""
+        return len(self._rounds) - (self._turn_boundaries[-1] if self._turn_boundaries else 0)
+
     def usage(self) -> SessionUsage | None:
         """What the session has cost so far, or `None` if no round reported anything.
 

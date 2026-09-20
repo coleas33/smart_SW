@@ -439,11 +439,13 @@ public class SwReviewAddIn : ISwAddin
         // currently showing. The two lookups are independent of the tool service.
         var packages = new RunPackageIndex(() => _reviewHost?.LatestSession?.RunDirectory);
 
+        var reviewDump = new SwReviewDump(_swApp, _applicationThread);
         var reviewOptions = new ReviewHostOptions(
             _pane.ReviewChannel, _backend, UserSettings.DefaultPath)
         {
             CurrentDocument = CurrentDocument,
-            Dump = new SwReviewDump(_swApp, _applicationThread),
+            Dump = reviewDump,
+            PrepareReview = reviewDump.Prepare,
             EntityResolver = new SwEntityResolver(
                 _swApp,
                 _applicationThread,
@@ -764,6 +766,8 @@ public class SwReviewAddIn : ISwAddin
         {
             Backend = endpoint,
             CurrentDocument = CurrentDocument,
+            RemodelAvailability = () => _toolService?.RemodelCapability
+                ?? RemodelAvailability.Unknown,
             Pipeline = new BackendRemodelPipeline(
                 endpoint,
                 () => _toolService?.RemodelBridge,
@@ -890,7 +894,11 @@ public class SwReviewAddIn : ISwAddin
         return new ToolServiceGate(
             CurrentDocument,
             () => ToolServiceHost.Start(new ToolServiceOptions(app, new ControlAppThreadInvoker(pane))),
-            service => reviewOptions.Bridge = service?.ReviewBridge,
+            service =>
+            {
+                reviewOptions.Bridge = service?.ReviewBridge;
+                _remodelHost?.RefreshAvailability();
+            },
             Report,
             schedule: null,
             // What holds the bridge, and so what stops it being re-attached to another document

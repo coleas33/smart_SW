@@ -455,7 +455,10 @@ fifth contract file.
 **root** of the run directory beside `benchmark-set.json`, because it describes the whole
 invocation rather than one package. Its fields: `commit`, `lever`, `arm`, `rep`,
 `provider`, `model`, `effort`, `max_steps`, `checklist_digest`, `set_digest`, `started_at`,
-`set_too_small_override` and the complete `efficiency` dump. A record carrying a field this
+`set_too_small_override`, `explanations_enabled`, and the complete `efficiency` dump.
+`explanations_enabled` defaults to false for legacy records. It is cross-checked against
+every package's session and must match across a study, as must `max_steps`.
+A record carrying a field this
 build does not know **fails loudly**, for the reason `EfficiencySettings` does; a run
 directory with no record at all reads as `None` and renders with its four provenance
 columns null.
@@ -466,6 +469,13 @@ checkout or when git cannot answer. Null, never a guess (Principle I).
 `max_steps` is recorded as `DEFAULT_MAX_STEPS`, because `swreview benchmark run` exposes no
 `--max-steps` option and its review path takes the default. If that option is ever added,
 the recorded value has to come from it.
+
+`swreview review` and `swreview benchmark run` accept
+`--explain-findings/--no-explain-findings` (default off for existing CLI workflows).
+Use `--explain-findings` in **both** arms when testing the pane's behavior. This is a
+presentation setting, not an efficiency lever. The session and provenance independently
+record it, the raw ledger displays it, and its provider usage/runtime remain in the
+session totals. A comparison with inconsistent presentation settings is refused.
 
 ### 10.2 `set_digest` is the digest of the saved copy
 

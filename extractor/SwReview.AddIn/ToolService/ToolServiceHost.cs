@@ -624,6 +624,7 @@ public sealed class ToolServiceHost : IToolService
         string reviewSecret,
         string generalChatSecret,
         string remodelSecret,
+        bool remodelSeatAvailable,
         ISwSession session,
         string documentPath,
         string captureDirectory)
@@ -633,6 +634,7 @@ public sealed class ToolServiceHost : IToolService
         ReviewSecret = reviewSecret;
         GeneralChatSecret = generalChatSecret;
         RemodelSecret = remodelSecret;
+        RemodelSeatAvailable = remodelSeatAvailable;
         Session = session;
         DocumentPath = documentPath;
         CaptureDirectory = captureDirectory;
@@ -654,6 +656,9 @@ public sealed class ToolServiceHost : IToolService
     /// (contracts/tools.md).
     /// </summary>
     public string RemodelSecret { get; }
+
+    /// <summary>Whether the attached bridge was given a remodel seat.</summary>
+    public bool RemodelSeatAvailable { get; }
 
     /// <summary>
     /// The attached scope, on the application thread.
@@ -766,6 +771,7 @@ public sealed class ToolServiceHost : IToolService
             reviewSecret,
             generalChatSecret,
             remodelSecret,
+            attached.Services.RemodelSeat != null,
             attached.Session,
             attached.DocumentPath,
             captureDirectory);

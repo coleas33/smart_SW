@@ -18,7 +18,13 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from annotated_types import Len
-from pydantic import Field, StringConstraints, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    StringConstraints,
+    model_serializer,
+    model_validator,
+)
 
 from swreview.agent.providers import EffortMapping, TokenUsage, TurnEndReason
 from swreview.agent.settings import EfficiencySettings
@@ -341,8 +347,40 @@ class ReviewSession(ReviewModel):
     steps: list[InvestigationStep] = Field(default_factory=list)
     evidence_requests: list[EvidenceRequest] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
+    finding_explanations: Annotated[
+        dict[
+            Annotated[str, StringConstraints(pattern=r"^F-[0-9]+$")],
+            Annotated[str, StringConstraints(min_length=1, max_length=480)],
+        ],
+        Len(max_length=5),
+    ] = Field(default_factory=dict)
+    """LLM-authored prose for the amplified rows, keyed by stable finding id.
+
+    It is separate from `Finding`: explanations never change evidence, status, severity,
+    ranking or source identifiers. Empty maps are omitted by the serializer so sessions
+    written before U5, and sessions with no findings, retain their existing bytes.
+    """
+    explanations_enabled: bool = False
+    """Whether this run opted into the bounded model explanation pass."""
+    finding_explanation_fingerprint: (
+        Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")] | None
+    ) = None
+    """Evidence fingerprint for the persisted batch, including an unsuccessful attempt."""
     coverage: Coverage = Field(default_factory=Coverage)
     timing: Timing
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_finding_explanations(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        data = handler(self)
+        if not self.finding_explanations:
+            data.pop("finding_explanations", None)
+        if not self.explanations_enabled:
+            data.pop("explanations_enabled", None)
+        if self.finding_explanation_fingerprint is None:
+            data.pop("finding_explanation_fingerprint", None)
+        return data
 
 
 def was_cut_short(session: ReviewSession) -> bool:
@@ -364,10 +402,7 @@ def was_cut_short(session: ReviewSession) -> bool:
     """
     return any(
         item.check == CLOSEOUT_CHECK
-        and (
-            item.reason.startswith(MAX_STEPS_CLOSEOUT_PREFIX)
-            or item.reason == TRUNCATED_CLOSEOUT
-        )
+        and (item.reason.startswith(MAX_STEPS_CLOSEOUT_PREFIX) or item.reason == TRUNCATED_CLOSEOUT)
         for item in session.coverage.unresolved
     )
 

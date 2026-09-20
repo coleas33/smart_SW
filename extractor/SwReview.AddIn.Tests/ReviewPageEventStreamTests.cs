@@ -227,6 +227,15 @@ public sealed class ReviewPageEventStreamTests
         Assert.Equal(1, run.Count("events.close"));
     }
 
+    [Fact]
+    public void AFollowUpUnfoldsTheTranscriptSoItsAssistantAnswerIsVisible()
+    {
+        Conversation run = Scripted.Value;
+
+        Assert.Equal("transcript", run.TranscriptClassAfterFollowup);
+        Assert.True(run.AnswerVisibleAfterFollowup);
+    }
+
     /// <summary>
     /// Loads the page, answers `ready`, `models.list` and `review.start` the way the add-in
     /// does, presses Review, and then plays the host's side of the stream at the page.
@@ -344,6 +353,23 @@ public sealed class ReviewPageEventStreamTests
                 run.StreamStateAfterSessionEnded = await TextOf(page, "stream-state");
                 run.ControlsAfterSessionEnded = await Controls(page);
 
+                // Re-fold the transcript, then ask a follow-up. The page must open the fold
+                // before posting so the engineer's answer cannot be hidden behind tool chrome.
+                await page.ExecuteScriptAsync(FollowupFetchStub);
+                await page.ExecuteScriptAsync(
+                    "var toggle = document.getElementById('transcript-toggle');"
+                        + "if (toggle.getAttribute('aria-expanded') === 'true') toggle.click();"
+                        + "if (document.getElementById('transcript').className !== 'transcript folded')"
+                        + " throw new Error('follow-up regression setup did not leave transcript folded');"
+                        + "var input = document.getElementById('followup-text');"
+                        + "input.value = 'What does this mean?';"
+                        + "document.getElementById('followup').dispatchEvent(new Event('submit', {cancelable:true}));0");
+                await OffscreenReviewPage.Settled(page);
+                await Push(page, SseFrames.Frame(200, "text.done", @"{""text"":""The answer is visible.""}"));
+                await OffscreenReviewPage.Settled(page);
+                run.TranscriptClassAfterFollowup = await ClassOf(page, "transcript");
+                run.AnswerVisibleAfterFollowup = await AnswerVisible(page);
+
                 run.Delays = await Delays(page);
             });
 
@@ -380,6 +406,18 @@ public sealed class ReviewPageEventStreamTests
             payload = new { chat_id = ChatId, reason = "the backend closed the event stream." },
         }));
         return page.ExecuteScriptAsync("0");
+    }
+
+    private static async Task<bool> AnswerVisible(CoreWebView2 page)
+    {
+        string raw = await page.ExecuteScriptAsync(@"(function () {
+  var blocks = document.querySelectorAll('#transcript .block.assistant');
+  if (!blocks.length) { return false; }
+  var answer = blocks[blocks.length - 1];
+  return answer.textContent.indexOf('The answer is visible.') >= 0
+    && getComputedStyle(answer).display !== 'none';
+}())");
+        return JsonDocument.Parse(raw).RootElement.GetBoolean();
     }
 
     private static async Task<string> TextOf(CoreWebView2 page, string elementId)
@@ -451,6 +489,17 @@ public sealed class ReviewPageEventStreamTests
   window.setTimeout = function (fn, delay) {
     window.__swreviewDelays.push(delay);
     return real.call(window, fn, 0);
+  };
+}())";
+
+    private const string FollowupFetchStub = @"
+(function () {
+  window.fetch = function () {
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      text: function () { return Promise.resolve('{}'); }
+    });
   };
 }())";
 
@@ -532,6 +581,10 @@ public sealed class ReviewPageEventStreamTests
         public string StreamStateAfterSessionEnded { get; set; } = string.Empty;
 
         public JsonElement ControlsAfterSessionEnded { get; set; }
+
+        public string TranscriptClassAfterFollowup { get; set; } = string.Empty;
+
+        public bool AnswerVisibleAfterFollowup { get; set; }
 
         public IReadOnlyList<int> Delays { get; set; } = new int[0];
 

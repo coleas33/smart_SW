@@ -16,9 +16,12 @@ Two rules run through all of them (constitution Principle I):
 
 from __future__ import annotations
 
+import json
 import re
 from fnmatch import fnmatchcase
-from typing import Any
+from typing import Annotated, Any, Literal
+
+from pydantic import Field
 
 from swreview.exceptions import ExceptionStore
 from swreview.ir.models import (
@@ -44,6 +47,12 @@ HOLE_TYPES: tuple[str, ...] = (
     "unknown",
 )
 FASTENER_KINDS: tuple[str, ...] = ("screw", "bolt", "nut", "washer", "pin", "other")
+COMPACT_PAGE_LIMIT = 20
+COMPACT_ITEM_TEXT_LIMIT = 120
+COMPACT_LIST_LIMIT = 20
+COMPACT_RESPONSE_BYTES = 6000
+
+CompactKind = Literal["components", "faces", "holes", "mates", "fasteners"]
 
 ToolResult = dict[str, Any]
 
@@ -151,6 +160,301 @@ def get_component(component_id: str) -> ToolResult:
     }
 
 
+def _compact_text(value: object, field: str, truncated: list[str]) -> str | None:
+    """Bound descriptive text while naming the omitted tail for exact retrieval."""
+    if value is None:
+        return None
+    text = str(value)
+    if len(text) <= COMPACT_ITEM_TEXT_LIMIT:
+        return text
+    truncated.append(field)
+    return text[: COMPACT_ITEM_TEXT_LIMIT - 1] + "…"
+
+
+def _compact_ids(values: list[str], field: str, truncated: list[str]) -> tuple[list[str], int]:
+    """Keep reference lists bounded without hiding how many references need detail."""
+    # IDs are evidence keys. Keep each selected key exact so the accompanying detail
+    # pointer is immediately callable; the list itself is structurally bounded.
+    kept = list(values[:COMPACT_LIST_LIMIT])
+    return kept, max(0, len(values) - len(kept))
+
+
+def _compact_record(kind: CompactKind, item: Any) -> dict[str, Any]:
+    """Project one item to bounded discovery fields; detail remains queryable by id."""
+    truncated: list[str] = []
+    if kind == "components":
+        record = {
+            "id": item.id,
+            "name": _compact_text(item.name, "name", truncated),
+            "document_id": item.document_id,
+            "referenced_configuration": _compact_text(
+                item.referenced_configuration, "referenced_configuration", truncated
+            ),
+            "suppression": item.suppression,
+            "pattern_id": item.pattern_id,
+            "is_toolbox": item.is_toolbox,
+            "detail_tool": "get_component",
+            "detail_id": item.id,
+        }
+        # full_path and persistent references are intentionally discoverable through the
+        # existing detail query, never silently presented as complete compact data.
+        record["omitted_fields"] = ["full_path", "persist_ref", "transform"]
+    elif kind == "faces":
+        record = {
+            "id": item.id,
+            "component_id": item.component_id,
+            "body_id": item.body_id,
+            "kind": _compact_text(item.kind, "kind", truncated),
+            "bbox": as_json(item.bbox),
+            "area_m2": item.area_m2,
+            "cylinder": as_json(item.cylinder) if item.cylinder is not None else None,
+            "plane": as_json(item.plane) if item.plane is not None else None,
+            "detail_tool": "get_component",
+            "detail_id": item.component_id,
+            "omitted_fields": ["persist_ref", "persist_ref_scope"],
+        }
+    elif kind == "holes":
+        face_ids, omitted_faces = _compact_ids(item.face_ids, "face_ids", truncated)
+        record = {
+            "id": item.id,
+            "component_id": item.component_id,
+            "feature_name": _compact_text(item.feature_name, "feature_name", truncated),
+            "hole_type": item.hole_type,
+            "standard": _compact_text(item.standard, "standard", truncated),
+            "size": _compact_text(item.size, "size", truncated),
+            "thread_designation": _compact_text(
+                item.thread_designation, "thread_designation", truncated
+            ),
+            "thread_depth": as_json(item.thread_depth)
+            if item.thread_depth is not None
+            else None,
+            "hole_depth": as_json(item.hole_depth) if item.hole_depth is not None else None,
+            "end_condition": item.end_condition,
+            "diameter": as_json(item.diameter) if item.diameter is not None else None,
+            "axis": as_json(item.axis),
+            "face_ids": face_ids,
+            "face_ids_omitted": omitted_faces,
+            "detail_tool": "get_component",
+            "detail_id": item.component_id,
+            "omitted_fields": ["persist_ref", "persist_ref_scope"],
+        }
+    elif kind == "mates":
+        component_ids, omitted_components = _compact_ids(
+            [entity.component_id for entity in item.entities], "component_ids", truncated
+        )
+        resolution = [entity.resolution_status for entity in item.entities]
+        resolution, omitted_resolution = _compact_ids(
+            [str(value) if value is not None else "unknown" for value in resolution],
+            "entity_resolution",
+            truncated,
+        )
+        record = {
+            "id": item.id,
+            "type": _compact_text(item.type, "type", truncated),
+            "component_ids": component_ids,
+            "component_ids_omitted": omitted_components,
+            "entity_resolution": resolution,
+            "entity_resolution_omitted": omitted_resolution,
+            "alignment": item.alignment,
+            "suppressed": item.suppressed,
+            "distance": as_json(item.distance) if item.distance is not None else None,
+            "angle": as_json(item.angle) if item.angle is not None else None,
+            "detail_tool": "list_mates",
+            "detail_component_id": component_ids[0] if component_ids else None,
+            "omitted_fields": ["persist_ref", "persist_ref_scope", "entity_persist_refs"],
+        }
+    else:
+        record = {
+            "id": item.id,
+            "component_id": item.component_id,
+            "kind": _compact_text(item.kind, "kind", truncated),
+            "identity_source": _compact_text(item.identity_source, "identity_source", truncated),
+            "thread_designation": _compact_text(
+                item.thread_designation, "thread_designation", truncated
+            ),
+            "length": as_json(item.length) if item.length is not None else None,
+            "head_type": _compact_text(item.head_type, "head_type", truncated),
+            "head_diameter": as_json(item.head_diameter)
+            if item.head_diameter is not None
+            else None,
+            "head_height": as_json(item.head_height) if item.head_height is not None else None,
+            "drive": _compact_text(item.drive, "drive", truncated),
+            "axis": as_json(item.axis),
+            "material": _compact_text(item.material, "material", truncated),
+            "detail_tool": "list_fasteners",
+            "detail_component_id": item.component_id,
+            "omitted_fields": ["persist_ref", "persist_ref_scope"],
+        }
+    if truncated:
+        record["truncated_fields"] = truncated
+    if kind == "holes":
+        _label_thread_depth(record, item)
+    return record
+
+
+def compact_query(
+    kind: CompactKind,
+    scope_id: str | None = None,
+    cursor: Annotated[int, Field(ge=0)] = 0,
+    limit: Annotated[int, Field(ge=1, le=COMPACT_PAGE_LIMIT)] = COMPACT_PAGE_LIMIT,
+    include_suppressed: bool = True,
+) -> ToolResult:
+    """Return a bounded, paginated discovery page for one package entity family.
+
+    Use this for the first pass over a large family, then follow each record's detail
+    pointer for complete evidence; the compact page is never a verdict or a replacement
+    for the existing full query.
+
+    Args:
+        kind: One of components, faces, holes, mates or fasteners.
+        scope_id: For components, the parent component id; for other kinds, a component id;
+            null means the package-wide list or top-level components.
+        cursor: Zero-based item offset returned as `next_cursor` by the previous page.
+        limit: Number of items, from 1 through 20.
+        include_suppressed: Keep suppressed components when kind is components.
+
+    Returns:
+        A stable package-order page with total, shown, omitted, omitted_before,
+        omitted_after, omitted_by_budget and next_cursor metadata. The serialized response
+        is capped at ``COMPACT_RESPONSE_BYTES`` UTF-8 bytes. Compact records preserve
+        engineering values and unknown/null semantics; omitted discovery fields identify
+        the existing detail query that retrieves them.
+    """
+    context = current_context()
+    if scope_id is not None and context.component(scope_id) is None:
+        safe_scope = scope_id
+        if len(safe_scope) > COMPACT_ITEM_TEXT_LIMIT:
+            safe_scope = safe_scope[: COMPACT_ITEM_TEXT_LIMIT - 1] + "…"
+        return unknown_id("component", safe_scope)
+    package = context.ir
+    if kind == "components":
+        items = [item for item in package.components if item.parent_id == scope_id]
+        if not include_suppressed:
+            items = [item for item in items if item.suppression != "suppressed"]
+    elif kind == "mates":
+        items = _mates_touching(package, scope_id)
+    else:
+        source = getattr(package, kind)
+        items = [
+            item
+            for item in source
+            if scope_id is None or item.component_id == scope_id
+        ]
+    total = len(items)
+    candidates = items[cursor : cursor + limit]
+    page: list[dict[str, Any]] = []
+    budget_omitted = 0
+
+    display_scope = scope_id
+    scope_truncated = False
+    if display_scope is not None and len(display_scope) > COMPACT_ITEM_TEXT_LIMIT:
+        display_scope = display_scope[: COMPACT_ITEM_TEXT_LIMIT - 1] + "…"
+        scope_truncated = True
+
+    def payload(
+        next_cursor: int | None,
+        *,
+        oversized_record: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        end = cursor + len(page)
+        result: dict[str, Any] = {
+            "kind": kind,
+            "scope_id": display_scope,
+            "cursor": cursor,
+            "limit": limit,
+            "total": total,
+            "shown": len(page),
+            "omitted": total - len(page),
+            "omitted_before": min(cursor, total),
+            "omitted_after": max(0, total - end),
+            "omitted_by_budget": budget_omitted,
+            "next_cursor": next_cursor,
+            "items": page,
+        }
+        if scope_truncated:
+            result["scope_id_truncated"] = True
+        if oversized_record is not None:
+            oversized = {
+                "index": cursor,
+                "detail_tool": oversized_record.get("detail_tool"),
+                "reason": "item exceeds the compact response byte budget; use the detail tool",
+            }
+            for key in ("detail_id", "detail_component_id"):
+                value = oversized_record.get(key)
+                if value is not None and len(value) <= COMPACT_ITEM_TEXT_LIMIT:
+                    oversized[key] = value
+                elif value is not None:
+                    oversized[f"{key}_omitted"] = True
+            fallback_tool = {
+                "components": "list_components",
+                "faces": "get_component",
+                "holes": "list_holes",
+                "mates": "list_mates",
+                "fasteners": "list_fasteners",
+            }[kind]
+            pointer_scope = (
+                oversized_record.get("detail_id")
+                or oversized_record.get("detail_component_id")
+                or scope_id
+            )
+            fallback_argument = {
+                "components": {"parent_id": scope_id},
+                "faces": {"component_id": pointer_scope},
+                "holes": {"component_id": pointer_scope},
+                "mates": {"component_id": pointer_scope},
+                "fasteners": {"component_id": pointer_scope},
+            }[kind]
+            # A huge key itself cannot fit in the bounded refusal. The full family query
+            # plus this page index remains a callable fallback, and the next cursor moves
+            # past the item so the caller is never trapped retrying it.
+            if any(
+                value is not None and len(value) > COMPACT_ITEM_TEXT_LIMIT
+                for value in fallback_argument.values()
+            ):
+                fallback_argument = {
+                    key: None for key in fallback_argument
+                }
+                oversized["fallback_scope_omitted"] = True
+                if kind == "faces":
+                    fallback_tool = "find_components"
+                    fallback_argument = {"name_pattern": "*", "document_id": None}
+                    oversized["fallback_instructions"] = (
+                        "Recover the full component id, then call get_component with it."
+                    )
+            oversized["fallback_tool"] = fallback_tool
+            oversized["fallback_arguments"] = fallback_argument
+            result["oversized_item"] = oversized
+        return result
+
+    for item in candidates:
+        candidate = _compact_record(kind, item)
+        trial = [*page, candidate]
+        page[:] = trial
+        budget_omitted = len(candidates) - len(page)
+        end = cursor + len(page)
+        trial_payload = payload(end if end < total else None)
+        # Default JSON encoding also covers providers that escape Unicode and add spaces.
+        size = len(json.dumps(trial_payload).encode("utf-8"))
+        if size <= COMPACT_RESPONSE_BYTES:
+            continue
+        page.pop()
+        break
+
+    # Every candidate after the first one that did not fit is omitted for the same
+    # byte-budget reason; report the complete count so pagination metadata is auditable.
+    budget_omitted = len(candidates) - len(page)
+    if not page and candidates:
+        # Always advance past a pathological record, so a caller cannot be trapped on
+        # one imported value forever. Normal records are bounded by the projection above.
+        return payload(
+            cursor + 1 if cursor + 1 < total else None,
+            oversized_record=_compact_record(kind, candidates[0]),
+        )
+
+    next_cursor = cursor + len(page)
+    return payload(next_cursor if next_cursor < total else None)
+
+
 def find_components(name_pattern: str, document_id: str | None = None) -> list[str] | ToolResult:
     """Component instance ids whose name or instance path matches a glob.
 
@@ -198,6 +502,13 @@ def list_mates(component_id: str | None = None) -> list[dict[str, Any]] | ToolRe
     return [as_json(mate) for mate in _mates_touching(context.ir, component_id)]
 
 
+def _label_thread_depth(data: dict[str, Any], hole: Hole) -> None:
+    """The same unknown/non-threaded distinction in full and compact evidence."""
+    if hole.thread_depth is None:
+        threaded = hole.hole_type == "tapped" or hole.thread_designation is not None
+        data["thread_depth_note"] = "unknown" if threaded else "not a threaded hole"
+
+
 def _hole_result(hole: Hole) -> dict[str, Any]:
     """A hole as JSON, with a null `thread_depth` always explained.
 
@@ -208,9 +519,7 @@ def _hole_result(hole: Hole) -> dict[str, Any]:
     exactly what it says, and says so instead.
     """
     data = as_json(hole)
-    if hole.thread_depth is None:
-        threaded = hole.hole_type == "tapped" or hole.thread_designation is not None
-        data["thread_depth_note"] = "unknown" if threaded else "not a threaded hole"
+    _label_thread_depth(data, hole)
     return data
 
 

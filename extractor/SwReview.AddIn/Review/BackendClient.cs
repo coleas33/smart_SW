@@ -136,6 +136,7 @@ public sealed class BackendClient : IBackendClient, IDisposable
             { "effort", request.Effort },
             { "engineer", request.Engineer },
             { "retry_of", request.RetryOf },
+            { "standards_profile", request.StandardsProfilePath },
             {
                 "bridge",
                 request.Bridge == null
@@ -156,7 +157,17 @@ public sealed class BackendClient : IBackendClient, IDisposable
                 "BadResponse", "the backend created a session without a chat_id.", retryable: false);
         }
 
-        return new ChatSessionHandle(chatId!, Text(body, "review_session_id") ?? string.Empty);
+        JsonElement? notExamined = null;
+        if (body.ValueKind == JsonValueKind.Object
+            && body.TryGetProperty("not_examined", out JsonElement warning)
+            && warning.ValueKind != JsonValueKind.Null
+            && warning.ValueKind != JsonValueKind.Undefined)
+        {
+            notExamined = warning.Clone();
+        }
+
+        return new ChatSessionHandle(
+            chatId!, Text(body, "review_session_id") ?? string.Empty, notExamined);
     }
 
     /// <summary>Stops the child and releases the supervisor. Called on add-in disconnect.</summary>

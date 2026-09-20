@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import inspect
 import math
+from pathlib import Path
 from typing import get_args
 
 import pytest
@@ -382,6 +383,27 @@ def test_no_code_path_in_stage_1_reads_or_writes_any_idimension_member() -> None
     extractor's `Rms` family and both guards - names the interface outside a comment."""
     for path in stage_1_sources():
         assert not [line for line in code_lines(path) if "IDimension" in line], path
+
+
+def test_stage_1_scan_ignores_description_strings_but_keeps_direct_member_references(
+    tmp_path: Path,
+) -> None:
+    """The scan filters plain probe prose while retaining executable-looking references."""
+    source = tmp_path / "Probe.cs"
+    source.write_text(
+        'var description = "IDimension member is not read"; var value = model.IDimension;\n'
+        'var interpolated = $"IDimension {model.Value}"; var dim = (IDimension)value; '
+        'var other = "IDimension";\n',
+        encoding="utf-8",
+    )
+
+    lines = [line for line in code_lines(source) if "IDimension" in line]
+
+    assert lines == [
+        'var description = ; var value = model.IDimension;',
+        'var interpolated = $"IDimension {model.Value}"; var dim = (IDimension)value; '
+        'var other = "IDimension";',
+    ]
 
 
 def test_no_admissible_parameter_is_a_dimension() -> None:
