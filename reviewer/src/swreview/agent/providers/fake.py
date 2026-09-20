@@ -182,10 +182,17 @@ class FakeProvider:
         *,
         script: Sequence[ScriptedTurn],
         model: str,
+        explanation_script: Sequence[ScriptedTurn] = (),
         clock: Callable[[], float] = perf_counter,
+        _presentation: bool = False,
     ) -> None:
         self.model = model
         self._script = tuple(script)
+        # The review and the bounded explanation pass are separate scripted channels.
+        # Keeping them separate means adding U5 cannot silently consume the next ordinary
+        # review turn in existing tests; U5 tests opt in with this channel explicitly.
+        self._explanation_script = tuple(explanation_script)
+        self._presentation = _presentation
         self._clock = clock
         self._turn_index = 0
         self._step_index = 0
@@ -202,6 +209,22 @@ class FakeProvider:
         """Every level is available: the fake does no thinking to budget."""
         return EffortMapping(requested=effort, provider_param=EFFORT_PARAM, provider_value=effort)
 
+    def for_presentation(self, max_output_tokens: int) -> FakeProvider:
+        """Return a fresh scripted adapter for the optional presentation pass.
+
+        The fake has no output ceiling to enforce, but validates the same positive bound
+        as the real adapters. An empty presentation script returns an empty response,
+        allowing the caller to persist its normal explanation fallback.
+        """
+        if max_output_tokens <= 0:
+            raise ValueError(f"max_output_tokens must be positive, got {max_output_tokens!r}")
+        return FakeProvider(
+            script=self._explanation_script,
+            model=self.model,
+            clock=self._clock,
+            _presentation=True,
+        )
+
     def run(
         self,
         *,
@@ -213,6 +236,9 @@ class FakeProvider:
         on_event: EventCallback,
     ) -> TurnResult:
         """Play the next scripted turn: tool calls up to `max_steps`, then the text."""
+        # A presentation adapter is already backed by the separate explanation script.
+        # Keep max_steps a control on tool dispatch only; a normal review with no allowed
+        # steps must still consume its ordinary scripted turn.
         turn = self._next_turn()
         history = [dict(message) for message in messages]
         steps = 0
@@ -249,6 +275,11 @@ class FakeProvider:
 
     def _next_turn(self) -> ScriptedTurn:
         if self._turn_index >= len(self._script):
+            if self._presentation:
+                # A default fake review has no model prose pass. Returning an empty
+                # response exercises the production fallback without making callers
+                # provide a presentation script explicitly.
+                return ScriptedTurn(text="", usage=None)
             raise ValueError(
                 f"the script has {len(self._script)} turn(s); "
                 f"run() was called {self._turn_index + 1} time(s)"

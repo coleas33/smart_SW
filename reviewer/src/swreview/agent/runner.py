@@ -56,6 +56,7 @@ from swreview.agent.events import (
     no_redaction,
     utc_now,
 )
+from swreview.agent.package_brief import package_brief
 from swreview.agent.providers import (
     AgentProvider,
     EffortLevel,
@@ -76,6 +77,11 @@ from swreview.ir.models import EvidencePackage
 from swreview.prerun import PrerunResult, attach_standards, gate_brief, prerun_checks
 from swreview.report.attention import rank
 from swreview.report.attention_record import write_attention_record
+from swreview.report.explanations import (
+    explanation_signature,
+    fill_fallbacks,
+    generate_explanations,
+)
 from swreview.report.session import (
     CLOSEOUT_CHECK,
     CoverageItem,
@@ -174,6 +180,7 @@ TOOL_NOTES_LEAD = (
     "everything else it used to say is here, once, rather than on every tool of every "
     "request. Read a tool's notes before calling it for the first time."
 )
+
 
 def build_system_prompt(
     checklist: Checklist,
@@ -369,9 +376,7 @@ def finalize_session(
     review = context.session
     previous = written if written is not None else []
     review.coverage.unresolved[:] = [
-        item
-        for item in review.coverage.unresolved
-        if all(item is not stale for stale in previous)
+        item for item in review.coverage.unresolved if all(item is not stale for stale in previous)
     ]
     previous.clear()
 
@@ -481,9 +486,7 @@ class CoverageStopTools:
     raising would break it.
     """
 
-    def __init__(
-        self, tools: ToolSet, checklist: Checklist, session: ReviewSession
-    ) -> None:
+    def __init__(self, tools: ToolSet, checklist: Checklist, session: ReviewSession) -> None:
         self.tools = tools
         self.checklist = checklist
         self.session = session
@@ -503,9 +506,7 @@ class CoverageStopTools:
         """Put the tools back on the wire for a new turn. See the class docstring."""
         self._withdrawn = False
 
-    def call(
-        self, name: str, arguments: Mapping[str, Any], call_id: str = ""
-    ) -> ToolCallResult:
+    def call(self, name: str, arguments: Mapping[str, Any], call_id: str = "") -> ToolCallResult:
         """Dispatch the call, then ask whether it was the one that finished the review.
 
         Asked after the call and never before it, because the call that closes the last
@@ -658,6 +659,9 @@ class ReviewRun:
         first turn runs, so no round can arrive before it is listening.
         """
         sink.add_listener(self.usage_ledger)
+        self._explanation_allowed = False
+        self._pending_turn_end: str | None = None
+        self.check_presentation_cancelled: Callable[[], None] = lambda: None
 
     @property
     def session(self) -> ReviewSession:
@@ -730,12 +734,52 @@ class ReviewRun:
         ranking of. It writes only what `rank` derives from the session just saved, so the
         folder never holds a record naming a session it no longer has (research R2.7).
         """
+        session = self.session
+        ranking = rank(session)
+        if session.explanations_enabled and ranking.rows and ranking.empty_reason is None:
+            signature = explanation_signature(session, self.context.ir)
+            if signature != session.finding_explanation_fingerprint:
+                session.finding_explanations.clear()
+                generated: dict[str, str] = {}
+                if self._explanation_allowed:
+                    offset = self.usage_ledger.current_round_count
+
+                    def presentation_usage(event_type: str, body: dict[str, Any]) -> None:
+                        self.sink.emit(
+                            event_type, {**body, "round_index": offset + body.get("round_index", 0)}
+                        )
+
+                    generated = generate_explanations(
+                        self.provider,
+                        ranking.rows[: ranking.top_n],
+                        effort="low",
+                        on_usage=presentation_usage,
+                        session=session,
+                        package=self.context.ir,
+                        check_cancelled=self.check_presentation_cancelled,
+                    )
+                    # One attempt per evidence fingerprint. A stopped/failed review that
+                    # never attempted presentation may try on a later successful turn.
+                    session.finding_explanation_fingerprint = signature
+                session.finding_explanations.update(generated)
+            fill_fallbacks(session, ranking.rows[: ranking.top_n])
+        elif not ranking.rows or ranking.empty_reason is not None:
+            session.finding_explanations.clear()
+            session.finding_explanation_fingerprint = None
+
+        # The closing request belongs to the same engineering turn. End that turn after
+        # its usage, and measure runtime after it, so neither cost nor waiting disappears.
+        if self._pending_turn_end is not None:
+            reason = self._pending_turn_end
+            self._pending_turn_end = None
+            self.sink.emit("turn.ended", {"reason": reason})
         session = finalize_session(self.context, self.started, written=self._finalized)
+        ranking = rank(session)
         # Before `save_session`, and recomputed from the whole ledger on every call, the
         # same rule finalization itself follows: finalizing twice is finalizing once.
         session.usage = self.usage_ledger.usage()
         save_session(session, self.session_path)
-        write_attention_record(self.out_dir, rank(session), session.session_id)
+        write_attention_record(self.out_dir, ranking, session.session_id)
         ended_at = session.ended_at
         body: dict[str, Any] = {
             "ended_at": ended_at.isoformat() if ended_at is not None else None,
@@ -753,6 +797,11 @@ class ReviewRun:
         if self._bridge is not None:
             self._bridge.close()
             self._bridge = None
+
+    def cancel_presentation(self) -> None:
+        """An external failure/Stop already closed the turn; finalization must be local."""
+        self._explanation_allowed = False
+        self._pending_turn_end = None
 
     # --- internals ----------------------------------------------------------------
 
@@ -774,6 +823,8 @@ class ReviewRun:
         """
         self.turns += 1
         self.session.ended_at = None
+        self._explanation_allowed = False
+        self._pending_turn_end = None
         if self._coverage_stop is not None:
             # Lever 7: the withdrawal lasts one turn. A follow-up question, or an answered
             # evidence request, arrives at a session whose checklist is already closed and
@@ -792,16 +843,21 @@ class ReviewRun:
             # The redaction, the `error_body` shape and the `turn.ended` that closes the
             # turn are `agent/events.py`'s, shared with the re-model run (004 T106); what
             # is this run's own is what follows - finalize, then re-raise.
+            self._explanation_allowed = False
             emit_turn_failed(self.sink, exc, self.redact)
             self.finalize()
             raise
 
         self.messages = [dict(message) for message in result.messages]
+        self._explanation_allowed = result.reason == "end"
         self.total_steps += result.steps
         cut_short = cut_short_reason(result.reason, self.max_steps)
         if cut_short is not None:
             self._closeout(cut_short)
-        self.sink.emit("turn.ended", {"reason": result.reason})
+        if self.session.explanations_enabled:
+            self._pending_turn_end = result.reason
+        else:
+            self.sink.emit("turn.ended", {"reason": result.reason})
         return result
 
     def _closeout(self, reason: str) -> None:
@@ -813,9 +869,7 @@ class ReviewRun:
         coverage; a `coverage` event means something was just decided.
         """
         item = _unresolved(self.session, CLOSEOUT_CHECK, reason)
-        self.sink.emit(
-            "coverage", {"bucket": "unresolved", "item": item.model_dump(mode="json")}
-        )
+        self.sink.emit("coverage", {"bucket": "unresolved", "item": item.model_dump(mode="json")})
 
 
 # --- entry points ---------------------------------------------------------------------
@@ -841,6 +895,7 @@ def start_review(
     bridge_factory: Callable[[str, str | None], Any] | None = None,
     callbacks: Iterable[EventListener] = (),
     redact: Callable[[str], str] = no_redaction,
+    explain_findings: bool = False,
 ) -> ReviewRun:
     """Prepare a review of `package_dir` writing into `out_dir`; play it with `start()`.
 
@@ -860,6 +915,8 @@ def start_review(
             mapping it chose is recorded on the session and in `session.started`.
         key_source: Where the provider's key came from, for the session record. `none`
             means the run needed no key, which is the truth for the scripted provider.
+        explain_findings: Opt into one bounded presentation request for the top findings
+            after a successful turn. The pane enables it; offline/check callers stay local.
         retry_of: The failed session this run replaces (FR-028), or None.
         max_steps: Tool-call budget for **one turn**. Hitting it is unresolved coverage,
             not a finish.
@@ -928,6 +985,7 @@ def start_review(
         )
         session.retry_of = UUID(str(retry_of)) if retry_of is not None else None
         session.efficiency = efficiency if efficiency is not None else EfficiencySettings()
+        session.explanations_enabled = explain_findings
         # Lever 10a, read here rather than in the tool: `extraction` is a statement about
         # where this run's evidence comes from, and the one place the lever is turned into
         # that statement is `ExtractionSettings.for_efficiency`.
@@ -974,9 +1032,7 @@ def start_review(
             if standards_profile is not None or session.efficiency.procedural_gate
             else None
         )
-        tools = ToolRegistry().dispatch(
-            context, fail_tool=fail_tool, efficiency=session.efficiency
-        )
+        tools = ToolRegistry().dispatch(context, fail_tool=fail_tool, efficiency=session.efficiency)
         # Lever 5, and the last thing setup does: the checks that enumerate themselves run
         # here, through the dispatch the provider is about to be handed, so their steps,
         # findings and events are the ones a model-driven call would have produced. `None`
@@ -984,6 +1040,12 @@ def start_review(
         prerun = prerun_checks(
             context, tools, efficiency=session.efficiency, standards=standards_gap
         )
+        # A configured standards profile is review coverage even when the optional
+        # pre-run/gate levers are off.  `prerun_checks` records this family when it runs;
+        # keep the same CoverageItem on the ordinary path so a failed profile cannot
+        # disappear from session.json and report.md.
+        if standards_gap is not None and prerun is None:
+            context.record_coverage("skipped", standards_gap.coverage_item())
         if session.steps:
             # Setup wrote steps - today only the pre-run does - so the adapter numbers its
             # own calls from there rather than from 0. `tool.started.step_index` identifies
@@ -1018,13 +1080,24 @@ def start_review(
         effort=effort,
         max_steps=max_steps,
         efficiency=session.efficiency,
-        opening_message=_opening_message(prerun, session),
+        opening_message=_opening_message(
+            prerun,
+            session,
+            loaded.package,
+            standards_gap=standards_gap if standards_profile is not None else None,
+        ),
         bridge=bridge_client,
         redact=redact,
     )
 
 
-def _opening_message(prerun: PrerunResult | None, session: ReviewSession) -> str:
+def _opening_message(
+    prerun: PrerunResult | None,
+    session: ReviewSession,
+    package: EvidencePackage | None = None,
+    *,
+    standards_gap: Any | None = None,
+) -> str:
     """The first user message: the opening instruction, and what the pre-run put above it.
 
     The one branch between lever 5 and lever 11, and it is **here** rather than inside
@@ -1038,11 +1111,14 @@ def _opening_message(prerun: PrerunResult | None, session: ReviewSession) -> str
     ranked ids the model is handed and the ranked ids the engineer reads come off one
     function over one session (FR-031).
     """
-    if prerun is None:
-        return OPENING_MESSAGE
-    gated = session.efficiency is not None and session.efficiency.procedural_gate
-    body = gate_brief(prerun, rank(session)) if gated else prerun.digest()
-    return f"{body}\n\n{OPENING_MESSAGE}"
+    parts: list[str] = []
+    if package is not None:
+        parts.append(package_brief(package, standards_gap=standards_gap))
+    if prerun is not None:
+        gated = session.efficiency is not None and session.efficiency.procedural_gate
+        parts.append(gate_brief(prerun, rank(session)) if gated else prerun.digest())
+    parts.append(OPENING_MESSAGE)
+    return "\n\n".join(parts)
 
 
 def run_review(

@@ -35,9 +35,10 @@ needs are a constant below rather than a call into `agent/checklist.py`, which i
 session module. `tests/unit/test_attention.py` asserts both: the ids against the
 checklist's own file, and the import purity in a subprocess.
 
-One typographic rule applies to every string this module renders: **no percent sign.** The
+One typographic rule applies to deterministic policy labels: **no percent sign.** The
 Standards tab's body scan forbids one anywhere it displays, and the ranking reaches that
-tab (research R2.14). Write "30 percent".
+tab (research R2.14). Write "30 percent". Optional persisted explanations belong to the
+Review pane and report; they do not change those labels or the Standards output.
 """
 
 from __future__ import annotations
@@ -48,7 +49,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import yaml
-from pydantic import Field
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
 
 from swreview.findings import Finding, FindingStatus, ReviewModel, Severity
 
@@ -257,6 +258,16 @@ class AttentionRow(ReviewModel):
     consequence_class: ConsequenceClass
     key: AttentionKey
     reason: str
+    explanation: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_missing_explanation(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        data = handler(self)
+        if self.explanation is None:
+            data.pop("explanation", None)
+        return data
 
 
 class NotAmplified(ReviewModel):
@@ -377,7 +388,16 @@ def rank(session: ReviewSession, policy: Policy | None = None) -> Ranking:
     rows = [_row(group, policy) for group in fold(session.findings, policy)]
     rows.sort(key=lambda row: row.key.order())
 
+    # Explanations are prose attached after this deterministic order is computed. Reading
+    # the persisted map here keeps every report and API re-render in sync without letting
+    # prose participate in the ranking keys.
     empty_reason = _empty_reason(rows)
+    persisted = getattr(session, "finding_explanations", {})
+    for row in rows[:TOP_N] if empty_reason is None else []:
+        text = persisted.get(row.finding_id)
+        if isinstance(text, str) and text:
+            row.explanation = text
+
     amplified = (
         set()
         if empty_reason is not None
@@ -538,10 +558,13 @@ def start_here_lines(ranking: Ranking) -> list[str]:
     if ranking.empty_reason is not None:
         lines = [f"Nothing to start with: {ranking.empty_reason}."]
     else:
-        lines = [
-            f"{number}. **{row.finding_id}** `{row.check}` - {_row_reason(row)}"
-            for number, row in enumerate(ranking.rows[: ranking.top_n], start=1)
-        ]
+        lines = []
+        for number, row in enumerate(ranking.rows[: ranking.top_n], start=1):
+            lines.append(f"{number}. **{row.finding_id}** `{row.check}` - {_row_reason(row)}")
+            if row.explanation is not None:
+                from swreview.report.text import markdown_text
+
+                lines.append(f"   - Explanation: {markdown_text(row.explanation)}")
     if ranking.not_amplified.total:
         lines.extend(["", _not_amplified_line(ranking.not_amplified)])
     return lines

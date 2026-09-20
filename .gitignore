@@ -75,3 +75,9 @@ extractor/SwReview.AddIn/web/*
 # run root). Both contain model output and reviewed document text.
 benchmarks/**/chat-log.jsonl
 **/events.jsonl
+
+# Local evidence imported from the 2026-09-20 pilot handoff (real-design paths).
+/dumps/20260919-184136-810-11249/
+/dumps/20260919-184738-810-11249-standards/
+/dumps/20260919-184809-810-11249-standards/
+/logs/tool-service-20260919-184725.log

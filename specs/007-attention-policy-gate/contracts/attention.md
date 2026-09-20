@@ -152,6 +152,32 @@ authenticated like every other session route and joins the door test's route cen
 
 ## 6. What the pages may do with it
 
+### Review finding explanations (U5, 2026-09-20)
+
+The Review pane enables `start_review(explain_findings=True)`. After a successful
+engineering turn, the runner may make one isolated, tool-free presentation request for
+the amplified rows (at most five). It receives only the member findings' evidence and
+component names, with a 16,000-byte UTF-8 prompt cap; it uses low effort and a 2,048-token
+output ceiling. Each returned explanation is at most 480 characters. Unknown/duplicate
+finding IDs, malformed JSON, or oversized output are rejected. No new evidence, ranking,
+severity, or status is produced by this request.
+
+`ReviewSession` optionally persists `explanations_enabled`, `finding_explanations`
+(representative finding ID to plain text), and `finding_explanation_fingerprint`.
+An unchanged evidence fingerprint reuses the batch, including across ordinary follow-ups;
+failure or Stop never starts a presentation request. Cancellation is checked before and
+during streaming. The request's reported usage belongs to the engineering turn and its
+elapsed time is included in session timing. Missing or invalid model text uses an explicit
+"No model explanation was generated" fallback rather than an invented paraphrase.
+
+`AttentionRow.explanation` is optional. Ranking keys and row order are unchanged. The
+Review pane renders the same persisted text under Start here and the corresponding
+finding cards (including members of a folded row); the Markdown report renders it as
+escaped plain text on both surfaces. Offline re-rendering and deterministic Model check /
+Standards runs make no presentation calls. Omitted optional fields preserve older session
+and attention-record shapes. Model-authored text is distinct from deterministic labels;
+the no-percent-label rule above still applies to the deterministic attention wording.
+
 - The two check pages render `result.attention.rows[0..top_n)` in the order supplied, each as
   its reason line, into `<section id="attention">` above the bucket chips (above the sixteen-
   check roster on the Standards tab), through `web/shared/check-page.js` and `dom.js` only.

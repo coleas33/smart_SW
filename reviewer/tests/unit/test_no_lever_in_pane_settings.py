@@ -5,7 +5,7 @@ against: an engineer flipping an experiment flag mid-pilot makes the pilot's own
 unreadable. An instruction in a task not to add a checkbox is not an assertion that none
 was added, so this module is the assertion.
 
-It iterates the eleven field names off `EfficiencySettings` itself rather than a retyped
+It iterates the twelve field names off `EfficiencySettings` itself rather than a retyped
 list, so a lever added later is covered without anyone remembering to extend this test,
 and it looks in the two places a pane setting can exist:
 
@@ -42,10 +42,10 @@ def test_the_two_guarded_files_exist() -> None:
     assert PANE_SETTINGS_WRITER.is_file()
 
 
-def test_there_are_eleven_levers_to_guard() -> None:
+def test_there_are_twelve_levers_to_guard() -> None:
     """The count is pinned as well as the names: a parametrized scan over an empty tuple
     would pass by reading nothing, and lever 11 is the pane's newest temptation (FR-026)."""
-    assert len(LEVER_NAMES) == 11
+    assert len(LEVER_NAMES) == 12
     assert "procedural_gate" in LEVER_NAMES
 
 

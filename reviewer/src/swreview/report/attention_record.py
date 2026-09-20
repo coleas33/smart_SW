@@ -30,6 +30,8 @@ pure module keeps importing nothing that does I/O.
 
 from __future__ import annotations
 
+import os
+import tempfile
 from pathlib import Path
 from uuid import UUID
 
@@ -117,7 +119,30 @@ def write_attention_record(directory: Path | str, ranking: Ranking, session_id: 
     target.mkdir(parents=True, exist_ok=True)
     record_file = target / ATTENTION_FILE_NAME
     record = AttentionRecord.of(ranking, session_id)
-    record_file.write_text(record.model_dump_json(indent=2) + "\n", encoding="utf-8")
+    # A render runs after the chat has been finalized, and the pane can read the record as
+    # soon as that state is visible. Writing in place briefly exposes an empty/truncated
+    # JSON file to that reader. Replace the completed file instead, so readers see either
+    # the previous valid record or this complete one, never a partial document.
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target,
+            prefix=f".{ATTENTION_FILE_NAME}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_name = temporary.name
+            temporary.write(record.model_dump_json(indent=2) + "\n")
+        os.replace(temporary_name, record_file)
+        temporary_name = None
+    finally:
+        if temporary_name is not None:
+            try:
+                Path(temporary_name).unlink()
+            except FileNotFoundError:
+                pass
     return record_file
 
 

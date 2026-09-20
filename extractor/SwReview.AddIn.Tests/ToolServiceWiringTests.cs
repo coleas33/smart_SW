@@ -1200,6 +1200,7 @@ public sealed class ToolServiceWiringTests
             ReviewBridge = new BridgeConfig(PipeName, "review-secret-" + ordinal);
             GeneralChatBridge = new BridgeConfig(PipeName, "chat-secret-" + ordinal);
             RemodelBridge = new BridgeConfig(PipeName, "remodel-secret-" + ordinal);
+            RemodelSeatAvailable = false;
             DocumentPath = documentPath ?? @"C:\models\bracket-" + ordinal + ".sldasm";
             Session = new FakeSession();
         }
@@ -1213,6 +1214,8 @@ public sealed class ToolServiceWiringTests
         public BridgeConfig GeneralChatBridge { get; }
 
         public BridgeConfig RemodelBridge { get; }
+
+        public bool RemodelSeatAvailable { get; }
 
         public ISwSession Session { get; }
 

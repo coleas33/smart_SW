@@ -27,13 +27,15 @@ class EfficiencySettings(BaseModel):
     package_reuse: bool = False            # lever 9
     lazy_meshes: bool = False              # lever 10a
     carry_over_rms: bool = False           # lever 11a
+    procedural_gate: bool = False          # lever 11
+    compact_queries: bool = False          # experimental bounded discovery pages
 ```
 
 **Threading**: one keyword argument through `start_review` (`agent/runner.py:595-651`), held on
 `ReviewRun` (`:394-424`) exactly as `effort` and `max_steps` already are; one argument through
 `run_benchmark` (`benchmark/runner.py:69-76`) and one through `cli._review_fn`
-(`cli.py:1341-1364`). The alternative, one plumbed parameter per lever, is ten signature changes
-across three call sites and ten separate contract edits (brief Q1).
+(`cli.py:1341-1364`). The alternative, one plumbed parameter per lever, is twelve signature
+changes across three call sites and twelve separate contract edits (brief Q1).
 
 **Recording**: `ReviewSession.efficiency: EfficiencySettings | None = None`, modelled on
 `provider_info`, which is optional for the same reason: a session written before the field existed
@@ -70,6 +72,7 @@ own numbers unreadable, and an adopted lever becomes a default in code, not a ch
 | 10a | `lazy_meshes` | `False` | Extraction plus a bridge fetch during review | Dump time and `start_review` | Dump wall clock, bridge `elapsed_ms` per `tessellate`, review wall clock; gated on identical `bodies_swept` |
 | 11a | `carry_over_rms` | `False` | Provider-neutral; the second and later reviews of one design | `start_review` | Tokens and tool calls on the second review; gated on every finding touching an edited part being re-run |
 | 11 | `procedural_gate` | `False` | Provider-neutral; the pre-run and the first user message (feature 007, `contracts/gate.md`) | `start_review`; implies lever 5, and never shares an arm with lever 5 or lever 7 | Tokens, round trips and seconds to first finding; **gated on the per-run `check_fit` and `check_axial_stack` call counts not falling** |
+| 12 | `compact_queries` | `False` | Provider-neutral; optional bounded package discovery tool surface | `ToolRegistry` build/dispatch when explicitly enabled | Compact discovery page size and follow-up detail retrieval; gated on complete pagination and unchanged default tool schemas |
 
 ## 3. The interaction matrix
 

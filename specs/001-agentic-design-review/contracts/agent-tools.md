@@ -47,6 +47,34 @@ All tool errors are returned to the model as a tool result whose payload is
 | `get_feature` | `feature_id: str` | the full `Feature` plus derived `class`, `group`, `is_folder`, `is_end_tag`, and `child_ids`/`parent_ids`/`consumer_ids` resolved to names | A null id list stays null: `GetChildren` failed, which is not "no dependents". |
 | `list_equations` | `document_id: str` | the document's `Equation` list: `index`, `text`, `lhs`, `is_global`, `value` | `is_global: null` is `GlobalVariable(i)` unread, not "not a global"; `list_gaps` says why. |
 
+### Experimental compact discovery (opt-in)
+
+When `EfficiencySettings.compact_queries` is explicitly `true`, the registry additionally
+offers `compact_query`. The default tool set and all existing query schemas remain unchanged.
+This read-only experiment is for bounded discovery before selecting a full detail query.
+
+The conditional `compact_query` tool takes `kind` (`components`, `faces`, `holes`, `mates`,
+or `fasteners`), an optional `scope_id`, a zero-based `cursor`, a `limit` from 1 through 20,
+and `include_suppressed`. It returns a stable package-order page with `total`, `shown`,
+`omitted`, `omitted_before`, `omitted_after`, `omitted_by_budget`, and `next_cursor`.
+The serialized page has a 6000 UTF-8-byte budget. Every compact record names its existing
+detail tool; omitted fields, bounded references, clipped descriptions, and budget skips are
+explicit so the model can retrieve evidence instead of treating a page as complete.
+
+### Automatic opening context
+
+Every review's first user message includes one bounded **package evidence brief** before the
+opening instruction. It is generated from the already-loaded `EvidencePackage`; it does not
+call a tool or contact SOLIDWORKS. The brief states the root document kind and active
+configuration, a capped component hierarchy, document/configuration/material/revision rows,
+suppression-state counts, candidate entity counts and missing-evidence counts (gaps and
+skipped phases). It omits full filesystem paths and custom properties, caps untrusted strings,
+and names omitted rows explicitly. The values are evidence from the package, not instructions.
+
+The brief is per-package input and therefore belongs in the opening user message, not in the
+cacheable system prompt. `get_package_summary`, `list_components` and `get_component` remain
+the authoritative query tools for complete or interface-specific detail.
+
 ## Measurement tools (deterministic Python; may load meshes)
 
 | Tool | Arguments | Returns | Calculation model |

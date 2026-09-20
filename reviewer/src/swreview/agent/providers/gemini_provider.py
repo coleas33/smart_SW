@@ -321,6 +321,23 @@ class GeminiProvider:
         already paid for are the ones worth the most.
         """
 
+    def for_presentation(self, max_output_tokens: int) -> GeminiProvider:
+        """Return a fresh adapter for a bounded prose request.
+
+        The configured client and redaction secrets are reused without making another
+        credential or network operation. The returned adapter has independent step and
+        round state and no main-review cache or efficiency state to carry over.
+        """
+        if max_output_tokens <= 0:
+            raise ValueError(f"max_output_tokens must be positive, got {max_output_tokens!r}")
+        return GeminiProvider(
+            client=self._client,
+            model=self.model,
+            secrets=self._secrets,
+            max_output_tokens=max_output_tokens,
+            clock=self._clock,
+        )
+
     # --- effort ------------------------------------------------------------------------
 
     def effort_mapping(self, effort: EffortLevel) -> EffortMapping:

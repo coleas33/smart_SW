@@ -77,8 +77,9 @@ cancels any URL outside `https://swreview.invalid/`.
 
 | type | payload | host action |
 |------|---------|-------------|
-| `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, settings (no key), run_root, document: {path, configuration} \| null}`. |
-| `review.start` | `{}` | Refuse if no document is open (`error`). Otherwise create the run folder, run the in-process dump, then `POST /sessions`; reply `review.started {chat_id, run_dir}`. Progress via `status` messages. |
+| `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, settings (no key), run_root, document: {path, configuration} \| null, review_preparation: boolean}`. |
+| `review.prepare` | `{}` | Read the active component tree without writing a run folder, resolving components, or contacting a model. Reply `review.prepared {preparation_id, document, component_count, unread_count, gap_count, instances, omitted_instances, requires_attention, standards_configured}`. At most 30 unread instances, strings capped at 200 characters. |
+| `review.start` | `{preparation_id?, retry_of?}` | Refuse if no document is open (`error`). A host advertising `review_preparation: true` in `init` requires the single-use id from its latest preparation and the same active document/configuration; otherwise `PreparationExpired`. Create the run folder, run the in-process dump, then `POST /sessions`; reply `review.started {chat_id, run_dir, not_examined}` where `not_examined` is the backend's `{sentence, instances}` warning or `null`. Progress via `status` messages. |
 | `settings.save` | `{provider, model, effort, api_key \| null, base_url, gemini_enterprise}` | Refuse with `error {error_class: "TurnRunning"}` while any chat has a running turn. Otherwise encrypt the key with DPAPI, write settings, restart the backend with the new environment; reply `settings.saved {settings (no key), key_source}`. A release build refuses `provider: "fake"` (FR-027). |
 | `settings.get` | `{}` | Reply `settings {settings (no key), key_source}`. |
 | `models.list` | `{provider}` | Proxy to backend `/models`; reply `models {models}`. |

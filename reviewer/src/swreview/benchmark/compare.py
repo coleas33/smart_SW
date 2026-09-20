@@ -129,6 +129,7 @@ LEVER_COUNTERS: dict[str, str] = {
     "lazy_meshes": "bodies_swept per arm (workstation harness)",
     "carry_over_rms": "carried against re-run counts (workstation harness)",
     "procedural_gate": GATE_COUNTER,
+    "compact_queries": "distinct tool names called (compact discovery and full detail)",
     NO_LEVER: "none: a baseline study has no lever to counter",
 }
 """The number **this** lever's gate needs and no other's (ab-harness section 6).
@@ -162,6 +163,7 @@ class RunRow(ReviewModel):
     provider: str | None
     model: str | None
     effort: str | None
+    explanations_enabled: bool = False
     package_id: str
     held_out: bool
     other_levers_on: list[str]
@@ -334,6 +336,12 @@ def _check_session(
     if provenance is None:
         return
 
+    if session.explanations_enabled != provenance.explanations_enabled:
+        raise CompareError(
+            f"{run_dir} / {package_id}: session.json and the provenance record "
+            "disagree on explanations_enabled"
+        )
+
     recorded = provenance.efficiency.model_dump()
     written = session.efficiency.model_dump()
     differing = sorted(name for name in recorded if recorded[name] != written[name])
@@ -427,6 +435,7 @@ def _row(run: _LoadedRun, score: PackageScore) -> RunRow:
         provider=info.provider if info is not None else None,
         model=info.model if info is not None else session.model,
         effort=info.effort_mapping.requested if info is not None else None,
+        explanations_enabled=session.explanations_enabled,
         package_id=score.package_id,
         held_out=score.held_out,
         other_levers_on=sorted(name for name in LEVER_NAMES if flags.get(name) and name != studied),
@@ -486,7 +495,10 @@ def _check_one_study(runs: Sequence[_LoadedRun]) -> None:
     for run in runs[1:]:
         other = run.provenance
         assert other is not None
-        for field in ("commit", "effort", "set_digest", "checklist_digest"):
+        for field in (
+            "commit", "effort", "set_digest", "checklist_digest", "max_steps",
+            "explanations_enabled",
+        ):
             if getattr(first, field) != getattr(other, field):
                 raise CompareError(
                     f"{runs[0].run_dir} and {run.run_dir} cannot be placed in one "
@@ -533,7 +545,7 @@ def _arm_run(run: _LoadedRun) -> ArmRun:
 
 def _counter(lever: str, off: Sequence[ArmRun], on: Sequence[ArmRun]) -> LeverCounter:
     name = LEVER_COUNTERS.get(lever, lever)
-    if lever == TRIM_LEVER:
+    if lever in (TRIM_LEVER, "compact_queries"):
         return _histogram_counter(name, off, on)
     if lever == TIER_LEVER:
         return _withheld_counter(name, off, on)
@@ -827,6 +839,7 @@ RUN_COLUMNS: tuple[str, ...] = (
     "provider",
     "model",
     "effort",
+    "explanations",
     "package",
     "input",
     "cached in",
@@ -892,6 +905,7 @@ def _run_line(row: RunRow) -> str:
         _text(row.provider),
         _text(row.model),
         _text(row.effort),
+        "on" if row.explanations_enabled else "off",
         row.package_id,
         _count(row.input_tokens),
         _count(row.cached_input_tokens),

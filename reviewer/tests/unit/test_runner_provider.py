@@ -27,6 +27,7 @@ from typing import Any
 import pytest
 
 from swreview.agent import runner
+from swreview.agent.package_brief import package_brief
 from swreview.agent.providers import (
     AgentEvent,
     EffortLevel,
@@ -198,7 +199,12 @@ def test_the_provider_is_given_the_system_prompt_the_tools_and_the_opening_messa
     assert "You are a mechanical design reviewer" in seen["system"]
     assert "coverage.closeout" in seen["system"]
     assert "cover-assy" in seen["system"]
-    assert seen["messages"] == [{"role": "user", "content": runner.OPENING_MESSAGE}]
+    assert seen["messages"] == [
+        {
+            "role": "user",
+            "content": f"{package_brief(run.context.ir)}\n\n{runner.OPENING_MESSAGE}",
+        }
+    ]
     assert seen["effort"] == EFFORT
     assert seen["max_steps"] == runner.DEFAULT_MAX_STEPS
     assert [tool.name for tool in seen["tools"]][0] == "get_package_summary"
@@ -466,7 +472,10 @@ def test_continue_session_appends_a_user_turn_and_runs_it(
 
     run.continue_session("Also check the holes on cmp:0001, please.")
 
-    assert run.messages[0] == {"role": "user", "content": runner.OPENING_MESSAGE}
+    assert run.messages[0] == {
+        "role": "user",
+        "content": f"{package_brief(run.context.ir)}\n\n{runner.OPENING_MESSAGE}",
+    }
     follow_ups = [
         message
         for message in run.messages

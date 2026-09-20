@@ -999,7 +999,11 @@ class TestStartingARun:
         assert response.json()["error_class"] == "ResumeRefused"
 
     def test_a_second_run_on_a_folder_a_live_run_holds_is_refused_as_in_progress(
-        self, client: TestClient, run_dir: Path, source: Path
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """One run per folder, said of a run that is genuinely under way.
 
@@ -1008,6 +1012,7 @@ class TestStartingARun:
         the plan off `planned` and the apply phase opens a change log. Answering
         `RunNotPlanned` here would tell an engineer to plan a part a run is writing to.
         """
+        calibrated(monkeypatch)
         planned(client, run_dir, source)
         job_id = str(start(client, run_dir).json()["job_id"])
         wait_for(client, job_id, lambda state: state["awaiting"] == "package_after")
@@ -1020,11 +1025,16 @@ class TestStartingARun:
         deliver_package_after(client, job_id, run_dir)
 
     def test_a_second_run_pressed_straight_after_the_first_is_refused_the_same_way(
-        self, client: TestClient, run_dir: Path, source: Path
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """The fast path: the second press lands before the worker has touched anything,
         and the answer is the same one, because it is decided by the job registry rather
         than by how far the run has got."""
+        calibrated(monkeypatch)
         planned(client, run_dir, source)
         first = start(client, run_dir)
         assert first.status_code == 201
@@ -1112,7 +1122,9 @@ class TestARunToCompletion:
         client: TestClient,
         run_dir: Path,
         source: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        calibrated(monkeypatch)
         planned(client, run_dir, source)
         job_id = str(start(client, run_dir).json()["job_id"])
         state = wait_for(client, job_id, lambda s: s["awaiting"] == "package_after")
@@ -1209,18 +1221,29 @@ class TestARunToCompletion:
     ) -> None:
         """The shipped profile is `IDENTITY`, uncalibrated until PROBE-8 measures it, and
         a profile nobody calibrated may not decide a run. The job reports that failure
-        rather than a verdict, and the change log stays on disk."""
-        _, state = run_to_completion(client, run_dir, source)
+        before the provider, bridge, or package-after rendezvous is entered."""
+        planned(client, run_dir, source)
+        started = start(client, run_dir)
+        assert started.status_code == 201, started.text
+        job_id = str(started.json()["job_id"])
+        state = wait_for(client, job_id, lambda item: item["state"] == "failed")
 
         assert state["state"] == "failed"
         assert "calibrat" in (state["error"] or "")
-        assert (run_dir / CHANGES_FILE_NAME).is_file()
+        assert state["plan_state"] == "planned"
+        assert not (run_dir / CHANGES_FILE_NAME).exists()
 
 
 class TestThePackageAfterRendezvous:
     def test_any_path_but_the_run_folders_after_dump_is_refused(
-        self, client: TestClient, run_dir: Path, source: Path, tmp_path: Path
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        calibrated(monkeypatch)
         planned(client, run_dir, source)
         job_id = str(start(client, run_dir).json()["job_id"])
         wait_for(client, job_id, lambda state: state["awaiting"] == "package_after")
@@ -1234,8 +1257,13 @@ class TestThePackageAfterRendezvous:
         assert deliver_package_after(client, job_id, run_dir).status_code == 200
 
     def test_a_file_that_is_not_a_model_check_dump_is_refused(
-        self, client: TestClient, run_dir: Path, source: Path
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        calibrated(monkeypatch)
         planned(client, run_dir, source)
         job_id = str(start(client, run_dir).json()["job_id"])
         wait_for(client, job_id, lambda state: state["awaiting"] == "package_after")
@@ -1251,11 +1279,17 @@ class TestThePackageAfterRendezvous:
         assert deliver_package_after(client, job_id, run_dir).status_code == 200
 
     def test_a_dump_that_never_arrives_fails_the_run_with_the_log_intact(
-        self, client: TestClient, run_dir: Path, source: Path, app: Any
+        self,
+        client: TestClient,
+        run_dir: Path,
+        source: Path,
+        app: Any,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """The rendezvous has a timeout because the dumper is another process's thread.
         On expiry the run finalizes as `failed`, the reason is on the plan, and the
         changes that were applied are still on disk."""
+        calibrated(monkeypatch)
         app.state.remodel.package_after_timeout = 0.05
         planned(client, run_dir, source)
         job_id = str(start(client, run_dir).json()["job_id"])
@@ -1431,11 +1465,16 @@ def test_the_package_after_timeout_defaults_to_the_documented_ten_minutes(
 
 
 def test_a_waiting_job_is_released_when_the_backend_shuts_down(
-    run_root: Path, run_dir: Path, source: Path, bridge: ProbingBridge
+    run_root: Path,
+    run_dir: Path,
+    source: Path,
+    bridge: ProbingBridge,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A job blocked on the rendezvous must not outlive the process that owns it: the
     shutdown that finalizes every chat releases every waiting run as well."""
 
+    calibrated(monkeypatch)
     app = create_app(
         token=TOKEN,
         allow_origin=ORIGIN,

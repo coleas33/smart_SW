@@ -77,6 +77,10 @@
     token: null,
     runRoot: null,
     documentInfo: null,
+    preparationAvailable: false,
+    preparation: null,
+    preparationEpoch: 0,
+    attentionEpoch: 0,
 
     // ---- the chat ----
     chatId: null,
@@ -112,6 +116,8 @@
     // because the tool calls and the model's prose are the record of how the review reached
     // its findings rather than the findings themselves.
     transcriptFolded: true,
+    followUpPending: false,
+    notExamined: null,
     textBlock: null,
     stream: null,
     reconnectTimer: null,
@@ -186,6 +192,7 @@
         showStatus(payload);
         return;
       case 'document.changed':
+        clearPreparation();
         state.documentInfo = payload && payload.path ? payload : null;
         renderDocument();
         return;
@@ -528,10 +535,15 @@
     if (!state.textBlock) {
       writeDelta('');
     }
-    render.clear(state.textBlock);
-    render.write(state.textBlock, text || '');
+    var completed = state.textBlock;
+    render.clear(completed);
+    render.write(completed, text || '');
     state.textBlock = null;
     scrollToEnd();
+    if (state.followUpPending) {
+      state.followUpPending = false;
+      completed.parentNode.scrollIntoView({ block: 'nearest' });
+    }
   }
 
   function startTool(body) {
@@ -734,18 +746,20 @@
    */
   function loadAttention() {
     var chatId = state.chatId;
+    var epoch = state.attentionEpoch;
     if (!chatId) {
       return;
     }
 
     call(sessionPath('/attention'), 'GET').then(
       function (ranking) {
-        if (!ranking || state.chatId !== chatId) {
+        if (!ranking || state.chatId !== chatId || state.attentionEpoch !== epoch) {
           return;
         }
 
         render.clear(ui.attention);
         ui.attention.appendChild(render.attentionPanel(ranking));
+        syncFindingExplanations(ranking);
         ui.attention.hidden = false;
       },
       function () {
@@ -760,22 +774,117 @@
    * Press Review, or Retry on an error card. `retryOf` names the chat this one replaces, which
    * the backend records on the session so the pair can be read back in the run folder (FR-028).
    */
-  function startReview(retryOf) {
+  function clearPreparation() {
+    state.preparation = null;
+    state.preparationEpoch++;
+    ui.preparation.hidden = true;
+    renderStartReview();
+  }
+
+  function syncFindingExplanations(ranking) {
+    // Text is persisted by the backend and repeated verbatim on both surfaces. Never derive
+    // an explanation, a verdict, or an order from the finding on the page.
+    var previous = ui.transcript.querySelectorAll('.finding-explanation');
+    for (var index = 0; index < previous.length; index++) {
+      previous[index].parentNode.removeChild(previous[index]);
+    }
+    if (ranking.empty_reason) {
+      return;
+    }
+    var rows = ranking.rows || [];
+    var count = typeof ranking.top_n === 'number' ? ranking.top_n : rows.length;
+    for (var rowIndex = 0; rowIndex < rows.length && rowIndex < count; rowIndex++) {
+      var row = rows[rowIndex];
+      var members = row.member_finding_ids || [row.finding_id];
+      for (var memberIndex = 0; memberIndex < members.length; memberIndex++) {
+        var entry = state.findings[members[memberIndex]];
+        if (entry && typeof row.explanation === 'string' && row.explanation) {
+          var text = render.el('p', 'finding-explanation', row.explanation);
+          entry.card.insertBefore(text, entry.card.querySelector('.card-head').nextSibling);
+        }
+      }
+    }
+  }
+
+  function prepareReview(retryOf) {
+    if (!state.preparationAvailable) {
+      startReview(retryOf);
+      return;
+    }
     if (state.startPending || state.turnRunning) {
       return;
     }
+    clearPreparation();
+    var epoch = state.preparationEpoch;
+    state.startPending = true;
+    renderStartReview();
+    send('review.prepare', {}).then(function (payload) {
+      state.startPending = false;
+      renderStartReview();
+      if (state.preparationEpoch !== epoch) {
+        return;
+      }
+      if (!payload.requires_attention) {
+        startReview(retryOf, payload.preparation_id);
+        return;
+      }
+      state.preparation = { payload: payload, retryOf: retryOf };
+      renderStartReview();
+      ui.preparationSummary.textContent = String(payload.unread_count || 0) + ' of '
+        + String(payload.component_count || 0) + ' component instances are not resolved. '
+        + String(payload.gap_count || 0) + ' gaps were recorded while reading the tree. '
+        + 'No review tokens have been used.';
+      render.clear(ui.preparationInstances);
+      var instances = payload.instances || [];
+      for (var index = 0; index < instances.length; index++) {
+        var item = instances[index];
+        ui.preparationInstances.appendChild(render.el('li', '',
+          (item.instance || item.name || 'Unnamed component') + ' (' + item.state + ')'));
+      }
+      if (payload.omitted_instances) {
+        ui.preparationInstances.appendChild(render.el('li', '',
+          String(payload.omitted_instances) + ' additional unread instances are not listed here.'));
+      }
+      ui.preparation.hidden = false;
+    }).catch(function (error) {
+      state.startPending = false;
+      renderStartReview();
+      if (state.preparationEpoch === epoch) {
+        appendCard(render.errorCard({
+          error_class: error.errorClass, message: error.message, retryable: error.retryable
+        }));
+      }
+    });
+  }
+
+  function startReview(retryOf, preparationId) {
+    if (state.startPending || state.turnRunning) {
+      return;
+    }
+
+    clearPreparation();
 
     closeStream();
     state.lastSeq = 0;
     state.reconnectDelay = RECONNECT_MIN;
     state.startPending = true;
+    // A new extraction may fail before the review.started reply. Do not leave the previous
+    // session's component warning presented as if it described this attempt.
+    state.notExamined = null;
+    renderNotExamined();
     renderStartReview();
     showStreamState('');
 
-    send('review.start', retryOf ? { retry_of: retryOf } : {}).then(function (payload) {
+    var request = retryOf ? { retry_of: retryOf } : {};
+    if (preparationId) {
+      request.preparation_id = preparationId;
+    }
+    send('review.start', request).then(function (payload) {
       resetTranscript();
       state.chatId = payload.chat_id;
       state.runDir = payload.run_dir;
+      state.notExamined = payload.not_examined || null;
+      renderNotExamined();
       renderSession();
       setTurnRunning(true);
       openStream();
@@ -801,6 +910,9 @@
    */
   function renderStartReview() {
     ui.startReview.disabled = state.startPending || state.turnRunning || !state.documentInfo;
+    var followupDisabled = state.startPending || state.turnRunning || !!state.preparation || !state.chatId;
+    ui.followupText.disabled = followupDisabled;
+    ui.followupSend.disabled = followupDisabled;
   }
 
   function resetTranscript() {
@@ -819,6 +931,9 @@
     state.tools = Object.create(null);
     state.toolsFinished = 0;
     state.runningTool = '';
+    state.followUpPending = false;
+    state.notExamined = null;
+    renderNotExamined();
     renderTranscriptHead();
     state.textBlock = null;
   }
@@ -831,19 +946,25 @@
 
   /** The follow-up box and Stop follow the turn: one running turn per chat (chat-api.md). */
   function setTurnRunning(running) {
+    if (running) {
+      state.attentionEpoch++;
+    }
     state.turnRunning = running;
     renderStartReview();
     ui.stop.disabled = !running || !state.chatId;
-    ui.followupText.disabled = running || !state.chatId;
-    ui.followupSend.disabled = running || !state.chatId;
   }
 
   function sendFollowUp() {
     var text = ui.followupText.value.trim();
-    if (!text || !state.chatId || state.turnRunning) {
+    if (!text || !state.chatId || state.turnRunning || state.startPending || state.preparation) {
       return;
     }
 
+    // Follow-up prose is useful output, not part of the collapsed tool trace. Open the
+    // transcript before posting so both the question and the answer are visible even when the
+    // engineer never opened Transcript manually.
+    foldTranscript(false);
+    state.followUpPending = true;
     setTurnRunning(true);
     appendCard(render.textBlock('engineer', text));
     ui.followupText.value = '';
@@ -854,6 +975,7 @@
         openStream();
       }
     }).catch(function (error) {
+      state.followUpPending = false;
       setTurnRunning(false);
       appendCard(render.errorCard({
         error_class: error.errorClass,
@@ -920,7 +1042,7 @@
         answer(card);
         return;
       case 'retry':
-        startReview(state.chatId);
+        prepareReview(state.chatId);
         return;
       case 'settings':
         ui.settings.hidden = false;
@@ -971,7 +1093,11 @@
     }
 
     setDetails(card, true);
-    card.scrollIntoView();
+    // The fold can be much taller than the remaining transcript viewport. Scrolling the card
+    // itself leaves its newly opened details just below the viewport when the card header was
+    // already visible; scroll the details panel to the transcript's start instead.
+    var details = card.querySelector('.details');
+    details.scrollIntoView({ block: 'start' });
     flash(card);
   }
 
@@ -1120,6 +1246,13 @@
 
   function showStreamState(text) {
     ui.streamState.textContent = text || '';
+  }
+
+  function renderNotExamined() {
+    var warning = state.notExamined;
+    var sentence = warning && warning.sentence ? warning.sentence : '';
+    ui.notExamined.textContent = sentence;
+    ui.notExamined.hidden = !sentence;
   }
 
   function showStatus(payload) {
@@ -1330,6 +1463,7 @@
       state.token = payload.token || null;
       state.runRoot = payload.run_root || null;
       state.documentInfo = payload.document || null;
+      state.preparationAvailable = payload.review_preparation === true;
       renderSettings(payload.settings, payload.key_source);
       renderDocument();
       renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', false);
@@ -1376,6 +1510,10 @@
     ui.streamState = document.getElementById('stream-state');
     ui.usage = document.getElementById('usage-line');
     ui.attention = document.getElementById('attention-panel');
+    ui.notExamined = document.getElementById('not-examined');
+    ui.preparation = document.getElementById('review-preparation');
+    ui.preparationSummary = document.getElementById('preparation-summary');
+    ui.preparationInstances = document.getElementById('preparation-instances');
     ui.transcriptToggle = document.getElementById('transcript-toggle');
     ui.transcript = document.getElementById('transcript');
     ui.coverage = document.getElementById('coverage-panel');
@@ -1403,8 +1541,17 @@
     });
 
     ui.startReview.addEventListener('click', function () {
-      startReview(null);
+      prepareReview(null);
     });
+    document.getElementById('preparation-check').addEventListener('click', function () {
+      prepareReview(state.preparation ? state.preparation.retryOf : null);
+    });
+    document.getElementById('preparation-continue').addEventListener('click', function () {
+      if (state.preparation) {
+        startReview(state.preparation.retryOf, state.preparation.payload.preparation_id);
+      }
+    });
+    document.getElementById('preparation-cancel').addEventListener('click', clearPreparation);
     ui.stop.addEventListener('click', stopTurn);
     ui.openReport.addEventListener('click', function () {
       send('report.open', { chat_id: state.chatId }).catch(function (error) {

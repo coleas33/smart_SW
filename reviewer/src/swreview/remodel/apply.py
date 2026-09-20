@@ -93,7 +93,7 @@ from swreview.remodel.plan import (
     record_state,
 )
 from swreview.remodel.report import read_log_targets, write_report
-from swreview.remodel.tolerances import ProfileName, Tolerances, require_calibrated
+from swreview.remodel.tolerances import ProfileName, Tolerances, require_stage_1
 
 __all__ = [
     "BRIDGE_METHOD",
@@ -1728,13 +1728,10 @@ def _copy_path(plan: RemodelPlan) -> str:
 
 def _stage_1_profile(tolerances: Tolerances) -> None:
     """Refuse a profile stage 1 does not decide under, or one nobody calibrated."""
-    if tolerances.name != VERIFY_PROFILE:
-        raise VerifyRefused(
-            f"this run would be verified under {tolerances.name!r}; stage 1 creates no "
-            f"geometry, so it decides under {VERIFY_PROFILE} alone and any measured "
-            "difference is a defect rather than a tolerance question"
-        )
-    require_calibrated(tolerances)
+    try:
+        require_stage_1(tolerances)
+    except ValueError as exc:
+        raise VerifyRefused(str(exc)) from exc
 
 
 # --- 6.2 the three readings -----------------------------------------------------------

@@ -287,6 +287,29 @@ def test_the_output_ceiling_is_sent_only_when_configured() -> None:
     assert unset_models.calls[0]["config"].max_output_tokens is None
 
 
+def test_presentation_clone_isolated_state_reuses_client_and_bounds_output() -> None:
+    adapter, models = build(
+        [chunk(text_part("{}"), finish_reason=types.FinishReason.STOP)],
+        max_output_tokens=4096,
+    )
+    adapter._step_index = 4
+    presentation = adapter.for_presentation(2048)
+
+    assert presentation is not adapter
+    assert presentation._client is adapter._client
+    assert presentation.model == adapter.model
+    assert presentation._max_output_tokens == 2048
+    assert presentation._step_index == 0
+    assert adapter._step_index == 4
+    assert adapter._max_output_tokens == 4096
+
+    result, _ = run(presentation, [], max_steps=0)
+    assert result.reason == "end"
+    config = models.calls[0]["config"]
+    assert config.max_output_tokens == 2048
+    assert config.tools is None
+
+
 # --- effort ------------------------------------------------------------------------------
 
 

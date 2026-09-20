@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using SwReview.AddIn.Settings;
 
 namespace SwReview.AddIn.Review;
@@ -47,7 +48,8 @@ public sealed class NewSessionRequest
         string effort,
         string engineer,
         BridgeConfig? bridge,
-        string? retryOf)
+        string? retryOf,
+        string? standardsProfilePath = null)
     {
         RunDirectory = runDirectory ?? throw new ArgumentNullException(nameof(runDirectory));
         Provider = provider ?? throw new ArgumentNullException(nameof(provider));
@@ -56,6 +58,7 @@ public sealed class NewSessionRequest
         Engineer = engineer ?? throw new ArgumentNullException(nameof(engineer));
         Bridge = bridge;
         RetryOf = retryOf;
+        StandardsProfilePath = standardsProfilePath;
     }
 
     /// <summary>`run_dir`: the folder the dump was just written into.</summary>
@@ -74,20 +77,35 @@ public sealed class NewSessionRequest
 
     /// <summary>The chat this one is retrying, or null (FR-028).</summary>
     public string? RetryOf { get; }
+
+    /// <summary>
+    /// The configured Standards profile for the reasoning-side pre-run, or null when the
+    /// setting is blank. The backend owns loading and validating the file.
+    /// </summary>
+    public string? StandardsProfilePath { get; }
 }
 
-/// <summary>What `POST /sessions` returns: `201 {chat_id, review_session_id}`.</summary>
+/// <summary>What `POST /sessions` returns: `201 {chat_id, review_session_id, not_examined}`.</summary>
 public sealed class ChatSessionHandle
 {
-    public ChatSessionHandle(string chatId, string reviewSessionId)
+    public ChatSessionHandle(
+        string chatId, string reviewSessionId, JsonElement? notExamined = null)
     {
         ChatId = chatId ?? throw new ArgumentNullException(nameof(chatId));
         ReviewSessionId = reviewSessionId ?? throw new ArgumentNullException(nameof(reviewSessionId));
+        NotExamined = notExamined;
     }
 
     public string ChatId { get; }
 
     public string ReviewSessionId { get; }
+
+    /// <summary>
+    /// The extractor's full warning sentence and its instances, or null when every component
+    /// was read. Kept as JSON because this object crosses directly to the page's shared
+    /// `#not-examined` renderer and the backend owns the sentence wording.
+    /// </summary>
+    public JsonElement? NotExamined { get; }
 }
 
 /// <summary>

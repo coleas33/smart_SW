@@ -32,6 +32,13 @@ nothing else.
 | `POST /remodel/runs/{job_id}/stop` | `{}` | Sets the run's stop flag. Idempotent | `200 {stopping}` |
 | `POST /remodel/close` | `{run_dir, bridge, discard_copy}` | `client.close_document(discard_copy)`. A copy that is not open is a no-op | `200 {closed}` |
 
+Before phase B starts, the worker performs a deterministic run-entry preflight. The plan must
+still be `planned`, its scope verdict must be `ok`, and it must carry the attested copy tuple
+(`run_id`, `copy_path`, `source`); stage 1 must use the calibrated `IDENTITY` profile. A failed
+preflight is reported on the job and leaves the plan, provider, bridge, change log, and
+package-after rendezvous untouched. This check remains in `run_remodel` so a caller cannot
+bypass it by skipping the pane's start-state checks.
+
 `provider`, `model` and `effort` on `POST /remodel/runs` are optional and are resolved exactly as
 `POST /sessions` resolves them (`ProviderSettings.from_env`), so a remodel run and a review run
 cannot disagree about what "the default provider" means. **No route constructs a provider.** The

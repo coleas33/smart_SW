@@ -116,9 +116,10 @@ from swreview.remodel.plan import (
     plan_path,
     plan_reorganize,
     record_state,
+    require_runnable_plan,
 )
 from swreview.remodel.scope import ScopeSignals
-from swreview.remodel.tolerances import IDENTITY, Tolerances
+from swreview.remodel.tolerances import IDENTITY, Tolerances, require_stage_1
 from swreview.remodel.units import DocumentUnitError
 from swreview.report.session import (
     ProviderInfo,
@@ -877,6 +878,11 @@ def run_remodel(
             swallowed, because whether to tell the engineer "the run failed" or to retry is
             the caller's decision and not this module's.
     """
+    # These are pure, local checks. They must precede provider construction, bridge calls,
+    # mutation and the after-dump rendezvous, even when a caller bypasses the HTTP route's
+    # state check.
+    require_runnable_plan(plan)
+    require_stage_1(tolerances)
     folder = Path(run_dir)
     slots = judgement_slots(plan, package)
     sink = EventSink(folder / EVENTS_FILE_NAME, listeners=callbacks, clock=now)

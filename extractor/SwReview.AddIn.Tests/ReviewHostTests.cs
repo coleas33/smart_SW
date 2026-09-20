@@ -39,6 +39,78 @@ namespace SwReview.AddIn.Tests;
 /// </summary>
 public sealed class ReviewHostTests
 {
+    [Fact]
+    public void PreparationReadsAvailabilityWithoutExtractingOrCreatingAPaidSession()
+    {
+        using var world = new ReviewWorld();
+        world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
+        int reads = 0;
+        world.Prepare = () => { reads++; return Preparation(world.Document); };
+        world.Open();
+        world.Receive("review.prepare", "p1", new { });
+
+        JsonElement result = world.Reply("review.prepared", "p1");
+        Assert.Equal(1, reads);
+        Assert.Equal(1, result.GetProperty("unread_count").GetInt32());
+        Assert.True(result.GetProperty("requires_attention").GetBoolean());
+        Assert.Equal("lightweight", result.GetProperty("instances")[0].GetProperty("state").GetString());
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.Empty(world.Backend.Created);
+        Assert.Empty(world.RunFolders());
+    }
+
+    [Theory]
+    [InlineData("path")]
+    [InlineData("configuration")]
+    [InlineData("missing-token")]
+    public void PreparationRefusesAChangedScopeOrAMissingToken(string change)
+    {
+        using var world = new ReviewWorld();
+        world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
+        world.Prepare = () => Preparation(world.Document);
+        world.Open();
+        world.Receive("review.prepare", "p1", new { });
+        string? token = world.Reply("review.prepared", "p1").GetProperty("preparation_id").GetString();
+        if (change == "path") world.Document = new PageDocument(@"C:\parts\other.SLDASM", "Default");
+        if (change == "configuration") world.Document = new PageDocument(world.Document.Path, "Other");
+        world.Receive("review.start", "r1", new { preparation_id = change == "missing-token" ? null : token });
+        Assert.Equal("PreparationExpired", world.Reply("error", "r1").GetProperty("error_class").GetString());
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.Empty(world.Backend.Created);
+    }
+
+    [Fact]
+    public void APreparationCanStartExactlyOneFreshExtraction()
+    {
+        using var world = new ReviewWorld();
+        world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
+        world.Prepare = () => Preparation(world.Document);
+        world.Open();
+        world.Receive("review.prepare", "p1", new { });
+        string? token = world.Reply("review.prepared", "p1").GetProperty("preparation_id").GetString();
+        world.Receive("review.start", "r1", new { preparation_id = token });
+        world.Receive("review.start", "r2", new { preparation_id = token });
+        Assert.Equal(1, world.Dump.Runs);
+        Assert.Single(world.Backend.Created);
+        Assert.Equal("PreparationExpired", world.Reply("error", "r2").GetProperty("error_class").GetString());
+    }
+
+    private static ReviewPreparation Preparation(PageDocument document)
+    {
+        var tree = new ComponentTreeResult
+        {
+            RootDocumentPath = document.Path,
+            ActiveConfiguration = document.Configuration ?? "",
+            RootDocumentKind = SwReview.Extractor.Ir.DocumentKind.Assembly,
+        };
+        tree.Nodes.Add(new ComponentNode
+        {
+            Name = "pin-1", Key = "assembly/pin-1",
+            Suppression = SwReview.Extractor.Ir.SuppressionState.Lightweight,
+        });
+        return new ReviewPreparation(tree, new GapCollector());
+    }
+
     private static readonly DateTime Stamp = new DateTime(2026, 9, 13, 14, 25, 30);
 
     /// <summary>A stored key, so a redaction test has something real to mask.</summary>
@@ -100,12 +172,14 @@ public sealed class ReviewHostTests
             Assert.Equal("high", posted.Effort);
             Assert.Equal(world.Engineer, posted.Engineer);
             Assert.Null(posted.RetryOf);
+            Assert.Equal(world.Settings.StandardsProfilePath, posted.StandardsProfilePath);
             Assert.Equal("swreview-abc123", posted.Bridge!.Pipe);
             Assert.Equal("bridge-secret-value", posted.Bridge!.Secret);
 
             JsonElement started = world.Reply("review.started", "r1");
             Assert.Equal("chat-1", started.GetProperty("chat_id").GetString());
             Assert.Equal(expected, started.GetProperty("run_dir").GetString());
+            Assert.Equal(JsonValueKind.Null, started.GetProperty("not_examined").ValueKind);
 
             SessionRecord record = Assert.Single(world.Host.Sessions);
             Assert.Equal("chat-1", record.ChatId);
@@ -114,6 +188,24 @@ public sealed class ReviewHostTests
             // The bridge secret authorizes the in-process tool service (T047). It travels to
             // the backend and nowhere else; the page must never see it.
             world.AssertNothingPostedContains("bridge-secret-value");
+        }
+    }
+
+    [Fact]
+    public void ReviewStartedForwardsTheBackendNotExaminedWarning()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\parts\bracket.sldasm", "Default");
+            world.Backend.NotExamined = JsonDocument.Parse(NotExaminedSample.Json()).RootElement.Clone();
+            world.Open();
+
+            world.Receive("review.start", "r1", new { });
+
+            JsonElement started = world.Reply("review.started", "r1");
+            Assert.Equal(
+                NotExaminedSample.Sentence,
+                started.GetProperty("not_examined").GetProperty("sentence").GetString());
         }
     }
 
@@ -168,8 +260,7 @@ public sealed class ReviewHostTests
             world.Receive("review.start", "r1", new { });
 
             string message = world.LastPosted("status").GetProperty("message").GetString()!;
-            Assert.Equal(
-                "Reviewing 12 components, 2 not read (lightweight or suppressed).", message);
+            Assert.Equal("Reviewing 12 components.", message);
         }
     }
 
@@ -194,17 +285,15 @@ public sealed class ReviewHostTests
 
     /// <summary>
     /// The four combinations of a gap count and an unexamined count, plus the singular "1 not
-    /// read": <see cref="ReviewHost.ReadyMessage"/> is the one place this sentence is composed,
-    /// and every one of the Review, Model check and Standards hosts' ready statuses reaches for
-    /// the same <see cref="DumpSummary.UnexaminedClause"/> it uses.
+    /// read": the header keeps only backend status and gaps; the review's full warning is
+    /// carried separately on <c>review.started</c>.
     /// </summary>
     [Theory]
     [InlineData(0, null, "Reviewing 4 components.")]
     [InlineData(23, null, "Reviewing 4 components (23 gaps).")]
-    [InlineData(0, 2, "Reviewing 4 components, 2 not read (lightweight or suppressed).")]
-    [InlineData(
-        23, 2, "Reviewing 4 components, 2 not read (lightweight or suppressed) (23 gaps).")]
-    [InlineData(0, 1, "Reviewing 4 components, 1 not read (lightweight or suppressed).")]
+    [InlineData(0, 2, "Reviewing 4 components.")]
+    [InlineData(23, 2, "Reviewing 4 components (23 gaps).")]
+    [InlineData(0, 1, "Reviewing 4 components.")]
     public void ReadyMessageComposesTheGapsAndUnexaminedClauses(
         int gaps, int? unexamined, string expected)
     {
@@ -974,6 +1063,8 @@ public sealed class ReviewHostTests
 
         public PageDocument? Document { get; set; }
 
+        public Func<ReviewPreparation>? Prepare { get; set; }
+
         public DateTime Now { get; set; } = Stamp;
 
         public BridgeConfig? Bridge { get; set; }
@@ -998,6 +1089,7 @@ public sealed class ReviewHostTests
                 BuildMode = BuildMode.Development,
                 LogFolder = LogFolder,
                 CurrentDocument = () => Document,
+                PrepareReview = Prepare,
                 Environment = _ => null,
                 Dump = Dump,
                 EntityResolver = UseResolver ? Resolver : null,
@@ -1070,6 +1162,7 @@ public sealed class ReviewHostTests
                 + string.Join(" | ", Posted.Select(TypeOf)));
             return matches[0];
         }
+
 
         /// <summary>Every message of <paramref name="type"/>, in the order they were posted.</summary>
         public JsonElement[] AllPosted(string type) => Posted
@@ -1206,6 +1299,8 @@ public sealed class ReviewHostTests
 
         public string NextChatId { get; set; } = "chat-1";
 
+        public JsonElement? NotExamined { get; set; }
+
         public BackendRequestException? CreateFailure { get; set; }
 
         /// <summary>Every chat id the host asked about, so a skipped record can be proven skipped.</summary>
@@ -1248,7 +1343,7 @@ public sealed class ReviewHostTests
             }
 
             Created.Add(request);
-            return new ChatSessionHandle(NextChatId, "review-" + NextChatId);
+            return new ChatSessionHandle(NextChatId, "review-" + NextChatId, NotExamined);
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Linq;
 using SolidWorks.Interop.sldworks;
 using SwReview.Extractor.Dump;
 using SwReview.Extractor.Ir;
+using SwReview.Extractor.PersistRefs;
 using SwReview.Extractor.Sw;
 
 namespace SwReview.AddIn.Review;
@@ -32,6 +33,16 @@ public sealed class SwReviewDump : IReviewDump
         _swApp = swApp ?? throw new ArgumentNullException(nameof(swApp));
         _thread = thread ?? throw new ArgumentNullException(nameof(thread));
     }
+
+    /// <summary>Reuse guarded tree traversal without running geometry phases or writing files.</summary>
+    public ReviewPreparation Prepare() => _thread.Invoke(() =>
+    {
+        SwSession session = SwSession.Attach(_swApp, documentPath: null, configurationName: null);
+        var gaps = new GapCollector();
+        var tree = new ComponentTreeDumper(session, new PersistRefService(session.Gate)).Traverse(
+            gaps, new DumpOptions { Configuration = session.Configuration.Name });
+        return new ReviewPreparation(tree, gaps);
+    });
 
     public DumpSummary Run(
         string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)

@@ -140,6 +140,9 @@ public sealed class ReviewHostOptions
     /// <summary>The open document, asked for fresh each time; SOLIDWORKS owns the answer.</summary>
     public Func<PageDocument?> CurrentDocument { get; set; } = () => null;
 
+    /// <summary>Read only the component census before a paid review; no run folder or model call.</summary>
+    public Func<ReviewPreparation>? PrepareReview { get; set; }
+
     /// <summary>
     /// The in-process extractor. Null until the add-in is attached to a SOLIDWORKS session,
     /// which is a state the pane really has: the Task Pane exists before the first document.
@@ -227,6 +230,8 @@ public sealed class ReviewHostOptions
 /// </summary>
 public sealed class ReviewHost : IDisposable
 {
+    private string? _preparationId;
+    private PageDocument? _preparedDocument;
     private static readonly string[] AllProviders = { "openai", "gemini", "fake" };
     private static readonly string[] ReleaseProviders = { "openai", "gemini" };
     private static readonly string[] Efforts = { "low", "medium", "high", "xhigh" };
@@ -510,6 +515,10 @@ public sealed class ReviewHost : IDisposable
                 ListModels(id, payload);
                 return;
 
+            case "review.prepare":
+                PrepareReview(id);
+                return;
+
             case "review.start":
                 StartReview(id, payload);
                 return;
@@ -556,6 +565,7 @@ public sealed class ReviewHost : IDisposable
             { "run_root", _settings.RunRoot },
             { "providers", Providers() },
             { "document", DocumentPayload(document) },
+            { "review_preparation", _options.PrepareReview != null },
         });
 
         ReportSettingsProblems(key);
@@ -859,7 +869,45 @@ public sealed class ReviewHost : IDisposable
         };
     }
 
-    // ---- review.start -------------------------------------------------------------------
+    // ---- review preparation and start ---------------------------------------------------
+
+    private void PrepareReview(string? id)
+    {
+        _preparationId = null;
+        _preparedDocument = null;
+        PageDocument? document = _options.CurrentDocument();
+        if (document == null || !document.IsAttachable)
+        {
+            SendError(id, "NoDocument", "Open a saved part or assembly to prepare a review.", true);
+            return;
+        }
+        if (_options.PrepareReview == null)
+        {
+            SendError(id, "NotAttached", "Component preparation is not available in this host.", true);
+            return;
+        }
+        if (AnyTurnRunning())
+        {
+            SendError(id, "TurnRunning", "Stop the running review before preparing another.", true);
+            return;
+        }
+        PostStatus("preparing", "Reading component availability before the review...");
+        ReviewPreparation preparation;
+        try
+        {
+            preparation = _options.PrepareReview();
+        }
+        catch (Exception failure)
+        {
+            SendError(id, "PreparationFailed", failure.Message, true);
+            return;
+        }
+        _preparationId = Guid.NewGuid().ToString("N");
+        _preparedDocument = preparation.Document;
+        Send("review.prepared", id, preparation.Payload(
+            _preparationId, !string.IsNullOrWhiteSpace(_settings.StandardsProfilePath)));
+        PostStatus("ready", "Component availability checked; no review tokens used.");
+    }
 
     /// <summary>
     /// Press Review: name and create the run folder, dump the open document into it, hand the
@@ -883,6 +931,21 @@ public sealed class ReviewHost : IDisposable
                 + "package is extracted from the active document.",
                 retryable: true);
             return;
+        }
+
+        if (_options.PrepareReview != null)
+        {
+            bool matches = _preparationId != null
+                && string.Equals(Text(payload, "preparation_id"), _preparationId, StringComparison.Ordinal)
+                && string.Equals(document.Path, _preparedDocument?.Path, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(document.Configuration, _preparedDocument?.Configuration, StringComparison.Ordinal);
+            _preparationId = null;
+            _preparedDocument = null;
+            if (!matches)
+            {
+                SendError(id, "PreparationExpired", "The active document or configuration changed. Check component availability again.", true);
+                return;
+            }
         }
 
         if (_options.Dump == null)
@@ -953,7 +1016,8 @@ public sealed class ReviewHost : IDisposable
                 _options.Bridge,
                 // FR-028: the page's Retry on an error card starts a fresh chat that says
                 // which one it is replacing, so the pair can be read back in the run folder.
-                Blank(Text(payload, "retry_of"))));
+                Blank(Text(payload, "retry_of")),
+                Blank(_settings.StandardsProfilePath)));
         }
         catch (Exception failure)
         {
@@ -972,6 +1036,7 @@ public sealed class ReviewHost : IDisposable
         {
             { "chat_id", handle.ChatId },
             { "run_dir", runDirectory },
+            { "not_examined", handle.NotExamined },
         });
     }
 
@@ -990,15 +1055,14 @@ public sealed class ReviewHost : IDisposable
     public void PostStatus(string stage, string message) => _actions.PostStatus(stage, message);
 
     /// <summary>
-    /// The ready status a review posts once the dump and the chat session both exist: how many
-    /// components, how many of them were never read - lightweight or suppressed
-    /// (<see cref="DumpSummary.UnexaminedClause"/>) - and how many gaps. Each clause after the
-    /// count is present only when it says something, so a run with nothing unread and no gaps
-    /// reads exactly as it did before this feature.
+    /// The ready status a review posts once the dump and the chat session both exist: the
+    /// component count and any gaps. The full not-examined sentence travels on the
+    /// <c>review.started</c> payload so it can wrap in the Review page's warning block instead
+    /// of being clipped inside the header badge.
     /// </summary>
     internal static string ReadyMessage(int components, int gaps, int? unexamined)
     {
-        string message = $"Reviewing {components} components{DumpSummary.UnexaminedClause(unexamined)}";
+        string message = $"Reviewing {components} components";
         return gaps == 0 ? $"{message}." : $"{message} ({gaps} gaps).";
     }
 

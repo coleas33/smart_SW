@@ -19,7 +19,8 @@
     "package_reuse": false,
     "lazy_meshes": false,
     "carry_over_rms": false,
-    "procedural_gate": false
+    "procedural_gate": false,
+    "compact_queries": false
   },
   "usage": null,
   "withheld_checks": [],

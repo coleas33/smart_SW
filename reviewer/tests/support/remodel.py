@@ -34,6 +34,7 @@ and `linked` leaves such a direction alone rather than inventing the reading.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -421,16 +422,31 @@ can only be called from one of these, so scanning them is what makes "nothing ca
 claim about stage 1 rather than about two modules that could never have named it."""
 
 _COMMENT_PREFIXES = ("#", "//", "/*", "*")
+# C# interpolated/verbatim strings stay visible: an interpolated string can contain an
+# executable member access inside ``{...}``, and this line-oriented scan must not hide it.
+_STRING_LITERAL = re.compile(r'"(?:\\.|[^"\\])*"')
+_INTERPOLATED_OR_VERBATIM = re.compile(r'\$@"|@\$"|\$"|@"')
 
 
 def code_lines(path: Path) -> list[str]:
-    """The file's lines with whole-line comments dropped, so prose about a member the
-    guard refuses does not read as a call to it."""
-    return [
-        line
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if not line.lstrip().startswith(_COMMENT_PREFIXES)
-    ]
+    """The file's executable-looking lines, with comments and string literals dropped.
+
+    The stage-1 scan is about calls into SOLIDWORKS, not words in a probe's explanatory
+    text. Removing literals keeps a description such as ``"IDimension.SystemValue"`` from
+    looking like an interop member while leaving an actual ``value.IDimension`` reference
+    visible to the assertion.
+    """
+    lines: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.lstrip().startswith(_COMMENT_PREFIXES):
+            continue
+        # Do not try to lex interpolation expressions with a line regex. Keeping the
+        # complete line is conservative and still lets the assertion catch a forbidden
+        # member, while ordinary prose strings are safely removed below.
+        lines.append(
+            line if _INTERPOLATED_OR_VERBATIM.search(line) else _STRING_LITERAL.sub("", line)
+        )
+    return lines
 
 
 def stage_1_sources() -> list[Path]:

@@ -416,6 +416,15 @@ class AgentProvider(Protocol):
         """What `effort` becomes for this model, or a named error when it cannot."""
         ...
 
+    def for_presentation(self, max_output_tokens: int) -> AgentProvider:
+        """Return an independent no-cache adapter for a bounded presentation request.
+
+        The returned adapter shares the already-created provider client, model and
+        redaction configuration, but has fresh per-turn state. Constructing it must not
+        make a network request or require credentials again.
+        """
+        ...
+
     def run(
         self,
         *,

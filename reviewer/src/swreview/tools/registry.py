@@ -97,6 +97,11 @@ def query_tools() -> tuple[Callable[..., Any], ...]:
     )
 
 
+def compact_query_tools() -> tuple[Callable[..., Any], ...]:
+    """The opt-in bounded discovery experiment, absent from default tool surfaces."""
+    return (query.compact_query,)
+
+
 def measurement_tools() -> tuple[Callable[..., Any], ...]:
     """Measurement tools: deterministic geometry, no verdict and no finding."""
     return (
@@ -231,6 +236,9 @@ wire formats carry a tool result as an object, and `ToolCallResult.payload` is a
 for the same reason, so a list becomes `{"result": [...]}` here - at the one place that
 knows it happened - rather than at each of the three adapters.
 """
+
+COMPACT_QUERY_TOOL_FUNCTIONS: tuple[Callable[..., Any], ...] = compact_query_tools()
+"""Tools exposed only when `EfficiencySettings.compact_queries` is explicitly on."""
 
 
 def error_payload(message: str) -> dict[str, Any]:
@@ -740,10 +748,14 @@ class ToolRegistry:
     ) -> tuple[Callable[..., Any], ...]:
         """The tools this run gets: the curated list, less any tier it withholds, plus the
         bridge when one is wired and the remodel tools when a plan is being judged."""
-        return self._offered(context, withheld_tier(context, efficiency))
+        return self._offered(
+            context,
+            withheld_tier(context, efficiency),
+            compact_queries=efficiency is not None and efficiency.compact_queries,
+        )
 
     def _offered(
-        self, context: ToolContext, tier: ToolTier | None
+        self, context: ToolContext, tier: ToolTier | None, *, compact_queries: bool = False
     ) -> tuple[Callable[..., Any], ...]:
         """`functions_for` with the tier already decided, so `dispatch` decides it once.
 
@@ -755,6 +767,8 @@ class ToolRegistry:
         functions = self.functions
         if tier is not None:
             functions = tuple(fn for fn in functions if fn.__name__ not in tier.tools)
+        if compact_queries:
+            functions = (*functions, *COMPACT_QUERY_TOOL_FUNCTIONS)
         if context.bridge is not None:
             functions = (*functions, *self.bridge_functions)
         if context.remodel is not None:
@@ -794,7 +808,11 @@ class ToolRegistry:
         """
         recorder = self._sink_for(context, sink)
         tier = withheld_tier(context, efficiency)
-        functions = self._offered(context, tier)
+        functions = self._offered(
+            context,
+            tier,
+            compact_queries=efficiency is not None and efficiency.compact_queries,
+        )
         names = [function.__name__ for function in functions]
         forced = set(fail_tool)
         unknown = sorted(forced - set(names))

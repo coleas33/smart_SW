@@ -226,9 +226,10 @@ def test_the_session_contract_defines_the_two_new_types_it_refs() -> None:
         assert name in SESSION_SCHEMA["$defs"]
 
 
-# --- lever 11 in the session contract (feature 007 FR-026) ---------------------------------
+# --- optional late levers in the session contract -------------------------------------------
 
 LEVER_11 = "procedural_gate"
+LEVER_12 = "compact_queries"
 
 
 def efficiency_block() -> dict[str, Any]:
@@ -248,7 +249,14 @@ def test_the_eleventh_lever_is_in_properties_and_not_in_required() -> None:
     assert LEVER_11 not in block["required"]
 
 
-def test_a_session_carrying_all_eleven_levers_validates(tmp_path: Path) -> None:
+def test_the_compact_query_lever_is_optional_in_the_session_contract() -> None:
+    block = efficiency_block()
+
+    assert LEVER_12 in block["properties"]
+    assert LEVER_12 not in block["required"]
+
+
+def test_a_session_carrying_all_twelve_levers_validates(tmp_path: Path) -> None:
     from swreview.agent.settings import EfficiencySettings
 
     session = build_session()
@@ -258,15 +266,16 @@ def test_a_session_carrying_all_eleven_levers_validates(tmp_path: Path) -> None:
 
     written = json.loads(path.read_text(encoding="utf-8"))
 
-    assert len(written["efficiency"]) == 11
+    assert len(written["efficiency"]) == 12
     assert written["efficiency"][LEVER_11] is False
+    assert written["efficiency"][LEVER_12] is False
     session_validator().validate(written)
 
 
 def test_a_session_written_before_lever_eleven_existed_still_validates(
     tmp_path: Path,
 ) -> None:
-    """A run folder from before this feature carries ten booleans and no eleventh."""
+    """A run folder from before the late levers carries the original ten booleans."""
     from swreview.agent.settings import EfficiencySettings
 
     session = build_session()
@@ -275,6 +284,7 @@ def test_a_session_written_before_lever_eleven_existed_still_validates(
     save_session(session, path)
     written = json.loads(path.read_text(encoding="utf-8"))
     del written["efficiency"][LEVER_11]
+    del written["efficiency"][LEVER_12]
 
     assert len(written["efficiency"]) == 10
     session_validator().validate(written)

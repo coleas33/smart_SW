@@ -285,6 +285,23 @@ class OpenAIProvider:
         rounds it already paid for are the ones worth the most.
         """
 
+    def for_presentation(self, max_output_tokens: int) -> OpenAIProvider:
+        """Return a fresh adapter for a bounded prose request.
+
+        Reuse the already-created client so this seam makes no network call and does not
+        resolve credentials again. Presentation requests deliberately start with the
+        normal cache and parallel-call settings off; all response, step and usage state
+        belongs to the returned adapter.
+        """
+        return OpenAIProvider(
+            model=self.model,
+            max_output_tokens=max_output_tokens,
+            parallel_tool_calls=False,
+            api_key=self._api_key,
+            client=self._client,
+            clock=self._clock,
+        )
+
     # --- the prompt cache (feature 005, lever 3) ---------------------------------------
 
     def use_prompt_cache(self, session_id: str) -> None:
