@@ -195,6 +195,13 @@ blocks are identical, which is why no difference row is added to feature 006's t
 key is present on the POST, on the `GET /checks/{check_id}` re-read (recomputed, byte-equal to
 the POST's), and after an Accept.
 
+*Amended 2026-09-23 (feature 009, owner decision 2A; `specs/009-engineer-workspace/contracts/plain-words.md`
+section 2):* the rows a person reads carry each finding's display title - whole, never cut at 80
+characters, parts named - in `title`: both check bodies' `attention`, the review route below and
+`report.md`'s Start here. A folded family's row keeps its family title. `attention.json`, the gate
+brief and `swreview attention` keep the recorded title the model reads. Order, keys and reasons are
+the same in all of them.
+
 `GET /sessions/{chat_id}/attention` answers the same shape for a review the pane started,
 computed from the live session on each call: `200 Ranking`; `404 UnknownChat`; for a run that
 has produced no findings, `200` with `rows: []` and `empty_reason` set. It never writes. It is

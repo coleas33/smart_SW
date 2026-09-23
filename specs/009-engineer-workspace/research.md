@@ -236,6 +236,10 @@ are backend text).
 Hole ids (`hole:0012`) in hole-alignment titles are not component ids and stay; plain words for them
 are an open item (R5).
 
+*Amended 2026-09-23 (owner, decision 2A, R2.28):* `title_from` gains no `names` argument; the
+third caller is `report/titles.display_title`, which names the parts in the title a person reads
+while `Finding.title`, the one the model reads, keeps its ids.
+
 #### R2.7 Size-for-size contacts are read from feature 010's list, through one accessor
 
 **Decision**: the summary carries `contacts: {count, text, items: [{id, component_ids, names,
@@ -543,6 +547,11 @@ analyst counted 71 of 99 titles cut on 830-02342 (fact 11). No `.md` golden hold
 same search), and feature 008's replay compares findings by subject key, which ignores the title
 (`specs/008-checks-first-review/contracts/replay.md` section 5).
 
+*Superseded 2026-09-23 (owner, decision 2A, R2.28):* `title_from` and `TITLE_LENGTH` stay as they
+are; the whole, named title is `report/titles.display_title`, built only where a person reads it.
+No baseline is regenerated. The replay's finding comparison ignores the title, but its round
+sizes do not: the recorded title is in every check tool's result.
+
 #### R2.21 Check ids and component ids move into folds, on every tab that shows them
 
 **Decision**: the finding card's line drops the check id; the fold's first labelled row is "Rule"
@@ -641,7 +650,7 @@ render is US6's (T057), which reuses the same renderers.
 | US4 | `test_tool_payload.py` array pins (R2.9) | the tool schema grows |
 | US5 | `ReviewPageEventStreamTests.TheTranscriptArrivesFoldedAndItsHeaderUnfoldsIt` (`:131`), `TheTranscriptHeaderCountsTheRoundsTheCallsAndWhatIsRunning` (`:150`), `AFollowUpUnfoldsTheTranscriptSoItsAssistantAnswerIsVisible` (`:231`); `ReviewPageAttentionPanelTests.ThePanelIsAboveTheTranscript` (`:142`); `ReviewPageNarrowLayoutTests.TheFirstFindingDetailsHaveAReadableViewportAtTheNarrowPaneSize` (`:29`, re-measured in Results) | the fold becomes a switch |
 | US6 | `ReviewHostTests.TrackingACheckMakesItsFolderTheLatestRunAndTheRecordCarriesNoChatId` (`:504`) keeps its assertions and gains the Review-page Show case | `LatestSession` stays for the Ask tab and the check tabs |
-| US7 | R2.20, R2.21, R2.23 lists | titles, ids, Model check |
+| US7 | R2.28 (was R2.20), R2.21, R2.23 lists | titles, ids, Model check |
 
 Any other test a landing change turns red is named in that task's commit message and edited
 deliberately, never loosened.
@@ -664,6 +673,65 @@ tasks share files with 008 and 010 and run serially with them where they meet:
 | `attention_policy_v1.yaml` | T032 (none planned) | T037, T047, T061, T067, T075 (classes) | read only, by the goal-table test |
 | `specs/007-attention-policy-gate/contracts/attention.md` | T032 (sections 2-4) | - | section 6 |
 | `render.js` | T094-T095 (`usageLine` only) | - | US3-US7, never `usageLine`'s body |
+
+*Amended 2026-09-23 (R2.28):* the `tools/recording.py` and golden-baseline rows no longer hold a
+009 task: `title_from` moves unchanged into `report/titles.py` and no baseline moves.
+
+#### R2.28 Whole, named titles where a person reads them; the model's title stays (owner decision 2A)
+
+**Decision** (owner, 2026-09-23; FR-027, `contracts/plain-words.md` section 2). R2.20's change -
+one title, whole and named, recorded by `title_from` into `Finding.title` - is not made.
+`Finding.title` stays the recorded title, byte for byte what it was: the first sentence of
+`observed`, cut at 80 characters with an ellipsis, ids as written. The whole, named title is
+built only where a person reads it, by one function, `report/titles.display_title(finding,
+names)`, which every such surface calls: the `finding` event and the snapshot's findings (through
+`pane_finding`), the Review tab's ranking and both check bodies' `attention` rows (through
+`with_display_titles`), and `report.md`'s finding headings and Start here. `title_from` and
+`TITLE_LENGTH` move unchanged from `tools/recording.py` into `report/titles.py`, beside the
+function that undoes their cut; `tools/recording.py` re-exports both, so no caller changes.
+
+**Why.** T062 was parked because R2.20's change moves every check tool's result - the recorded
+finding is in it, and in its slim view's rows (`tools/model_view.ROW_FIELDS`) - which feature
+008's replay acceptance pins to the recorded rounds; landing it meant re-recording or re-pinning,
+and every future result naming a finding would carry the longer title on every round. The owner
+chose the option with no model-side cost: the model reads what it read, and only the pages and the
+report change. VERIFIED on the committed replay fixtures: every recorded title is
+`title_from(observed)` (99 of 99 on `big-assembly`, 13 of 13 and 7 of 7 on the small ones); 71
+of 99 are cut and 6 name a named part by id on `big-assembly` (10 and 2 of 13 on
+`small-assembly-a`, 5 and 0 of 7 on `small-assembly-b`).
+
+**Which title is "whole".** A title this product recorded from `observed` (`finding.title ==
+title_from(finding.observed)`, cut or not) is shown as the whole first sentence; any other title
+is shown as written, named. Always showing the first sentence of `observed` was rejected: a title
+written by hand says something else - VERIFIED, the ranked-report golden
+(`tests/unit/test_report_start_here/test_the_ranked_report_matches_the_golden.md`) holds eight
+titles none of which is its finding's first sentence - and a title an older build wrote would be
+replaced by a sentence it never showed. Undoing only the cut this product made is the one reading
+under which "the whole title" means the title.
+
+**Why the pages keep reading `title`.** Each body a page receives carries the display title under
+the key it already prints, so `render.js` and `web/shared/attention.js` are unchanged, FR-030
+holds by construction (an older backend's `title` prints as before), and
+`chat-events.schema.json` - whose `finding` body is `review-session.schema.json#/$defs/Finding`,
+`additionalProperties: false` - does not move. `events.jsonl` records the `finding` events as the
+pane received them; the replay reads only their ids (`benchmark/recording.py _finding`).
+
+**What moves, and what does not.** The `title` value, only where the recorded title was cut or
+named a named part, on: the `finding` event, the snapshot, the attention route, both check bodies'
+`attention` rows, and `report.md`. Nothing else: no tool result, no slim view, no gate brief, no
+explanation prompt, no `session.json`, no `attention.json`, no golden baseline, no tool payload
+pin, no replay round. A new test pins the bytes the model reads of representative check tools
+(`tests/unit/test_model_reads_the_recorded_title.py`). Deliberately edited: the two check-route
+tests that pinned a check body's `attention` equal to `rank(session)`
+(`test_chat_checks_routes.py`, `test_chat_standards_routes.py`), which now pin it equal to
+`with_display_titles(rank(session), ...)` - the order, keys and reasons still the record's. The
+pane fixture is regenerated once with `--write`.
+
+**Alternatives**: B, the whole, named title in `Finding.title` (R2.20 as planned; an earlier
+attempt implemented it) - rejected by the owner: a token cost on every result that names a finding
+and a re-recording of 008's replay fixtures; a `display_title` key beside `title` - rejected: a
+change to every `Finding` of 001's session contract and a fallback in the page; the page naming
+parts from `summary.component_names` - rejected: the page builds no text (FR-029).
 
 ---
 
@@ -736,6 +804,7 @@ Re-opened on 2026-09-23 at `e8b40b5`:
 | FR-024, FR-025 | "the default view" | the Review tab's default view for labels; ids move into folds on the Review tab and in the shared Start-here and rule rows of the check tabs | R2.19, R2.21 |
 | FR-012 | wherever a component has a name | the Review tab; the check tabs keep ids in their subject lists | R2.21 |
 | FR-028 | statements rather than the fraction | needs the backend to send the unresolved rules' statements (`rule_statements`) | R2.23 |
+| FR-027 (owner, 2026-09-23) | titles not truncated; the page clamps them | the titles an engineer reads - Review tab, the check tabs' Start here, `report.md` - are whole and named; the title the model reads stays as recorded | R2.28 |
 
 ---
 
@@ -747,6 +816,7 @@ Re-opened on 2026-09-23 at `e8b40b5`:
 | The goal state words ("issues found", "checked, no issue", "not reached", "not applicable") and reason words are first opinions beside the owner's "Decide / Fix / Verify" | owner | nothing; data |
 | Hole ids (`hole:0012`) stay in hole-alignment titles; plain words would need the hole-to-part map | owner, later | nothing |
 | SOLIDWORKS API tokens (`swMateCONCENTRIC`, `swSelFACES`) in RMS titles come from the checks' observed strings; rewording them changes findings' evidence | owner, later | nothing |
+| `swreview attention` prints Start here with the recorded titles (cut, ids): it is a command-line reader of `attention.json`, and a CLI in the pane's terminal is often a model reading it, so it was left with the model's title (R2.28) | owner | nothing |
 | `report.md` could lead with the same summary block (one source); not done so the report goldens hold | owner | nothing |
 | The backend never evicts chats, so a night of kept reviews holds every run's package in memory (fact 25: 1.48 MB on disk for 830-02342); evicting ended chats after their snapshot is a follow-up | backlog | nothing |
 | Follow-up questions are not on the event stream, so pinned answers do not survive a page reload; an in-memory list on `ReviewRun` would cover the reload case | backlog | nothing |

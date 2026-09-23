@@ -25,23 +25,47 @@ is not a string - an absent key, a 404 from an older backend, a token that names
 
 ## 2. Titles
 
-`tools/recording.title_from(observed, names=None)` returns the first sentence of `observed`
-(split on ". "), trimmed, with every `cmp:` id whose name is non-blank replaced by the name
-(`report/names.with_component_names`), and never cut. `TITLE_LENGTH` is removed. `result_to_finding`
-and `record_drawing_finding` pass `component_names(context.ir)`. `observed` keeps its ids. The page's
-two-line clamp is the only length limit. The golden baselines that held a cut title are regenerated
-once; their diff touches `title:` lines only.
+*Amended 2026-09-23 by the owner (decision 2A, research R2.28).* A finding has two titles, and
+each is built for its reader:
 
-*Not landed* (T061's title half and T062, open, 2026-09-23): `title_from` still cuts at
-`TITLE_LENGTH` (80) and keeps component ids. T062 is parked because whole, named titles change
-every check tool's result, which feature 008's replay acceptance on its committed recordings pins
-to the recorded ones; landing it needs the owner's call on re-recording or re-pinning those.
+- **The recorded title**, `Finding.title`, is what the model reads. It is exactly what it was
+  before this feature: `title_from(observed)` - the first sentence of `observed` (split on ". "),
+  trimmed, its closing period dropped, cut at `TITLE_LENGTH` (80) with an ellipsis, component ids
+  as written. It is in every check tool's result, so it costs no token and moves no replayed
+  round. It stays in `session.json`, `attention.json`, every tool result and its slim view
+  (`tools/model_view.py`), the gate brief (`prerun.gate_brief`), the explanation pass's prompt
+  (`report/explanations.py`) and `swreview attention`.
+- **The display title** is what a person reads. `report/titles.display_title(finding, names)`
+  returns, for a title this product recorded from `observed` (`finding.title ==
+  title_from(finding.observed)`, cut or not), the whole first sentence of `observed`; for any
+  other title - one written by hand, or by an older build with another rule - the title as
+  written. Either way every `cmp:` id whose name is non-blank is replaced by the name
+  (`report/names.with_component_names`); `names` is `component_names(package)`, empty when there
+  is no package. It is never cut: the page's two-line clamp is the only length limit.
+
+`report/titles.py` holds both, so the display title undoes exactly the cut the recorded title
+made; `tools/recording.title_from` and `TITLE_LENGTH` are that module's, re-exported unchanged.
+Every surface a person reads calls `display_title`, through one of two helpers or directly:
+
+| Surface | How |
+|---|---|
+| the `finding` event (`ToolContext.record_finding`, and the runner's re-run announcement after an answer batch) | `pane_finding(finding, names)`: the `Finding` body with `title` replaced |
+| the snapshot's `findings` (`report/snapshot.review_snapshot`: both restore routes and the pane fixture) | `pane_finding` |
+| the Review tab's ranking rows (`review_ranking`: the attention route, the snapshot, the disk route), which Start here and "Show all" print | `with_display_titles(ranking, findings, names)` |
+| both check bodies' `attention` rows (`check_result`, `standards_result`), which the check tabs' Start here prints | `with_display_titles` |
+| `report.md`: each finding's heading and Start here's titled rows (`render_report`, every caller) | `display_title`, and `with_display_titles` on the ranking it is given |
+
+`with_display_titles` replaces the title of every row with its survivor's (`row.finding_id`)
+display title; a folded family's row keeps its family title, and a row whose finding is not among
+`findings` keeps its title. Order, keys, reasons and every other field are the ranking's own, and
+applying it twice changes nothing. The page prints `title` verbatim wherever it arrives; it builds
+no title. `observed` keeps its ids everywhere. No golden baseline moves: they pin recorded titles.
 
 ## 3. Names instead of ids
 
 | Surface | Name | Id |
 |---|---|---|
-| finding title | backend (section 2) | `observed` and "Affects" in the fold |
+| finding title | backend, the display title (section 2) | `observed` and "Affects" in the fold |
 | Start-here meta, Review tab | `summary.component_names` | "Affects" in the finding card's fold, which the row scrolls to |
 | question panel "about" | `QuestionView.about[].name` | the question's fold |
 | not-loaded warning | `not_examined.headline` | the warning's fold lists `instances` ids |
@@ -102,8 +126,8 @@ the visible text of Results - skipping the contents of shut `<details>` and of h
   findings or coverage);
 - no error class name (any key of `labels.errors`).
 
-The backend half is a Python test on the same fixture: no finding title holds a `cmp:` id whose
-component has a non-blank name, and no summary word holds a check id or a raw token.
+The backend half is a Python test on the same fixture: no display title (section 2) holds a
+`cmp:` id whose component has a non-blank name, and no summary word holds a check id or a raw token.
 
 *Landed as* (T065, `test_plain_words_fixture.py`): the page scan runs the last three checks and the
 backend test the summary half; the `cmp:` checks on both sides wait for T062 (section 2), and a

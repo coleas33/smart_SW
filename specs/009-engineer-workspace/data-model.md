@@ -5,9 +5,13 @@
 No IR schema change and no event type. The review-session contract gains three optional properties
 on `$defs.EvidenceRequest` (`question`, `options`, `blocks`) and no required one; the event schema
 references that definition, so `chat-events.schema.json` does not move. `attention.json`, both check
-bodies and `report.md` keep their shapes and bytes (research R2.2); only the golden baselines that
-hold a cut title move, once, with the title change (research R2.20). Everything else below is a new
-response shape, a data file, or page state, each normative in `contracts/`.
+bodies and `report.md` keep their shapes (research R2.2), and `attention.json` its bytes. *Amended
+2026-09-23 (owner, decision 2A, research R2.28):* no golden baseline moves - `Finding.title` stays
+the recorded title the model reads - and the `title` a person reads is the display title
+(`contracts/plain-words.md` section 2): on the `finding` event, the snapshot's findings, the
+Review tab's ranking rows, both check bodies' `attention` rows and in `report.md`, where a recorded
+title was cut or named a part by id. Everything else below is a new response shape, a data file,
+or page state, each normative in `contracts/`.
 
 ---
 

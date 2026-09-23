@@ -6,6 +6,8 @@
 
 **Status**: Draft (User Stories 1 and 2 landed on main 2026-09-23)
 
+**Amended**: 2026-09-23 by the owner (decision 2A): a finding's title is whole and names its parts only where a person reads it; the title the model reads in every tool result is unchanged (FR-027, research R2.28).
+
 **Input**: Owner direction of 2026-09-22: "We also need to improve the UI and make this easier for a non developer user to gain value from. The goal is to get all the critical details to the user as fast and clear as possible." Evidence: the pilot workstation's evening sitting (`docs/pane-findings-2026-09-20-review-gui.md`, asks U8 to U16) and `docs/roadmap-2026-09-22.md`. Owner decisions: modelling-practice findings as one folded group (2026-09-22); size-for-size contacts as a separate list, not findings; summary wording "Decide / Fix / Verify" (both 2026-09-23).
 
 ## User Scenarios & Testing *(mandatory)*
@@ -111,7 +113,7 @@ A normal session is an assembly, then a pin, then a plate. Each review is kept a
 
 ### User Story 7 - Plain Words Everywhere the Engineer Looks (Priority: P6)
 
-Everywhere in the engineer's default view, internal vocabulary gives way to words: status, bucket and reason words come from labels the backend supplies; check ids and component ids move into the fold as "rule …" and "part …"; errors say what to do rather than naming an error class; titles are no longer cut at 80 characters but wrap to two lines; Model check shows rule statements rather than a fraction and rule ids. Nothing is lost - every id and number is still in the fold, the transcript and the report.
+Everywhere in the engineer's default view, internal vocabulary gives way to words: status, bucket and reason words come from labels the backend supplies; check ids and component ids move into the fold as "rule …" and "part …"; errors say what to do rather than naming an error class; titles are no longer cut at 80 characters but wrap to two lines, and name parts rather than ids (the title the model reads stays as recorded, owner decision 2A of 2026-09-23); Model check shows rule statements rather than a fraction and rule ids. Nothing is lost - every id and number is still in the fold, the transcript and the report.
 
 **Why this priority**: it is what makes the rest usable by someone who is not a developer, and it is done inside the stories above rather than as a separate pass.
 
@@ -183,7 +185,7 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 - **FR-024**: Status, bucket and reason words in the default view MUST come from backend-supplied labels.
 - **FR-025**: Check ids and component ids MUST appear only inside folds, the transcript and the report.
 - **FR-026**: Errors MUST say what the engineer can do next.
-- **FR-027**: Finding titles MUST not be truncated at a fixed character count; the page clamps them to two lines.
+- **FR-027**: Finding titles as the engineer reads them - on the Review tab, in the check tabs' Start here and in `report.md` - MUST not be truncated at a fixed character count and MUST name a part rather than its id where the part has a name; the page clamps them to two lines. The title the model reads in every tool result MUST stay as recorded, so no tool result and no replayed round changes (owner decision 2A, 2026-09-23, research R2.28).
 - **FR-028**: Model check MUST show rule statements rather than the verdict fraction and rule-id lists.
 
 **Constraints**
