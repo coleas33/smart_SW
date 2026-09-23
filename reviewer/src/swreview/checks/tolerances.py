@@ -72,6 +72,7 @@ __all__ = [
     "ToleranceSubject",
     "UnresolvedTolerance",
     "drawing_answer",
+    "drawing_record_states_limits",
     "frame_zone",
     "general_tolerance_dimension",
     "is_position_frame",
@@ -1014,7 +1015,7 @@ class ResolverLookup:
                     and not record.is_hole_callout
                 ):
                     continue
-                if _drawing_record_states_limits(record):
+                if drawing_record_states_limits(record):
                     return True
                 if (
                     declared
@@ -1026,7 +1027,7 @@ class ResolverLookup:
         return False
 
 
-def _drawing_record_states_limits(record: DisplayDimensionRecord) -> bool:
+def drawing_record_states_limits(record: DisplayDimensionRecord) -> bool:
     """A display dimension with limits of its own, or a fit class the ISO 286 table carries."""
     if record.tolerance_type_raw in (*WRITTEN_PRECISION_TYPES, GENERAL_TABLE_TYPE):
         return False

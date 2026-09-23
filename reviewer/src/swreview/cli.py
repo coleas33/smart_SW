@@ -182,6 +182,10 @@ tokenizer_app = typer.Typer(
     no_args_is_help=True,
     help="The o200k_base vocabulary every token count uses: fetch it once per machine.",
 )
+drawing_app = typer.Typer(
+    no_args_is_help=True,
+    help="Drawing context read from a package: the bounded per-part brief (feature 011).",
+)
 app.add_typer(check_app, name="check")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(exceptions_app, name="exceptions")
@@ -189,6 +193,7 @@ app.add_typer(chat_app, name="chat")
 app.add_typer(rms_app, name="rms")
 app.add_typer(remodel_app, name="remodel")
 app.add_typer(tokenizer_app, name="tokenizer")
+app.add_typer(drawing_app, name="drawing")
 
 FAKE_REVIEW_SCRIPT: tuple[ScriptedTurn, ...] = (
     ScriptedTurn(
@@ -1390,6 +1395,48 @@ def check_standards_command(
     lines.append(f"report: {run.report_file}")
     lines.append(f"check: {run.check_file}")
     _emit(payload, lines, json_output)
+
+
+# --- drawing brief ---------------------------------------------------------------
+
+
+@drawing_app.command("brief")
+def drawing_brief_command(
+    package: PackageOption,
+    document: Annotated[
+        str, typer.Option("--document", help="Part or assembly document id to brief.")
+    ],
+    run: Annotated[
+        Path | None,
+        typer.Option("--run", help="A review run folder whose session.json holds the answers."),
+    ] = None,
+    profile: Annotated[
+        Path | None,
+        typer.Option("--profile", help="The standards profile: description property, bands."),
+    ] = None,
+) -> None:
+    """Print one part's or assembly's drawing brief as compact JSON (feature 011).
+
+    The same brief `get_drawing_brief` gives a review, built from the package, the run's
+    `session.json` when `--run` is given (the engineer's answers, contacts and interference
+    findings) and the profile when `--profile` is given; without them those sections say they
+    are unknown. At most 6,000 bytes, every cut counted. Exits 2 when the document cannot be
+    briefed - not in the package, or a drawing - naming the ones that can; exits 1 when an
+    input cannot be read. Reads and writes nothing else.
+    """
+    from swreview.checks.standards.profile import load_profile
+    from swreview.drawings.brief import BriefRefused, build_brief
+
+    with _errors_as_exit_1(ProfileError):
+        package_ir = load_package(package).package
+        session = None if run is None else load_session(Path(run) / SESSION_FILE_NAME)
+        standards = None if profile is None else load_profile(profile)
+    try:
+        brief = build_brief(package_ir, session, standards, document)
+    except BriefRefused as refusal:
+        typer.echo(f"error: {refusal}", err=True)
+        raise typer.Exit(2) from refusal
+    typer.echo(brief.to_json())
 
 
 # --- rms types -------------------------------------------------------------------

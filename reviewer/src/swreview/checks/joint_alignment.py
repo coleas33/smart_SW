@@ -64,6 +64,7 @@ __all__ = [
     "check_position_stack",
     "fastener_size",
     "run_joint_checks",
+    "tolerance_subjects",
 ]
 
 CHECK_NOMINAL = "hole.nominal_alignment"
@@ -415,7 +416,7 @@ def _document_of(package: EvidencePackage, component_id: str | None) -> str | No
 def _size_subjects(
     joint: Joint,
     package: EvidencePackage,
-    fastener: FastenerSize,
+    fastener: FastenerSize | None,
     clearance: Sequence[HoleInstance],
 ) -> list[ToleranceSubject]:
     subjects = [
@@ -429,7 +430,7 @@ def _size_subjects(
         )
         for instance in clearance
     ]
-    if not fastener.threaded:
+    if fastener is not None and not fastener.threaded:
         subjects.append(
             ToleranceSubject(
                 kind="pin_size",
@@ -440,6 +441,27 @@ def _size_subjects(
             )
         )
     return subjects
+
+
+def _position_subject(instance: HoleInstance, package: EvidencePackage) -> ToleranceSubject:
+    return ToleranceSubject(
+        kind="hole_position",
+        nominal_mm=instance.size_mm,
+        document_id=_document_of(package, instance.component_id),
+        face_ids=instance.face_ids,
+        instance_id=instance.id,
+        component_id=instance.component_id,
+    )
+
+
+def tolerance_subjects(joint: Joint, package: EvidencePackage) -> list[ToleranceSubject]:
+    """Every subject `hole.position_stack` asks its lookup about for `joint`: each clearance
+    hole's size, the pin's when the fastener is known and is not threaded, then every
+    instance's position. Feature 011's drawing brief lists them with what each resolves to,
+    so the brief and the stack-up cannot name different subjects (011 FR-042)."""
+    clearance, _ = _roles(joint)
+    sizes = _size_subjects(joint, package, fastener_size(joint, package), clearance)
+    return [*sizes, *(_position_subject(instance, package) for instance in joint.instances)]
 
 
 def _maximum_material_zone(
@@ -511,19 +533,7 @@ def check_position_stack(
         )
 
     positions = [
-        (
-            instance,
-            lookup.resolve(
-                ToleranceSubject(
-                    kind="hole_position",
-                    nominal_mm=instance.size_mm,
-                    document_id=_document_of(package, instance.component_id),
-                    face_ids=instance.face_ids,
-                    instance_id=instance.id,
-                    component_id=instance.component_id,
-                )
-            ),
-        )
+        (instance, lookup.resolve(_position_subject(instance, package)))
         for instance in joint.instances
     ]
     open_positions = [answer for _, answer in positions if isinstance(answer, UnresolvedTolerance)]
