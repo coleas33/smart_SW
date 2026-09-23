@@ -52,6 +52,7 @@ from swreview.agent.providers import AgentProvider
 from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
 from swreview.agent.settings import ProviderSettings
 from swreview.chat.server import create_app
+from swreview.checks.rms.registry import RULES
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
 from swreview.ir.models import EvidencePackage
@@ -242,7 +243,8 @@ class TestRunCheck:
         Strict on both sides, so a key added to one family's body and forgotten on the
         other's is a failure and not a difference nobody wrote down: the two bodies share
         `attention`, which is why `contracts/standards-check.md` adds no difference row
-        for it.
+        for it. `rule_statements` is the Model check's alone (feature 009 T064): the
+        Standards header names no unresolved rule, so it needs no statements.
         """
         result = start_check(client, check_dir)
 
@@ -259,6 +261,7 @@ class TestRunCheck:
             "exceptions_carried_forward",
             "attention",
             "not_examined",
+            "rule_statements",
         }
 
     def test_the_check_result_carries_everything_the_contract_names(
@@ -688,6 +691,56 @@ class TestTheDoor:
 
 
 # --- 4. GET /checks/{check_id} ----------------------------------------------------
+
+
+class TestRuleStatements:
+    """Feature 009 T063: the Model check header says what an unresolved rule requires.
+
+    "Not graded, evidence missing:" followed by rule ids told the engineer nothing; the body
+    now carries `rule_statements` - every rule the grade names, in its findings and its
+    coverage rows, with its `RULES` statement - and the page prints the statement with the
+    id behind a fold (contracts/plain-words.md section 6, data-model section 10).
+    """
+
+    def test_every_rule_the_grade_names_has_its_catalogue_statement(
+        self, client: TestClient, check_dir: Path
+    ) -> None:
+        result = start_check(client, check_dir)
+        named = {row["rule_id"] for row in result["findings"]} | {
+            row["check"] for row in result["coverage"]
+        }
+
+        statements = result["rule_statements"]
+
+        assert statements == {
+            rule_id: RULES[rule_id].statement for rule_id in named if rule_id in RULES
+        }
+        assert set(result["grade"]["unresolved_rule_ids"]) <= set(statements)
+        assert {FAIL_RULE, WARN_RULE} <= set(statements)
+
+    def test_an_id_the_catalogue_lacks_is_left_out(self) -> None:
+        """A checklist item or an id no rule has is named by the grade and has no statement."""
+        from swreview.chat.server import rule_statements
+
+        statements = rule_statements(
+            [{"check": FAIL_RULE}, {"check": "rms.not.a.rule"}],
+            [{"check": "modeling.resilience"}, {"check": WARN_RULE}, {"check": FAIL_RULE}],
+        )
+
+        assert statements == {
+            FAIL_RULE: RULES[FAIL_RULE].statement,
+            WARN_RULE: RULES[WARN_RULE].statement,
+        }
+        assert list(statements) == [FAIL_RULE, WARN_RULE], "first named first, once each"
+
+    def test_the_read_answers_the_same_statements_as_the_post(
+        self, client: TestClient, check_dir: Path
+    ) -> None:
+        posted = start_check(client, check_dir)
+
+        got = client.get(f"/checks/{CHECK_ID}").json()
+
+        assert got["rule_statements"] == posted["rule_statements"]
 
 
 class TestReadCheck:
