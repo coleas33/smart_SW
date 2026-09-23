@@ -25,7 +25,7 @@ from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
 from swreview.report.attention import rank
 from swreview.report.attention_record import ATTENTION_FILE_NAME, read_attention_record
 from swreview.report.markdown import render_report
-from swreview.report.rerender import rerender_run_folder
+from swreview.report.rerender import render_folder_report, rerender_run_folder
 from swreview.report.session import load_session
 from tests.support.standards import (
     AssemblySpec,
@@ -106,7 +106,7 @@ def test_a_review_folder_with_a_package_renders_its_component_names(tmp_path: Pa
 
 
 def test_a_review_folder_without_a_package_renders_the_placeholder(tmp_path: Path) -> None:
-    """What `swreview report <session.json>` renders today, unchanged."""
+    """What `swreview report <session.json>` also renders for a folder holding no package."""
     run_dir = copied(REVIEW_FOLDER, tmp_path)
     (run_dir / PACKAGE_FILE_NAME).unlink()
 
@@ -129,6 +129,37 @@ def test_it_writes_the_report_and_the_record_and_nothing_else(tmp_path: Path) ->
     written = {"report.md", ATTENTION_FILE_NAME}
     assert set(after) - set(before) == written
     assert {name: body for name, body in after.items() if name not in written} == before
+
+
+def test_the_folder_report_is_what_the_re_render_writes_and_it_writes_nothing(
+    tmp_path: Path,
+) -> None:
+    """`render_folder_report` is the reading-and-rendering half `swreview report` calls: the
+    same text and ranking the re-render writes, and not one byte written to the folder."""
+    run_dir = copied(REVIEW_FOLDER, tmp_path)
+    twin = copied(REVIEW_FOLDER, tmp_path, "twin")
+    session = load_session(run_dir / "session.json")
+    before = files_in(run_dir)
+
+    report, ranking = render_folder_report(run_dir, session)
+
+    assert files_in(run_dir) == before
+    assert report == rerender_run_folder(twin).read_text(encoding="utf-8")
+    assert ranking == rank(session)
+    assert read_attention_record(twin).rows == ranking.rows
+
+
+def test_the_folder_report_takes_the_caller_s_package_over_the_folder_s(tmp_path: Path) -> None:
+    """The one caller holding a package (`cli._save_run`) is not overridden by the folder."""
+    run_dir = copied(REVIEW_FOLDER, tmp_path)
+    (run_dir / PACKAGE_FILE_NAME).unlink()
+    package = load_package(REVIEW_FOLDER).package
+    session = load_session(run_dir / "session.json")
+
+    report, _ = render_folder_report(run_dir, session, package=package)
+
+    assert NAMED_COMPONENT in report
+    assert report == render_report(session, package, ranking=rank(session))
 
 
 def test_the_record_it_writes_is_the_ranking_the_report_was_rendered_from(

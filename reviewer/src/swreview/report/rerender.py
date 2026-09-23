@@ -13,6 +13,12 @@ needs, and the three commands call it rather than each rendering a little differ
 (research R2.7). It writes `report.md` and `attention.json` from one `Ranking`, so the
 "Start here" section and the record beside it are the same order by construction.
 
+`swreview report <session.json>` renders one session to a path of the caller's choosing and
+writes no record, so it cannot call the re-render; it calls the half that reads and renders,
+`render_folder_report`, for the same reason. Since feature 009's decision 2A a session-only
+render also printed part ids in every finding heading where the folder's package names the
+parts (found on review, 2026-09-23).
+
 This module also names the files a run folder holds, because it is the one module that has
 to know all of them at once. `report/dispositions.py` and `checks/rules/run.py` re-export
 the names their own callers already import. Two of the four are defined elsewhere and
@@ -28,7 +34,7 @@ from typing import NoReturn
 
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
 from swreview.ir.models import EvidencePackage
-from swreview.report.attention import rank
+from swreview.report.attention import Ranking, rank
 from swreview.report.attention_record import ATTENTION_FILE_NAME, write_attention_record
 from swreview.report.markdown import render_report
 from swreview.report.session import SESSION_FILE_NAME, ReviewSession, load_session
@@ -41,6 +47,7 @@ __all__ = [
     "REPORT_FILE_NAME",
     "SESSION_FILE_NAME",
     "UNREADABLE_CHECK_RECORD",
+    "render_folder_report",
     "rerender_run_folder",
     "run_folder_session",
 ]
@@ -98,16 +105,33 @@ def rerender_run_folder(run_dir: Path | str, *, package: EvidencePackage | None 
     """
     directory = Path(run_dir)
     session = _session_of(directory)
+    report, ranking = render_folder_report(directory, session, package=package)
+
+    report_file = directory / REPORT_FILE_NAME
+    report_file.write_text(report, encoding="utf-8")
+    write_attention_record(directory, ranking, session.session_id)
+    return report_file
+
+
+def render_folder_report(
+    run_dir: Path | str, session: ReviewSession, *, package: EvidencePackage | None = None
+) -> tuple[str, Ranking]:
+    """`session`'s report as the folder it sits in renders it, and the ranking it printed.
+
+    Reads `package.json` (when the folder holds one, and the caller passed none) and
+    `check.json` (a standards folder's verdict header), and writes nothing: the text and the
+    ranking are the caller's to write, so the one command that must not write a record,
+    `swreview report`, renders exactly what `rerender_run_folder` writes as `report.md`.
+
+    Raises:
+        ValueError: a `check.json` whose verdict cannot be read.
+        pydantic.ValidationError: a `package.json` this build cannot read.
+    """
+    directory = Path(run_dir)
     package = package if package is not None else _package_of(directory)
     header = _header_of(directory, session)
     ranking = rank(session)
-
-    report_file = directory / REPORT_FILE_NAME
-    report_file.write_text(
-        header + render_report(session, package, ranking=ranking), encoding="utf-8"
-    )
-    write_attention_record(directory, ranking, session.session_id)
-    return report_file
+    return header + render_report(session, package, ranking=ranking), ranking
 
 
 def run_folder_session(run_dir: Path | str) -> Path:

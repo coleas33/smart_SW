@@ -130,7 +130,11 @@ from swreview.remodel.summary import plan_lines, plan_summary_row
 from swreview.report.attention import coverage_line, rank, start_here_lines
 from swreview.report.dispositions import REPORT_FILE_NAME, apply_disposition, find_finding
 from swreview.report.markdown import render_report
-from swreview.report.rerender import rerender_run_folder, run_folder_session
+from swreview.report.rerender import (
+    render_folder_report,
+    rerender_run_folder,
+    run_folder_session,
+)
 from swreview.report.session import CoverageBucket, ReviewSession, load_session, save_session
 from swreview.secrets import KEY_ENV_VARS as KEY_ENV_VARS
 from swreview.secrets import KEY_SHAPES
@@ -745,6 +749,11 @@ def report(
 ) -> None:
     """Re-render the Markdown report from a session.
 
+    It renders with what the session's folder holds, whatever `--out` says: `package.json`
+    for the parts' names and the manifest, and a standards folder's verdict header
+    (`report/rerender.render_folder_report`), so the text is what `rerender_run_folder` writes
+    as `report.md`. An unreadable `check.json` exits 1 rather than dropping the header.
+
     It ranks and renders the section, and it deliberately writes **no** `attention.json`.
     This command renders one session to one output path, and `--out` may point anywhere -
     beside another run, into a scratch directory, at a file that is not `report.md` at all
@@ -756,8 +765,9 @@ def report(
     target = Path(out) if out is not None else Path(session_file).parent / REPORT_FILE_NAME
     with _errors_as_exit_1():
         session = load_session(session_file)
+        report_text, _ = render_folder_report(Path(session_file).parent, session)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(render_report(session, ranking=rank(session)), encoding="utf-8")
+        target.write_text(report_text, encoding="utf-8")
 
     payload = {
         "session_file": str(session_file),

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import subprocess
 from collections.abc import Callable, Sequence
@@ -41,12 +42,28 @@ from swreview.agent.settings import (
     pane_defaults,
 )
 from swreview.checks.golden_interference import interference_case
-from swreview.ir.loader import save_package
+from swreview.checks.standards.run import CHECK_FILE_NAME
+from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
 from swreview.ir.models import EvidencePackage
+from swreview.report.attention import rank
+from swreview.report.markdown import render_report
+from swreview.report.names import component_names
+from swreview.report.rerender import REPORT_FILE_NAME as REPORT_FILE
+from swreview.report.rerender import rerender_run_folder
+from swreview.report.session import load_session
+from tests.unit.test_rerender import (
+    NAMED_COMPONENT,
+    PLACEHOLDER,
+    REVIEW_FOLDER,
+    copied,
+    standards_run_folder,
+)
+from tests.unit.test_review_summary import BIG_ASSEMBLY
 from tests.unit.test_tools_checks_fastener import joint_package
 from tests.unit.test_tools_checks_fit import drawing_package
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+PART_ID = re.compile(r"cmp:[0-9]{4,}")
 COVER_BLIND_TAP = REPO_ROOT / "benchmarks" / "packages" / "cover-blind-tap"
 
 MakePackage = Callable[..., EvidencePackage]
@@ -829,6 +846,99 @@ def test_report_on_a_missing_session_exits_1(tmp_path: Path) -> None:
     result = invoke("report", str(tmp_path / "nowhere.json"))
 
     assert result.exit_code == 1
+
+
+def named_ids_in(text: str, names: dict[str, str]) -> list[str]:
+    """Every `cmp:` id in `text` whose component has a name a person could have read instead."""
+    return [one for one in PART_ID.findall(text) if names.get(one, "").strip()]
+
+
+def test_report_headings_name_the_parts_as_the_folder_re_render_does(tmp_path: Path) -> None:
+    """`swreview report` renders with the `package.json` beside the session (review of
+    2026-09-23): each heading names the parts, as `rerender_run_folder` and the run's own report
+    do (feature 009 FR-027), where a session-only render printed their ids."""
+    run_dir = copied(BIG_ASSEMBLY, tmp_path)
+    twin = copied(BIG_ASSEMBLY, tmp_path, "twin")
+    names = component_names(load_package(run_dir).package)
+    session = load_session(run_dir / "session.json")
+    assert named_ids_in(" ".join(finding.title for finding in session.findings), names), (
+        "the fixture's recorded titles must name a part by id, or this proves nothing"
+    )
+
+    result = invoke("report", str(run_dir / "session.json"))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    report = (run_dir / REPORT_FILE).read_text(encoding="utf-8")
+    headings = [line for line in report.splitlines() if line.startswith("#### F-")]
+    assert len(headings) == len(session.findings)
+    assert named_ids_in("\n".join(headings), names) == []
+    assert report == rerender_run_folder(twin).read_text(encoding="utf-8")
+
+
+def test_report_to_another_path_still_reads_the_session_s_folder(tmp_path: Path) -> None:
+    """`--out` moves where the report goes, not where its package comes from."""
+    run_dir = copied(REVIEW_FOLDER, tmp_path)
+    target = tmp_path / "elsewhere" / "again.md"
+
+    body = payload(invoke("report", str(run_dir / "session.json"), "--out", str(target), "--json"))
+
+    report = target.read_text(encoding="utf-8")
+    assert body["report_file"] == str(target)
+    assert NAMED_COMPONENT in report
+    assert PLACEHOLDER not in report
+    assert report == rerender_run_folder(run_dir).read_text(encoding="utf-8")
+
+
+def test_report_keeps_a_standards_folder_s_verdict_header(tmp_path: Path) -> None:
+    """Header and body byte for byte, as `run_standards_check` wrote them: a session-only render
+    deleted the header, the other loss `report/rerender.py` exists to prevent."""
+    run_dir = standards_run_folder(tmp_path)
+    shutil.copy(tmp_path / "package" / PACKAGE_FILE_NAME, run_dir / PACKAGE_FILE_NAME)
+    written = (run_dir / REPORT_FILE).read_text(encoding="utf-8")
+    (run_dir / REPORT_FILE).unlink()
+
+    result = invoke("report", str(run_dir / "session.json"))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert (run_dir / REPORT_FILE).read_text(encoding="utf-8") == written
+
+
+def test_report_without_a_package_beside_it_renders_as_before(tmp_path: Path) -> None:
+    """No package in the folder: the placeholder and the ids, which is all a session holds."""
+    run_dir = copied(REVIEW_FOLDER, tmp_path)
+    (run_dir / PACKAGE_FILE_NAME).unlink()
+
+    result = invoke("report", str(run_dir / "session.json"))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    report = (run_dir / REPORT_FILE).read_text(encoding="utf-8")
+    session = load_session(run_dir / "session.json")
+    assert PLACEHOLDER in report
+    assert report == render_report(session, ranking=rank(session))
+
+
+def test_report_writes_the_report_and_no_attention_record(tmp_path: Path) -> None:
+    """The record is written where the session is written (007 research R2.7), never here."""
+    run_dir = copied(BIG_ASSEMBLY, tmp_path)
+    before = sorted(path.name for path in run_dir.iterdir())
+
+    result = invoke("report", str(run_dir / "session.json"))
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert sorted(path.name for path in run_dir.iterdir()) == sorted([*before, REPORT_FILE])
+
+
+def test_report_refuses_a_check_record_it_cannot_read_and_writes_nothing(tmp_path: Path) -> None:
+    """Rendering on without the verdict header would delete it; exit 1 names the record."""
+    run_dir = standards_run_folder(tmp_path)
+    (run_dir / CHECK_FILE_NAME).write_text("{not json", encoding="utf-8")
+    written = (run_dir / REPORT_FILE).read_bytes()
+
+    result = invoke("report", str(run_dir / "session.json"))
+
+    assert result.exit_code == 1
+    assert CHECK_FILE_NAME in result.stderr
+    assert (run_dir / REPORT_FILE).read_bytes() == written
 
 
 # --- disposition -----------------------------------------------------------------
