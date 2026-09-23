@@ -54,7 +54,7 @@ from swreview.findings import Finding
 from swreview.geometry.axis import axis_distance
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import Ranking, coverage_line, load_policy, start_here_lines
-from swreview.report.session import CoverageItem, CoverageScope
+from swreview.report.session import Contact, CoverageItem, CoverageScope
 from swreview.tools import checks_mechanical
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import ToolContext
@@ -262,6 +262,9 @@ class PrerunCall:
     step_index: int
     findings: tuple[Finding, ...]
     error: str | None
+    contacts: tuple[Contact, ...] = ()
+    """What the call put on the session's contact list (feature 010): an interference group
+    that is two parts touching is a contact, not a finding, and the line says so."""
 
     @property
     def label(self) -> str:
@@ -271,8 +274,10 @@ class PrerunCall:
     def line(self) -> str:
         if self.error is not None:
             return f"  {self.label} -> error: {self.error}"
-        found = "no findings" if not self.findings else _plural(len(self.findings), "finding")
-        return f"  {self.label} -> ok, {found}"
+        counts = [_plural(len(self.findings), "finding")] if self.findings else []
+        if self.contacts:
+            counts.append(_plural(len(self.contacts), "contact"))
+        return f"  {self.label} -> ok, {', '.join(counts) or 'no findings'}"
 
 
 @dataclass(frozen=True)
@@ -624,6 +629,7 @@ def prerun_checks(
     calls: list[PrerunCall] = []
     for name, arguments in planned_calls(context, tools):
         before = len(session.findings)
+        contacts_before = len(session.contacts)
         step_index = len(session.steps)
         result = call_tool(
             request=ToolCallRequest(
@@ -641,6 +647,7 @@ def prerun_checks(
                 step_index=step_index,
                 findings=tuple(session.findings[before:]),
                 error=_error_of(result),
+                contacts=tuple(session.contacts[contacts_before:]),
             )
         )
 

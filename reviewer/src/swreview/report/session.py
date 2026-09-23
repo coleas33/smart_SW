@@ -81,6 +81,38 @@ class EvidenceRequestIdAllocator(SequentialIdAllocator):
         super().__init__(prefix="ER", start=start)
 
 
+class Contact(ReviewModel):
+    """Two parts touching at nominal size, not interfering (feature 010 data-model 9).
+
+    A detected interference group whose every member has a volume at or below the contact
+    threshold, or no volume and only the possible-interference flag, is listed here instead
+    of as a finding (owner decision 2026-09-23): it names both parts so a line-to-line fit
+    stays visible, and the ranking never reads this list, so it can never take a "Start
+    here" slot (SC-001).
+    """
+
+    id: Annotated[str, StringConstraints(pattern=r"^C-[0-9]{3,}$")]
+    kind: Literal["zero_volume", "possible_only", "thread_model"]
+    group_key: str
+    configuration: str
+    interference_ids: list[str]
+    component_ids: Annotated[list[str], Len(min_length=2)]
+    volume_mm3: float | None
+    """The largest member volume in mm3; `None` when no member reported one."""
+    joint_id: str | None
+    """The joint these parts form, when the joint map has one over them (from US4)."""
+    reason: str
+    tool_result_ids: list[int]
+    """The investigation step that judged the group."""
+
+
+class ContactIdAllocator(SequentialIdAllocator):
+    """Yields `C-001`, `C-002`, ... within one session."""
+
+    def __init__(self, start: int = 1) -> None:
+        super().__init__(prefix="C", start=start)
+
+
 class CoverageScope(ReviewModel):
     """What a coverage item covers: instances, pairs, configuration, positions."""
 
@@ -366,6 +398,13 @@ class ReviewSession(ReviewModel):
         Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")] | None
     ) = None
     """Evidence fingerprint for the persisted batch, including an unsuccessful attempt."""
+    contacts: list[Contact] = Field(default_factory=list)
+    """Interference groups that are two parts touching, not overlapping (feature 010).
+
+    Optional and omitted when empty, in `properties` of `review-session.schema.json` and
+    never in `required`, so a session written before the list existed round-trips to its
+    own bytes. The ranking never reads it.
+    """
     coverage: Coverage = Field(default_factory=Coverage)
     timing: Timing
 
@@ -380,6 +419,8 @@ class ReviewSession(ReviewModel):
             data.pop("explanations_enabled", None)
         if self.finding_explanation_fingerprint is None:
             data.pop("finding_explanation_fingerprint", None)
+        if not self.contacts:
+            data.pop("contacts", None)
         return data
 
 

@@ -98,13 +98,13 @@ column because of this table.
 **Flag**: `trim_tool_descriptions`. **Default**: off. **Scope**: both providers; the tool schema
 and the system prompt. **Read**: once at `start_review`, applied **after** `spec_for`.
 
-**The honest ceiling, measured on this tree (VERIFIED).** Of 34,065 bytes sent today, **15,274
+**The honest ceiling, measured on this tree (VERIFIED).** Of 34,101 bytes sent today, **15,274
 (45 percent) is JSON structure** and lever 2 cannot reach it; only lever 4 or a schema change can.
 18,791 bytes (55 percent) is prose.
 
 | Cap (tool / parameter description) | Bytes | Saved |
 |---|---|---|
-| none (today) | 34,065 | 0 |
+| none (today) | 34,101 | 0 |
 | 300 / 120 | 27,158 | 20 percent |
 | 200 / 100 | 25,020 | 27 percent |
 | **160 / 90** | **23,834** | **30 percent** |

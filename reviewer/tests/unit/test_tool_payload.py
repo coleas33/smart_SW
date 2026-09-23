@@ -298,8 +298,8 @@ def encoding_digests() -> dict[str, str]:
 
 REVIEW_TOOL_COUNT = 32
 REVIEW_BRIDGE_TOOL_COUNT = 35
-OPENAI_ARRAY_BYTES = 34_065
-GEMINI_ARRAY_BYTES = 34_217
+OPENAI_ARRAY_BYTES = 34_101
+GEMINI_ARRAY_BYTES = 34_253
 """**Deviation from T001, recorded in `specs/005-llm-efficiency/probe-log.md`.** The task
 asks for 34,248; this tree produces 34,217, and a pin is a measurement or it is nothing.
 Six files of the spec package still quote 34,248 (and 37,709 for the bridge, measured
@@ -312,7 +312,7 @@ the whole body. **Regenerated, never transcribed** - `--write` prints them.
 
 **Deviation, and it is in the lever's favour.** `contracts/levers.md` and T056 quote 23,834
 bytes and 30 percent, measured before the split existed; the split that keeps the rejoin
-byte-equal (T052) leaves 21,432 bytes and 37.1 percent on OpenAI. Nothing here is typed to
+byte-equal (T052) leaves 21,432 bytes and 37.2 percent on OpenAI. Nothing here is typed to
 match a document: a pin is a measurement or it is nothing, and the same rule already
 applies to `GEMINI_ARRAY_BYTES` above."""
 
@@ -322,9 +322,9 @@ MCP_GEMINI_ARRAY_BYTES = 14_084
 LARGEST_TOOL = "check_axial_stack"
 LARGEST_TOOL_BYTES = 2_734
 RMS_TIER_KEPT_TOOLS = 26
-RMS_TIER_KEPT_BYTES = 25_972
+RMS_TIER_KEPT_BYTES = 26_008
 RMS_TIER_DELTA_BYTES = 8_093
-RMS_TIER_DELTA_PERCENT = 23.8
+RMS_TIER_DELTA_PERCENT = 23.7
 STRUCTURAL_FLOOR_BYTES = 15_274
 
 TOOL_OBJECT_CEILING = {"openai": 3_000, "gemini": 3_500}
@@ -364,7 +364,7 @@ def test_trimmed_array_bytes_per_encoding(encoding: str, expected: int) -> None:
 def test_the_bridge_array_is_pinned_in_both_arms() -> None:
     """The 35-tool array a bridged run sends, so a US3 session is measured too."""
     bridged = TOOLSETS["review+bridge"]
-    assert measure("review+bridge", bridged, "openai").total_bytes == 37_712
+    assert measure("review+bridge", bridged, "openai").total_bytes == 37_748
     assert (
         measure("review+bridge", bridged, "openai", trim=True).total_bytes
         == TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES
@@ -378,7 +378,7 @@ def test_the_trim_takes_the_same_bytes_off_either_encoding(encoding: str) -> Non
     off = measure("review", TOOL_FUNCTIONS, encoding).total_bytes
     on = measure("review", TOOL_FUNCTIONS, encoding, trim=True).total_bytes
 
-    assert off - on == 12_633
+    assert off - on == 12_669
 
 
 def test_the_trim_is_bounded_by_the_structural_floor() -> None:
@@ -386,7 +386,7 @@ def test_the_trim_is_bounded_by_the_structural_floor() -> None:
     off = measure("review", TOOL_FUNCTIONS, "openai").total_bytes
     on = measure("review", TOOL_FUNCTIONS, "openai", trim=True).total_bytes
 
-    assert round(100 * (off - on) / off, 1) == 37.1
+    assert round(100 * (off - on) / off, 1) == 37.2
     assert on > structural_floor_bytes()
 
 
@@ -479,8 +479,8 @@ def test_longest_descriptions_and_largest_objects_are_the_documented_ones() -> N
     assert list(description_bytes().items())[:4] == [
         ("check_rms_assembly", 1_455),
         ("check_rms_part", 1_296),
+        ("check_interference_group", 905),
         ("check_fastener_joint", 871),
-        ("check_interference_group", 870),
     ]
     assert list(tool_object_bytes().items())[:3] == [
         ("check_axial_stack", 2_734),

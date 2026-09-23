@@ -5,9 +5,10 @@ report is plain Markdown - headings and pipe tables, no HTML (constitution Princ
 an engineer must be able to reproduce any finding from what is printed here.
 
 Section order: title, manifest discrepancies, summary counts, start here (only when the
-caller supplies a ranking), findings grouped by severity (high to info), evidence
-requests, coverage (all five buckets, always), timing, tokens (only when the session
-carries usage), investigation trace (collapsed past 50 steps).
+caller supplies a ranking), findings grouped by severity (high to info), contacts (only
+when the session holds one, feature 010), evidence requests, coverage (all five buckets,
+always), timing, tokens (only when the session carries usage), investigation trace
+(collapsed past 50 steps).
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
+from swreview.checks.interference import interference_outcomes
 from swreview.findings import Calculation, Disposition, Finding, carried_and_computed
 from swreview.ir.models import (
     Angle,
@@ -91,6 +93,9 @@ def render_report(
     )
     lines.extend(_render_findings(session, package, components_by_id, explanations))
     lines.append("")
+    if session.contacts:
+        lines.extend(_render_contacts(session, package))
+        lines.append("")
     lines.extend(_render_evidence_requests(session))
     lines.append("")
     lines.extend(_render_coverage(session))
@@ -462,6 +467,48 @@ def _render_findings(
             lines.extend(_render_finding(finding, package, components_by_id, explanations))
             lines.append("")
 
+    return lines
+
+
+# --- contacts (feature 010) ------------------------------------------------------------
+
+_CONTACT_KINDS = {
+    "zero_volume": "zero volume",
+    "possible_only": "possible only",
+    "thread_model": "thread model",
+}
+
+
+def _counted(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def _render_contacts(session: ReviewSession, package: EvidencePackage | None) -> list[str]:
+    """Two parts touching at nominal size, listed apart from the findings (FR-002).
+
+    Rendered only when the session holds a contact, so a session written before feature 010
+    renders byte for byte as it did. The counts are `interference_outcomes`', the one count
+    of every group; the ranking never reads this list.
+    """
+    outcomes = interference_outcomes(session, package)
+    lines = [
+        "## Contacts",
+        "",
+        f"{_counted(outcomes['contacts'], 'contact')} and "
+        f"{_counted(outcomes['findings'], 'interference finding')} from "
+        f"{_counted(outcomes['groups'], 'detected group')}. A contact is two parts touching at "
+        "nominal size; it is listed so a line-to-line fit stays visible, and it is not an "
+        "interference finding.",
+        "",
+        "| Contact | Parts | Configuration | Kind | Volume | Joint |",
+        "|---|---|---|---|---|---|",
+    ]
+    for contact in session.contacts:
+        volume = "no volume" if contact.volume_mm3 is None else f"{contact.volume_mm3!r} mm3"
+        lines.append(
+            f"| {contact.id} | {', '.join(contact.component_ids)} | {contact.configuration} "
+            f"| {_CONTACT_KINDS[contact.kind]} | {volume} | {contact.joint_id or 'none'} |"
+        )
     return lines
 
 

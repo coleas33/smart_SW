@@ -30,6 +30,7 @@
     "steps": { "type": "array", "items": { "$ref": "#/$defs/InvestigationStep" } },
     "evidence_requests": { "type": "array", "items": { "$ref": "#/$defs/EvidenceRequest" } },
     "findings": { "type": "array", "items": { "$ref": "#/$defs/Finding" } },
+    "contacts": { "type": "array", "items": { "$ref": "#/$defs/Contact" }, "description": "Interference groups that are two parts touching at nominal size, not overlapping (feature 010 FR-002). Added to properties and left out of required, and omitted from session.json when empty, so a session written before the list existed still validates and round-trips to its own bytes; the ranking never reads it" },
     "coverage": { "$ref": "#/$defs/Coverage" },
     "timing": { "$ref": "#/$defs/Timing" }
   },
@@ -123,6 +124,21 @@
         "entity_ids": { "type": "array", "items": { "type": "string" } },
         "status": { "enum": ["open", "answered"] }, "answer": { "type": ["string", "null"] },
         "answered_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "Contact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "group_key", "configuration", "interference_ids", "component_ids", "volume_mm3", "joint_id", "reason", "tool_result_ids"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^C-[0-9]{3,}$" },
+        "kind": { "enum": ["zero_volume", "possible_only", "thread_model"] },
+        "group_key": { "type": "string" }, "configuration": { "type": "string" },
+        "interference_ids": { "type": "array", "items": { "type": "string" } },
+        "component_ids": { "type": "array", "items": { "type": "string" }, "minItems": 2 },
+        "volume_mm3": { "type": ["number", "null"] },
+        "joint_id": { "type": ["string", "null"] },
+        "reason": { "type": "string" },
+        "tool_result_ids": { "type": "array", "items": { "type": "integer" } }
       }
     },
     "Calculation": {
