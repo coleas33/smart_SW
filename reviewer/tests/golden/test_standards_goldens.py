@@ -1319,11 +1319,16 @@ class TestTheMatchedPair:
         assert NO_ITAR not in findings_by_check(other)
 
     def test_the_other_profile_recognizes_no_file_name_so_no_data_card_is_graded(self) -> None:
-        """`part_number.pattern` decides which documents the data card is read on."""
+        """`part_number.pattern` decides which documents the data card is read on.
+
+        Edited deliberately by feature 010 T072 (FR-020): a pattern that matches none of the
+        graded documents is a likely profile error, so every document is unresolved saying
+        so, where it was skipped - still no data card graded, and no finding."""
         other = graded_against(PAIR_A, MATCHED_PAIR[PAIR_B])
         every_document = sorted(row.document_id for row in package_of(PAIR_A).documents)
 
-        assert sorted(buckets_of(other, DATA_CARD)["skipped"]) == every_document
+        assert sorted(buckets_of(other, DATA_CARD)["unresolved"]) == every_document
+        assert "skipped" not in buckets_of(other, DATA_CARD)
         assert DATA_CARD not in findings_by_check(other)
 
     def test_the_other_profile_names_a_configuration_the_parts_do_not_carry(self) -> None:

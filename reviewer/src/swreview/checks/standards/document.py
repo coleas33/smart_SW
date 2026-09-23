@@ -48,7 +48,7 @@ from swreview.checks.standards.results import (
     skipped,
     unresolved,
 )
-from swreview.checks.standards.traversal import CheckedDocument
+from swreview.checks.standards.traversal import CheckedDocument, graded_documents
 from swreview.ir.models import EvidencePackage
 
 __all__ = [
@@ -159,6 +159,19 @@ def data_card_complete(
         return [skipped(rule, document_id, exempt)]
 
     if not document.matches_part_number:
+        graded = graded_documents(package, profile)
+        if not any(item.matches_part_number for item in graded):
+            # Feature 010 FR-020: a convention that no graded document follows is far likelier
+            # a profile error than a vault where nothing is named to it; skipping every
+            # document would hide that as silence (`contracts/hygiene.md` section 4).
+            return [
+                unresolved(
+                    rule,
+                    document_id,
+                    f"the part-number pattern matched 0 of {len(graded)} graded documents, "
+                    "which is likely a profile error; check part_number.pattern",
+                )
+            ]
         return [
             skipped(
                 rule,

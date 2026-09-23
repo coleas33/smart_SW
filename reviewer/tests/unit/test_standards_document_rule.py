@@ -139,12 +139,50 @@ class TestWhichDocumentsAreEvaluated:
         assert outcomes(evaluate(package)) == {"fail"}
 
     def test_a_name_that_does_not_follow_the_convention_is_skipped(self) -> None:
-        package = package_of(PartSpec(NON_CONFORMING, properties={}))
-        results = evaluate(package)
+        """Edited deliberately by feature 010 T072: a second, conforming part keeps the
+        pattern matching one graded document, which is when a non-conforming name is still
+        today's skip (with nothing conforming, the zero-match rule below speaks instead)."""
+        package = package_of(
+            AssemblySpec(
+                CONFORMING,
+                properties=COMPLETE,
+                components=[ComponentSpec("bracket-1", NON_CONFORMING)],
+            ),
+            PartSpec(NON_CONFORMING, properties={}),
+        )
+        [part] = [row for row in package.documents if row.kind == "part"]
+        results = evaluate(package, part.document_id)
 
         assert outcomes(results) == {"skip"}
         assert "convention" in reason(results, "skip")
         assert "bracket.SLDPRT" in reason(results, "skip")
+
+    def test_a_pattern_that_matches_no_graded_document_is_a_likely_profile_error(
+        self,
+    ) -> None:
+        """Feature 010 FR-020: every document unresolved, naming the count, not skipped."""
+        package = package_of(PartSpec(NON_CONFORMING, properties={}))
+        graded = graded_documents(package, PROFILE)
+
+        for document in graded:
+            results = evaluate(package, document.document_id)
+            assert outcomes(results) == {"unresolved"}
+            assert reason(results, "unresolved") == (
+                f"the part-number pattern matched 0 of {len(graded)} graded documents, which "
+                "is likely a profile error; check part_number.pattern"
+            )
+
+    def test_the_zero_match_rule_leaves_the_matching_semantics_alone(self) -> None:
+        """The whole file name, extension included, still decides: a conforming stem with a
+        name the pattern does not reach is still no match."""
+        package = package_of(PartSpec(CONFORMING, properties=COMPLETE))
+        profile = PROFILE.model_copy(
+            update={"part_number": PROFILE.part_number.model_copy(update={"pattern": "MR-#####"})}
+        )
+
+        results = evaluate(package, profile=profile)
+
+        assert outcomes(results) == {"unresolved"}
 
     def test_the_name_is_taken_from_the_path_and_never_from_a_window_title(self) -> None:
         """Difference l: the macro switches itself off when titles hide extensions."""

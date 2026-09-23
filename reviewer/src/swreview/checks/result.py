@@ -28,6 +28,7 @@ __all__ = [
     "PLACES",
     "ROUNDING_ASSUMPTION",
     "CheckResult",
+    "DocumentResult",
     "Limits",
     "MissingToleranceError",
     "cite",
@@ -64,6 +65,27 @@ class CheckResult:
     calculation: Calculation | None
     coverage_limits: list[str]
     recommended_action: str
+
+
+@dataclass(frozen=True)
+class DocumentResult:
+    """A document-scope verdict and what its finding binds to (feature 010's mass and
+    hygiene checks): the documents it judged and every instance of them. The documents are
+    bound as well, so a finding on the root assembly - which no component instantiates - still
+    names where it was read."""
+
+    result: CheckResult
+    documents: tuple[str, ...]
+    component_ids: tuple[str, ...]
+
+    @property
+    def document_id(self) -> str:
+        """The first document judged: the only one, for a check of one document."""
+        return self.documents[0]
+
+    @property
+    def document_ids(self) -> tuple[str, ...]:
+        return self.documents
 
 
 def unresolved(

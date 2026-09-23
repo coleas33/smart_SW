@@ -23,18 +23,14 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from itertools import combinations
 from typing import Any
-
-import trimesh
 
 from swreview.checks.fastener import HeadSweep
 from swreview.checks.fastener_identity import (
     EnvelopeOf,
     RecognisedFastener,
     fastener_group,
-    joint_map_with_fasteners,
     run_fastener_checks,
 )
 from swreview.checks.joint_alignment import JointResult, run_joint_checks
@@ -48,23 +44,21 @@ from swreview.checks.joints import (
     joint_label,
     pattern_group,
 )
-from swreview.checks.mass import DocumentResult, run_mass_checks
-from swreview.checks.result import CheckResult
+from swreview.checks.mass import run_mass_checks
+from swreview.checks.result import CheckResult, DocumentResult
 from swreview.checks.tool_access import recess_group, run_head_fit, sweep_head
 from swreview.report.session import CoverageBucket, CoverageItem, CoverageScope
 from swreview.tools.context import ToolContext, current_context
-from swreview.tools.measure import load_body_mesh
+from swreview.tools.joint_context import BodyMeshes, joint_analysis
 from swreview.tools.query import ToolResult
 from swreview.tools.recording import record_result
 
 __all__ = [
     "CODE_FIRST_CHECKS",
     "JOINT_MAP_CHECK",
-    "BodyMeshes",
-    "JointAnalysis",
+    "check_hygiene",
     "check_joints",
     "check_mass_material",
-    "joint_analysis",
     "record_joint_map",
 ]
 
@@ -165,57 +159,6 @@ def record_joint_map(context: ToolContext, joint_map: JointMap) -> Counter[Cover
     for fastener in joint_map.unplaced:
         record("skipped", _unplaced_item(fastener))
     return written
-
-
-# --- what every joint check reads, once per context -------------------------------------------
-
-
-@dataclass(frozen=True)
-class JointAnalysis:
-    """The recognised fasteners and the joint map they are placed in."""
-
-    recognised: tuple[RecognisedFastener, ...]
-    joint_map: JointMap
-
-
-def joint_analysis(context: ToolContext) -> JointAnalysis:
-    """The context's joint analysis, built on first use and kept on the context (T049), so
-    `check_joints` and the interference tool's thread-model rule read one map, built once."""
-    if context.joint_analysis is None:
-        recognised, joint_map = joint_map_with_fasteners(context.ir)
-        context.joint_analysis = JointAnalysis(recognised=recognised, joint_map=joint_map)
-    analysis: JointAnalysis = context.joint_analysis
-    return analysis
-
-
-class BodyMeshes:
-    """The package's body meshes by component, each loaded at most once per tool call.
-
-    The tool layer's half of "pure but for the mesh load": the checks take a `mesh_of`
-    callable and never open a file. A component whose bodies are absent or unloadable
-    reads as `None` and its reason is kept, so a check can name it rather than skip it.
-    """
-
-    def __init__(self, context: ToolContext) -> None:
-        self._context = context
-        self._meshes: dict[str, trimesh.Trimesh | None] = {}
-        self.reasons: dict[str, str] = {}
-
-    def mesh_of(self, component_id: str) -> trimesh.Trimesh | None:
-        if component_id not in self._meshes:
-            bodies = [body for body in self._context.ir.bodies if body.component_id == component_id]
-            loaded = []
-            for body in bodies:
-                mesh, reason = load_body_mesh(self._context, body)
-                if mesh is None:
-                    self.reasons[component_id] = reason or f"{component_id} body {body.id}"
-                    loaded = []
-                    break
-                loaded.append(mesh)
-            if not bodies:
-                self.reasons[component_id] = f"{component_id} has no exported body mesh"
-            self._meshes[component_id] = trimesh.util.concatenate(loaded) if loaded else None
-        return self._meshes[component_id]
 
 
 def _head_sweeper(
@@ -407,6 +350,40 @@ def check_mass_material() -> ToolResult:
         statuses=Counter(finding.status for finding in findings),
         written=written,
         extra={"documents": checks.documents},
+    )
+
+
+def check_hygiene() -> ToolResult:
+    """Check part numbers against file names, duplicate descriptions and part numbers,
+    revisions, and suppressed or lightweight components.
+
+    Notes:
+        Takes no argument. The property names come from the attached standards profile;
+        without one the property checks are skipped, saying which setting is missing.
+    """
+    # Imported here, as prerun and the registry import every standards module: a module under
+    # `checks/standards/` reaches `checks/rules/` and the runner, which import the pre-run,
+    # which imports this module (`prerun._deferred` says it once).
+    from swreview.checks.hygiene import run_hygiene_checks
+    from swreview.tools.standards_checks import standards_run
+
+    context = current_context()
+    session = context.require_session()
+    findings_before = len(session.findings)
+    run = standards_run(context)
+    checks = run_hygiene_checks(context.ir, None if run is None else run.profile)
+    written: Counter[CoverageBucket] = Counter()
+    refused = _record_documents(context, checks.findings)
+    if refused is not None:
+        return refused
+    _record_coverage(context, written, "checked", checks.checked)
+    _record_coverage(context, written, "skipped", checks.skipped)
+    findings = session.findings[findings_before:]
+    return _summary(
+        findings=[finding.id for finding in findings],
+        statuses=Counter(finding.status for finding in findings),
+        written=written,
+        extra={"documents": checks.documents, "profile": "absent" if run is None else "attached"},
     )
 
 
