@@ -49,6 +49,8 @@ from swreview.ir.models import (
     Hole,
 )
 from swreview.report.session import (
+    Contact,
+    ContactIdAllocator,
     CoverageBucket,
     CoverageItem,
     EvidenceRequest,
@@ -164,6 +166,7 @@ class ToolContext:
     evidence_request_ids: EvidenceRequestIdAllocator = field(
         default_factory=EvidenceRequestIdAllocator
     )
+    contact_ids: ContactIdAllocator = field(default_factory=ContactIdAllocator)
 
     def __post_init__(self) -> None:
         package = self.package.package
@@ -250,6 +253,16 @@ class ToolContext:
         items = getattr(self.require_session().coverage, bucket)
         items[:] = [existing for existing in items if existing.check != check]
         self.record_coverage(bucket, item)
+
+    def record_contact(self, contact: Contact) -> None:
+        """Append a contact to the session's contact list (feature 010).
+
+        No event of its own: a contact rides the judging tool's `tool.finished`, whose
+        payload carries it, so the event schema does not grow a type (`contracts/
+        contacts.md` section 3). Raises `ValueError` outside a review session, like every
+        writer here.
+        """
+        self.require_session().contacts.append(contact)
 
     def record_evidence_request(self, request: EvidenceRequest) -> None:
         """Open an evidence request on the session and announce it."""

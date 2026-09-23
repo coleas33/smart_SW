@@ -317,7 +317,9 @@ def test_a_tool_already_under_the_caps_reports_nothing() -> None:
 
 # --- the pinned pre-split text -----------------------------------------------------------
 
-PRE_SPLIT_DESCRIPTION_BYTES = 16_006
+PRE_SPLIT_DESCRIPTION_BYTES = 16_041
+"""16,006 until feature 010 T022 said what a touching group now is (a contact); edited
+deliberately with the one entry below that moved."""
 """UTF-8 bytes of the 35 pre-split descriptions. The split moves text; it never loses any."""
 
 PRE_SPLIT_DESCRIPTIONS: dict[str, str] = {
@@ -505,10 +507,11 @@ The verdict on one grouped interference condition, honoring retained exceptions.
 condition: the finding names them all rather than repeating itself once per pair.
 
 A group with an overlap volume is `demonstrated` - the overlap is a fact SOLIDWORKS
-computed. A group SOLIDWORKS reported as coincident or touching, with no volume, is
-`suspected`. A group with a truncated or failed pair is `unresolved` and each such
-pair is also written into the session's unresolved coverage: nothing is known about
-them, and an exception cannot speak for a pair that was never evaluated.
+computed. A group whose pairs only touch (zero volume, or none and the possible
+flag) is a `contact` on the session, not a finding. A group with a truncated or
+failed pair is `unresolved` and each such pair is also written into the session's
+unresolved coverage: nothing is known about them, and an exception cannot speak for
+a pair that was never evaluated.
 
 An exception accepted for exactly these components in this configuration clears the
 group and is cited on the finding; one whose geometry or configuration has since

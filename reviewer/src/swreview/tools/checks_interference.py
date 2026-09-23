@@ -20,8 +20,9 @@ so what the tool adds is the three things US3 asks of the reviewer:
 from __future__ import annotations
 
 from swreview.checks import interference as interference_check
-from swreview.checks.interference import InterferenceGroup
+from swreview.checks.interference import ContactVerdict, InterferenceGroup
 from swreview.ir.models import EvidencePackage
+from swreview.report.session import Contact
 from swreview.tools.context import ToolContext, current_context, error_result
 from swreview.tools.query import ToolResult, as_json
 from swreview.tools.recording import record_result
@@ -75,10 +76,11 @@ def check_interference_group(group_key: str) -> ToolResult:
         condition: the finding names them all rather than repeating itself once per pair.
 
         A group with an overlap volume is `demonstrated` - the overlap is a fact SOLIDWORKS
-        computed. A group SOLIDWORKS reported as coincident or touching, with no volume, is
-        `suspected`. A group with a truncated or failed pair is `unresolved` and each such
-        pair is also written into the session's unresolved coverage: nothing is known about
-        them, and an exception cannot speak for a pair that was never evaluated.
+        computed. A group whose pairs only touch (zero volume, or none and the possible
+        flag) is a `contact` on the session, not a finding. A group with a truncated or
+        failed pair is `unresolved` and each such pair is also written into the session's
+        unresolved coverage: nothing is known about them, and an exception cannot speak for
+        a pair that was never evaluated.
 
         An exception accepted for exactly these components in this configuration clears the
         group and is cited on the finding; one whose geometry or configuration has since
@@ -90,7 +92,11 @@ def check_interference_group(group_key: str) -> ToolResult:
         return selected
 
     store = context.exception_store()
-    result = interference_check.check_interference_group(selected, context.ir, store)
+    outcome = interference_check.classify_group(selected, context.ir, store)
+    if outcome.contact is not None:
+        return _record_contact(context, selected, outcome.contact)
+    assert outcome.finding is not None
+    result = outcome.finding
 
     exception = (
         None
@@ -121,4 +127,36 @@ def check_interference_group(group_key: str) -> ToolResult:
         "pairs": selected.pairs,
         "coverage": len(coverage),
         "exception": None if exception is None else as_json(exception),
+    }
+
+
+def _record_contact(
+    context: ToolContext, group: InterferenceGroup, verdict: ContactVerdict
+) -> ToolResult:
+    """Put a contact on the session instead of a finding (feature 010 FR-002).
+
+    No finding, no `finding` event and no coverage: the contact is its own record, named by
+    the next contact id and citing the step in flight, and it reaches the pane in this
+    tool's own result (`contracts/contacts.md` section 3).
+    """
+    contact = Contact(
+        id=next(context.contact_ids),
+        kind=verdict.kind,
+        group_key=verdict.group_key,
+        configuration=verdict.configuration,
+        interference_ids=list(verdict.interference_ids),
+        component_ids=list(verdict.component_ids),
+        volume_mm3=verdict.volume_mm3,
+        joint_id=verdict.joint_id,
+        reason=verdict.reason,
+        tool_result_ids=[context.current_step_id],
+    )
+    context.record_contact(contact)
+    return {
+        "status": "contact",
+        "contact": as_json(contact),
+        "group_key": group.group_key,
+        "configuration": group.configuration,
+        "members": len(group.interferences),
+        "pairs": group.pairs,
     }

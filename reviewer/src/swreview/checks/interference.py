@@ -34,16 +34,22 @@ from swreview.checks.result import CheckResult, unresolved
 from swreview.exceptions import ExceptionStore, ReviewException
 from swreview.findings import Calculation, Severity
 from swreview.ir.models import EvidencePackage, Interference, Volume
-from swreview.report.session import CoverageItem, CoverageScope
+from swreview.report.session import CoverageItem, CoverageScope, ReviewSession
 
 __all__ = [
     "CHECK",
+    "CONTACT_VOLUME_MM3",
     "EXCLUDED_EFFECTS",
     "SEVERITY_VOLUME_MM3",
     "VOLUME_TO_MM3",
+    "ContactKind",
+    "ContactVerdict",
+    "GroupOutcome",
     "InterferenceGroup",
     "check_interference_group",
+    "classify_group",
     "group_interferences",
+    "interference_outcomes",
     "mechanism_positions_coverage",
     "run_coverage",
     "volume_mm3",
@@ -59,6 +65,13 @@ inch as 25.4 mm; `swreview.units` converts lengths only, so the factor lives her
 
 SEVERITY_VOLUME_MM3 = 1.0
 """Above this the overlap is material; at or below it, often a modelling artifact."""
+
+CONTACT_VOLUME_MM3 = 1e-6
+"""At or below this every member of a group is two parts touching, not overlapping (feature
+010 research R2.9). A thousandth of a cubic micrometre: below any material meaning, and
+named because a float 0.0 from the host may arrive as a denormal."""
+
+ContactKind = Literal["zero_volume", "possible_only", "thread_model"]
 
 PLACES = 9
 
@@ -292,6 +305,109 @@ def check_interference_group(
     return _reported(group)
 
 
+@dataclass(frozen=True)
+class ContactVerdict:
+    """A group that is two parts touching at nominal size, not an interference (R2.9).
+
+    The session's `Contact` is built from this by the tool that judged the group, because
+    only the session knows the contact's id and the step that judged it.
+    """
+
+    kind: ContactKind
+    group_key: str
+    configuration: str
+    interference_ids: tuple[str, ...]
+    component_ids: tuple[str, ...]
+    volume_mm3: float | None
+    """The largest member volume in mm3; `None` when no member reported one."""
+    reason: str
+    joint_id: str | None = None
+
+
+@dataclass(frozen=True)
+class GroupOutcome:
+    """What one detected group is: exactly one of a finding and a contact."""
+
+    finding: CheckResult | None
+    contact: ContactVerdict | None
+
+
+def _plural_pairs(count: int) -> str:
+    return f"{count} pair" if count == 1 else f"{count} pairs"
+
+
+def _contact(group: InterferenceGroup) -> ContactVerdict | None:
+    """Rule 4: every member touches - a volume at or below `CONTACT_VOLUME_MM3`, or none
+    with the possible-interference flag - or `None` when any member overlaps."""
+    for item in group.interferences:
+        if item.volume is None:
+            if not item.is_possible:
+                return None
+        elif volume_mm3(item.volume) > CONTACT_VOLUME_MM3:
+            return None
+
+    measured = [item for item in group.interferences if item.volume is not None]
+    pair = f"{group.component_ids[0]} and {', '.join(group.component_ids[1:])}"
+    if measured:
+        largest = max(measured, key=lambda item: volume_mm3(item.volume))  # type: ignore[arg-type]
+        assert largest.volume is not None
+        kind: ContactKind = "zero_volume"
+        volume: float | None = volume_mm3(largest.volume)
+        reported = _volume_text(largest.volume)
+    else:
+        kind, volume = "possible_only", None
+        reported = "no overlap volume, only a possible interference"
+    return ContactVerdict(
+        kind=kind,
+        group_key=group.group_key,
+        configuration=group.configuration,
+        interference_ids=tuple(item.id for item in group.interferences),
+        component_ids=tuple(group.component_ids),
+        volume_mm3=volume,
+        reason=(
+            f"{pair} touch at nominal in configuration {group.configuration}: SOLIDWORKS "
+            f"reported {reported} ({_plural_pairs(len(group.interferences))}); this is a "
+            "contact, not an interference."
+        ),
+    )
+
+
+def classify_group(
+    group: InterferenceGroup,
+    package: EvidencePackage,
+    exceptions: ExceptionStore | None = None,
+    joint_map: object | None = None,
+) -> GroupOutcome:
+    """Whether one grouped condition is a finding or a contact (feature 010 `contracts/
+    contacts.md` section 1), first rule that matches:
+
+    1. an uncomputed member: the `unresolved` finding of today;
+    2. an `active` exception: the excepted finding of today;
+    3. a `needs_review` exception: the `suspected` finding of today;
+    4. every member touching - no volume above `CONTACT_VOLUME_MM3`, or no volume and the
+       possible flag - a **contact**, never a finding (owner decision 2026-09-23);
+    5. a thread modelled as a cylinder, bounded by the annulus it can explain: arrives with
+       feature 010 US4, which is what `joint_map` is for; accepted and unused until then;
+    6. otherwise the finding of today, a positive volume `demonstrated`.
+
+    Rules 1 to 3 and 6 are `check_interference_group`'s verdicts unchanged, byte for byte.
+    """
+    del joint_map  # rule 5, feature 010 T049
+    if group.status == "computed":
+        exception = (
+            None
+            if exceptions is None
+            else exceptions.match(package, group.component_ids, group.configuration, CHECK)
+        )
+        if exception is None:
+            contact = _contact(group)
+            if contact is not None:
+                return GroupOutcome(finding=None, contact=contact)
+    return GroupOutcome(
+        finding=check_interference_group(group, package, exceptions), contact=None
+    )
+
+
 def _unresolved_group(group: InterferenceGroup) -> CheckResult:
     unknown = [item for item in group.interferences if item.status != "computed"]
     errors = sorted({item.error for item in unknown if item.error})
@@ -405,6 +521,32 @@ def _reported(group: InterferenceGroup) -> CheckResult:
         coverage_limits=[STATIC_SCOPE_LIMIT],
         recommended_action=action,
     )
+
+
+def interference_outcomes(
+    session: ReviewSession, package: EvidencePackage | None
+) -> dict[str, int]:
+    """The one count of every detected group and what became of it (feature 010
+    `contracts/contacts.md` section 5).
+
+    `groups` is every group the package reports when it is given - which equals
+    `findings + contacts` once every group has been judged, the acceptance tests' check of
+    FR-001 - and what this session judged when it is not. `unresolved` and `excepted` are
+    subsets of `findings`.
+    """
+    findings = [finding for finding in session.findings if finding.check == CHECK]
+    judged = len(findings) + len(session.contacts)
+    return {
+        "groups": judged if package is None else len(group_interferences(package)),
+        "findings": len(findings),
+        "contacts": len(session.contacts),
+        "unresolved": sum(1 for finding in findings if finding.status == "unresolved"),
+        "excepted": sum(
+            1
+            for finding in findings
+            if finding.exception_id is not None and finding.status == "checked_within_scope"
+        ),
+    }
 
 
 def run_coverage(

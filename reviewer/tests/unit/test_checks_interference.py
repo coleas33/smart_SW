@@ -20,6 +20,7 @@ import pytest
 from swreview.checks.interference import (
     CHECK,
     check_interference_group,
+    classify_group,
     group_interferences,
     mechanism_positions_coverage,
     run_coverage,
@@ -311,14 +312,19 @@ def test_a_measured_overlap_is_demonstrated() -> None:
     assert result.calculation.units_out == "mm3"
 
 
-def test_a_possible_interference_without_a_volume_is_suspected() -> None:
+def test_a_possible_interference_without_a_volume_is_a_contact() -> None:
+    """Feature 010 T017, edited deliberately: coincident or touching faces with no overlap
+    volume are two parts touching at nominal, listed as a contact and never a finding
+    (owner decision 2026-09-23, `contracts/contacts.md` section 1 rule 4)."""
     members = [interference("int:1", "cmp:0001", "cmp:0002", is_possible=True)]
     package = package_with(members)
 
-    result = check_interference_group(group_interferences(package)[0], package)
+    outcome = classify_group(group_interferences(package)[0], package)
 
-    assert result.status == "suspected"
-    assert "coincident" in result.observed
+    assert outcome.finding is None
+    assert outcome.contact is not None
+    assert outcome.contact.kind == "possible_only"
+    assert "possible interference" in outcome.contact.reason
 
 
 def test_a_fastener_pair_is_named_in_the_observed_condition() -> None:

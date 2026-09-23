@@ -23,6 +23,7 @@ from swreview.ir.models import (
     InterferenceSettings,
     Volume,
 )
+from swreview.report.session import Contact
 from swreview.tools import checks_interference, query
 from swreview.tools.context import ToolContext, context_for, use_context
 from swreview.tools.registry import RecordedTool, ToolRegistry
@@ -227,3 +228,139 @@ def test_a_retired_exception_is_not_returned(context: ToolContext) -> None:
     context.exceptions = store
 
     assert query.get_exceptions() == []
+
+
+# --- contacts (feature 010 T021, contracts/contacts.md section 3) --------------------------
+
+
+@pytest.fixture
+def contact_context(make_package: MakePackage) -> Iterator[ToolContext]:
+    """A zero-volume group and a positive-volume one, with every event collected."""
+    package = make_package(
+        interferences=[
+            interference("int:1", "pin/plate", volume_mm3=0.0),
+            interference("int:2", "pin/plate", volume_mm3=0.0),
+            interference("int:3", "boss/screws", volume_mm3=6.0),
+        ]
+    )
+    tool_context = context_for(package)
+    events: list[tuple[str, object]] = []
+    tool_context.emit = lambda event_type, body: events.append((event_type, body))
+    tool_context.events = events  # type: ignore[attr-defined]
+    with use_context(tool_context):
+        yield tool_context
+
+
+def test_a_zero_volume_group_is_a_contact_and_no_finding(contact_context: ToolContext) -> None:
+    session = contact_context.require_session()
+
+    result = checks_interference.check_interference_group("pin/plate")  # the step in flight: 0
+
+    assert result["status"] == "contact"
+    assert result["group_key"] == "pin/plate"
+    assert result["configuration"] == "Default"
+    assert result["members"] == 2
+    assert result["pairs"] == [["cmp:0001", "cmp:0002"], ["cmp:0001", "cmp:0002"]]
+    assert result["contact"]["id"] == "C-001"
+    assert result["contact"]["kind"] == "zero_volume"
+    assert session.findings == []
+    [contact] = session.contacts
+    assert contact.id == "C-001"
+    assert contact.interference_ids == ["int:1", "int:2"]
+    assert contact.component_ids == ["cmp:0001", "cmp:0002"]
+    assert contact.tool_result_ids == [0]
+    assert contact.joint_id is None
+
+
+def test_a_contact_writes_no_finding_event_and_no_coverage(contact_context: ToolContext) -> None:
+    before = contact_context.require_session().coverage.model_copy(deep=True)
+
+    checks_interference.check_interference_group("pin/plate")
+
+    events = contact_context.events  # type: ignore[attr-defined]
+    assert [event_type for event_type, _ in events] == []
+    assert contact_context.require_session().coverage == before
+
+
+def test_contact_ids_follow_on_within_the_session(make_package: MakePackage) -> None:
+    package = make_package(
+        interferences=[
+            interference("int:1", "pin/plate", volume_mm3=0.0),
+            interference("int:2", "other/touch", volume_mm3=None),
+        ]
+    )
+    tool_context = context_for(package)
+    with use_context(tool_context):
+        first = checks_interference.check_interference_group("pin/plate")
+        second = checks_interference.check_interference_group("other/touch")
+
+    assert (first["contact"]["id"], second["contact"]["id"]) == ("C-001", "C-002")
+    assert second["contact"]["kind"] == "possible_only"
+
+
+def test_a_positive_volume_group_returns_exactly_todays_payload(
+    contact_context: ToolContext,
+) -> None:
+    result = checks_interference.check_interference_group("boss/screws")
+
+    assert set(result) == {
+        "status",
+        "finding",
+        "group_key",
+        "configuration",
+        "members",
+        "pairs",
+        "coverage",
+        "exception",
+    }
+    assert result["status"] == "recorded"
+    assert result["finding"]["status"] == "demonstrated"
+    assert contact_context.require_session().contacts == []
+
+
+def test_an_excepted_zero_volume_group_is_still_the_excepted_finding(
+    contact_context: ToolContext,
+) -> None:
+    store = ExceptionStore()
+    groups = {group.group_key: group for group in checks_interference.groups_of(contact_context.ir)}
+    store.accept(groups["pin/plate"], contact_context.ir, by="engineer", note="line to line")
+    contact_context.exceptions = store
+
+    result = checks_interference.check_interference_group("pin/plate")
+
+    assert result["finding"]["status"] == "checked_within_scope"
+    assert contact_context.require_session().contacts == []
+
+
+def test_a_contact_through_the_registry_records_the_step_it_cites(
+    contact_context: ToolContext,
+) -> None:
+    tool = recorded(contact_context, "check_interference_group")
+
+    payload = tool.call({"group_key": "pin/plate"}).payload
+
+    session = contact_context.require_session()
+    assert payload["status"] == "contact"
+    assert [step.tool for step in session.steps] == ["check_interference_group"]
+    assert session.contacts[0].tool_result_ids == [session.steps[0].index]
+
+
+def test_record_contact_refuses_outside_a_review_session(
+    contact_context: ToolContext,
+) -> None:
+    record = Contact(
+        id="C-001",
+        kind="zero_volume",
+        group_key="k",
+        configuration="Default",
+        interference_ids=["int:1"],
+        component_ids=["cmp:0001", "cmp:0002"],
+        volume_mm3=0.0,
+        joint_id=None,
+        reason="touching",
+        tool_result_ids=[0],
+    )
+    contact_context.session = None
+
+    with pytest.raises(ValueError, match="review session"):
+        contact_context.record_contact(record)
