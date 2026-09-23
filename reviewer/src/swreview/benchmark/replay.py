@@ -21,11 +21,17 @@ The driver makes no network call and needs no key and no SOLIDWORKS unless its c
 
 from __future__ import annotations
 
+import json
+import re
 import shutil
+import tempfile
+from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from swreview.agent.providers import (
     FRAMING_TOKENS,
@@ -44,21 +50,47 @@ from swreview.agent.providers.fake import (
     ScriptedTurn,
 )
 from swreview.agent.runner import ReviewRun, start_review
-from swreview.benchmark.recording import RecordedCall, RecordedRound, Recording
+from swreview.agent.settings import EfficiencySettings
+from swreview.benchmark.recording import (
+    UNCOMMITTED_ENDS,
+    RecordedCall,
+    RecordedRound,
+    Recording,
+    read_recording,
+)
+from swreview.findings import SubjectKey, finding_subject_key
 from swreview.ir.loader import PACKAGE_FILE_NAME
 from swreview.report.session import ReviewSession
-from swreview.tokens import count_tokens
+from swreview.tokens import TOKENIZER_NAME, count_tokens, encoding
+from swreview.tools.registry import (
+    BRIDGE_TOOL_FUNCTIONS,
+    COMPACT_QUERY_TOOL_FUNCTIONS,
+    REMODEL_TOOL_FUNCTIONS,
+    TOOL_FUNCTIONS,
+    standards_tools,
+)
 
 __all__ = [
     "EMPTY_EXPLANATIONS",
     "FOLLOW_UP_PLACEHOLDER",
+    "CallClass",
     "PlayedCall",
     "PlayedReview",
     "PlayedRound",
+    "ReplayCall",
+    "ReplayFinding",
+    "ReplayFindings",
+    "ReplayReport",
+    "ReplayRound",
+    "ReplayTotals",
     "TurnKind",
     "TurnPlan",
     "estimated_sizes",
     "play_review",
+    "render_replay_lines",
+    "replay",
+    "replay_recording",
+    "subject_of",
     "turn_plans",
 ]
 
@@ -154,6 +186,8 @@ class PlayedReview:
     rounds: list[PlayedRound] = field(default_factory=list)
     setup_steps: int = 0
     """Steps setup wrote before the first model round (lever 5's pre-run)."""
+    prefix: str = ""
+    """The system prompt, the tool schemas and the opening message, as `_prefix` renders them."""
 
 
 class _Stop(BaseException):
@@ -253,10 +287,26 @@ def play_review(
         run.close()
 
 
+def _prefix(run: ReviewRun) -> str:
+    """What every request of the run starts with: the system prompt, the tools, the opening.
+
+    Serialized the same way for every pass, so the difference between two passes is the
+    difference their settings make; the provider's own rendering of the schemas is not seen
+    here, which is why the replay calibrates the prefix to the recorded first round.
+    """
+    tools = [
+        {"name": tool.name, "description": tool.description, "parameters": tool.schema}
+        for tool in run.tools
+    ]
+    return run.system + json.dumps(tools) + run.opening_message
+
+
 def _play(run: ReviewRun, turns: Sequence[TurnPlan]) -> PlayedReview:
+    played = PlayedReview(
+        session=run.session, setup_steps=len(run.session.steps), prefix=_prefix(run)
+    )
     tools = _RecordingTools(run.tools, run)
     run.tools = tools
-    played = PlayedReview(session=run.session, setup_steps=len(run.session.steps))
     committed: list[PlayedCall] = []
     committed_rounds = 0
     for turn_index, plan in enumerate(turns):
@@ -266,7 +316,7 @@ def _play(run: ReviewRun, turns: Sequence[TurnPlan]) -> PlayedReview:
         dispatched = tools.played[start:]
         rounds = _rounds_of(turn_index, plan, committed, committed_rounds, dispatched, stopped)
         played.rounds.extend(rounds)
-        if not stopped:
+        if not stopped and plan.end_reason not in UNCOMMITTED_ENDS:
             committed.extend(dispatched)
             committed_rounds += len(rounds)
     played.session = run.session
@@ -410,3 +460,527 @@ def _rounds_of(
             )
         )
     return rounds
+
+
+# --- the replay: two passes, classes, accounting, findings (contracts/replay.md §3 to §7) ------
+
+CallClass = Literal["reproduced", "changed", "estimated", "carried"]
+"""How a recorded call was priced. User Story 2 adds `answered_from_checks`, User Story 3
+`stored`; `carried` is a presentation round, which has no calls of its own."""
+
+BRIDGE_TOOLS = frozenset(function.__name__ for function in BRIDGE_TOOL_FUNCTIONS)
+STANDARDS_TOOLS = frozenset(function.__name__ for function in standards_tools())
+KNOWN_TOOLS = frozenset(
+    function.__name__
+    for function in (
+        *TOOL_FUNCTIONS,
+        *BRIDGE_TOOL_FUNCTIONS,
+        *REMODEL_TOOL_FUNCTIONS,
+        *COMPACT_QUERY_TOOL_FUNCTIONS,
+        *standards_tools(),
+    )
+)
+"""Every tool the current code can offer in some run; a recorded name outside it is retired."""
+
+
+class ReplayModel(BaseModel):
+    """The replay report's parts: strict, and serialized under their contract names."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+
+class ReplayCall(ReplayModel):
+    step: int
+    tool: str
+    class_: CallClass = Field(alias="class")
+    reason: str | None = None
+    """A sentence for every class but `reproduced`."""
+
+
+class ReplayRound(ReplayModel):
+    turn: int
+    round: int
+    kind: Literal["main", "presentation"]
+    recorded_input: int
+    as_recorded_input: int
+    requested_input: int
+    estimated: bool
+    lower_bound: bool
+    calls: list[ReplayCall]
+
+
+class ReplayTotals(ReplayModel):
+    recorded: int
+    as_recorded: int
+    requested: int
+    difference: int
+    """`requested - recorded`."""
+    estimated_rounds: int
+    lower_bound_rounds: int
+    carried_rounds: int
+
+
+class PassSettings(ReplayModel):
+    efficiency: EfficiencySettings
+    model_view: dict[str, Any] | None = None
+    """What the model read of each result; recorded from User Story 3 on, off until then."""
+
+
+class ReplaySettings(ReplayModel):
+    as_recorded: PassSettings
+    requested: PassSettings
+
+
+class ReplayFinding(ReplayModel):
+    check: str
+    subject: str
+    """The printable form of `finding_subject_key` without the check (`subject_of`)."""
+
+
+class NotReplayableFinding(ReplayFinding):
+    step: int | None
+    reason: str
+
+
+class ReplayFindings(ReplayModel):
+    recorded: int
+    replayed: int
+    lost: list[ReplayFinding]
+    added: list[ReplayFinding]
+    not_replayable: list[NotReplayableFinding]
+
+
+class ReplayReport(ReplayModel):
+    """One recorded review re-priced by the current code (data-model section 2)."""
+
+    run_dir: str
+    provider: str
+    tokenizer: str
+    comparison: Literal["exact", "shape"]
+    framing_tokens: int
+    settings: ReplaySettings
+    rounds: list[ReplayRound]
+    totals: ReplayTotals
+    regrouped: None = None
+    """The labelled regrouped estimate; User Story 4 fills it."""
+    findings: ReplayFindings
+
+
+def replay(
+    run_dir: Path | str,
+    *,
+    requested: EfficiencySettings,
+    standards_profile: Path | str | None = None,
+) -> ReplayReport:
+    """Replay the review in `run_dir` as recorded and with `requested`, and compare both.
+
+    No key, no network, no SOLIDWORKS: both passes play the recorded rounds through
+    `start_review` with the scripted provider, in a temporary folder holding a copy of the
+    package, and nothing is written into `run_dir`. Refuses a folder that is not a review
+    (`RecordingRefused`) and a machine without the vocabulary (`TokenizerUnavailable`).
+    """
+    return replay_recording(
+        read_recording(run_dir), requested=requested, standards_profile=standards_profile
+    )
+
+
+def replay_recording(
+    recording: Recording,
+    *,
+    requested: EfficiencySettings,
+    standards_profile: Path | str | None = None,
+) -> ReplayReport:
+    """`replay` over a recording already read."""
+    encoding()  # a replay that cannot count has nothing to report: refuse before running
+    recorded_settings = recording.session.efficiency or EfficiencySettings()
+    plans = turn_plans(recording)
+    options: dict[str, Any] = {"standards_profile": standards_profile}
+    with tempfile.TemporaryDirectory(prefix="swreview-replay-") as scratch:
+        first = play_review(
+            recording.run_dir,
+            Path(scratch) / "as-recorded",
+            plans,
+            model=recording.session.model,
+            efficiency=recorded_settings,
+            **options,
+        )
+        second = play_review(
+            recording.run_dir,
+            Path(scratch) / "requested",
+            plans,
+            model=recording.session.model,
+            efficiency=requested,
+            **options,
+        )
+    classes = _classify(recording, first, standards_profile is not None)
+    sizes_first, lower = _sizes(recording, first, classes)
+    sizes_second = _requested_sizes(first, second, classes, sizes_first)
+    rounds = _rounds(
+        recording,
+        classes,
+        first,
+        second,
+        sizes_first,
+        sizes_second,
+        lower,
+        prefix_difference=count_tokens(second.prefix) - count_tokens(first.prefix),
+    )
+    return ReplayReport(
+        run_dir=str(recording.run_dir),
+        provider=recording.provider,
+        tokenizer=TOKENIZER_NAME,
+        comparison="shape" if recording.provider == "gemini" else "exact",
+        framing_tokens=FRAMING_TOKENS,
+        settings=ReplaySettings(
+            as_recorded=PassSettings(efficiency=recorded_settings),
+            requested=PassSettings(efficiency=requested),
+        ),
+        rounds=rounds,
+        totals=_totals(rounds),
+        findings=_findings(recording, classes, second),
+    )
+
+
+@dataclass(frozen=True)
+class _Classified:
+    """One recorded call, its counterpart in pass A (by position), and its class."""
+
+    index: int
+    recorded: RecordedCall
+    played: PlayedCall | None
+    class_: CallClass
+    reason: str | None
+
+
+def _classify(recording: Recording, first: PlayedReview, with_profile: bool) -> list[_Classified]:
+    """Class every recorded call from pass A (contracts/replay.md section 3)."""
+    played = [call for played_round in first.rounds for call in played_round.calls]
+    classified: list[_Classified] = []
+    index = 0
+    for turn in recording.turns:
+        estimated_at: int | None = None
+        for recorded_round in turn.rounds:
+            for call in recorded_round.calls:
+                counterpart = played[index] if index < len(played) else None
+                class_, reason = _class_of(call, counterpart, estimated_at, with_profile)
+                if class_ == "estimated" and estimated_at is None:
+                    estimated_at = call.step
+                classified.append(_Classified(index, call, counterpart, class_, reason))
+                index += 1
+    return classified
+
+
+def _class_of(
+    recorded: RecordedCall,
+    played: PlayedCall | None,
+    estimated_at: int | None,
+    with_profile: bool,
+) -> tuple[CallClass, str | None]:
+    if recorded.tool not in KNOWN_TOOLS:
+        return "estimated", f"{recorded.tool} is not known to the current code"
+    if recorded.tool in BRIDGE_TOOLS:
+        return "estimated", (
+            f"{recorded.tool} needs the live SOLIDWORKS bridge, which a replay does not have"
+        )
+    if recorded.tool in STANDARDS_TOOLS and not with_profile:
+        return "estimated", (
+            f"{recorded.tool} needs a standards profile, and none was given (--standards-profile)"
+        )
+    if played is None:
+        return "estimated", "the replay stopped before this call"
+    if played.status != recorded.status:
+        return "estimated", (
+            f"the recording returned {recorded.status} and the current code returns "
+            f"{played.status}: {played.summary}"
+        )
+    if same_summary(recorded.summary, played.summary):
+        return "reproduced", None
+    if estimated_at is not None:
+        return "estimated", (
+            f"its result differs from the recording after the estimated call at step "
+            f"{estimated_at}, whose effect a replay cannot reproduce"
+        )
+    return "changed", "the current code's result differs from the recorded one"
+
+
+_SESSION_IDS = re.compile(r"\b(F|ER)-[0-9]{3,}\b")
+_TRUNCATION = "…"
+
+
+def same_summary(recorded: str, replayed: str) -> bool:
+    """Whether two 200-character trace lines report the same result.
+
+    Finding and evidence-request ids are compared as ids, not as numbers: a replay that cannot
+    run a recorded check skips that check's findings, so every later finding is numbered lower
+    than it was recorded and a summary that differs only by its ids is the same result. When a
+    line was cut at its length limit, the two are compared as far as both go.
+    """
+
+    def normalized(summary: str) -> tuple[str, bool]:
+        cut = summary.endswith(_TRUNCATION)
+        text = summary[: -len(_TRUNCATION)] if cut else summary
+        return _SESSION_IDS.sub(r"\1-#", text), cut
+
+    left, left_cut = normalized(recorded)
+    right, right_cut = normalized(replayed)
+    if left_cut or right_cut:
+        shared = min(len(left), len(right))
+        return left[:shared] == right[:shared]
+    return left == right
+
+
+def _sizes(
+    recording: Recording, first: PlayedReview, classes: Sequence[_Classified]
+) -> tuple[dict[int, int], set[int]]:
+    """Pass A's size of every call, by index, and the indices sized as a lower bound."""
+    sizes: dict[int, int] = {}
+    for item in classes:
+        if item.class_ != "estimated" and item.played is not None:
+            sizes[item.index] = count_tokens(item.played.text)
+    by_step = {item.recorded.step: item for item in classes}
+    lower: set[int] = set()
+    for turn in recording.turns:
+        for recorded_round in turn.rounds:
+            known = {
+                call.step: sizes[by_step[call.step].index]
+                for call in recorded_round.calls
+                if by_step[call.step].index in sizes
+            }
+            for step, (size, bound) in estimated_sizes(recording, recorded_round, known).items():
+                sizes[by_step[step].index] = size
+                if bound:
+                    lower.add(by_step[step].index)
+    return sizes, lower
+
+
+def _requested_sizes(
+    first: PlayedReview,
+    second: PlayedReview,
+    classes: Sequence[_Classified],
+    sizes_first: Mapping[int, int],
+) -> dict[int, int]:
+    """Pass B's size of every call: the current code's result, or pass A's estimate."""
+    played = {call.index: call for r in second.rounds for call in r.calls}
+    sizes = dict(sizes_first)
+    for item in classes:
+        if item.class_ != "estimated" and item.index in played:
+            sizes[item.index] = count_tokens(played[item.index].text)
+    return sizes
+
+
+def _rounds(
+    recording: Recording,
+    classes: Sequence[_Classified],
+    first: PlayedReview,
+    second: PlayedReview,
+    sizes_first: Mapping[int, int],
+    sizes_second: Mapping[int, int],
+    lower: set[int],
+    *,
+    prefix_difference: int,
+) -> list[ReplayRound]:
+    """Price every recorded round in both passes (contracts/replay.md section 4)."""
+    base = recording.turns[0].main_rounds[0].usage.input_tokens or 0
+    by_step = {item.recorded.step: item for item in classes}
+    played_first = {(r.turn, r.index): r for r in first.rounds}
+    played_second = {(r.turn, r.index): r for r in second.rounds}
+    rounds: list[ReplayRound] = []
+    committed_outputs = 0
+    words = 0
+    words_unknown = False
+    for turn in recording.turns:
+        if turn.index > 0:
+            words += turn.user_tokens or 0
+            words_unknown = words_unknown or turn.user_tokens is None
+        outputs = committed_outputs
+        for recorded_round in turn.rounds:
+            recorded_input = recorded_round.usage.input_tokens or 0
+            items = [by_step[call.step] for call in recorded_round.calls]
+            calls = [
+                ReplayCall(
+                    step=i.recorded.step, tool=i.recorded.tool, class_=i.class_, reason=i.reason
+                )
+                for i in items
+            ]
+            if recorded_round.kind == "presentation":
+                rounds.append(
+                    ReplayRound(
+                        turn=turn.index,
+                        round=recorded_round.index,
+                        kind="presentation",
+                        recorded_input=recorded_input,
+                        as_recorded_input=recorded_input,
+                        requested_input=recorded_input,
+                        estimated=False,
+                        lower_bound=False,
+                        calls=calls,
+                    )
+                )
+                continue
+            key = (turn.index, recorded_round.index)
+            fixed = base + outputs + words
+            a, b = played_first.get(key), played_second.get(key)
+            as_recorded = (
+                fixed + sum(sizes_first[c.index] + FRAMING_TOKENS for c in a.visible)
+                if a is not None
+                else recorded_input
+            )
+            requested_input = (
+                fixed
+                + prefix_difference
+                + sum(sizes_second[c.index] + FRAMING_TOKENS for c in b.visible)
+                if b is not None
+                else recorded_input
+            )
+            rounds.append(
+                ReplayRound(
+                    turn=turn.index,
+                    round=recorded_round.index,
+                    kind="main",
+                    recorded_input=recorded_input,
+                    as_recorded_input=as_recorded,
+                    requested_input=requested_input,
+                    estimated=any(i.class_ == "estimated" for i in items),
+                    lower_bound=any(i.index in lower for i in items)
+                    or (words_unknown and turn.index > 0),
+                    calls=calls,
+                )
+            )
+            outputs += recorded_round.usage.output_tokens or 0
+        if turn.end_reason not in UNCOMMITTED_ENDS:
+            committed_outputs = outputs
+    return rounds
+
+
+def _totals(rounds: Sequence[ReplayRound]) -> ReplayTotals:
+    recorded = sum(r.recorded_input for r in rounds)
+    requested = sum(r.requested_input for r in rounds)
+    return ReplayTotals(
+        recorded=recorded,
+        as_recorded=sum(r.as_recorded_input for r in rounds),
+        requested=requested,
+        difference=requested - recorded,
+        estimated_rounds=sum(1 for r in rounds if r.estimated),
+        lower_bound_rounds=sum(1 for r in rounds if r.lower_bound),
+        carried_rounds=sum(1 for r in rounds if r.kind == "presentation"),
+    )
+
+
+def subject_of(key: SubjectKey) -> str:
+    """A finding's subject key, without its check, as one line a person can read."""
+    _, components, locations, inputs, configuration = key
+    parts: list[str] = []
+    if components:
+        parts.append("components " + ", ".join(components))
+    for document_id, sheet, view, annotation, page in locations:
+        where = [document_id] + [
+            f"{label} {value}"
+            for label, value in (
+                ("sheet", sheet),
+                ("view", view),
+                ("annotation", annotation),
+                ("page", page),
+            )
+            if value is not None
+        ]
+        parts.append("at " + " ".join(str(item) for item in where))
+    if inputs:
+        parts.append("inputs " + ", ".join(inputs))
+    parts.append(f"configuration {configuration}")
+    return "; ".join(parts)
+
+
+def _findings(
+    recording: Recording, classes: Sequence[_Classified], second: PlayedReview
+) -> ReplayFindings:
+    """Compare the recorded and requested findings as multisets (contracts/replay.md §5)."""
+    by_step = {item.recorded.step: item for item in classes}
+    not_replayable: list[NotReplayableFinding] = []
+    replayable: Counter[SubjectKey] = Counter()
+    recorded_all: Counter[SubjectKey] = Counter()
+    for item in recording.findings:
+        key = finding_subject_key(item.finding)
+        recorded_all[key] += 1
+        step_class = by_step.get(item.step) if item.step is not None else None
+        if step_class is not None and step_class.class_ == "estimated":
+            not_replayable.append(
+                NotReplayableFinding(
+                    check=item.finding.check,
+                    subject=subject_of(key),
+                    step=item.step,
+                    reason=step_class.reason or "its step could not be replayed offline",
+                )
+            )
+        else:
+            replayable[key] += 1
+    replayed = Counter(finding_subject_key(finding) for finding in second.session.findings)
+    return ReplayFindings(
+        recorded=len(recording.findings),
+        replayed=len(second.session.findings),
+        lost=_listed(replayable - replayed),
+        added=_listed(replayed - recorded_all),
+        not_replayable=not_replayable,
+    )
+
+
+def _listed(keys: Counter[SubjectKey]) -> list[ReplayFinding]:
+    return [
+        ReplayFinding(check=key[0], subject=subject_of(key))
+        for key in sorted(keys.elements(), key=lambda key: (key[0], subject_of(key)))
+    ]
+
+
+def _levers(settings: PassSettings) -> str:
+    on = [name for name, value in settings.efficiency.model_dump().items() if value is True]
+    return ", ".join(on) if on else "every lever off"
+
+
+def render_replay_lines(report: ReplayReport) -> list[str]:
+    """The human output, in the order `contracts/replay.md` section 7 gives."""
+    lines = [
+        f"replay of {report.run_dir}",
+        f"provider {report.provider}; tokens counted with {report.tokenizer}; "
+        f"{report.comparison} comparison; {report.framing_tokens} framing tokens per result",
+        f"as recorded: {_levers(report.settings.as_recorded)}",
+        f"requested: {_levers(report.settings.requested)}",
+        f"{'turn':>4} {'round':>5} {'recorded':>12} {'as recorded':>12} {'requested':>12}  flags",
+    ]
+    for r in report.rounds:
+        flags = []
+        if r.kind == "presentation":
+            flags.append("carried")
+        if r.estimated:
+            flags.append("estimated")
+        if r.lower_bound:
+            flags.append("lower bound")
+        if any(c.class_ == "changed" for c in r.calls):
+            flags.append("changed")
+        lines.append(
+            f"{r.turn:>4} {r.round:>5} {r.recorded_input:>12,} {r.as_recorded_input:>12,} "
+            f"{r.requested_input:>12,}  {', '.join(flags)}".rstrip()
+        )
+    totals = report.totals
+    lines.append(
+        f"totals: recorded {totals.recorded:,}; as recorded {totals.as_recorded:,}; "
+        f"requested {totals.requested:,}; difference {totals.difference:+,}"
+    )
+    lines.append(
+        f"rounds: {totals.estimated_rounds} estimated, {totals.lower_bound_rounds} lower bound, "
+        f"{totals.carried_rounds} carried"
+    )
+    priced = [c for r in report.rounds for c in r.calls if c.class_ != "reproduced"]
+    for call in priced:
+        lines.append(f"  step {call.step} {call.tool}: {call.class_} - {call.reason}")
+    findings = report.findings
+    lines.append(
+        f"findings: {findings.recorded} recorded, {findings.replayed} replayed, "
+        f"{len(findings.lost)} lost, {len(findings.added)} added, "
+        f"{len(findings.not_replayable)} not replayable offline"
+    )
+    lines += [f"  lost: {item.check} - {item.subject}" for item in findings.lost]
+    lines += [f"  added: {item.check} - {item.subject}" for item in findings.added]
+    lines += [
+        f"  not replayable: {item.check} - {item.subject} (step {item.step}: {item.reason})"
+        for item in findings.not_replayable
+    ]
+    return lines

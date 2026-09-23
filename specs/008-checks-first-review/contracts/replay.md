@@ -67,6 +67,15 @@ classified from pass A, and pass B reuses the class:
 | `carried` | a presentation round | its recorded input, in every total |
 | `answered_from_checks` (User Story 2) | pass B runs checks first and the pre-run already ran the call, so the guard answered | the guard's `already_run` answer |
 
+*Reconciled with the code (T023).* "Same summary" compares finding and evidence-request ids
+(`F-…`, `ER-…`) as ids rather than as numbers (`replay.same_summary`): a replay that cannot run
+a recorded check skips that check's findings, so every later finding is numbered lower than it
+was recorded, and on the big recording three hole-alignment results would otherwise read as
+diverged. A summary cut at its 200-character limit is compared as far as both go. Which tool
+was not offered offline is decided by name: a bridge tool needs the live bridge, a standards
+tool needs `--standards-profile`, and a name no registry list holds is not known to the current
+code; the reason says which. The fixture generator uses the same comparison.
+
 ## 4. The accounting
 
 ```
@@ -92,6 +101,14 @@ input[t,k] = R0 + dP
    the adapters send.
 5. Output tokens are held at the recorded values; the replay prices input only.
 6. A Gemini recording is counted over the same text and labelled `comparison: "shape"`.
+7. *Reconciled with the code (T016, T023).* A turn that ended `stopped` or `error` keeps no
+   history (the runner assigns none when a turn raises), so its outputs and results are in no
+   later round; its engineer message is. A follow-up's words are the recorded growth
+   (`RecordedTurn.user_tokens`); when that growth is not observable - the previous round asked
+   for calls - they count as zero and the turn's rounds are flagged `lower_bound`. Before User
+   Story 3 the prefix difference `dP` is counted over the system prompt, the tools' names,
+   descriptions and canonical schemas, and the opening message, rendered the same way for both
+   passes.
 
 ## 5. The finding comparison
 
@@ -99,7 +116,8 @@ Findings are compared as multisets of `finding_subject_key` (data-model section 
 finding is **lost** when its step was `reproduced`, `changed` or `answered_from_checks` and the
 requested pass's session does not hold its key; lost findings exit 1. A finding of an `estimated`
 or `stored` step is **not replayable offline** and is listed with its step and reason, never
-counted lost or kept. A requested-pass finding with no recorded counterpart is **added** and
+counted lost or kept. *Reconciled (T023):* a finding tied to no scripted step - a recorded
+pre-run's, or one no event bracket holds - is compared as a reproduced step's is. A requested-pass finding with no recorded counterpart is **added** and
 changes no exit code. The human output names every lost and every added finding by check and
 subject.
 
@@ -123,6 +141,11 @@ comparison kind; the two settings; one line per round (`turn`, `round`, `recorde
 checks` flags); the three totals and the difference; the count of estimated, lower-bound and
 carried rounds; the regrouped estimate with its assumption, when present; then the findings -
 recorded and replayed counts, every lost, added and not-replayable finding by check and subject.
+*Landed as (T023):* after the round counts, one line per call that was not `reproduced`
+(`step N tool: class - reason`), so every estimate and every change is named where it is
+priced; `settings.*.model_view` is `null` until User Story 3 and `regrouped` `null` until User
+Story 4. Before User Story 3 the command takes `RUN_DIR`, `--lever`, `--standards-profile` and
+`--json`.
 
 `--json` prints exactly the `ReplayReport` model and nothing else:
 
@@ -162,6 +185,17 @@ within 5% of its recorded tokens, and no identifying token of the recording rema
 the owner's denylist at `%LOCALAPPDATA%\SwReview\fixture-denylist.txt` outside the repository.
 The recordings themselves never enter the repository (FR-007).
 
+*Landed as (T018).* `--groups N` gives the live detection's group count when the model judged
+fewer groups than it found (the big recording's count, 113, is recorded only in the model's own
+prose); the fixture package persists the rows and the volume-unit gap together, as checks first
+will. The generator runs from `reviewer/` and grades with the profile's path relative to it,
+because the path is written into the standards findings and an absolute one would carry the
+generating machine's folders. The package's own SOLIDWORKS type names are kept wherever they
+are quoted (a gap listing skipped types). A result is taken as reproduced only when its status
+and summary match (`same_summary`) and its size sits within the framing noise of the recorded
+growth; the generator's own leak check polices every replaced token of three characters or more
+with a letter, and every replaced number of five digits or more.
+
 The committed hygiene test checks every fixture file: document and vault paths under the
 fictional root; no drive path outside it, no email, no http(s) URL, no copyright sign; none of
 `830-02342`, `810-11249`, `810-11281`; and, when the denylist file exists, none of its lines (the
@@ -179,7 +213,9 @@ test says why it skipped that part when the file is absent).
 
 ## 10. Real recordings
 
-`reviewer/tests/integration/test_replay_recorded_runs.py` (marker `integration`, skipped when
-`%LOCALAPPDATA%\SwReview\handover\2026-09-20-gui\dumps` is absent) checks pass A within 1% on every
+`reviewer/tests/integration/test_replay_recorded_runs.py` (skipped when
+`%LOCALAPPDATA%\SwReview\handover\2026-09-20-gui\dumps` is absent; *landed without* the
+`integration` marker, which `tests/conftest.py` skips whole when no native evidence package is
+present - as it is not on the machine holding the recordings) checks pass A within 1% on every
 round of the three recorded reviews (observed at most 0.023%) and that replayed plus
 not-replayable findings equal the recorded key set (830: 88 + 11 = 99).
