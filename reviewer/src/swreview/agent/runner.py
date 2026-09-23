@@ -1227,6 +1227,9 @@ def start_review(
         offered: ToolSet = tools
         if prerun is not None:
             offered = PrerunGuard(tools, prerun, folded=session.folded_families)
+        # Lever 13 (feature 008 FR-030): the tools the pre-run ran to completion, which the
+        # guard leaves off the array; empty with the lever or checks first off.
+        withheld = prerun.withheld if prerun is not None else ()
         # Lever 7, and the last decision setup makes: after the pre-run, because the
         # pre-run is not a turn and has no next round to withdraw anything from. With the
         # flag off nothing in this module or in either adapter takes a different path
@@ -1245,7 +1248,7 @@ def start_review(
         system=build_system_prompt(
             checklist,
             loaded.package,
-            [tool.spec for tool in tools],
+            [tool.spec for tool in tools if tool.name not in withheld],
             efficiency=session.efficiency,
         ),
         sink=sink,

@@ -106,6 +106,7 @@ __all__ = [
     "STANDARDS_UNGRADABLE_ROOT",
     "STANDARDS_UNREADABLE",
     "UNNAMED_ERROR",
+    "WITHHELD_LINE",
     "LiveOutcome",
     "NotEvaluated",
     "PrerunCall",
@@ -118,6 +119,7 @@ __all__ = [
     "prerun_checks",
     "prerun_tools",
     "repeat_key",
+    "withheld_tools",
 ]
 
 RMS_PRERUN_TOOLS: tuple[str, ...] = (
@@ -213,6 +215,13 @@ DIGEST_HEADER = (
 EVALUATED_HEADER = "Evaluated:"
 NOT_EVALUATED_HEADER = "NOT evaluated, and why:"
 NOTHING_EVALUATED = "  nothing: no pre-run check was available this run."
+
+WITHHELD_LINE = (
+    "Not offered to you this session, because checks first ran them to completion: {tools}."
+)
+"""The digest's line after `Evaluated:` when lever 13 took tools off the array (feature 008
+FR-030, `contracts/checks-first.md` section 7): it names them, so a model that reads a tool
+in the list above and misses it in its array knows why, and is told not to look for it."""
 
 UNNAMED_ERROR = "the tool reported a failure without naming it"
 """What a failed call's line says when its envelope carries no `error` key.
@@ -482,6 +491,10 @@ class PrerunResult:
     their findings are one counts line in the digest, never a list of ids."""
     live: LiveOutcome | None = None
     """What live interference detection did, or why it was not attempted (feature 008)."""
+    withheld: tuple[str, ...] = ()
+    """The tools lever 13 took off the array because this pre-run ran them to completion
+    (`withheld_tools`), in pre-run order. Empty with the lever off; `PrerunGuard` leaves them
+    out of what it hands the adapters, and the digest names them."""
 
     @property
     def findings(self) -> tuple[Finding, ...]:
@@ -498,6 +511,8 @@ class PrerunResult:
         """
         lines = [DIGEST_HEADER, "", EVALUATED_HEADER]
         lines.extend(self._call_lines() or [NOTHING_EVALUATED])
+        if self.withheld:
+            lines.append(WITHHELD_LINE.format(tools=", ".join(self.withheld)))
         lines.append(f"Findings recorded: {len(self.findings)}")
         lines.extend(self._finding_lines())
         if self.not_evaluated:
@@ -992,7 +1007,77 @@ def prerun_checks(
         not_evaluated=families,
         families=tuple(session.folded_families),
         live=live,
+        withheld=(
+            withheld_tools(context, tools, calls) if efficiency.withhold_prerun_tools else ()
+        ),
     )
+
+
+def withheld_tools(
+    context: ToolContext, tools: ToolDispatch, calls: Sequence[PrerunCall]
+) -> tuple[str, ...]:
+    """The check tools lever 13 takes off the array: the ones this pre-run ran to completion.
+
+    `contracts/checks-first.md` section 7, one clause per row (research R2.53). A call
+    *completed* when it has no error and a `repeat_key`, so the re-call guard can answer
+    any repeat of it; a tool is a candidate only when every one of its calls completed and
+    it is on the wire now - a tool a tier withheld was never offered, and is not this
+    lever's to claim.
+
+    - The three RMS tools leave together, and only when each ran package-wide (no
+      `document_id`): one step of the system prompt and one checklist sentence name all
+      three, and a partial set would leave a sentence naming a tool that is not there.
+    - `check_interference_group` leaves when every group `groups_of` now enumerates had a
+      completed call, no key is shared by two groups (the tool judges only the active
+      configuration's), and live detection is not offered: with a bridge the model can
+      detect again and add groups only this tool judges.
+    - Each of feature 010's `CODE_FIRST_CHECKS` leaves on its own.
+    - `check_standards` leaves when a standards run is attached and its call completed.
+
+    `bridge_interference` and `get_finding` are never candidates. Returned in pre-run order.
+    """
+    # Deferred: see `_deferred` above.
+    from swreview.checks.standards.registry import CHECK_TOOL
+    from swreview.tools.standards_checks import standards_run
+
+    offered = {tool.name for tool in tools}
+    made: dict[str, list[PrerunCall]] = {}
+    for call in calls:
+        made.setdefault(call.tool, []).append(call)
+
+    def completed(name: str) -> bool:
+        return (
+            name in offered
+            and bool(made.get(name))
+            and all(
+                call.error is None and repeat_key(call.tool, call.arguments) is not None
+                for call in made[name]
+            )
+        )
+
+    withheld: list[str] = []
+    if all(
+        completed(name) and not any(call.arguments.get("document_id") for call in made[name])
+        for name in RMS_PRERUN_TOOLS
+    ):
+        withheld.extend(RMS_PRERUN_TOOLS)
+    if (
+        completed(INTERFERENCE_TOOL)
+        and LIVE_INTERFERENCE_TOOL not in offered
+        and _every_group_judged(context.ir, made[INTERFERENCE_TOOL])
+    ):
+        withheld.append(INTERFERENCE_TOOL)
+    withheld.extend(name for name in checks_mechanical.CODE_FIRST_CHECKS if completed(name))
+    if standards_run(context) is not None and completed(CHECK_TOOL):
+        withheld.append(CHECK_TOOL)
+    return tuple(withheld)
+
+
+def _every_group_judged(package: EvidencePackage, calls: Sequence[PrerunCall]) -> bool:
+    """Every group has a judged call for its key, and no key names two groups."""
+    keys = [group.group_key for group in groups_of(package)]
+    judged = {call.arguments.get("group_key") for call in calls}
+    return len(keys) == len(set(keys)) and set(keys) <= judged
 
 
 def _prerun_call(
@@ -1223,7 +1308,12 @@ class PrerunGuard:
     call that matches one is answered with the recorded outcome and recorded as one real
     step through `registry.record_call` - status ok, no coverage, no finding - so the step
     indices the adapters count stay the session's. Everything else goes to the dispatch.
-    Registers no tool: iterating it is iterating the dispatch.
+    Registers no tool: iterating it is iterating the dispatch, less the tools lever 13
+    withheld (`PrerunResult.withheld`, feature 008 FR-030). Those leave the array the
+    adapters encode and nothing else: `call` still reaches the ledger - every one of their
+    pre-run calls is in it, which is what made them withheld - and the dispatch behind it
+    still holds them, so a model that calls one anyway is answered, never told it does not
+    exist.
     """
 
     def __init__(
@@ -1232,6 +1322,7 @@ class PrerunGuard:
         self.tools = tools
         self.live = prerun.live
         self.folded = tuple(folded)
+        self.withheld = frozenset(prerun.withheld)
         self._ledger: dict[tuple[Any, ...], PrerunCall] = {}
         for call in prerun.calls:
             key = repeat_key(call.tool, call.arguments)
@@ -1239,10 +1330,10 @@ class PrerunGuard:
                 self._ledger.setdefault(key, call)
 
     def __iter__(self) -> Iterator[ProviderTool]:
-        return iter(self.tools)
+        return (tool for tool in self.tools if tool.name not in self.withheld)
 
     def __len__(self) -> int:
-        return len(self.tools)
+        return sum(1 for _ in self)
 
     def call(self, name: str, arguments: Mapping[str, Any], call_id: str = "") -> ToolCallResult:
         """The recorded outcome for a repeat, or the dispatch's own answer for anything else."""
