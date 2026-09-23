@@ -308,15 +308,15 @@ def test_the_joints_with_no_clearance_hole_are_named_once(big) -> None:
 
 
 def test_the_result_counts_the_alignment_findings(big) -> None:
-    """Edited deliberately by feature 010 T046: 9 alignment findings, and now the fastener
-    family's 25 (the folds of the fastener block below)."""
+    """Edited deliberately by feature 010 T046 and T060: 9 alignment findings, the fastener
+    family's 25, and US5's 7 head-clearance and 6 head-fit folds."""
     _, result = big
 
-    assert result["findings"] == 34
+    assert result["findings"] == 47
     assert result["by_status"] == {
-        "checked_within_scope": 25,
-        "demonstrated": 6,
-        "unresolved": 2,
+        "checked_within_scope": 34,
+        "demonstrated": 8,
+        "unresolved": 4,
         "suspected": 1,
     }
     assert len(alignment_findings(big[0])) == 9
@@ -460,6 +460,88 @@ def test_screws_whose_tapped_part_has_no_hole_are_one_skipped_item(big) -> None:
 
     assert item.reason.startswith("9 placed screws (cmp:0071 in hol:0003#1, ")
     assert "cmp:0069 in hol:0025#2" in item.reason
+
+
+# --- tool access and head fit on the big fixture (T060, contracts/tool-access.md s. 5) -------
+
+
+def test_the_head_under_the_clevis_leg_is_demonstrated_naming_it(big) -> None:
+    context, _ = big
+
+    [blocked] = [
+        finding
+        for finding in fastener_findings(context, "fastener.head_clearance")
+        if finding.status == "demonstrated"
+    ]
+
+    assert blocked.observed.startswith("1 joint (jnt:0015 hol:0012#1+hol:0024#1+cmp:0061): ")
+    assert "runs into cmp:0004 at 0.6 mm" in blocked.observed
+    assert blocked.calculation.inputs["tool"] == "hex_key"
+    assert blocked.calculation.inputs["tool_source"].startswith("pilot default")
+
+
+def test_every_other_placed_screw_head_is_clear(big) -> None:
+    context, _ = big
+
+    clearances = fastener_findings(context, "fastener.head_clearance")
+    clear = [finding for finding in clearances if finding.status == "checked_within_scope"]
+
+    assert len(clearances) == len(clear) + 1
+    assert sum(int(finding.observed.split(" ", 1)[0]) for finding in clear) == 47
+    assert not [
+        item
+        for item in context.require_session().coverage.skipped
+        if item.check == "fastener.head_clearance"
+    ]
+
+
+def test_the_12_mm_counterbore_under_an_m8_socket_head_is_demonstrated(big) -> None:
+    context, _ = big
+
+    [tight] = [
+        finding
+        for finding in fastener_findings(context, "fastener.head_fit")
+        if finding.status == "demonstrated"
+    ]
+
+    assert tight.observed == (
+        "1 joint (jnt:0059 hol:0025#2+cmp:0069): The 12.0 mm counterbore of hol:0025#2 is "
+        "smaller than the 13.0 mm head of an M8x1.25 socket head cap (ISO 4762): the head "
+        "cannot seat"
+    )
+
+
+def test_the_14_mm_counterbores_under_the_same_head_pass(big) -> None:
+    context, _ = big
+
+    passes = sorted(
+        (
+            finding.calculation.result["recess_diameter_mm"],
+            finding.calculation.result["recess_depth_mm"],
+            int(finding.observed.split(" ", 1)[0]),
+        )
+        for finding in fastener_findings(context, "fastener.head_fit")
+        if finding.status == "checked_within_scope"
+    )
+
+    # hol:0010 (3 joints, 8.375 deep) and hol:0024 (4 joints, 8.6 deep) under M8 heads of
+    # 13.0 x 8.0; hol:0011 under M10 heads of 16.0 x 10.0.
+    assert passes == [(14.0, 8.375, 3), (14.0, 8.6, 4), (17.5, 10.225, 3)]
+
+
+def test_the_flat_head_torx_countersinks_are_unresolved_for_want_of_a_head_row(big) -> None:
+    """FHT is flat head Torx (owner answer); the head table carries ISO 10642's hexagon socket
+    countersunk heads and nothing for a flat head, so head fit waits rather than borrows."""
+    context, _ = big
+
+    unresolved = [
+        finding
+        for finding in fastener_findings(context, "fastener.head_fit")
+        if finding.status == "unresolved"
+    ]
+
+    assert sorted(int(finding.observed.split(" ", 1)[0]) for finding in unresolved) == [16, 19]
+    assert all("flat head" in finding.observed for finding in unresolved)
 
 
 # --- through the registry -------------------------------------------------------------------

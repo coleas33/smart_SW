@@ -23,7 +23,7 @@ Five sources, which is every place a `Finding.check` value can come from:
 3. the deterministic numeric checks, each of which owns its id as a module constant:
    `interference.CHECK`, the five `fastener.CHECK_*`, `fit.CHECK`, `stack.CHECK`,
    `hole_alignment.CHECK`, and feature 010's `joint_alignment.CHECK_NOMINAL` and
-   `CHECK_STACK` and `fastener_identity.CHECK_IDENTITY`;
+   `CHECK_STACK`, `fastener_identity.CHECK_IDENTITY` and `tool_access.CHECK_HEAD_FIT`;
 4. `tools/session.py` `DRAWING_FINDING_CHECK` - the one id `record_drawing_finding`
    accepts, which is fixed rather than caller-supplied;
 5. nothing else: `build_finding` is the one finding constructor, and every caller of it
@@ -43,6 +43,7 @@ from swreview.checks import (
     interference,
     joint_alignment,
     stack,
+    tool_access,
 )
 from swreview.checks.rms.registry import RULES as RMS_RULES
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
@@ -71,6 +72,7 @@ NUMERIC_CHECKS: frozenset[str] = frozenset(
         joint_alignment.CHECK_NOMINAL,
         joint_alignment.CHECK_STACK,
         fastener_identity.CHECK_IDENTITY,
+        tool_access.CHECK_HEAD_FIT,
         *FASTENER_CHECKS,
     }
 )
@@ -87,9 +89,9 @@ def test_the_five_sources_between_them_name_every_emittable_check() -> None:
     before it makes the two coverage tests below pass for the wrong reason."""
     assert len(RMS_RULES) == 34
     assert len(STANDARDS_RULES) == 16
-    assert len(NUMERIC_CHECKS) == 12, "9 until feature 010 T036, 11 until T046"
+    assert len(NUMERIC_CHECKS) == 13, "9 until feature 010 T036, 11 until T046, 12 until T060"
     assert DRAWING_FINDING_CHECK == "drawing.manufacturing_inputs"
-    assert len(emittable()) == 63, "the five sources share no id (60 before feature 010)"
+    assert len(emittable()) == 64, "the five sources share no id (60 before feature 010)"
 
 
 def test_every_emittable_check_id_has_a_consequence_class() -> None:
@@ -131,7 +133,7 @@ def test_the_needs_judgement_prefixes_each_match_at_least_one_emittable_id() -> 
 def test_the_judgement_families_are_the_numeric_checks_except_the_axial_stack() -> None:
     """Which emittable ids key 2 actually lifts, named rather than left to a prefix scan.
 
-    Eleven of the twelve numeric checks: only the engineer knows whether an overlap is the
+    Twelve of the thirteen numeric checks: only the engineer knows whether an overlap is the
     intended press fit, which two dimensions are one interface, or what a screw clamps.
     `stack.worst_case` is the one that is not, and deliberately: the engineer states the
     stack - the dimensions, their signs and the target are arguments to the check - so once

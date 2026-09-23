@@ -29,7 +29,9 @@ from typing import Any
 
 import trimesh
 
+from swreview.checks.fastener import HeadSweep
 from swreview.checks.fastener_identity import (
+    EnvelopeOf,
     RecognisedFastener,
     fastener_group,
     joint_map_with_fasteners,
@@ -47,6 +49,7 @@ from swreview.checks.joints import (
     pattern_group,
 )
 from swreview.checks.result import CheckResult
+from swreview.checks.tool_access import recess_group, run_head_fit, sweep_head
 from swreview.report.session import CoverageBucket, CoverageItem, CoverageScope
 from swreview.tools.context import ToolContext, current_context
 from swreview.tools.measure import load_body_mesh
@@ -213,6 +216,49 @@ class BodyMeshes:
         return self._meshes[component_id]
 
 
+def _head_sweeper(
+    context: ToolContext, meshes: BodyMeshes
+) -> tuple[EnvelopeOf | None, str]:
+    """What sweeps each placed screw's head, or `None` and why no sweep can be made.
+
+    Every body the package holds is swept, the screw's own excluded. With lever 10a's lazy
+    meshes nothing is fetched here - the code-first pass makes no bridge call - and every
+    part component whose body was never fetched is named, never assumed clear
+    (`contracts/tool-access.md` section 3). A package with no body mesh at all is one
+    skipped item for every joint rather than an unresolved finding each.
+    """
+    package = context.ir
+    lazy = context.extraction.meshes == "lazy"
+    if not package.bodies:
+        reason = "the package holds no body mesh"
+        if lazy:
+            reason += " (extracted with lazy meshes; check_joints fetches none)"
+        return None, reason
+    with_bodies = sorted({body.component_id for body in package.bodies})
+    parts = {item.document_id for item in package.documents if item.kind == "part"}
+    unfetched_parts = [
+        component.id
+        for component in package.components
+        if lazy
+        and component.suppression == "resolved"
+        and component.document_id in parts
+        and component.id not in with_bodies
+    ]
+
+    def sweep(joint: Joint) -> HeadSweep:
+        assert joint.fastener is not None
+        screw = joint.fastener.component_id
+        return sweep_head(
+            joint,
+            package,
+            screw_mesh=meshes.mesh_of(screw),
+            others=[(cid, meshes.mesh_of(cid)) for cid in with_bodies if cid != screw],
+            unfetched=[cid for cid in unfetched_parts if cid != screw],
+        )
+
+    return sweep, ""
+
+
 def _record_folded(
     context: ToolContext,
     results: Sequence[JointResult],
@@ -270,11 +316,19 @@ def check_joints() -> ToolResult:
         return refused
 
     meshes = BodyMeshes(context)
+    envelope_of, no_sweep = _head_sweeper(context, meshes)
     fasteners = run_fastener_checks(
-        context.ir, joint_map, analysis.recognised, mesh_of=meshes.mesh_of
+        context.ir,
+        joint_map,
+        analysis.recognised,
+        mesh_of=meshes.mesh_of,
+        envelope_of=envelope_of,
+        no_sweep_reason=no_sweep,
     )
-    refused = _record_folded(context, fasteners.results, fastener_group) or _record_identity(
-        context, fasteners.identity
+    refused = (
+        _record_folded(context, fasteners.results, fastener_group)
+        or _record_folded(context, run_head_fit(context.ir, joint_map), recess_group)
+        or _record_identity(context, fasteners.identity)
     )
     if refused is not None:
         return refused

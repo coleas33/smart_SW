@@ -22,20 +22,54 @@ clearance_mm: 0.5
 # Room for the hand and for the tool not being perfectly on axis. One number for every
 # tool: a finer split would imply knowledge this table does not have.
 
+#
+# reach_diameter_ratio (feature 010 US5): how far back from the head plane the tool needs
+# the space, as a multiple of d, so the joint checks can sweep every screw with no length a
+# model types in. Pilot defaults too, owner answer 2026-09-23 ("pilot defaults for now"):
+#
+#     reach_mm = reach_diameter_ratio * d
+
 tools:
   hex_key:
     envelope_diameter_ratio: 0.6
+    reach_diameter_ratio: 5.0
     source: >-
       pilot default: hex key across flats taken as 0.6 x d (an M6 socket head cap screw
       drives with a 5 mm key, so this is conservative for small metric sizes and loose
-      for large ones); replace with the shop's key set before relying on it
+      for large ones), and a reach of 5 x d for the key's arm and the hand turning it;
+      replace with the shop's key set before relying on it
+  torx_key:
+    envelope_diameter_ratio: 1.0
+    reach_diameter_ratio: 5.0
+    source: >-
+      pilot default: Torx key across points taken as 1.0 x d (a T20 key is about 3.9 mm for
+      an M4 button head, a T40 about 6.5 mm for an M8), and a reach of 5 x d for the key's
+      arm and the hand turning it; replace with the shop's key set before relying on it
   socket:
     envelope_diameter_ratio: 1.6
+    reach_diameter_ratio: 4.0
     source: >-
       pilot default: outside diameter of a hex socket taken as 1.6 x d, which covers a
-      common 1/4 in drive socket over a hex head of the same nominal size
+      common 1/4 in drive socket over a hex head of the same nominal size, and a reach of
+      4 x d for the socket and its extension
   screwdriver:
     envelope_diameter_ratio: 1.2
+    reach_diameter_ratio: 10.0
     source: >-
       pilot default: barrel diameter of a driver handle taken as 1.2 x d; the blade
-      itself is smaller, the handle is what runs into a neighbouring boss
+      itself is smaller, the handle is what runs into a neighbouring boss; a reach of
+      10 x d for the blade and the handle
+
+# Which tool turns a head (feature 010 US5, contracts/tool-access.md section 2). The drive a
+# head code names (checks/fastener_names.yaml) decides first; the head type decides when no
+# drive is stated; a head neither names is unresolved, never given a guessed tool.
+drive_tools:
+  hex_socket: hex_key
+  torx: torx_key
+  hex_head: socket
+
+head_tools:
+  socket head cap: hex_key
+  button head: hex_key
+  socket countersunk head: hex_key
+  hex head: socket
