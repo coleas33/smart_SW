@@ -383,7 +383,7 @@ class TestARunThroughTheWholePipeline:
         """FR-045 and SC-009 over a whole run rather than over one route.
 
         The application was built with a provider factory, and a remodel run never asks it
-        for anything: `build_provider` is the one construction site, it refuses the scripted
+        for anything: `build_provider` is the one entry point, it refuses the scripted
         provider this run names, and the absence is recorded on the plan while phases C and
         D run unaffected. A deterministic re-model works on a workstation with no key.
         """

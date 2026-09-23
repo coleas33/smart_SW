@@ -690,7 +690,7 @@ no SOLIDWORKS, no LLM, no I/O, fully testable with builder fixtures over an IR p
 | `apply_log.py` | `ChangeRecord` plus `derive_undo(change)`, a pure inverse per change kind | one test per kind |
 | `plan.py` | `RemodelPlan` (pydantic, `plan_schema: "1.0"`), `plan_reorganize()` composes the above | four golden plans |
 | `apply.py` | the deterministic executor | fake bridge that scripts a failure at change N |
-| `runner.py` | phases A to D; the only place a provider is constructed | `FakeProvider` scripts, including one that proposes garbage |
+| `runner.py` | phases A to D; the one entry point to a provider, which delegates to `cli.provider_factory` (decision 4A, 2026-09-23) | `FakeProvider` scripts, including one that proposes garbage |
 
 ### R6.1 Targets
 

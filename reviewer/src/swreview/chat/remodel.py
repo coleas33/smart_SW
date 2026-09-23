@@ -29,9 +29,11 @@ phase leaves it, the dumper is the add-in, and so the worker blocks on a `thread
 with a timeout. On expiry it raises `PackageAfterTimeout`, which `run_remodel` reports on
 the stream, records on the plan and finalizes as `failed` **with the change log intact**.
 
-**No route constructs a provider.** `remodel/runner.py::build_provider` is the one
-construction site (FR-045), it is reached only from `POST /remodel/runs`, and a run whose
-adapter cannot be built records the absence and applies the deterministic plan anyway.
+**No route constructs a provider.** `remodel/runner.py::build_provider` is the remodel run's
+one entry point to an adapter (FR-045); it builds none itself but delegates to
+`cli.provider_factory`, the one construction body (owner decision 4A, 2026-09-23). It is reached
+only from `POST /remodel/runs`, and a run whose adapter cannot be built records the absence and
+applies the deterministic plan anyway.
 """
 
 from __future__ import annotations

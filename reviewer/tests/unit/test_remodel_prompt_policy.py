@@ -85,65 +85,126 @@ def construction_sources() -> dict[str, str]:
     }
 
 
-def imports_the_factory(source: str) -> bool:
-    """Does this module import `provider_factory` from `swreview.cli`, at any depth?
+REMODEL_MODULE_PACKAGE = "swreview.remodel"
+"""What a relative import in a scanned module is relative to: every module scanned here is
+one of `remodel/`'s own (`construction_sources` scans the runner and the body by source, and
+neither imports relatively)."""
+
+FACTORY = "swreview.cli.provider_factory"
+"""The one body that builds an adapter (owner decision 4A)."""
+
+FACTORY_MODULES = ("swreview.cli", "swreview.chat.server")
+"""The modules a way to an adapter lives in: the body itself, and the pane's entry point
+`chat.server.build_provider`, which hands the body the pane's levers - lever 6 among them, which
+a remodel run must never be built with."""
+
+REGISTRY_GET = "swreview.agent.providers.get"
+"""The registry's one door (`ADAPTER_MODULES` is what it consults; nothing else imports an
+adapter module by name)."""
+
+
+def _absolute(node: ast.ImportFrom) -> str:
+    """The module a `from` import names, a relative one resolved against `remodel/`."""
+    if node.level == 0:
+        return node.module or ""
+    parts = REMODEL_MODULE_PACKAGE.split(".")
+    anchor = parts[: len(parts) - node.level + 1]
+    return ".".join([*anchor, node.module] if node.module else anchor)
+
+
+def _bindings(tree: ast.Module) -> dict[str, str]:
+    """Every name an import in `tree` binds, at any depth, to the dotted name it stands for.
+
+    `import a.b` binds `a` to `a`; `import a.b as c` binds `c` to `a.b`; `from a import b as c`
+    binds `c` to `a.b`. Scopes are merged, which can only find more, never less.
+    """
+    bound: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname:
+                    bound[alias.asname] = alias.name
+                else:
+                    head = alias.name.split(".")[0]
+                    bound[head] = head
+        elif isinstance(node, ast.ImportFrom):
+            base = _absolute(node)
+            for alias in node.names:
+                bound[alias.asname or alias.name] = f"{base}.{alias.name}"
+    return bound
+
+
+def _dotted(node: ast.expr) -> str | None:
+    """`a.b.c` for a chain of attributes on a name, else `None`."""
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    return ".".join([node.id, *reversed(parts)])
+
+
+def reached(source: str) -> set[str]:
+    """Every dotted name `source` reaches: what each import names, and what each call names
+    once its first name is resolved through the import that bound it.
+
+    `swreview.cli` for `import swreview.cli` and for `from swreview import cli`;
+    `swreview.cli.provider_factory` for `from ..cli import provider_factory` in a `remodel/`
+    module and for `swreview.cli.provider_factory(...)` after `import swreview`.
+    """
+    tree = ast.parse(source)
+    bound = _bindings(tree)
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            base = _absolute(node)
+            names.update(f"{base}.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.Call):
+            dotted = _dotted(node.func)
+            if dotted is None:
+                continue
+            head, _, rest = dotted.partition(".")
+            if head in bound:
+                names.add(f"{bound[head]}.{rest}" if rest else bound[head])
+    return names
+
+
+def _within(name: str, module: str) -> bool:
+    return name == module or name.startswith(f"{module}.")
+
+
+def reaches_the_factory(source: str) -> bool:
+    """Does this module reach `cli.provider_factory` - imported at any depth, absolutely or
+    relatively, or called through `swreview.cli` (`reached`)?
 
     At any depth because the one legitimate import is deferred into a function body: `cli`
     imports the `remodel` package, so a module-scope import would be circular.
     """
-    return any(
-        isinstance(node, ast.ImportFrom)
-        and node.module == "swreview.cli"
-        and any(alias.name == "provider_factory" for alias in node.names)
-        for node in ast.walk(ast.parse(source))
-    )
+    return FACTORY in reached(source)
 
 
-def imports_the_command_line(source: str) -> bool:
-    """Does this module import `swreview.cli` in any form, and so have the factory in reach?
+def reaches_a_factory_module(source: str) -> bool:
+    """Does this module reach `swreview.cli` or `swreview.chat.server` in any form?
 
-    `from swreview.cli import ...`, `import swreview.cli` and `from swreview import cli` -
-    the last two reach the factory as `cli.provider_factory` without naming it in an import.
-    The package uses absolute imports only, so these three are every way in.
+    Either puts an adapter in reach without naming the factory: `cli.provider_factory` after
+    `from swreview import cli`, or the pane's `chat.server.build_provider`, which builds with
+    the pane's levers. Imported absolutely or relatively, at any depth, or called through a
+    parent package's attribute (`reached`).
     """
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.ImportFrom):
-            if node.module == "swreview.cli":
-                return True
-            if node.module == "swreview" and any(alias.name == "cli" for alias in node.names):
-                return True
-        if isinstance(node, ast.Import) and any(
-            alias.name == "swreview.cli" for alias in node.names
-        ):
-            return True
-    return False
+    return any(_within(name, module) for name in reached(source) for module in FACTORY_MODULES)
 
 
 def constructs_a_provider(source: str) -> bool:
-    """Does this module reach into the provider registry to build an adapter?
+    """Does this module import or call the provider registry's `get`, however it bound it?
 
-    `providers.get(...)` and a bare `get(...)` imported from the provider package are the
-    only two ways in, because `ADAPTER_MODULES` is what `get` consults and nothing else
-    imports an adapter module by name.
+    `from ...providers import get`, and a call of `providers.get(...)`, a bare or aliased
+    `get(...)` or the full dotted path, each resolved through the import that bound its first
+    name - so a local called `providers`, or a dictionary's `get`, is not the registry.
     """
-    tree = ast.parse(source)
-    imported_get = any(
-        isinstance(node, ast.ImportFrom)
-        and node.module == "swreview.agent.providers"
-        and any(alias.name == "get" for alias in node.names)
-        for node in ast.walk(tree)
-    )
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if isinstance(func, ast.Attribute) and func.attr == "get":
-            value = func.value
-            if isinstance(value, ast.Name) and value.id == "providers":
-                return True
-        if imported_get and isinstance(func, ast.Name) and func.id == "get":
-            return True
-    return False
+    return REGISTRY_GET in reached(source)
 
 
 # --- 1. the prompt ----------------------------------------------------------------------
@@ -256,7 +317,7 @@ def factory(monkeypatch: pytest.MonkeyPatch) -> RecordingFactory:
 
 
 @pytest.mark.parametrize(
-    ("source", "factory_import", "command_line_import"),
+    ("source", "factory", "factory_module"),
     [
         ("from swreview.cli import provider_factory", True, True),
         ("def build():\n    from swreview.cli import provider_factory\n", True, True),
@@ -266,15 +327,53 @@ def factory(monkeypatch: pytest.MonkeyPatch) -> RecordingFactory:
         ("from swreview import remodel", False, False),
         ("from swreview.remodel.plan import plan_path", False, False),
         ("def run(provider_factory=None):\n    return provider_factory\n", False, False),
+        ("from ..cli import provider_factory", True, True),
+        ("from .. import cli", False, True),
+        ("from swreview.chat.server import build_provider", False, True),
+        ("def build():\n    from swreview.chat.server import build_provider\n", False, True),
+        ("from swreview.chat import server", False, True),
+        ("import swreview.chat.server", False, True),
+        ("from ..chat.server import build_provider", False, True),
+        ("from ..chat import server", False, True),
+        ("import swreview\nswreview.cli.provider_factory(settings)\n", True, True),
+        ("from . import plan", False, False),
+        ("from .plan import plan_path", False, False),
+        ("from swreview import chat", False, False),
     ],
 )
 def test_the_import_detectors_see_every_way_to_the_factory(
-    source: str, factory_import: bool, command_line_import: bool
+    source: str, factory: bool, factory_module: bool
 ) -> None:
     """A `sites == []` assertion is only as strong as the detector behind it: the deferred
     import counts, and a parameter that happens to be called `provider_factory` does not."""
-    assert imports_the_factory(source) is factory_import
-    assert imports_the_command_line(source) is command_line_import
+    assert reaches_the_factory(source) is factory
+    assert reaches_a_factory_module(source) is factory_module
+
+
+@pytest.mark.parametrize(
+    ("source", "constructs"),
+    [
+        ("from swreview.agent import providers\nproviders.get(name)\n", True),
+        ("from swreview.agent.providers import get\nget(name)\n", True),
+        ("def build():\n    from swreview.agent.providers import get\n    get(name)\n", True),
+        ("from swreview.agent.providers import get as fetch\nfetch(name)\n", True),
+        ("import swreview.agent.providers as registry\nregistry.get(name)\n", True),
+        ("import swreview.agent.providers\nswreview.agent.providers.get(name)\n", True),
+        ("from ..agent import providers\nproviders.get(name)\n", True),
+        ("from ..agent.providers import get\nget(name)\n", True),
+        ("from swreview.agent import providers\nproviders.ProviderName('openai')\n", False),
+        ("from swreview.agent.providers import ProviderName\nProviderName('openai')\n", False),
+        ("settings = {}\nsettings.get('provider')\n", False),
+        ("providers = {}\nproviders.get('openai')\n", False),
+    ],
+)
+def test_the_registry_detector_sees_every_way_to_providers_get(
+    source: str, constructs: bool
+) -> None:
+    """The same rule for the registry: the call is resolved through the import that bound
+    its name - aliased, deferred or relative - and a local that happens to be called
+    `providers` or a dictionary's `get` is not the registry."""
+    assert constructs_a_provider(source) is constructs
 
 
 def test_no_apply_phase_module_constructs_a_provider() -> None:
@@ -291,7 +390,7 @@ def test_no_apply_phase_module_constructs_a_provider() -> None:
     )
 
 
-def test_the_remodel_runner_is_the_one_construction_site() -> None:
+def test_the_remodel_runner_is_the_one_entry_point() -> None:
     """`runner.build_provider` is the remodel run's one way to an adapter, and builds none.
 
     Owner decision 4A (2026-09-23, contracts/tools.md "Providers"): the runner delegates to
@@ -299,10 +398,12 @@ def test_the_remodel_runner_is_the_one_construction_site() -> None:
     too. So `runner.py` imports the factory and does not also reach the registry itself -
     that would be the second construction body the decision removed, the one that carried
     the original's wrong `redact=` keyword - and no other `remodel/` module reaches either.
-    That the import is used, and how, is asserted by behaviour in the next two tests.
+    Neither directly nor through the pane's `chat.server.build_provider`, whose levers a remodel
+    run must not be built with. That the import is used, and how, is asserted by behaviour in
+    the next two tests.
     """
     source = runner_source()
-    assert imports_the_factory(source), (
+    assert reaches_the_factory(source), (
         "remodel/runner.py must hand construction to cli.provider_factory, the one body"
     )
     assert not constructs_a_provider(source), (
@@ -310,7 +411,7 @@ def test_the_remodel_runner_is_the_one_construction_site() -> None:
         "construction body beside cli.provider_factory, which decision 4A removed"
     )
     sites = sites_other_than_the_runner(
-        lambda text: constructs_a_provider(text) or imports_the_command_line(text)
+        lambda text: constructs_a_provider(text) or reaches_a_factory_module(text)
     )
     assert sites == [], (
         f"{sites} reach a provider; remodel/runner.py::build_provider is the remodel run's "
