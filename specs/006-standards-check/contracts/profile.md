@@ -24,7 +24,8 @@ clean result, which is the worst failure a release gate has.
 ```yaml
 # standards.yaml - the company's release checklist configuration.
 # Every value below is FICTIONAL placeholder data. Replace all of it.
-version: 1
+# Version 2 adds general_tolerance and hygiene; a version 1 file still loads without them.
+version: 2
 
 # Absolute path to the vault or project root. Library prefixes below may be written
 # relative to it; an absolute prefix is matched as written. A root that does not exist
@@ -100,6 +101,23 @@ export_control:
   # Presence of this phrase anywhere in a drawing's note text is the defect.
   # Matched case-insensitively as a substring.
   phrase: "EXAMPLE-RESTRICTED"
+
+general_tolerance:
+  # The title block's general tolerance, by decimal places: a dimension written to
+  # decimal_places decimals (.XX is 2) and carrying no tolerance of its own takes
+  # plus_minus_mm. Bands ascend by decimal places. An empty list and a null angular_deg
+  # mean the company declares none; nothing defaults to a standard class.
+  linear:
+    - {decimal_places: 1, plus_minus_mm: 0.3}
+    - {decimal_places: 2, plus_minus_mm: 0.13}
+    - {decimal_places: 3, plus_minus_mm: 0.05}
+  angular_deg: 0.75
+
+hygiene:
+  # The custom properties the hygiene checks read: the part number compared with the file
+  # name, and the description two documents must not share. Empty skips those checks.
+  part_number_property: "Fictional Number"
+  description_property: "Fictional Summary"
 ```
 
 **This block is itself an example profile, and SC-005 scans it.** The YAML above is what the
@@ -116,7 +134,9 @@ both fixture profiles.
 
 | Field | Type | Required | Rules |
 |---|---|---|---|
-| `version` | int | yes | Must be `1`. A profile whose version this build does not know **refuses the run naming both versions**, rather than ignoring the fields it does not recognize |
+| `version` | int | yes | `1` or `2`. A profile whose version this build does not know **refuses the run naming it and the known versions**, rather than ignoring the fields it does not recognize. Version 2 (feature 010 research R2.19) requires the two sections below and version 1 must carry neither, so the owner's version 1 file keeps loading until it is rewritten |
+| `general_tolerance` | mapping | version 2 | `linear`: a list of `{decimal_places, plus_minus_mm}` bands, ascending by decimal places (owner answer 2026-09-23: the general tolerance is by decimal places), `decimal_places` a whole number from 0, `plus_minus_mm` above 0; `angular_deg` above 0 or null. An empty list and a null angle mean the company declares none. Read by feature 010's tolerance resolver only for a dimension with no tolerance of its own |
+| `hygiene` | mapping | version 2 | `part_number_property` and `description_property`, the property names feature 010's hygiene checks read; either may be empty, which skips the checks that need it |
 | `vault_root` | str | yes | An absolute path. May name a directory that does not exist on this machine. Trailing separators are normalized away |
 | `library.skip_prefixes` | list[str] | yes (may be empty) | See "Prefix semantics". Applies to **part documents only** |
 | `library.sketch_exempt_prefixes` | list[str] | yes (may be empty) | Affects `standards.part.sketches_fully_defined` and no other check |
@@ -169,7 +189,8 @@ silently disable a skip list.
 ## Validation rules
 
 A profile is **valid** when it parses as YAML, is a mapping, carries every required key with
-the right type, carries no unknown key, and has `version == 1`. Anything else is a refusal
+the right type, carries no unknown key, and has `version` 1 or 2 with exactly that version's
+sections. Anything else is a refusal
 whose message names:
 
 | Failure | `error_class` | Message names |

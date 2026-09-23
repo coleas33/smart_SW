@@ -9,19 +9,22 @@ an explicit "unsupported" - never an approximation of a case they cannot model
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
 
-from swreview.ir.models import Axis, FaceGeometry, Quantity, Vec3
+from swreview.ir.models import Axis, BBox3D, FaceGeometry, Quantity, Vec3
 
 __all__ = [
     "ANGLE_TOL_RAD",
     "DISTANCE_TOL_M",
     "AxisRelation",
+    "axial_extent",
     "axis_distance",
     "face_gap",
+    "is_axis_aligned",
     "unit_vector",
 ]
 
@@ -60,6 +63,44 @@ def unit_vector(vector: Vec3, what: str) -> np.ndarray:
 
 def _point(vector: Vec3) -> np.ndarray:
     return np.array([vector.x, vector.y, vector.z], dtype=float)
+
+
+def axial_extent(
+    boxes: Sequence[BBox3D], axis: Axis, what: str = "the axis"
+) -> tuple[float, float]:
+    """The lowest and highest projection of every box corner on `axis`, in metres.
+
+    Measured from `axis.origin` along the unit direction, so a reversed axis reads the same
+    boxes backwards. Exact for an axis-aligned box on a coordinate axis; on an oblique axis
+    the corners of a box reach past what it bounds, by up to `r sin(angle)` for a cylinder
+    face of radius `r` - which is why a check that needs an exact length asks
+    `is_axis_aligned` first (feature 010 `contracts/joint-map.md` section 2).
+
+    Raises `ValueError` naming `what` for a zero-length direction, and for no box at all:
+    an extent of nothing is unknown, not zero.
+    """
+    direction = unit_vector(axis.direction, what)
+    if not boxes:
+        raise ValueError(f"no box to measure along {what}")
+    origin = _point(axis.origin)
+    projections = [
+        float(np.dot(np.array([x, y, z]) - origin, direction))
+        for box in boxes
+        for x in (box.min.x, box.max.x)
+        for y in (box.min.y, box.max.y)
+        for z in (box.min.z, box.max.z)
+    ]
+    return min(projections), max(projections)
+
+
+def is_axis_aligned(direction: Vec3, within_deg: float) -> bool:
+    """Whether `direction` lies within `within_deg` of a coordinate axis, either sense.
+
+    Raises `ValueError` for a zero-length direction, through `unit_vector`.
+    """
+    unit = unit_vector(direction, "the direction")
+    largest = min(1.0, float(np.max(np.abs(unit))))
+    return math.degrees(math.acos(largest)) <= within_deg
 
 
 def _line_relation(

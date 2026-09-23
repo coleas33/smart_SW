@@ -3,7 +3,7 @@
 # carried (research.md R5), field by field. Its one-mate prefix is LONGER than the
 # two-mate prefix it overlaps, which is the ordinary case; profile B carries the
 # reversed one (contracts/profile.md prefix semantics rule 6).
-version: 1
+version: 2
 
 vault_root: "/srv/meridian-vault"
 
@@ -44,3 +44,14 @@ material:
 
 export_control:
   phrase: "MERIDIAN-EMBARGO"
+
+general_tolerance:
+  linear:
+    - {decimal_places: 1, plus_minus_mm: 0.4}
+    - {decimal_places: 2, plus_minus_mm: 0.15}
+    - {decimal_places: 3, plus_minus_mm: 0.04}
+  angular_deg: 0.6
+
+hygiene:
+  part_number_property: "Meridian Part Ref"
+  description_property: "Meridian Summary"

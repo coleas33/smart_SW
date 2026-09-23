@@ -55,6 +55,7 @@ from swreview.geometry.axis import axis_distance
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import Ranking, coverage_line, load_policy, start_here_lines
 from swreview.report.session import CoverageItem, CoverageScope
+from swreview.tools import checks_mechanical
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import ToolContext
 from swreview.tools.registry import ToolDispatch
@@ -88,6 +89,7 @@ __all__ = [
     "not_evaluated_families",
     "planned_calls",
     "prerun_checks",
+    "prerun_tools",
 ]
 
 RMS_PRERUN_TOOLS: tuple[str, ...] = (
@@ -105,7 +107,15 @@ None takes an argument the pre-run has to choose: `check_rms_part` and
 INTERFERENCE_TOOL = "check_interference_group"
 """The fourth: one call per group `groups_of` enumerates."""
 
-PRERUN_TOOLS: tuple[str, ...] = (*RMS_PRERUN_TOOLS, INTERFERENCE_TOOL)
+
+def prerun_tools() -> tuple[str, ...]:
+    """Every tool the pre-run may call, read when asked: the four above, then feature 010's
+    `CODE_FIRST_CHECKS`. A withheld one among them carries its tier's sentence into the
+    digest (contracts/levers.md, levers 4 and 5)."""
+    return (*RMS_PRERUN_TOOLS, INTERFERENCE_TOOL, *checks_mechanical.CODE_FIRST_CHECKS)
+
+
+PRERUN_TOOLS: tuple[str, ...] = prerun_tools()
 
 PRERUN_CHECK_PREFIX = "coverage.prerun."
 """What every coverage item the digest writes is checked against.
@@ -388,6 +398,10 @@ def planned_calls(
     resolves the active configuration itself and refuses anything still ambiguous, so a
     second call would ask it the same question twice.
 
+    Feature 010's argument-free checks follow the interference groups, one `(name, {})` per
+    name in `checks_mechanical.CODE_FIRST_CHECKS`, read at call time: that tuple is the one
+    hook those checks have into the pre-run (feature 010 `contracts/code-first.md`).
+
     `check_standards` is planned last, and only when the context carries a standards run -
     the same attribute `ToolRegistry._offered` reads to decide whether to register the tool
     at all (research R2.11). Asking the context rather than taking a parameter is what keeps
@@ -405,6 +419,9 @@ def planned_calls(
     if INTERFERENCE_TOOL not in withheld:
         keys = dict.fromkeys(group.group_key for group in groups_of(context.ir))
         planned.extend((INTERFERENCE_TOOL, {"group_key": key}) for key in keys)
+    planned.extend(
+        (name, {}) for name in checks_mechanical.CODE_FIRST_CHECKS if name not in withheld
+    )
     if CHECK_TOOL not in withheld and standards_run(context) is not None:
         planned.append((CHECK_TOOL, {}))
     return tuple(planned)
@@ -628,7 +645,7 @@ def prerun_checks(
         )
 
     withheld_prerun_tools = [
-        (tool.name, tool.reason) for tool in tools.withheld if tool.name in PRERUN_TOOLS
+        (tool.name, tool.reason) for tool in tools.withheld if tool.name in prerun_tools()
     ]
     families = not_evaluated_families(context.ir, withheld_prerun_tools, standards)
     for family in families:

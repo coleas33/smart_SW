@@ -36,13 +36,12 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-import numpy as np
 from pydantic import ValidationError
 
 from swreview.checks import fastener as joint_check
 from swreview.checks import hole_alignment as alignment_check
 from swreview.checks.result import round_length
-from swreview.geometry.axis import axis_distance, unit_vector
+from swreview.geometry.axis import axial_extent, axis_distance
 from swreview.ir.models import Axis, ComponentInstance, Fastener, Quantity, SourceRef
 from swreview.tools.context import (
     ToolContext,
@@ -118,24 +117,14 @@ def _stated_thickness(context: ToolContext, component: ComponentInstance) -> flo
 
 def _bbox_extent_mm(context: ToolContext, component_id: str, axis: Axis) -> float | None:
     """The extent of the component's extracted face boxes along `axis`, in millimetres."""
+    boxes = [face.bbox for face in context.ir.faces if face.component_id == component_id]
     try:
-        direction = unit_vector(axis.direction, f"the fastener axis over {component_id}")
+        low, high = axial_extent(boxes, axis, f"the fastener axis over {component_id}")
     except ValueError:
-        # No direction to project along, so the extent along it is unknown, not zero.
+        # No direction to project along, or no face to project: the extent is unknown, not
+        # zero.
         return None
-
-    projections: list[float] = []
-    for face in context.ir.faces:
-        if face.component_id != component_id:
-            continue
-        low, high = face.bbox.min, face.bbox.max
-        for x in (low.x, high.x):
-            for y in (low.y, high.y):
-                for z in (low.z, high.z):
-                    projections.append(float(np.dot(np.array([x, y, z]), direction)))
-    if not projections:
-        return None
-    return round_length((max(projections) - min(projections)) * 1000.0)
+    return round_length((high - low) * 1000.0)
 
 
 def _layer_for(context: ToolContext, component_id: str, axis: Axis) -> _Layer:

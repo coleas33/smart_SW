@@ -3,7 +3,7 @@
 # carried (research.md R5), field by field. Its two-mate prefix "parts/hardware/dowels/"
 # is LONGER than the one-mate prefix "parts/hardware/" it overlaps, so the reversed case
 # of contracts/profile.md prefix semantics rule 6 is exercised rather than assumed.
-version: 1
+version: 2
 
 vault_root: "K:/kestrel-store"
 
@@ -44,3 +44,14 @@ material:
 
 export_control:
   phrase: "KESTREL-CONTROLLED"
+
+general_tolerance:
+  linear:
+    - {decimal_places: 0, plus_minus_mm: 0.8}
+    - {decimal_places: 1, plus_minus_mm: 0.35}
+    - {decimal_places: 2, plus_minus_mm: 0.12}
+  angular_deg: 1.25
+
+hygiene:
+  part_number_property: "Kestrel Part Code"
+  description_property: "Kestrel Caption"

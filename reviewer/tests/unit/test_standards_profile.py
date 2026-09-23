@@ -101,6 +101,8 @@ STRING_FIELDS: tuple[str, ...] = (
     "revision.header_text",
     "material.configuration",
     "export_control.phrase",
+    "hygiene.part_number_property",
+    "hygiene.description_property",
 )
 LIST_FIELDS: tuple[str, ...] = (
     "library.skip_prefixes",
@@ -108,7 +110,18 @@ LIST_FIELDS: tuple[str, ...] = (
     "library.one_mate_prefixes",
     "library.two_mate_prefixes",
     "data_card.properties",
+    "general_tolerance.linear",
 )
+VERSION_2_SECTIONS: tuple[str, ...] = ("general_tolerance", "hygiene")
+"""The two sections version 2 adds (feature 010 research R2.19): required on version 2,
+absent on version 1."""
+
+
+def as_version_1(data: dict[str, Any]) -> dict[str, Any]:
+    """A version 2 fixture written back as the version 1 profile it extends."""
+    copy = {key: value for key, value in deepcopy(data).items() if key not in VERSION_2_SECTIONS}
+    copy["version"] = 1
+    return copy
 CELL_FIELDS: tuple[str, ...] = ("revision.cell.row_from_end", "revision.cell.column")
 
 
@@ -127,8 +140,16 @@ def test_a_fixture_profile_loads_field_for_field(fixture: Path) -> None:
 def test_every_field_carries_the_type_the_contract_states(fixture: Path) -> None:
     profile = load_profile(fixture)
 
-    assert profile.version == 1
+    assert profile.version == 2
     assert isinstance(profile.vault_root, str)
+    assert profile.general_tolerance is not None and profile.hygiene is not None
+    assert isinstance(profile.general_tolerance.linear, list)
+    for band in profile.general_tolerance.linear:
+        assert isinstance(band.decimal_places, int)
+        assert isinstance(band.plus_minus_mm, float)
+    assert isinstance(profile.general_tolerance.angular_deg, float)
+    assert isinstance(profile.hygiene.part_number_property, str)
+    assert isinstance(profile.hygiene.description_property, str)
     for field in (
         profile.library.skip_prefixes,
         profile.library.sketch_exempt_prefixes,
@@ -233,7 +254,7 @@ def test_an_unknown_key_is_refused_naming_it(tmp_path: Path, dotted: str) -> Non
     assert dotted.rsplit(".", 1)[-1] in str(raised.value)
 
 
-@pytest.mark.parametrize("version", [0, 2, 17, "1"], ids=repr)
+@pytest.mark.parametrize("version", [0, 3, 17, "2"], ids=repr)
 def test_an_unknown_version_is_refused_naming_both_versions(tmp_path: Path, version: Any) -> None:
     path = write(tmp_path, replacing(raw(PROFILE_A), "version", version))
 
@@ -242,8 +263,126 @@ def test_an_unknown_version_is_refused_naming_both_versions(tmp_path: Path, vers
 
     message = str(raised.value)
     assert repr(version) in message or str(version) in message
-    assert "1" in message
+    assert "1" in message and "2" in message, "the refusal names the versions this build knows"
     assert str(path) in message
+
+
+# --- version 2: the general tolerance and the hygiene names (feature 010 T015) ------------
+
+
+def test_a_version_1_profile_still_loads_with_neither_version_2_section(tmp_path: Path) -> None:
+    """The owner's real profile is version 1 until the owner rewrites it (plan RK-7)."""
+    data = as_version_1(raw(PROFILE_A))
+
+    profile = load_profile(write(tmp_path, data))
+
+    assert profile.version == 1
+    assert (profile.general_tolerance, profile.hygiene) == (None, None)
+
+
+@pytest.mark.parametrize("section", VERSION_2_SECTIONS)
+def test_a_version_1_profile_carrying_a_version_2_section_is_refused_naming_it(
+    tmp_path: Path, section: str
+) -> None:
+    data = {**as_version_1(raw(PROFILE_A)), section: raw(PROFILE_A)[section]}
+
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, data))
+
+    assert section in str(raised.value)
+
+
+@pytest.mark.parametrize("section", VERSION_2_SECTIONS)
+def test_a_version_2_profile_missing_either_section_is_refused_naming_it(
+    tmp_path: Path, section: str
+) -> None:
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, without(raw(PROFILE_A), section)))
+
+    assert section in str(raised.value)
+
+
+@pytest.mark.parametrize("section", VERSION_2_SECTIONS)
+def test_a_version_2_section_written_as_null_is_refused_naming_it(
+    tmp_path: Path, section: str
+) -> None:
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, replacing(raw(PROFILE_A), section, None)))
+
+    assert section in str(raised.value)
+
+
+def bands(*rows: tuple[Any, Any]) -> list[dict[str, Any]]:
+    return [{"decimal_places": places, "plus_minus_mm": value} for places, value in rows]
+
+
+def test_the_bands_are_read_by_decimal_places_in_ascending_order(tmp_path: Path) -> None:
+    """Owner answer 2026-09-23: the general tolerance is by decimal places (research R5)."""
+    declared = bands((1, 0.5), (2, 0.2), (3, 0.05))
+    data = replacing(raw(PROFILE_A), "general_tolerance.linear", declared)
+
+    profile = load_profile(write(tmp_path, data))
+
+    assert profile.general_tolerance is not None
+    read = [(band.decimal_places, band.plus_minus_mm) for band in profile.general_tolerance.linear]
+    assert read == [(1, 0.5), (2, 0.2), (3, 0.05)]
+
+
+@pytest.mark.parametrize(
+    ("rows", "named"),
+    [
+        (((2, 0.2), (1, 0.5)), "decimal places 1 follows 2"),
+        (((1, 0.5), (1, 0.2)), "decimal places 1 follows 1"),
+    ],
+    ids=["unordered", "overlapping"],
+)
+def test_unordered_or_overlapping_bands_are_refused_naming_them(
+    tmp_path: Path, rows: tuple[tuple[int, float], ...], named: str
+) -> None:
+    data = replacing(raw(PROFILE_A), "general_tolerance.linear", bands(*rows))
+
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, data))
+
+    assert named in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("row", "field"),
+    [((-1, 0.5), "decimal_places"), ((1, 0.0), "plus_minus_mm"), ((1, -0.1), "plus_minus_mm"),
+     ((1.5, 0.1), "decimal_places")],
+    ids=["negative places", "zero band", "negative band", "fractional places"],
+)
+def test_a_band_that_could_not_be_meant_is_refused_naming_the_field(
+    tmp_path: Path, row: tuple[Any, Any], field: str
+) -> None:
+    data = replacing(raw(PROFILE_A), "general_tolerance.linear", bands(row))
+
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, data))
+
+    assert field in str(raised.value)
+
+
+def test_an_empty_band_list_and_no_angular_value_mean_the_company_declares_none(
+    tmp_path: Path,
+) -> None:
+    data = replacing(raw(PROFILE_A), "general_tolerance", {"linear": [], "angular_deg": None})
+
+    profile = load_profile(write(tmp_path, data))
+
+    assert profile.general_tolerance is not None
+    assert (profile.general_tolerance.linear, profile.general_tolerance.angular_deg) == ([], None)
+
+
+@pytest.mark.parametrize("value", [0.0, -0.5], ids=repr)
+def test_an_angular_tolerance_that_is_not_positive_is_refused(tmp_path: Path, value: float) -> None:
+    data = replacing(raw(PROFILE_A), "general_tolerance.angular_deg", value)
+
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, data))
+
+    assert "angular_deg" in str(raised.value)
 
 
 # --- the file itself ---------------------------------------------------------------------

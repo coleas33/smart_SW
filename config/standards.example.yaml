@@ -1,6 +1,7 @@
 # standards.yaml - the company's release checklist configuration.
 # Every value below is FICTIONAL placeholder data. Replace all of it.
-version: 1
+# Version 2 adds general_tolerance and hygiene; a version 1 file still loads without them.
+version: 2
 
 # Absolute path to the vault or project root. Library prefixes below may be written
 # relative to it; an absolute prefix is matched as written. A root that does not exist
@@ -76,3 +77,20 @@ export_control:
   # Presence of this phrase anywhere in a drawing's note text is the defect.
   # Matched case-insensitively as a substring.
   phrase: "EXAMPLE-RESTRICTED"
+
+general_tolerance:
+  # The title block's general tolerance, by decimal places: a dimension written to
+  # decimal_places decimals (.XX is 2) and carrying no tolerance of its own takes
+  # plus_minus_mm. Bands ascend by decimal places. An empty list and a null angular_deg
+  # mean the company declares none; nothing defaults to a standard class.
+  linear:
+    - {decimal_places: 1, plus_minus_mm: 0.3}
+    - {decimal_places: 2, plus_minus_mm: 0.13}
+    - {decimal_places: 3, plus_minus_mm: 0.05}
+  angular_deg: 0.75
+
+hygiene:
+  # The custom properties the hygiene checks read: the part number compared with the file
+  # name, and the description two documents must not share. Empty skips those checks.
+  part_number_property: "Fictional Number"
+  description_property: "Fictional Summary"

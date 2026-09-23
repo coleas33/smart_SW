@@ -248,7 +248,7 @@ def leaves(data: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
 
 
 def value_bearing(data: Mapping[str, Any]) -> dict[str, Any]:
-    """Every leaf but `version`, which the schema pins to `1` in every profile."""
+    """Every leaf but `version`, which the schema pins in every profile (1 or 2)."""
     return {name: value for name, value in leaves(data).items() if name != "version"}
 
 
@@ -258,9 +258,20 @@ def r5_field(leaf: str) -> str:
 
 
 def _folded(value: Any) -> set[Any]:
-    """A value as a set, so a list field and a scalar field compare the same way."""
+    """A value as a set, so a list field and a scalar field compare the same way.
+
+    A list of mappings - version 2's `general_tolerance.linear` bands - compares band by
+    band: two profiles agree when they declare the same band, key for key.
+    """
     items = value if isinstance(value, list) else [value]
-    return {item.casefold() if isinstance(item, str) else item for item in items}
+    return {
+        item.casefold()
+        if isinstance(item, str)
+        else tuple(sorted(item.items()))
+        if isinstance(item, Mapping)
+        else item
+        for item in items
+    }
 
 
 def agree(left: Any, right: Any) -> bool:
