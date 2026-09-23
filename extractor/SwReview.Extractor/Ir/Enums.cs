@@ -277,6 +277,23 @@ public enum ModelDimensionType
     Other,
 }
 
+/// <summary>AttachedFace.via (schema 1.6.0, feature 011).</summary>
+public enum AttachedVia
+{
+    /// <summary>The annotation was attached to this face.</summary>
+    Face,
+
+    /// <summary>The annotation was attached to an edge; this is one of its two adjacent faces.</summary>
+    Edge,
+}
+
+/// <summary>DrawingCandidate.reason (schema 1.6.0, feature 011): the only rule.</summary>
+public enum DrawingCandidateReason
+{
+    /// <summary>Same folder, same file stem, .SLDDRW, beside a reviewed document.</summary>
+    SameNameBesideModel,
+}
+
 /// <summary>ModelAnnotation.kind (schema 1.5.0, feature 010).</summary>
 public enum ModelAnnotationKind
 {
