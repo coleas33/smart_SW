@@ -27,7 +27,13 @@ from swreview.ir.models import (
     Quantity,
     SourceRef,
 )
-from swreview.report.attention import Ranking, coverage_line, start_here_lines
+from swreview.report.attention import (
+    Ranking,
+    coverage_line,
+    family_of,
+    family_title,
+    start_here_lines,
+)
 from swreview.report.session import (
     CoverageItem,
     CoverageScope,
@@ -453,9 +459,15 @@ def _render_findings(
         lines.append("No findings.")
         return lines
 
+    families = tuple(session.folded_families)
+    by_family: dict[str, list[Finding]] = {family: [] for family in families}
     by_severity: dict[str, list[Finding]] = {severity: [] for severity in _SEVERITY_ORDER}
     for finding in session.findings:
-        by_severity[finding.severity].append(finding)
+        family = family_of(finding.check, families)
+        if family is not None:
+            by_family[family].append(finding)
+        else:
+            by_severity[finding.severity].append(finding)
 
     for severity in _SEVERITY_ORDER:
         findings = by_severity[severity]
@@ -467,6 +479,45 @@ def _render_findings(
             lines.extend(_render_finding(finding, package, components_by_id, explanations))
             lines.append("")
 
+    for family, findings in by_family.items():
+        if findings:
+            lines.extend(
+                _render_family(family, findings, package, components_by_id, explanations)
+            )
+
+    return lines
+
+
+def _render_family(
+    family: str,
+    findings: list[Finding],
+    package: EvidencePackage | None,
+    components_by_id: dict[str, ComponentInstance],
+    explanations: dict[str, str] | None,
+) -> list[str]:
+    """One folded family, collapsed, with every finding in full (feature 008, FR-014).
+
+    After the severity sections, so the findings an engineer judges come first; each member
+    rendered exactly as a severity section renders it, in recording order, so nothing about
+    a finding is lost by folding. The summary counts each rule once, sorted by check id.
+    The one place this report writes HTML: `<details>` is what collapses a subsection in
+    every Markdown viewer the pane and the owner use, and `contracts/attention.md` section 2
+    records the exception.
+    """
+    per_rule: dict[str, int] = {}
+    for finding in findings:
+        per_rule[finding.check] = per_rule.get(finding.check, 0) + 1
+    summary = ", ".join(f"{check} ({count})" for check, count in sorted(per_rule.items()))
+    lines = [
+        f"### {family_title(family, len(findings), len(per_rule))}",
+        "",
+        f"<details><summary>{summary}</summary>",
+        "",
+    ]
+    for finding in findings:
+        lines.extend(_render_finding(finding, package, components_by_id, explanations))
+        lines.append("")
+    lines.extend(["</details>", ""])
     return lines
 
 

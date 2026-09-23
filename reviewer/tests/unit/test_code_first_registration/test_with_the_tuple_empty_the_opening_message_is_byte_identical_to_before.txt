@@ -24,15 +24,13 @@ Evaluated:
   check_rms_assembly() -> ok, no findings
   check_interference_group(group_key='cmp:0002|cmp:0003') -> ok, 1 finding
 Findings recorded: 5
-  rms.folders.present - 1 suspected: F-001
-  rms.grouping.all_features_in_a_group - 1 demonstrated: F-002
-  rms.params.global_variables_present - 1 demonstrated: F-003
-  rms.params.dimensions_driven_by_equations - 1 suspected: F-004
+  modelling practice: 4 findings across 4 rules (2 demonstrated, 2 suspected); counts only - the findings are in the session and the report
   interference.static - 1 demonstrated: F-005
 
 NOT evaluated, and why:
   fastener joints: 1 fastener in the package; no joint was evaluated. Which components a screw clamps is not derivable from the package, so name the fastener, the hole and the clamped stack yourself with `check_fastener_joint`.
   fit: no interface was evaluated: `check_fit` needs two drawing dimensions identified as the bore and the shaft of one interface, which nothing in the package says.
   axial stack: no stack was evaluated: `check_axial_stack` needs an ordered list of dimensions with signs and the gap they set, which nothing in the package says.
+  standards: no profile was configured for this review
 
 Review the evidence package described in the system prompt. Work through the checklist, gather evidence with the query tools before you judge anything, and close out every checklist item with a finding or a coverage entry. When you are done, summarize what you found and what is still unresolved.

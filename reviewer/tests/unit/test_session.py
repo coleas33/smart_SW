@@ -310,6 +310,40 @@ def test_a_session_without_the_provider_fields_still_validates(tmp_path: Path) -
     session_validator().validate(json.loads(path.read_text(encoding="utf-8")))
 
 
+PRE_008_SESSION = Path(__file__).resolve().parents[1] / "fixtures" / "attention" / (
+    "session-20260918-review.json"
+)
+"""A committed session written before feature 008: it carries no `folded_families`."""
+
+
+def test_folded_families_defaults_empty_and_is_absent_from_the_file_when_empty() -> None:
+    """Feature 008 T029: optional, and omitted when empty, so older sessions keep their bytes."""
+    session = build_session()
+
+    assert session.folded_families == []
+    assert "folded_families" not in json.loads(session.model_dump_json())
+
+
+def test_folded_families_round_trips_through_disk_and_validates(tmp_path: Path) -> None:
+    session = build_session(folded_families=["rms"])
+    path = save_session(session, tmp_path / "session.json")
+
+    written = json.loads(path.read_text(encoding="utf-8"))
+    assert written["folded_families"] == ["rms"]
+    session_validator().validate(written)
+    assert load_session(path).folded_families == ["rms"]
+
+
+def test_a_pre_008_session_loads_and_re_serializes_byte_identically() -> None:
+    raw = PRE_008_SESSION.read_bytes()
+    session = load_session(PRE_008_SESSION)
+
+    assert session.folded_families == []
+    assert (session.model_dump_json(indent=2) + "\n").encode("utf-8") == raw.replace(
+        b"\r\n", b"\n"
+    )
+
+
 def test_provider_info_rejects_an_unknown_key_source() -> None:
     with pytest.raises(ValidationError):
         ProviderInfo(

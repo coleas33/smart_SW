@@ -44,6 +44,25 @@ Two needs-judgement findings never fold: two press fits may be two intents.
 Folding writes nothing: `session.findings`, `Finding.group` and the Findings section are
 byte-identical before and after. The fold is recorded in the ranking and in `attention.json`.
 
+**The family fold (feature 008, FR-014).** A session whose `folded_families` names a family
+(`["rms"]` when the review ran checks first) folds every finding whose check starts with
+`<family>.` - any status, any severity, shared subjects, suppressed and decided ones included -
+into **one** row, before and instead of the rule above. The row's representative is the member
+whose own key sorts first, so a rebuild-breaking or high-severity member lifts the family and an
+all-suppressed family is a suppressed row; `member_finding_ids` is every family id sorted,
+`component_ids` the union (which the reach key reads), `check` and `key.check` the family prefix
+(`rms`), `title` `Modelling practice: N findings across M rules` (counted in English: `1 finding
+across 1 rule`), `family` the prefix and `rule_count` the distinct check ids. Non-family rows keep
+their relative order. A session without the field - every session written before 008, and every
+check folder - ranks byte-identically. `report/attention.py` reads the plain session value and
+imports no settings module.
+
+**The one exception to "Findings byte-identical".** For a session that names a folded family,
+that family's findings render once in the report, after the severity sections, in one
+`### Modelling practice: N findings across M rules` subsection wrapped in `<details>`, and not in
+the severity sections; every finding id still appears under `## Findings`. Every other session,
+and every existing golden, renders byte-identically (008 research R2.21).
+
 ## 3. The "Start here" section
 
 Rendered by `render_report(session, package=None, *, ranking=None)` only when a ranking is
@@ -89,6 +108,9 @@ Points the section exists to enforce:
   Findings, on every surface; nothing "opens with" it.
 - **Rendering with no ranking is byte-identical to today**, proven by the one golden of this
   renderer; a second golden pins the ranked shape.
+- **A folded family takes one slot** (feature 008). Its line carries the title after the reason,
+  as a needs-judgement row does: `3. **F-004** \`rms\` - rebuild breaker, demonstrated, 2
+  components (Modelling practice: 6 findings across 6 rules)`.
 
 ## 4. `attention.json`
 
@@ -131,6 +153,9 @@ Points the record exists to enforce:
 - **Reproducible from the session alone.** `rank(load_session(...), policy)` reproduces the
   record exactly; a record whose `session_id` is not the session beside it is stale, the same
   rule `check.json` already follows.
+- **Two optional row fields** (feature 008). A folded family's row adds `"family": "rms"` and
+  `"rule_count": <M>`; both are omitted when absent, so an unfolded session's record keeps its
+  bytes.
 - **Not a session file.** It is not in `SESSION_FILES`; a folder holding only `attention.json`
   is not "a folder that already holds a review". When a review claims an RMS check folder, the
   record is rotated to `attention.1.json` beside `session.1.json`.

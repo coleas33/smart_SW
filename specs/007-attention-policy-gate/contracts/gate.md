@@ -17,6 +17,14 @@ code default at `ChatServer._start_review`.
 | `procedural_gate` + `prerun_checks` | refused: "levers 5 and 11 never share an arm until each has been gated alone" |
 | `procedural_gate` + `coverage_stop` | refused, for the reason `prerun_checks` + `coverage_stop` is |
 
+**FR-030, amended by feature 008 (T038).** Lever 5 is checks first, the pane default since
+2026-09-22 (008 `contracts/checks-first.md`). Under checks first the standards family is
+attached whenever a profile is named and reported with its reason when it is not, so lever 5's
+digest now carries the standards line of section 2 too ("standards: no profile was configured
+for this review"), and it shows the modelling-practice findings as one counts-only line
+(008 FR-014). The gate's part 1 is still that digest, byte for byte: lever 5's digest and the
+gate's differ only by the brief's parts 2 to 6 (008 US2 scenario 3, research R4).
+
 ## 2. What the pre-run runs with the gate on
 
 `planned_calls` is lever 5's list - `check_rms_part`, `check_rms_equations`,

@@ -451,6 +451,16 @@ class ReviewSession(ReviewModel):
     never in `required`, so a session written before the list existed round-trips to its
     own bytes. The ranking never reads it.
     """
+    folded_families: list[str] = Field(default_factory=list)
+    """The rule families whose findings rank and render as one group (feature 008, FR-014).
+
+    `["rms"]` when the review ran checks first: every modelling-practice finding is one
+    ranking row and one collapsed report subsection, and the model is told only their
+    counts. A plain session value rather than a reading of `efficiency`, so
+    `report/attention.py` needs no settings import and a feature 005 lever-5 session does
+    not silently re-fold (research R2.21). Omitted when empty, so every older session keeps
+    its bytes; check folders never fold.
+    """
     coverage: Coverage = Field(default_factory=Coverage)
     timing: Timing
 
@@ -467,6 +477,8 @@ class ReviewSession(ReviewModel):
             data.pop("finding_explanation_fingerprint", None)
         if not self.contacts:
             data.pop("contacts", None)
+        if not self.folded_families:
+            data.pop("folded_families", None)
         return data
 
 

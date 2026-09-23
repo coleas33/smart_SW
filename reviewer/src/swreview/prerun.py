@@ -49,21 +49,32 @@ from time import perf_counter
 from typing import Any
 
 from swreview.agent.providers import ToolCallRequest, ToolCallResult, call_tool
-from swreview.agent.settings import EfficiencySettings
+from swreview.agent.settings import EfficiencySettings, checks_first
 from swreview.checks.fastener_identity import joint_map_with_fasteners
 from swreview.checks.joints import JointMap
 from swreview.findings import Finding
 from swreview.ir.models import EvidencePackage
-from swreview.report.attention import Ranking, coverage_line, load_policy, start_here_lines
+from swreview.report.attention import (
+    FAMILY_TITLES,
+    Ranking,
+    coverage_line,
+    family_counts,
+    family_of,
+    load_policy,
+    start_here_lines,
+)
 from swreview.report.session import Contact, CoverageItem, CoverageScope
 from swreview.tools import checks_mechanical
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import ToolContext
+from swreview.tools.model_view import count_findings
 from swreview.tools.registry import ToolDispatch
 
 __all__ = [
     "DIGEST_HEADER",
+    "DIGEST_ID_CAP",
     "EVALUATED_HEADER",
+    "FAMILY_COUNTS_NOTE",
     "GATE_BLIND_SPOT_HEADER",
     "GATE_INSTRUCTION",
     "GATE_JUDGEMENT_HEADER",
@@ -298,6 +309,9 @@ class PrerunCall:
     contacts: tuple[Contact, ...] = ()
     """What the call put on the session's contact list (feature 010): an interference group
     that is two parts touching is a contact, not a finding, and the line says so."""
+    payload: Mapping[str, Any] | None = None
+    """The call's full result, kept in memory so the re-call guard can answer a repeat with
+    its digest (feature 008). Defaulted, so a direct constructor stays valid."""
 
     @property
     def label(self) -> str:
@@ -307,10 +321,30 @@ class PrerunCall:
     def line(self) -> str:
         if self.error is not None:
             return f"  {self.label} -> error: {self.error}"
-        counts = [_plural(len(self.findings), "finding")] if self.findings else []
-        if self.contacts:
-            counts.append(_plural(len(self.contacts), "contact"))
-        return f"  {self.label} -> ok, {', '.join(counts) or 'no findings'}"
+        return f"  {self.label} -> ok, {_outcome_counts(self.findings, self.contacts)}"
+
+
+def _outcome_counts(findings: Sequence[Finding], contacts: Sequence[Contact]) -> str:
+    """`2 findings, 1 contact`, or `no findings`: what a call, or a run of calls, recorded."""
+    counts = [_plural(len(findings), "finding")] if findings else []
+    if contacts:
+        counts.append(_plural(len(contacts), "contact"))
+    return ", ".join(counts) or "no findings"
+
+
+DIGEST_ID_CAP = 20
+"""How many finding ids one `(check, status)` line of the opening digest names.
+
+The opening message sits in the fixed prefix of every request and is never pruned, so it
+names at most twenty ids per line and counts the rest (`and 1480 more`); a tool digest,
+which is pruned after two rounds, can afford its own larger caps (research R2.20)."""
+
+COLLAPSED_ERRORS_NAMED = 3
+"""How many failed calls a collapsed line names; the rest are counted."""
+
+FAMILY_COUNTS_NOTE = "counts only - the findings are in the session and the report"
+"""What a folded family's digest line ends with, so a model reading counts and no ids knows
+the ids exist and where (FR-014)."""
 
 
 @dataclass(frozen=True)
@@ -319,6 +353,9 @@ class PrerunResult:
 
     calls: tuple[PrerunCall, ...]
     not_evaluated: tuple[NotEvaluated, ...]
+    families: tuple[str, ...] = ()
+    """The session's folded families when the pre-run ran (`["rms"]` under checks first):
+    their findings are one counts line in the digest, never a list of ids."""
 
     @property
     def findings(self) -> tuple[Finding, ...]:
@@ -327,13 +364,14 @@ class PrerunResult:
     def digest(self) -> str:
         """The text prepended to the first user message.
 
-        Counts per check with every finding named by id, then the "NOT evaluated" block.
-        Nothing here is counted independently of the session: the findings are the objects
-        the tools recorded, so a digest that disagrees with `session.json` is not a thing
-        this can produce.
+        Counts per check with the findings named by id - at most `DIGEST_ID_CAP` per line -
+        and a folded family as one counts line, then the "NOT evaluated" block. Nothing here
+        is counted independently of the session: the findings are the objects the tools
+        recorded, so a digest that disagrees with `session.json` is not a thing this can
+        produce.
         """
         lines = [DIGEST_HEADER, "", EVALUATED_HEADER]
-        lines.extend([call.line() for call in self.calls] or [NOTHING_EVALUATED])
+        lines.extend(self._call_lines() or [NOTHING_EVALUATED])
         lines.append(f"Findings recorded: {len(self.findings)}")
         lines.extend(self._finding_lines())
         if self.not_evaluated:
@@ -341,15 +379,72 @@ class PrerunResult:
             lines.extend(family.line() for family in self.not_evaluated)
         return "\n".join(lines)
 
-    def _finding_lines(self) -> list[str]:
-        """One line per check and status, in the order the findings were recorded."""
-        grouped: dict[tuple[str, str], list[str]] = {}
-        for finding in self.findings:
-            grouped.setdefault((finding.check, finding.status), []).append(finding.id)
+    def _call_lines(self) -> list[str]:
+        """One line per tool, in the order each was first called (research R2.20).
+
+        A tool called once renders exactly `PrerunCall.line()`; a tool called several times
+        - `check_interference_group` once per group - collapses to one line of counts, so
+        a thousand groups are one line rather than a thousand.
+        """
+        by_tool: dict[str, list[PrerunCall]] = {}
+        for call in self.calls:
+            by_tool.setdefault(call.tool, []).append(call)
         return [
-            f"  {check} - {len(ids)} {status}: {', '.join(ids)}"
-            for (check, status), ids in grouped.items()
+            calls[0].line() if len(calls) == 1 else _collapsed_line(tool, calls)
+            for tool, calls in by_tool.items()
         ]
+
+    def _finding_lines(self) -> list[str]:
+        """One line per folded family or per check and status, in recording order."""
+        grouped: dict[tuple[str, str], list[Finding]] = {}
+        for finding in self.findings:
+            family = family_of(finding.check, self.families)
+            key = ("", family) if family is not None else (finding.check, finding.status)
+            grouped.setdefault(key, []).append(finding)
+        lines: list[str] = []
+        for (check, status), findings in grouped.items():
+            if not check:
+                lines.append(_family_line(status, findings))
+                continue
+            ids = [finding.id for finding in findings]
+            more = len(ids) - DIGEST_ID_CAP
+            named = ", ".join(ids[:DIGEST_ID_CAP]) + (f", and {more} more" if more > 0 else "")
+            lines.append(f"  {check} - {len(ids)} {status}: {named}")
+        return lines
+
+
+def _collapsed_line(tool: str, calls: Sequence[PrerunCall]) -> str:
+    """`check_interference_group x113 -> 113 ok, 113 findings`, errors counted and named."""
+    failed = [call for call in calls if call.error is not None]
+    parts = [f"{len(calls) - len(failed)} ok"]
+    if failed:
+        named = "; ".join(
+            f"{call.label}: {call.error}" for call in failed[:COLLAPSED_ERRORS_NAMED]
+        )
+        rest = len(failed) - COLLAPSED_ERRORS_NAMED
+        if rest > 0:
+            named += f"; and {rest} more"
+        parts.append(f"{_plural(len(failed), 'error')} ({named})")
+    findings = [finding for call in calls for finding in call.findings]
+    contacts = [contact for call in calls for contact in call.contacts]
+    parts.append(_outcome_counts(findings, contacts))
+    return f"  {tool} x{len(calls)} -> {', '.join(parts)}"
+
+
+def _family_line(family: str, findings: Sequence[Finding]) -> str:
+    """A folded family's one line: counts, never ids (FR-014).
+
+    `modelling practice: 85 findings across 7 rules (51 demonstrated, 34 suspected); counts
+    only - ...`, counted by `tools/model_view.count_findings` - the rule the re-call guard's
+    counts-only answer uses - and worded by the ranking's own `family_counts`.
+    """
+    counts = count_findings((f.check, f.status, f.severity) for f in findings)
+    statuses = ", ".join(f"{count} {status}" for status, count in counts.by_status.items())
+    name = FAMILY_TITLES.get(family, family).lower()
+    return (
+        f"  {name}: {family_counts(counts.findings, counts.rules)} ({statuses}); "
+        f"{FAMILY_COUNTS_NOTE}"
+    )
 
 
 def gate_brief(prerun: PrerunResult, ranking: Ranking) -> str:
@@ -664,7 +759,7 @@ def prerun_checks(
         What was run and what was not, so the caller can render the digest or the brief, or
         `None` when both levers are off and there is nothing to render.
     """
-    if not (efficiency.prerun_checks or efficiency.procedural_gate):
+    if not checks_first(efficiency):
         return None
 
     session = context.require_session()
@@ -690,6 +785,7 @@ def prerun_checks(
                 findings=tuple(session.findings[before:]),
                 error=_error_of(result),
                 contacts=tuple(session.contacts[contacts_before:]),
+                payload=result.payload,
             )
         )
 
@@ -699,7 +795,11 @@ def prerun_checks(
     families = not_evaluated_families(context.ir, withheld_prerun_tools, standards)
     for family in families:
         context.record_coverage("skipped", family.coverage_item())
-    return PrerunResult(calls=tuple(calls), not_evaluated=families)
+    return PrerunResult(
+        calls=tuple(calls),
+        not_evaluated=families,
+        families=tuple(session.folded_families),
+    )
 
 
 def _error_of(result: ToolCallResult) -> str | None:
