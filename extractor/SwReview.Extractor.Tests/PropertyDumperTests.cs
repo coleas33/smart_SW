@@ -478,6 +478,71 @@ public class PropertyDumperTests
         Assert.Empty(_gaps.Gaps);
     }
 
+    // ---- the overridden-mass gap (feature 010) -------------------------------------
+    //
+    // ReadMass used to decide this gap from its own GetOverrideOptions() call, testing the
+    // answer with `is int[]`; the call returns an IMassPropertyOverrideOptions object, so the
+    // gap its doc comment promised never fired. It is now decided from the override answer the
+    // two-path read already produced, with no second call.
+
+    private const string OverriddenMassReason =
+        "The mass properties are OVERRIDDEN in SOLIDWORKS; the values recorded were typed by a "
+        + "user, not computed from the geometry.";
+
+    [Fact]
+    public void RecordOverriddenMass_WhenTheMassIsOverridden_AddsExactlyOneGap()
+    {
+        PropertyDumper.RecordOverriddenMass(true, DocumentId, _gaps);
+
+        Gap gap = Assert.Single(_gaps.Gaps);
+        Assert.Equal(GapKind.Unsupported, gap.Kind);
+        Assert.Equal("document", gap.EntityKind);
+        Assert.Equal(DocumentId, gap.EntityId);
+        Assert.Equal(OverriddenMassReason, gap.Reason);
+        Assert.Null(gap.Error);
+    }
+
+    [Fact]
+    public void RecordOverriddenMass_WhenTheMassIsNotOverridden_AddsNothing()
+    {
+        PropertyDumper.RecordOverriddenMass(false, DocumentId, _gaps);
+
+        Assert.Empty(_gaps.Gaps);
+    }
+
+    [Fact]
+    public void RecordOverriddenMass_WhenTheOverrideIsUnknown_DoesNotDuplicateTheReadsOwnGap()
+    {
+        // Unknown is the override read's to report, and it already has: one mass_override gap
+        // naming both paths. Nothing is added beside it.
+        bool? overridden = PropertyDumper.ReadMassOverridden(
+            () => null,
+            mp => true,
+            null,
+            mp => true,
+            DocumentId,
+            PartName,
+            _gaps,
+            _gate);
+        Assert.Null(overridden);
+        Gap readGap = Assert.Single(_gaps.Gaps);
+
+        PropertyDumper.RecordOverriddenMass(overridden, DocumentId, _gaps);
+
+        Assert.Same(readGap, Assert.Single(_gaps.Gaps));
+        Assert.Equal("mass_override", readGap.EntityKind);
+    }
+
+    [Fact]
+    public void RecordOverriddenMass_AsksSolidWorksNothing()
+    {
+        // The answer is the one the override read produced; a second GetOverrideOptions call is
+        // exactly what used to decide this gap wrongly.
+        PropertyDumper.RecordOverriddenMass(true, DocumentId, _gaps);
+
+        Assert.Empty(_observer.Members);
+    }
+
     private sealed class RefuseEverythingGuard : ICallGuard
     {
         public void Assert(string interopMember) =>
