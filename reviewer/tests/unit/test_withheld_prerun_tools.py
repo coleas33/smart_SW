@@ -435,6 +435,66 @@ def test_the_gemini_adapter_sends_an_unknown_tool_error_naming_no_withheld_tool(
     assert not set(SEVEN) & set(listed_in(error))
 
 
+# --- one rule for "completed", one filter for the array --------------------------------------
+
+
+def test_the_guards_ledger_and_lever_13_read_one_rule_for_a_completed_call(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """The safety argument: every withheld tool's pre-run calls are in the guard's ledger, so
+    a call to one is always answered. Tightening the rule in one place tightens both - the
+    tool is then neither withheld nor answered, so a model that calls it gets a real run."""
+    from swreview import prerun
+
+    original = prerun.answers_repeat
+
+    def tightened(call: Any) -> bool:
+        return call.tool != "check_hygiene" and original(call)
+
+    monkeypatch.setattr(prerun, "answers_repeat", tightened)
+    run, spy = reviewed(
+        tmp_path,
+        turns=(ScriptedTurn(text="done", tool_calls=(ScriptedToolCall("check_hygiene"),)),),
+    )
+    prerun_steps_ok(run)
+
+    assert "check_hygiene" in offered(spy), "not answerable, so not withheld"
+    assert withheld_line([name for name in SEVEN if name != "check_hygiene"]) in opening(run)
+    [step] = model_steps(run, 1)
+    assert step.tool == "check_hygiene" and step.status == "ok"
+    assert ALREADY_RUN not in step.result_summary, "the ledger no longer answers it either"
+
+
+def test_the_prompts_tool_notes_describe_the_guards_array(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """Lever 2's tool notes follow the array the adapter is handed, taken from the one filter
+    that builds it, never from a second copy of the rule that must agree by hand."""
+    from swreview.prerun import PrerunGuard
+
+    notes = EfficiencySettings(
+        prerun_checks=True, withhold_prerun_tools=True, trim_tool_descriptions=True
+    )
+    run, spy = reviewed(tmp_path, folder="plain", efficiency=notes)
+    names = offered(spy)
+    noted = [name for name in names if f"### {name}\n" in spy.systems[0]]
+    assert noted, "precondition: some offered tool has notes"
+    assert not any(f"### {name}\n" in spy.systems[0] for name in SEVEN)
+    dropped = noted[0]
+
+    original = PrerunGuard.__iter__
+
+    def narrower(self: PrerunGuard) -> Any:
+        return (tool for tool in original(self) if tool.name != dropped)
+
+    monkeypatch.setattr(PrerunGuard, "__iter__", narrower)
+    _, narrowed = reviewed(tmp_path, folder="narrowed", efficiency=notes)
+
+    assert dropped not in offered(narrowed)
+    assert f"### {dropped}\n" not in narrowed.systems[0]
+    assert all(f"### {name}\n" in narrowed.systems[0] for name in noted[1:])
+
+
 # --- the edges: what stays offered ----------------------------------------------------------
 
 
