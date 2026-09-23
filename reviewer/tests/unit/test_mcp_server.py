@@ -43,7 +43,7 @@ from pydantic import ValidationError
 
 from swreview.agent.providers.schema import tool_spec
 from swreview.exceptions import EXCEPTIONS_FILE_NAME
-from swreview.ir.loader import PACKAGE_FILE_NAME, save_package
+from swreview.ir.loader import PACKAGE_FILE_NAME, load_package, save_package
 from swreview.ir.models import Design, EvidencePackage
 from swreview.mcp import server as mcp_server
 from swreview.mcp.chat_log import CHAT_LOG_FILE_NAME
@@ -391,6 +391,9 @@ def test_a_bridge_call_reaches_the_client_that_holds_the_secret(run_dir: Path) -
 
     The factory's client is the one the tools call, and the call is logged like any other,
     so a bridge wired into general chat is neither invisible nor a different code path.
+
+    Feature 008 T056, edited deliberately: the tool takes the entity id of the run folder's
+    package and the client receives that entity's persistent reference (FR-016).
     """
     built: list[FakeBridge] = []
 
@@ -404,12 +407,13 @@ def test_a_bridge_call_reaches_the_client_that_holds_the_secret(run_dir: Path) -
         bridge_secret="s3cret",
         bridge_factory=factory,
     )
-    result = call(server, "bridge_capture", {"persist_ref": "YWJj", "view": "iso"})
+    component = load_package(run_dir).package.components[0]
+    result = call(server, "bridge_capture", {"entity_id": component.id, "view": "iso"})
 
     assert result.is_error is False
     assert payload_of(result)["file"] == "captures/cap-0001.png"
     assert [(client.pipe_name, client.secret) for client in built] == [("swreview-abc", "s3cret")]
-    assert built[0].calls == [("YWJj", "iso")]
+    assert built[0].calls == [(component.persist_ref, "iso")]
 
     entry = chat_log(run_dir)[-1]
     assert entry["tool"] == "bridge_capture"

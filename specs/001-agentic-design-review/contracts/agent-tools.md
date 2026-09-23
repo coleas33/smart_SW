@@ -150,8 +150,8 @@ C# console host out of process, one coarse operation per call, on a single STA t
 
 | Tool | Arguments | Returns |
 |------|-----------|---------|
-| `bridge_capture` | `persist_ref: str`, `view: str` | PNG path, appended to `captures` |
-| `bridge_measure` | `persist_ref_a: str`, `persist_ref_b: str` | SolidWorks Measure result with units |
+| `bridge_capture` | `entity_id: str`, `view: str` | PNG path, appended to `captures`. Since feature 008 the model sends the entity id a query tool returned, and `tools/refs.resolve_entity_ref` resolves it server-side to the entity's persistent reference, which is what the host receives; an id that does not resolve (unknown, no reference, or two kinds with different references) is an error result naming it, with no bridge call |
+| `bridge_measure` | `entity_id_a: str`, `entity_id_b: str` | SolidWorks Measure result with units; both ids resolved server-side as for `bridge_capture`, and the result names `entity_id_a`/`entity_id_b` and carries no reference |
 | `bridge_interference` | `component_ids: list[str]`, `configuration: str`, `settings: InterferenceSettings` | `Interference` list with status |
 
 `InterferenceSettings` is the IR's own model and all five fields are required of the model:

@@ -559,7 +559,18 @@ DRY_RUN_TEXT = (
     "and stops, so nothing here is a review finding."
 )
 
-BRIDGE_PROBE_REF = "probe"
+BRIDGE_PROBE_CONFIGURATION = "probe"
+"""The configuration the development probe asks live detection for. No real configuration
+is called this, so the pre-run's re-call guard never answers a probe (feature 008)."""
+
+BRIDGE_PROBE_SETTINGS: dict[str, Any] = {
+    "treat_coincident_as_interference": False,
+    "treat_subassemblies_as_components": True,
+    "include_multibody": False,
+    "ignore_hidden": True,
+    "fastener_folder_treatment": "include",
+}
+"""All five detection settings stated, as `bridge_interference` requires."""
 
 
 def fake_chat_script(*, bridge_calls: int = 0) -> tuple[ScriptedTurn, ...]:
@@ -570,13 +581,21 @@ def fake_chat_script(*, bridge_calls: int = 0) -> tuple[ScriptedTurn, ...]:
     on the fourth are visible in the event stream, on a workstation and in the subprocess
     test alike. It is 0 for every ordinary run, and the bridge tools only exist at all
     when the session asked for a bridge.
+
+    The probe is `bridge_interference` over the whole assembly (feature 008 research R2.28):
+    it validates only the component ids it is given, so an empty list reaches the bridge in
+    any package, where `bridge_measure` now wants entity ids a made-up probe would not have.
     """
     probe = tuple(
         ScriptedToolCall(
-            "bridge_measure",
-            {"persist_ref_a": f"{BRIDGE_PROBE_REF}-{index}", "persist_ref_b": BRIDGE_PROBE_REF},
+            "bridge_interference",
+            {
+                "component_ids": [],
+                "configuration": BRIDGE_PROBE_CONFIGURATION,
+                "settings": dict(BRIDGE_PROBE_SETTINGS),
+            },
         )
-        for index in range(bridge_calls)
+        for _ in range(bridge_calls)
     )
     opening = ScriptedTurn(
         text=DRY_RUN_TEXT,

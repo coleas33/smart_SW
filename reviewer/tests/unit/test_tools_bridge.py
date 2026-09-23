@@ -183,7 +183,7 @@ def test_fail_tool_accepts_a_bridge_tool_name_when_the_bridge_is_wired(
         tool.name: tool for tool in ToolRegistry().build(context, fail_tool=["bridge_capture"])
     }
 
-    result = tools["bridge_capture"].call({"persist_ref": "YWJj", "view": "iso"})
+    result = tools["bridge_capture"].call({"entity_id": "cmp:0001", "view": "iso"})
 
     assert result.is_error is True
 
@@ -194,13 +194,16 @@ def test_fail_tool_accepts_a_bridge_tool_name_when_the_bridge_is_wired(
 def test_bridge_capture_appends_a_capture_and_returns_its_path(
     context: ToolContext, bridge: FakeBridge
 ) -> None:
-    result = bridge_tools.bridge_capture("YWJj", "iso")
+    result = bridge_tools.bridge_capture("cmp:0001", "iso")
 
     assert result["status"] == "captured"
     assert result["file"] == "captures/cap-0001.png"
     assert result["host_path"].endswith("cap-0001.png")
     assert bridge.calls[0][0] == "capture"
     assert bridge.calls[0][1]["view"] == "iso"
+    # Feature 008 T056: the model sends the entity id; the bridge receives that entity's
+    # persistent reference, resolved server-side.
+    assert bridge.calls[0][1]["persist_ref"] == context.component("cmp:0001").persist_ref
     capture = context.ir.captures[-1]
     assert capture.id == "cap:0001"
     assert capture.file == "captures/cap-0001.png"
@@ -208,15 +211,15 @@ def test_bridge_capture_appends_a_capture_and_returns_its_path(
 
 
 def test_two_captures_get_different_ids(context: ToolContext) -> None:
-    bridge_tools.bridge_capture("YWJj", "iso")
-    bridge_tools.bridge_capture("YWJj", "front")
+    bridge_tools.bridge_capture("cmp:0001", "iso")
+    bridge_tools.bridge_capture("cmp:0001", "front")
 
     ids = [capture.id for capture in context.ir.captures]
     assert len(ids) == len(set(ids)) == 2
 
 
 def test_bridge_capture_refuses_a_view_the_host_cannot_frame(context: ToolContext) -> None:
-    result = bridge_tools.bridge_capture("YWJj", "back")
+    result = bridge_tools.bridge_capture("cmp:0001", "back")
 
     assert "back" in result["error"]
     assert "iso" in result["error"]
@@ -226,7 +229,7 @@ def test_bridge_capture_refuses_a_file_outside_the_package(make_package: MakePac
     row = {**CAPTURE_ROW, "file": "../../elsewhere/cap.png"}
     bridge = FakeBridge({"capture": {"capture": row, "path": None, "gap": None}})
     with use_context(bridged(make_package, bridge)) as context:
-        result = bridge_tools.bridge_capture("YWJj", "iso")
+        result = bridge_tools.bridge_capture("cmp:0001", "iso")
 
     assert "outside the package" in result["error"]
     assert context.ir.captures == []
@@ -235,7 +238,7 @@ def test_bridge_capture_refuses_a_file_outside_the_package(make_package: MakePac
 def test_bridge_capture_refuses_a_result_that_names_no_file(make_package: MakePackage) -> None:
     bridge = FakeBridge({"capture": {"capture": None, "path": None, "gap": None}})
     with use_context(bridged(make_package, bridge)):
-        result = bridge_tools.bridge_capture("YWJj", "iso")
+        result = bridge_tools.bridge_capture("cmp:0001", "iso")
 
     assert "no file" in result["error"]
 
@@ -253,7 +256,7 @@ def test_a_failed_capture_records_the_hosts_gap(make_package: MakePackage) -> No
     )
     context = bridged(make_package, bridge)
     with use_context(context):
-        result = bridge_tools.bridge_capture("YWJj", "iso")
+        result = bridge_tools.bridge_capture("cmp:0001", "iso")
 
     assert "recorded as a gap" in result["error"]
     assert context.ir.gaps[-1].entity_kind == "capture"
@@ -267,7 +270,7 @@ def test_a_malformed_host_gap_is_recorded_rather_than_dropped(make_package: Make
     context = bridged(make_package, bridge)
     before = len(context.ir.gaps)
     with use_context(context):
-        result = bridge_tools.bridge_capture("YWJj", "iso")
+        result = bridge_tools.bridge_capture("cmp:0001", "iso")
 
     assert "recorded as a gap" in result["error"]
     assert len(context.ir.gaps) == before + 1
@@ -284,11 +287,57 @@ def test_a_malformed_host_gap_is_recorded_rather_than_dropped(make_package: Make
 def test_bridge_measure_returns_the_measurement_in_the_hosts_units(
     context: ToolContext, bridge: FakeBridge
 ) -> None:
-    result = bridge_tools.bridge_measure("YWJj", "ZGVm")
+    result = bridge_tools.bridge_measure("cmp:0001", "cmp:0002")
 
     assert result["measurement"]["distance"] == {"value": 0.0125, "unit": "m"}
     assert "metres" in result["source"]
     assert bridge.calls[0][0] == "measure"
+    first, second = context.component("cmp:0001"), context.component("cmp:0002")
+    assert bridge.calls[0][1]["persist_ref_a"] == first.persist_ref
+    assert bridge.calls[0][1]["persist_ref_b"] == second.persist_ref
+
+
+def test_bridge_measure_names_the_entity_ids_and_carries_no_reference(
+    context: ToolContext,
+) -> None:
+    """Feature 008 T056: the payload names what the model sent, never a reference value."""
+    result = bridge_tools.bridge_measure("cmp:0001", "cmp:0002")
+
+    assert result["entity_id_a"] == "cmp:0001"
+    assert result["entity_id_b"] == "cmp:0002"
+    for component in context.ir.components:
+        assert component.persist_ref not in str(result)
+    assert "persist_ref_a" not in result and "persist_ref_b" not in result
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments"),
+    [
+        ("bridge_capture", {"entity_id": "cmp:9999", "view": "iso"}),
+        ("bridge_measure", {"entity_id_a": "cmp:0001", "entity_id_b": "cmp:9999"}),
+    ],
+)
+def test_an_unknown_entity_id_is_an_error_naming_it_and_no_bridge_call(
+    context: ToolContext, bridge: FakeBridge, tool: str, arguments: dict[str, Any]
+) -> None:
+    result = tools_of(context)[tool].call(arguments)
+
+    assert result.is_error is True
+    assert "cmp:9999" in result.payload["error"]
+    assert bridge.calls == []
+
+
+def test_a_bridge_failure_names_the_entity_id_not_the_reference(
+    make_package: MakePackage,
+) -> None:
+    context = bridged(make_package, FakeBridge(raises=BridgeError("the pipe closed")))
+    with use_context(context):
+        captured = bridge_tools.bridge_capture("cmp:0001", "iso")
+        measured = bridge_tools.bridge_measure("cmp:0001", "cmp:0002")
+
+    for result in (captured, measured):
+        assert "cmp:0001" in result["error"]
+        assert context.component("cmp:0001").persist_ref not in result["error"]
 
 
 # --- bridge_interference -----------------------------------------------------------
@@ -358,7 +407,7 @@ def test_bridge_interference_refuses_a_malformed_result(make_package: MakePackag
 def test_a_bridge_error_is_an_error_result(make_package: MakePackage) -> None:
     bridge = FakeBridge(raises=BridgeError("SelectByID2 returned false"))
     with use_context(bridged(make_package, bridge)):
-        result = bridge_tools.bridge_capture("YWJj", "iso")
+        result = bridge_tools.bridge_capture("cmp:0001", "iso")
 
     assert "SelectByID2" in result["error"]
 
@@ -370,7 +419,7 @@ def test_an_open_circuit_is_an_error_result_and_failed_coverage(
     context = bridged(make_package, bridge)
     with use_context(context):
         tool = tools_of(context)["bridge_measure"]
-        result = tool.call({"persist_ref_a": "YWJj", "persist_ref_b": "ZGVm"})
+        result = tool.call({"entity_id_a": "cmp:0001", "entity_id_b": "cmp:0002"})
 
     assert result.is_error is True
     assert "circuit is open" in result.payload["error"]
@@ -385,8 +434,8 @@ def test_every_further_call_after_the_circuit_opens_is_failed_coverage(
     with use_context(context):
         tools = tools_of(context)
         for name, arguments in (
-            ("bridge_capture", {"persist_ref": "YWJj", "view": "iso"}),
-            ("bridge_measure", {"persist_ref_a": "YWJj", "persist_ref_b": "ZGVm"}),
+            ("bridge_capture", {"entity_id": "cmp:0001", "view": "iso"}),
+            ("bridge_measure", {"entity_id_a": "cmp:0001", "entity_id_b": "cmp:0002"}),
         ):
             assert tools[name].call(arguments).is_error is True
 
@@ -476,7 +525,7 @@ def test_a_closed_document_is_an_error_result_and_failed_coverage(
     context = bridged(make_package, bridge)
     with use_context(context):
         tool = tools_of(context)["bridge_capture"]
-        result = tool.call({"persist_ref": "YWJj", "view": "iso"})
+        result = tool.call({"entity_id": "cmp:0001", "view": "iso"})
 
     assert result.is_error is True
     assert "no longer open" in result.payload["error"]
@@ -501,7 +550,7 @@ def test_a_closed_document_still_records_a_gap_the_host_attached(
     )
     context = bridged(make_package, bridge)
     with use_context(context):
-        result = bridge_tools.bridge_capture("YWJj", "iso")
+        result = bridge_tools.bridge_capture("cmp:0001", "iso")
 
     assert "recorded as a gap" in result["error"]
     assert context.ir.gaps[-1].entity_kind == "capture"
@@ -516,8 +565,8 @@ def test_every_live_call_after_the_document_closes_keeps_the_same_sentence(
     with use_context(context):
         tools = tools_of(context)
         errors = [
-            tools["bridge_capture"].call({"persist_ref": "YWJj", "view": "iso"}),
-            tools["bridge_measure"].call({"persist_ref_a": "YWJj", "persist_ref_b": "ZGVm"}),
+            tools["bridge_capture"].call({"entity_id": "cmp:0001", "view": "iso"}),
+            tools["bridge_measure"].call({"entity_id_a": "cmp:0001", "entity_id_b": "cmp:0002"}),
         ]
 
     assert all(result.is_error for result in errors)

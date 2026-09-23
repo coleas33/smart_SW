@@ -317,7 +317,12 @@ def test_fail_bridge_makes_the_fourth_bridge_call_the_circuit_open_one(run_dir: 
     the session, so it takes the first forced failure. The rule is unchanged - three
     `--fail-bridge` failures counted over every bridge call, then `BridgeOpenError` - so the
     fourth bridge call is the scripted model's third probe, and its fourth probe is refused
-    by the open circuit too."""
+    by the open circuit too.
+
+    Feature 008 T058, edited deliberately again: the bridge tools that act on an entity now
+    take entity ids, so the development probe is `bridge_interference` over the whole
+    assembly in a configuration named "probe" (which the re-call guard never matches), and
+    every bridge call of the session is a `bridge_interference`."""
     with backend(
         LAUNCHERS["console-script"], "--run-root", str(run_dir.parent), "--fail-bridge", "3"
     ) as started:
@@ -344,7 +349,13 @@ def test_fail_bridge_makes_the_fourth_bridge_call_the_circuit_open_one(run_dir: 
         if event["type"] == "tool.finished"
         and tool_of[event["body"]["step_index"]] in ("bridge_interference", "bridge_measure")
     ]
-    assert [tool for tool, _ in bridge_results] == ["bridge_interference", *["bridge_measure"] * 4]
+    assert [tool for tool, _ in bridge_results] == ["bridge_interference"] * 5
+    probes = [
+        event["body"]["arguments"]
+        for event in events
+        if event["type"] == "tool.started" and event["body"]["tool"] == "bridge_interference"
+    ][1:]
+    assert all(probe["configuration"] == "probe" for probe in probes)
     assert all(body["status"] == "error" for _, body in bridge_results)
     for _, body in bridge_results[:3]:
         assert "--fail-bridge" in str(body["error"])

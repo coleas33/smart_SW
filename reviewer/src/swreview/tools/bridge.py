@@ -62,6 +62,7 @@ from swreview.tools.context import (
     not_one_of,
 )
 from swreview.tools.query import ToolResult, as_json
+from swreview.tools.refs import EntityRefRefused, resolve_entity_ref
 
 __all__ = [
     "bridge_capture",
@@ -163,24 +164,30 @@ def capture_through_bridge(
     persist_ref: str,
     view: str,
     component_ids: list[str] | None = None,
+    *,
+    subject: str | None = None,
 ) -> ToolResult:
     """Ask the bridge for a capture, record it in the package copy, return its path.
 
     Shared by `bridge_capture` and by `request_capture`, which routes through the bridge
     when one is wired: both must record the same `Capture` and refuse the same paths.
+    `subject` is what the messages call the entity - the id the model sent, so an error it
+    reads never quotes a reference it was not shown (feature 008) - and defaults to the
+    reference for a caller that has no id.
     """
+    label = subject if subject is not None else persist_ref
     if context.bridge is None:
         return error_result("no live SOLIDWORKS bridge is wired to this run")
     try:
         result = context.bridge.capture(persist_ref, view)
     except BridgeError as exc:
-        return _bridge_failure(context, exc, f"capturing {persist_ref!r}")
+        return _bridge_failure(context, exc, f"capturing {label!r}")
 
     payload: dict[str, Any] = result if isinstance(result, dict) else {}
     row = payload.get("capture")
     if not isinstance(row, dict) or not row.get("file"):
         return error_result(
-            f"the bridge captured {persist_ref!r} but its result names no file: {result!r}"
+            f"the bridge captured {label!r} but its result names no file: {result!r}"
         )
     relative = _relative_inside_package(context, str(row["file"]))
     if relative is None:
@@ -329,11 +336,11 @@ def _fetch_component(context: ToolContext, component_id: str) -> list[str]:
     return unresolved
 
 
-def bridge_capture(persist_ref: str, view: str) -> ToolResult:
+def bridge_capture(entity_id: str, view: str) -> ToolResult:
     """Render one entity in the open SOLIDWORKS document and save a PNG.
 
     Args:
-        persist_ref: The entity's persistent reference, as the package records it.
+        entity_id: The entity's id as a query tool returned it; resolved server-side.
         view: One of iso, front, top, right, fit.
 
     Notes:
@@ -344,15 +351,19 @@ def bridge_capture(persist_ref: str, view: str) -> ToolResult:
     context = current_context()
     if view not in BRIDGE_VIEWS:
         return not_one_of("view", str(view), BRIDGE_VIEWS)
-    return capture_through_bridge(context, persist_ref, view)
+    try:
+        persist_ref, _ = resolve_entity_ref(context.ir, entity_id)
+    except EntityRefRefused as refused:
+        return error_result(str(refused))
+    return capture_through_bridge(context, persist_ref, view, subject=entity_id)
 
 
-def bridge_measure(persist_ref_a: str, persist_ref_b: str) -> ToolResult:
+def bridge_measure(entity_id_a: str, entity_id_b: str) -> ToolResult:
     """SOLIDWORKS' own Measure between two entities, with the units it reports.
 
     Args:
-        persist_ref_a: First entity's persistent reference.
-        persist_ref_b: Second entity's persistent reference.
+        entity_id_a: First entity's id as a query tool returned it; resolved server-side.
+        entity_id_b: Second entity's id as a query tool returned it; resolved server-side.
 
     Notes:
         This is the live counterpart of `measure_axis_distance` and `measure_face_gap`: it
@@ -364,15 +375,20 @@ def bridge_measure(persist_ref_a: str, persist_ref_b: str) -> ToolResult:
     if context.bridge is None:
         return error_result("no live SOLIDWORKS bridge is wired to this run")
     try:
+        persist_ref_a, _ = resolve_entity_ref(context.ir, entity_id_a)
+        persist_ref_b, _ = resolve_entity_ref(context.ir, entity_id_b)
+    except EntityRefRefused as refused:
+        return error_result(str(refused))
+    try:
         result = context.bridge.measure(persist_ref_a, persist_ref_b)
     except BridgeError as exc:
         return _bridge_failure(
-            context, exc, f"measuring between {persist_ref_a!r} and {persist_ref_b!r}"
+            context, exc, f"measuring between {entity_id_a!r} and {entity_id_b!r}"
         )
     return {
         "status": "measured",
-        "persist_ref_a": persist_ref_a,
-        "persist_ref_b": persist_ref_b,
+        "entity_id_a": entity_id_a,
+        "entity_id_b": entity_id_b,
         "measurement": result,
         "source": "SOLIDWORKS Measure through the live bridge; lengths are in metres",
     }
