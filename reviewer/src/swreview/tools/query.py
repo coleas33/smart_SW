@@ -23,7 +23,15 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
-from swreview.drawings.native import native_sheet_count
+from swreview.drawings.native import (
+    NativeSheet,
+    every_native_sheet,
+    ingested_source,
+    native_sheet_count,
+    native_sheets,
+    shadowed_sheets,
+    sheet_payload,
+)
 from swreview.exceptions import ExceptionStore
 from swreview.ir.models import (
     BBox2D,
@@ -647,6 +655,9 @@ def get_drawing_sheet(document_id: str, sheet_name: str | None = None) -> ToolRe
     if context.document(document_id) is None:
         return unknown_id("document", document_id)
     sheets = [sheet for sheet in context.ir.drawings if sheet.document_id == document_id]
+    native = native_sheets(context.ir, document_id)
+    if native:
+        return _native_drawing_sheet(context.ir, document_id, sheet_name, native, sheets)
     if not sheets:
         return error_result(f"document {document_id!r} has no extracted drawing sheets")
     if sheet_name is None:
@@ -662,6 +673,38 @@ def get_drawing_sheet(document_id: str, sheet_name: str | None = None) -> ToolRe
     result = as_json(sheet)
     result["available_sheets"] = [item.sheet_name for item in sheets]
     result["reason"] = sheet_reason(context.ir, sheet)
+    return result
+
+
+def _native_drawing_sheet(
+    package: EvidencePackage,
+    document_id: str,
+    sheet_name: str | None,
+    native: list[NativeSheet],
+    ingested: list[DrawingSheet],
+) -> ToolResult:
+    """`get_drawing_sheet` for a document the drawing phase read (feature 011).
+
+    A native sheet by name, preferred over an ingested sheet of the same name; the first
+    native sheet when no name is given; an ingested sheet of another name as today. Every
+    answer lists both kinds as `{name, source}` (`contracts/drawing-source.md` section 2).
+    """
+    available = [{"name": item.sheet.name, "source": "native"} for item in native] + [
+        {"name": item.sheet_name, "source": ingested_source(item)} for item in ingested
+    ]
+    chosen = native[0] if sheet_name is None else next(
+        (item for item in native if item.sheet.name == sheet_name), None
+    )
+    if chosen is not None:
+        return {**sheet_payload(package, chosen), "available_sheets": available}
+    matching = [item for item in ingested if item.sheet_name == sheet_name]
+    if not matching:
+        return error_result(
+            f"document {document_id!r} has no sheet {sheet_name!r}; available: {available}"
+        )
+    result = as_json(matching[0])
+    result["available_sheets"] = available
+    result["reason"] = sheet_reason(package, matching[0])
     return result
 
 
@@ -710,9 +753,12 @@ def find_dimensions(
         except re.error as exc:
             return error_result(f"text_regex {text_regex!r} is not a valid regex: {exc}")
     results: list[dict[str, Any]] = []
+    shadowed = shadowed_sheets(context.ir)
     for sheet in context.ir.drawings:
         if document_id is not None and sheet.document_id != document_id:
             continue
+        if (sheet.document_id, sheet.sheet_name) in shadowed:
+            continue  # a native sheet of the same name is read instead (feature 011)
         for dimension in sheet.dimensions:
             if pattern is not None and pattern.search(dimension.text_as_read) is None:
                 continue
@@ -721,6 +767,22 @@ def find_dimensions(
             entry = as_json(dimension)
             entry["document_id"] = sheet.document_id
             entry["sheet_name"] = sheet.sheet_name
+            results.append(entry)
+    # Feature 011: every native dimension that converts, through the one conversion; a native
+    # dimension names its view but has no box, so `near_view` matches the view's name.
+    for item in every_native_sheet(context.ir):
+        if document_id is not None and item.drawing.document_id != document_id:
+            continue
+        for view, _, converted in item.dimensions():
+            if isinstance(converted, str):
+                continue
+            if pattern is not None and pattern.search(converted.text_as_read) is None:
+                continue
+            if near_view is not None and view.name != near_view:
+                continue
+            entry = as_json(converted)
+            entry["document_id"] = item.drawing.document_id
+            entry["sheet_name"] = item.sheet.name
             results.append(entry)
     return results
 

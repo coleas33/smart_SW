@@ -31,6 +31,8 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 from swreview.checks.result import cite
+from swreview.drawings import binding
+from swreview.drawings.native import native_matches, shadowed_sheets
 from swreview.ir.models import Dimension, EvidencePackage, SourceRef
 
 __all__ = ["EntityRefRefused", "RefArg", "resolve_dimension", "resolve_entity_ref"]
@@ -49,11 +51,20 @@ def resolve_dimension(package: EvidencePackage, source_ref: RefArg) -> Dimension
 
     Raises `LookupError` when the reference names no dimension or more than one, and
     `pydantic.ValidationError` when it is not a well-formed `SourceRef`.
+
+    Feature 011 matches the natively read sheets too, through the one conversion
+    (`drawings/native.native_matches`), and an ingested sheet of the same document and name
+    as a native one is not read beside it. **A native match is refused while
+    `DRAWING_BINDING_VALIDATED` is false**, with a `LookupError` naming the seat validation, so
+    every check that takes a reference returns its error result and computes nothing (FR-024,
+    research R2.11); a PDF-ingested match resolves whatever the switch.
     """
     source = as_source_ref(source_ref)
+    shadowed = shadowed_sheets(package)
     matches = [
         dimension
         for sheet in package.drawings
+        if (sheet.document_id, sheet.sheet_name) not in shadowed
         for dimension in sheet.dimensions
         if (
             dimension.source.document_id == source.document_id
@@ -61,11 +72,22 @@ def resolve_dimension(package: EvidencePackage, source_ref: RefArg) -> Dimension
             and dimension.source.annotation == source.annotation
         )
     ]
-    if not matches:
+    native = native_matches(package, source)
+    count = len(matches) + len(native)
+    if not count:
         raise LookupError(f"no drawing dimension at {cite(source)}")
-    if len(matches) > 1:
-        raise LookupError(f"{len(matches)} drawing dimensions at {cite(source)}; ambiguous")
-    return matches[0]
+    if count > 1:
+        raise LookupError(f"{count} drawing dimensions at {cite(source)}; ambiguous")
+    if matches:
+        return matches[0]
+    _, converted = native[0]
+    if not binding.DRAWING_BINDING_VALIDATED:
+        raise LookupError(
+            f"{cite(source)} is a native drawing dimension, and {binding.NOT_VALIDATED}"
+        )
+    if isinstance(converted, str):
+        raise LookupError(f"{cite(source)}: {converted}")
+    return converted
 
 
 class EntityRefRefused(LookupError):
