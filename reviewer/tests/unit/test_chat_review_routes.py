@@ -63,6 +63,12 @@ UNKNOWN_CHAT = "8a1d6f60-0000-4000-8000-000000000000"
 SECOND_FINDING = {**DRAWING_FINDING_ARGUMENTS, "observed": "The second tapped hole has no depth"}
 
 
+PRERUN_THEN_MODEL = [f"F-{number:03d}" for number in range(1, 6)]
+"""The findings of `finished_chat` in recording order: since feature 008 the pane runs checks
+first, so the pre-run's three RMS findings on the fixture package (missing folders, no global
+variables, no equation-driven dimensions) come before the model's two drawing findings."""
+
+
 @pytest.fixture
 def finished_chat(client: TestClient, run_dir: Path, provider_control: ProviderControl) -> str:
     """A settled review that recorded two findings and asked one question."""
@@ -131,7 +137,10 @@ def test_the_live_snapshots_findings_come_in_the_order_of_the_finding_events(
     body = client.get(f"/sessions/{finished_chat}/snapshot").json()
 
     streamed = [event["body"]["id"] for event in events_of(run_dir) if event["type"] == "finding"]
-    assert [finding["id"] for finding in body["findings"]] == streamed == ["F-001", "F-002"]
+    # Feature 008 T047, edited deliberately: the pane runs checks first, and on the fixture
+    # package the pre-run's RMS rules record three findings before the model's two.
+    assert [finding["id"] for finding in body["findings"]] == streamed == PRERUN_THEN_MODEL
+    assert [f["check"] for f in body["findings"][-2:]] == ["drawing.manufacturing_inputs"] * 2
     assert [request["id"] for request in body["evidence_requests"]] == ["ER-001"]
 
 
@@ -211,7 +220,7 @@ def test_a_restarted_backend_still_serves_the_run_folder(
         response = fresh.get(f"/reviews/{run_dir.name}")
 
     assert response.status_code == 200, response.text
-    assert [finding["id"] for finding in response.json()["findings"]] == ["F-001", "F-002"]
+    assert [finding["id"] for finding in response.json()["findings"]] == PRERUN_THEN_MODEL
 
 
 # --- 3. every refusal is the same 404, naming only the id -------------------------------------
