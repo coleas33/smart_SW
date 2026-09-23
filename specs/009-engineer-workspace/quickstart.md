@@ -100,14 +100,15 @@ newest review; a configuration switch hides a review of another configuration.
 
 ```powershell
 cd ..\reviewer
-uv run pytest tests/unit/test_recording.py tests/unit/test_plain_words_fixture.py tests/golden -q
+uv run pytest tests/unit/test_recording.py tests/unit/test_plain_words_fixture.py tests/unit/test_display_titles.py tests/unit/test_model_reads_the_recorded_title.py tests/golden -q
 cd ..\extractor
 dotnet test SwReview.sln -c Release --filter "FullyQualifiedName~ReviewPageDefaultViewScan|FullyQualifiedName~ReviewPageLabels|FullyQualifiedName~ReviewPageErrors|FullyQualifiedName~ErrorLabelsCoverTheHost|FullyQualifiedName~ReviewPageInjection"
 ```
 
-Expected: titles whole and named (not yet: T061's title half, T062 and T065's fourth check are
-open, so titles are still cut at 80 characters and keep component ids); the regenerated goldens
-differ from before in `title:` values only; the default view holds no named component id, no raw status token, no check id outside a fold
+Expected: the titles an engineer reads - Results, the check tabs' Start here, `report.md` - are
+whole and named, while the title the model reads in every tool result stays cut at 80 characters
+with its ids, byte for byte (owner decision 2A of 2026-09-23, research R2.28); no golden baseline
+is regenerated; the default view holds no named component id, no raw status token, no check id outside a fold
 and no error class name (SC-003); every error says what to do next.
 
 ## Scenario 7 (US7): Model check

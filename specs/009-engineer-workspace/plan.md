@@ -39,7 +39,12 @@ ship:
    Model check states rule statements rather than a fraction and an id list.
 
 The ranking, `attention.json`, the check bodies, `report.md` and every finding's evidence do not
-move; the only golden baselines that move are the ten holding a cut title, once.
+move; the only golden baselines that move are the ten holding a cut title, once. *Amended
+2026-09-23 (owner, decision 2A, research R2.28):* no golden baseline moves. `Finding.title`, the
+title the model reads, stays as recorded; the whole, named title is built by
+`report/titles.display_title` only where a person reads it - the `finding` event, the snapshot,
+the Review tab's ranking, both check bodies' `attention` rows and `report.md` - so those carry a
+different `title` value where the recorded one was cut or named a part by id, and nothing else.
 
 ## Technical Context
 
@@ -129,7 +134,7 @@ specs/009-engineer-workspace/
 Every file this feature adds or changes, reconciled with what landed on 2026-09-23 (T077): a row
 marked *landed as* is a file the tasks touched that this block did not name, a change it did not
 describe, or a change it names that has not landed. A file not named here is not touched; in
-particular `report/attention.py`, `report/attention_record.py`, `report/markdown.py`, `chat-events.schema.json`,
+particular `report/attention.py`, `report/attention_record.py`, `chat-events.schema.json`,
 `ir.schema.json`, `settings.schema.json`, `UserSettings.cs`, `Serve/PROTOCOL.md`, every check module
 and 008's `usageLine` in `render.js` are **reused unchanged**.
 
@@ -139,44 +144,58 @@ reviewer/src/swreview/
 ├── report/review_words_v1.yaml      # NEW: templates, group labels, goals, states, reasons, labels (T008)
 ├── report/summary.py                # NEW: Words, load_words (T008); the summary, ReviewRanking (T011);
 │                                    #      family line (T017); contacts (T019); questions (T038); resume (T040)
-├── report/snapshot.py               # NEW: review_snapshot (T021)
+├── report/snapshot.py               # NEW: review_snapshot (T021); *landed as*: findings through
+│                                    #      pane_finding (T062)
+├── report/titles.py                 # NEW, *landed as* (T062, decision 2A): TITLE_LENGTH, first_sentence,
+│                                    #      title_from (moved unchanged), display_title, pane_finding,
+│                                    #      with_display_titles
+├── report/markdown.py               # CHANGED, *landed as* (T062): headings and Start here titled by
+│                                    #      display_title
+├── tools/context.py                 # CHANGED, *landed as* (T062): the finding event's body, finding_body
+├── agent/runner.py                  # CHANGED, *landed as* (T062): the re-run re-announcement's body
 ├── report/explanations.py           # CHANGED: calls component_names (T006)
 ├── report/unexamined.py             # CHANGED: NotExamined.headline (T013)
 ├── report/session.py                # CHANGED: EvidenceRequest.question/options/blocks (T034)
 ├── agent/events.py                  # CHANGED: UsageLedger.last_conversation_input (T040)
 ├── tools/session.py                 # CHANGED: request_evidence's short form (T036); title names (T062,
-│                                    #      *landed as*: not landed - T062 is open, parked)
+│                                    #      *landed as*: no title change - decision 2A keeps the recorded
+│                                    #      title in the tool result)
 ├── tools/recording.py               # CHANGED: title_from whole and named, TITLE_LENGTH removed (T062;
-│                                    #      *landed as*: untouched - T062 is open, parked: whole, named
-│                                    #      titles change every check tool's result, which 008's replay
-│                                    #      acceptance pins to the recorded ones)
+│                                    #      *landed as*: title_from and TITLE_LENGTH moved unchanged into
+│                                    #      report/titles.py and re-exported here, decision 2A, R2.28)
 └── chat/server.py                   # CHANGED: attention route answers the summary (T015, T040);
                                      #      request_id on two refusals (T042); snapshot and disk routes,
-                                     #      UnknownReview (T051); GET /labels (T060); rule_statements (T064)
+                                     #      UnknownReview (T051); GET /labels (T060); rule_statements (T064);
+                                     #      *landed as*: check_attention, both check bodies' titled rows (T062)
 
 reviewer/tests/
 ├── fixtures/pane/generate_pane_fixture.py                          # NEW (T023)
 ├── golden/test_golden/{ten baselines with a cut title}.yml         # CHANGED: titles only, red by design (T062;
-│                                                                   #      *landed as*: untouched, T062 open)
+│                                                                   #      *landed as*: untouched - decision 2A
+│                                                                   #      keeps the recorded title, R2.28)
+├── support/attention.py                                            # CHANGED, *landed as*: ranking_as_shown, the
+│                                                                   #      check routes' oracle (T061)
 └── unit/
     ├── test_report_names.py, test_review_words.py                  # NEW (Setup)
     ├── test_review_summary.py, test_review_goals.py                # NEW (US3; extended T016, T018, T037)
     ├── test_review_snapshot.py, test_review_summary_fixture.py     # NEW (US3)
     ├── test_pane_fixture.py                                        # NEW (US3; regenerated T062 - *landed as*:
-    │                                                               #      not yet, T062 open)
+    │                                                               #      regenerated, its display titles read)
     ├── test_usage_ledger_resume.py                                 # NEW (US4)
     ├── test_chat_review_routes.py                                  # NEW (US6)
-    ├── test_plain_words_fixture.py                                 # NEW (US7; *landed as*: the summary half of
-    │                                                               #      T061 - the title half waits for T062)
+    ├── test_plain_words_fixture.py                                 # NEW (US7; *landed as*: both halves of T061)
+    ├── test_display_titles.py, test_model_reads_the_recorded_title.py   # NEW, *landed as* (T061, decision 2A)
+    ├── test_runner_provider.py, test_chat_standards_routes.py,
+    │   test_carry_over_guards.py                                   # CHANGED, *landed as* (T061, T062)
     ├── test_unexamined.py, test_chat_review_unexamined.py          # CHANGED (T012)
     ├── test_chat_attention_route.py                                # CHANGED (T014, T039)
     ├── test_session.py, test_events_schema.py                      # CHANGED (T033)
     ├── test_tools_session.py                                       # CHANGED (T035)
     ├── test_tool_payload.py                                        # CHANGED: pins regenerated, red by design (T036)
     ├── test_chat_server.py                                         # CHANGED: request_id (T041); ROUTES (T050, T059)
-    ├── test_recording.py                                           # CHANGED (T061; *landed as*: untouched, T061
-    │                                                               #      open with T062)
-    └── test_chat_checks_routes.py                                  # CHANGED (T063)
+    ├── test_recording.py                                           # CHANGED (T061; *landed as*: the recorded
+    │                                                               #      title's two guards)
+    └── test_chat_checks_routes.py                                  # CHANGED (T063; T062's titled rows)
 
 extractor/SwReview.AddIn/
 ├── Review/ReviewPage/index.html     # CHANGED: summary (T025), questions (T044), the switch and two
@@ -213,8 +232,8 @@ extractor/SwReview.AddIn.Tests/
 ├── ReviewPageSessionsTests.cs, ReviewPageSessionsAcceptanceTests.cs                      # NEW (US6)
 ├── ActiveConfigurationWatchTests.cs                                                     # NEW (US6)
 ├── ReviewPageDefaultViewScanTests.cs, ReviewPageLabelsTests.cs                           # NEW (US7; *landed as*:
-│                                                                    #      the scan runs three of its four checks -
-│                                                                    #      T065 open until T062)
+│                                                                    #      the scan runs all four checks, and the
+│                                                                    #      titles are printed verbatim, T065)
 ├── ReviewPageErrorsTests.cs, ErrorLabelsCoverTheHostTests.cs                             # NEW (US7)
 ├── ReviewPageEventStreamTests.cs, ReviewPageAttentionPanelTests.cs,
 │   ReviewPageNarrowLayoutTests.cs                                   # CHANGED: red by design (T046); harness (T068)
@@ -287,7 +306,9 @@ Research in [research.md](research.md) (R1 to R5). Design in [data-model.md](dat
 11. **Restores cost nothing.** A chip is one `GET`; the transcript of a live chat is replayed only on
     demand, in a mode that does not close the stream per turn.
 12. **Ids move, never vanish.** Titles whole and named at the one title funnel; ids in folds on every
-    tab through the shared rows; errors in words with the class in the fold.
+    tab through the shared rows; errors in words with the class in the fold. *Amended 2026-09-23
+    (decision 2A):* the one funnel is `report/titles.display_title`, on every surface a person
+    reads; the recorded title keeps its ids for the model.
 
 ## Delivery order
 
@@ -313,7 +334,8 @@ after the pane fixture exists (T023), because it regenerates it.
 **External dependencies**: feature 008 - T018 (the committed fixtures), T030 and T032 (the folded
 family), T057 and T062 (the tool pins), T083-T085 (the answer batch), T094-T095 (`usageLine`, which
 this feature never edits); feature 010 - T020 (`Contact`, `ReviewSession.contacts`) and T022 (the
-contact path), T016 and T043 (golden regenerations serial with T062), and T037, T047, T061, T067,
+contact path), T016 and T043 (golden regenerations serial with T062 - no longer since decision 2A,
+R2.28), and T037, T047, T061, T067,
 T075 (new policy classes, all under the goal prefixes; the goal table's completeness test names any
 later one it lacks); the next workstation sitting for Phase 9.
 
