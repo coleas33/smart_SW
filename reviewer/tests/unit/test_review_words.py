@@ -31,7 +31,7 @@ from swreview.chat.server import ChatError
 from swreview.findings import FindingStatus, Severity
 from swreview.report.attention import CHECKLIST_ITEM_IDS, CLOSEOUT_ITEM_ID, load_policy
 from swreview.report.session import CoverageBucket
-from swreview.report.summary import WORDS_FILE, Words, load_words
+from swreview.report.summary import WORDS_FILE, Words, goal_of, load_words
 
 CONTACT_KINDS = ("zero_volume", "possible_only", "thread_model")
 """Feature 010's contact kinds (its data model section 9), labelled here ahead of it."""
@@ -257,6 +257,31 @@ def test_every_classified_check_maps_to_exactly_one_goal_by_longest_prefix() -> 
             tied.append(check)
     assert unmapped == [], f"check ids with no goal: {sorted(unmapped)}"
     assert tied == []
+
+
+@pytest.mark.parametrize(
+    ("check", "goal"),
+    [
+        ("joint.map", "hole_alignment"),
+        ("hole.nominal_alignment", "hole_alignment"),
+        ("hole.position_stack", "hole_alignment"),
+        ("fastener.identity", "fasteners"),
+        ("fastener.engagement", "fasteners"),
+        ("fastener.head_clearance", "tool_access"),
+        ("fastener.head_fit", "tool_access"),
+        ("mass.density", "mass_and_material"),
+        ("mass.coverage", "mass_and_material"),
+        ("hygiene.part_number_matches_file", "hygiene"),
+        ("hygiene.coverage", "hygiene"),
+    ],
+)
+def test_feature_010s_check_and_coverage_ids_land_in_their_goals(check: str, goal: str) -> None:
+    """Feature 010's findings and its coverage-only rows (`joint.map`, `mass.coverage`,
+    `hygiene.coverage`) each land in one goal: the coverage rows are what tell a goal line
+    what the checks could not reach."""
+    found = goal_of(check, load_words().goals)
+
+    assert found is not None and found.id == goal
 
 
 def test_the_states_and_reasons_are_all_worded() -> None:

@@ -92,7 +92,9 @@ goals:
   - id: hole_alignment
     title: "Hole alignment"
     items: [holes.alignment]
-    prefixes: [hole.]
+    # `joint.` is feature 010's joint map (coverage rows only): the joints alignment is
+    # judged on, the near misses listed for the engineer, and the holes it could not use.
+    prefixes: [hole., joint.]
   - id: fits_and_stacks
     title: "Fits and stacks"
     items: [interfaces.fit, interfaces.stack]
