@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal
 
 from swreview import units
@@ -49,9 +49,13 @@ __all__ = [
     "EXCLUDED_EFFECTS",
     "FUNCTION_VERSION",
     "SUPPORTED_KINDS",
+    "THROUGH_TAPPED_SOURCE",
     "ClampedLayer",
+    "Placement",
     "ThreadSpec",
+    "UsableThread",
     "check_fastener_joint",
+    "check_placed_screw",
     "nominal_diameter",
     "parse_thread",
 ]
@@ -207,12 +211,23 @@ def nominal_diameter(designation: str) -> Quantity | None:
 # --- the clamped stack -------------------------------------------------------------
 
 
+CLAMPED_PROTRUSION = "protrusion = screw length - clamped stack - washers"
+CLAMPED_POSE = "the screw is drawn fully home and square to the joint face"
+PLACED_POSE = "the screw is where the assembly places it"
+
+
 @dataclass
 class _Stack:
     """What the bottoming and engagement checks share, computed once, in millimetres.
 
     `missing` holds noun phrases naming the values that could not be obtained; they are
     what the unresolved results report, so they read as "the length of fastener fst:1".
+
+    `bottoming_derivation` and `engagement_derivation` say where the protrusion and the
+    usable thread came from - the lines each rule function writes ahead of its own - and
+    `pose` what is assumed about the screw's seat. A clamped stack derives its protrusion
+    from a length and a list of layers; a placed screw measures it from the assembly
+    (`check_placed_screw`), so the same four rule functions serve both.
     """
 
     length_mm: float | None = None
@@ -223,6 +238,9 @@ class _Stack:
     missing: list[str] = field(default_factory=list)
     inputs: dict[str, Quantity | str] = field(default_factory=dict)
     sources: list[Quantity | str] = field(default_factory=list)
+    bottoming_derivation: list[str] = field(default_factory=lambda: [CLAMPED_PROTRUSION])
+    engagement_derivation: list[str] = field(default_factory=list)
+    pose: str = CLAMPED_POSE
 
     def missing_for(self, *keywords: str) -> list[str]:
         """The missing phrases that mention any of `keywords`, in table order."""
@@ -379,9 +397,9 @@ def _bottoming(fastener: Fastener, hole: Hole, stack: _Stack) -> CheckResult:
                 "bottoms": margin_mm < 0.0,
             },
             [
-                "protrusion = screw length - clamped stack - washers",
+                *stack.bottoming_derivation,
                 "margin = usable thread depth - protrusion",
-                "the screw is drawn fully home and square to the joint face",
+                stack.pose,
             ],
         ),
         coverage_limits=[],
@@ -414,11 +432,12 @@ def _engagement(
         else "usable thread engagement must meet the rule for the tapped material"
     )
     assumptions = [
+        *stack.engagement_derivation,
         "engagement = min(protrusion, usable thread depth)",
         f"engagement rule for material class {rule.name}: {rule.source}",
     ]
 
-    missing = stack.missing_for("length", "clamped", "usable thread depth")
+    missing = stack.missing_for("length", "clamped", "usable thread depth", "protrusion")
     if designation is None or diameter is None:
         missing.append(f"the nominal thread diameter for designation {designation!r}")
     if rule.min_engagement_ratio is None:
@@ -709,6 +728,169 @@ def check_fastener_joint(
     return [
         _bottoming(fastener, hole, stack),
         _engagement(fastener, hole, stack, hole_material, rule),
+        _thread_match(fastener, hole, stack),
+        _head_clearance(fastener, hole, stack, envelope),
+    ]
+
+
+# --- the placed screw (feature 010 US4) ---------------------------------------------------
+
+THROUGH_TAPPED_SOURCE = "derived: through-tapped length from the tapped face"
+THIN_SHEET_SEVERITY: Severity = "low"
+"""A through-tapped part thinner than the rule's length cannot meet it with any screw: the
+owner's answer of 2026-09-23 makes that shortfall a finding at low severity, carrying the
+sheet thickness (feature 010 research R5)."""
+
+
+@dataclass(frozen=True)
+class UsableThread:
+    """How much thread a placed screw can engage, and where the number came from.
+
+    A blind hole's is its Hole Wizard `thread_depth`; a through-tapped hole's is its tapped
+    face's axial length, labelled derived. Never `hole_depth`, never a blind face's extent -
+    the tap drill runs deeper than the thread (research R2.13).
+    """
+
+    length_mm: float
+    source: str
+
+    @property
+    def is_through_tapped(self) -> bool:
+        return self.source == THROUGH_TAPPED_SOURCE
+
+
+@dataclass(frozen=True)
+class Placement:
+    """What the assembly says about one placed screw in its tapped hole (`contracts/
+    fasteners.md` section 4): the protrusion - the tip's depth below the thread entry along
+    the tapped axis - and the usable thread, each with where it came from, or the words
+    naming why it could not be measured.
+
+    Every phrase in `missing` names the protrusion or the usable thread depth, so the rule
+    functions route it to the checks that need it.
+    """
+
+    protrusion_mm: float | None
+    protrusion_source: str
+    usable_thread: UsableThread | None
+    missing: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.protrusion_mm is None and not any("protrusion" in item for item in self.missing):
+            raise ValueError("a placement with no protrusion must say why in `missing`")
+        if self.usable_thread is None and not any(
+            "usable thread depth" in item for item in self.missing
+        ):
+            raise ValueError("a placement with no usable thread must say why in `missing`")
+
+    def derivation(self) -> list[str]:
+        """The lines every placed-screw result carries in place of the clamped-stack ones."""
+        lines = [
+            "protrusion = thread entry - screw tip, along the tapped axis "
+            f"({self.protrusion_source})"
+        ]
+        if self.usable_thread is not None:
+            lines.append(f"usable thread depth = {self.usable_thread.source}")
+        return lines
+
+
+def _placed_stack(fastener: Fastener, hole: Hole, placement: Placement) -> _Stack:
+    stack = _Stack(
+        bottoming_derivation=placement.derivation(),
+        engagement_derivation=placement.derivation(),
+        pose=PLACED_POSE,
+    )
+    stack.inputs["fastener_id"] = fastener.id
+    stack.inputs["hole_id"] = hole.id
+    stack.missing = list(placement.missing)
+    if placement.protrusion_mm is not None:
+        stack.protrusion_mm = round_length(placement.protrusion_mm)
+        quantity = Quantity(value=stack.protrusion_mm, unit="mm")
+        stack.inputs["protrusion_mm"] = quantity
+        stack.sources.append(quantity)
+    if placement.usable_thread is not None:
+        stack.thread_depth_mm = round_length(placement.usable_thread.length_mm)
+        quantity = Quantity(value=stack.thread_depth_mm, unit="mm")
+        stack.inputs["usable_thread_depth_mm"] = quantity
+        stack.inputs["usable_thread_source"] = placement.usable_thread.source
+        stack.sources.append(quantity)
+    return stack
+
+
+def _thin_sheet(
+    result: CheckResult, fastener: Fastener, hole: Hole, placement: Placement
+) -> CheckResult:
+    """A demonstrated shortfall in a through-tapped part thinner than the rule's length is
+    `low` severity and says so, with the sheet thickness (owner answer 2026-09-23)."""
+    usable = placement.usable_thread
+    calculation = result.calculation
+    if (
+        result.status != "demonstrated"
+        or usable is None
+        or not usable.is_through_tapped
+        or calculation is None
+    ):
+        return result
+    ratio = calculation.result.get("required_ratio")
+    designation = hole.thread_designation or fastener.thread_designation
+    diameter = None if designation is None else nominal_diameter(designation)
+    if not isinstance(ratio, float) or diameter is None:
+        return result
+    required_mm = round_length(ratio * diameter.value)
+    if usable.length_mm >= required_mm:
+        return result
+    sheet = round_length(usable.length_mm)
+    return replace(
+        result,
+        severity=THIN_SHEET_SEVERITY,
+        observed=(
+            f"{result.observed}; the tapped part is a {sheet} mm sheet, thinner than the "
+            f"{required_mm} mm the rule needs, so no screw length can meet it"
+        ),
+        calculation=calculation.model_copy(
+            update={
+                "result": {
+                    **calculation.result,
+                    "sheet_thickness_mm": sheet,
+                    "required_engagement_mm": required_mm,
+                }
+            }
+        ),
+        recommended_action=(
+            f"Accept the thin-sheet engagement of {fastener.id} in {hole.id} deliberately, or "
+            "use a thicker part, an insert or a nut."
+        ),
+    )
+
+
+def check_placed_screw(
+    fastener: Fastener,
+    hole: Hole,
+    placement: Placement,
+    hole_material: str | None = None,
+    rules: EngagementRules | None = None,
+    envelope: EnvelopeResult | None = None,
+) -> list[CheckResult]:
+    """The four joint checks for a screw the assembly places in a tapped hole (FR-012, FR-013).
+
+    Beside `check_fastener_joint`, not instead of it: that check takes a clamped stack a
+    model names; this one reads the protrusion and the usable thread off the placed geometry
+    (`placement`), so no clamped list and no bounding-box layer thickness is needed. The same
+    `_bottoming`, `_engagement`, `_thread_match` and `_head_clearance` decide, each result
+    carrying the placement's derivation instead of the clamped-stack formula; `hole_depth` is
+    never read. A through-tapped part too thin for the rule makes the engagement shortfall
+    low severity, with the sheet thickness.
+    """
+    if fastener.kind not in SUPPORTED_KINDS:
+        return [_unsupported(fastener)]
+
+    stack = _placed_stack(fastener, hole, placement)
+    rule = (rules or load_rules()).for_material(hole_material)
+    return [
+        _bottoming(fastener, hole, stack),
+        _thin_sheet(
+            _engagement(fastener, hole, stack, hole_material, rule), fastener, hole, placement
+        ),
         _thread_match(fastener, hole, stack),
         _head_clearance(fastener, hole, stack, envelope),
     ]

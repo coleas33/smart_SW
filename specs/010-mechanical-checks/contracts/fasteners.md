@@ -18,8 +18,9 @@ normalized to one space and `×` to `x`.
 | unified inch | `^(#<n>\|<a>/<b>\|<a.b>)-<tpi>( x <L>)?$` | `1/4-20 x 1-1/2` |
 
 `<head code>` is looked up in `checks/fastener_names.yaml`
-(`SHC: {kind: screw, head_type: socket head cap, drive: hex_socket}`, `BHT` and `FHT` with
-`drive: null` until the owner states it). A pitch written with a hyphen (`M4-0.7`) is a pitch; a
+(`SHC: {kind: screw, head_type: socket head cap, drive: hex_socket}`, `FHT` flat head and `BHT`
+button head, both `drive: torx` by the owner's answer of 2026-09-23). A head named in words
+(`socket head cap screw`) names no drive; only a head code does. A pitch written with a hyphen (`M4-0.7`) is a pitch; a
 bare integer after the size is a length; an unknown head code is `kind = null` and the size is
 still read. Lengths are mm for metric and inches for unified unless the text carries a unit.
 
@@ -70,13 +71,24 @@ For each screw joint with a placed, recognised screw and a tapped instance:
 | usable thread (blind) | `Hole.thread_depth`, measured inward from the entry; missing when null |
 | usable thread (through) | the tapped face's axial extent, `derived: through-tapped length from the tapped face` |
 | unknown end condition | usable thread missing |
-| axis not aligned | protrusion from faces missing (`"the axis is oblique; bounding-box extents are not used"`); a mesh extent is still exact and used |
-| agreement `disagrees` | protrusion missing (`"the parsed size disagrees with the measured shank"`) |
+| axis not aligned | protrusion missing (`"the axis is oblique; bounding-box extents are not used"`). A mesh extent of the screw is exact on any axis and is still computed, but the thread entry it is measured from is the tapped face's box, which overruns an oblique face by `r` times the sum of `|a_i| sqrt(1 - a_i^2)` (1.8 mm on a 4.2 mm bore at 30 degrees), so the protrusion stays missing with that reason (joint-map.md section 2: engagement requires an aligned axis; T044 as landed). A through-tapped usable length on an oblique axis is missing for the same reason |
+| agreement `disagrees`, or two names that disagree on the size | protrusion missing (`"the parsed size disagrees with the measured shank"`, or the conflicting names) |
+| screw extent does not cross exactly one end of the tapped face | wholly inside: missing (`"the screw lies wholly inside the tapped face"`); short of it: missing, with the gap (a placement by origin may be on the wrong hole); across both ends: the smaller of the two protrusions |
+| mesh extent precision | a GLB stores single-precision vertices; a mesh extent is rounded to 0.001 mm |
 
 The four results come from the same `_bottoming`, `_engagement`, `_thread_match` and
 `_head_clearance` functions as `check_fastener_joint`, each calculation carrying the derivation
 lines instead of `"protrusion = screw length - clamped stack - washers"`. `hole_depth` is never
-read. `hole_material` is the tapped component's document material.
+read. `hole_material` is the tapped component's document material. A demonstrated engagement
+shortfall in a through-tapped part thinner than the rule's length (`ratio x d`) is severity
+`low`, with `sheet_thickness_mm` and `required_engagement_mm` in its result (owner answer
+2026-09-23).
+
+The placed-screw results fold by **screw document and tapped part** (`fastener_identity.
+fastener_group`), not by pattern group: one screw part mis-threaded into one part at two
+unrelated holes is one condition and one finding (SC-002). A screw placed in a joint with no
+tapped instance is one skipped `fastener.engagement` coverage item for all such joints, and
+with no tool envelope swept head clearance is one skipped `fastener.head_clearance` item.
 
 ## 5. The engagement rule
 

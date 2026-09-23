@@ -36,11 +36,15 @@ def test_the_default_path_is_the_yaml_next_to_the_loader() -> None:
     assert DEFAULT_RULES_PATH.is_file()
 
 
+OWNER_DECISION = "Owner decision 2026-09-23: at least 1.5 x d into steel and aluminium alike"
+
+
 @pytest.mark.parametrize(
     ("material", "expected_class", "expected_ratio"),
     [
-        ("AISI 1018 Steel", "steel", 1.0),
-        ("Stainless Steel (ferritic)", "steel", 1.0),
+        # Steel was 1.0 x d until the owner's decision of 2026-09-23 (feature 010 T042).
+        ("AISI 1018 Steel", "steel", 1.5),
+        ("Stainless Steel (ferritic)", "steel", 1.5),
         ("Cast Iron, gray", "cast_iron", 1.5),
         ("6061-T6", "aluminum", 1.5),
         ("Aluminium 5052-H32", "aluminum", 1.5),
@@ -59,6 +63,41 @@ def test_every_material_class_resolves_from_a_realistic_material_name(
     assert rule.name == expected_class
     assert rule.min_engagement_ratio == pytest.approx(expected_ratio)
     assert rule.source != ""
+
+
+@pytest.mark.parametrize("material", ["Alloy Steel", "6061-T6"])
+def test_steel_and_aluminium_are_1_5_d_citing_the_owner_decision(
+    rules: EngagementRules, material: str
+) -> None:
+    """Feature 010 FR-013: 1.5 x d into steel and aluminium alike (research R2.14)."""
+    rule = rules.for_material(material)
+
+    assert rule.min_engagement_ratio == pytest.approx(1.5)
+    assert rule.source == OWNER_DECISION
+
+
+@pytest.mark.parametrize(
+    ("material", "ratio", "source"),
+    [
+        ("Cast Iron, gray", 1.5, "Common guidance for ferrous castings"),
+        ("Nylon 6/6", 2.5, "Common guidance for thermoplastics without inserts"),
+    ],
+)
+def test_the_other_classes_are_unchanged(
+    rules: EngagementRules, material: str, ratio: float, source: str
+) -> None:
+    rule = rules.for_material(material)
+
+    assert (rule.min_engagement_ratio, rule.source) == (pytest.approx(ratio), source)
+
+
+def test_the_file_header_records_how_the_owner_answer_was_read() -> None:
+    """The answer was typed "1.td into both"; the file says it was read as 1.5 x d, so a
+    wrong reading is visible where the number lives."""
+    header = DEFAULT_RULES_PATH.read_text(encoding="utf-8").split("version:", 1)[0]
+
+    assert '"1.td into both"' in header
+    assert "1.5 x d" in header
 
 
 def test_every_class_in_the_table_is_reachable_by_at_least_one_of_its_own_tokens(

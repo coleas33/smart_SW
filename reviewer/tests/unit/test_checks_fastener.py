@@ -227,29 +227,33 @@ def test_engagement_below_the_material_rule_is_demonstrated() -> None:
 
 
 def test_the_engagement_rule_is_chosen_by_the_hole_material_and_cited() -> None:
-    aluminium = by_check(
+    """Edited deliberately by feature 010 T042: steel and aluminium are both 1.5 x d since the
+    owner's decision of 2026-09-23, so the contrast is now steel (1.5) against plastic (2.5),
+    on one joint engaging 12 mm of an M6 - 2.0 x d."""
+    plastic = by_check(
         check_fastener_joint(
-            screw(length=mm(9.0)),
+            screw(length=mm(15.0)),
             tapped_hole(thread_depth=mm(12.0)),
             [layer(mm(3.0))],
-            hole_material="6061-T6",
+            hole_material="Nylon 6/6",
         )
     )["fastener.engagement"]
     steel = by_check(
         check_fastener_joint(
-            screw(length=mm(9.0)),
+            screw(length=mm(15.0)),
             tapped_hole(thread_depth=mm(12.0)),
             [layer(mm(3.0))],
             hole_material="AISI 1018 Steel",
         )
     )["fastener.engagement"]
 
-    assert aluminium.status == "demonstrated"
+    assert plastic.calculation.result["ratio"] == pytest.approx(2.0, abs=1e-9)
+    assert plastic.status == "demonstrated"
     assert steel.status == "checked_within_scope"
 
     rules = load_rules()
-    assert rules.for_material("6061-T6").source in " ".join(aluminium.calculation.assumptions)
-    assert aluminium.calculation.inputs["material_class"] == "aluminum"
+    assert rules.for_material("Nylon 6/6").source in " ".join(plastic.calculation.assumptions)
+    assert plastic.calculation.inputs["material_class"] == "plastic"
     assert steel.calculation.inputs["material_class"] == "steel"
     assert rules.for_material("AISI 1018 Steel").source in " ".join(steel.calculation.assumptions)
 

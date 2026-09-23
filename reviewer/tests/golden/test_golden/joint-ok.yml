@@ -58,8 +58,8 @@ result:
 - calculation:
     assumptions:
     - engagement = min(protrusion, usable thread depth)
-    - 'engagement rule for material class aluminum: Common guidance for aluminum alloys;
-      consider 2.0 x d for high-load joints'
+    - 'engagement rule for material class aluminum: Owner decision 2026-09-23: at
+      least 1.5 x d into steel and aluminium alike'
     - lengths rounded to 1e-6 of the unit they are reported in
     excluded_effects:
     - thread form, class of fit, and the tolerance on the tapped depth
@@ -75,8 +75,8 @@ result:
       clamped_0_cmp:0002_mm:
         unit: mm
         value: 3.0
-      engagement_rule_source: Common guidance for aluminum alloys; consider 2.0 x
-        d for high-load joints
+      engagement_rule_source: 'Owner decision 2026-09-23: at least 1.5 x d into steel
+        and aluminium alike'
       fastener_id: fst:1
       fastener_length:
         unit: mm
@@ -116,9 +116,9 @@ result:
   observed: 'fst:1 engages 9.0 mm of thread in hole:1: 1.5 x d against the 1.5 x d
     rule for aluminum'
   recommended_action: ''
-  requirement: usable thread engagement must be at least 1.5 x the nominal thread
-    diameter for material class aluminum (Common guidance for aluminum alloys; consider
-    2.0 x d for high-load joints)
+  requirement: 'usable thread engagement must be at least 1.5 x the nominal thread
+    diameter for material class aluminum (Owner decision 2026-09-23: at least 1.5
+    x d into steel and aluminium alike)'
   severity: info
   status: checked_within_scope
 - calculation:

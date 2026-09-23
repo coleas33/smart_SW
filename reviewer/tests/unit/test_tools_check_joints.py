@@ -73,11 +73,15 @@ def test_the_joint_map_check_is_not_a_checklist_item() -> None:
 
 
 def test_one_checked_item_per_pattern_group(big) -> None:
+    """Edited deliberately by feature 010 T046: `check_joints` records the map with the
+    recognised fasteners placed, which adds two pattern groups - the eight screws on
+    `hol:0003`'s clearance instances and the second M4 on `hol:0022` - to the foundational
+    eleven (the foundational map keeps its own golden, T029)."""
     context, _ = big
 
     checked = joint_items(context, "checked")
 
-    assert len(checked) == 11
+    assert len(checked) == 13
     reasons = [item.reason for item in checked]
     assert any(reason.startswith("15 screw joints: ") for reason in reasons)
     assert any(reason.startswith("16 screw joints: ") for reason in reasons)
@@ -121,7 +125,11 @@ def test_one_skipped_item_per_candidate(big) -> None:
 def test_one_skipped_item_per_gap(big) -> None:
     context, _ = big
 
-    gaps = [item for item in joint_items(context, "skipped") if "not a joint" not in item.reason]
+    gaps = [
+        item
+        for item in joint_items(context, "skipped")
+        if "not a joint" not in item.reason and "was not placed" not in item.reason
+    ]
 
     assert len(gaps) == 6
     faceless = [item for item in gaps if "no cylinder face" in item.reason]
@@ -140,10 +148,13 @@ def test_it_returns_counts_and_not_a_payload(big) -> None:
     context, result = big
 
     assert result["status"] == "recorded"
-    assert result["joints"] == {"total": 50, "by_kind": {"screw": 47, "pin": 2, "unclassified": 1}}
-    assert result["pattern_groups"] == 11
+    # Edited deliberately by feature 010 T046: the map is the one with the fasteners placed
+    # (50 foundational joints, 47 screw, 2 pin, 1 unclassified, before US4).
+    assert result["joints"] == {"total": 59, "by_kind": {"screw": 57, "pin": 2}}
+    assert result["pattern_groups"] == 13
     assert result["candidates"] == 2
-    assert result["unplaced_fasteners"] == 0
+    assert result["recognised_fasteners"] == 68
+    assert result["unplaced_fasteners"] == 11
     session = context.require_session()
     assert result["findings"] == len(session.findings)
     assert result["finding_ids"] == [finding.id for finding in session.findings]
@@ -216,7 +227,8 @@ def test_the_dowel_joint_is_demonstrated_misaligned_0_750_against_0_050(big) -> 
     ]
 
     assert dowel.severity == "high"
-    assert dowel.observed.startswith("1 joint (jnt:0048 hol:0018#1+hol:0027#2): ")
+    # jnt:0048 in the foundational map; the placed fasteners renumber it (T046).
+    assert dowel.observed.startswith("1 joint (jnt:0056 hol:0018#1+hol:0027#2): ")
     result = dowel.calculation.result
     assert (result["offset_mm"], result["allowed_offset_mm"]) == (0.75, 0.05)
     assert result["fixture"] == "floating"
@@ -275,22 +287,39 @@ def test_the_stack_is_one_skipped_item_for_every_joint(big) -> None:
 
 
 def test_the_joints_with_no_clearance_hole_are_named_once(big) -> None:
+    """Edited deliberately by feature 010 T046: with the fasteners placed the ids move, the
+    second M4 on `hol:0022` joins the list, and the eight screws placed by their origin on
+    `hol:0003`'s clearance instances are named once, as having no second axis to line up."""
     context, _ = big
 
-    [item] = [
+    tapped_only, single = [
         item
         for item in context.require_session().coverage.skipped
         if item.check == "hole.nominal_alignment"
     ]
 
-    assert item.reason.startswith("no clearance hole to line up in jnt:0011, jnt:0049: ")
+    assert tapped_only.reason.startswith(
+        "no clearance hole to line up in jnt:0019, jnt:0057, jnt:0058: "
+    )
+    assert single.reason.startswith(
+        "one measured member only in jnt:0001, jnt:0002, jnt:0003, jnt:0004, jnt:0005, "
+        "jnt:0006, jnt:0007, jnt:0008: "
+    )
 
 
 def test_the_result_counts_the_alignment_findings(big) -> None:
+    """Edited deliberately by feature 010 T046: 9 alignment findings, and now the fastener
+    family's 25 (the folds of the fastener block below)."""
     _, result = big
 
-    assert result["findings"] == 9
-    assert result["by_status"] == {"checked_within_scope": 8, "demonstrated": 1}
+    assert result["findings"] == 34
+    assert result["by_status"] == {
+        "checked_within_scope": 25,
+        "demonstrated": 6,
+        "unresolved": 2,
+        "suspected": 1,
+    }
+    assert len(alignment_findings(big[0])) == 9
 
 
 def test_the_small_fixtures_pin_passes_with_a_zero_budget() -> None:
@@ -302,6 +331,135 @@ def test_the_small_fixtures_pin_passes_with_a_zero_budget() -> None:
     assert finding.status == "checked_within_scope"
     assert finding.calculation.result["position_budget_mm"] == 0.0
     assert "measured diameter" in finding.calculation.inputs["F_source"]
+
+
+# --- fasteners on the big fixture (T046, contracts/fasteners.md section 6) -------------------
+
+
+def fastener_findings(context: ToolContext, check: str) -> list:
+    return [
+        finding for finding in context.require_session().findings if finding.check == check
+    ]
+
+
+def engagement_of(context: ToolContext, hole_id: str):
+    [finding] = [
+        finding
+        for finding in fastener_findings(context, "fastener.engagement")
+        if f"into {hole_id}" in finding.observed or f"in {hole_id}:" in finding.observed
+    ]
+    return finding
+
+
+def test_68_of_68_named_screws_are_recognised(big) -> None:
+    """SC-004: every screw named in the vendor pattern, recognised by code."""
+    _, result = big
+
+    assert result["recognised_fasteners"] == 68
+
+
+def test_the_two_m4_screws_in_m5_threads_are_one_thread_match_finding(big) -> None:
+    """SC-002: one screw part mis-threaded into one part at two holes is one condition."""
+    context, _ = big
+
+    [mismatch] = [
+        finding
+        for finding in fastener_findings(context, "fastener.thread_match")
+        if finding.status == "demonstrated"
+    ]
+
+    assert mismatch.severity == "high"
+    assert mismatch.observed.startswith(
+        "2 joints (jnt:0019 hol:0013#1+cmp:0007, jnt:0058 hol:0022#1): "
+    )
+    result = mismatch.calculation.result
+    assert (result["fastener_thread"], result["hole_thread"]) == ("M4X0.7", "M5X0.8")
+
+
+@pytest.mark.parametrize(
+    ("hole_id", "count", "engaged", "required_ratio", "status"),
+    [
+        ("hol:0006", 3, 10.225, 1.5, "demonstrated"),  # M10: 15.0 required
+        ("hol:0016", 16, 2.205, 1.5, "demonstrated"),  # M2: 3.0 required
+        ("hol:0004", 3, 14.375, 1.5, "checked_within_scope"),  # M8
+        ("hol:0012", 4, 14.6, 1.5, "checked_within_scope"),  # M8
+        ("hol:0014", 15, 5.133, 1.5, "checked_within_scope"),  # M3
+        ("hol:0015", 4, 5.883, 1.5, "checked_within_scope"),  # M3
+    ],
+)
+def test_the_engagement_table_of_research_r2_13(
+    big, hole_id: str, count: int, engaged: float, required_ratio: float, status: str
+) -> None:
+    context, _ = big
+
+    finding = engagement_of(context, hole_id)
+
+    assert finding.status == status
+    assert finding.observed.startswith(f"{count} joint")
+    assert finding.calculation.result["engagement_mm"] == engaged
+    assert finding.calculation.result["required_ratio"] == required_ratio
+
+
+def test_the_m3_in_a_thin_sheet_is_short_at_low_severity_with_the_derived_length(big) -> None:
+    context, _ = big
+
+    finding = engagement_of(context, "hol:0021")
+
+    assert (finding.status, finding.severity) == ("demonstrated", "low")
+    assert finding.calculation.result["engagement_mm"] == 1.394
+    assert finding.calculation.result["sheet_thickness_mm"] == 1.725
+    assert finding.calculation.inputs["usable_thread_source"] == (
+        "derived: through-tapped length from the tapped face"
+    )
+
+
+def test_the_oblique_m4_engagement_is_unresolved_naming_the_oblique_axis(big) -> None:
+    context, _ = big
+
+    [unresolved] = [
+        finding
+        for finding in fastener_findings(context, "fastener.engagement")
+        if finding.status == "unresolved"
+    ]
+
+    assert "hol:0013#1 (the axis is oblique; bounding-box extents are not used)" in (
+        unresolved.observed
+    )
+
+
+def test_the_screw_named_m5_with_a_3_3_mm_shank_is_one_suspected_identity(big) -> None:
+    context, _ = big
+
+    [identity] = fastener_findings(context, "fastener.identity")
+
+    assert (identity.status, identity.severity) == ("suspected", "medium")
+    assert "is named M5x0.8 but its shank measures 3.3 mm" in identity.observed
+    assert identity.component_ids == ["cmp:0078"]
+
+
+def test_every_unplaced_screw_is_one_skipped_joint_map_row(big) -> None:
+    context, _ = big
+
+    unplaced = [item for item in joint_items(context, "skipped") if "was not placed" in item.reason]
+
+    assert len(unplaced) == 11
+    assert unplaced[0].reason == (
+        "M5x0.8 was not placed: it has no face in a hole and its origin lies on no hole "
+        "instance's axis"
+    )
+
+
+def test_screws_whose_tapped_part_has_no_hole_are_one_skipped_item(big) -> None:
+    context, _ = big
+
+    [item] = [
+        item
+        for item in context.require_session().coverage.skipped
+        if item.check == "fastener.engagement"
+    ]
+
+    assert item.reason.startswith("9 placed screws (cmp:0071 in hol:0003#1, ")
+    assert "cmp:0069 in hol:0025#2" in item.reason
 
 
 # --- through the registry -------------------------------------------------------------------

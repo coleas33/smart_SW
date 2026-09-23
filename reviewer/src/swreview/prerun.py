@@ -50,7 +50,8 @@ from typing import Any
 
 from swreview.agent.providers import ToolCallRequest, ToolCallResult, call_tool
 from swreview.agent.settings import EfficiencySettings
-from swreview.checks.joints import build_joint_map
+from swreview.checks.fastener_identity import joint_map_with_fasteners
+from swreview.checks.joints import JointMap
 from swreview.findings import Finding
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import Ranking, coverage_line, load_policy, start_here_lines
@@ -203,7 +204,40 @@ what the joint map could not reach rather than counting candidate pairs (`contra
 code-first.md` section 4); when a tier withholds it, the tier's own sentence says why."""
 
 
-def _hole_alignment_family(package: EvidencePackage) -> NotEvaluated | None:
+def _fastener_joint_family(joint_map: JointMap) -> NotEvaluated | None:
+    """What the joint map could not reach for fasteners, or `None` when it reached them all.
+
+    A recognised fastener no rule placed, and a placed screw whose tapped part has no
+    extracted hole, are what the fastener checks could not judge (`contracts/code-first.md`
+    section 4). A family with nothing to report renders no line.
+    """
+    unplaced = len(joint_map.unplaced)
+    untapped = sum(
+        1
+        for joint in joint_map.joints
+        if joint.fastener is not None and joint.tapped_instance is None
+    )
+    clauses = []
+    if unplaced:
+        clauses.append(
+            f"{_plural(unplaced, 'recognised fastener')} {'was' if unplaced == 1 else 'were'} "
+            "not placed in any joint"
+        )
+    if untapped:
+        clauses.append(
+            f"{_plural(untapped, 'placed screw')} {'enters' if untapped == 1 else 'enter'} a "
+            "part whose tapped hole was not extracted"
+        )
+    if not clauses:
+        return None
+    return NotEvaluated(
+        check=f"{PRERUN_CHECK_PREFIX}fastener_joint",
+        label="fastener joints",
+        reason=f"{'; '.join(clauses)}.",
+    )
+
+
+def _hole_alignment_family(package: EvidencePackage, joint_map: JointMap) -> NotEvaluated | None:
     """The holes the joint map could not use, or `None` when it missed nothing.
 
     A hole row with no cylinder face, or one on a component that was not read, yields no
@@ -211,7 +245,7 @@ def _hole_alignment_family(package: EvidencePackage) -> NotEvaluated | None:
     with nothing to report renders no line.
     """
     hole_ids = {hole.id for hole in package.holes}
-    missed = [gap for gap in build_joint_map(package).gaps if gap.subject in hole_ids]
+    missed = [gap for gap in joint_map.gaps if gap.subject in hole_ids]
     if not missed:
         return None
     count = len(missed)
@@ -542,21 +576,31 @@ def not_evaluated_families(
                 ),
             )
         )
-    families.append(
-        NotEvaluated(
-            check=f"{PRERUN_CHECK_PREFIX}fastener_joint",
-            label="fastener joints",
-            reason=(
-                f"{_plural(len(package.fasteners), 'fastener')} in the package; no "
-                "joint was evaluated. Which components a screw clamps is not derivable "
-                "from the package, so name the fastener, the hole and the clamped "
-                "stack yourself with `check_fastener_joint`."
-            ),
-        )
-    )
     withheld_names = {name for name, _ in withheld}
-    if JOINTS_TOOL in checks_mechanical.CODE_FIRST_CHECKS and JOINTS_TOOL not in withheld_names:
-        hole_alignment = _hole_alignment_family(package)
+    joints_run = (
+        JOINTS_TOOL in checks_mechanical.CODE_FIRST_CHECKS and JOINTS_TOOL not in withheld_names
+    )
+    joint_map = joint_map_with_fasteners(package)[1] if joints_run else None
+    if joint_map is None:
+        families.append(
+            NotEvaluated(
+                check=f"{PRERUN_CHECK_PREFIX}fastener_joint",
+                label="fastener joints",
+                reason=(
+                    f"{_plural(len(package.fasteners), 'fastener')} in the package; no "
+                    "joint was evaluated. Which components a screw clamps is not derivable "
+                    "from the package, so name the fastener, the hole and the clamped "
+                    "stack yourself with `check_fastener_joint`."
+                ),
+            )
+        )
+    else:
+        # Feature 010 T047: `check_joints` places the fasteners it recognises, so the line
+        # states what the joint map could not reach rather than a count to judge by hand.
+        fastener_joint = _fastener_joint_family(joint_map)
+        if fastener_joint is not None:
+            families.append(fastener_joint)
+        hole_alignment = _hole_alignment_family(package, joint_map)
         if hole_alignment is not None:
             families.append(hole_alignment)
     families.extend(

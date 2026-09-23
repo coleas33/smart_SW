@@ -167,6 +167,11 @@ class ToolContext:
         default_factory=EvidenceRequestIdAllocator
     )
     contact_ids: ContactIdAllocator = field(default_factory=ContactIdAllocator)
+    joint_analysis: Any | None = None
+    """Feature 010: the recognised fasteners and the joint map they are placed in, built once
+    per context by `tools/checks_mechanical.joint_analysis` and read by `check_joints` and
+    the interference tool's thread-model rule. Typed loosely, like `bridge`, so the tool
+    context does not import the checks that fill it."""
 
     def __post_init__(self) -> None:
         package = self.package.package

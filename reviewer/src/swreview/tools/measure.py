@@ -47,6 +47,7 @@ __all__ = [
     "DRIVING_TOOLS",
     "bounding_box",
     "check_tool_envelope",
+    "load_body_mesh",
     "measure_axis_distance",
     "measure_face_gap",
 ]
@@ -219,10 +220,13 @@ def _corner(boxes: list[BBox3D], minimum: bool) -> dict[str, float]:
     }
 
 
-def _mesh_for(
+def load_body_mesh(
     context: ToolContext, body: BodyRef
 ) -> tuple[trimesh.Trimesh | None, str | None]:
-    """`body`'s mesh in world metres, or `None` and the reason it could not be loaded."""
+    """`body`'s mesh in world metres, or `None` and the reason it could not be loaded.
+
+    The one reader of a body mesh in the tool layer: `check_tool_envelope` and feature 010's
+    `check_joints` both load through it, so a failure reads the same wherever it happens."""
     path = Path(context.package.resolve(body.mesh_file))
     try:
         return load_mesh(path), None
@@ -297,7 +301,7 @@ def check_tool_envelope(
     for body in context.ir.bodies:
         if body.component_id == fastener.component_id:
             continue
-        mesh, reason = _mesh_for(context, body)
+        mesh, reason = load_body_mesh(context, body)
         if mesh is None:
             assert reason is not None
             unresolved.append(reason)

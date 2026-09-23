@@ -113,6 +113,9 @@ classes:
   # R2.22): alignment is the same question as coaxiality, asked of every joint by code.
   hole.nominal_alignment: interface
   hole.position_stack: interface
+  # a fastener whose name its modelled shank contradicts: which size is right is the
+  # engineer's to say, and every check that leans on the size waits for it.
+  fastener.identity: interface
   stack.worst_case: interface
   # the drawing finding the model records -> manufacturing.
   drawing.manufacturing_inputs: manufacturing

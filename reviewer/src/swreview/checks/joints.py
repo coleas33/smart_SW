@@ -34,11 +34,11 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import yaml
@@ -47,7 +47,17 @@ from swreview import units
 from swreview.checks.fastener import parse_thread
 from swreview.checks.result import CheckResult, round_length
 from swreview.geometry.axis import is_axis_aligned, unit_vector
-from swreview.ir.models import Axis, BBox3D, EvidencePackage, FaceGeometry, Hole
+from swreview.ir.models import (
+    Axis,
+    BBox3D,
+    ComponentInstance,
+    EvidencePackage,
+    FaceGeometry,
+    Hole,
+)
+
+if TYPE_CHECKING:  # the fastener module imports this one; the type is only annotated here
+    from swreview.checks.fastener_identity import RecognisedFastener
 
 __all__ = [
     "CLEARANCE_TYPES",
@@ -65,10 +75,12 @@ __all__ = [
     "JointRules",
     "PairValues",
     "build_joint_map",
+    "component_frame",
     "fold_by_pattern",
     "folded_result",
     "joint_label",
     "load_joint_rules",
+    "pattern_group",
     "plain_diameter_mm",
 ]
 
@@ -250,6 +262,18 @@ def _point(vector: Any) -> np.ndarray:
     return np.array([vector.x, vector.y, vector.z], dtype=float)
 
 
+def component_frame(component: ComponentInstance) -> tuple[np.ndarray, tuple[np.ndarray, ...]]:
+    """The component origin in metres and its three basis vectors, from the row-major
+    transform whose translation is its last column (`ir/models.py`, research R2.3)."""
+    matrix = component.transform
+    origin = np.array([matrix[0][3], matrix[1][3], matrix[2][3]], dtype=float)
+    basis = tuple(
+        np.array([matrix[0][column], matrix[1][column], matrix[2][column]], dtype=float)
+        for column in range(3)
+    )
+    return origin, basis
+
+
 @dataclass(frozen=True)
 class HoleInstance:
     """One instance of a Hole Wizard feature: faces of the row that share one axis (R2.1)."""
@@ -365,8 +389,9 @@ class Joint:
     in one joint of a pattern does not split the pattern from its siblings."""
     axis_aligned: bool
     pairs: tuple[PairValues, ...]
-    fastener: Any | None = None
-    """The recognised fastener placed in the joint, from US4; `None` until then."""
+    fastener: RecognisedFastener | None = None
+    """The recognised fastener placed in the joint (US4, `contracts/joint-map.md` section 5);
+    `None` in the foundational map and for a joint no fastener was placed in."""
 
     def instance(self, instance_id: str) -> HoleInstance:
         return next(item for item in self.instances if item.id == instance_id)
@@ -375,8 +400,14 @@ class Joint:
     def reference_instance(self) -> HoleInstance:
         return self.instance(self.reference)
 
+    @property
+    def tapped_instance(self) -> HoleInstance | None:
+        """The instance a screw threads into: the reference when it is tapped."""
+        reference = self.reference_instance
+        return reference if reference.is_tapped else None
+
     def as_json(self) -> dict[str, Any]:
-        return {
+        written: dict[str, Any] = {
             "id": self.id,
             "kind": self.kind,
             "instances": [item.id for item in self.instances],
@@ -388,6 +419,15 @@ class Joint:
             "axis_aligned": self.axis_aligned,
             "pairs": [{"a": pair.a, "b": pair.b, **pair.as_dict()} for pair in self.pairs],
         }
+        if self.fastener is not None:
+            # Only when placed, so the foundational map's golden does not move (T041).
+            written["fastener"] = {
+                "component_id": self.fastener.component_id,
+                "designation": self.fastener.designation,
+                "placement": self.fastener.placement,
+                "placed_on": self.fastener.placed_on,
+            }
+        return written
 
 
 @dataclass(frozen=True)
@@ -423,7 +463,8 @@ class JointMap:
     joints: tuple[Joint, ...]
     candidates: tuple[Candidate, ...]
     gaps: tuple[JointMapGap, ...]
-    unplaced: tuple[Any, ...]
+    unplaced: tuple[RecognisedFastener, ...]
+    """The recognised fasteners no rule placed, each carrying its `unplaced_reason`."""
     rules: JointRules
 
     def pattern_groups(self) -> dict[str, tuple[str, ...]]:
@@ -434,7 +475,7 @@ class JointMap:
         return {key: tuple(ids) for key, ids in groups.items()}
 
     def as_json(self) -> dict[str, Any]:
-        return {
+        written: dict[str, Any] = {
             "rules_version": self.rules.version,
             "instance_count": len(self.instances),
             "joints": [joint.as_json() for joint in self.joints],
@@ -442,6 +483,16 @@ class JointMap:
             "candidates": [candidate.as_json() for candidate in self.candidates],
             "gaps": [gap.as_json() for gap in self.gaps],
         }
+        if self.unplaced:
+            written["unplaced"] = [
+                {
+                    "component_id": item.component_id,
+                    "designation": item.designation,
+                    "reason": item.unplaced_reason,
+                }
+                for item in self.unplaced
+            ]
+        return written
 
 
 # --- building the map ------------------------------------------------------------------------
@@ -790,9 +841,16 @@ class _Clusters:
             self.parent[high] = low
 
 
-def _kind(instances: Sequence[HoleInstance], cylinders: Sequence[CylinderMember]) -> JointKind:
-    """Section 6: the first rule that matches (rule 2 arrives with US4's fasteners)."""
+def _kind(
+    instances: Sequence[HoleInstance],
+    cylinders: Sequence[CylinderMember],
+    fastener: RecognisedFastener | None = None,
+) -> JointKind:
+    """Section 6: the first rule that matches."""
     if any(item.is_tapped for item in instances):
+        return "screw"
+    if fastener is not None and fastener.fastener.kind in ("screw", "bolt"):
+        # Rule 2: its tapped part is not in the map, and the checks that need it say so.
         return "screw"
     clearances = [item for item in instances if item.is_clearance]
     if (
@@ -819,6 +877,7 @@ def _joint(
     cylinders: list[CylinderMember],
     pairs: list[PairValues],
     free_by_face: Mapping[str, _FreeFace],
+    fastener: RecognisedFastener | None = None,
 ) -> Joint:
     instances = sorted(instances, key=lambda item: _id_key(item.id))
     tapped = [item for item in instances if item.is_tapped]
@@ -830,7 +889,7 @@ def _joint(
         _lateral(free_by_face[item.face_id].geometry.midpoint(), ref.origin, ref.direction)
         for item in cylinders
     ]
-    kind = _kind(instances, cylinders)
+    kind = _kind(instances, cylinders, fastener)
     members = sorted(f"{item.hole_id}@{item.component_id}" for item in instances)
     return Joint(
         id=f"jnt:{number:04d}",
@@ -849,31 +908,173 @@ def _joint(
         pattern_key=f"{kind}|{','.join(members)}",
         axis_aligned=all(item.axis_aligned for item in instances),
         pairs=tuple(sorted(pairs, key=lambda item: (_id_key(item.a), _id_key(item.b)))),
+        fastener=fastener,
     )
 
 
+# --- placing recognised fasteners (section 5) -------------------------------------------------
+
+
+def _root_of(clusters: _Clusters, instance_id: str) -> str:
+    """The cluster an instance is in, or the instance itself when it is in none yet -
+    without adding it, so a lone instance joins the map only when a fastener is placed."""
+    return clusters.find(instance_id) if instance_id in clusters.parent else instance_id
+
+
+def _choose(
+    on: Sequence[HoleInstance], clusters: _Clusters, by_root_tapped: Mapping[str, bool]
+) -> tuple[str, HoleInstance] | str:
+    """The one cluster a fastener sits in, as `(root, instance)`, or the reason there is none.
+
+    Instances of one cluster are one joint. Across clusters, the one holding a tapped hole
+    wins; with none or several, nothing is guessed.
+    """
+    groups: dict[str, list[HoleInstance]] = {}
+    for instance in sorted(on, key=lambda item: _id_key(item.id)):
+        groups.setdefault(_root_of(clusters, instance.id), []).append(instance)
+    chosen = list(groups)
+    if len(groups) > 1:
+        chosen = [root for root in groups if by_root_tapped.get(root, groups[root][0].is_tapped)]
+        if len(chosen) != 1:
+            names = " and ".join(members[0].id for members in groups.values())
+            return (
+                f"its origin lies on the axes of {names}, in different joints, and not "
+                "exactly one of them has a tapped hole"
+            )
+    members = groups[chosen[0]]
+    tapped = [item for item in members if item.is_tapped]
+    return chosen[0], (tapped or members)[0]
+
+
+def _place(
+    fasteners: Sequence[RecognisedFastener],
+    package: EvidencePackage,
+    instances: Sequence[HoleInstance],
+    links: Mapping[str, list[CylinderMember]],
+    free_by_face: Mapping[str, _FreeFace],
+    clusters: _Clusters,
+    rules: JointRules,
+) -> tuple[list[RecognisedFastener], list[RecognisedFastener]]:
+    """Each fastener by a member face, then by its origin, else unplaced with the reason.
+
+    Returns the placed fasteners and the unplaced ones. Placement is decided before any lone
+    instance joins the clusters, so the order fasteners are placed in cannot change where any
+    of them lands; a second fastener landing in a joint that already holds one is unplaced,
+    a face placement taking precedence over an origin one.
+    """
+    by_id = {item.id: item for item in instances}
+    by_root_tapped: dict[str, bool] = {}
+    for instance in instances:
+        if instance.id in clusters.parent:
+            root = clusters.find(instance.id)
+            by_root_tapped[root] = by_root_tapped.get(root, False) or instance.is_tapped
+    components = {item.id: item for item in package.components}
+    member_instances: dict[str, list[str]] = {}
+    for face_id, members in links.items():
+        component_id = free_by_face[face_id].face.component_id
+        member_instances.setdefault(component_id, []).extend(item.instance_id for item in members)
+
+    placed: list[tuple[str, RecognisedFastener]] = []
+    unplaced: list[RecognisedFastener] = []
+    for fastener in sorted(fasteners, key=lambda item: _id_key(item.component_id)):
+        how: Literal["face", "origin"]
+        if fastener.component_id in member_instances:
+            how = "face"
+            on = [by_id[item] for item in member_instances[fastener.component_id]]
+        else:
+            how = "origin"
+            component = components.get(fastener.component_id)
+            if component is None:
+                unplaced.append(
+                    replace(fastener, unplaced_reason="its component is not in the package")
+                )
+                continue
+            origin, basis = component_frame(component)
+            on = [
+                instance
+                for instance in instances
+                if instance.component_id != fastener.component_id
+                and _lateral(origin, instance.geometry.origin, instance.geometry.direction) * 1000.0
+                <= rules.origin_on_axis_mm
+                and any(
+                    float(np.linalg.norm(vector)) > 0.0
+                    and _angle_deg(vector / np.linalg.norm(vector), instance.geometry.direction)
+                    <= rules.parallel_deg
+                    for vector in basis
+                )
+            ]
+            if not on:
+                unplaced.append(
+                    replace(
+                        fastener,
+                        unplaced_reason=(
+                            "it has no face in a hole and its origin lies on no hole "
+                            "instance's axis"
+                        ),
+                    )
+                )
+                continue
+        choice = _choose(on, clusters, by_root_tapped)
+        if isinstance(choice, str):
+            unplaced.append(replace(fastener, unplaced_reason=choice))
+            continue
+        root, instance = choice
+        placed.append((root, replace(fastener, placement=how, placed_on=instance.id)))
+
+    kept: list[RecognisedFastener] = []
+    holder: dict[str, RecognisedFastener] = {}
+    for root, fastener in sorted(
+        placed, key=lambda item: (item[1].placement != "face", _id_key(item[1].component_id))
+    ):
+        if root in holder:
+            unplaced.append(
+                replace(
+                    fastener,
+                    placement=None,
+                    placed_on=None,
+                    unplaced_reason=(
+                        f"its joint at {fastener.placed_on} already holds "
+                        f"{holder[root].component_id}"
+                    ),
+                )
+            )
+            continue
+        holder[root] = fastener
+        kept.append(fastener)
+    return kept, sorted(unplaced, key=lambda item: _id_key(item.component_id))
+
+
 def build_joint_map(
-    package: EvidencePackage, rules: JointRules | None = None, fasteners: Any = None
+    package: EvidencePackage,
+    rules: JointRules | None = None,
+    fasteners: Sequence[RecognisedFastener] | None = None,
 ) -> JointMap:
     """Every joint of `package`, per `contracts/joint-map.md` sections 1 to 6.
 
-    `fasteners` is where US4's recognised fasteners arrive to be placed (section 5); it is
-    accepted and unused until then, so the foundational map is what this returns. Never
-    raises on a valid package: whatever cannot be used is a `JointMapGap`.
+    Without `fasteners` this is the foundational map. With the fasteners
+    `fastener_identity.recognise_fasteners` found, each is placed (section 5): by a member
+    face, then by its origin on an instance axis, a lone instance it lands on becoming a
+    one-instance joint; one no rule places is in `unplaced` with its reason. Never raises on
+    a valid package: whatever cannot be used is a `JointMapGap`.
     """
-    del fasteners  # placed from US4 (T041)
     rules = rules or load_joint_rules()
-    if package.extractor.profile == "model_check":
-        return JointMap(
-            (),
-            (),
-            (),
-            (JointMapGap("package", "the hole phase did not run (profile model_check)"),),
-            (),
-            rules,
-        )
-    if not package.holes:
-        return JointMap((), (), (), (JointMapGap("package", "no hole was extracted"),), (), rules)
+    model_check = package.extractor.profile == "model_check"
+    for reason, applies in (
+        ("the hole phase did not run (profile model_check)", model_check),
+        ("no hole was extracted", not package.holes),
+    ):
+        if applies:
+            return JointMap(
+                (),
+                (),
+                (),
+                (JointMapGap("package", reason),),
+                tuple(
+                    replace(item, unplaced_reason=f"{reason}, so there is no hole to place it in")
+                    for item in fasteners or ()
+                ),
+                rules,
+            )
 
     instances, gaps = _explode(package, rules)
     by_id = {item.id: item for item in instances}
@@ -892,6 +1093,16 @@ def build_joint_map(
                 links.setdefault(item.face.id, []).append(member)
                 clusters.join(instance.id, item.face.id)
 
+    free_by_face = {item.face.id: item for item in free}
+    placed, unplaced = _place(
+        fasteners or (), package, instances, links, free_by_face, clusters, rules
+    )
+    placed_by_root: dict[str, RecognisedFastener] = {}
+    for fastener in placed:
+        assert fastener.placed_on is not None
+        # `find` adds a lone instance to the clusters: it becomes a one-instance joint.
+        placed_by_root[clusters.find(fastener.placed_on)] = fastener
+
     grouped_instances: dict[str, list[HoleInstance]] = {}
     for instance in instances:
         if instance.id in clusters.parent:
@@ -908,7 +1119,6 @@ def build_joint_map(
         grouped_instances,
         key=lambda root: _id_key(min((item.id for item in grouped_instances[root]), key=_id_key)),
     )
-    free_by_face = {item.face.id: item for item in free}
     joints = tuple(
         _joint(
             number,
@@ -916,6 +1126,7 @@ def build_joint_map(
             grouped_cylinders.get(root, []),
             grouped_pairs.get(root, []),
             free_by_face,
+            placed_by_root.get(root),
         )
         for number, root in enumerate(roots, start=1)
     )
@@ -929,7 +1140,7 @@ def build_joint_map(
         joints=joints,
         candidates=candidates,
         gaps=tuple(sorted([*gaps, *free_gaps], key=lambda item: _id_key(item.subject))),
-        unplaced=(),
+        unplaced=tuple(unplaced),
         rules=rules,
     )
 
@@ -937,30 +1148,39 @@ def build_joint_map(
 # --- folding patterned results --------------------------------------------------------------
 
 
-def _fold_key(joint: Joint, result: CheckResult) -> tuple[Any, ...]:
-    """What makes two joints' results one finding: same pattern, check, verdict and numbers."""
+def _fold_key(group: str, result: CheckResult) -> tuple[Any, ...]:
+    """What makes two joints' results one finding: same group, check, verdict and numbers."""
     calculation = result.calculation
     numbers = (
         tuple(sorted((key, repr(value)) for key, value in calculation.result.items()))
         if calculation is not None
         else (result.observed, tuple(result.coverage_limits))
     )
-    return (joint.pattern_key, result.check, result.status, result.severity, numbers)
+    return (group, result.check, result.status, result.severity, numbers)
+
+
+def pattern_group(joint: Joint) -> str:
+    """The default fold group: the joint's pattern (research R2.21)."""
+    return joint.pattern_key
 
 
 def fold_by_pattern(
     results: Sequence[tuple[Joint, CheckResult]],
+    group_of: Callable[[Joint], str] = pattern_group,
 ) -> list[tuple[tuple[Joint, ...], CheckResult]]:
     """Results with the same check, status, severity and calculation result within one
-    pattern group, as one entry naming every joint (research R2.21), in first-seen order.
+    group - the pattern group unless `group_of` says otherwise - as one entry naming every
+    joint (research R2.21), in first-seen order.
 
     A result whose numbers differ from its siblings' stays its own entry, so folding never
     hides a joint that differs (plan RK-4). The first joint's result stands for the group;
-    the caller writes the joint list into the finding.
+    the caller writes the joint list into the finding. The fastener checks fold by screw part
+    and tapped part (`fastener_identity.fastener_group`), so one screw part mis-threaded into
+    one part at two unrelated holes is one condition, one finding (SC-002).
     """
     groups: dict[tuple[Any, ...], tuple[list[Joint], CheckResult]] = {}
     for joint, result in results:
-        key = _fold_key(joint, result)
+        key = _fold_key(group_of(joint), result)
         if key in groups:
             groups[key][0].append(joint)
         else:
