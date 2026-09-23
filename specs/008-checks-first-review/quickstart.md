@@ -140,7 +140,7 @@ uv run pytest tests/unit/test_parallel_tool_calls.py tests/unit/test_runner_prov
 Expected: each small fixture's regrouped estimate under 300,000 with its assumption printed, and
 its strict figure below the recorded total (SC-003 as amended). `--lever parallel_tool_calls` asks
 for the OpenAI pane: the fixtures record the scripted provider, whose pane makes no parallel calls,
-so without it only rule R applies and the estimates are about 381,000 and 388,000; the big fixture's follow-up round
+so without it only rule R applies and the estimates are about 382,000 and 389,000; the big fixture's follow-up round
 under 30,000 (Scenario 6's output, turn 1, SC-004); three answers in one submission give three
 answered records and one resumed turn, and one bad id changes nothing (SC-005); three bridge calls
 in one response reach the bridge one at a time.
