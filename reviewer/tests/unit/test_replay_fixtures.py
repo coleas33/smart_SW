@@ -2,10 +2,11 @@
 
 Each fixture is shaped like one recorded review - the big assembly and two runs of the small
 one - and replaying it with the settings it was recorded with must reproduce every recorded
-round within 1% and the finding set exactly. Every replay of a committed fixture is graded with
-`config/standards.example.yaml`, the profile the pilot ran (research R2.10). The payload shapes
-that make later savings measurable are pinned too: the part check's 866 feature rows and the
-110 mate entities with their persistent references.
+round within 1% and the finding set exactly: every recorded finding replayed, or - for a group
+feature 010 judges touching - reclassified as a contact, counted per fixture. Every replay of a
+committed fixture is graded with `config/standards.example.yaml`, the profile the pilot ran
+(research R2.10). The payload shapes that make later savings measurable are pinned too: the
+part check's 866 feature rows and the 110 mate entities with their persistent references.
 """
 
 from __future__ import annotations
@@ -51,6 +52,11 @@ def test_every_round_is_within_one_percent_of_the_recorded_input(name: str) -> N
     )
 
 
+RECLASSIFIED = {"big-assembly": 3, "small-assembly-a": 2, "small-assembly-b": 0}
+"""Recorded `interference.static` findings on touching groups (0.0 mm3), which feature 010
+judges contacts: the replay names each one reclassified rather than lost (010 T094-T095)."""
+
+
 @pytest.mark.parametrize("name", NAMES)
 def test_the_finding_set_is_exact(name: str) -> None:
     findings = as_recorded(name).findings
@@ -58,18 +64,24 @@ def test_the_finding_set_is_exact(name: str) -> None:
     assert findings.lost == []
     assert findings.added == []
     assert findings.not_replayable == []
-    assert findings.recorded == findings.replayed
+    assert len(findings.reclassified) == RECLASSIFIED[name]
+    assert {item.check for item in findings.reclassified} <= {"interference.static"}
+    assert findings.recorded == findings.replayed + RECLASSIFIED[name]
 
 
-def test_the_big_assembly_has_one_estimated_round_the_live_call() -> None:
+def test_the_big_assembly_has_the_live_call_and_three_touching_groups_estimated() -> None:
+    """One estimated round was the live call alone until feature 010. The three touching
+    groups judged after it are contacts now, so their results differ from the recording; a
+    replay cannot tell that difference from anything the live call did, so each of their
+    rounds is estimated too. Those are exactly the three reclassified findings' steps."""
     report = as_recorded("big-assembly")
 
     estimated = [r for r in report.rounds if r.estimated]
-    assert len(estimated) == 1
-    assert [c.tool for c in estimated[0].calls if c.class_ == "estimated"] == [
-        "bridge_interference"
-    ]
-    assert report.totals.estimated_rounds == 1
+    assert len(estimated) == 4
+    calls = [c for r in estimated for c in r.calls if c.class_ == "estimated"]
+    assert [c.tool for c in calls] == ["bridge_interference", *["check_interference_group"] * 3]
+    assert [c.step for c in calls[1:]] == [item.step for item in report.findings.reclassified]
+    assert report.totals.estimated_rounds == 4
     assert report.totals.lower_bound_rounds == 0
 
 
