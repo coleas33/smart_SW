@@ -48,10 +48,11 @@ the wrong failure (FR-045).
 is registered for the turn, and none of the five tools it does get names a document, a path
 or a run folder. The `RemodelClient` this module holds is never passed to phase B.
 
-This is also the **one place a remodel run constructs a provider** (`contracts/tools.md`,
-"Providers"): `build_provider` asks the registry for the adapter, OpenAI by default and
-Gemini as the only alternative. Every other module of `remodel/` is deterministic and a
-test asserts none of them reaches the registry.
+This is also the **one place a remodel run reaches a provider** (`contracts/tools.md`,
+"Providers"): `build_provider` refuses the scripted provider and hands everything else to
+`cli.provider_factory`, the one body that builds an adapter for the review and the pane too,
+OpenAI by default and Gemini as the only alternative. Every other module of `remodel/` is
+deterministic and a test asserts none of them reaches the registry or the factory.
 """
 
 from __future__ import annotations
@@ -62,7 +63,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from swreview.agent import providers
 from swreview.agent.events import (
     DEFAULT_MAX_STEPS,
     EVENTS_FILE_NAME,
@@ -85,7 +85,6 @@ from swreview.agent.settings import (
     DEFAULT_EFFORT,
     DEFAULT_PROVIDER,
     ProviderSettings,
-    output_ceiling,
 )
 from swreview.bridge.remodel_client import RemodelClient
 from swreview.checks.rms_types import load_table
@@ -298,37 +297,40 @@ def plan_run(
 
 
 def build_provider(settings: ProviderSettings) -> AgentProvider:
-    """The adapter the judgement phase talks to. **The one construction site of this run.**
+    """The adapter the judgement phase talks to. **The one entry point of this run.**
 
-    `providers.get` is the registry, and it is the whole of the provider policy: it answers
-    for `openai` (the default), `gemini` and `fake`, and raises `UnknownProviderError` for
-    every other string, so there is no name a remodel run could be given that reaches a
-    fourth vendor.
+    It builds nothing itself: `cli.provider_factory` is the one body that constructs an
+    adapter, for the review, the pane and this run alike (owner decision 4A, 2026-09-23,
+    `contracts/tools.md` "Providers"). This run had its own copy of that body until then, and
+    the copy carried the original's wrong `redact=` keyword, so the Gemini fix of `d47a91f`
+    had to be made twice. No efficiency levers are passed, so every lever stays off for a
+    remodel run, as it always has.
 
-    The scripted adapter is deliberately not built here. It plays a script, a script belongs
+    Behind the factory, `providers.get` is the registry, and it is the whole of the provider
+    policy: it answers for `openai` (the default), `gemini` and `fake`, and raises
+    `UnknownProviderError` for every other string, so there is no name a remodel run could be
+    given that reaches a fourth vendor.
+
+    The scripted adapter is deliberately not built here, and the refusal comes before the
+    factory is asked, because the factory would give it the review's script. A script belongs
     to whoever wrote it, and a default script invented in the product would make a test pass
     for the fixture's reasons; callers that want it inject their own factory.
+
+    The import is deferred, as `chat.server.build_provider`'s is, because `cli` imports the
+    `remodel` package.
 
     Raises:
         ValueError: `settings` names the scripted provider.
         UnknownProviderError: the registry does not answer for that name.
     """
-    adapter = providers.get(settings.provider)
     if settings.provider is ProviderName.FAKE:
         raise ValueError(
             "the scripted provider plays a script, and a remodel run has none to give it; "
             "pass provider_factory= with the script this run should play"
         )
-    if settings.provider is ProviderName.GEMINI:
-        from google import genai
+    from swreview.cli import provider_factory
 
-        return adapter(
-            client=genai.Client(**settings.client_kwargs()),
-            model=settings.model,
-            secrets=settings.secrets,
-            max_output_tokens=output_ceiling(settings.provider, settings.model),
-        )
-    return adapter(model=settings.model, **settings.client_kwargs())
+    return provider_factory(settings)
 
 
 def system_prompt() -> str:
