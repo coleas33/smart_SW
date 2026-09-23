@@ -106,6 +106,42 @@ public class BridgeSecretPolicyTests : IDisposable
         Assert.False(Scoped().IsAuthorized(ChatSecret, BridgeCommands.Tessellate));
     }
 
+    [Fact]
+    public void ScopedSecretPolicy_OnlyTheReviewSecretReachesDrawingRead()
+    {
+        // Feature 011 (contracts/confirmed-open.md section 2): the confirmed candidate's
+        // read-only open answers the review that asked the question, never general chat and
+        // never the re-modeler.
+        var policy = new ScopedSecretPolicy(ReviewSecret, ChatSecret, "remodel-secret-qrs");
+
+        Assert.True(policy.IsAuthorized(ReviewSecret, BridgeCommands.DrawingRead));
+        Assert.False(policy.IsAuthorized(ChatSecret, BridgeCommands.DrawingRead));
+        Assert.False(policy.IsAuthorized("remodel-secret-qrs", BridgeCommands.DrawingRead));
+    }
+
+    [Fact]
+    public void Dispatch_GeneralChatSecretAskingForDrawingRead_IsUnauthorizedAndNothingRuns()
+    {
+        var services = new BridgeServices(
+            new Fakes.FakeCaptureView(),
+            new Fakes.FakeMeasureSource("no measure source in this test"),
+            new Fakes.FakeInterferenceSource(new Fakes.FakeInterferenceDetector()),
+            new SwReview.Extractor.Interference.ComponentIndex(new Dump.ComponentTreeResult()),
+            System.IO.Path.GetTempPath());
+        var dispatcher = new SwBridgeDispatcher(services, Scoped());
+        var request = new BridgeRequest
+        {
+            Id = "1",
+            Command = BridgeCommands.DrawingRead,
+            Secret = ChatSecret,
+        };
+
+        BridgeResponse response = dispatcher.Dispatch(request);
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Equal(SwBridgeDispatcher.UnauthorizedError, response.Error);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -136,6 +172,11 @@ public class BridgeSecretPolicyTests : IDisposable
         Assert.False(policy.IsAuthorized(ChatSecret, command));
     }
 
+    /// <remarks>
+    /// Edited deliberately by feature 011 T071: the review scope gains <c>drawing.read</c>, the
+    /// confirmed candidate's read-only open (contracts/confirmed-open.md section 2); the
+    /// general-chat scope does not.
+    /// </remarks>
     [Fact]
     public void ScopedSecretPolicy_ScopesAreExactlyWhatTheContractNames()
     {
@@ -147,6 +188,7 @@ public class BridgeSecretPolicyTests : IDisposable
                 BridgeCommands.Measure,
                 BridgeCommands.Interference,
                 BridgeCommands.Tessellate,
+                BridgeCommands.DrawingRead,
             },
             ScopedSecretPolicy.ReviewCommands.ToArray());
 

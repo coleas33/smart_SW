@@ -1,7 +1,7 @@
 # Bridge protocol (Python side)
 
 **The authoritative protocol is
-`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.2). That
+`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.3). That
 file describes what `SwReview.Extractor.Console.exe serve --pipe <name>` speaks;
 `swreview.bridge.client` is written against it, and
 `reviewer/tests/unit/test_bridge_client.py` is the executable copy of what this client
@@ -19,7 +19,10 @@ One JSON object per line, UTF-8, `\n`-terminated, over `\\.\pipe\<name>`:
 
 `id` is a string (a monotonic counter rendered as decimal), `params` is the command's
 argument object, and `command` is one of `ping`, `capture`, `measure`, `interference`,
-`tessellate` - the whole vocabulary. A client built with a `secret` adds one more
+`tessellate`, `drawing.read` - the whole vocabulary. `drawing.read` (protocol 1.3, feature 011)
+sends exactly `run_id` - the review's run folder's own name - and `document_id`, and never a
+path: the in-process host resolves the run folder, the package and the drawing's file from its
+own records (`specs/011-drawing-context/contracts/confirmed-open.md` section 2). A client built with a `secret` adds one more
 top-level field, `"secret": "<per-launch>"`, on every line; a client built without one **omits the field
 entirely** rather than sending `""`, because an empty string is a wrong secret to the
 in-process host and the console host asks for none. The secret is never written into an

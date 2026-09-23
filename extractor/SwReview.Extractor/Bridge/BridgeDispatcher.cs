@@ -124,6 +124,57 @@ public interface ITessellateSource
     TessellateCommandResult Tessellate(string componentId, string packageDirectory);
 }
 
+/// <summary>
+/// What <c>drawing.read</c> answers (protocol 1.3, feature 011, contracts/confirmed-open.md
+/// section 2): which document's candidate was read, the drawing's own document id, what the seam
+/// did, and how many sheets and gaps it added to the package.
+/// </summary>
+public sealed class ConfirmedDrawingResult
+{
+    [JsonPropertyName("document_id")]
+    public string DocumentId { get; set; } = string.Empty;
+
+    [JsonPropertyName("drawing_document_id")]
+    public string DrawingDocumentId { get; set; } = string.Empty;
+
+    /// <summary>True when the read opened the drawing; false when it was already open.</summary>
+    [JsonPropertyName("opened")]
+    public bool Opened { get; set; }
+
+    /// <summary>True when the read closed what it opened.</summary>
+    [JsonPropertyName("closed")]
+    public bool Closed { get; set; }
+
+    [JsonPropertyName("sheets")]
+    public int Sheets { get; set; }
+
+    [JsonPropertyName("gaps")]
+    public int Gaps { get; set; }
+}
+
+/// <summary>
+/// A <c>drawing.read</c> the host refused, with the sentence it answers: nothing was opened, or
+/// the seam refused the open.
+/// </summary>
+public sealed class ConfirmedDrawingRefused : InvalidOperationException
+{
+    public ConfirmedDrawingRefused(string message)
+        : base(message)
+    {
+    }
+}
+
+/// <summary>
+/// The host side of <c>drawing.read</c> (feature 011): reads the confirmed candidate of one
+/// document into one review's package, resolving everything from the host's own records, and
+/// refusing with <see cref="ConfirmedDrawingRefused"/> when any step fails. The real one is
+/// <see cref="Dump.ConfirmedDrawingRead"/>, which the add-in builds on its review records.
+/// </summary>
+public interface IConfirmedDrawingSource
+{
+    ConfirmedDrawingResult Read(string runId, string documentId);
+}
+
 /// <summary>What <c>interference</c> answers.</summary>
 public sealed class InterferenceCommandResult
 {
@@ -215,6 +266,13 @@ public sealed class BridgeServices
     /// <see cref="RemodelSeat"/>: <c>remodel.open</c> refuses rather than inventing one.
     /// </summary>
     public string? RemodelRunRoot { get; set; }
+
+    /// <summary>
+    /// Feature 011, protocol 1.3. The source <c>drawing.read</c> reads a confirmed candidate
+    /// through, or null on a bridge that reads none - the console host above all, which keeps no
+    /// review records. Null is the default, so a host hands the command a source deliberately.
+    /// </summary>
+    public IConfirmedDrawingSource? ConfirmedDrawings { get; set; }
 }
 
 /// <summary>
@@ -242,12 +300,13 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
     ///
     /// 1.1 is additive: the four 1.0 commands and the envelope are untouched, and it adds the
     /// <c>remodel.*</c> family and <c>result.error_code</c> on a failed reply. 1.2 is additive
-    /// again: everything 1.1 speaks is unchanged and it adds one command, <c>tessellate</c>.
+    /// again: everything 1.1 speaks is unchanged and it adds one command, <c>tessellate</c>. 1.3
+    /// (feature 011) adds one more, <c>drawing.read</c>, and changes nothing else.
     /// <c>ping</c> reports this value and a client compares against it
     /// (<c>PROTOCOL_VERSION</c> in <c>reviewer/src/swreview/bridge/client.py</c>), so it is
     /// what the document says it is or the two ends have already come apart.
     /// </summary>
-    public const string ProtocolVersion = "1.2";
+    public const string ProtocolVersion = "1.3";
 
     /// <summary>
     /// The whole of what a refused request is told (T045). One word, the same for a wrong
@@ -377,6 +436,9 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
 
             case BridgeCommands.Tessellate:
                 return Tessellate(request);
+
+            case BridgeCommands.DrawingRead:
+                return DrawingRead(request);
 
             default:
                 if (RemodelCommandTable.Find(request.Command) != null)
@@ -546,6 +608,53 @@ public sealed class SwBridgeDispatcher : IBridgeDispatcher
         return BridgeResponse.Ok(
             request.Id,
             _services.TessellateSource.Tessellate(componentId, _services.CaptureDirectory));
+    }
+
+    /// <summary>The whole of what <c>drawing.read</c> is handed: a run id and a document id.</summary>
+    private static readonly string[] DrawingReadParameters = { "run_id", "document_id" };
+
+    /// <summary>
+    /// Feature 011, protocol 1.3 (contracts/confirmed-open.md section 2). Reads the candidate the
+    /// engineer confirmed into the review's package, through the host's
+    /// <see cref="BridgeServices.ConfirmedDrawings"/>. Any parameter but the two - a path above
+    /// all - is refused before anything runs: the host resolves the run folder, the package and
+    /// the file from its own records, so the caller can never name what SOLIDWORKS opens.
+    /// </summary>
+    private BridgeResponse DrawingRead(BridgeRequest request)
+    {
+        if (request.Params.ValueKind == JsonValueKind.Object)
+        {
+            foreach (JsonProperty member in request.Params.EnumerateObject())
+            {
+                if (Array.IndexOf(DrawingReadParameters, member.Name) < 0)
+                {
+                    return BridgeResponse.Failed(
+                        request.Id,
+                        $"'{BridgeCommands.DrawingRead}' takes only \"run_id\" and \"document_id\"; "
+                        + $"\"{member.Name}\" was refused, so nothing was opened.");
+                }
+            }
+        }
+
+        string runId = RequiredString(request, "run_id");
+        string documentId = RequiredString(request, "document_id");
+
+        if (_services.ConfirmedDrawings == null)
+        {
+            return BridgeResponse.Failed(
+                request.Id,
+                "This bridge cannot read a drawing: only the add-in's review host reads a confirmed "
+                + "candidate, from its own review records.");
+        }
+
+        try
+        {
+            return BridgeResponse.Ok(request.Id, _services.ConfirmedDrawings.Read(runId, documentId));
+        }
+        catch (ConfirmedDrawingRefused refusal)
+        {
+            return BridgeResponse.Failed(request.Id, refusal.Message);
+        }
     }
 
     // =================================================================================

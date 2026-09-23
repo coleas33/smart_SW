@@ -196,13 +196,27 @@ public static class OpenDrawingDiscovery
             throw new ArgumentNullException(nameof(documentPaths));
         }
 
+        return DocumentResolver(documentPaths.Select(path => (path, DocumentIds.For(path))));
+    }
+
+    /// <summary>
+    /// <see cref="DocumentResolver(IEnumerable{string})"/> over documents that already carry their
+    /// ids - a package's <c>documents[]</c> - so a path ties to the id the package gave it.
+    /// </summary>
+    public static Func<string, string?> DocumentResolver(IEnumerable<(string Path, string DocumentId)> documents)
+    {
+        if (documents == null)
+        {
+            throw new ArgumentNullException(nameof(documents));
+        }
+
         var byKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (string path in documentPaths)
+        foreach ((string path, string documentId) in documents)
         {
             string? key = Key(path);
             if (key != null && !byKey.ContainsKey(key))
             {
-                byKey[key] = DocumentIds.For(path);
+                byKey[key] = documentId;
             }
         }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -99,8 +100,9 @@ public class BridgeDispatcherTests : IDisposable
         // constant with itself would pass at any value, which is how the two ends came
         // apart. 1.2 adds `tessellate` (T096); the `remodel.*` family of 1.1 is unchanged,
         // so remodel_client.py's REMODEL_PROTOCOL_VERSION is the version that family needs
-        // rather than the version a host must report.
-        Assert.Equal("1.2", result.Protocol);
+        // rather than the version a host must report. Edited deliberately by feature 011 T071:
+        // 1.3 adds `drawing.read`, additively.
+        Assert.Equal("1.3", result.Protocol);
         Assert.Equal(SwBridgeDispatcher.ProtocolVersion, result.Protocol);
         Assert.Equal(@"C:\work\bracket-assy.SLDASM", result.Document);
         Assert.Equal("Default", result.Configuration);
@@ -735,6 +737,130 @@ public class BridgeDispatcherTests : IDisposable
 
         Assert.Equal(BridgeStatus.Error, response.Status);
         Assert.Contains("remodel.frobnicate", response.Error!, StringComparison.Ordinal);
+    }
+
+    // ---- drawing.read (feature 011 T071, contracts/confirmed-open.md section 2) -------------
+
+    [Fact]
+    public void DrawingRead_HandsTheSourceTheRunAndTheDocumentAndAnswersItsResult()
+    {
+        var source = new FakeConfirmedDrawings();
+
+        BridgeResponse response = DispatchDrawingRead(
+            "{\"run_id\":\"20260923-101500-chat0001\",\"document_id\":\"doc:0007\"}", source);
+
+        Assert.Equal(BridgeStatus.Ok, response.Status);
+        Assert.Equal(new[] { ("20260923-101500-chat0001", "doc:0007") }, source.Calls);
+        var result = Assert.IsType<ConfirmedDrawingResult>(response.Result);
+        Assert.Equal("doc:0007", result.DocumentId);
+        Assert.Equal(
+            new[] { "document_id", "drawing_document_id", "opened", "closed", "sheets", "gaps" },
+            Keys(result));
+    }
+
+    [Theory]
+    [InlineData("{\"run_id\":\"r\",\"document_id\":\"doc:0007\",\"path\":\"C:/Fictional/x.SLDDRW\"}", "path")]
+    [InlineData("{\"run_id\":\"r\",\"document_id\":\"doc:0007\",\"candidate_path\":\"x\"}", "candidate_path")]
+    [InlineData("{\"run_id\":\"r\",\"document_id\":\"doc:0007\",\"open\":true}", "open")]
+    public void DrawingRead_AnyOtherParameterAPathAboveAllIsRefusedBeforeAnythingRuns(string parameters, string refused)
+    {
+        var source = new FakeConfirmedDrawings();
+
+        BridgeResponse response = DispatchDrawingRead(parameters, source);
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Contains("\"" + refused + "\"", response.Error!, StringComparison.Ordinal);
+        Assert.Contains("nothing was opened", response.Error!, StringComparison.Ordinal);
+        Assert.Empty(source.Calls);
+    }
+
+    [Theory]
+    [InlineData("{\"document_id\":\"doc:0007\"}", "run_id")]
+    [InlineData("{\"run_id\":\"r\"}", "document_id")]
+    [InlineData("{\"run_id\":\"\",\"document_id\":\"doc:0007\"}", "run_id")]
+    [InlineData("{\"run_id\":7,\"document_id\":\"doc:0007\"}", "run_id")]
+    public void DrawingRead_AMissingRunOrDocumentIsRefusedBeforeAnythingRuns(string parameters, string missing)
+    {
+        var source = new FakeConfirmedDrawings();
+
+        BridgeResponse response = DispatchDrawingRead(parameters, source);
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Contains(missing, response.Error!, StringComparison.Ordinal);
+        Assert.Empty(source.Calls);
+    }
+
+    [Fact]
+    public void DrawingRead_TheSourcesRefusalIsTheErrorWordForWord()
+    {
+        var source = new FakeConfirmedDrawings { Refusal = "the package already holds ten drawings, so this one was not opened" };
+
+        BridgeResponse response = DispatchDrawingRead("{\"run_id\":\"r\",\"document_id\":\"doc:0007\"}", source);
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Equal("the package already holds ten drawings, so this one was not opened", response.Error);
+    }
+
+    [Fact]
+    public void DrawingRead_OnABridgeWithNoSource_TheConsoleHost_AnswersThatItCannotReadADrawing()
+    {
+        BridgeResponse response = DispatchDrawingRead("{\"run_id\":\"r\",\"document_id\":\"doc:0007\"}", source: null);
+
+        Assert.Equal(BridgeStatus.Error, response.Status);
+        Assert.Contains("cannot read a drawing", response.Error!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DrawingRead_IsOneOfTheCommandsTheBridgeAnswersAndPassesTheReadOnlyGuard()
+    {
+        Assert.Contains(BridgeCommands.DrawingRead, BridgeCommands.All);
+        Assert.Equal("drawing.read", BridgeCommands.DrawingRead);
+        ReadOnlyGuard.Assert(BridgeCommands.DrawingRead);
+        Assert.False(RemodelCommands.IsRemodelCommand(BridgeCommands.DrawingRead));
+    }
+
+    private BridgeResponse DispatchDrawingRead(string parameters, IConfirmedDrawingSource? source)
+    {
+        var services = new BridgeServices(
+            _captureView,
+            new FakeMeasureSource("no measure source in this test"),
+            new FakeInterferenceSource(new FakeInterferenceDetector()),
+            Index(null),
+            _captureDirectory)
+        {
+            DocumentPath = @"C:\work\bracket-assy.SLDASM",
+            ConfirmedDrawings = source,
+        };
+
+        return new SwBridgeDispatcher(services, NoSecretPolicy.Instance)
+            .Dispatch(Request("1", BridgeCommands.DrawingRead, parameters));
+    }
+
+    /// <summary>The host's source, recording what it was asked; it answers or refuses.</summary>
+    private sealed class FakeConfirmedDrawings : IConfirmedDrawingSource
+    {
+        public List<(string RunId, string DocumentId)> Calls { get; } = new List<(string, string)>();
+
+        public string? Refusal { get; set; }
+
+        public ConfirmedDrawingResult Read(string runId, string documentId)
+        {
+            Calls.Add((runId, documentId));
+            if (Refusal != null)
+            {
+                throw new ConfirmedDrawingRefused(Refusal);
+            }
+
+            return new ConfirmedDrawingResult
+            {
+                DocumentId = documentId,
+                DrawingDocumentId = "doc:0012",
+                Opened = true,
+                Closed = true,
+                Sheets = 2,
+                Gaps = 1,
+            };
+        }
     }
 
     /// <summary>The wire keys of a result object, in declaration order.</summary>

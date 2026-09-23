@@ -170,6 +170,74 @@ public static class PackageAppender
         return Save(packageDirectory, package);
     }
 
+    /// <summary>
+    /// Merges the confirmed candidate's drawing into <paramref name="package"/> (feature 011,
+    /// contracts/confirmed-open.md section 2): the record - <c>opened_by_review: true</c> when the
+    /// read opened it, the member omitted otherwise and never false - its <c>documents[]</c> row
+    /// and manifest entry, its id in <c>design.drawing_document_ids</c>, its gaps, and the removal
+    /// of the document's candidate row. A drawing the package already holds is refused, and the
+    /// package is left as it was.
+    /// </summary>
+    public static void MergeDrawing(
+        EvidencePackage package,
+        DrawingRecord record,
+        Document document,
+        ManifestEntry entry,
+        IReadOnlyList<Gap> gaps,
+        string candidateDocumentId,
+        bool openedByReview)
+    {
+        if (package == null)
+        {
+            throw new ArgumentNullException(nameof(package));
+        }
+
+        if (record == null)
+        {
+            throw new ArgumentNullException(nameof(record));
+        }
+
+        if (document == null)
+        {
+            throw new ArgumentNullException(nameof(document));
+        }
+
+        if (entry == null)
+        {
+            throw new ArgumentNullException(nameof(entry));
+        }
+
+        bool already = (package.DrawingRecords ?? new List<DrawingRecord>())
+                .Exists(row => string.Equals(row.DocumentId, record.DocumentId, StringComparison.Ordinal))
+            || package.Documents.Exists(row => string.Equals(row.DocumentId, document.DocumentId, StringComparison.Ordinal));
+        if (already)
+        {
+            throw new InvalidOperationException(
+                $"'{document.Path}' ({record.DocumentId}) is already in this package; a drawing is not merged twice.");
+        }
+
+        record.OpenedByReview = openedByReview ? true : (bool?)null;
+        (package.DrawingRecords ??= new List<DrawingRecord>()).Add(record);
+        package.Documents.Add(document);
+        package.Manifest.Entries.Add(entry);
+        package.Design.DrawingDocumentIds.Add(record.DocumentId);
+
+        if (gaps != null)
+        {
+            package.Gaps.AddRange(gaps);
+        }
+
+        if (package.DrawingCandidates != null)
+        {
+            package.DrawingCandidates.RemoveAll(
+                row => string.Equals(row.DocumentId, candidateDocumentId, StringComparison.Ordinal));
+            if (package.DrawingCandidates.Count == 0)
+            {
+                package.DrawingCandidates = null;
+            }
+        }
+    }
+
     /// <summary>Merges one capture into <paramref name="package"/>. Captures are purely additive.</summary>
     public static void Merge(EvidencePackage package, IrCapture? capture, Gap? gap)
     {

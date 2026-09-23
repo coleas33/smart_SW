@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using SwReview.Extractor.Ids;
 using SwReview.Extractor.Ir;
 
@@ -258,6 +259,65 @@ public sealed class DrawingIdAllocators
     public IdAllocator RevisionTables { get; } = new IdAllocator("drv");
 
     public IdAllocator Tables { get; } = new IdAllocator("dtb");
+
+    /// <summary>A fresh set: every prefix starts at 0001 (a dump).</summary>
+    public DrawingIdAllocators()
+    {
+    }
+
+    private DrawingIdAllocators(IReadOnlyCollection<DrawingRecord> records)
+    {
+        IdAllocator Continue(string prefix, IEnumerable<string> ids) =>
+            new IdAllocator(prefix, IdAllocator.HighestIssued(prefix, ids));
+
+        var sheets = new List<string>();
+        var views = new List<string>();
+        var dimensions = new List<string>();
+        var annotations = new List<string>();
+        var notes = new List<string>();
+        var revisionTables = new List<string>();
+        var tables = new List<string>();
+
+        foreach (DrawingRecord record in records)
+        {
+            foreach (DrawingSheetRecord sheet in record.Sheets)
+            {
+                sheets.Add(sheet.Id);
+                revisionTables.AddRange(sheet.RevisionTables.Select(table => table.Id));
+                tables.AddRange((sheet.Tables ?? new List<DrawingTable>()).Select(table => table.Id));
+                foreach (DrawingView view in sheet.Views)
+                {
+                    views.Add(view.Id);
+                    dimensions.AddRange(view.DisplayDimensions.Select(dimension => dimension.Id));
+                    annotations.AddRange(view.Annotations.Select(annotation => annotation.Id));
+                    notes.AddRange(view.Notes.Select(note => note.Id));
+                }
+            }
+        }
+
+        Sheets = Continue("dsh", sheets);
+        Views = Continue("dvw", views);
+        Dimensions = Continue("ddm", dimensions);
+        Annotations = Continue("dan", annotations);
+        Notes = Continue("dnt", notes);
+        RevisionTables = Continue("drv", revisionTables);
+        Tables = Continue("dtb", tables);
+    }
+
+    /// <summary>
+    /// A set continuing past every drawing id <paramref name="package"/> already holds, prefix by
+    /// prefix (feature 011, contracts/confirmed-open.md section 2): a drawing appended to a
+    /// package - the confirmed candidate's read - numbers after the drawings the dump read.
+    /// </summary>
+    public static DrawingIdAllocators ContinuingFrom(EvidencePackage package)
+    {
+        if (package == null)
+        {
+            throw new ArgumentNullException(nameof(package));
+        }
+
+        return new DrawingIdAllocators(package.DrawingRecords ?? new List<DrawingRecord>());
+    }
 }
 
 /// <summary>
@@ -363,11 +423,13 @@ public sealed class DumpScope
     private readonly List<ScopedComponent> _components = new List<ScopedComponent>();
     private readonly List<FaceRequest> _faceRequests = new List<FaceRequest>();
 
-    public DumpScope(GapCollector gaps, DumpOptions options, ComponentTreeResult tree)
+    public DumpScope(
+        GapCollector gaps, DumpOptions options, ComponentTreeResult tree, DrawingIdAllocators? drawingIds = null)
     {
         Gaps = gaps ?? throw new ArgumentNullException(nameof(gaps));
         Options = options ?? throw new ArgumentNullException(nameof(options));
         Tree = tree ?? throw new ArgumentNullException(nameof(tree));
+        DrawingIds = drawingIds ?? new DrawingIdAllocators();
     }
 
     public GapCollector Gaps { get; }
@@ -419,9 +481,10 @@ public sealed class DumpScope
 
     /// <summary>
     /// The drawing ids (feature 011): one set for the package, so every drawing the
-    /// <c>drawing</c> phase reads continues the same sequences.
+    /// <c>drawing</c> phase reads continues the same sequences - fresh for a dump, continuing the
+    /// package's own for a drawing appended to it (<see cref="DrawingIdAllocators.ContinuingFrom"/>).
     /// </summary>
-    public DrawingIdAllocators DrawingIds { get; } = new DrawingIdAllocators();
+    public DrawingIdAllocators DrawingIds { get; }
 
     /// <summary>
     /// The drawings the <c>drawing</c> phase reads, in order: the root drawing for a drawing
