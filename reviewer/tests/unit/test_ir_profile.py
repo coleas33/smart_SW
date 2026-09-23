@@ -51,9 +51,10 @@ def build_extractor(**overrides: object) -> ExtractorInfo:
 
 def test_the_profile_bump_is_carried_by_the_current_schema_version() -> None:
     """1.2.0 is where `extractor.profile` arrived; 1.3.0 (T089) added the reuse fields
-    beside it, 1.4.0 (006 T013) widened its enumeration with `standards` and 1.5.0
-    (010 T077) added the tolerance evidence without touching it."""
-    assert SCHEMA_VERSION == "1.5.0"
+    beside it, 1.4.0 (006 T013) widened its enumeration with `standards`, and 1.5.0
+    (010 T077) and 1.6.0 (011 T006) added the tolerance evidence and the drawing context
+    without touching it."""
+    assert SCHEMA_VERSION == "1.6.0"
     assert build_package().schema_version == SCHEMA_VERSION
 
 

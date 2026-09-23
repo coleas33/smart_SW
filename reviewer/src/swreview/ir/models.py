@@ -35,7 +35,7 @@ from pydantic import (
     model_validator,
 )
 
-SCHEMA_VERSION = "1.5.0"
+SCHEMA_VERSION = "1.6.0"
 SUPPORTED_SCHEMA_MAJOR = 1
 SCHEMA_VERSION_PATTERN = r"^1\.[0-9]+\.[0-9]+$"
 
@@ -291,7 +291,10 @@ class Design(IRModel):
     design_id: str
     name: str
     root_assembly_document_id: str
-    active_configuration: str
+    active_configuration: str = Field(
+        description="The root document's active configuration; empty for a drawing root, which "
+        "has none (feature 011, contracts/attach.md section 2)"
+    )
     drawing_document_ids: list[str]
 
 
@@ -905,6 +908,41 @@ class DrawingSheet(IRModel):
         return omit_additive(handler, self, nulls=("source",))
 
 
+# GtolFrame is feature 010's (schema 1.5.0); it is defined here, ahead of the drawing models,
+# because a drawing's geometric tolerance reuses it from 1.6.0 (feature 011 data-model.md
+# section 1) and one frame model serves both.
+
+class GtolFrame(IRModel):
+    """One frame of a geometric tolerance, as SOLIDWORKS answered it (schema 1.5.0).
+
+    A GTol created before SOLIDWORKS 2022 answers the frame calls `GetFrameSymbols3` and
+    `GetFrameValues`; one in the 2022 format answers `IGtol.GetFrame(n).GetSymbolXml()`
+    instead. Both are asked and each answer is recorded verbatim; parsing is Python's.
+    """
+
+    number: int = Field(ge=1, description="The one-based frame number the calls were asked for")
+    symbols_raw: list[str] = Field(
+        default_factory=list,
+        description=(
+            "IGtol.GetFrameSymbols3 verbatim: the geometric characteristic symbol, then the "
+            "material condition symbols of tolerance 1, tolerance 2 and datums 1 to 3"
+        ),
+    )
+    values_raw: list[str] = Field(
+        default_factory=list,
+        description="IGtol.GetFrameValues verbatim: tolerance 1, tolerance 2, datums 1 to 3",
+    )
+    symbol_xml_raw: str | None = Field(
+        default=None, description="IGtolFrame.GetSymbolXml verbatim, for the 2022 format"
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler, self, nulls=("symbol_xml_raw",), empties=("symbols_raw", "values_raw")
+        )
+
+
 # --- 2b. Native drawing evidence (schema 1.4.0, feature 006) ----------------------
 #
 # These are new models, not an extension of `DrawingSheet`: the PDF ingest's sheet requires
@@ -944,6 +982,96 @@ class RevisionTableRow(IRModel):
     @model_serializer(mode="wrap")
     def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         return omit_additive(handler, self, nulls=("is_header",), empties=("cells",))
+
+
+class AttachedFace(IRModel):
+    """One model face a drawing dimension or annotation is attached to (schema 1.6.0, feature
+    011 data-model.md section 2).
+
+    Read through `IAnnotation.GetAttachedEntities3` and `IView.GetCorrespondingEntity`; an edge is
+    recorded as its two adjacent faces, each `via: edge`. An attached entity that is neither, or
+    whose model counterpart could not be read, adds no row and a `drawing_attachment` gap.
+    """
+
+    persist_ref: PersistRef = Field(
+        description="The model face's persistent reference, from its owning part document"
+    )
+    scope: str = Field(description="The document_id of that part document")
+    via: Literal["face", "edge"] = Field(
+        description="`edge`: the annotation was attached to an edge and this is one of its two "
+        "adjacent faces"
+    )
+
+
+class BomRow(IRModel):
+    """The documents one bill-of-materials row stands for (schema 1.6.0)."""
+
+    index: int = Field(ge=0, description="The table row")
+    document_ids: list[str] = Field(
+        default_factory=list,
+        description="IBomTableAnnotation.GetModelPathNames paths that are package documents",
+    )
+    unresolved_paths: list[str] = Field(
+        default_factory=list, description="The paths that are not, recorded verbatim"
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(handler, self, empties=("document_ids", "unresolved_paths"))
+
+
+REVISION_TABLE_TYPE = 3
+"""`swTableAnnotation_RevisionBlock`: the table type feature 006 records in `revision_tables`."""
+
+
+class DrawingTable(IRModel):
+    """One table on a sheet that is not a revision table (schema 1.6.0, feature 011).
+
+    Bills of materials, hole tables, general tolerance tables, title blocks and general tables,
+    cell by cell; revision tables stay in `DrawingSheetRecord.revision_tables` exactly as
+    feature 006 records them.
+    """
+
+    id: Annotated[str, StringConstraints(pattern=r"^dtb:[0-9]{4,}$")]
+    sheet_id: str
+    owner_view_id: str = Field(
+        description="The DrawingView.id whose GetTableAnnotations returned the table"
+    )
+    table_type_raw: int | None = Field(
+        default=None,
+        description="ITableAnnotation.Type verbatim, in swTableAnnotationType_e; never 3 here. "
+        "Python names it",
+    )
+    title: str | None = Field(default=None, description="ITableAnnotation.Title")
+    row_count: int | None = Field(default=None, ge=0)
+    column_count: int | None = Field(default=None, ge=0)
+    rows: list[RevisionTableRow] = Field(
+        default_factory=list,
+        description="Feature 006's row model: a null cell is unread, an empty one is empty",
+    )
+    bom_rows: list[BomRow] = Field(
+        default_factory=list, description="For a bill of materials only"
+    )
+    persist_ref: PersistRef | None = None
+    persist_ref_scope: str | None = None
+
+    @model_validator(mode="after")
+    def _never_a_revision_table(self) -> DrawingTable:
+        if self.table_type_raw == REVISION_TABLE_TYPE:
+            raise ValueError(
+                "a revision table (type 3) belongs in the sheet's revision_tables, as feature "
+                "006 records it, never in tables"
+            )
+        return self
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler,
+            self,
+            nulls=("title", "row_count", "column_count", "persist_ref", "persist_ref_scope"),
+            empties=("rows", "bom_rows"),
+        )
 
 
 class RevisionTable(IRModel):
@@ -1038,6 +1166,27 @@ class DrawingAnnotation(IRModel):
         description="IAnnotation.IsDangling(); null plus an annotation_dangling gap, and "
         "that annotation is then unresolved",
     )
+    gtol_frames: list[GtolFrame] = Field(
+        default_factory=list,
+        description="A geometric tolerance's frames (type 5), feature 010's frame reads (schema "
+        "1.6.0)",
+    )
+    datum_identifier_raw: str | None = Field(
+        default=None, description="IGtol.GetDatumIdentifier, for a geometric tolerance (1.6.0)"
+    )
+    datum_label: str | None = Field(
+        default=None, description="IDatumTag.GetLabel, for a datum tag (type 2; 1.6.0)"
+    )
+    surface_finish_symbol_raw: int | None = Field(
+        default=None, description="ISFSymbol.GetSymbol, for a surface finish symbol (type 7; 1.6.0)"
+    )
+    surface_finish_texts_raw: list[str] = Field(
+        default_factory=list,
+        description="ISFSymbol.GetTextAtIndex(0..GetTextCount-1) verbatim (1.6.0)",
+    )
+    attached_faces: list[AttachedFace] = Field(
+        default_factory=list, description="For types 2, 5 and 7 (1.6.0)"
+    )
     persist_ref: PersistRef | None = None
     persist_ref_scope: str | None = None
 
@@ -1046,7 +1195,9 @@ class DrawingAnnotation(IRModel):
         return omit_additive(
             handler,
             self,
-            nulls=("name", "type_raw", "is_dangling", "persist_ref", "persist_ref_scope"),
+            nulls=("name", "type_raw", "is_dangling", "datum_identifier_raw", "datum_label",
+                   "surface_finish_symbol_raw", "persist_ref", "persist_ref_scope"),
+            empties=("gtol_frames", "surface_finish_texts_raw", "attached_faces"),
         )
 
 
@@ -1090,6 +1241,61 @@ class DisplayDimensionRecord(IRModel):
         description="IDimension.GetSystemValue3(1, null), the computed value, for the "
         "finding's observed text; same union and same null rule",
     )
+    text_prefix: str | None = Field(
+        default=None,
+        description="IDisplayDimension.GetText(1) verbatim, the empty string kept; null plus a "
+        "dimension_text gap (schema 1.6.0)",
+    )
+    text_suffix: str | None = Field(default=None, description="GetText(2), as text_prefix")
+    text_above: str | None = Field(default=None, description="GetText(3), as text_prefix")
+    text_below: str | None = Field(default=None, description="GetText(4), as text_prefix")
+    precision_raw: int | None = Field(
+        default=None, description="IDisplayDimension.GetPrimaryPrecision2 (1.6.0)"
+    )
+    tolerance_precision_raw: int | None = Field(
+        default=None, description="IDisplayDimension.GetPrimaryTolPrecision2 (1.6.0)"
+    )
+    uses_document_precision: bool | None = Field(
+        default=None, description="IDisplayDimension.GetUseDocPrecision (1.6.0)"
+    )
+    units_raw: int | None = Field(
+        default=None, description="IDisplayDimension.GetUnits, swLengthUnit_e for a length (1.6.0)"
+    )
+    uses_document_units: bool | None = Field(
+        default=None, description="IDisplayDimension.GetUseDocUnits (1.6.0)"
+    )
+    tolerance: Tolerance | None = Field(
+        default=None,
+        description="IDimension.Tolerance, mapped exactly as ModelDimension.tolerance; null is "
+        "never 'none' (1.6.0)",
+    )
+    tolerance_type_raw: int | None = Field(
+        default=None, description="IDimensionTolerance.Type verbatim, swTolType_e (1.6.0)"
+    )
+    fit_hole_class: str | None = Field(
+        default=None, description="IDimensionTolerance.GetHoleFitValue, for a fit type (1.6.0)"
+    )
+    fit_shaft_class: str | None = Field(
+        default=None, description="IDimensionTolerance.GetShaftFitValue, for a fit type (1.6.0)"
+    )
+    is_reference: bool | None = Field(
+        default=None, description="IDisplayDimension.IsReferenceDim (1.6.0)"
+    )
+    driven_state_raw: int | None = Field(
+        default=None,
+        description="IDimension.DrivenState verbatim, swDimensionDrivenState_e (1.6.0)",
+    )
+    is_hole_callout: bool | None = Field(
+        default=None, description="IDisplayDimension.IsHoleCallout (1.6.0)"
+    )
+    hole_callout_variables_raw: list[str] = Field(
+        default_factory=list,
+        description="IDisplayDimension.GetHoleCalloutVariables, each verbatim, in order (1.6.0)",
+    )
+    attached_faces: list[AttachedFace] = Field(
+        default_factory=list,
+        description="The model faces the dimension is attached to, where SOLIDWORKS says (1.6.0)",
+    )
     persist_ref: PersistRef | None = None
     persist_ref_scope: str | None = None
 
@@ -1099,7 +1305,12 @@ class DisplayDimensionRecord(IRModel):
             handler,
             self,
             nulls=("name", "dimension_type_raw", "is_overridden", "override_value", "value",
+                   "text_prefix", "text_suffix", "text_above", "text_below", "precision_raw",
+                   "tolerance_precision_raw", "uses_document_precision", "units_raw",
+                   "uses_document_units", "tolerance", "tolerance_type_raw", "fit_hole_class",
+                   "fit_shaft_class", "is_reference", "driven_state_raw", "is_hole_callout",
                    "persist_ref", "persist_ref_scope"),
+            empties=("hole_callout_variables_raw", "attached_faces"),
         )
 
 
@@ -1128,6 +1339,20 @@ class DrawingView(IRModel):
         "referenced_document_id is null, because it is what lets the gap name the model "
         "that was not loaded",
     )
+    referenced_configuration: str | None = Field(
+        default=None,
+        description="IView.ReferencedConfiguration; null plus a drawing_view_state gap (schema "
+        "1.6.0)",
+    )
+    is_model_out_of_date: bool | None = Field(
+        default=None,
+        description="IView.IsModelOutOfDate(); null means unread, and binds nothing (1.6.0)",
+    )
+    is_model_loaded: bool | None = Field(default=None, description="IView.IsModelLoaded() (1.6.0)")
+    scale_decimal: float | None = Field(default=None, description="IView.ScaleDecimal (1.6.0)")
+    orientation_name: str | None = Field(
+        default=None, description="IView.GetOrientationName() (1.6.0)"
+    )
     display_dimensions: list[DisplayDimensionRecord] = Field(default_factory=list)
     annotations: list[DrawingAnnotation] = Field(default_factory=list)
     notes: list[DrawingNote] = Field(default_factory=list)
@@ -1140,7 +1365,8 @@ class DrawingView(IRModel):
             handler,
             self,
             nulls=("name", "view_type_raw", "referenced_document_id", "referenced_model_path",
-                   "persist_ref", "persist_ref_scope"),
+                   "referenced_configuration", "is_model_out_of_date", "is_model_loaded",
+                   "scale_decimal", "orientation_name", "persist_ref", "persist_ref_scope"),
             empties=("display_dimensions", "annotations", "notes"),
         )
 
@@ -1176,16 +1402,45 @@ class DrawingSheetRecord(IRModel):
     revision_tables: list[RevisionTable] = Field(
         default_factory=list, description="Every revision table on the sheet, not just one"
     )
+    sheet_format_path: str | None = Field(
+        default=None,
+        description="ISheet.GetTemplateName(), the .slddrt path; null plus a drawing_sheet gap "
+        "(schema 1.6.0)",
+    )
+    scale_numerator: float | None = Field(
+        default=None,
+        description="ISheet.GetProperties2() item 2; both scale numbers or neither (1.6.0)",
+    )
+    scale_denominator: float | None = Field(
+        default=None, description="ISheet.GetProperties2() item 3 (1.6.0)"
+    )
+    first_angle: bool | None = Field(
+        default=None,
+        description="ISheet.GetProperties2() item 4; true is first-angle projection (1.6.0)",
+    )
+    tables: list[DrawingTable] = Field(
+        default_factory=list,
+        description="Every table on the sheet that is not a revision table (1.6.0)",
+    )
     persist_ref: PersistRef | None = None
     persist_ref_scope: str | None = None
+
+    @model_validator(mode="after")
+    def _scale_is_both_numbers_or_neither(self) -> DrawingSheetRecord:
+        if (self.scale_numerator is None) != (self.scale_denominator is None):
+            raise ValueError(
+                "a sheet scale is both numbers (scale_numerator and scale_denominator) or neither"
+            )
+        return self
 
     @model_serializer(mode="wrap")
     def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         return omit_additive(
             handler,
             self,
-            nulls=("sheet_format_name", "persist_ref", "persist_ref_scope"),
-            empties=("views", "revision_tables"),
+            nulls=("sheet_format_name", "sheet_format_path", "scale_numerator",
+                   "scale_denominator", "first_angle", "persist_ref", "persist_ref_scope"),
+            empties=("views", "revision_tables", "tables"),
         )
 
 
@@ -1210,12 +1465,60 @@ class DrawingRecord(IRModel):
         description="GetSheetNames() order; empty plus a drawing_sheet gap when the "
         "enumeration failed",
     )
+    is_detailing_mode: bool | None = Field(
+        default=None,
+        description="IDrawingDoc.IsDetailingMode; null plus a drawing_document_settings gap "
+        "(schema 1.6.0)",
+    )
+    length_unit_raw: int | None = Field(
+        default=None,
+        description="GetUserPreferenceInteger(swUnitsLinear = 47), swLengthUnit_e verbatim (1.6.0)",
+    )
+    dimension_precision_raw: int | None = Field(
+        default=None,
+        description="GetUserPreferenceInteger(swDetailingLinearDimPrecision = 24) (1.6.0)",
+    )
+    units_decimal_places_raw: int | None = Field(
+        default=None,
+        description="GetUserPreferenceInteger(swUnitsLinearDecimalPlaces = 49), recorded until "
+        "probe D4 says which default governs (1.6.0)",
+    )
+    tolerance_precision_raw: int | None = Field(
+        default=None,
+        description="GetUserPreferenceInteger(swDetailingLinearTolPrecision = 25) (1.6.0)",
+    )
+    drafting_standard_name: str | None = Field(
+        default=None,
+        description="GetUserPreferenceString(swDetailingDimensionStandardName = 65) verbatim "
+        "(1.6.0)",
+    )
+    opened_by_review: Literal[True] | None = Field(
+        default=None,
+        description="True only when the product opened this drawing read-only at the "
+        "engineer's confirmation (feature 011 contracts/confirmed-open.md); omitted otherwise, "
+        "never false (1.6.0)",
+    )
 
     @model_serializer(mode="wrap")
     def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         return omit_additive(
-            handler, self, nulls=("active_sheet_name",), empties=("sheets",)
+            handler,
+            self,
+            nulls=("active_sheet_name", "is_detailing_mode", "length_unit_raw",
+                   "dimension_precision_raw", "units_decimal_places_raw",
+                   "tolerance_precision_raw", "drafting_standard_name", "opened_by_review"),
+            empties=("sheets",),
         )
+
+
+class DrawingCandidate(IRModel):
+    """A drawing file of the same name beside a reviewed part or assembly document, not open,
+    never opened by the extraction (schema 1.6.0, feature 011 contracts/open-drawings.md
+    section 5). Never written for a document that has an attached drawing."""
+
+    document_id: str = Field(description="The reviewed part or assembly document")
+    path: str = Field(description="The drawing file beside it: same folder, same stem, .SLDDRW")
+    reason: Literal["same_name_beside_model"] = Field(description="The only rule")
 
 
 class CutListItem(IRModel):
@@ -1336,37 +1639,6 @@ class ModelDimension(IRModel):
                 "persist_ref",
                 "persist_ref_scope",
             ),
-        )
-
-
-class GtolFrame(IRModel):
-    """One frame of a geometric tolerance, as SOLIDWORKS answered it (schema 1.5.0).
-
-    A GTol created before SOLIDWORKS 2022 answers the frame calls `GetFrameSymbols3` and
-    `GetFrameValues`; one in the 2022 format answers `IGtol.GetFrame(n).GetSymbolXml()`
-    instead. Both are asked and each answer is recorded verbatim; parsing is Python's.
-    """
-
-    number: int = Field(ge=1, description="The one-based frame number the calls were asked for")
-    symbols_raw: list[str] = Field(
-        default_factory=list,
-        description=(
-            "IGtol.GetFrameSymbols3 verbatim: the geometric characteristic symbol, then the "
-            "material condition symbols of tolerance 1, tolerance 2 and datums 1 to 3"
-        ),
-    )
-    values_raw: list[str] = Field(
-        default_factory=list,
-        description="IGtol.GetFrameValues verbatim: tolerance 1, tolerance 2, datums 1 to 3",
-    )
-    symbol_xml_raw: str | None = Field(
-        default=None, description="IGtolFrame.GetSymbolXml verbatim, for the 2022 format"
-    )
-
-    @model_serializer(mode="wrap")
-    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        return omit_additive(
-            handler, self, nulls=("symbol_xml_raw",), empties=("symbols_raw", "values_raw")
         )
 
 
@@ -1607,6 +1879,13 @@ class EvidencePackage(IRModel):
             "(schema 1.5.0, feature 010), written by the `tolerance` phase. Omitted when empty."
         ),
     )
+    drawing_candidates: list[DrawingCandidate] = Field(
+        default_factory=list,
+        description=(
+            "Same-name drawing files beside reviewed documents that no attached drawing shows "
+            "(schema 1.6.0, feature 011), in traversal order. Omitted when empty."
+        ),
+    )
     rms_suppress_test: SuppressTestRun | None = None
     gaps: list[Gap]
 
@@ -1614,17 +1893,19 @@ class EvidencePackage(IRModel):
     def _omit_empty_additive_arrays(
         self, handler: SerializerFunctionWrapHandler
     ) -> dict[str, Any]:
-        """Leave the 1.4.0 and 1.5.0 arrays out when they carry no rows, so a package that
-        ran none of their phases round-trips to the bytes the 1.3.0 build wrote and the
-        feature 001, 002 and 003 goldens stay byte-identical (SC-004, feature 010 FR-028).
+        """Leave the 1.4.0, 1.5.0 and 1.6.0 arrays out when they carry no rows, so a package
+        that ran none of their phases round-trips to the bytes the 1.3.0 build wrote and the
+        feature 001, 002 and 003 goldens stay byte-identical (SC-004, feature 010 FR-028,
+        feature 011 FR-048).
 
-        Only these four are dropped: every array feature 001 shipped keeps its `[]`, because
+        Only these five are dropped: every array feature 001 shipped keeps its `[]`, because
         dropping those would change the shape its readers were written against.
         """
         return omit_additive(
             handler,
             self,
-            empties=("drawing_records", "cut_list_items", "model_dimensions", "model_annotations"),
+            empties=("drawing_records", "cut_list_items", "model_dimensions", "model_annotations",
+                     "drawing_candidates"),
         )
 
     # The three entry points below gate the schema major before pydantic runs, so an

@@ -343,10 +343,10 @@ def defs() -> dict[str, Any]:
 
 def test_the_bump_is_a_minor_one() -> None:
     """Every addition in this feature is optional, so the major does not move. The minor
-    has moved once since (1.5.0, feature 010's tolerance evidence), and neither touched a
-    member this file measures."""
-    assert SCHEMA_VERSION == "1.5.0"
-    assert build_package().schema_version == "1.5.0"
+    has moved twice since (1.5.0, feature 010's tolerance evidence; 1.6.0, feature 011's
+    drawing context, which adds members beside these and changes none of them)."""
+    assert SCHEMA_VERSION == "1.6.0"
+    assert build_package().schema_version == "1.6.0"
 
 
 def test_a_one_three_zero_package_still_loads_with_the_new_fields_defaulted() -> None:

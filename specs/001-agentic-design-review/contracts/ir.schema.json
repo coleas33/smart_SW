@@ -25,6 +25,40 @@
       "title": "Angle",
       "type": "object"
     },
+    "AttachedFace": {
+      "additionalProperties": false,
+      "description": "One model face a drawing dimension or annotation is attached to (schema 1.6.0, feature\n011 data-model.md section 2).\n\nRead through `IAnnotation.GetAttachedEntities3` and `IView.GetCorrespondingEntity`; an edge is\nrecorded as its two adjacent faces, each `via: edge`. An attached entity that is neither, or\nwhose model counterpart could not be read, adds no row and a `drawing_attachment` gap.",
+      "properties": {
+        "persist_ref": {
+          "contentEncoding": "base64",
+          "description": "The model face's persistent reference, from its owning part document",
+          "minLength": 1,
+          "title": "Persist Ref",
+          "type": "string"
+        },
+        "scope": {
+          "description": "The document_id of that part document",
+          "title": "Scope",
+          "type": "string"
+        },
+        "via": {
+          "description": "`edge`: the annotation was attached to an edge and this is one of its two adjacent faces",
+          "enum": [
+            "face",
+            "edge"
+          ],
+          "title": "Via",
+          "type": "string"
+        }
+      },
+      "required": [
+        "persist_ref",
+        "scope",
+        "via"
+      ],
+      "title": "AttachedFace",
+      "type": "object"
+    },
     "Axis": {
       "additionalProperties": false,
       "properties": {
@@ -107,6 +141,39 @@
         "is_solid"
       ],
       "title": "BodyRef",
+      "type": "object"
+    },
+    "BomRow": {
+      "additionalProperties": false,
+      "description": "The documents one bill-of-materials row stands for (schema 1.6.0).",
+      "properties": {
+        "index": {
+          "description": "The table row",
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "document_ids": {
+          "description": "IBomTableAnnotation.GetModelPathNames paths that are package documents",
+          "items": {
+            "type": "string"
+          },
+          "title": "Document Ids",
+          "type": "array"
+        },
+        "unresolved_paths": {
+          "description": "The paths that are not, recorded verbatim",
+          "items": {
+            "type": "string"
+          },
+          "title": "Unresolved Paths",
+          "type": "array"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "title": "BomRow",
       "type": "object"
     },
     "Capture": {
@@ -536,6 +603,7 @@
           "type": "string"
         },
         "active_configuration": {
+          "description": "The root document's active configuration; empty for a drawing root, which has none (feature 011, contracts/attach.md section 2)",
           "title": "Active Configuration",
           "type": "string"
         },
@@ -734,6 +802,229 @@
           "default": null,
           "description": "IDimension.GetSystemValue3(1, null), the computed value, for the finding's observed text; same union and same null rule",
           "title": "Value"
+        },
+        "text_prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.GetText(1) verbatim, the empty string kept; null plus a dimension_text gap (schema 1.6.0)",
+          "title": "Text Prefix"
+        },
+        "text_suffix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "GetText(2), as text_prefix",
+          "title": "Text Suffix"
+        },
+        "text_above": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "GetText(3), as text_prefix",
+          "title": "Text Above"
+        },
+        "text_below": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "GetText(4), as text_prefix",
+          "title": "Text Below"
+        },
+        "precision_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.GetPrimaryPrecision2 (1.6.0)",
+          "title": "Precision Raw"
+        },
+        "tolerance_precision_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.GetPrimaryTolPrecision2 (1.6.0)",
+          "title": "Tolerance Precision Raw"
+        },
+        "uses_document_precision": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.GetUseDocPrecision (1.6.0)",
+          "title": "Uses Document Precision"
+        },
+        "units_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.GetUnits, swLengthUnit_e for a length (1.6.0)",
+          "title": "Units Raw"
+        },
+        "uses_document_units": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.GetUseDocUnits (1.6.0)",
+          "title": "Uses Document Units"
+        },
+        "tolerance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tolerance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDimension.Tolerance, mapped exactly as ModelDimension.tolerance; null is never 'none' (1.6.0)"
+        },
+        "tolerance_type_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDimensionTolerance.Type verbatim, swTolType_e (1.6.0)",
+          "title": "Tolerance Type Raw"
+        },
+        "fit_hole_class": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDimensionTolerance.GetHoleFitValue, for a fit type (1.6.0)",
+          "title": "Fit Hole Class"
+        },
+        "fit_shaft_class": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDimensionTolerance.GetShaftFitValue, for a fit type (1.6.0)",
+          "title": "Fit Shaft Class"
+        },
+        "is_reference": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.IsReferenceDim (1.6.0)",
+          "title": "Is Reference"
+        },
+        "driven_state_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDimension.DrivenState verbatim, swDimensionDrivenState_e (1.6.0)",
+          "title": "Driven State Raw"
+        },
+        "is_hole_callout": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.IsHoleCallout (1.6.0)",
+          "title": "Is Hole Callout"
+        },
+        "hole_callout_variables_raw": {
+          "description": "IDisplayDimension.GetHoleCalloutVariables, each verbatim, in order (1.6.0)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Hole Callout Variables Raw",
+          "type": "array"
+        },
+        "attached_faces": {
+          "description": "The model faces the dimension is attached to, where SOLIDWORKS says (1.6.0)",
+          "items": {
+            "$ref": "#/$defs/AttachedFace"
+          },
+          "title": "Attached Faces",
+          "type": "array"
         },
         "persist_ref": {
           "anyOf": [
@@ -965,6 +1256,69 @@
           "description": "IAnnotation.IsDangling(); null plus an annotation_dangling gap, and that annotation is then unresolved",
           "title": "Is Dangling"
         },
+        "gtol_frames": {
+          "description": "A geometric tolerance's frames (type 5), feature 010's frame reads (schema 1.6.0)",
+          "items": {
+            "$ref": "#/$defs/GtolFrame"
+          },
+          "title": "Gtol Frames",
+          "type": "array"
+        },
+        "datum_identifier_raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IGtol.GetDatumIdentifier, for a geometric tolerance (1.6.0)",
+          "title": "Datum Identifier Raw"
+        },
+        "datum_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDatumTag.GetLabel, for a datum tag (type 2; 1.6.0)",
+          "title": "Datum Label"
+        },
+        "surface_finish_symbol_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISFSymbol.GetSymbol, for a surface finish symbol (type 7; 1.6.0)",
+          "title": "Surface Finish Symbol Raw"
+        },
+        "surface_finish_texts_raw": {
+          "description": "ISFSymbol.GetTextAtIndex(0..GetTextCount-1) verbatim (1.6.0)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Surface Finish Texts Raw",
+          "type": "array"
+        },
+        "attached_faces": {
+          "description": "For types 2, 5 and 7 (1.6.0)",
+          "items": {
+            "$ref": "#/$defs/AttachedFace"
+          },
+          "title": "Attached Faces",
+          "type": "array"
+        },
         "persist_ref": {
           "anyOf": [
             {
@@ -998,6 +1352,35 @@
         "owner_id"
       ],
       "title": "DrawingAnnotation",
+      "type": "object"
+    },
+    "DrawingCandidate": {
+      "additionalProperties": false,
+      "description": "A drawing file of the same name beside a reviewed part or assembly document, not open,\nnever opened by the extraction (schema 1.6.0, feature 011 contracts/open-drawings.md\nsection 5). Never written for a document that has an attached drawing.",
+      "properties": {
+        "document_id": {
+          "description": "The reviewed part or assembly document",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "path": {
+          "description": "The drawing file beside it: same folder, same stem, .SLDDRW",
+          "title": "Path",
+          "type": "string"
+        },
+        "reason": {
+          "const": "same_name_beside_model",
+          "description": "The only rule",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id",
+        "path",
+        "reason"
+      ],
+      "title": "DrawingCandidate",
       "type": "object"
     },
     "DrawingNote": {
@@ -1097,6 +1480,98 @@
           },
           "title": "Sheets",
           "type": "array"
+        },
+        "is_detailing_mode": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDrawingDoc.IsDetailingMode; null plus a drawing_document_settings gap (schema 1.6.0)",
+          "title": "Is Detailing Mode"
+        },
+        "length_unit_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "GetUserPreferenceInteger(swUnitsLinear = 47), swLengthUnit_e verbatim (1.6.0)",
+          "title": "Length Unit Raw"
+        },
+        "dimension_precision_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "GetUserPreferenceInteger(swDetailingLinearDimPrecision = 24) (1.6.0)",
+          "title": "Dimension Precision Raw"
+        },
+        "units_decimal_places_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "GetUserPreferenceInteger(swUnitsLinearDecimalPlaces = 49), recorded until probe D4 says which default governs (1.6.0)",
+          "title": "Units Decimal Places Raw"
+        },
+        "tolerance_precision_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "GetUserPreferenceInteger(swDetailingLinearTolPrecision = 25) (1.6.0)",
+          "title": "Tolerance Precision Raw"
+        },
+        "drafting_standard_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "GetUserPreferenceString(swDetailingDimensionStandardName = 65) verbatim (1.6.0)",
+          "title": "Drafting Standard Name"
+        },
+        "opened_by_review": {
+          "anyOf": [
+            {
+              "const": true,
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "True only when the product opened this drawing read-only at the engineer's confirmation (feature 011 contracts/confirmed-open.md); omitted otherwise, never false (1.6.0)",
+          "title": "Opened By Review"
         }
       },
       "required": [
@@ -1269,6 +1744,66 @@
           "title": "Revision Tables",
           "type": "array"
         },
+        "sheet_format_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISheet.GetTemplateName(), the .slddrt path; null plus a drawing_sheet gap (schema 1.6.0)",
+          "title": "Sheet Format Path"
+        },
+        "scale_numerator": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISheet.GetProperties2() item 2; both scale numbers or neither (1.6.0)",
+          "title": "Scale Numerator"
+        },
+        "scale_denominator": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISheet.GetProperties2() item 3 (1.6.0)",
+          "title": "Scale Denominator"
+        },
+        "first_angle": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ISheet.GetProperties2() item 4; true is first-angle projection (1.6.0)",
+          "title": "First Angle"
+        },
+        "tables": {
+          "description": "Every table on the sheet that is not a revision table (1.6.0)",
+          "items": {
+            "$ref": "#/$defs/DrawingTable"
+          },
+          "title": "Tables",
+          "type": "array"
+        },
         "persist_ref": {
           "anyOf": [
             {
@@ -1304,6 +1839,128 @@
         "was_active"
       ],
       "title": "DrawingSheetRecord",
+      "type": "object"
+    },
+    "DrawingTable": {
+      "additionalProperties": false,
+      "description": "One table on a sheet that is not a revision table (schema 1.6.0, feature 011).\n\nBills of materials, hole tables, general tolerance tables, title blocks and general tables,\ncell by cell; revision tables stay in `DrawingSheetRecord.revision_tables` exactly as\nfeature 006 records them.",
+      "properties": {
+        "id": {
+          "pattern": "^dtb:[0-9]{4,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "sheet_id": {
+          "title": "Sheet Id",
+          "type": "string"
+        },
+        "owner_view_id": {
+          "description": "The DrawingView.id whose GetTableAnnotations returned the table",
+          "title": "Owner View Id",
+          "type": "string"
+        },
+        "table_type_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ITableAnnotation.Type verbatim, in swTableAnnotationType_e; never 3 here. Python names it",
+          "title": "Table Type Raw"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "ITableAnnotation.Title",
+          "title": "Title"
+        },
+        "row_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Count"
+        },
+        "column_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Column Count"
+        },
+        "rows": {
+          "description": "Feature 006's row model: a null cell is unread, an empty one is empty",
+          "items": {
+            "$ref": "#/$defs/RevisionTableRow"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "bom_rows": {
+          "description": "For a bill of materials only",
+          "items": {
+            "$ref": "#/$defs/BomRow"
+          },
+          "title": "Bom Rows",
+          "type": "array"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "persist_ref_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref Scope"
+        }
+      },
+      "required": [
+        "id",
+        "sheet_id",
+        "owner_view_id"
+      ],
+      "title": "DrawingTable",
       "type": "object"
     },
     "DrawingView": {
@@ -1370,6 +2027,71 @@
           "default": null,
           "description": "IView.GetReferencedModelName(), recorded even when referenced_document_id is null, because it is what lets the gap name the model that was not loaded",
           "title": "Referenced Model Path"
+        },
+        "referenced_configuration": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IView.ReferencedConfiguration; null plus a drawing_view_state gap (schema 1.6.0)",
+          "title": "Referenced Configuration"
+        },
+        "is_model_out_of_date": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IView.IsModelOutOfDate(); null means unread, and binds nothing (1.6.0)",
+          "title": "Is Model Out Of Date"
+        },
+        "is_model_loaded": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IView.IsModelLoaded() (1.6.0)",
+          "title": "Is Model Loaded"
+        },
+        "scale_decimal": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IView.ScaleDecimal (1.6.0)",
+          "title": "Scale Decimal"
+        },
+        "orientation_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IView.GetOrientationName() (1.6.0)",
+          "title": "Orientation Name"
         },
         "display_dimensions": {
           "items": {
@@ -3954,6 +4676,14 @@
         "$ref": "#/$defs/ModelAnnotation"
       },
       "title": "Model Annotations",
+      "type": "array"
+    },
+    "drawing_candidates": {
+      "description": "Same-name drawing files beside reviewed documents that no attached drawing shows (schema 1.6.0, feature 011), in traversal order. Omitted when empty.",
+      "items": {
+        "$ref": "#/$defs/DrawingCandidate"
+      },
+      "title": "Drawing Candidates",
       "type": "array"
     },
     "rms_suppress_test": {

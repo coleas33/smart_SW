@@ -206,9 +206,10 @@ def json_paths(node: Any, prefix: str = "") -> set[str]:
 
 
 def test_the_bump_is_a_minor_one() -> None:
-    """Every addition is optional, so the major does not move (FR-028)."""
-    assert SCHEMA_VERSION == "1.5.0"
-    assert build_package().schema_version == "1.5.0"
+    """Every addition is optional, so the major does not move (FR-028). The minor has moved
+    once since (1.6.0, feature 011's drawing context)."""
+    assert SCHEMA_VERSION == "1.6.0"
+    assert build_package().schema_version == "1.6.0"
 
 
 def test_a_one_four_zero_package_still_loads_with_the_new_members_absent() -> None:
