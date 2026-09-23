@@ -49,6 +49,9 @@ payload the model has to page through:
 (the big fixture's map with its recognised fasteners placed; the foundational map without
 them is 50 joints in 11 pattern groups, pinned by its own golden). `check_mass_material` adds `"documents": 26`;
 `check_hygiene` adds `"documents": 26, "profile": "attached" | "absent"`.
+*Amended 2026-09-23 (T108):* `coverage` counts the per-check rows; the summary row each of the
+last two writes under its checklist item's id (`mass.material`, `hygiene`) is not counted, so
+the results do not change.
 
 | Tool | Docstring summary (the model's view) | Families |
 |---|---|---|
