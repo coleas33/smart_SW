@@ -1463,7 +1463,7 @@ def test_answering_twice_is_refused(client: TestClient, waiting_chat: str) -> No
 
 # The two refusals name the request they refused (feature 009 T041's single-route half,
 # data-model section 9), so the page can say which question without parsing English. The
-# batch route's half waits for feature 008 T084-T085.
+# batch route's half follows feature 008's batch-route tests below.
 
 
 def test_an_unknown_evidence_request_names_its_request_id(
@@ -1725,6 +1725,68 @@ def test_a_batch_is_refused_while_a_turn_is_running(
     assert unknown_while_running.json()["error_class"] == "TurnRunning"
     assert malformed_while_running.json()["error_class"] == "InvalidRequest"
     provider_control.release()
+
+
+# The batch route's half of feature 009 T041 (data-model section 9): its two refusals about
+# one request name that request, the first that failed, as `request_id`; no other refusal
+# of the route carries the key, not even the 400 whose message names a repeated id.
+
+REFUSAL_KEYS = {"error_class", "message", "retryable", "request_id"}
+
+
+def test_the_batch_names_the_unknown_request_it_refused(
+    client: TestClient, waiting_on_three: str
+) -> None:
+    body = answer_all(
+        client,
+        waiting_on_three,
+        [
+            ANSWERS[0],
+            {"request_id": "ER-404", "answer": "anything"},
+            {"request_id": "ER-405", "answer": "anything"},
+        ],
+    ).json()
+
+    assert (body["error_class"], body["request_id"]) == ("UnknownEvidenceRequest", "ER-404")
+    assert set(body) == REFUSAL_KEYS
+
+
+def test_the_batch_names_the_answered_request_it_refused(
+    client: TestClient, waiting_on_three: str
+) -> None:
+    client.post(f"/sessions/{waiting_on_three}/evidence/ER-003", json={"answer": "Rev C"})
+    settle(client, waiting_on_three)
+
+    body = answer_all(
+        client, waiting_on_three, [ANSWERS[0], {"request_id": "ER-003", "answer": "again"}]
+    ).json()
+
+    assert (body["error_class"], body["request_id"]) == ("AlreadyAnswered", "ER-003")
+    assert set(body) == REFUSAL_KEYS
+
+
+def test_every_other_batch_refusal_carries_no_request_id(
+    client: TestClient, provider_control: ProviderControl, waiting_on_three: str
+) -> None:
+    repeated = answer_all(client, waiting_on_three, [ANSWERS[0], ANSWERS[0]]).json()
+    malformed = answer_all(client, waiting_on_three, [{"request_id": "ER-001"}]).json()
+    unknown_chat = answer_all(client, str(uuid4()), ANSWERS).json()
+    provider_control.hold()
+    client.post(f"/sessions/{waiting_on_three}/messages", json={"text": "keep going"})
+    wait_until(provider_control.started.is_set, "the follow-up turn to reach the gate")
+    running = answer_all(client, waiting_on_three, ANSWERS).json()
+    provider_control.release()
+
+    refusals = (repeated, malformed, unknown_chat, running)
+    assert [body["error_class"] for body in refusals] == [
+        "InvalidRequest",
+        "InvalidRequest",
+        "UnknownChat",
+        "TurnRunning",
+    ]
+    assert "ER-002" in repeated["message"]
+    assert all("request_id" not in body for body in refusals)
+    assert all(set(body) == REFUSAL_KEYS - {"request_id"} for body in refusals)
 
 
 # --- dispositions --------------------------------------------------------------------
