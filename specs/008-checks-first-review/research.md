@@ -1170,6 +1170,14 @@ the array is filtered per run, never in the registry. `--lever withhold_prerun_t
 `prerun_checks` or `procedural_gate` is refused - without a pre-run nothing is withheld and the
 arm would measure nothing, the rule `parallel_tool_calls` with Gemini already follows.
 
+*Landed as* (T107 to T116). The session writes the field only when it is on, so every committed
+session keeps its bytes. The stub rule is one parameter, `offered`, on `prune_history` and
+`result_stub`; the replay counts a call it could not run as offered, since it ran where the
+recording was made. On the replay of the three fixtures with the pane defaults, lever 13 takes
+77,724, 73,952 and 60,112 requested tokens off (to 662,748, 457,686 and 452,302 at prune age 2),
+loses no finding and keeps reclassified at 3, 2 and 0; the figures are in tasks.md's Phase 9
+note.
+
 ## R3. Verified facts the plan relies on
 
 Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the design passes'):

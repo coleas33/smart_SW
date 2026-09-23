@@ -53,7 +53,7 @@ from swreview.benchmark.replay import (
 )
 from swreview.findings import finding_subject_key
 from swreview.ir.loader import load_package
-from swreview.prerun import DIGEST_HEADER
+from swreview.prerun import DIGEST_HEADER, WITHHELD_LINE
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import context_for
 from swreview.tools.registry import TOOL_RESULTS_DIR_NAME, ToolRegistry
@@ -487,3 +487,100 @@ def test_both_prune_ages_are_priced_for_the_owner() -> None:
     assert any(
         line.endswith("history pruning after 2 rounds") for line in render_replay_lines(two)
     )
+
+
+# --- the amendment of 2026-09-23: already-run tools leave the array (008 T116) ----------------
+
+WITHHELD_ON_THE_FIXTURES: dict[str, tuple[str, ...]] = {
+    "big-assembly": (
+        "check_rms_part",
+        "check_rms_equations",
+        "check_rms_assembly",
+        "check_interference_group",
+        "check_joints",
+        "check_mass_material",
+        "check_hygiene",
+        "check_standards",
+    ),
+    "small-assembly-a": (
+        "check_rms_part",
+        "check_rms_equations",
+        "check_rms_assembly",
+        "check_interference_group",
+        "check_joints",
+        "check_mass_material",
+        "check_hygiene",
+        "check_standards",
+    ),
+    "small-assembly-b": (
+        "check_rms_part",
+        "check_rms_equations",
+        "check_rms_assembly",
+        "check_joints",
+        "check_mass_material",
+        "check_hygiene",
+        "check_standards",
+    ),
+}
+"""What lever 13 takes off each fixture's pane array, in pre-run order. The replay has no
+bridge, so the interference tool leaves wherever the pre-run judged a group; the third
+fixture holds none, so the pre-run never called it and it stays."""
+
+
+@cache
+def with_lever_13_off(name: str) -> ReplayReport:
+    """The pane defaults with lever 13 off: the pane as it was before the amendment."""
+    efficiency, view = pane_request(name)
+    return replay(
+        FIXTURES / name,
+        requested=(efficiency.model_copy(update={"withhold_prerun_tools": False}), view),
+        standards_profile=EXAMPLE_PROFILE,
+    )
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_lever_13_cuts_every_round_of_every_fixture_and_loses_no_finding(name: str) -> None:
+    on, off = with_pane_defaults(name), with_lever_13_off(name)
+
+    assert on.settings.requested.efficiency.withhold_prerun_tools is True
+    assert off.settings.requested.efficiency.withhold_prerun_tools is False
+    assert on.totals.requested < off.totals.requested
+    for with_it, without_it in zip(on.rounds, off.rounds, strict=True):
+        if with_it.kind == "main":
+            assert with_it.requested_input < without_it.requested_input
+        else:
+            assert with_it.requested_input == without_it.requested_input
+    assert on.findings.lost == []
+    assert on.findings.not_replayable == []
+    assert len(on.findings.reclassified) == RECLASSIFIED[name]
+    assert on.totals.as_recorded == off.totals.as_recorded, "pass A does not move"
+
+
+def test_the_big_assemblys_requested_prefix_carries_no_withheld_schema(
+    big_pane: tuple[ReplayPasses, Path],
+) -> None:
+    """The replay prices the tool array in every round's prefix, and the requested pass's
+    array is the one a pane review now sends."""
+    passes, _ = big_pane
+    withheld = WITHHELD_ON_THE_FIXTURES["big-assembly"]
+
+    for name in withheld:
+        assert f'"name": "{name}"' not in passes.second.prefix, name
+        assert name not in passes.second.offered
+    assert not set(withheld) & passes.second.offered
+    assert "get_finding" in passes.second.offered
+    assert WITHHELD_LINE.format(tools=", ".join(withheld)) in passes.second.opening
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_each_fixture_withholds_what_its_pre_run_completed(name: str, tmp_path: Path) -> None:
+    passes = replay_passes(
+        read_recording(FIXTURES / name),
+        tmp_path,
+        requested=pane_request(name),
+        standards_profile=EXAMPLE_PROFILE,
+    )
+
+    withheld = WITHHELD_ON_THE_FIXTURES[name]
+    assert sorted(passes.first.offered - passes.second.offered) == sorted(withheld)
+    assert passes.second.offered - passes.first.offered == {"get_finding"}
