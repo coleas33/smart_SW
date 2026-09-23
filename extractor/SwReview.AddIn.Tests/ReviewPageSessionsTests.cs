@@ -118,6 +118,26 @@ public sealed class ReviewPageSessionsTests
         Assert.Equal("Drawing 7", run.DraftAfterReturn.GetProperty("boxValue").GetString());
     }
 
+    /// <summary>
+    /// A follow-up on a review restored from its live chat picks the stream up after the
+    /// snapshot's last seq - never from the start, which would play the finished turns again as if
+    /// they were live - and a cleared review leaves no chip marked as shown.
+    /// </summary>
+    [Fact]
+    public void AFollowUpOnARestoredReviewReadsTheStreamFromTheSnapshotsLastSeq()
+    {
+        NightRun run = Night.Value;
+
+        Assert.Equal("chat-2", run.FollowUpOpen.GetProperty("chat_id").GetString());
+        Assert.Equal("4", run.FollowUpOpen.GetProperty("last_event_id").GetString());
+    }
+
+    [Fact]
+    public void ClearingTheShownReviewLeavesNoChipMarkedAsShown()
+    {
+        Assert.Equal(new[] { "false", "false" }, ReviewPageDriver.Strings(Night.Value.Cleared, "chipCurrent"));
+    }
+
     /// <summary>Show names the chat on screen, so the host resolves against that review's package (FR-023).</summary>
     [Fact]
     public void EntityShowCarriesTheShownReviewsChatId()
@@ -309,6 +329,13 @@ public sealed class ReviewPageSessionsTests
                 run.RestoredB = await driver.Read(ReadState);
                 run.DraftAfterReturn = await driver.Read(Press("question-next") + ReadDraft);
 
+                // A follow-up on the restored B reads the stream from the snapshot's last seq.
+                await driver.Read(FollowUp("And now?"));
+                await driver.Settle();
+                run.FollowUpOpen = driver.Posted("events.open").Last();
+                await driver.Push("chat-2", 5, "turn.ended", @"{""reason"":""end""}");
+                await driver.Settle();
+
                 // A's chip while B is on screen: behind the stale line.
                 await driver.Read(Chip("chat-1"));
                 await driver.Settle();
@@ -336,6 +363,10 @@ public sealed class ReviewPageSessionsTests
                 run.ClosesAfterReplay = driver.Posted("events.close").Length;
                 run.AttentionReadsDuringReplay = (await driver.Calls()).Count(c => (c.GetProperty("path").GetString() ?? string.Empty).EndsWith("/attention", StringComparison.Ordinal));
                 await driver.Click("view-results");
+
+                // Clear review: no chip is the shown one any more.
+                await driver.Click("clear-review");
+                run.Cleared = await driver.Read(ReadState);
             });
 
         return run;
@@ -590,6 +621,10 @@ return JSON.stringify({
         public int ClosesAfterReplay { get; set; }
 
         public int AttentionReadsDuringReplay { get; set; }
+
+        public JsonElement FollowUpOpen { get; set; }
+
+        public JsonElement Cleared { get; set; }
     }
 
     private sealed class ReloadRun

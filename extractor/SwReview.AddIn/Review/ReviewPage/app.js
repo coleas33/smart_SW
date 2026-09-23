@@ -1333,6 +1333,12 @@
     state.restoredFromFolder = fromFolder;
     state.readOnly = body.read_only ? String(body.read_only_reason || '') : null;
     state.snapshotLastSeq = typeof body.last_seq === 'number' ? body.last_seq : 0;
+
+    // Whatever stream is opened for this chat from here on - a follow-up, the answers, a turn
+    // still running - picks up after the snapshot: the events up to it are what Results already
+    // shows, and read again as live they would add their cards' markers twice and close the
+    // stream at their old `session.ended`. Only a Transcript replay reads from the start.
+    state.lastSeq = state.snapshotLastSeq;
     renderResults(body);
     renderReadOnly();
 
@@ -1341,7 +1347,6 @@
       appendCard(render.restoredTranscript());
     } else if (body.chat_state === 'running') {
       state.transcriptLoaded = true;
-      state.lastSeq = state.snapshotLastSeq;
       setTurnRunning(true);
       openStream();
     }
@@ -1439,6 +1444,15 @@
     state.replayUntil = state.snapshotLastSeq;
     state.lastSeq = 0;
     openStream();
+  }
+
+  /**
+   * A new turn on a restored chat whose Transcript was never replayed: the Transcript is built
+   * from this turn on, as live - the turns before it are in the run folder's events.jsonl and
+   * report.md - rather than replayed after it, out of order.
+   */
+  function transcriptFromHere() {
+    state.transcriptLoaded = true;
   }
 
   // ---- the review ----------------------------------------------------------------------------
@@ -1618,6 +1632,8 @@
     state.lastSeq = 0;
     showStreamState('');
     renderBinding();
+    // The review is still kept by the host - its chip stays - but it is no longer the one shown.
+    renderChips();
   }
 
   /**
@@ -1730,6 +1746,7 @@
     state.followUpPending = true;
     pinsOf(state.chatId).push({ question: text, answer: null });
     renderAnswers();
+    transcriptFromHere();
     setTurnRunning(true);
     appendCard(render.textBlock('engineer', text));
     ui.followupText.value = '';
@@ -2174,6 +2191,7 @@
     var chatId = state.chatId;
     var items = currentQuestions();
     state.questionNote = { text: 'Sending your answers...', bad: false };
+    transcriptFromHere();
     setTurnRunning(true);
     renderQuestions();
 
