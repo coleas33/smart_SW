@@ -50,8 +50,8 @@ from typing import Any
 
 from swreview.agent.providers import ToolCallRequest, ToolCallResult, call_tool
 from swreview.agent.settings import EfficiencySettings
+from swreview.checks.joints import build_joint_map
 from swreview.findings import Finding
-from swreview.geometry.axis import axis_distance
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import Ranking, coverage_line, load_policy, start_here_lines
 from swreview.report.session import Contact, CoverageItem, CoverageScope
@@ -70,6 +70,7 @@ __all__ = [
     "GATE_NOT_REACHED_HEADER",
     "GATE_START_HERE_HEADER",
     "INTERFERENCE_TOOL",
+    "JOINTS_TOOL",
     "NOT_EVALUATED_HEADER",
     "PRERUN_CHECK_PREFIX",
     "PRERUN_TOOLS",
@@ -84,7 +85,6 @@ __all__ = [
     "PrerunCall",
     "PrerunResult",
     "attach_standards",
-    "coaxial_hole_pairs",
     "gate_brief",
     "not_evaluated_families",
     "planned_calls",
@@ -197,34 +197,33 @@ def _plural(count: int, noun: str) -> str:
     return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
 
 
-def coaxial_hole_pairs(package: EvidencePackage) -> int:
-    """How many hole pairs in two different components share an axis as modelled.
+JOINTS_TOOL = "check_joints"
+"""Feature 010's joint tool. When the pre-run plans it, the hole-alignment family states
+what the joint map could not reach rather than counting candidate pairs (`contracts/
+code-first.md` section 4); when a tier withholds it, the tier's own sentence says why."""
 
-    The candidate pairs for `hole.coaxiality`, counted rather than checked. "Shares an
-    axis" is `AxisRelation.relation == "coincident"` - the criterion `geometry/axis.py`
-    already applies, with its own tolerances - rather than a coaxiality rule invented here,
-    and the pair must cross two components because the checklist item is coaxiality *across
-    mating parts*.
 
-    Quadratic in the number of holes on purpose: it runs once per review over a list the
-    extractor already loaded, and an index keyed on a rounded axis would be a second
-    coaxiality rule to keep in step with the first.
+def _hole_alignment_family(package: EvidencePackage) -> NotEvaluated | None:
+    """The holes the joint map could not use, or `None` when it missed nothing.
+
+    A hole row with no cylinder face, or one on a component that was not read, yields no
+    instance and so sits in no joint; those are what alignment could not judge. A family
+    with nothing to report renders no line.
     """
-    holes = package.holes
-    pairs = 0
-    for index, first in enumerate(holes):
-        for second in holes[index + 1 :]:
-            if first.component_id == second.component_id:
-                continue
-            try:
-                relation = axis_distance(first.axis, second.axis)
-            except ValueError:
-                # A zero-length direction is a missing input, not a pair: unknown stays
-                # unknown and the hole is simply not counted as a candidate.
-                continue
-            if relation.relation == "coincident":
-                pairs += 1
-    return pairs
+    hole_ids = {hole.id for hole in package.holes}
+    missed = [gap for gap in build_joint_map(package).gaps if gap.subject in hole_ids]
+    if not missed:
+        return None
+    count = len(missed)
+    return NotEvaluated(
+        check=f"{PRERUN_CHECK_PREFIX}hole_alignment",
+        label="hole alignment",
+        reason=(
+            f"{_plural(count, 'hole')} {'has' if count == 1 else 'have'} no cylinder face or "
+            f"{'belongs' if count == 1 else 'belong'} to a component that was not read; "
+            f"{'it is' if count == 1 else 'they are'} in no joint."
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -509,12 +508,15 @@ def not_evaluated_families(
 ) -> tuple[NotEvaluated, ...]:
     """Every line of the "NOT evaluated" block, counted against `package`.
 
-    Four families are here on every run, because no enumerator can decide their scope, and
-    three more appear conditionally: a pre-run tool a tier withheld, which carries the
+    Three families are here on every run, because no enumerator can decide their scope, and
+    four more appear conditionally: a pre-run tool a tier withheld, which carries the
     tier's own sentence rather than a second one written here (contracts/levers.md, levers 4
     and 5); interference when the package reports none, so "no group was checked" is a
-    statement about the package rather than a silence; and the standards family when
-    `attach_standards` could not attach a run.
+    statement about the package rather than a silence; hole alignment when feature 010's
+    `check_joints` runs and its joint map could not reach a hole - the joint map is what
+    judges alignment now, so the line says what it missed, and a withheld `check_joints`
+    speaks for itself; and the standards family when `attach_standards` could not attach a
+    run.
 
     Args:
         package: The package under review; every count comes off it.
@@ -540,29 +542,25 @@ def not_evaluated_families(
                 ),
             )
         )
+    families.append(
+        NotEvaluated(
+            check=f"{PRERUN_CHECK_PREFIX}fastener_joint",
+            label="fastener joints",
+            reason=(
+                f"{_plural(len(package.fasteners), 'fastener')} in the package; no "
+                "joint was evaluated. Which components a screw clamps is not derivable "
+                "from the package, so name the fastener, the hole and the clamped "
+                "stack yourself with `check_fastener_joint`."
+            ),
+        )
+    )
+    withheld_names = {name for name, _ in withheld}
+    if JOINTS_TOOL in checks_mechanical.CODE_FIRST_CHECKS and JOINTS_TOOL not in withheld_names:
+        hole_alignment = _hole_alignment_family(package)
+        if hole_alignment is not None:
+            families.append(hole_alignment)
     families.extend(
         [
-            NotEvaluated(
-                check=f"{PRERUN_CHECK_PREFIX}fastener_joint",
-                label="fastener joints",
-                reason=(
-                    f"{_plural(len(package.fasteners), 'fastener')} in the package; no "
-                    "joint was evaluated. Which components a screw clamps is not derivable "
-                    "from the package, so name the fastener, the hole and the clamped "
-                    "stack yourself with `check_fastener_joint`."
-                ),
-            ),
-            NotEvaluated(
-                check=f"{PRERUN_CHECK_PREFIX}hole_alignment",
-                label="hole alignment",
-                reason=(
-                    f"{_plural(coaxial_hole_pairs(package), 'coaxial hole pair')} across "
-                    f"two components, out of {_plural(len(package.holes), 'hole')}; none "
-                    "was evaluated. `check_hole_alignment` without the drawing tolerance "
-                    "that governs the pair is `unresolved` by design, and the package binds "
-                    "no tolerance to a hole, so identify it and call the check."
-                ),
-            ),
             NotEvaluated(
                 check=f"{PRERUN_CHECK_PREFIX}fit",
                 label="fit",

@@ -98,18 +98,19 @@ column because of this table.
 **Flag**: `trim_tool_descriptions`. **Default**: off. **Scope**: both providers; the tool schema
 and the system prompt. **Read**: once at `start_review`, applied **after** `spec_for`.
 
-**The honest ceiling, measured on this tree (VERIFIED).** Of 34,101 bytes sent today, **15,274
-(45 percent) is JSON structure** and lever 2 cannot reach it; only lever 4 or a schema change can.
-18,791 bytes (55 percent) is prose.
+**The honest ceiling, measured on this tree (VERIFIED).** Of 34,933 bytes sent today, **15,437
+(44 percent) is JSON structure** and lever 2 cannot reach it; only lever 4 or a schema change can.
+19,496 bytes (56 percent) is prose. (Regenerated 2026-09-23 when feature 010 added
+`check_joints` and reworded two docstrings; the four cap rows below were measured on the 32-tool array of 2026-09-16.)
 
 | Cap (tool / parameter description) | Bytes | Saved |
 |---|---|---|
-| none (today) | 34,101 | 0 |
+| none (today) | 34,933 | 0 |
 | 300 / 120 | 27,158 | 20 percent |
 | 200 / 100 | 25,020 | 27 percent |
 | **160 / 90** | **23,834** | **30 percent** |
 | 120 / 70 | 22,450 | 34 percent |
-| everything stripped (floor) | 15,274 | 55 percent |
+| everything stripped (floor) | 15,437 | 56 percent |
 
 So about 30 percent of the tool payload, roughly 2,550 tokens per request, roughly 153,000 tokens
 over a 60-call review. This is **below** the source document's "a third to a half" at the upper

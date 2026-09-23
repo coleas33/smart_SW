@@ -63,6 +63,7 @@ from swreview.tools import (
     checks_fastener,
     checks_fit,
     checks_interference,
+    checks_mechanical,
     measure,
     query,
     remodel_plan,
@@ -123,6 +124,7 @@ def check_tools() -> tuple[Callable[..., Any], ...]:
         rms_checks.check_rms_part,
         rms_checks.check_rms_assembly,
         rms_checks.check_rms_equations,
+        checks_mechanical.check_joints,
     )
 
 

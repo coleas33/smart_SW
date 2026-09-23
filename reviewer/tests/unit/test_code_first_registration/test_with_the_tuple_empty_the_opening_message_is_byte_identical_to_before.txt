@@ -32,7 +32,6 @@ Findings recorded: 5
 
 NOT evaluated, and why:
   fastener joints: 1 fastener in the package; no joint was evaluated. Which components a screw clamps is not derivable from the package, so name the fastener, the hole and the clamped stack yourself with `check_fastener_joint`.
-  hole alignment: 1 coaxial hole pair across two components, out of 2 holes; none was evaluated. `check_hole_alignment` without the drawing tolerance that governs the pair is `unresolved` by design, and the package binds no tolerance to a hole, so identify it and call the check.
   fit: no interface was evaluated: `check_fit` needs two drawing dimensions identified as the bore and the shaft of one interface, which nothing in the package says.
   axial stack: no stack was evaluated: `check_axial_stack` needs an ordered list of dimensions with signs and the gap they set, which nothing in the package says.
 

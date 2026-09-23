@@ -33,6 +33,7 @@ __all__ = [
     "cite",
     "dimension_inputs",
     "limits_mm",
+    "permitted_radial_offset_mm",
     "require_length",
     "round_length",
     "unresolved",
@@ -105,6 +106,19 @@ class MissingToleranceError(ValueError):
 def round_length(value: float) -> float:
     """Round a length to `PLACES` decimals of whatever unit it is expressed in."""
     return round(value, PLACES)
+
+
+def permitted_radial_offset_mm(zone_mm: float) -> float:
+    """How far an axis may sit from true position inside a zone of `zone_mm` (FR-009).
+
+    A position or coaxiality zone of `t` - a cylinder of diameter `t` or a band of width `t`
+    centred on true position - lets the axis move `t / 2`, whether or not a diameter symbol
+    was read (feature 010 research R2.8). The one reading of a zone: `hole.coaxiality` and
+    the joint stack both call it. Raises `ValueError` for a negative zone.
+    """
+    if zone_mm < 0.0:
+        raise ValueError(f"a tolerance zone cannot be negative, got {zone_mm} mm")
+    return round_length(zone_mm / 2.0)
 
 
 def cite(source: SourceRef) -> str:

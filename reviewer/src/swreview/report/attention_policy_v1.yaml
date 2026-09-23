@@ -109,6 +109,10 @@ classes:
   fastener.head_clearance: interface
   fastener.unsupported: interface
   hole.coaxiality: interface
+  # feature 010's joint checks, first opinions for the owner's read-through (research
+  # R2.22): alignment is the same question as coaxiality, asked of every joint by code.
+  hole.nominal_alignment: interface
+  hole.position_stack: interface
   stack.worst_case: interface
   # the drawing finding the model records -> manufacturing.
   drawing.manufacturing_inputs: manufacturing

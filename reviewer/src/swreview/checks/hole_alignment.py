@@ -16,6 +16,7 @@ from swreview.checks.result import (
     ROUNDING_ASSUMPTION,
     CheckResult,
     cite,
+    permitted_radial_offset_mm,
     require_length,
     round_length,
 )
@@ -27,7 +28,8 @@ __all__ = ["CHECK", "EXCLUDED_EFFECTS", "check_hole_alignment"]
 
 CHECK = "hole.coaxiality"
 FUNCTION = "swreview.checks.hole_alignment.check_hole_alignment"
-FUNCTION_VERSION = "1"
+FUNCTION_VERSION = "2"
+"""2 from feature 010 FR-009: the offset is compared with half the zone, not the whole."""
 
 EXCLUDED_EFFECTS = [
     "datum reference frame and material condition modifiers (MMC, LMC)",
@@ -48,10 +50,11 @@ _SEVERITY_BY_STATUS: dict[str, Severity] = {
 def check_hole_alignment(a: Hole, b: Hole, tolerance: Dimension | None) -> CheckResult:
     """Compare the offset between two hole axes with a position tolerance.
 
-    `tolerance` is the drawing dimension that governs the pair; its nominal is read as the
-    permitted offset. `None` leaves the check `unresolved` with the measured offset still
-    reported. An offset above the tolerance is `demonstrated`; at or below it, the check is
-    `checked_within_scope`.
+    `tolerance` is the drawing dimension that governs the pair; its nominal is read as a
+    position or coaxiality zone, which permits the axis half of it (feature 010 FR-009,
+    `permitted_radial_offset_mm`). `None` leaves the check `unresolved` with the measured
+    offset still reported. An offset above the permitted half is `demonstrated`; at or
+    below it, the check is `checked_within_scope`.
 
     Raises `TypeError` when `tolerance` is an angular dimension: an angle where a length
     belongs is a mistake at the call site, not an unknown input (FR-022).
@@ -116,19 +119,22 @@ def check_hole_alignment(a: Hole, b: Hole, tolerance: Dimension | None) -> Check
         )
 
     tolerance_mm = round_length(units.as_mm(tolerance.nominal))
+    permitted_mm = permitted_radial_offset_mm(tolerance_mm)
     result["tolerance_mm"] = tolerance_mm
-    result["within_tolerance"] = offset_mm <= tolerance_mm
+    result["zone_mm"] = tolerance_mm
+    result["permitted_offset_mm"] = permitted_mm
+    result["within_tolerance"] = offset_mm <= permitted_mm
     inputs["tolerance_text_as_read"] = tolerance.text_as_read
     inputs["tolerance_source"] = cite(tolerance.source)
 
-    status = "demonstrated" if offset_mm > tolerance_mm else "checked_within_scope"
+    status = "demonstrated" if offset_mm > permitted_mm else "checked_within_scope"
     return CheckResult(
         check=CHECK,
         status=status,
         severity=_SEVERITY_BY_STATUS.get(status, "medium"),
         observed=(
             f"The axes of {a.id} and {b.id} are {offset_mm} mm apart ({relation.relation}) "
-            f"against a {tolerance_mm} mm tolerance."
+            f"against the {permitted_mm} mm a {tolerance_mm} mm tolerance zone permits."
         ),
         requirement=requirement,
         inputs=[a.id, b.id, tolerance],
@@ -152,7 +158,8 @@ def _calculation(
     ]
     if tolerance is not None:
         assumptions.append(
-            "the tolerance nominal is read as the permitted offset between the axes"
+            "the tolerance value is a position or coaxiality zone; the axis may move half of "
+            "it from true position"
         )
     return Calculation(
         model=CHECK,

@@ -152,7 +152,14 @@ def test_with_the_tuple_empty_the_plan_is_the_legacy_plan(
 def test_with_the_tuple_empty_the_opening_message_is_byte_identical_to_before(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Any, file_regression: FileRegressionFixture
 ) -> None:
-    """The baseline was written from the tree before feature 010 touched `prerun.py`."""
+    """The baseline was written from the tree before feature 010 touched `prerun.py`.
+
+    Regenerated once, deliberately, by T037: that task retires `coaxial_hole_pairs`, so the
+    legacy "hole alignment: 1 coaxial hole pair" line has nothing left to count it. With
+    `check_joints` out of the tuple no joint map runs, and the hole-alignment family says
+    nothing rather than claim what a map that never ran could not reach. Every other byte is
+    the pre-010 message.
+    """
     monkeypatch.setattr(checks_mechanical, "CODE_FIRST_CHECKS", ())
 
     run, _ = started(tmp_path, "empty-tuple", efficiency=ON)
