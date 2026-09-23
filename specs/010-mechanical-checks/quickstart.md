@@ -15,8 +15,8 @@ the two version 2 test profiles under `reviewer/tests/fixtures/standards/`.
 
 ```powershell
 cd reviewer
-$big = "tests/fixtures/mechanical/big-assembly/package.json"
-$small = "tests/fixtures/mechanical/small-assembly/package.json"
+$big = "tests/fixtures/mechanical/big-assembly"
+$small = "tests/fixtures/mechanical/small-assembly"
 ```
 
 ## Scenario 0 (Foundational): what must not move
@@ -43,7 +43,7 @@ the denylist scan passes, or is skipped naming the missing local file.
 ## Scenario 2 (US2): the joint map
 
 ```powershell
-uv run python -c "from swreview.ir.loader import load_package; from swreview.checks.joints import build_joint_map; m = build_joint_map(load_package('$big')); print(len(m.joints), [c.reason for c in m.candidates], len(m.gaps))"
+uv run python -c "from swreview.ir.loader import load_package; from swreview.checks.joints import build_joint_map; m = build_joint_map(load_package('$big').package); print(len(m.joints), [c.reason for c in m.candidates], len(m.gaps))"
 uv run pytest tests/unit/test_joint_map.py tests/unit/test_joint_map_acceptance.py tests/unit/test_tools_check_joints.py -q
 ```
 
@@ -160,7 +160,8 @@ uv run swreview benchmark replay <008 big-assembly replay fixture> --json
 uv run pytest tests/unit/test_joint_map_on_replay_fixture.py -q
 ```
 
-Expected: the five 0.0 mm3 recorded findings reported as reclassified as contacts, none lost;
+Expected: the three recorded touching-group findings reported as reclassified as contacts (3, 2
+and 0 on the three replay fixtures, 008 `contracts/replay.md` section 9), none lost;
 the three new pre-run steps and no added model round (SC-006); the joint map over the replay
 fixture reproduces research R3's counts.
 
@@ -181,5 +182,6 @@ the screws whose shank faces the widened extractor requested; no model round spe
 
 ```powershell
 cd reviewer; uv run pytest -q; uv run ruff check src tests
+uv run pytest -q -m perf tests/perf/test_joint_map_perf.py -s   # build_joint_map < 200 ms, check_joints < 2 s
 cd ..\extractor; dotnet build SwReview.sln -c Release; dotnet test SwReview.sln -c Release
 ```

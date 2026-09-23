@@ -31,8 +31,8 @@ uv run pytest tests/unit/test_report_tokens.py tests/unit/test_report_start_here
 ```
 
 Expected: the encoding loads with the network patched off and names `o200k_base`; the adapter's
-bytes are unchanged by `tool_result_text`; both report goldens are byte-identical; twelve levers,
-none in the pane schema; the docstring and prefix pins unedited.
+bytes are unchanged by `tool_result_text`; both report goldens are byte-identical; thirteen levers
+(lever 13 since the Phase 9 amendment), none in the pane schema; the docstring and prefix pins unedited.
 
 ## Scenario 1 (US1): replay a fixture as recorded
 
@@ -42,9 +42,10 @@ uv run swreview benchmark replay "$fx/big-assembly" --no-pane-defaults --standar
 ```
 
 Expected: one line per round with the recorded, as-recorded and requested input; every
-as-recorded figure within 1% of the recorded one; one estimated round (`bridge_interference`) and
-one carried presentation round; a recorded total of about 12.4M; `tokens counted with
-o200k_base`; the finding set exact; exit 0. The JSON validates against `ReplayReport`. The fixture
+as-recorded figure within 1% of the recorded one; four estimated rounds (`bridge_interference`,
+and since feature 010 the three touching groups judged after it) and one carried presentation
+round; a recorded total of about 12.4M; `tokens counted with o200k_base`; the finding set exact -
+99 recorded, 96 replayed and 3 reclassified as contacts; exit 0. The JSON validates against `ReplayReport`. The fixture
 folder's files are unchanged (`Get-FileHash` before and after).
 
 ## Scenario 2 (US1): what the replay refuses
@@ -77,8 +78,9 @@ uv run pytest tests/unit/test_prerun_digest.py tests/unit/test_prerun_repeat_gua
 ```
 
 Expected: no recorded finding lost; the requested total far below the as-recorded one; the
-recorded RMS and assembly calls classed `answered from checks`; 113 interference findings, one per
-group, listed as added; the opening message carries the family counts line and no RMS id; a
+recorded RMS and assembly calls classed `answered from checks`; every one of the 113 groups judged,
+one interference finding or (since feature 010) one contact each, with 3 recorded findings
+reclassified as contacts; 62 findings added by feature 010's checks in the pre-run; the opening message carries the family counts line and no RMS id; a
 repeated check answers `already_run` with no new finding; the report holds one collapsed
 "Modelling practice: 85 findings across 7 rules" subsection and the ranking one family row.
 
@@ -126,13 +128,15 @@ every change off.
 ## Scenario 8 (US4): one turn for a question or an answer
 
 ```powershell
-uv run swreview benchmark replay "$fx/small-assembly-a" --standards-profile ../config/standards.example.yaml
-uv run swreview benchmark replay "$fx/small-assembly-b" --standards-profile ../config/standards.example.yaml
+uv run swreview benchmark replay "$fx/small-assembly-a" --lever parallel_tool_calls --standards-profile ../config/standards.example.yaml
+uv run swreview benchmark replay "$fx/small-assembly-b" --lever parallel_tool_calls --standards-profile ../config/standards.example.yaml
 uv run pytest tests/unit/test_parallel_tool_calls.py tests/unit/test_runner_provider.py -k "batch or parallel" -q
 ```
 
 Expected: each small fixture's regrouped estimate under 300,000 with its assumption printed, and
-its strict figure below the recorded total (SC-003 as amended); the big fixture's follow-up round
+its strict figure below the recorded total (SC-003 as amended). `--lever parallel_tool_calls` asks
+for the OpenAI pane: the fixtures record the scripted provider, whose pane makes no parallel calls,
+so without it only rule R applies and the estimates are about 381,000 and 388,000; the big fixture's follow-up round
 under 30,000 (Scenario 6's output, turn 1, SC-004); three answers in one submission give three
 answered records and one resumed turn, and one bad id changes nothing (SC-005); three bridge calls
 in one response reach the bridge one at a time.
