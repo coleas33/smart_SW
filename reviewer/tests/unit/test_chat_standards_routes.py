@@ -53,6 +53,7 @@ from swreview.ir.models import DumpPhase, EvidencePackage
 from swreview.report.attention import rank
 from swreview.report.attention_record import read_attention_record
 from swreview.report.session import load_session
+from tests.support.attention import ranking_as_shown
 from tests.support.features import AssemblySpec, PartSpec, feature, folder, rms_package
 
 ORIGIN = "https://swreview.invalid"
@@ -528,12 +529,17 @@ class TestRunStandardsCheck:
     ) -> None:
         """FR-022. Byte-identical in shape to the Model check body's `attention`, which is
         why `contracts/standards-check.md` adds no difference row for it: one block, one
-        rule, two tabs (`contracts/attention.md` section 5)."""
+        rule, two tabs (`contracts/attention.md` section 5). Each row's title is the one a
+        person reads (feature 009 decision 2A, research R2.28); the record keeps the
+        recorded one."""
         result = start_standards(client, standards_dir)
+        session = load_session(standards_dir / SESSION_FILE)
 
-        assert result["attention"] == to_jsonable_python(
-            rank(load_session(standards_dir / SESSION_FILE))
-        )
+        assert result["attention"] == ranking_as_shown(standards_dir)
+        assert result["attention"] != to_jsonable_python(rank(session)), "a cut title is whole"
+        assert [row.title for row in read_attention_record(standards_dir).rows] == [
+            row.title for row in rank(session).rows
+        ], "the record keeps the recorded titles"
         assert result["attention"]["policy_version"] == "attention_policy_v1"
         assert "session_id" not in result["attention"]
         assert [row["finding_id"] for row in result["attention"]["rows"]] == [
@@ -956,7 +962,7 @@ class TestAcceptException:
             STANDARDS_CHECK_ID
         )
         assert client.get(f"/checks/{STANDARDS_CHECK_ID}").json()["attention"] == (
-            to_jsonable_python(rank(load_session(standards_dir / SESSION_FILE)))
+            ranking_as_shown(standards_dir)
         )
 
     def test_a_blank_note_is_refused(self, client: TestClient, standards_dir: Path) -> None:

@@ -24,7 +24,9 @@ from typing import TYPE_CHECKING, Any
 from pydantic_core import to_jsonable_python
 
 from swreview.ir.models import EvidencePackage
+from swreview.report.names import component_names
 from swreview.report.summary import COVERAGE_BUCKETS, review_ranking
+from swreview.report.titles import pane_finding
 from swreview.report.unexamined import not_examined
 
 if TYPE_CHECKING:  # pragma: no cover - imported for annotations only
@@ -48,9 +50,11 @@ def review_snapshot(
 
     Every finding, request and coverage entry is exactly the body its stream event carries
     (`finding`, `evidence.requested`, `coverage`), so the page renders a restored review
-    with the functions that rendered it live.
+    with the functions that rendered it live - a finding's with its display title
+    (`report/titles.pane_finding`, feature 009 decision 2A), as the ranking's rows are.
     """
     block = not_examined(package)
+    names = component_names(package)
     return {
         "run_id": run_id,
         "read_only": read_only_reason is not None,
@@ -58,7 +62,7 @@ def review_snapshot(
         "chat_state": chat_state,
         "last_seq": last_seq,
         "document": _root_document(package),
-        "findings": [finding.model_dump(mode="json") for finding in session.findings],
+        "findings": [pane_finding(finding, names) for finding in session.findings],
         "evidence_requests": [
             request.model_dump(mode="json") for request in session.evidence_requests
         ],

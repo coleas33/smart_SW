@@ -41,7 +41,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from uuid import UUID
+
+from pydantic_core import to_jsonable_python
 
 from swreview.agent.providers import EffortMapping, TokenUsage
 from swreview.agent.settings import EfficiencySettings
@@ -55,7 +58,7 @@ from swreview.findings import (
     Severity,
     build_finding,
 )
-from swreview.ir.loader import save_package
+from swreview.ir.loader import load_package, save_package
 from swreview.ir.models import (
     ComponentInstance,
     Document,
@@ -64,7 +67,9 @@ from swreview.ir.models import (
     ManifestEntry,
     SourceRef,
 )
+from swreview.report.attention import rank
 from swreview.report.dispositions import SESSION_FILE_NAME
+from swreview.report.names import component_names
 from swreview.report.session import (
     Coverage,
     CoverageItem,
@@ -75,8 +80,10 @@ from swreview.report.session import (
     ReviewSession,
     SessionUsage,
     Timing,
+    load_session,
     save_session,
 )
+from swreview.report.titles import with_display_titles
 from tests.support.packages import IDENTITY_TRANSFORM, build_package, persist_ref
 
 __all__ = [
@@ -101,6 +108,7 @@ __all__ = [
     "build_attention_session",
     "check_session",
     "main",
+    "ranking_as_shown",
     "review_session",
     "write_fixtures",
 ]
@@ -923,6 +931,22 @@ def write_fixtures(directory: Path | str = FIXTURE_DIR) -> list[Path]:
         ),
     ]
     return sorted(written)
+
+
+# --- the ranking as a page receives it ------------------------------------------------------
+
+
+def ranking_as_shown(folder: Path | str) -> dict[str, Any]:
+    """`rank()` of the folder's session with the titles a person reads, as JSON.
+
+    The check bodies' `attention` since feature 009's decision 2A (research R2.28): the
+    ranking the record holds, each unfolded row titled `report/titles.display_title` of its
+    finding, the parts named from the folder's package. `attention.json` keeps the recorded
+    titles; the two route test modules compare against this one oracle.
+    """
+    session = load_session(Path(folder) / SESSION_FILE_NAME)
+    names = component_names(load_package(folder).package)
+    return to_jsonable_python(with_display_titles(rank(session), session.findings, names))
 
 
 USAGE = "usage: uv run python -m tests.support.attention --write"

@@ -9,10 +9,10 @@ not-examined headline holds a check id of the fixture or an underscore-joined st
 token. The recorded sentences behind the goal lines (`detail`) are in a fold and are the run's
 own words, so they are not scanned.
 
-T061's other half - every finding title, as `title_from(observed, names)` records it, holds no
-`cmp:` id of a named part - waits for T062, which is not landed: whole, named titles change
-every check tool's result, and feature 008's replay acceptance on its committed recordings
-(`test_replay_fixtures.py`) pins those results to the recorded ones.
+T061's other half, as the owner decided it on 2026-09-23 (decision 2A, research R2.28): every
+title the engineer reads of this review - the snapshot's findings and ranking rows, which the
+Review tab prints, and `report.md`'s headings - is the display title, whole and named: no `cmp:`
+id of a named part and no cut, where the recorded titles the model read held both.
 """
 
 from __future__ import annotations
@@ -26,8 +26,12 @@ from swreview.findings import FindingStatus
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import rank
+from swreview.report.markdown import render_report
+from swreview.report.names import COMPONENT_ID, component_names
 from swreview.report.session import CoverageBucket, ReviewSession, load_session
+from swreview.report.snapshot import review_snapshot
 from swreview.report.summary import ReviewSummary, review_summary
+from swreview.report.titles import TITLE_LENGTH, title_from
 from swreview.report.unexamined import not_examined
 from tests.unit.test_review_summary import BIG_ASSEMBLY
 
@@ -88,3 +92,44 @@ def test_no_summary_line_holds_a_check_id_or_a_raw_token(
 
     assert offending == []
     assert len(lines) > 20, "the scan reads every summary line, not an empty list"
+
+
+# --- the titles the engineer reads (decision 2A) ------------------------------------------------
+
+ELLIPSIS = "…"
+
+
+def named_ids(title: str, names: dict[str, str]) -> set[str]:
+    """The `cmp:` ids `title` holds whose component has a non-blank name."""
+    return {one for one in COMPONENT_ID.findall(title) if names.get(one, "").strip()}
+
+
+def test_the_recorded_titles_held_named_ids_and_cuts(
+    session: ReviewSession, package: EvidencePackage
+) -> None:
+    """What makes the next test prove something: the model's titles, as recorded."""
+    names = component_names(package)
+    recorded = [finding.title for finding in session.findings]
+
+    assert recorded == [title_from(finding.observed) for finding in session.findings]
+    assert [title for title in recorded if named_ids(title, names)]
+    assert [title for title in recorded if title.endswith(ELLIPSIS)]
+
+
+def test_no_title_the_engineer_reads_names_a_named_part_by_its_id_or_is_cut(
+    session: ReviewSession, package: EvidencePackage
+) -> None:
+    names = component_names(package)
+    snapshot = review_snapshot(session, package, run_id="big-assembly")
+    report = render_report(session, package, ranking=rank(session))
+    headings = [line for line in report.splitlines() if line.startswith("#### F-")]
+    titles = [
+        *(finding["title"] for finding in snapshot["findings"]),
+        *(row["title"] for row in snapshot["ranking"]["rows"] if "family" not in row),
+        *headings,
+    ]
+
+    assert [title for title in titles if named_ids(title, names)] == []
+    assert [title for title in titles if ELLIPSIS in title] == []
+    assert len(headings) == len(session.findings)
+    assert max(len(finding["title"]) for finding in snapshot["findings"]) > TITLE_LENGTH

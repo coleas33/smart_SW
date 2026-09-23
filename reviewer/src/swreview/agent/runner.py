@@ -867,7 +867,7 @@ class ReviewRun:
         before = len(self.session.findings)
         self._ask(answers_message(answers))
         for finding in _reconcile_reruns(self.session, before):
-            self.sink.emit("finding", finding.model_dump(mode="json"))
+            self.sink.emit("finding", self.context.finding_body(finding))
         return self.finalize()
 
     def finalize(self) -> ReviewSession:

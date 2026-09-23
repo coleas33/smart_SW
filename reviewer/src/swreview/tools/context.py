@@ -48,6 +48,7 @@ from swreview.ir.models import (
     Fastener,
     Hole,
 )
+from swreview.report.names import component_names
 from swreview.report.session import (
     Contact,
     ContactIdAllocator,
@@ -58,6 +59,7 @@ from swreview.report.session import (
     ReviewSession,
     Timing,
 )
+from swreview.report.titles import pane_finding
 
 
 def error_result(message: str) -> dict[str, str]:
@@ -237,7 +239,17 @@ class ToolContext:
         running instead of reconstructing it from `session.json` afterwards.
         """
         self.require_session().findings.append(finding)
-        self.emit_event("finding", finding.model_dump(mode="json"))
+        self.emit_event("finding", self.finding_body(finding))
+
+    def finding_body(self, finding: Finding) -> dict[str, Any]:
+        """The `finding` event's body: `finding` as the pane shows it (feature 009 decision 2A).
+
+        The session keeps the recorded title the model read; the stream is what the pane
+        prints, so its title is the display title, named from this context's package
+        (`report/titles.pane_finding`). The runner's re-announcement of a folded re-run goes
+        through here too, so the two announcements cannot word a title differently.
+        """
+        return pane_finding(finding, component_names(self.ir))
 
     def record_coverage(self, bucket: CoverageBucket, item: CoverageItem) -> None:
         """Append a coverage item to `bucket` and announce which bucket it went into."""

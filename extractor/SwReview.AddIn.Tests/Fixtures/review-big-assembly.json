@@ -12,7 +12,7 @@
     {
       "id": "F-001",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -50,7 +50,7 @@
     {
       "id": "F-002",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "57 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "57 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Directional2, Directional3, Axis1, Axis2, Axis3, Sketch1, Revolve1, Sketch1, Sketch8, Cut-Revolve1, Sketch8, Chamfer1, Fillet4, Sketch13, Boss-Extrude2, Sketch13, Sketch22, Boss-Extrude3, Sketch22, Sketch9, Cut-Extrude1, Sketch9, Sketch18, Cut-Extrude4, Sketch18, Fillet16, Chamfer9, Chamfer8, Fillet3, Fillet12, Fillet5, Fillet6, Fillet15, Fillet17, Fillet24, Sketch16, Cut-Extrude2, Sketch16, Fillet19, Chamfer10, Sketch21, M8 Clearance Hole1, Sketch21, Sketch20, Sketch25, Ø2.0mm Degob Hole1, Sketch25, Sketch24, CirPattern2, Fillet20, Fillet22, Fillet23",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -660,7 +660,7 @@
     {
       "id": "F-003",
       "check": "rms.sketches.fully_defined",
-      "title": "Sketch1 constrained status is under_defined; Sketch1 constrained status is unde…",
+      "title": "Sketch1 constrained status is under_defined; Sketch1 constrained status is under_defined",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -730,7 +730,7 @@
     {
       "id": "F-004",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -768,7 +768,7 @@
     {
       "id": "F-005",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "116 content feature(s) sit outside every group: Notes, Notes Area, Setul9___End…",
+      "title": "116 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch5, Cut-Extrude1, Sketch5, Sketch4, Sketch10, Sketch6, Cut-Extrude2, Sketch6, M4 Clearance Hole1, Sketch4, Sketch3, M8x1.25 Tapped Hole1, Sketch10, Sketch9, Hole Thread28, Hole Thread31, Hole Thread35, Sketch22, Cut-Extrude4, Sketch22, Sketch36, Cut-Extrude10, Sketch36, Sketch24, Cut-Extrude12, Sketch24, Sketch40, M3x0.5 Tapped Hole1, Sketch40, Sketch39, Sketch46, Cut-Extrude16, Sketch46, Fillet2, Fillet14, Mirror1, Sketch37, Cut-Extrude11, Sketch37, Fillet1, Sketch15, Cut-Extrude3, Sketch15, Sketch41, Boss-Extrude6, Sketch41, Sketch42, Boss-Extrude7, Sketch42, Sketch18, M10x1.5 Tapped Hole1, Sketch18, Sketch17, Hole Thread32, Hole Thread33, Hole Thread34, Sketch21, Ø3.0mm Degob Hole1, Sketch21, Sketch20, Sketch28, Cut-Extrude7, Sketch28, Sketch23, Boss-Extrude2, Sketch23, Sketch27, Boss-Extrude5, Sketch27, Sketch30, Cut-Extrude8, Sketch30, Sketch43, Cut-Extrude13, Sketch43, Sketch44, Cut-Extrude14, Sketch44, Sketch33, M2x0.4 Tapped Hole1, Sketch33, Sketch32, Fillet9, Fillet6, Fillet3, Fillet5, Fillet10, Fillet4, Chamfer1, Fillet7, Fillet8, Fillet11, Fillet18, Fillet12, Fillet15, Fillet16, Fillet17, Sketch45, Cut-Extrude15, Sketch45, Sketch51, 3/8 NPT Tapped Hole1, Sketch51, Sketch50, Chamfer3; Ø3.0mm Degob Hole1 is suppressed in Kamibat; Boss-Extrude2 is suppressed in Kamibat; Sketch27 is suppressed in Kamibat; Boss-Extrude5 is suppressed in Kamibat; Sketch27 is suppressed in Kamibat; Fillet5 is suppressed in Kamibat; Fillet4 is suppressed in Kamibat; Chamfer1 is suppressed in Kamibat; Fillet7 is suppressed in Kamibat; Fillet8 is suppressed in Kamibat",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -1979,7 +1979,7 @@
     {
       "id": "F-006",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -2017,7 +2017,7 @@
     {
       "id": "F-007",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "102 content feature(s) sit outside every group: Notes, Notes Area, Setul9___End…",
+      "title": "102 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Cut-Extrude1, Sketch2, Sketch3, Chamfer1, Cut-Extrude4, Sketch3, Sketch7, Cut-Extrude5, Sketch7, Sketch12, Cut-Extrude6, Sketch12, Mirror1, Sketch64, Cut-Extrude12, Sketch64, Sketch65, Boss-Extrude4, Sketch65, Sketch66, Cut-Extrude13, Sketch66, Sketch73, Cut-Extrude14, Sketch73, Sketch22, CBORE for M8 GAGI4, Sketch22, Sketch21, Sketch43, Boss-Extrude3, Sketch43, Sketch46, CBORE for M10 SUGU0, Sketch46, Sketch45, Sketch69, M8x1.25 Tapped Hole1, Sketch69, Sketch68, Sketch76, M5x0.8 Tapped Hole1, Sketch76, Sketch75, Sketch90, Cut-Extrude15, Sketch90, Sketch91, Cut-Extrude16, Sketch91, Sketch79, M3x0.5 Tapped Hole2, Sketch79, Sketch78, Sketch72, M3x0.5 Tapped Hole1, Sketch72, Sketch71, Sketch82, M2x0.4 Tapped Hole4, Sketch82, Sketch81, Sketch85, Ø3.0mm Degob Hole2, Sketch85, Sketch86, Sketch89, Ø3.0mm Degob Slot2, Sketch89, Sketch88, Mirror2, Chamfer7, Fillet8, Fillet14, Fillet4, Chamfer6, Fillet3, Chamfer8, Fillet9, Fillet10, Fillet11, Fillet12, Fillet13, Fillet15, Fillet16, Fillet19, Chamfer5, Fillet17, Fillet18, Chamfer9; Chamfer5 is suppressed in Kamibat; Fillet17 is suppressed in Kamibat",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -3080,7 +3080,7 @@
     {
       "id": "F-008",
       "check": "rms.sketches.fully_defined",
-      "title": "Sketch91 constrained status is under_defined; Sketch91 constrained status is un…",
+      "title": "Sketch91 constrained status is under_defined; Sketch91 constrained status is under_defined; Sketch82 constrained status is under_defined; Sketch82 constrained status is under_defined",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -3180,7 +3180,7 @@
     {
       "id": "F-009",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -3225,7 +3225,7 @@
     {
       "id": "F-010",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -3462,7 +3462,7 @@
     {
       "id": "F-011",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -3500,7 +3500,7 @@
     {
       "id": "F-012",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "25 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "25 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Cut-Extrude1, Sketch2, Sketch3, Cut-Extrude2, Sketch3, Sketch6, CSK for M3 Bola Vebu Machine Screw1, Sketch6, Sketch5, Fillet2, Fillet1, Fillet3, Chamfer1",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -3790,7 +3790,7 @@
     {
       "id": "F-013",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -3831,7 +3831,7 @@
     {
       "id": "F-014",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -4064,7 +4064,7 @@
     {
       "id": "F-015",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -4102,7 +4102,7 @@
     {
       "id": "F-016",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "27 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "27 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Tables, Sketch1, Sketch2, Sketch12, Revolve1, Sketch12, Sketch7, Revolve2, Sketch7, Sketch11, Cut-Extrude4, Sketch11, CirPattern1, Chamfer1, Split1, Sketch13, Helix/Spiral1, Sketch13, Sketch14, Cut-Sweep1, Sketch14, Combine1; Split1 is suppressed in 80704P581; Sketch13 is suppressed in 80704P581; Helix/Spiral1 is suppressed in 80704P581; Sketch13 is suppressed in 80704P581; Sketch14 is suppressed in 80704P581; Cut-Sweep1 is suppressed in 80704P581; Sketch14 is suppressed in 80704P581; Combine1 is suppressed in 80704P581",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -4421,7 +4421,7 @@
     {
       "id": "F-017",
       "check": "rms.sketches.one_sketch_per_feature",
-      "title": "Sketch1 is consumed by 4 features: Sketch7, Revolve1, Revolve2, Sketch12; Sketc…",
+      "title": "Sketch1 is consumed by 4 features: Sketch7, Revolve1, Revolve2, Sketch12; Sketch2 is consumed by 2 features: Cut-Extrude4, Sketch11",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -4541,7 +4541,7 @@
     {
       "id": "F-018",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -4579,7 +4579,7 @@
     {
       "id": "F-019",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "57 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "57 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3, Sketch4, Cut-Extrude2, Sketch4, Sketch5, Cut-Extrude3, Sketch5, Sketch8, Boss-Extrude3, Sketch8, Sketch13, Boss-Extrude4, Sketch13, Fillet4, Chamfer1, Sketch7, Cut-Extrude4, Sketch7, Sketch11, CSK for M3 Bola Vebu Machine Screw1, Sketch11, Sketch10, Sketch19, M3x0.5 Tapped Hole1, Sketch19, Sketch18, Sketch16, CBORE for M4 GAGI4, Sketch16, Sketch15, Mirror1, Chamfer2, Chamfer3, Fillet3, Fillet11, Fillet12, Fillet5, Fillet6, Fillet7, Fillet8, Fillet10",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -5189,7 +5189,7 @@
     {
       "id": "F-020",
       "check": "rms.sketches.one_sketch_per_feature",
-      "title": "Sketch2 is consumed by 3 features: Cut-Extrude3, Sketch5, Boss-Extrude2; Sketch…",
+      "title": "Sketch2 is consumed by 3 features: Cut-Extrude3, Sketch5, Boss-Extrude2; Sketch2 is consumed by 3 features: Cut-Extrude3, Sketch5, Boss-Extrude2",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -5279,7 +5279,7 @@
     {
       "id": "F-021",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -5317,7 +5317,7 @@
     {
       "id": "F-022",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "30 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "30 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Cut-List-Item1, Axis1, Axis2, Axis3, Sketch1, Sheet-Metal5, Base-Flange1, Sketch1, Sketch12, Cut-Extrude1, Sketch12, Sketch11, CSK for M2 Bola Vebu Machine Screw1, Sketch11, Sketch10, Sketch13, Cut-Extrude2, Sketch13, Fillet2, Fillet4, Cut-List-Item1, Bola-Pattern5, Bend-Lines2, Bounding-Box2, Sketch Transformation1; Bola-Pattern5 is suppressed in Kamibat; Bounding-Box2 is suppressed in Kamibat; Sketch Transformation1 is suppressed in Kamibat",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -5661,7 +5661,7 @@
     {
       "id": "F-023",
       "check": "rms.sketches.fully_defined",
-      "title": "Bend-Lines2 constrained status is under_defined; Bounding-Box2 constrained stat…",
+      "title": "Bend-Lines2 constrained status is under_defined; Bounding-Box2 constrained status is under_defined; Bounding-Box2 is suppressed in Kamibat",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -5723,7 +5723,7 @@
     {
       "id": "F-024",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -5762,7 +5762,7 @@
     {
       "id": "F-025",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Tables, Sketch1, Sketch2, Extrude1, Sketch2, Sketch3, Extrude2, Sketch3, Sketch4, Extrude3, Sketch4, Sketch5",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -6084,7 +6084,7 @@
     {
       "id": "F-027",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -6122,7 +6122,7 @@
     {
       "id": "F-028",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "53 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "53 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch5, CBORE for M8 GAGI4, Sketch5, Sketch4, Sketch8, CBORE for M8 KIKA7, Sketch8, Sketch7, Sketch10, Cut-Extrude1, Sketch10, Sketch11, Cut-Extrude2, Sketch11, Sketch15, Cut-Extrude3, Sketch15, Sketch19, Cut-Extrude4, Sketch19, Sketch20, Cut-Extrude5, Sketch20, Chamfer1, Sketch14, M5x0.8 Tapped Hole1, Sketch14, Sketch13, Sketch18, Ø3.0mm Degob Hole1, Sketch18, Sketch17, Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -6692,7 +6692,7 @@
     {
       "id": "F-029",
       "check": "rms.sketches.fully_defined",
-      "title": "Sketch2 constrained status is under_defined; Sketch2 constrained status is unde…",
+      "title": "Sketch2 constrained status is under_defined; Sketch2 constrained status is under_defined",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -6762,7 +6762,7 @@
     {
       "id": "F-030",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -6803,7 +6803,7 @@
     {
       "id": "F-031",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -7036,7 +7036,7 @@
     {
       "id": "F-032",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -7076,7 +7076,7 @@
     {
       "id": "F-033",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -7308,7 +7308,7 @@
     {
       "id": "F-034",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -7361,7 +7361,7 @@
     {
       "id": "F-035",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "38 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "38 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Tables, Sketch1, Sketch2, Boss-Extrude1, Sketch2, Chamfer1, Sketch3, Revolve1, Sketch3, Sketch4, Revolve2, Sketch4, Sketch5, Sketch6, Cut-Revolve1, Sketch6, Boss-Extrude2, Sketch5, CirPattern1, Sketch7, Cut-Extrude1, Sketch7, Split1, Sketch8, Sketch9, Helix/Spiral1, Sketch9, Cut-Sweep1, Sketch8, Sketch10, Boss-Extrude3, Sketch10, Sketch11; Split1 is suppressed in 19645L936; Sketch8 is suppressed in 19645L936; Sketch9 is suppressed in 19645L936; Helix/Spiral1 is suppressed in 19645L936; Sketch9 is suppressed in 19645L936; Cut-Sweep1 is suppressed in 19645L936; Sketch8 is suppressed in 19645L936; Sketch10 is suppressed in 19645L936; Boss-Extrude3 is suppressed in 19645L936; Sketch10 is suppressed in 19645L936; Sketch11 is suppressed in 19645L936",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -7808,7 +7808,7 @@
     {
       "id": "F-036",
       "check": "rms.sketches.one_sketch_per_feature",
-      "title": "Sketch1 is consumed by 11 features: Sketch4, Sketch6, Revolve1, Sketch2, Cut-Sw…",
+      "title": "Sketch1 is consumed by 11 features: Sketch4, Sketch6, Revolve1, Sketch2, Cut-Sweep1, Sketch3, Plane2, Boss-Extrude1, Cut-Revolve1, Sketch8, Revolve2; Sketch2 is consumed by 3 features: Boss-Extrude2, Boss-Extrude1, Sketch5; Sketch2 is consumed by 3 features: Boss-Extrude2, Boss-Extrude1, Sketch5; Sketch5 is consumed by 5 features: Cut-Extrude1, Sketch6, Boss-Extrude2, Cut-Revolve1, Sketch7; Sketch6 is consumed by 2 features: Cut-Revolve1, CirPattern1; Sketch6 is consumed by 2 features: Cut-Revolve1, CirPattern1; Sketch5 is consumed by 5 features: Cut-Extrude1, Sketch6, Boss-Extrude2, Cut-Revolve1, Sketch7; Cut-Sweep1 is suppressed in 19645L936; Plane2 is suppressed in 19645L936; Sketch8 is suppressed in 19645L936",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -8067,7 +8067,7 @@
     {
       "id": "F-037",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -8107,7 +8107,7 @@
     {
       "id": "F-038",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -8339,7 +8339,7 @@
     {
       "id": "F-039",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -8386,7 +8386,7 @@
     {
       "id": "F-040",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -8625,7 +8625,7 @@
     {
       "id": "F-041",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -8681,7 +8681,7 @@
     {
       "id": "F-042",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "38 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "38 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Tables, Sketch1, Sketch2, Boss-Extrude1, Sketch2, Chamfer1, Sketch3, Revolve1, Sketch3, Sketch4, Revolve2, Sketch4, Sketch5, Sketch6, Cut-Revolve1, Sketch6, Boss-Extrude2, Sketch5, CirPattern1, Sketch7, Cut-Extrude1, Sketch7, Split1, Sketch8, Sketch9, Helix/Spiral1, Sketch9, Cut-Sweep1, Sketch8, Sketch10, Boss-Extrude3, Sketch10, Sketch11; Split1 is suppressed in 91999B956; Sketch8 is suppressed in 91999B956; Sketch9 is suppressed in 91999B956; Helix/Spiral1 is suppressed in 91999B956; Sketch9 is suppressed in 91999B956; Cut-Sweep1 is suppressed in 91999B956; Sketch8 is suppressed in 91999B956; Sketch10 is suppressed in 91999B956; Boss-Extrude3 is suppressed in 91999B956; Sketch10 is suppressed in 91999B956; Sketch11 is suppressed in 91999B956",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -9131,7 +9131,7 @@
     {
       "id": "F-043",
       "check": "rms.sketches.one_sketch_per_feature",
-      "title": "Sketch1 is consumed by 11 features: Cut-Revolve1, Sketch4, Revolve1, Revolve2,…",
+      "title": "Sketch1 is consumed by 11 features: Cut-Revolve1, Sketch4, Revolve1, Revolve2, Plane2, Sketch6, Boss-Extrude1, Sketch8, Cut-Sweep1, Sketch2, Sketch3; Sketch2 is consumed by 3 features: Boss-Extrude2, Boss-Extrude1, Sketch5; Sketch2 is consumed by 3 features: Boss-Extrude2, Boss-Extrude1, Sketch5; Sketch5 is consumed by 5 features: Cut-Revolve1, Sketch7, Boss-Extrude2, Sketch6, Cut-Extrude1; Sketch6 is consumed by 2 features: Cut-Revolve1, CirPattern1; Sketch6 is consumed by 2 features: Cut-Revolve1, CirPattern1; Sketch5 is consumed by 5 features: Cut-Revolve1, Sketch7, Boss-Extrude2, Sketch6, Cut-Extrude1; Plane2 is suppressed in 91999B956; Sketch8 is suppressed in 91999B956; Cut-Sweep1 is suppressed in 91999B956",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -9393,7 +9393,7 @@
     {
       "id": "F-044",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -9431,7 +9431,7 @@
     {
       "id": "F-045",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "15 content feature(s) sit outside every group: Notes, Setul9___EndTag___, Ambie…",
+      "title": "15 content feature(s) sit outside every group: Notes, Setul9___EndTag___, Ambient, Directional1, Tables, Sketch1, Sketch2, Sketch3, Boss-Extrude1, Sketch3, Sketch4, Cut-Extrude1, Sketch4, Fillet1, Sketch5",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -9621,7 +9621,7 @@
     {
       "id": "F-046",
       "check": "rms.sketches.one_sketch_per_feature",
-      "title": "Sketch1 is consumed by 2 features: Boss-Extrude1, Sketch3; Sketch2 is consumed…",
+      "title": "Sketch1 is consumed by 2 features: Boss-Extrude1, Sketch3; Sketch2 is consumed by 4 features: Cut-Extrude1, Boss-Extrude1, Sketch4, Sketch3",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -9721,7 +9721,7 @@
     {
       "id": "F-047",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -9759,7 +9759,7 @@
     {
       "id": "F-048",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "67 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "67 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, 8-11-26 82350820(2)-1/88534272-1-solid1, 8-11-26 82350820(2)-1/15104486-1-solid1, 8-11-26 82350820(2)-1/50257021 Mozutoli Bebevunig Ring 47x0.79mm Zeniv Lop Profile Tabs-1-solid1, 8-11-26 82350820(2)-1/82081797 64d06e7mu Double VUD-1-solid1, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid1, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid2, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid3, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid4, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid5, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid6, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid7, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid8, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid9, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid10, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid11, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid12, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid13, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid14, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid15, 8-11-26 82350820(2)-1/40798206 FIM-869 Input Flange_8mm Input, 3_1 & 4_1 & 5_1, Keyed -1-solid1, 8-11-26 82350820(2)-1/53580438-1-solid1, 8-11-26 82350820(2)-1/91916004-1-solid1, 8-11-26 82350820(2)-1/7352PETO D-Rings_52x1.0mm VUD-1-solid1, 8-11-26 82350820(2)-1/7352PETO D-Rings_32x1.0mm VUD-1-solid1, 8-11-26 82350820(2)-1/7352PETO D-Rings_52x1.0mm VUD-2-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-1-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-1-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-1-solid1, 8-11-26 82350820(2)-1/30218372 M12 Kezi-1-solid1, 8-11-26 82350820(2)-1/12031220 Sealing Washer (Rofug) M12 Kezi_65360P388-1-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 12-1-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 12-2-solid1, 8-11-26 82350820(2)-1/72965679-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-1-solid1, 8-11-26 82350820(2)-1/8071NOZE Housing Cap_MU13345-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-0-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-1-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-2-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-3-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-4-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-5-1-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-2-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-3-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 20-1-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 20-2-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-4-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-5-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-6-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-2-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-3-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-4-solid1, 8-11-26 82350820(2)-1/12031220 Sealing Washer (Rofug) M12 Kezi_65360P388-2-solid1, 8-11-26 82350820(2)-1/30218372 M12 Kezi-2-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-2-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-3-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-4-solid1, 8-11-26 82350820(2)-1/BIVEV-X_12662396 (LI428-3)-1-solid1, 8-11-26 82350820(2)-1/56800103 Muzifu Gear i=3 KAZ019-1-solid1",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -10469,7 +10469,7 @@
     {
       "id": "F-049",
       "check": "rms.folders.present",
-      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -10510,7 +10510,7 @@
     {
       "id": "F-050",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "22 content feature(s) sit outside every group: Notes, Setul9___EndTag___, Ambie…",
+      "title": "22 content feature(s) sit outside every group: Notes, Setul9___EndTag___, Ambient, Directional1, Tables, Sketch1, Sketch6, Sketch2, Revolve1, Sketch2, Sketch7, Cut-Extrude1, Sketch7, Sketch8, Cut-Extrude2, Sketch8, Sketch3, Helix/Spiral1, Sketch3, Sketch4, Cut-Sweep1, Sketch4; Sketch3 is suppressed in 6926R326; Helix/Spiral1 is suppressed in 6926R326; Sketch3 is suppressed in 6926R326; Sketch4 is suppressed in 6926R326; Cut-Sweep1 is suppressed in 6926R326; Sketch4 is suppressed in 6926R326",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -10780,7 +10780,7 @@
     {
       "id": "F-051",
       "check": "rms.sketches.one_sketch_per_feature",
-      "title": "Sketch1 is consumed by 6 features: Cut-Sweep1, Revolve1, Sketch6, Cut-Extrude1,…",
+      "title": "Sketch1 is consumed by 6 features: Cut-Sweep1, Revolve1, Sketch6, Cut-Extrude1, Sketch2, Sketch4; Sketch6 is consumed by 2 features: Sketch7, Cut-Extrude1; Cut-Sweep1 is suppressed in 6926R326; Sketch4 is suppressed in 6926R326",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -10906,7 +10906,7 @@
     {
       "id": "F-052",
       "check": "rms.assembly.mates_to_reference_geometry",
-      "title": "mat:0001 (swMatePARALLEL) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/…",
+      "title": "mat:0001 (swMatePARALLEL) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1; mat:0003 (swMateCONCENTRIC) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on MAN_M4-0.7X14_BA319_FU-1; mat:0004 (swMateCOINCIDENT) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on MAN_M4-0.7X14_BA319_FU-1; mat:0005 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-78148-1; mat:0006 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-78148-1; mat:0007 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-78148-1; mat:0009 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-41033-1; mat:0012 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on MAN_M8-1.25X20_GI_TA-1; mat:0013 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on MAN_M10-1.5X16_GI_TA-1; mat:0014 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on MAN_M10-1.5X16_GI_TA-1; mat:0015 (swMateCOINCIDENT) references swSelFACES on 359-17543-2, swSelFACES on MAN_M8-1.25X16_GI_TA-5; mat:0017 (swMateCONCENTRIC) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-21; mat:0019 (swMateCONCENTRIC) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-1; mat:0020 (swMateCOINCIDENT) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-1; mat:0021 (swMateCOINCIDENT) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-21; mat:0022 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-12658-2/359-12658-1; mat:0025 (swMateCONCENTRIC) references swSelFACES on 359-61417-1; mat:0026 (swMateCONCENTRIC) references swSelEDGES on 359-61417-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-1; mat:0027 (swMateCOINCIDENT) references swSelFACES on 359-61417-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-1; mat:0028 (swMateCONCENTRIC) references swSelFACES on 359-61417-1, swSelFACES on MAN_M4-0.7X12_GI_TA-1; mat:0029 (swMateCOINCIDENT) references swSelFACES on 359-61417-1, swSelFACES on MAN_M4-0.7X12_GI_TA-1; mat:0030 (swMateDISTANCE) references swSelFACES on 359-41033-1, swSelFACES on 359-61417-1; mat:0031 (swMateCONCENTRIC) references swSelEDGES on 359-41033-1, swSelFACES on GEM_M2-0.4X4_VOD02_NA-23; mat:0032 (swMateCOINCIDENT) references swSelFACES on 359-41033-1, swSelFACES on GEM_M2-0.4X4_VOD02_NA-23; mat:0033 (swMateCOINCIDENT) references swSelFACES on 359-61417-1, swSelFACES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1; mat:0034 (swMateCONCENTRIC) references swSelFACES on 359-61417-1, swSelFACES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1; mat:0035 (swMateCONCENTRIC) references swSelEDGES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1, swSelFACES on BOZ_M3-0.5X4_PE8_NA-1; mat:0036 (swMateCOINCIDENT) references swSelFACES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1, swSelFACES on BOZ_M3-0.5X4_PE8_NA-1; mat:0039 (swMateCOINCIDENT) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0040 (swMateCONCENTRIC) references swSelFACES on 359-17543-2, swSelFACES on MAN_M8-1.25X16_GI_TA-5; mat:0041 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-32917-1; mat:0042 (swMateCONCENTRIC) references swSelFACES on 359-32917-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-5; mat:0043 (swMateCOINCIDENT) references swSelFACES on 359-32917-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-5; mat:0044 (swMateCOINCIDENT) references swSelFACES on 359-78148-1, swSelFACES on VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-1; mat:0045 (swMateCONCENTRIC) references swSelFACES on 359-78148-1, swSelFACES on VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-1; mat:0046 (swMateCOINCIDENT) references swSelFACES on 359-78148-1, swSelFACES on VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-1; mat:0048 (swMateCOINCIDENT) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0049 (swMateCOINCIDENT) references swSelEDGES on 359-60763-1, swSelFACES on MAN_M8-1.25X20_GI_TA-1; mat:0050 (swMateDISTANCE) references swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, swSelFACES on 359-60763-1; mat:0051 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on 359-61417-1; mat:0052 (swMateCOINCIDENT) references swSelFACES on 359-17543-2, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0053 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on 359-32917-1; mat:0054 (swMateCONCENTRIC) references swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0055 (swMateCONCENTRIC) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -12236,7 +12236,7 @@
     {
       "id": "F-053",
       "check": "rms.params.dimensions_driven_by_equations",
-      "title": "none of the 1 equation(s) drives a dimension (a driven left side names one, as…",
+      "title": "none of the 1 equation(s) drives a dimension (a driven left side names one, as in D1@Sketch1): conical taper",
       "status": "suspected",
       "severity": "low",
       "component_ids": [
@@ -12674,7 +12674,7 @@
     {
       "id": "F-064",
       "check": "rms.params.global_variables_present",
-      "title": "none of the 9 equation(s) is a global variable: D3@Helix/Spiral1, D1@Chamfer1,…",
+      "title": "none of the 9 equation(s) is a global variable: D3@Helix/Spiral1, D1@Chamfer1, D1@Sketch1, D1@Cut-Extrude4, D2@Sketch1, D1@Sketch14, D2@Sketch14, D4@Helix/Spiral1, D1@Sketch2",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -12864,7 +12864,7 @@
     {
       "id": "F-069",
       "check": "rms.params.global_variables_present",
-      "title": "none of the 4 equation(s) is a global variable: D1@Sketch1, D1@Sketch5, D2@Sket…",
+      "title": "none of the 4 equation(s) is a global variable: D1@Sketch1, D1@Sketch5, D2@Sketch1, D3@Sketch1",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -13141,7 +13141,7 @@
     {
       "id": "F-076",
       "check": "rms.params.global_variables_present",
-      "title": "none of the 12 equation(s) is a global variable: D4@Helix/Spiral1, D3@Helix/Spi…",
+      "title": "none of the 12 equation(s) is a global variable: D4@Helix/Spiral1, D3@Helix/Spiral1, D2@Sketch5, D3@Sketch5, D1@Chamfer1, D2@Sketch1, D1@Sketch1, D1@Sketch6, D2@Sketch6, D3@Sketch1, D3@Sketch6, D4@Sketch6",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -13368,7 +13368,7 @@
     {
       "id": "F-081",
       "check": "rms.params.global_variables_present",
-      "title": "none of the 12 equation(s) is a global variable: D4@Helix/Spiral1, D3@Helix/Spi…",
+      "title": "none of the 12 equation(s) is a global variable: D4@Helix/Spiral1, D3@Helix/Spiral1, D2@Sketch5, D3@Sketch5, D1@Chamfer1, D2@Sketch1, D1@Sketch1, D1@Sketch6, D2@Sketch6, D3@Sketch1, D3@Sketch6, D4@Sketch6",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -13538,7 +13538,7 @@
     {
       "id": "F-085",
       "check": "rms.params.global_variables_present",
-      "title": "none of the 6 equation(s) is a global variable: D5@Sketch1, D7@Sketch1, D4@Sket…",
+      "title": "none of the 6 equation(s) is a global variable: D5@Sketch1, D7@Sketch1, D4@Sketch1, D3@Helix/Spiral1, D4@Helix/Spiral1, D1@Sketch1",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -13579,7 +13579,7 @@
     {
       "id": "F-086",
       "check": "standards.part.sketches_fully_defined",
-      "title": "Sketch1 is under-defined, at the top level of the feature tree; Sketch1 is unde…",
+      "title": "Sketch1 is under-defined, at the top level of the feature tree; Sketch1 is under-defined, under Revolve1",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -13642,7 +13642,7 @@
     {
       "id": "F-087",
       "check": "standards.part.sketches_fully_defined",
-      "title": "Sketch91 is under-defined, at the top level of the feature tree; Sketch91 is un…",
+      "title": "Sketch91 is under-defined, at the top level of the feature tree; Sketch91 is under-defined, under Cut-Extrude16; Sketch82 is under-defined, at the top level of the feature tree, and belongs to the hole-wizard feature M2x0.4 Tapped Hole4; Sketch82 is under-defined, under M2x0.4 Tapped Hole4, and belongs to the hole-wizard feature M2x0.4 Tapped Hole4",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -13725,7 +13725,7 @@
     {
       "id": "F-088",
       "check": "standards.part.sketches_fully_defined",
-      "title": "Bend-Lines2 is under-defined, under Bola-Pattern5; Bounding-Box2 is under-defin…",
+      "title": "Bend-Lines2 is under-defined, under Bola-Pattern5; Bounding-Box2 is under-defined, under Bola-Pattern5; Bounding-Box2 is suppressed in Kamibat",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -13789,7 +13789,7 @@
     {
       "id": "F-089",
       "check": "standards.part.cut_list_excluded",
-      "title": "Cut-List-Item1 in the cut-list folder Solid Bodies is not excluded from the cut…",
+      "title": "Cut-List-Item1 in the cut-list folder Solid Bodies is not excluded from the cut list",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -13842,7 +13842,7 @@
     {
       "id": "F-090",
       "check": "standards.part.sketches_fully_defined",
-      "title": "Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde…",
+      "title": "Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is under-defined, under Boss-Extrude2",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -13905,7 +13905,7 @@
     {
       "id": "F-091",
       "check": "interference.static",
-      "title": "Static interference between cmp:0015 and cmp:0026 in configuration Kamibat: lar…",
+      "title": "Static interference between MAN_M4-0.7X14_BA319_FU-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 2.53e-07 m3 (252.54845822 mm3)",
       "status": "demonstrated",
       "severity": "high",
       "component_ids": [
@@ -13993,7 +13993,7 @@
     {
       "id": "F-092",
       "check": "interference.static",
-      "title": "Static interference between cmp:0015 and cmp:0021 in configuration Kamibat: lar…",
+      "title": "Static interference between MAN_M4-0.7X14_BA319_FU-1 and VOM01O-RUNAGO07-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3)",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -14081,7 +14081,7 @@
     {
       "id": "F-093",
       "check": "interference.static",
-      "title": "Static interference between cmp:0026 and cmp:0060, cmp:0072, cmp:0075 in config…",
+      "title": "Static interference between GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 and MAN_M4-0.7X14_BA319_FU-5, MAN_M4-0.7X14_BA319_FU-7, MAN_M4-0.7X14_BA319_FU-6 in configuration Kamibat: largest overlap volume 2.52e-07 m3 (251.727787434 mm3); the same condition repeats across 3 pairs (MAN_M4-0.7X14_BA319_FU-5+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, MAN_M4-0.7X14_BA319_FU-7+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, MAN_M4-0.7X14_BA319_FU-6+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
       "status": "demonstrated",
       "severity": "high",
       "component_ids": [
@@ -14179,7 +14179,7 @@
     {
       "id": "F-094",
       "check": "interference.static",
-      "title": "Static interference between cmp:0021 and cmp:0026 in configuration Kamibat: lar…",
+      "title": "Static interference between VOM01O-RUNAGO07-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 2.4e-08 m3 (24.304552846 mm3); the same condition repeats across 7 pairs (VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
       "status": "demonstrated",
       "severity": "high",
       "component_ids": [
@@ -14291,7 +14291,7 @@
     {
       "id": "F-095",
       "check": "interference.static",
-      "title": "Static interference between cmp:0013 and cmp:0026 in configuration Kamibat: lar…",
+      "title": "Static interference between 359-12658-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3); the same condition repeats across 2 pairs (359-12658-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, 359-12658-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -14383,7 +14383,7 @@
     {
       "id": "F-096",
       "check": "interference.static",
-      "title": "Static interference between cmp:0002 and cmp:0026 in configuration Kamibat: lar…",
+      "title": "Static interference between 359-17543-2 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3)",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -14471,7 +14471,7 @@
     {
       "id": "F-097",
       "check": "hole.coaxiality",
-      "title": "The axes of hol:0004 and hol:0010 are 25.0 mm apart (parallel), but no coaxiali…",
+      "title": "The axes of hol:0004 and hol:0010 are 25.0 mm apart (parallel), but no coaxiality tolerance is available; the check did not run",
       "status": "unresolved",
       "severity": "medium",
       "component_ids": [
@@ -14552,7 +14552,7 @@
     {
       "id": "F-098",
       "check": "hole.coaxiality",
-      "title": "The axes of hol:0010 and hol:0024 are 13.5 mm apart (skew), but no coaxiality t…",
+      "title": "The axes of hol:0010 and hol:0024 are 13.5 mm apart (skew), but no coaxiality tolerance is available; the check did not run",
       "status": "unresolved",
       "severity": "medium",
       "component_ids": [
@@ -14634,7 +14634,7 @@
     {
       "id": "F-099",
       "check": "hole.coaxiality",
-      "title": "The axes of hol:0017 and hol:0027 are 68.35203 mm apart (parallel), but no coax…",
+      "title": "The axes of hol:0017 and hol:0027 are 68.35203 mm apart (parallel), but no coaxiality tolerance is available; the check did not run",
       "status": "unresolved",
       "severity": "medium",
       "component_ids": [
@@ -17480,7 +17480,7 @@
           "F-093"
         ],
         "check": "interference.static",
-        "title": "Static interference between cmp:0026 and cmp:0060, cmp:0072, cmp:0075 in config…",
+        "title": "Static interference between GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 and MAN_M4-0.7X14_BA319_FU-5, MAN_M4-0.7X14_BA319_FU-7, MAN_M4-0.7X14_BA319_FU-6 in configuration Kamibat: largest overlap volume 2.52e-07 m3 (251.727787434 mm3); the same condition repeats across 3 pairs (MAN_M4-0.7X14_BA319_FU-5+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, MAN_M4-0.7X14_BA319_FU-7+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, MAN_M4-0.7X14_BA319_FU-6+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
         "status": "demonstrated",
         "severity": "high",
         "component_ids": [
@@ -17510,7 +17510,7 @@
           "F-091"
         ],
         "check": "interference.static",
-        "title": "Static interference between cmp:0015 and cmp:0026 in configuration Kamibat: lar…",
+        "title": "Static interference between MAN_M4-0.7X14_BA319_FU-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 2.53e-07 m3 (252.54845822 mm3)",
         "status": "demonstrated",
         "severity": "high",
         "component_ids": [
@@ -17538,7 +17538,7 @@
           "F-094"
         ],
         "check": "interference.static",
-        "title": "Static interference between cmp:0021 and cmp:0026 in configuration Kamibat: lar…",
+        "title": "Static interference between VOM01O-RUNAGO07-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 2.4e-08 m3 (24.304552846 mm3); the same condition repeats across 7 pairs (VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
         "status": "demonstrated",
         "severity": "high",
         "component_ids": [
@@ -17566,7 +17566,7 @@
           "F-092"
         ],
         "check": "interference.static",
-        "title": "Static interference between cmp:0015 and cmp:0021 in configuration Kamibat: lar…",
+        "title": "Static interference between MAN_M4-0.7X14_BA319_FU-1 and VOM01O-RUNAGO07-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3)",
         "status": "demonstrated",
         "severity": "medium",
         "component_ids": [
@@ -17594,7 +17594,7 @@
           "F-095"
         ],
         "check": "interference.static",
-        "title": "Static interference between cmp:0013 and cmp:0026 in configuration Kamibat: lar…",
+        "title": "Static interference between 359-12658-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3); the same condition repeats across 2 pairs (359-12658-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, 359-12658-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
         "status": "demonstrated",
         "severity": "medium",
         "component_ids": [
@@ -17622,7 +17622,7 @@
           "F-096"
         ],
         "check": "interference.static",
-        "title": "Static interference between cmp:0002 and cmp:0026 in configuration Kamibat: lar…",
+        "title": "Static interference between 359-17543-2 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3)",
         "status": "demonstrated",
         "severity": "medium",
         "component_ids": [
@@ -17649,7 +17649,7 @@
           "F-097"
         ],
         "check": "hole.coaxiality",
-        "title": "The axes of hol:0004 and hol:0010 are 25.0 mm apart (parallel), but no coaxiali…",
+        "title": "The axes of hol:0004 and hol:0010 are 25.0 mm apart (parallel), but no coaxiality tolerance is available; the check did not run",
         "status": "unresolved",
         "severity": "medium",
         "component_ids": [
@@ -17676,7 +17676,7 @@
           "F-098"
         ],
         "check": "hole.coaxiality",
-        "title": "The axes of hol:0010 and hol:0024 are 13.5 mm apart (skew), but no coaxiality t…",
+        "title": "The axes of hol:0010 and hol:0024 are 13.5 mm apart (skew), but no coaxiality tolerance is available; the check did not run",
         "status": "unresolved",
         "severity": "medium",
         "component_ids": [
@@ -17703,7 +17703,7 @@
           "F-099"
         ],
         "check": "hole.coaxiality",
-        "title": "The axes of hol:0017 and hol:0027 are 68.35203 mm apart (parallel), but no coax…",
+        "title": "The axes of hol:0017 and hol:0027 are 68.35203 mm apart (parallel), but no coaxiality tolerance is available; the check did not run",
         "status": "unresolved",
         "severity": "medium",
         "component_ids": [
@@ -17733,7 +17733,7 @@
           "F-029"
         ],
         "check": "rms.sketches.fully_defined",
-        "title": "Sketch1 constrained status is under_defined; Sketch1 constrained status is unde…",
+        "title": "Sketch1 constrained status is under_defined; Sketch1 constrained status is under_defined",
         "status": "demonstrated",
         "severity": "medium",
         "component_ids": [
@@ -17768,7 +17768,7 @@
           "F-051"
         ],
         "check": "rms.sketches.one_sketch_per_feature",
-        "title": "Sketch1 is consumed by 4 features: Sketch7, Revolve1, Revolve2, Sketch12; Sketc…",
+        "title": "Sketch1 is consumed by 4 features: Sketch7, Revolve1, Revolve2, Sketch12; Sketch2 is consumed by 2 features: Cut-Extrude4, Sketch11",
         "status": "demonstrated",
         "severity": "medium",
         "component_ids": [
@@ -17840,7 +17840,7 @@
           "F-090"
         ],
         "check": "standards.part.sketches_fully_defined",
-        "title": "Sketch1 is under-defined, at the top level of the feature tree; Sketch1 is unde…",
+        "title": "Sketch1 is under-defined, at the top level of the feature tree; Sketch1 is under-defined, under Revolve1",
         "status": "demonstrated",
         "severity": "medium",
         "component_ids": [
@@ -17869,7 +17869,7 @@
           "F-052"
         ],
         "check": "rms.assembly.mates_to_reference_geometry",
-        "title": "mat:0001 (swMatePARALLEL) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/…",
+        "title": "mat:0001 (swMatePARALLEL) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1; mat:0003 (swMateCONCENTRIC) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on MAN_M4-0.7X14_BA319_FU-1; mat:0004 (swMateCOINCIDENT) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on MAN_M4-0.7X14_BA319_FU-1; mat:0005 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-78148-1; mat:0006 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-78148-1; mat:0007 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-78148-1; mat:0009 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-41033-1; mat:0012 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on MAN_M8-1.25X20_GI_TA-1; mat:0013 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on MAN_M10-1.5X16_GI_TA-1; mat:0014 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on MAN_M10-1.5X16_GI_TA-1; mat:0015 (swMateCOINCIDENT) references swSelFACES on 359-17543-2, swSelFACES on MAN_M8-1.25X16_GI_TA-5; mat:0017 (swMateCONCENTRIC) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-21; mat:0019 (swMateCONCENTRIC) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-1; mat:0020 (swMateCOINCIDENT) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-1; mat:0021 (swMateCOINCIDENT) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on MAN_M8-1.25X40_GI_TA-21; mat:0022 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-12658-2/359-12658-1; mat:0025 (swMateCONCENTRIC) references swSelFACES on 359-61417-1; mat:0026 (swMateCONCENTRIC) references swSelEDGES on 359-61417-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-1; mat:0027 (swMateCOINCIDENT) references swSelFACES on 359-61417-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-1; mat:0028 (swMateCONCENTRIC) references swSelFACES on 359-61417-1, swSelFACES on MAN_M4-0.7X12_GI_TA-1; mat:0029 (swMateCOINCIDENT) references swSelFACES on 359-61417-1, swSelFACES on MAN_M4-0.7X12_GI_TA-1; mat:0030 (swMateDISTANCE) references swSelFACES on 359-41033-1, swSelFACES on 359-61417-1; mat:0031 (swMateCONCENTRIC) references swSelEDGES on 359-41033-1, swSelFACES on GEM_M2-0.4X4_VOD02_NA-23; mat:0032 (swMateCOINCIDENT) references swSelFACES on 359-41033-1, swSelFACES on GEM_M2-0.4X4_VOD02_NA-23; mat:0033 (swMateCOINCIDENT) references swSelFACES on 359-61417-1, swSelFACES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1; mat:0034 (swMateCONCENTRIC) references swSelFACES on 359-61417-1, swSelFACES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1; mat:0035 (swMateCONCENTRIC) references swSelEDGES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1, swSelFACES on BOZ_M3-0.5X4_PE8_NA-1; mat:0036 (swMateCOINCIDENT) references swSelFACES on LOGAB ZIG NAGUG, KA, #8 KIKAK-1, swSelFACES on BOZ_M3-0.5X4_PE8_NA-1; mat:0039 (swMateCOINCIDENT) references swSelFACES on 359-12658-2/359-12658-1, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0040 (swMateCONCENTRIC) references swSelFACES on 359-17543-2, swSelFACES on MAN_M8-1.25X16_GI_TA-5; mat:0041 (swMateCOINCIDENT) references swSelFACES on 359-60763-1, swSelFACES on 359-32917-1; mat:0042 (swMateCONCENTRIC) references swSelFACES on 359-32917-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-5; mat:0043 (swMateCOINCIDENT) references swSelFACES on 359-32917-1, swSelFACES on GEM_M3-0.5X8_PE8_NA-5; mat:0044 (swMateCOINCIDENT) references swSelFACES on 359-78148-1, swSelFACES on VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-1; mat:0045 (swMateCONCENTRIC) references swSelFACES on 359-78148-1, swSelFACES on VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-1; mat:0046 (swMateCOINCIDENT) references swSelFACES on 359-78148-1, swSelFACES on VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-1; mat:0048 (swMateCOINCIDENT) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0049 (swMateCOINCIDENT) references swSelEDGES on 359-60763-1, swSelFACES on MAN_M8-1.25X20_GI_TA-1; mat:0050 (swMateDISTANCE) references swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, swSelFACES on 359-60763-1; mat:0051 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on 359-61417-1; mat:0052 (swMateCOINCIDENT) references swSelFACES on 359-17543-2, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0053 (swMateCONCENTRIC) references swSelFACES on 359-60763-1, swSelFACES on 359-32917-1; mat:0054 (swMateCONCENTRIC) references swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1; mat:0055 (swMateCONCENTRIC) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/VOM01O-RUNAGO07-1, swSelFACES on GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1",
         "status": "demonstrated",
         "severity": "medium",
         "component_ids": [
@@ -17895,7 +17895,7 @@
           "F-089"
         ],
         "check": "standards.part.cut_list_excluded",
-        "title": "Cut-List-Item1 in the cut-list folder Solid Bodies is not excluded from the cut…",
+        "title": "Cut-List-Item1 in the cut-list folder Solid Bodies is not excluded from the cut list",
         "status": "demonstrated",
         "severity": "medium",
         "component_ids": [
@@ -17940,7 +17940,7 @@
           "F-050"
         ],
         "check": "rms.grouping.all_features_in_a_group",
-        "title": "57 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+        "title": "57 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Directional2, Directional3, Axis1, Axis2, Axis3, Sketch1, Revolve1, Sketch1, Sketch8, Cut-Revolve1, Sketch8, Chamfer1, Fillet4, Sketch13, Boss-Extrude2, Sketch13, Sketch22, Boss-Extrude3, Sketch22, Sketch9, Cut-Extrude1, Sketch9, Sketch18, Cut-Extrude4, Sketch18, Fillet16, Chamfer9, Chamfer8, Fillet3, Fillet12, Fillet5, Fillet6, Fillet15, Fillet17, Fillet24, Sketch16, Cut-Extrude2, Sketch16, Fillet19, Chamfer10, Sketch21, M8 Clearance Hole1, Sketch21, Sketch20, Sketch25, Ø2.0mm Degob Hole1, Sketch25, Sketch24, CirPattern2, Fillet20, Fillet22, Fillet23",
         "status": "demonstrated",
         "severity": "medium",
         "component_ids": [
@@ -18186,7 +18186,7 @@
           "F-084"
         ],
         "check": "rms.params.dimensions_driven_by_equations",
-        "title": "none of the 1 equation(s) drives a dimension (a driven left side names one, as…",
+        "title": "none of the 1 equation(s) drives a dimension (a driven left side names one, as in D1@Sketch1): conical taper",
         "status": "suspected",
         "severity": "low",
         "component_ids": [
@@ -18270,7 +18270,7 @@
           "F-049"
         ],
         "check": "rms.folders.present",
-        "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+        "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
         "status": "suspected",
         "severity": "low",
         "component_ids": [

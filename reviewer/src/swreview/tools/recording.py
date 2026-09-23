@@ -21,6 +21,10 @@ from swreview.findings import Finding
 from swreview.findings import build_finding as build_finding_model
 from swreview.ir.models import SourceRef
 from swreview.report.session import CoverageItem, CoverageScope
+
+# The recorded title every check tool's result carries lives in `report/titles.py`, beside the
+# display title that undoes its cut (feature 009 decision 2A); re-exported here unchanged.
+from swreview.report.titles import TITLE_LENGTH, title_from
 from swreview.tools.context import ToolContext, error_result
 from swreview.tools.query import ToolResult, as_json
 
@@ -32,16 +36,6 @@ __all__ = [
     "result_to_finding",
     "title_from",
 ]
-
-TITLE_LENGTH = 80
-
-
-def title_from(observed: str) -> str:
-    """A one-line title: the first sentence of `observed`, trimmed."""
-    first = observed.strip().split(". ")[0].strip().rstrip(".")
-    if len(first) <= TITLE_LENGTH:
-        return first
-    return first[: TITLE_LENGTH - 1].rstrip() + "…"
 
 
 def result_to_finding(
