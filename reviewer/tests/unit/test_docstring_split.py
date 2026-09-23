@@ -209,7 +209,10 @@ def test_canonical_schema_still_refuses_an_args_entry_with_no_parameter() -> Non
 def test_the_pin_covers_exactly_the_tools_that_reach_a_provider() -> None:
     """A new tool must be added to the pin deliberately, not discovered missing at T056."""
     assert set(PRE_SPLIT_DESCRIPTIONS) == {function.__name__ for function in ALL_TOOL_FUNCTIONS}
-    assert len(PRE_SPLIT_DESCRIPTIONS) == 36, "35 until feature 010 T028 added check_joints"
+    assert len(PRE_SPLIT_DESCRIPTIONS) == 38, (
+        "35 until feature 010 T028 added check_joints, 36 until T067 and T075 added "
+        "check_mass_material and check_hygiene"
+    )
 
 
 @pytest.mark.parametrize(
@@ -317,10 +320,13 @@ def test_a_tool_already_under_the_caps_reports_nothing() -> None:
 
 # --- the pinned pre-split text -----------------------------------------------------------
 
-PRE_SPLIT_DESCRIPTION_BYTES = 16_702
+PRE_SPLIT_DESCRIPTION_BYTES = 16_767
 """16,006 until feature 010: T022 said what a touching group now is (a contact), T028 added
 `check_joints`, T035 said a nominal position is a zone and T037 said `check_joints` checks
-alignment; edited deliberately with the entries below that moved."""
+alignment (16,702); T067 and T075 added `check_mass_material` and `check_hygiene` and
+rewrote `check_joints` under the 160-character cap to name every check it now runs, its
+notes cut to keep the array under `test_tool_payload.ARRAY_CEILING`; edited deliberately
+with the entries below that moved."""
 """UTF-8 bytes of the 35 pre-split descriptions. The split moves text; it never loses any."""
 
 PRE_SPLIT_DESCRIPTIONS: dict[str, str] = {
@@ -576,15 +582,22 @@ exactly: null grades every part document including the ones whose tree was never
 a `fail` outcome consults the retained exceptions for this rule id, coverage is
 replaced and findings are appended.""",
     "check_joints": """\
-Find every joint of the assembly from its geometry, and check how each lines up.
+Find every joint from the geometry and check it: alignment, stack-up, fastener
+identity, thread, engagement, bottoming, tool access and head fit.
 
-Takes no argument. A joint is two or more parts whose holes - or a hole and a screw
-or pin face - share an axis: parallel, overlapping in projection and touching along
-it. Each pattern of joints is recorded as checked coverage; a pair that misses by a
-little is listed for the engineer, never reported, and every hole or face the map
-could not use is skipped coverage saying why. Each joint's offset is then checked
-against the clearance its fastener leaves, with the position budget as a callout,
-and a pattern of identical results is one finding naming every joint.""",
+Takes no argument. A near miss is listed, never reported; what the map could not use
+is skipped coverage saying why.""",
+    "check_mass_material": """\
+Check every part has a material or a deliberate mass override, that its density fits
+the material, and flag assembly mass overrides.
+
+Takes no argument. Unread parts and bodies are counted, never assumed.""",
+    "check_hygiene": """\
+Check part numbers against file names, duplicate descriptions and part numbers,
+revisions, and suppressed or lightweight components.
+
+Takes no argument. Property names come from the attached standards profile; without
+one those checks are skipped.""",
     "request_evidence": """\
 Record something you need and the package does not have. Returns its id.
 

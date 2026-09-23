@@ -296,8 +296,8 @@ def encoding_digests() -> dict[str, str]:
 
 # --- the pinned baseline ----------------------------------------------------------------
 
-REVIEW_TOOL_COUNT = 33
-REVIEW_BRIDGE_TOOL_COUNT = 36
+REVIEW_TOOL_COUNT = 35
+REVIEW_BRIDGE_TOOL_COUNT = 38
 OPENAI_ARRAY_BYTES = 35_442
 GEMINI_ARRAY_BYTES = 35_615
 """**Deviation from T001, recorded in `specs/005-llm-efficiency/probe-log.md`.** The task
@@ -321,7 +321,7 @@ MCP_OPENAI_ARRAY_BYTES = 14_866
 MCP_GEMINI_ARRAY_BYTES = 14_084
 LARGEST_TOOL = "check_axial_stack"
 LARGEST_TOOL_BYTES = 2_734
-RMS_TIER_KEPT_TOOLS = 27
+RMS_TIER_KEPT_TOOLS = 29
 RMS_TIER_KEPT_BYTES = 27_349
 RMS_TIER_DELTA_BYTES = 8_093
 RMS_TIER_DELTA_PERCENT = 22.8
@@ -338,8 +338,9 @@ ARRAY_CEILING = 36_000
 
 
 def test_curated_tool_count_is_pinned() -> None:
-    """33 tools, 36 with the bridge (32 and 35 until feature 010 T028 added
-    `check_joints`). A new tool is a decision, not an accident."""
+    """35 tools, 38 with the bridge (32 and 35 until feature 010 T028 added
+    `check_joints`, 33 and 36 until T067 and T075 added `check_mass_material` and
+    `check_hygiene`). A new tool is a decision, not an accident."""
     assert len(TOOL_FUNCTIONS) == REVIEW_TOOL_COUNT
     assert len(TOOLSETS["review+bridge"]) == REVIEW_BRIDGE_TOOL_COUNT
 
@@ -425,7 +426,7 @@ def test_whole_array_under_ceiling(encoding: str) -> None:
 
 
 def test_rms_tier_row_is_the_array_delta_not_the_object_sum() -> None:
-    """Withholding the six RMS tools: 33 tools to 27, and what that takes off the wire."""
+    """Withholding the six RMS tools: 35 tools to 29, and what that takes off the wire."""
     delta = tier_delta()
     assert delta.kept_tools == RMS_TIER_KEPT_TOOLS
     assert delta.kept_bytes == RMS_TIER_KEPT_BYTES

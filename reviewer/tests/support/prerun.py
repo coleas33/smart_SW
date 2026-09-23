@@ -75,9 +75,12 @@ MODEL_DRIVEN_CALLS: tuple[ScriptedToolCall, ...] = (
     ScriptedToolCall("check_rms_assembly"),
     ScriptedToolCall("check_interference_group", {"group_key": GROUP_KEY}),
     ScriptedToolCall("check_joints"),
+    ScriptedToolCall("check_mass_material"),
+    ScriptedToolCall("check_hygiene"),
 )
 """What a model has to ask for to reach the state the pre-run reaches on its own; feature
-010's `check_joints` joined through `CODE_FIRST_CHECKS`, after the interference groups."""
+010's `check_joints`, `check_mass_material` and `check_hygiene` joined through
+`CODE_FIRST_CHECKS`, in its order, after the interference groups."""
 
 
 def _axis(z_origin: float, x_origin: float = 0.0) -> Axis:
@@ -201,9 +204,7 @@ def empty_model_check_package() -> EvidencePackage:
     interference, no holes and no fasteners. `record_partial_evidence` has already written
     its own `skipped` item for the profile, and the digest must not write a second one.
     """
-    package = rms_package(
-        parts=[PartSpec(document_id=PART_DOCUMENT, name="housing", features=[])]
-    )
+    package = rms_package(parts=[PartSpec(document_id=PART_DOCUMENT, name="housing", features=[])])
     return package.model_copy(
         update={
             "extractor": package.extractor.model_copy(update={"profile": "model_check"}),
