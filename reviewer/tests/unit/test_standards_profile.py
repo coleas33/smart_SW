@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import re
 from collections.abc import Iterator
 from copy import deepcopy
 from pathlib import Path
@@ -103,6 +104,11 @@ STRING_FIELDS: tuple[str, ...] = (
     "export_control.phrase",
     "hygiene.part_number_property",
     "hygiene.description_property",
+    "drawing.drafting_standard",
+    "drawing.projection",
+    "drawing.dimension_unit",
+    "drawing.drawing_template",
+    "drawing.bom_template",
 )
 LIST_FIELDS: tuple[str, ...] = (
     "library.skip_prefixes",
@@ -111,17 +117,44 @@ LIST_FIELDS: tuple[str, ...] = (
     "library.two_mate_prefixes",
     "data_card.properties",
     "general_tolerance.linear",
+    "drawing.sheet_formats",
 )
 VERSION_2_SECTIONS: tuple[str, ...] = ("general_tolerance", "hygiene")
 """The two sections version 2 adds (feature 010 research R2.19): required on version 2,
 absent on version 1."""
 
+VERSION_3_SECTIONS: tuple[str, ...] = ("drawing",)
+"""The section version 3 adds (feature 011 `contracts/profile.md` section 1): required on
+version 3, absent on versions 1 and 2."""
+
+DRAWING_KEYS: tuple[str, ...] = (
+    "sheet_formats",
+    "drafting_standard",
+    "projection",
+    "dimension_unit",
+    "drawing_template",
+    "bom_template",
+)
+
+
+def as_version_2(data: dict[str, Any]) -> dict[str, Any]:
+    """A version 3 fixture written back as the version 2 profile it extends."""
+    copy = {key: value for key, value in deepcopy(data).items() if key not in VERSION_3_SECTIONS}
+    copy["version"] = 2
+    return copy
+
 
 def as_version_1(data: dict[str, Any]) -> dict[str, Any]:
-    """A version 2 fixture written back as the version 1 profile it extends."""
-    copy = {key: value for key, value in deepcopy(data).items() if key not in VERSION_2_SECTIONS}
+    """A version 3 fixture written back as the version 1 profile it extends."""
+    copy = {
+        key: value
+        for key, value in as_version_2(data).items()
+        if key not in VERSION_2_SECTIONS
+    }
     copy["version"] = 1
     return copy
+
+
 CELL_FIELDS: tuple[str, ...] = ("revision.cell.row_from_end", "revision.cell.column")
 
 
@@ -140,7 +173,15 @@ def test_a_fixture_profile_loads_field_for_field(fixture: Path) -> None:
 def test_every_field_carries_the_type_the_contract_states(fixture: Path) -> None:
     profile = load_profile(fixture)
 
-    assert profile.version == 2
+    # Edited deliberately by feature 011 T028: the fixtures moved to version 3 with the
+    # drawing section (`contracts/profile.md` section 1).
+    assert profile.version == 3
+    assert profile.drawing is not None
+    assert isinstance(profile.drawing.sheet_formats, list)
+    assert all(isinstance(item, str) for item in profile.drawing.sheet_formats)
+    for name in ("drafting_standard", "projection", "dimension_unit", "drawing_template",
+                 "bom_template"):
+        assert isinstance(getattr(profile.drawing, name), str), name
     assert isinstance(profile.vault_root, str)
     assert profile.general_tolerance is not None and profile.hygiene is not None
     assert isinstance(profile.general_tolerance.linear, list)
@@ -254,8 +295,12 @@ def test_an_unknown_key_is_refused_naming_it(tmp_path: Path, dotted: str) -> Non
     assert dotted.rsplit(".", 1)[-1] in str(raised.value)
 
 
-@pytest.mark.parametrize("version", [0, 3, 17, "2"], ids=repr)
-def test_an_unknown_version_is_refused_naming_both_versions(tmp_path: Path, version: Any) -> None:
+@pytest.mark.parametrize("version", [0, 4, 17, "3"], ids=repr)
+def test_an_unknown_version_is_refused_naming_the_known_versions(
+    tmp_path: Path, version: Any
+) -> None:
+    # Edited deliberately by feature 011 T028: 3 is a known version now, so 4 and the string
+    # "3" take its place, and the refusal names all three known versions.
     path = write(tmp_path, replacing(raw(PROFILE_A), "version", version))
 
     with pytest.raises(ProfileInvalid) as raised:
@@ -263,7 +308,7 @@ def test_an_unknown_version_is_refused_naming_both_versions(tmp_path: Path, vers
 
     message = str(raised.value)
     assert repr(version) in message or str(version) in message
-    assert "1" in message and "2" in message, "the refusal names the versions this build knows"
+    assert "versions 1, 2 and 3" in message, "the refusal names the versions this build knows"
     assert str(path) in message
 
 
@@ -297,7 +342,7 @@ def test_a_version_2_profile_missing_either_section_is_refused_naming_it(
     tmp_path: Path, section: str
 ) -> None:
     with pytest.raises(ProfileInvalid) as raised:
-        load_profile(write(tmp_path, without(raw(PROFILE_A), section)))
+        load_profile(write(tmp_path, without(as_version_2(raw(PROFILE_A)), section)))
 
     assert section in str(raised.value)
 
@@ -307,9 +352,202 @@ def test_a_version_2_section_written_as_null_is_refused_naming_it(
     tmp_path: Path, section: str
 ) -> None:
     with pytest.raises(ProfileInvalid) as raised:
-        load_profile(write(tmp_path, replacing(raw(PROFILE_A), section, None)))
+        load_profile(write(tmp_path, replacing(as_version_2(raw(PROFILE_A)), section, None)))
 
     assert section in str(raised.value)
+
+
+# --- version 3: the drawing section (feature 011 T028, contracts/profile.md section 1) -------
+
+
+@pytest.mark.parametrize("fixture", FIXTURES, ids=lambda path: path.stem)
+def test_a_version_3_profile_with_its_drawing_section_loads(fixture: Path) -> None:
+    profile = load_profile(fixture)
+
+    assert profile.version == 3
+    assert profile.drawing is not None
+    assert profile.model_dump()["drawing"] == raw(fixture)["drawing"]
+    assert list(raw(fixture)["drawing"]) == list(DRAWING_KEYS)
+
+
+def test_profile_a_carries_the_drawing_values_the_plate_drawing_fixture_writes() -> None:
+    """Drawing A of `tests/fixtures/drawings/plate-drawing` conforms to profile A."""
+    drawing = load_profile(PROFILE_A).drawing
+    assert drawing is not None
+    assert (drawing.projection, drawing.dimension_unit) == ("third_angle", "mm")
+    assert drawing.sheet_formats == ["FICTIONAL-FORMAT-A"]
+    assert drawing.drafting_standard == "FICTIONAL-STANDARD"
+
+
+def test_profile_b_leaves_every_drawing_setting_empty() -> None:
+    """The skipped cases of the comparison (`contracts/profile.md` section 2)."""
+    drawing = load_profile(PROFILE_B).drawing
+    assert drawing is not None
+    assert drawing.sheet_formats == []
+    assert all(
+        getattr(drawing, name) == "" for name in DRAWING_KEYS if name != "sheet_formats"
+    )
+
+
+def test_a_version_3_profile_missing_its_drawing_section_is_refused_naming_it(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, without(raw(PROFILE_A), "drawing")))
+
+    assert "drawing" in str(raised.value)
+
+
+def test_a_version_3_drawing_section_written_as_null_is_refused_naming_it(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, replacing(raw(PROFILE_A), "drawing", None)))
+
+    assert "drawing" in str(raised.value)
+
+
+@pytest.mark.parametrize("section", VERSION_2_SECTIONS)
+def test_a_version_3_profile_missing_a_version_2_section_is_refused_naming_it(
+    tmp_path: Path, section: str
+) -> None:
+    """Version 3 also requires everything version 2 requires."""
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, without(raw(PROFILE_A), section)))
+
+    assert section in str(raised.value)
+
+
+@pytest.mark.parametrize("key", DRAWING_KEYS)
+def test_a_missing_drawing_key_is_refused_naming_it(tmp_path: Path, key: str) -> None:
+    path = write(tmp_path, without(raw(PROFILE_A), f"drawing.{key}"))
+
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(path)
+
+    assert key in str(raised.value)
+    assert str(path) in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "allowed"),
+    [
+        ("projection", "isometric", "first_angle, third_angle or ''"),
+        ("projection", "First_Angle", "first_angle, third_angle or ''"),
+        ("projection", "third angle", "first_angle, third_angle or ''"),
+        ("dimension_unit", "cm", "mm, in or ''"),
+        ("dimension_unit", "MM", "mm, in or ''"),
+        ("dimension_unit", "inch", "mm, in or ''"),
+    ],
+)
+def test_a_drawing_setting_outside_its_values_is_refused_naming_the_key_and_the_values(
+    tmp_path: Path, key: str, value: str, allowed: str
+) -> None:
+    path = write(tmp_path, replacing(raw(PROFILE_A), f"drawing.{key}", value))
+
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(path)
+
+    message = str(raised.value)
+    assert f"drawing.{key}" in message
+    assert repr(value) in message
+    assert allowed in message
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("projection", None),
+        ("projection", 3),
+        ("dimension_unit", None),
+        ("drafting_standard", None),
+        ("drawing_template", 7),
+        ("bom_template", ["a"]),
+        ("sheet_formats", "FICTIONAL-FORMAT-A"),
+        ("sheet_formats", None),
+        ("sheet_formats", [1]),
+    ],
+    ids=repr,
+)
+def test_a_drawing_setting_of_the_wrong_type_is_refused_naming_it(
+    tmp_path: Path, key: str, value: Any
+) -> None:
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, replacing(raw(PROFILE_A), f"drawing.{key}", value)))
+
+    assert key in str(raised.value)
+
+
+def test_a_repeated_sheet_format_is_refused_naming_it(tmp_path: Path) -> None:
+    data = replacing(
+        raw(PROFILE_A), "drawing.sheet_formats", ["FICTIONAL-FORMAT-A", "FICTIONAL-FORMAT-A"]
+    )
+
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, data))
+
+    message = str(raised.value)
+    assert "sheet_formats" in message
+    assert "'FICTIONAL-FORMAT-A'" in message
+
+
+def test_the_general_tolerance_is_not_restated_in_the_drawing_section(tmp_path: Path) -> None:
+    """`drawing.general_tolerance` is an unknown key, refused like any other (FR-045)."""
+    data = raw(PROFILE_A)
+    data["drawing"]["general_tolerance"] = data["general_tolerance"]
+
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, data))
+
+    assert "general_tolerance" in str(raised.value)
+
+
+def test_every_drawing_setting_may_be_empty(tmp_path: Path) -> None:
+    data = replacing(
+        raw(PROFILE_A),
+        "drawing",
+        {key: [] if key == "sheet_formats" else "" for key in DRAWING_KEYS},
+    )
+
+    profile = load_profile(write(tmp_path, data))
+
+    assert profile.model_dump()["drawing"] == data["drawing"]
+
+
+def test_a_version_2_profile_still_loads_with_no_drawing_section(tmp_path: Path) -> None:
+    profile = load_profile(write(tmp_path, as_version_2(raw(PROFILE_A))))
+
+    assert profile.version == 2
+    assert profile.drawing is None
+    assert profile.general_tolerance is not None and profile.hygiene is not None
+
+
+def test_a_version_1_profile_has_no_drawing_section_either(tmp_path: Path) -> None:
+    profile = load_profile(write(tmp_path, as_version_1(raw(PROFILE_A))))
+
+    assert (profile.version, profile.drawing) == (1, None)
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_a_drawing_section_on_an_earlier_version_is_refused_naming_it(
+    tmp_path: Path, version: int
+) -> None:
+    earlier = as_version_1 if version == 1 else as_version_2
+    data = {**earlier(raw(PROFILE_A)), "drawing": raw(PROFILE_A)["drawing"]}
+
+    with pytest.raises(ProfileInvalid) as raised:
+        load_profile(write(tmp_path, data))
+
+    message = str(raised.value)
+    assert "drawing" in message
+    assert f"version {version}" in message
+
+
+def test_the_known_versions_are_one_two_and_three() -> None:
+    from swreview.checks.standards.profile import KNOWN_VERSIONS, PROFILE_VERSION
+
+    assert KNOWN_VERSIONS == (1, 2, 3)
+    assert PROFILE_VERSION == 3
 
 
 def bands(*rows: tuple[Any, Any]) -> list[dict[str, Any]]:
@@ -556,14 +794,27 @@ def test_the_schema_is_expressed_in_exactly_one_module() -> None:
     assert {module for module, _ in owners} == {OWNER.relative_to(SRC).as_posix()}
 
 
+SHARED_WITH_THE_EVIDENCE: frozenset[str] = frozenset({"dimension_unit"})
+"""Profile key names the extractor also writes, for another reason.
+
+Version 3's `drawing.dimension_unit` (feature 011) is spelled like feature 006's
+`dimension_unit` **gap kind** - a display dimension whose unit could not be determined - which
+the drawing dumper writes and its tests assert. The extractor naming a gap kind is not the
+extractor knowing the profile, so the C# scan below leaves that one name out (edited
+deliberately by feature 011 T028). Every other key is matched as a whole word, so the IR member
+`drafting_standard_name` is not read as the profile key `drafting_standard`."""
+
+
 def test_the_extractor_side_knows_the_path_and_not_the_schema() -> None:
     """The host checks that a path is configured and readable; it never parses the file."""
+    keys = sorted(DISTINCTIVE_KEYS - SHARED_WITH_THE_EVIDENCE)
+    assert len(keys) >= 11, keys
     offenders = [
         f"{path.relative_to(EXTRACTOR).as_posix()}: {key}"
         for path in sorted(EXTRACTOR.rglob("*.cs"))
         if "/obj/" not in path.as_posix() and "/bin/" not in path.as_posix()
-        for key in sorted(DISTINCTIVE_KEYS)
-        if key in path.read_text(encoding="utf-8", errors="replace")
+        for key in keys
+        if re.search(rf"\b{re.escape(key)}\b", path.read_text(encoding="utf-8", errors="replace"))
     ]
 
     assert offenders == []
