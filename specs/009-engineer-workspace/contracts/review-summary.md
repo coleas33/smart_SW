@@ -41,8 +41,11 @@ rule_count, finding_ids}`. The partition holds: the group counts plus the family
 
 The table is `goals` in the words file: `{id, title, items, prefixes}`. Nine goals, in this order: interference, fasteners, hole alignment, fits and stacks, tool access, mass and material, hygiene, drawings, and modelling practice (`items: [modeling.resilience]`, `prefixes: [rms.]`, a goal of its own since 2026-09-23 so modelling findings never fill the hygiene line). A finding's check belongs to
 the goal with the longest prefix it starts with; a coverage item matches a goal when its `check` is
-one of the goal's `items` or starts with one of its `prefixes`. One `GoalLine` per goal, in table
-order, the state first match winning:
+one of the goal's `items` or starts with one of its `prefixes`. *Landed as* (T011): one goal per
+check, finding and coverage row alike - `summary.goal_of(check, goals)` answers the goal whose
+`items` name it, else the goal of its longest prefix - so a `standards.drawing.*` row speaks for
+drawings and never also for hygiene (`standards.`). One `GoalLine` per goal, in table order, the
+state first match winning:
 
 | # | State | When |
 |---|---|---|
@@ -50,11 +53,13 @@ order, the state first match winning:
 | 2 | `not_reached` | a coverage item whose `check` is one of the goal's `items` sits in `unresolved`, `skipped` or `failed`; or no coverage item and no finding matches the goal at all |
 | 3 | `checked` | a `checked` coverage item matches, or a `checked_within_scope` finding is mapped to it |
 | 4 | `not_applicable` | only `out_of_scope` items match |
+| 5 | `not_reached` | otherwise: rule rows only (no `items` row), none checked, at least one `unresolved`, `skipped` or `failed` (*landed as*, T011: the four rows above left this case with no state; the big-assembly fixture's mass-and-material goal is one, an unresolved `standards.part.material_assigned` row beside an out-of-scope one) |
 
 `reason` (for `not_reached` and `not_applicable`): the bucket of the first matching close-out row in
 `unresolved, skipped, failed` order mapped through `goal_reasons` (`evidence missing`, `skipped`, `a
-check failed`), `out of scope` for `not_applicable`, `no check ran` when nothing matched. `detail`:
-that row's `reason`, verbatim, or `None`.
+check failed`), `out of scope` for `not_applicable`, `no check ran` when nothing matched; for row 5,
+the first matching rule row in that order. `detail`: that row's `reason`, verbatim, or `None` - for
+`not_applicable`, the first out-of-scope row's `reason`.
 
 ## 4. The other lines
 

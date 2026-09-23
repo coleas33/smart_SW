@@ -25,8 +25,10 @@ failed to load" must not look the same to the engineer (FR-024).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import pytest
 from pydantic_core import to_jsonable_python
@@ -35,6 +37,7 @@ from starlette.testclient import TestClient
 from swreview.report.attention import rank
 from swreview.report.attention_record import read_attention_record
 from swreview.report.session import load_session
+from swreview.report.summary import load_words, review_summary
 from tests.unit import test_chat_server as chat
 from tests.unit.test_chat_server import (
     DRAWING_FINDING_ARGUMENTS,
@@ -101,14 +104,17 @@ def test_a_settled_review_answers_the_ranking_of_its_live_session(
     response = get(client, reviewed_chat)
 
     assert response.status_code == 200, response.text
-    assert response.json() == to_jsonable_python(rank(load_session(run_dir / "session.json")))
+    body = response.json()
+    body.pop("summary")
+    assert body == to_jsonable_python(rank(load_session(run_dir / "session.json")))
 
 
 def test_the_body_is_the_block_the_check_bodies_carry(
     client: TestClient, reviewed_chat: str
 ) -> None:
     """One shape on all three surfaces: the `Ranking` of `contracts/attention.md` section
-    4 minus `session_id`, which the route's own path already names."""
+    4 minus `session_id`, which the route's own path already names - plus, on this route
+    alone, the Review tab's `summary` (feature 009, contracts/review-summary.md section 1)."""
     body = get(client, reviewed_chat).json()
 
     assert set(body) == {
@@ -118,6 +124,7 @@ def test_the_body_is_the_block_the_check_bodies_carry(
         "not_amplified",
         "coverage",
         "empty_reason",
+        "summary",
     }
     assert body["policy_version"] == "attention_policy_v1"
     assert body["empty_reason"] is None
@@ -248,6 +255,72 @@ def test_an_unknown_chat_is_a_404(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json()["error_class"] == "UnknownChat"
+
+
+# --- 5. the summary beside the ranking (feature 009 T014) -----------------------------------
+
+
+def live_run(app: Any, chat_id: str) -> Any:
+    """The run the backend holds for `chat_id`: its live session and its package."""
+    return app.state.server.chats[UUID(chat_id)].run
+
+
+def test_the_body_is_the_live_ranking_plus_the_live_summary(
+    app: Any, client: TestClient, reviewed_chat: str
+) -> None:
+    run = live_run(app, reviewed_chat)
+
+    body = get(client, reviewed_chat).json()
+    summary = body.pop("summary")
+
+    assert body == to_jsonable_python(rank(run.session))
+    assert summary == to_jsonable_python(
+        review_summary(rank(run.session), run.session, run.context.ir)
+    )
+    assert summary["headline"] == "1 finding in 1 issue"
+
+
+def test_a_review_that_found_nothing_answers_the_words_three_groups_and_every_goal(
+    client: TestClient, empty_chat: str
+) -> None:
+    summary = get(client, empty_chat).json()["summary"]
+
+    assert summary["headline"] == "No findings were recorded"
+    assert [(group["kind"], group["count"]) for group in summary["groups"]] == [
+        ("decide", 0),
+        ("fix", 0),
+        ("verify", 0),
+    ]
+    assert [line["goal"] for line in summary["goals"]] == [goal.id for goal in load_words().goals]
+
+
+def test_the_summary_follows_a_disposition_like_the_ranking(
+    client: TestClient, reviewed_chat: str
+) -> None:
+    """Computed from the live session, so a decision moves the finding into "Decided"."""
+    finding_id = get(client, reviewed_chat).json()["rows"][0]["finding_id"]
+
+    decided = client.post(
+        f"/sessions/{reviewed_chat}/findings/{finding_id}/disposition",
+        json={"decision": "rejected", "note": "intended", "by": "a.engineer"},
+    )
+    assert decided.status_code == 200, decided.text
+
+    groups = {
+        group["kind"]: group["count"]
+        for group in get(client, reviewed_chat).json()["summary"]["groups"]
+    }
+    assert groups["decided"] == 1
+
+
+def test_the_attention_record_carries_no_summary(
+    client: TestClient, run_dir: Path, reviewed_chat: str
+) -> None:
+    """`attention.json` is the ranking as the engineer was shown it, and nothing more."""
+    assert get(client, reviewed_chat).status_code == 200
+
+    record = json.loads((run_dir / "attention.json").read_text(encoding="utf-8"))
+    assert "summary" not in record
 
 
 def test_the_route_is_in_the_door_test_s_census() -> None:

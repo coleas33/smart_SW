@@ -46,9 +46,15 @@ class UnexaminedInstance(ReviewModel):
 
 
 class NotExamined(ReviewModel):
-    """The sentence every surface prints, and the instances behind it in package order."""
+    """The sentence every surface prints, and the instances behind it in package order.
+
+    `headline` is the same fact with names and no ids, for the Review tab's warning
+    (feature 009 research R2.8); `sentence` keeps the ids for `report.md` and both check
+    bodies, which print it.
+    """
 
     sentence: str
+    headline: str
     instances: list[UnexaminedInstance]
 
 
@@ -80,10 +86,30 @@ def not_examined(package: EvidencePackage) -> NotExamined | None:
     )
     verb = "was" if count == 1 else "were"
     sentence = f"{count} of {total} component instances {verb} not read: {named}. {CANNOT_SEE}"
+    headline = (
+        f"{count} of {total} parts {verb} not loaded: {_names_by_state(instances)}. {CANNOT_SEE}"
+    )
     return NotExamined(
         sentence=sentence,
+        headline=headline,
         instances=[
             UnexaminedInstance(id=instance.id, name=instance.name, state=instance.suppression)
             for instance in instances
         ],
     )
+
+
+def _names_by_state(instances: list[ComponentInstance]) -> str:
+    """Names only, one group per state in the order the states first appear, each group's
+    names in package order: `Pin-A-1 and Pin-B-1 (lightweight), Plate-1 (suppressed)`."""
+    by_state: dict[str, list[str]] = {}
+    for instance in instances:
+        by_state.setdefault(instance.suppression, []).append(instance.name)
+    return ", ".join(f"{_and_list(names)} ({state})" for state, names in by_state.items())
+
+
+def _and_list(names: list[str]) -> str:
+    """One name as it is, two joined by "and", more with commas and a final "and"."""
+    if len(names) == 1:
+        return names[0]
+    return f"{', '.join(names[:-1])} and {names[-1]}"

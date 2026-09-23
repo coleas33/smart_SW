@@ -42,10 +42,15 @@ PLACEHOLDERS: dict[str, set[str]] = {
     "headline.findings_many": {"n"},
     "headline.issues_one": set(),
     "headline.issues_many": {"n"},
-    **{f"groups.{kind}.{form}": {"n"} for kind in ("decide", "fix", "verify", "decided",
-                                                   "within_scope") for form in ("one", "many")},
-    **{f"groups.{kind}.label": set() for kind in ("decide", "fix", "verify", "decided",
-                                                  "within_scope")},
+    **{
+        f"groups.{kind}.{form}": {"n"}
+        for kind in ("decide", "fix", "verify", "decided", "within_scope")
+        for form in ("one", "many")
+    },
+    **{
+        f"groups.{kind}.label": set()
+        for kind in ("decide", "fix", "verify", "decided", "within_scope")
+    },
     "questions.one": set(),
     "questions.many": {"n"},
     "not_loaded.text": {"count", "total"},

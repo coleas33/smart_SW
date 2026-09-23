@@ -129,5 +129,93 @@ def test_the_block_round_trips_as_json() -> None:
     assert again == block
     assert again.model_dump() == {
         "sentence": block.sentence,
+        "headline": block.headline,
         "instances": [{"id": "cmp:0002", "name": "b", "state": "unloaded"}],
     }
+
+
+# --- the headline: names only, for the Review tab (feature 009 T012, research R2.8) ----------
+
+
+def test_the_headline_names_the_instances_without_their_ids_grouped_by_state() -> None:
+    package = build_package(
+        components=[
+            instance(1, "housing-1", "resolved"),
+            instance(2, "Pin-A-1", "lightweight"),
+            instance(3, "bracket-1", "resolved"),
+            instance(4, "Pin-B-1", "lightweight"),
+        ]
+    )
+
+    block = not_examined(package)
+
+    assert block is not None
+    assert block.headline == (
+        "2 of 4 parts were not loaded: Pin-A-1 and Pin-B-1 (lightweight). " + CANNOT_SEE
+    )
+    assert "cmp:" not in block.headline
+
+
+def test_one_instance_heads_in_the_singular() -> None:
+    package = build_package(
+        components=[instance(1, "housing-1", "resolved"), instance(2, "cover-1", "suppressed")]
+    )
+
+    block = not_examined(package)
+
+    assert block is not None
+    assert block.headline == "1 of 2 parts was not loaded: cover-1 (suppressed). " + CANNOT_SEE
+
+
+def test_several_states_are_grouped_in_the_order_they_first_appear() -> None:
+    package = build_package(
+        components=[
+            instance(1, "Pin-A-1", "lightweight"),
+            instance(2, "Plate-1", "suppressed"),
+            instance(3, "Pin-B-1", "lightweight"),
+            instance(4, "Cap-1", "unloaded"),
+            instance(5, "Base-1", "resolved"),
+        ]
+    )
+
+    block = not_examined(package)
+
+    assert block is not None
+    assert block.headline == (
+        "4 of 5 parts were not loaded: Pin-A-1 and Pin-B-1 (lightweight), Plate-1 "
+        "(suppressed), Cap-1 (unloaded). " + CANNOT_SEE
+    )
+
+
+def test_three_names_in_one_state_are_listed_with_a_final_and() -> None:
+    package = build_package(
+        components=[
+            instance(1, "a-1", "lightweight"),
+            instance(2, "b-1", "lightweight"),
+            instance(3, "c-1", "lightweight"),
+            instance(4, "d-1", "resolved"),
+        ]
+    )
+
+    block = not_examined(package)
+
+    assert block is not None
+    assert block.headline.startswith(
+        "3 of 4 parts were not loaded: a-1, b-1 and c-1 (lightweight)."
+    )
+
+
+def test_the_headline_leaves_the_sentence_and_the_instances_as_they_were() -> None:
+    package = build_package(
+        components=[instance(1, "housing-1", "resolved"), instance(2, "DOWEL PIN-1", "lightweight")]
+    )
+
+    block = not_examined(package)
+
+    assert block is not None
+    assert block.sentence == (
+        "1 of 2 component instances was not read: DOWEL PIN-1 cmp:0002 (lightweight). " + CANNOT_SEE
+    )
+    assert [(row.id, row.name, row.state) for row in block.instances] == [
+        ("cmp:0002", "DOWEL PIN-1", "lightweight")
+    ]

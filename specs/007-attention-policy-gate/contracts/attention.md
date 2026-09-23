@@ -210,6 +210,14 @@ the no-percent-label rule above still applies to the deterministic attention wor
   each, behind a shut `Show all <rows.length> issues (<findings> findings)` control, where
   `<findings>` is the sum of the rows' `member_finding_ids`. Clicking any row scrolls to that
   finding's card.
+- **The Review tab prints the backend's summary above Start here and computes nothing**
+  (feature 009, 2026-09-23). The Review route's body is a `ReviewRanking`: the ranking above,
+  unchanged, plus a `summary` (`specs/009-engineer-workspace/contracts/review-summary.md`) - the
+  finding and issue counts, the Decide / Fix / Verify groups counted over findings by this
+  contract's own keys, the open questions, the parts not loaded and one line per check goal,
+  every word from `report/review_words_v1.yaml`. The page prints it verbatim in `#summary`
+  before this panel; it never counts, groups or orders. `report/attention.py` does not import
+  the summary, and `attention.json` and both check bodies do not carry it.
 - No page script sorts, compares severities, or contains a band rule; a test scans every page
   script, comments stripped, for `.sort(`, `localeCompare`, a severity literal list, or a
   numeric comparison on `severity`/`status`, with an allowlist of the existing bucket display
