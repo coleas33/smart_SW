@@ -27,11 +27,14 @@ from swreview.checks.drawing_context import (
     candidate_question,
     run_drawing_context,
 )
+from swreview.drawings.brief import BriefRefused, build_brief
 from swreview.drawings.evidence import DrawingIndex
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.session import CoverageItem, CoverageScope, EvidenceRequest
-from swreview.tools.context import ToolContext, current_context
+from swreview.tools.checks_mechanical import _attached_profile
+from swreview.tools.context import ToolContext, current_context, error_result
+from swreview.tools.joint_context import joint_analysis
 from swreview.tools.query import ToolResult
 from swreview.tools.session import record_evidence_request
 
@@ -42,6 +45,7 @@ __all__ = [
     "TEN_DRAWINGS",
     "check_drawings",
     "drawing_evidence",
+    "get_drawing_brief",
     "read_confirmed_candidates",
 ]
 
@@ -114,6 +118,27 @@ def check_drawings() -> ToolResult:
         Takes no argument.
     """
     return _record(current_context())
+
+
+def get_drawing_brief(document_id: str) -> ToolResult:
+    """A short brief of one part or assembly: what it is, its joints, the interfaces that need
+    a callout, what its drawing covers, and the engineer's answers.
+
+    Args:
+        document_id: A part or assembly document id.
+    """
+    context = current_context()
+    try:
+        brief = build_brief(
+            context.ir,
+            context.session,
+            _attached_profile(context),
+            document_id,
+            joint_map=joint_analysis(context).joint_map,
+        )
+    except BriefRefused as refusal:
+        return error_result(str(refusal))
+    return brief.content
 
 
 # --- the confirmed read-only open (User Story 5 part B, `contracts/confirmed-open.md` 1) ---------

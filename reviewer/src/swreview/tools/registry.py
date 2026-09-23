@@ -219,7 +219,7 @@ def drawing_tools() -> tuple[Callable[..., Any], ...]:
     `enabled_tools` never carry it (`contracts/questions.md` section 1); a test asserts all
     three.
     """
-    return (drawings.check_drawings,)
+    return (drawings.check_drawings, drawings.get_drawing_brief)
 
 
 REGISTRATIONS: tuple[Registration, ...] = (

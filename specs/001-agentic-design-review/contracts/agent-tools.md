@@ -146,6 +146,7 @@ set), exactly as `get_finding` and `compact_query` are described outside it.
 | Tool | Arguments | Produces |
 |------|-----------|----------|
 | `check_drawings` (conditional) | none | One `drawing.context` coverage item per reviewed part or assembly document (`checked`, `unresolved` or `skipped`, naming the drawings, the usable views and every unusable view's reason), and at most four questions written as ordinary evidence requests through the one writer `request_evidence` uses: one about every same-name drawing candidate, and one per document two or more drawings show usably, three at most. Planned by the pre-run after every `CODE_FIRST_CHECKS` name; returns counts: `{status, drawings, candidates, questions, findings, finding_ids, coverage}` |
+| `get_drawing_brief` (conditional) | `document_id: str` | The bounded per-part brief of `specs/011-drawing-context/contracts/brief.md`: the document, its joints from feature 010's joint map, every interface's tolerance and source or what was searched, the drawing record bound or why none and the position budget callout, what its drawings cover, the engineer's answered questions and its drawings' conformance; compact JSON of at most 6,000 bytes, every cut counted in `omitted`, no persistent reference and no profile value. Built with the context's session and the attached standards run's profile, never loading one; a document not in the package, or a drawing, is an error result naming the documents that can be briefed. `swreview drawing brief` prints the same JSON |
 
 ## Session tools
 
