@@ -35,6 +35,8 @@ from google.genai import types
 from swreview.agent.providers.openai_provider import tool_param
 from swreview.agent.providers.schema import ToolSpec, gemini_adapt, tool_spec
 from swreview.mcp.server import MCP_BRIDGE_TOOL_FUNCTIONS, MCP_TOOL_FUNCTIONS
+from swreview.prerun import INTERFERENCE_TOOL, prerun_tools
+from swreview.tokens import count_tokens
 from swreview.tools.registry import (
     BRIDGE_TOOL_FUNCTIONS,
     FINDING_DETAIL_TOOL_FUNCTIONS,
@@ -158,15 +160,39 @@ def measure(
     )
 
 
+def without(functions: Sequence[ToolFunction], names: Iterable[str]) -> tuple[ToolFunction, ...]:
+    """`functions` less the ones named, in order."""
+    left_out = set(names)
+    return tuple(function for function in functions if function.__name__ not in left_out)
+
+
+PRERUN_WITHHELD: tuple[str, ...] = prerun_tools()
+"""The tools lever 13 takes off a pane review's array when checks first runs every one of
+them to completion (feature 008 FR-030): the pre-run's own list, never retyped here."""
+
+PRERUN_WITHHELD_WITH_BRIDGE: tuple[str, ...] = tuple(
+    name for name in PRERUN_WITHHELD if name != INTERFERENCE_TOOL
+)
+"""With live detection offered the interference tool stays (`prerun.withheld_tools`)."""
+
 TOOLSETS: dict[str, tuple[ToolFunction, ...]] = {
     "review": TOOL_FUNCTIONS,
     "review+bridge": (*TOOL_FUNCTIONS, *BRIDGE_TOOL_FUNCTIONS),
     "review+slim": (*TOOL_FUNCTIONS, *FINDING_DETAIL_TOOL_FUNCTIONS),
+    "review+slim-prerun": without(
+        (*TOOL_FUNCTIONS, *FINDING_DETAIL_TOOL_FUNCTIONS), PRERUN_WITHHELD
+    ),
+    "review+slim+bridge-prerun": without(
+        (*TOOL_FUNCTIONS, *FINDING_DETAIL_TOOL_FUNCTIONS, *BRIDGE_TOOL_FUNCTIONS),
+        PRERUN_WITHHELD_WITH_BRIDGE,
+    ),
     "mcp": MCP_TOOL_FUNCTIONS,
     "mcp+bridge": (*MCP_TOOL_FUNCTIONS, *MCP_BRIDGE_TOOL_FUNCTIONS),
 }
-"""The five arrays that actually get sent. The Ask tab's is not the review's (FR-039b), and a
-review with payload slimming on (the pane since feature 008) also offers `get_finding`."""
+"""The arrays that actually get sent. The Ask tab's is not the review's (FR-039b); a review
+with payload slimming on (the pane since feature 008) also offers `get_finding`; and a pane
+review whose checks first ran every pre-run tool to completion offers neither those tools
+(lever 13) nor, without a bridge, the interference tool."""
 
 
 def baseline_rows() -> list[PayloadRow]:
@@ -247,6 +273,55 @@ def tier_delta(
         kept_bytes=measure("kept", kept, encoding, trim=trim).total_bytes,
         full_bytes=measure("review", TOOL_FUNCTIONS, encoding, trim=trim).total_bytes,
         object_bytes=sum(sizes[name] for name in withheld),
+    )
+
+
+# --- lever 13: the pre-run's tools off the pane array (feature 008 FR-030) ---------------------
+
+
+def array_tokens(functions: Sequence[ToolFunction], encoding: str) -> int:
+    """o200k_base tokens of the compact array: the replay's tokenizer over the wire bytes. An
+    estimate of what a provider counts, which renders tool definitions its own way."""
+    return count_tokens(_compact(ENCODINGS[encoding](specs_of(functions))).decode("utf-8"))
+
+
+@dataclass(frozen=True)
+class PrerunSaving:
+    """What lever 13 takes off every request of a pane review, in one encoding."""
+
+    encoding: str
+    bridge: bool
+    kept_tools: int
+    kept_bytes: int
+    full_bytes: int
+    kept_tokens: int
+    full_tokens: int
+
+    @property
+    def saved_bytes(self) -> int:
+        return self.full_bytes - self.kept_bytes
+
+    @property
+    def saved_tokens(self) -> int:
+        return self.full_tokens - self.kept_tokens
+
+
+def prerun_saving(encoding: str = "openai", *, bridge: bool = False) -> PrerunSaving:
+    """The slimmed pane array with and without the tools checks first ran to completion."""
+    full = (
+        *TOOL_FUNCTIONS,
+        *FINDING_DETAIL_TOOL_FUNCTIONS,
+        *(BRIDGE_TOOL_FUNCTIONS if bridge else ()),
+    )
+    kept = TOOLSETS["review+slim+bridge-prerun" if bridge else "review+slim-prerun"]
+    return PrerunSaving(
+        encoding=encoding,
+        bridge=bridge,
+        kept_tools=len(kept),
+        kept_bytes=measure("kept", kept, encoding).total_bytes,
+        full_bytes=measure("full", full, encoding).total_bytes,
+        kept_tokens=array_tokens(kept, encoding),
+        full_tokens=array_tokens(full, encoding),
     )
 
 
@@ -341,6 +416,25 @@ SLIM_GEMINI_ARRAY_BYTES = 36_220
 `get_finding`, which only a slimmed review offers. **Regenerated, never transcribed** -
 `--write` prints them in its `review+slim` rows."""
 
+PRERUN_REVIEW_TOOL_COUNT = 29
+PRERUN_OPENAI_ARRAY_BYTES = 29_217
+PRERUN_GEMINI_ARRAY_BYTES = 29_552
+PRERUN_BRIDGE_TOOL_COUNT = 33
+PRERUN_BRIDGE_OPENAI_ARRAY_BYTES = 34_145
+PRERUN_BRIDGE_GEMINI_ARRAY_BYTES = 34_247
+"""The pane arrays once checks first has run every pre-run tool to completion (feature 008
+lever 13): the slimmed review array less the seven, and with a bridge less six, the
+interference tool staying. **Regenerated, never transcribed** - `--write` prints them in its
+`review+slim-prerun` and `review+slim+bridge-prerun` rows."""
+
+PRERUN_SAVED_BYTES = {"openai": 6_983, "gemini": 6_668}
+PRERUN_SAVED_TOKENS = {"openai": 1_496, "gemini": 1_435}
+PRERUN_BRIDGE_SAVED_BYTES = {"openai": 5_753, "gemini": 5_489}
+PRERUN_BRIDGE_SAVED_TOKENS = {"openai": 1_230, "gemini": 1_180}
+"""What lever 13 takes off every request of a pane review, without and with a bridge: bytes
+exactly, and o200k tokens of the compact array as an estimate (a provider renders tool
+definitions its own way). `--write` prints them in its Lever 13 table."""
+
 TOOL_OBJECT_CEILING = {"openai": 3_000, "gemini": 3_500}
 """No single tool may weigh more than this. Headroom, not a target."""
 
@@ -350,7 +444,8 @@ ARRAY_CEILING = 38_000
 Raised from 36,000 (feature 005, "roughly 5 percent above today") on 2026-09-23 by the
 owner, when feature 010's check tools and feature 008's `get_finding` took the slimmed pane
 array to 36,220 bytes: about 5 percent above that. The tools the pre-run has already run
-are the next thing to leave the array (about 6,700 bytes), not a higher ceiling."""
+are the next thing to leave the array (about 6,700 bytes), not a higher ceiling - and they
+did, with feature 008's lever 13 (`PRERUN_SAVED_BYTES`)."""
 
 
 # --- the tests ---------------------------------------------------------------------------
@@ -405,6 +500,89 @@ def test_the_slimmed_review_array_is_pinned(encoding: str, expected: int) -> Non
     assert len(slim) == SLIM_REVIEW_TOOL_COUNT == REVIEW_TOOL_COUNT + 1
     assert total == expected
     assert total < ARRAY_CEILING
+
+
+@pytest.mark.parametrize(
+    ("encoding", "expected"),
+    [("openai", PRERUN_OPENAI_ARRAY_BYTES), ("gemini", PRERUN_GEMINI_ARRAY_BYTES)],
+)
+def test_the_pane_array_without_the_pre_runs_tools_is_pinned(encoding: str, expected: int) -> None:
+    """Feature 008 lever 13: the array a pane review sends once checks first ran all seven."""
+    array = TOOLSETS["review+slim-prerun"]
+    total = measure("review+slim-prerun", array, encoding).total_bytes
+
+    assert len(array) == PRERUN_REVIEW_TOOL_COUNT == SLIM_REVIEW_TOOL_COUNT - len(PRERUN_WITHHELD)
+    assert total == expected
+    assert total < ARRAY_CEILING
+
+
+@pytest.mark.parametrize(
+    ("encoding", "expected"),
+    [("openai", PRERUN_BRIDGE_OPENAI_ARRAY_BYTES), ("gemini", PRERUN_BRIDGE_GEMINI_ARRAY_BYTES)],
+)
+def test_the_bridged_pane_array_without_the_pre_runs_tools_is_pinned(
+    encoding: str, expected: int
+) -> None:
+    """With a bridge the interference tool stays: live detection can add groups only it
+    judges (`prerun.withheld_tools`)."""
+    array = TOOLSETS["review+slim+bridge-prerun"]
+    total = measure("review+slim+bridge-prerun", array, encoding).total_bytes
+
+    assert INTERFERENCE_TOOL in {function.__name__ for function in array}
+    assert len(array) == PRERUN_BRIDGE_TOOL_COUNT
+    assert total == expected
+    assert total < ARRAY_CEILING
+
+
+@pytest.mark.usefixtures("vocabulary")
+@pytest.mark.parametrize("encoding", sorted(ENCODINGS))
+def test_the_per_round_saving_of_lever_13_is_pinned(encoding: str) -> None:
+    plain = prerun_saving(encoding)
+    bridged = prerun_saving(encoding, bridge=True)
+
+    assert (plain.saved_bytes, plain.saved_tokens) == (
+        PRERUN_SAVED_BYTES[encoding],
+        PRERUN_SAVED_TOKENS[encoding],
+    )
+    assert (bridged.saved_bytes, bridged.saved_tokens) == (
+        PRERUN_BRIDGE_SAVED_BYTES[encoding],
+        PRERUN_BRIDGE_SAVED_TOKENS[encoding],
+    )
+    assert plain.full_bytes == measure("slim", TOOLSETS["review+slim"], encoding).total_bytes
+
+
+def test_the_saving_is_the_withheld_objects_plus_one_separator_each() -> None:
+    """As for the RMS tier: an array delta, not an object sum."""
+    sizes = tool_object_bytes("openai")
+
+    assert prerun_saving("openai").saved_bytes == (
+        sum(sizes[name] for name in PRERUN_WITHHELD) + len(PRERUN_WITHHELD)
+    )
+
+
+def test_the_pinned_array_is_the_one_a_pane_review_offers(tmp_path: Path) -> None:
+    """The pin measures what lever 13 really leaves: the array a pane review of the pre-run
+    fixture hands its provider, name for name and in order."""
+    from swreview.agent.providers import ProviderName
+    from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
+    from swreview.agent.runner import start_review
+    from swreview.agent.settings import pane_defaults
+    from swreview.ir.loader import save_package
+    from tests.support.prerun import prerun_package
+
+    save_package(prerun_package(), tmp_path)
+    pane = pane_defaults(ProviderName.FAKE)
+    run = start_review(
+        tmp_path,
+        tmp_path,
+        provider=FakeProvider(script=[ScriptedTurn(text="done")], model="fake-scripted"),
+        efficiency=pane.efficiency,
+        model_view=pane.model_view,
+    )
+
+    assert [tool.name for tool in run.tools] == [
+        function.__name__ for function in TOOLSETS["review+slim-prerun"]
+    ]
 
 
 @pytest.mark.parametrize("encoding", sorted(ENCODINGS))
@@ -598,6 +776,21 @@ def baseline_table() -> str:
                 f"| withhold {len(delta.withheld)} RMS tools | {encoding} "
                 f"| {arm_name(trim)} | {delta.kept_tools} | {delta.kept_bytes:,} "
                 f"| {delta.delta_bytes:,} | {delta.delta_percent} |"
+            )
+    lines.append("")
+    lines.append(
+        "| Lever 13 | Encoding | Kept tools | Kept bytes | Saved bytes per round "
+        "| Saved % | Saved tokens per round (o200k) |"
+    )
+    lines.append("|---|---|---:|---:|---:|---:|---:|")
+    for bridge in (False, True):
+        for encoding in ENCODINGS:
+            saving = prerun_saving(encoding, bridge=bridge)
+            lines.append(
+                f"| pane{' + bridge' if bridge else ''} | {encoding} | {saving.kept_tools} "
+                f"| {saving.kept_bytes:,} | {saving.saved_bytes:,} "
+                f"| {round(100 * saving.saved_bytes / saving.full_bytes, 1)} "
+                f"| {saving.saved_tokens:,} |"
             )
     lines.append("")
     floor = structural_floor_bytes()

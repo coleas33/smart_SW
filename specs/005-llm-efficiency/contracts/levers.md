@@ -29,6 +29,7 @@ class EfficiencySettings(BaseModel):
     carry_over_rms: bool = False           # lever 11a
     procedural_gate: bool = False          # lever 11
     compact_queries: bool = False          # experimental bounded discovery pages
+    withhold_prerun_tools: bool = False    # lever 13 (feature 008 amendment, 2026-09-23)
 ```
 
 **Threading**: one keyword argument through `start_review` (`agent/runner.py:595-651`), held on
@@ -73,6 +74,7 @@ own numbers unreadable, and an adopted lever becomes a default in code, not a ch
 | 11a | `carry_over_rms` | `False` | Provider-neutral; the second and later reviews of one design | `start_review` | Tokens and tool calls on the second review; gated on every finding touching an edited part being re-run |
 | 11 | `procedural_gate` | `False` | Provider-neutral; the pre-run and the first user message (feature 007, `contracts/gate.md`) | `start_review`; implies lever 5, and never shares an arm with lever 5 or lever 7 | Tokens, round trips and seconds to first finding; **gated on the per-run `check_fit` and `check_axial_stack` call counts not falling** |
 | 12 | `compact_queries` | `False` | Provider-neutral; optional bounded package discovery tool surface | `ToolRegistry` build/dispatch when explicitly enabled | Compact discovery page size and follow-up detail retrieval; gated on complete pagination and unchanged default tool schemas |
+| 13 | `withhold_prerun_tools` | `False` (pane default since 2026-09-23) | Provider-neutral; the tool array after the pre-run | `start_review`, after the pre-run; needs lever 5 or 11 | Tool array bytes per request (`test_tool_payload.py`), and the replay of the recorded runs with no finding lost |
 
 ## 3. The interaction matrix
 
@@ -463,6 +465,28 @@ on.**
 **Adoption rule**: the general gate, **plus a specific regression to watch**: those two checks are
 never pre-run, so if their call counts fall, the digest is suppressing exploration and the lever
 fails the gate regardless of what the token number says.
+
+### Lever 13: the tools checks first ran leave the array (feature 008 amendment)
+
+**Flag**: `withhold_prerun_tools`. **Default**: off in the class and on the command line; **the
+pane default for both providers since 2026-09-23**, by the owner's decision, gated by the offline
+replay (`specs/008-checks-first-review/contracts/checks-first.md` section 7, FR-030, research
+R2.53). **Read**: once at `start_review`, after the pre-run; inert without lever 5 or 11, and
+`--lever withhold_prerun_tools` alone is refused.
+
+A check tool the pre-run ran to completion leaves the tool array for the rest of the session: the
+three RMS tools together when all ran package-wide, `check_interference_group` when every
+detected group was judged and live detection is not offered, each of feature 010's
+`CODE_FIRST_CHECKS`, and `check_standards` when attached and run. `PrerunGuard` still answers a
+call to one; nothing the model is sent asks for one. `get_finding` and `bridge_interference`
+never leave.
+
+**Measured** (regenerated 2026-09-23 by `python -m tests.unit.test_tool_payload --write`): the
+slimmed pane array falls from 36 tools and 36,200 bytes to **29 tools and 29,217 bytes** on
+OpenAI (29,552 on Gemini), **6,983 bytes and about 1,496 o200k tokens less on every request**
+(6,668 and 1,435 on Gemini); with a bridge, which keeps `check_interference_group`, 33 tools and
+34,145 bytes, 5,753 bytes and about 1,230 tokens less. Lever 13 is a thirteenth lever: the
+lever-count pins move to thirteen, and no pane control exists (`test_no_lever_in_pane_settings.py`).
 
 ### Lever 6: parallel tool calls, meaning round-trip batching only
 
