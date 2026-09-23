@@ -611,6 +611,17 @@ the packages it was found on. One consequence, accepted: the hygiene component c
 for its passes, so a hygiene run with no profile whose components are all resolved reads `skipped`
 - its four property checks were skipped, and the reason's counts say so.
 
+*Amended again 2026-09-23 (a defect found in review): finalization and the `failed` row.* `failed`
+closes no checklist item (`agent/checklist.COVERAGE_BUCKETS`, 005 FR-051), so after a refused
+call the item was still open and `finalize_session` added its close-out row - `unresolved`, "the
+review ended without a finding or a coverage entry for it" - beside the family's own row. That
+sentence is false, and the unresolved bucket comes first in the goal line's reason order, so the
+saved session's goal line read "evidence missing" rather than "a check failed". Finalization now
+adds no close-out row for an item that has a `failed` row under its own id; a `failed` row under
+another check (the registry's `tool.<name>`) leaves the close-out as it was. `failed` still closes
+nothing, for `Checklist.bucket_of` and for lever 7. Pinned in the same module: every scripted case,
+refusals included, keeps its one row and its goal line through finalization.
+
 **Alternatives.**
 
 | Option | Why not |

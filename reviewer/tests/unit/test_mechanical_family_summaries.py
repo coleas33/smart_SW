@@ -14,14 +14,17 @@ one `checked` per-check row or recorded a finding; otherwise `skipped`, with the
 its reason, so a run that checked nothing - no standards profile, every part lightweight -
 reads "not reached" on the Review summary's goal line instead of "checked". A call whose
 finding is refused writes the row `failed`, never `checked`, whatever it recorded before the
-refusal. The bucket is pinned here on scripted family runs, so each case is exactly the one
-named, and on real packages for the cases the defect was found on.
+refusal; finalization adds no close-out row beside it, so the saved session's goal line still
+says a check failed. The bucket is pinned here on scripted family runs, so each case is exactly
+the one named, before and after finalization, and on real packages for the cases the defect was
+found on.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -29,6 +32,7 @@ from typing import Any
 import pytest
 
 from swreview.agent.checklist import OPEN_BUCKET, ChecklistItem, load_checklist
+from swreview.agent.runner import finalize_session
 from swreview.checks import hygiene, mass
 from swreview.checks.result import CheckResult, DocumentResult
 from swreview.checks.standards.profile import load_profile
@@ -405,6 +409,72 @@ def test_a_repeat_moves_the_one_row_between_buckets(
         ran(family, context)
 
         assert [bucket for bucket, _ in rows(context, family.item_id)] == [case.bucket]
+
+
+def close_the_goals_other_items(context: ToolContext, family: Family) -> None:
+    """Close every other item of the family's goal `checked`, so its goal line speaks for the
+    family's own row alone: the hygiene goal names four items, and finalization would close
+    the other three out as unresolved on a scripted run that never touched them."""
+    goal = next(goal for goal in WORDS.goals if goal.id == family.goal)
+    for item_id in goal.items:
+        if item_id != family.item_id:
+            context.record_coverage(
+                "checked",
+                CoverageItem(
+                    check=item_id, scope=CoverageScope(), reason="scripted: closed", error=None
+                ),
+            )
+
+
+@families
+@cases
+def test_finalization_keeps_the_row_and_the_goal_line_the_call_wrote(
+    monkeypatch: pytest.MonkeyPatch, family: Family, case: Case
+) -> None:
+    """The saved session - what the pane and the report read - is the finalized one.
+    Finalization closes out each item still open with an `unresolved` row saying the review
+    "ended without a finding or a coverage entry for it". A refused call's `failed` summary
+    row is the item's own entry - `failed` closes no item, so the item is still open - and
+    that sentence would be false beside it and would take the goal line's reason, which the
+    unresolved bucket outranks, from "a check failed" to "evidence missing". So finalization
+    adds nothing under an item with its own `failed` row, and in every case the item keeps
+    the one row the call wrote and the goal line the call left."""
+    context = build_context(load_package(FIXTURES / "small-assembly"))
+    close_the_goals_other_items(context, family)
+    script_run(monkeypatch, family, context, checked=case.checked, findings=case.findings)
+    context, _ = ran(family, context)
+    [(_, item)] = rows(context, family.item_id)
+
+    finalize_session(context, datetime.now(UTC))
+
+    assert [(bucket, row.reason) for bucket, row in rows(context, family.item_id)] == [
+        (case.bucket, item.reason)
+    ]
+    detail = None if case.goal_reason is None else item.reason
+    assert goal_state(goal_line(context, family)) == (case.goal_label, case.goal_reason, detail)
+
+
+@families
+def test_a_failed_row_under_another_check_leaves_the_items_close_out(family: Family) -> None:
+    """Only the item's own `failed` row stands in for its close-out. The registry writes a
+    failed call's row under `tool.<name>`, which is no item's id: an item it leaves open is
+    closed out as before."""
+    context = build_context(load_package(FIXTURES / "small-assembly"))
+    context.record_coverage(
+        "failed",
+        CoverageItem(
+            check=f"tool.{family.tool.__name__}",
+            scope=CoverageScope(),
+            reason=f"tool {family.tool.__name__} failed; whatever it was called for is not covered",
+            error="scripted",
+        ),
+    )
+
+    finalize_session(context, datetime.now(UTC))
+
+    [(bucket, item)] = rows(context, family.item_id)
+    assert bucket == "unresolved"
+    assert item.reason.endswith("the review ended without a finding or a coverage entry for it")
 
 
 def test_every_part_lightweight_leaves_mass_and_material_not_reached() -> None:

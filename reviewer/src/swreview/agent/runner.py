@@ -469,6 +469,11 @@ def finalize_session(
             )
         )
     for item in context.checklist.open_items(review):
+        if any(failed.check == item.id for failed in review.coverage.failed):
+            # The item's own `failed` row - a mechanical family's summary row on a refused
+            # finding (feature 010 research R2.25) - already says why it went nowhere; `failed`
+            # closes no item, and "ended without a coverage entry" beside it would be false.
+            continue
         previous.append(
             _unresolved(
                 review,

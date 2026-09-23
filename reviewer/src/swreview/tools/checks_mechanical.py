@@ -411,8 +411,10 @@ def _record_family(
     `check` - and return the tool's counts, or the refusal of a finding.
 
     A refused finding stops the call before its per-check rows are written, as every check
-    tool stops at one; the summary row is still written, `failed`, so the checklist item and
-    the goal line say a check failed rather than keep what an earlier call wrote.
+    tool stops at one; the summary row is still written, `failed`, so the item's row and the
+    goal line say a check failed rather than keep what an earlier call wrote. `failed` closes
+    no checklist item, and finalization adds no close-out row beside the item's own `failed`
+    row, so the saved session says the same (`runner.finalize_session`).
     """
     session = context.require_session()
     findings_before = len(session.findings)

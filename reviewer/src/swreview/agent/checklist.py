@@ -21,8 +21,11 @@ CHECKLIST_FILE = Path(__file__).parent / "checklist_v1.yaml"
 COVERAGE_BUCKETS: tuple[str, ...] = ("checked", "skipped", "unresolved", "out_of_scope")
 """Coverage buckets an item may be closed out in, in the order they are searched.
 
-`failed` is deliberately absent: it is written by the tool layer against a tool name, not
-against a checklist item, so it never counts as closing an item out.
+`failed` is deliberately absent: it says a tool broke or a finding was refused, so it never
+counts as closing an item out. The tool layer writes it against a tool name; the mass and
+hygiene families write their summary row there, under the item's own id, when a finding is
+refused (feature 010 research R2.25), and finalization then adds no close-out row beside it
+(`runner.finalize_session`).
 """
 
 FINDING_BUCKET = "finding"

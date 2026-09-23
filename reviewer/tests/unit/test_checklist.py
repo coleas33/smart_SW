@@ -442,7 +442,8 @@ def test_the_items_own_coverage_entry_closes_it_in_every_bucket(
 
 @family_parameters
 def test_a_failed_entry_under_the_item_id_does_not_close_it(family: Family) -> None:
-    """`failed` is written by the tool layer against a tool name, never as a close-out."""
+    """`failed` never closes an item, not even the family's own summary row, which a refused
+    finding writes there under the item's id (T108 as amended)."""
     session = empty_session()
     session.coverage.failed.append(coverage_item(family.item_id))
 

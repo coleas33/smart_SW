@@ -76,7 +76,9 @@ its scope. It is `checked` only when `<c>` or `<f>` is not zero, `skipped` other
 lightweight is a run that checked nothing, and the goal line reads "not reached" - and `failed`,
 with the refusal as its `error`, when a finding is refused (the call then writes no per-check
 row); one item across the three buckets, so a repeated call leaves one. It is what closes the
-checklist item on a run with no finding. The result's `coverage` counts do not include it.
+checklist item on a run with no finding. The result's `coverage` counts do not include it. A
+`failed` item closes nothing, and finalization adds no close-out row beside it, so the saved
+session's goal line still reads "a check failed" (research R2.25, amended again the same day).
 
 ## 4. The extractor override read (seat-validated)
 
