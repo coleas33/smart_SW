@@ -104,7 +104,7 @@ The opening message is never pruned (`model-view.md` section 7).
 | `check_rms_assembly`, `check_standards` | `(tool,)` |
 | `check_interference_group` | `(tool, group_key)` |
 | `bridge_interference` | `(tool, configuration, sorted-JSON settings)`, only when `component_ids` is empty |
-| every name in feature 010's `CODE_FIRST_CHECKS` (*landed as*, T044, research R2.52) | `(tool,)`: they take no argument |
+| `check_joints`, `check_mass_material`, `check_hygiene`: every name in feature 010's `CODE_FIRST_CHECKS`, read when the key is asked for (*landed as*, T044, research R2.52; 010 T092-T093) | `(tool,)`, whatever arguments: they take none |
 
 A hit records one real step through `registry.record_call` (status `ok`, no coverage, no finding
 event) and answers:

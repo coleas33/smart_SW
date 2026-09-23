@@ -111,9 +111,10 @@ When the review ran its checks first (lever 5 or 11; the pane default), a call t
 pre-run already ran **successfully** is answered, never run again (008 FR-012,
 `specs/008-checks-first-review/contracts/checks-first.md` section 5). The guarded calls:
 `check_rms_part` and `check_rms_equations` (whatever `document_id`), `check_rms_assembly`,
-`check_standards`, every `CODE_FIRST_CHECKS` name, `check_interference_group` with the same
-`group_key`, and `bridge_interference` with `component_ids: []`, the same configuration and the
-same settings. The answer is one recorded step (status `ok`, no finding, no coverage):
+`check_standards`, every `CODE_FIRST_CHECKS` name (feature 010's `check_joints`,
+`check_mass_material` and `check_hygiene`, whatever arguments), `check_interference_group`
+with the same `group_key`, and `bridge_interference` with `component_ids: []`, the same
+configuration and the same settings. The answer is one recorded step (status `ok`, no finding, no coverage):
 
 ```json
 {"status": "already_run", "ran_at_step": 4,

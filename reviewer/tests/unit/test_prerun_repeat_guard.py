@@ -8,13 +8,22 @@ recorded outcome: one real step (the pane's tool card and `tool.started.step_ind
 aligned with the session), no finding, no coverage, and for a folded family counts only.
 A call the pre-run did not make - other settings, a component subset, another
 configuration, or a call whose pre-run attempt failed - runs as it always did.
+
+Feature 010's three argument-free checks (`check_joints`, `check_mass_material`,
+`check_hygiene`) are guarded the same way (010 T092, its `contracts/code-first.md` section
+5): each records findings - a joint's alignment, a part's density, an unresolved component -
+so a repeat would record every one of them a second time. They are keyed by name alone,
+through `CODE_FIRST_CHECKS`, the one registration point, and never through a second list.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import ReviewRun, start_review
@@ -29,8 +38,10 @@ from swreview.prerun import (
     PrerunResult,
     repeat_key,
 )
+from swreview.tools import checks_mechanical
 from swreview.tools.context import build_context
-from swreview.tools.registry import ToolDispatch, ToolRegistry
+from swreview.tools.model_view import check_digest
+from swreview.tools.registry import TOOL_RESULTS_DIR_NAME, ToolDispatch, ToolRegistry
 from tests.support.prerun import (
     CHECKS_FIRST,
     GROUP_KEY,
@@ -294,3 +305,145 @@ def test_repeat_key_catches_a_document_subset_and_nothing_else() -> None:
     assert repeat_key("get_package_summary", {}) is None
     assert repeat_key("check_interference_group", {}) is None
     assert repeat_key(LIVE_OVERLAP_KEY, {}) is None
+
+
+# --- feature 010: the three argument-free checks (010 T092) ------------------------------
+
+MECHANICAL_CHECKS = ("check_joints", "check_mass_material", "check_hygiene")
+"""Named here rather than read from `CODE_FIRST_CHECKS`: the test says which three tools
+the guard must catch, and the tuple-driven test below says how it catches them."""
+
+MECHANICAL_FIXTURE = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "mechanical" / "small-assembly"
+)
+"""Feature 010's small fixture, on which each of the three records at least one finding in
+the pre-run (a pin joint's alignment, two densities, an unresolved component), so "the
+repeat recorded no finding" says something."""
+
+
+def mechanical_package() -> Any:
+    return load_package(MECHANICAL_FIXTURE).package
+
+
+def stored_payload(run: ReviewRun, step: int) -> dict[str, Any]:
+    """A step's full result as the run stored it (`tool-results/step-<n>.json`, 008 SC-008)."""
+    path = Path(run.session_path).parent / TOOL_RESULTS_DIR_NAME / f"step-{step}.json"
+    return json.loads(path.read_text(encoding="utf-8"))["payload"]
+
+
+@pytest.mark.parametrize("tool", MECHANICAL_CHECKS)
+def test_repeat_key_keys_each_mechanical_check_by_its_name_alone(tool: str) -> None:
+    """They take no argument, so any argument a model adds is noise: the same question."""
+    assert repeat_key(tool, {}) == (tool,)
+    assert repeat_key(tool, {"document_id": PART_DOCUMENT}) == (tool,)
+
+
+def test_the_guard_keys_whatever_code_first_checks_names_when_it_is_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One mechanism (010 notes): a check joins the guard by joining `CODE_FIRST_CHECKS`,
+    and leaves it by leaving the tuple - no per-tool list to keep in step with it."""
+    monkeypatch.setattr(checks_mechanical, "CODE_FIRST_CHECKS", ("check_joints", "check_later"))
+
+    assert repeat_key("check_later", {}) == ("check_later",)
+    assert repeat_key("check_joints", {}) == ("check_joints",)
+    assert repeat_key("check_mass_material", {}) is None
+    assert repeat_key("check_hygiene", {}) is None
+
+
+@pytest.mark.parametrize("tool", MECHANICAL_CHECKS)
+def test_a_repeated_mechanical_check_records_one_step_each_and_no_finding(
+    tmp_path: Path, tool: str
+) -> None:
+    events: list[tuple[str, dict[str, Any]]] = []
+    run = played(
+        tmp_path,
+        (ScriptedToolCall(tool), ScriptedToolCall(tool)),
+        package=mechanical_package(),
+        efficiency=CHECKS_FIRST,
+        events=events,
+    )
+    session = run.session
+    ran_at = prerun_step(run, tool)
+    recorded = [finding for finding in session.findings if ran_at in finding.tool_result_ids]
+    assert recorded, f"the fixture gives {tool} nothing to record, so the test proves nothing"
+
+    first, second = model_steps(run, 2)
+    for step in (first, second):
+        assert (step.tool, step.status) == (tool, "ok")
+        assert '"status":"already_run"' in step.result_summary
+        assert f'"ran_at_step":{ran_at}' in step.result_summary
+        assert not [f for f in session.findings if step.index in f.tool_result_ids]
+    finished = [
+        body["step_index"]
+        for kind, body in events
+        if kind == "tool.finished" and body["step_index"] in (first.index, second.index)
+    ]
+    assert finished == [first.index, second.index]
+    finding_events = [body for kind, body in events if kind == "finding"]
+    assert len(finding_events) == len(session.findings)
+
+
+@pytest.mark.parametrize("tool", MECHANICAL_CHECKS)
+def test_the_mechanical_answer_is_the_digest_of_the_recorded_result(
+    tmp_path: Path, tool: str
+) -> None:
+    """`outcome` is `check_digest` of the pre-run call's own payload, unfolded: these three
+    return counts and ids, and no family of theirs is folded (008 FR-014)."""
+    run = played(tmp_path, (), package=mechanical_package(), efficiency=CHECKS_FIRST)
+    session = run.session
+    ran_at = prerun_step(run, tool)
+    recorded = stored_payload(run, ran_at)
+    before = (len(session.findings), len(session.contacts), session.coverage.model_dump())
+
+    result = run.tools.call(tool, {})
+
+    assert result.is_error is False
+    assert result.payload["status"] == ALREADY_RUN
+    assert result.payload["ran_at_step"] == ran_at
+    assert result.payload["note"] == REPEAT_NOTE
+    assert result.payload["outcome"] == check_digest(recorded)
+    assert result.payload["outcome"]["finding_ids"] == [
+        finding.id for finding in session.findings if ran_at in finding.tool_result_ids
+    ]
+    assert (len(session.findings), len(session.contacts), session.coverage.model_dump()) == (
+        before
+    )
+    assert session.steps[-1].tool == tool
+
+
+@pytest.mark.parametrize("tool", MECHANICAL_CHECKS)
+def test_a_mechanical_check_whose_pre_run_call_was_forced_to_fail_is_not_answered(
+    tmp_path: Path, tool: str
+) -> None:
+    run = played(
+        tmp_path,
+        (ScriptedToolCall(tool),),
+        package=mechanical_package(),
+        efficiency=CHECKS_FIRST,
+        fail_tool=[tool],
+    )
+
+    model_step = run.session.steps[-1]
+    assert (model_step.tool, model_step.status) == (tool, "error")
+    assert "already_run" not in model_step.result_summary
+
+
+@pytest.mark.parametrize("tool", MECHANICAL_CHECKS)
+def test_a_mechanical_check_whose_pre_run_attempt_failed_runs_and_records_findings(
+    tmp_path: Path, tool: str
+) -> None:
+    """The guard's own rule without a forced failure on the tool: a failed ledger entry
+    lets the model's call through to the tool, which records what it finds."""
+    folder = tmp_path / "package"
+    save_package(mechanical_package(), folder)
+    context = build_context(load_package(folder))
+    dispatch = ToolRegistry().dispatch(context)
+    failed = PrerunCall(tool=tool, arguments={}, step_index=0, findings=(), error="it broke")
+    guard = PrerunGuard(dispatch, PrerunResult(calls=(failed,), not_evaluated=()), folded=())
+
+    result = guard.call(tool, {})
+
+    assert result.payload["status"] == "recorded"
+    assert result.payload["findings"] >= 1
+    assert context.session is not None and context.session.findings
