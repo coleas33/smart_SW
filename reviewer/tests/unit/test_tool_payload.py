@@ -298,21 +298,21 @@ def encoding_digests() -> dict[str, str]:
 
 REVIEW_TOOL_COUNT = 33
 REVIEW_BRIDGE_TOOL_COUNT = 36
-OPENAI_ARRAY_BYTES = 34_933
-GEMINI_ARRAY_BYTES = 35_034
+OPENAI_ARRAY_BYTES = 35_442
+GEMINI_ARRAY_BYTES = 35_615
 """**Deviation from T001, recorded in `specs/005-llm-efficiency/probe-log.md`.** The task
 asks for 34,248; this tree produces 34,217, and a pin is a measurement or it is nothing.
 Six files of the spec package still quote 34,248 (and 37,709 for the bridge, measured
 37,712); probe-log.md lists them by line for the change that is allowed to edit them."""
-TRIMMED_OPENAI_ARRAY_BYTES = 21_675
-TRIMMED_GEMINI_ARRAY_BYTES = 21_776
-TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES = 24_187
+TRIMMED_OPENAI_ARRAY_BYTES = 22_184
+TRIMMED_GEMINI_ARRAY_BYTES = 22_357
+TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES = 24_696
 """Lever 2 on: the same 32 tools carrying the first paragraph of each docstring instead of
 the whole body. **Regenerated, never transcribed** - `--write` prints them.
 
 **Deviation, and it is in the lever's favour.** `contracts/levers.md` and T056 quote 23,834
 bytes and 30 percent, measured before the split existed; the split that keeps the rejoin
-byte-equal (T052) leaves 21,675 bytes and 38.0 percent on OpenAI. Nothing here is typed to
+byte-equal (T052) leaves 22,184 bytes and 37.4 percent on OpenAI. Nothing here is typed to
 match a document: a pin is a measurement or it is nothing, and the same rule already
 applies to `GEMINI_ARRAY_BYTES` above."""
 
@@ -322,10 +322,10 @@ MCP_GEMINI_ARRAY_BYTES = 14_084
 LARGEST_TOOL = "check_axial_stack"
 LARGEST_TOOL_BYTES = 2_734
 RMS_TIER_KEPT_TOOLS = 27
-RMS_TIER_KEPT_BYTES = 26_840
+RMS_TIER_KEPT_BYTES = 27_349
 RMS_TIER_DELTA_BYTES = 8_093
-RMS_TIER_DELTA_PERCENT = 23.2
-STRUCTURAL_FLOOR_BYTES = 15_437
+RMS_TIER_DELTA_PERCENT = 22.8
+STRUCTURAL_FLOOR_BYTES = 15_708
 
 TOOL_OBJECT_CEILING = {"openai": 3_000, "gemini": 3_500}
 """No single tool may weigh more than this. Headroom, not a target."""
@@ -365,7 +365,7 @@ def test_trimmed_array_bytes_per_encoding(encoding: str, expected: int) -> None:
 def test_the_bridge_array_is_pinned_in_both_arms() -> None:
     """The 35-tool array a bridged run sends, so a US3 session is measured too."""
     bridged = TOOLSETS["review+bridge"]
-    assert measure("review+bridge", bridged, "openai").total_bytes == 38_580
+    assert measure("review+bridge", bridged, "openai").total_bytes == 39_089
     assert (
         measure("review+bridge", bridged, "openai", trim=True).total_bytes
         == TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES
@@ -383,11 +383,11 @@ def test_the_trim_takes_the_same_bytes_off_either_encoding(encoding: str) -> Non
 
 
 def test_the_trim_is_bounded_by_the_structural_floor() -> None:
-    """38 percent off, and the remaining 15,437 bytes is structure no trim can reach."""
+    """37 percent off, and the remaining 15,708 bytes is structure no trim can reach."""
     off = measure("review", TOOL_FUNCTIONS, "openai").total_bytes
     on = measure("review", TOOL_FUNCTIONS, "openai", trim=True).total_bytes
 
-    assert round(100 * (off - on) / off, 1) == 38.0
+    assert round(100 * (off - on) / off, 1) == 37.4
     assert on > structural_floor_bytes()
 
 
@@ -445,7 +445,7 @@ def test_the_rms_tier_delta_shrinks_once_lever_2_has_taken_its_bytes() -> None:
     which is why every row records which other levers were on.
     """
     assert tier_delta(trim=True).delta_bytes == 2_745
-    assert tier_delta(trim=True).delta_percent == 12.7
+    assert tier_delta(trim=True).delta_percent == 12.4
     assert tier_delta(trim=True).kept_tools == RMS_TIER_KEPT_TOOLS
 
 
