@@ -80,6 +80,8 @@ from swreview.benchmark.compare import (
     splice_ledger,
     write_ledger,
 )
+from swreview.benchmark.recording import RecordingRefused, read_recording
+from swreview.benchmark.replay import render_replay_lines, replay_recording
 from swreview.benchmark.runner import (
     RunProvenance,
     current_commit,
@@ -2234,6 +2236,47 @@ def benchmark_time(
         f"net saved: {timing.net_saved_minutes}",
     ]
     _emit(payload, lines, json_output)
+
+
+@benchmark_app.command("replay")
+def benchmark_replay(
+    run_dir: Annotated[
+        Path,
+        typer.Argument(help="A review run folder: session.json, events.jsonl, package.json."),
+    ],
+    lever: LeverOption = None,
+    standards_profile: Annotated[
+        Path | None,
+        typer.Option(
+            "--standards-profile",
+            help="The standards profile both passes grade with (the one the review ran).",
+        ),
+    ] = None,
+    json_output: JsonFlag = False,
+) -> None:
+    """Price a recorded review through the current code, offline, and name any lost finding.
+
+    Replays the folder's recorded calls in their recorded rounds twice - as recorded, and with
+    the levers named by `--lever` - with a scripted provider, and prints every round's recorded,
+    as-recorded and requested input, the totals and the finding comparison (008
+    `contracts/replay.md`). No key, no network, no SOLIDWORKS, and nothing is written into
+    RUN_DIR. Exit 1 on a refusal (one sentence) or, after printing everything, when a recorded
+    finding is lost; exit 2 on an unknown or refused lever.
+    """
+    with _errors_as_exit_1(RecordingRefused, TokenizerUnavailable):
+        recording = read_recording(run_dir)
+    try:
+        provider = ProviderName(recording.provider)
+    except ValueError:
+        provider = ProviderName.FAKE
+    requested = _efficiency(lever, provider=provider)
+    with _errors_as_exit_1(RecordingRefused, TokenizerUnavailable):
+        report = replay_recording(
+            recording, requested=requested, standards_profile=standards_profile
+        )
+    _emit(report.model_dump(mode="json", by_alias=True), render_replay_lines(report), json_output)
+    if report.findings.lost:
+        raise typer.Exit(1)
 
 
 @benchmark_app.command("compare")

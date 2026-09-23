@@ -27,6 +27,8 @@ script.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -42,7 +44,10 @@ __all__ = [
     "DEFAULT_PREFIX_TOKENS",
     "UsageFor",
     "default_usage",
+    "folder_hashes",
     "record_scripted_review",
+    "rewrite_events",
+    "rewrite_session",
     "usage",
 ]
 
@@ -138,3 +143,30 @@ def record_scripted_review(
             "deterministic, so the usage written would not match what the replay counts"
         )
     return out_path
+
+
+# --- editing a recording, the way older code or an older extractor would have written it ----
+
+
+def rewrite_events(run_dir: Path, change: Callable[[dict[str, Any]], dict[str, Any]]) -> None:
+    """Rewrite every event of `run_dir/events.jsonl` through `change`, keeping line order."""
+    path = run_dir / "events.jsonl"
+    events = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    path.write_text("".join(json.dumps(change(event)) + "\n" for event in events), encoding="utf-8")
+
+
+def rewrite_session(run_dir: Path, change: Callable[[dict[str, Any]], None]) -> None:
+    """Edit `run_dir/session.json` in place through `change`, which mutates the parsed JSON."""
+    path = run_dir / "session.json"
+    session = json.loads(path.read_text(encoding="utf-8"))
+    change(session)
+    path.write_text(json.dumps(session, indent=2), encoding="utf-8")
+
+
+def folder_hashes(folder: Path) -> dict[str, str]:
+    """A sha256 per file under `folder`, keyed by relative path: "nothing was written"."""
+    return {
+        path.relative_to(folder).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(folder.rglob("*"))
+        if path.is_file()
+    }
