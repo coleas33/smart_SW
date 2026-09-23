@@ -126,6 +126,11 @@ configuration and the same settings. The answer is one recorded step (status `ok
 modelling-practice family is folded - or `{groups, rows, configuration, settings}` for the live
 call. A call the pre-run did not make, or made and failed, runs as it always did.
 
+With 008's lever 13 on (the pane default since 2026-09-23), a check tool the pre-run ran to
+completion is also left out of the tool array for the rest of the session (008 FR-030,
+`contracts/checks-first.md` section 7); a call to it anyway still gets this answer, never "no
+tool named".
+
 ## Session tools
 
 | Tool | Arguments | Effect |
