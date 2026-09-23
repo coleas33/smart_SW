@@ -62,22 +62,76 @@ public sealed class ReviewPageAttentionPanelTests
     // ---- what it shows -----------------------------------------------------------------------
 
     /// <summary>
-    /// The rows in the order the backend supplied them, each naming the finding, the check and
-    /// the reason it was placed. <see cref="AttentionSample"/>'s ids run F-007, F-008, F-003,
-    /// F-002, F-004 and its checks are not alphabetical, so a page that sorted anything renders
-    /// a different list and fails here; the sixth row is beyond `top_n` and must not appear.
+    /// Every row, in the order the backend supplied it. <see cref="AttentionSample"/>'s ids run
+    /// F-007, F-008, F-003, F-002, F-004, F-009 and its checks are not alphabetical, so a page
+    /// that sorted anything renders a different list and fails here.
+    ///
+    /// U12 rewrote the second half of this (docs/pane-findings-2026-09-20-review-gui.md section
+    /// 5): the sixth row, beyond `top_n`, used to be asserted absent, and on 830-02342 that hid
+    /// 94 of 99 findings with no path to them. The first `top_n` rows are still the only ones
+    /// under Start here; the rest follow them behind "Show all", in the supplied order, and are
+    /// on screen only once that control is opened (contracts/attention.md section 6).
     /// </summary>
     [Fact]
     public void TheRankedRowsRenderInTheOrderTheRankingSuppliedThem()
     {
         JsonElement panel = Scripted.Value.FirstEnd;
+        JsonElement expanded = Scripted.Value.FirstEndExpanded;
+        string[] everyRow = AttentionSample.ShownFindingIds.Concat(new[] { AttentionSample.BeyondTopN }).ToArray();
 
         Assert.False(panel.GetProperty("hidden").GetBoolean(), "the panel stayed hidden.");
         Assert.Equal(AttentionSample.ShownFindingIds, Strings(panel, "ids"));
         Assert.Equal(AttentionSample.ShownChecks, Strings(panel, "checks"));
         Assert.Equal(AttentionSample.ShownReasons, Strings(panel, "reasons"));
         Assert.Equal(AttentionSample.Heading, panel.GetProperty("heading").GetString());
-        Assert.DoesNotContain(AttentionSample.BeyondTopN, panel.GetProperty("text").GetString()!);
+
+        Assert.Equal(new[] { AttentionSample.BeyondTopN }, Strings(panel, "indexIds"));
+        Assert.Equal(everyRow, Strings(panel, "allIds"));
+        Assert.False(
+            panel.GetProperty("beyondRendered").GetBoolean(),
+            "the row beyond top_n was on screen before Show all was opened.");
+
+        Assert.True(
+            expanded.GetProperty("beyondRendered").GetBoolean(),
+            "the row beyond top_n is not on screen after Show all was opened.");
+        Assert.Equal(everyRow, Strings(expanded, "allIds"));
+        Assert.Equal(AttentionSample.ShownFindingIds, Strings(expanded, "ids"));
+    }
+
+    /// <summary>
+    /// One count line, from the backend's own numbers, saying which unit each counts: the rows
+    /// are issues (`rows.length`; a row can fold several findings of one check) and
+    /// `not_amplified.beyond_top_n` counts findings. The sample's sixth row folds three findings,
+    /// so a line that took one number for the other prints 6 or 1 where 3 belongs. The control
+    /// names both units too.
+    /// </summary>
+    [Fact]
+    public void TheCountLineSaysHowManyIssuesStartHereShowsAndHowManyFindingsAreNotInIt()
+    {
+        JsonElement panel = Scripted.Value.FirstEnd;
+
+        Assert.Equal(
+            "Start here: 5 of " + AttentionSample.IssueCount + " issues · "
+                + AttentionSample.BeyondTopNFindings + " findings not in Start here",
+            panel.GetProperty("countLine").GetString());
+        Assert.Equal(
+            "Show all " + AttentionSample.IssueCount + " issues (" + AttentionSample.FindingCount + " findings)",
+            panel.GetProperty("moreLabel").GetString());
+    }
+
+    /// <summary>
+    /// A row behind Show all is a way into the transcript like a Start-here row: the click
+    /// scrolls its card's head into view and lights the card, and opens nothing.
+    /// </summary>
+    [Fact]
+    public void ClickingARowBehindShowAllScrollsToItsFindingCard()
+    {
+        JsonElement clicked = Scripted.Value.AfterIndexClick;
+
+        Assert.False(clicked.GetProperty("headInViewBefore").GetBoolean(), "the head was already in view.");
+        Assert.True(clicked.GetProperty("headInViewAfter").GetBoolean(), "the click did not scroll to the card.");
+        Assert.True(clicked.GetProperty("flashed").GetBoolean(), "the finding card was not lit.");
+        Assert.True(clicked.GetProperty("afterHidden").GetBoolean(), "the click opened the fold.");
     }
 
     /// <summary>
@@ -319,10 +373,14 @@ public sealed class ReviewPageAttentionPanelTests
                 await page.ExecuteScriptAsync(FetchStub);
                 await Body(page, AttentionSample.Json());
 
-                // 1. A review that ends normally: the panel appears with the stubbed rows.
+                // 1. A review that ends normally: the panel appears with the stubbed rows, and
+                //    then Show all is opened.
                 await StartReview(page);
                 await EndSession(page, "chat-1");
                 run.FirstEnd = await Read(page);
+                await page.ExecuteScriptAsync(
+                    "document.querySelector('#attention-panel .attention-more > summary').click();0");
+                run.FirstEndExpanded = await Read(page);
 
                 // 2. A second press throws that chat away, and the panel with it.
                 await StartReview(page);
@@ -368,7 +426,8 @@ public sealed class ReviewPageAttentionPanelTests
                     await SseFrames.Push(page, "chat-6", SseFrames.Frame(filler + 1, "finding", Filler(filler)));
                 }
 
-                await SseFrames.Push(page, "chat-6", SseFrames.Frame(Fillers + 1, "finding", RankedFinding));
+                await SseFrames.Push(page, "chat-6", SseFrames.Frame(Fillers + 1, "finding", BeyondFinding));
+                await SseFrames.Push(page, "chat-6", SseFrames.Frame(Fillers + 2, "finding", RankedFinding));
                 await OffscreenReviewPage.Settled(page);
                 await EndSession(page, "chat-6");
                 run.AfterRowClick = await Evaluate(
@@ -376,6 +435,7 @@ public sealed class ReviewPageAttentionPanelTests
                     RowClick
                         .Replace("@@FOUND@@", AttentionSample.ShownFindingIds[0])
                         .Replace("@@MISSING@@", AttentionSample.ShownFindingIds[1]));
+                run.AfterIndexClick = await Evaluate(page, IndexClick.Replace("@@FOUND@@", AttentionSample.BeyondTopN));
 
                 // 8. Two folds opened by their own buttons, then Collapse all.
                 run.AfterCollapseAll = await Evaluate(page, CollapseAll);
@@ -395,6 +455,18 @@ public sealed class ReviewPageAttentionPanelTests
         + @"""status"":""demonstrated"",""severity"":""medium"","
         + @"""component_ids"":[""cmp:0002"",""cmp:0003""],"
         + @"""observed"":""Largest overlap 0.012 mm in configuration Default.""}";
+
+    /// <summary>The finding the row beyond `top_n` stands for, so that row too has a card.</summary>
+    private static readonly string BeyondFinding = JsonSerializer.Serialize(new
+    {
+        id = AttentionSample.BeyondTopN,
+        check = "rms.folders.present",
+        title = AttentionSample.BeyondTopNTitle,
+        status = "suspected",
+        severity = "low",
+        component_ids = new[] { "cmp:0002" },
+        observed = "The 1-Reference folder is missing.",
+    });
 
     /// <summary>How many unranked findings stand in the transcript before the ranked one.</summary>
     private const int Fillers = 30;
@@ -526,6 +598,9 @@ public sealed class ReviewPageAttentionPanelTests
     var panel = document.getElementById('attention-panel');
     var transcript = document.getElementById('transcript');
     var heading = panel.querySelector('.attention-heading');
+    var count = panel.querySelector('.attention-count');
+    var more = panel.querySelector('.attention-more > summary');
+    var beyond = panel.querySelector('.attention-index [data-finding-id=""" + AttentionSample.BeyondTopN + @"""]');
 
     var handlers = 0;
     var all = panel.getElementsByTagName('*');
@@ -544,6 +619,13 @@ public sealed class ReviewPageAttentionPanelTests
       children: panel.childNodes.length,
       heading: heading ? heading.textContent : '',
       ids: attrs(panel, '.attention-row', 'data-finding-id'),
+      indexIds: attrs(panel, '.attention-index [data-finding-id]', 'data-finding-id'),
+      allIds: attrs(panel, '[data-finding-id]', 'data-finding-id'),
+      // `checkVisibility` as well as the boxes: a shut <details> skips its content rather than
+      // removing it from layout, so a row inside one still reports client rects.
+      beyondRendered: !!beyond && beyond.getClientRects().length > 0 && beyond.checkVisibility(),
+      countLine: count ? count.textContent : '',
+      moreLabel: more ? more.textContent : '',
       checks: texts(panel, '.attention-check'),
       reasons: texts(panel, '.attention-reason'),
       lists: panel.querySelectorAll('ol').length,
@@ -614,6 +696,46 @@ public sealed class ReviewPageAttentionPanelTests
       flashed: /(^|\s)flash(\s|$)/.test(card.className),
       flashedCards: document.querySelectorAll('#transcript .card.flash').length,
       strayRowSurvived: strayRowSurvived
+    });
+  } catch (error) {
+    return JSON.stringify({ ok: false, error: '' + ((error && error.message) || error) });
+  }
+}())
+";
+
+    /// <summary>
+    /// Opens Show all, scrolls the transcript to its top, clicks the line for the row beyond
+    /// `top_n`, and reports where its card went - in one evaluation, for the flash's sake.
+    /// </summary>
+    private const string IndexClick = @"
+(function () {
+  try {
+    var more = document.querySelector('#attention-panel .attention-more');
+    if (!more) { return JSON.stringify({ ok: false, error: 'no Show all control' }); }
+    more.open = true;
+
+    var line = document.querySelector('#attention-panel .attention-index [data-finding-id=""@@FOUND@@""]');
+    if (!line) { return JSON.stringify({ ok: false, error: 'no line for @@FOUND@@' }); }
+    var card = document.querySelector('#transcript .card.finding[data-finding-id=""@@FOUND@@""]');
+    if (!card) { return JSON.stringify({ ok: false, error: 'no finding card for @@FOUND@@' }); }
+
+    var transcript = document.getElementById('transcript');
+    var headInView = function () {
+      var head = card.querySelector('.card-head').getBoundingClientRect();
+      var view = transcript.getBoundingClientRect();
+      return head.top >= view.top && head.bottom <= view.bottom;
+    };
+
+    transcript.scrollTop = 0;
+    var headInViewBefore = headInView();
+    line.click();
+
+    return JSON.stringify({
+      ok: true,
+      headInViewBefore: headInViewBefore,
+      headInViewAfter: headInView(),
+      flashed: /(^|\s)flash(\s|$)/.test(card.className),
+      afterHidden: card.querySelector('.details').hidden
     });
   } catch (error) {
     return JSON.stringify({ ok: false, error: '' + ((error && error.message) || error) });
@@ -696,6 +818,8 @@ public sealed class ReviewPageAttentionPanelTests
     {
         public JsonElement FirstEnd { get; set; }
 
+        public JsonElement FirstEndExpanded { get; set; }
+
         public JsonElement AfterSecondPress { get; set; }
 
         public JsonElement AfterStaleAnswer { get; set; }
@@ -707,6 +831,8 @@ public sealed class ReviewPageAttentionPanelTests
         public JsonElement AfterFailedRead { get; set; }
 
         public JsonElement AfterRowClick { get; set; }
+
+        public JsonElement AfterIndexClick { get; set; }
 
         public JsonElement AfterCollapseAll { get; set; }
     }

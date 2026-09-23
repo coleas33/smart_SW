@@ -20,8 +20,15 @@ namespace SwReview.AddIn.Tests;
 /// sorted - by id, by check or by anything else - renders a different order and the order
 /// assertions fail. The ranking is the backend's and the page is a renderer (FR-023).
 ///
-/// <b>There is one row beyond `top_n`.</b> Six rows and `top_n` of five: a page that rendered
-/// `rows` whole rather than the first `top_n` shows <see cref="BeyondTopN"/> and fails.
+/// <b>There is one row beyond `top_n`, and it folds three findings.</b> Six rows and `top_n` of
+/// five. The check tabs render the first `top_n` and nothing else, so a check tab that shows
+/// <see cref="BeyondTopN"/> fails. The Review tab shows every row in the order supplied - the
+/// first `top_n` under Start here and the rest one line each behind its "Show all" control
+/// (U12, contracts/attention.md section 6) - so there <see cref="BeyondTopN"/> is present only
+/// once that control is opened, and after the five. Because the sixth row folds three findings,
+/// the rows (<see cref="IssueCount"/>) and the findings (<see cref="FindingCount"/>,
+/// <see cref="BeyondTopNFindings"/>) are different numbers, and a count line that confused the
+/// two units prints the wrong one.
 ///
 /// Every field of the contract is here even though the pages read three of them. A page that
 /// started reading `key` or `consequence_class` would then be tested against the real shape
@@ -79,8 +86,26 @@ internal static class AttentionSample
         "discipline, demonstrated",
     };
 
-    /// <summary>The sixth row, which is beyond `top_n` and must not be rendered.</summary>
+    /// <summary>
+    /// The sixth row, beyond `top_n`: never rendered by a check tab, and rendered by the Review
+    /// tab only behind "Show all", after the five, as one line.
+    /// </summary>
     public const string BeyondTopN = "F-009";
+
+    /// <summary>Its title, which the one-line row prints.</summary>
+    public const string BeyondTopNTitle = "A method group folder is missing";
+
+    /// <summary>The findings the sixth row folds: three of one check, the survivor first.</summary>
+    public static readonly string[] BeyondTopNMembers = { "F-009", "F-010", "F-011" };
+
+    /// <summary>`rows.length`: how many issues the ranking holds.</summary>
+    public const int IssueCount = 6;
+
+    /// <summary>Every finding the rows stand for: one per shown row, three folded into the sixth.</summary>
+    public const int FindingCount = 8;
+
+    /// <summary>`not_amplified.beyond_top_n`, which counts findings, not rows.</summary>
+    public const int BeyondTopNFindings = 3;
 
     /// <summary>The ranking with rows, as a JSON literal a page test can embed.</summary>
     /// <param name="firstReason">
@@ -172,16 +197,17 @@ internal static class AttentionSample
             Row(
                 BeyondTopN,
                 "rms.folders.present",
-                "A method group folder is missing",
+                BeyondTopNTitle,
                 "suspected",
                 "low",
                 new[] { "cmp:0002" },
                 "hygiene",
                 judgement: 1,
-                reason: "hygiene, suspected"),
+                reason: "hygiene, suspected",
+                members: BeyondTopNMembers),
         },
         top_n = 5,
-        not_amplified = NotAmplified(1),
+        not_amplified = NotAmplified(BeyondTopNFindings),
         coverage = Coverage(),
         empty_reason = (string?)null,
     };
@@ -195,10 +221,11 @@ internal static class AttentionSample
         string[] componentIds,
         string consequenceClass,
         int judgement,
-        string reason) => new
+        string reason,
+        string[]? members = null) => new
     {
         finding_id = findingId,
-        member_finding_ids = new[] { findingId },
+        member_finding_ids = members ?? new[] { findingId },
         check,
         title,
         status,

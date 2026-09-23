@@ -179,13 +179,28 @@ Standards runs make no presentation calls. Omitted optional fields preserve olde
 and attention-record shapes. Model-authored text is distinct from deterministic labels;
 the no-percent-label rule above still applies to the deterministic attention wording.
 
+- **Pages may show all rows, in the supplied order, behind a control** (amended 2026-09-22,
+  feature 009 increment 3, U12). `rows[0..top_n)` is what goes under "Start here", on every
+  surface; the rows after it may be shown too, but only after them, only in the order the
+  ranking supplied, and only behind a control the engineer opens. A page never reorders,
+  filters or re-ranks the rows, and `TOP_N` stays 5. Any count a page prints is the backend's
+  number and names its unit: `rows.length` counts issues (a row can fold several findings) and
+  `not_amplified.*` counts findings.
 - The two check pages render `result.attention.rows[0..top_n)` in the order supplied, each as
   its reason line, into `<section id="attention">` above the bucket chips (above the sixteen-
-  check roster on the Standards tab), through `web/shared/check-page.js` and `dom.js` only.
+  check roster on the Standards tab), through `web/shared/check-page.js`, the shared row
+  renderer `web/shared/attention.js` and `dom.js` only. They do not show the rows beyond
+  `top_n` yet.
 - The Review page fetches the route in `endSession`, drops the response if `state.chatId` has
   moved on, renders through `render.attentionPanel(ranking)` into `<section
   id="attention-panel">` above the transcript, shows `empty_reason` in words when there are no
-  rows, and clears the panel in `resetTranscript`.
+  rows, and clears the panel in `resetTranscript`. Under the heading it prints one count line,
+  `Start here: <shown> of <rows.length> issues · <not_amplified.beyond_top_n> findings not in
+  Start here`, then the `top_n` rows as the check pages render them (the same
+  `web/shared/attention.js` row), then - when there are more - every remaining row, one line
+  each, behind a shut `Show all <rows.length> issues (<findings> findings)` control, where
+  `<findings>` is the sum of the rows' `member_finding_ids`. Clicking any row scrolls to that
+  finding's card.
 - No page script sorts, compares severities, or contains a band rule; a test scans every page
   script, comments stripped, for `.sort(`, `localeCompare`, a severity literal list, or a
   numeric comparison on `severity`/`status`, with an allowlist of the existing bucket display

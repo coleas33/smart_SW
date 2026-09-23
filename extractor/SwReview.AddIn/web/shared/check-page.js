@@ -43,6 +43,13 @@
 
   var dom = window.SwReviewDom;
   var docs = window.SwReviewDocument;
+
+  /*
+    The Start-here row - heading, stripe map, `amplified`, the row and its meta line - is
+    `web/shared/attention.js`'s, loaded before this file and by the Review page, so the three
+    tabs render the same row from one copy (feature 009 increment 3).
+  */
+  var attention = window.SwReviewAttention;
   var bridge = (window.chrome && window.chrome.webview) ? window.chrome.webview : null;
 
   /** The buckets, in the order a header states them: what to act on first. */
@@ -68,34 +75,8 @@
   /** The heading of the section holding rules that named no document. */
   var UNGROUPED_LABEL = 'Rules that name no document';
 
-  /** What separates two facts inside one line. Written once, so every line separates the same. */
-  var DOT = ' · ';
-
-  /**
-   * Which stripe a ranked row wears, by the consequence class the policy recorded on it.
-   *
-   * A map rather than a list, because it is not an order: the rows arrive ranked and the stripe
-   * only restates, in the pane's own palette, the class the policy already wrote down. A page
-   * that invented a hue for a rank it computed would be a second policy, and it computes none.
-   * A class this map has never heard of gets the quiet stripe rather than no stripe at all.
-   */
-  var STRIPES = {
-    rebuild_breaker: 'stripe-critical',
-    manufacturing: 'stripe-critical',
-    interface: 'stripe-judge',
-    discipline: 'stripe-warn',
-    hygiene: 'stripe-quiet'
-  };
-
   /** How long a pointed-at row stays lit, in milliseconds. */
   var FLASH_MS = 1500;
-
-  /**
-   * The heading over the ranked rows. The same words the report's own section uses, because it
-   * is the same ranking: an engineer who reads the tab and then opens `report.md` must find the
-   * same five rows under the same name (contracts/attention.md section 3).
-   */
-  var ATTENTION_HEADING = 'Start here';
 
   /** A run folder's own name, which is also the backend's `check_id`. */
   function folderName(runDirectory) {
@@ -576,8 +557,10 @@
      * policy, arguable from nothing, disagreeing with the report an engineer opens beside it.
      *
      * So nothing here reads a severity, compares two rows, or knows how many there ought to be:
-     * it reads `rows`, takes the first `top_n` of them, and prints three of each row's fields.
-     * `PageRuleScanTests` is the test that keeps it that way.
+     * it reads `rows` and renders the first `top_n` of them through `web/shared/attention.js`,
+     * the same row the Review tab renders. `PageRuleScanTests` is the test that keeps it that
+     * way. (The Review tab also shows the rows beyond `top_n` behind "Show all"; the check tabs
+     * do not, yet - contracts/attention.md section 6.)
      *
      * Three states, and the third is the one that matters on an older check folder: a body from
      * before this feature carries no ranking at all, and the section stays empty rather than
@@ -591,83 +574,14 @@
         return;
       }
 
-      ui.attention.appendChild(dom.el('h2', 'attention-heading', ATTENTION_HEADING));
+      ui.attention.appendChild(dom.el('h2', 'attention-heading', attention.HEADING));
 
       if (ranking.empty_reason) {
         ui.attention.appendChild(dom.el('p', 'attention-empty', ranking.empty_reason));
         return;
       }
 
-      var rows = amplified(ranking);
-      var list = dom.el('ol', 'attention-rows');
-      for (var index = 0; index < rows.length; index++) {
-        list.appendChild(attentionRow(rows[index] || {}));
-      }
-      ui.attention.appendChild(list);
-    }
-
-    /**
-     * The first `top_n` rows. `rows` holds every row the policy ranked, suppressed ones last,
-     * and `top_n` is how many of them the policy chose to amplify - a page that printed the
-     * whole array would be overruling that choice. A body carrying no usable `top_n` prints
-     * what it was given rather than nothing.
-     */
-    function amplified(ranking) {
-      var rows = ranking.rows || [];
-      var count = ranking.top_n;
-      return (typeof count === 'number' && count >= 0 && count < rows.length)
-        ? rows.slice(0, count)
-        : rows;
-    }
-
-    /**
-     * One ranked row: which finding, what it is, which check, what the policy already knew about
-     * it, and the reason it was placed here.
-     *
-     * Every one of those fields is on the row the backend sent and was being dropped. A row that
-     * prints only an id and a check id asks an engineer to go and look up the thing they were
-     * just told to start with, which is the opposite of amplifying it.
-     */
-    function attentionRow(row) {
-      var item = dom.el('li', 'attention-row ' + stripeOf(row));
-      item.setAttribute('data-finding-id', String(row.finding_id || ''));
-      dom.append(item, [
-        dom.el('span', 'attention-id', row.finding_id || ''),
-        dom.el('span', 'attention-reason', row.reason || ''),
-        dom.el('span', 'attention-title', row.title || ''),
-        dom.el('span', 'attention-check', row.check || ''),
-        dom.el('span', 'attention-meta', attentionMeta(row)),
-        dom.el('span', 'attention-components mono', dom.list(row.component_ids))
-      ]);
-      return item;
-    }
-
-    /** What the policy already knew about the finding, as plain text and in its own words. */
-    function attentionMeta(row) {
-      var parts = [];
-      if (row.status) {
-        parts.push(String(row.status));
-      }
-      if (row.severity) {
-        parts.push(String(row.severity));
-      }
-      return parts.join(DOT);
-    }
-
-    /**
-     * Which stripe the row wears.
-     *
-     * `key.judgement` is the policy's own lever for "only an engineer can settle this", and a row
-     * it placed there wears the judgement stripe whatever its consequence class - that is the
-     * lever's whole point, and it is read off the key the backend published rather than decided
-     * here. Everything else is the consequence class, through a map.
-     */
-    function stripeOf(row) {
-      var key = row.key || {};
-      if (key.judgement === 0) {
-        return 'stripe-judge';
-      }
-      return STRIPES[String(row.consequence_class || '')] || 'stripe-quiet';
+      ui.attention.appendChild(attention.rowList(attention.amplified(ranking)));
     }
 
     /**

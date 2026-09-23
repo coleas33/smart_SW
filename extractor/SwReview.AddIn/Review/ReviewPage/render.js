@@ -47,13 +47,14 @@
   var compact = dom.compact;
   var seconds = dom.seconds;
 
-  /**
-   * The heading over the ranked rows. The same words the report's own section uses, and the
-   * same words the two check tabs print, because it is the same ranking: an engineer who reads
-   * the pane and then opens `report.md` must find the same rows under the same name
-   * (contracts/attention.md section 3).
-   */
-  var ATTENTION_HEADING = 'Start here';
+  /*
+    The Start-here row - its heading, its stripe map, `amplified`, the row and its meta line -
+    lives in `web/shared/attention.js`, loaded before this file and by both check tabs, so the
+    Review tab and the check tabs render the same row from one copy (feature 009 increment 3).
+    The separator is that file's too.
+  */
+  var attention = window.SwReviewAttention;
+  var DOT = attention.DOT;
 
   /**
    * The fallback when a ranking arrives with no rows and no sentence of its own. The backend
@@ -68,38 +69,8 @@
    */
   var COVERAGE_HEADING = 'Not reached';
 
-  /**
-   * The separator between the small facts that share a line, as an escape rather than as the
-   * character itself: every other page file in the pane is ASCII, and a source file that is
-   * the only one carrying a byte above 127 is the one an editor re-saves in the wrong codepage.
-   */
-  var DOT = ' · ';
-
-  /**
-   * The stripe a ranked row carries, by the consequence class the backend already assigned it
-   * (contracts/attention.md section 1, key 3). An object literal rather than an array: this is
-   * a map from a class the policy named to a hue, and it puts nothing before anything - the
-   * order of the rows is the ranking's and is never touched here. `PageRuleScanTests` scans
-   * array literals for exactly that reason.
-   */
-  var CONSEQUENCE_STRIPE = {
-    rebuild_breaker: 'stripe-critical',
-    manufacturing: 'stripe-critical',
-    interface: 'stripe-judge',
-    discipline: 'stripe-warn',
-    hygiene: 'stripe-quiet',
-    unclassified: 'stripe-quiet'
-  };
-
-  /**
-   * The stripe for a row only an engineer can settle. It is read off the ranking's own key -
-   * `key.judgement`, contracts/attention.md section 1 key 2, where 0 means "needs your
-   * judgement" - and not off the row's severity or status, which this page never compares.
-   */
-  var JUDGEMENT_STRIPE = 'stripe-judge';
-
-  /** A consequence class the table above does not name still gets a stripe, the quietest one. */
-  var DEFAULT_STRIPE = 'stripe-quiet';
+  /** The multiplication sign a folded row's member count is written with, as an escape. */
+  var TIMES = '\u00d7';
 
   // ---- formatting ---------------------------------------------------------------------
 
@@ -606,122 +577,116 @@
   }
 
   /**
-   * What to start with: the rows the backend ranked, in the order it supplied them.
+   * What to start with: every row the backend ranked, in the order it supplied them.
    *
    * Rebuilt from the whole ranking on every call, like `coverageSummary` beside it and for the
    * same reason - the ranking is the whole truth about what to look at first, and a panel that
    * only grew would show a re-run's rows twice.
    *
-   * This amplifies; it never filters. Every finding is still in the transcript above and in
-   * `report.md`, and the rows here are the ones `report/attention.py` placed first, with the
-   * same ids and the same reasons the report's "Start here" section prints
-   * (contracts/attention.md sections 3 and 6). So nothing here reads a severity, compares two
-   * rows or knows how many there ought to be: it reads `rows`, takes the first `top_n`, and
-   * prints three of each row's fields. `PageRuleScanTests` is the test that keeps it that way.
-   *
-   * The same three states the two check tabs render, deliberately built the same way in the
-   * same words. They cannot be one function: this page loads `render.js` and `shared/dom.js`
-   * and the check tabs load `shared/check-page.js`, which is the larger half of a check page
-   * and has no business on a chat transcript. What is shared is `dom.js` - the one place a
-   * string becomes a text node - and the class names, so the two look alike because they are
-   * styled from the same vocabulary rather than because someone matched them by eye.
+   * This amplifies; it never filters. The first `top_n` rows - the ones `report/attention.py`
+   * placed first, with the same ids and reasons the report's "Start here" section prints - are
+   * the Start-here cards, built by `web/shared/attention.js` exactly as the check tabs build
+   * them. Every other row follows them behind "Show all", one line each, in the same supplied
+   * order (U12, docs/pane-findings-2026-09-20-review-gui.md section 5; contracts/attention.md
+   * section 6): on 830-02342 the five cards were the only way in to 99 findings. Nothing here
+   * reads a severity, compares two rows or sorts; the counts are the backend's numbers.
+   * `PageRuleScanTests` is the test that keeps it that way.
    */
   function attentionPanel(ranking) {
     var panel = el('section', 'attention');
-    panel.appendChild(el('h3', 'eyebrow attention-heading', ATTENTION_HEADING));
+    panel.appendChild(el('h3', 'eyebrow attention-heading', attention.HEADING));
 
-    var rows = (ranking && !ranking.empty_reason) ? amplified(ranking) : [];
+    var rows = (ranking && !ranking.empty_reason) ? (ranking.rows || []) : [];
     if (!rows.length) {
       panel.appendChild(el(
         'p', 'attention-empty', (ranking && ranking.empty_reason) || NOTHING_TO_START_WITH));
       return panel;
     }
 
-    var list = el('ol', 'attention-rows');
-    for (var index = 0; index < rows.length; index++) {
-      list.appendChild(attentionRow(rows[index] || {}));
+    var shown = attention.amplified(ranking);
+    panel.appendChild(el('p', 'attention-count', countLine(ranking, shown.length)));
+    panel.appendChild(attention.rowList(shown));
+    if (shown.length < rows.length) {
+      panel.appendChild(attentionIndex(rows, shown.length));
     }
-    panel.appendChild(list);
     return panel;
   }
 
   /**
-   * The first `top_n` rows. `rows` holds every row the policy ranked, suppressed ones last,
-   * and `top_n` is how many of them it chose to amplify - a page that printed the whole array
-   * would be overruling that choice. A ranking carrying no usable `top_n` prints what it was
-   * given rather than nothing.
+   * "Start here: 5 of 18 issues - 94 findings not in Start here", from the backend's numbers,
+   * saying which unit each counts. The rows are issues: a row can fold several findings of one
+   * check (contracts/attention.md section 2), so `rows.length` counts issues. The second number
+   * is `not_amplified.beyond_top_n`, which the backend counts in findings. A ranking that does
+   * not carry it says nothing about findings rather than a number made up here.
    */
-  function amplified(ranking) {
-    var rows = ranking.rows || [];
-    var count = ranking.top_n;
-    return (typeof count === 'number' && count >= 0 && count < rows.length)
-      ? rows.slice(0, count)
-      : rows;
+  function countLine(ranking, shownCount) {
+    var line = attention.HEADING + ': ' + shownCount + ' of '
+      + counted(ranking.rows.length, 'issue', 'issues');
+    var beyond = ranking.not_amplified ? ranking.not_amplified.beyond_top_n : null;
+    if (typeof beyond === 'number') {
+      line += DOT + counted(beyond, 'finding', 'findings') + ' not in ' + attention.HEADING;
+    }
+    return line;
   }
 
   /**
-   * One ranked row: which finding, the reason the policy placed it, what it says, which check
-   * said it, and the state it is in.
-   *
-   * Tier one, and the widest card on the page. Until now the row printed three fields out of
-   * the ten the backend sends (contracts/attention.md section 4), so the panel that is supposed
-   * to be the first thing read said less about a finding than the finding's own card did.
-   *
-   * The stripe is the one piece of colour here, and it restates a field rather than adding a
-   * judgement of its own: `consequence_class` through a map, or the judgement key when the
-   * policy marked the row as one only an engineer can settle. Nothing reads a severity, nothing
-   * compares two rows, and nothing sorts - the order is the ranking's whole statement.
+   * The rows after the first `shownCount`, in the order supplied, one line each, behind a fold
+   * that names both units: "Show all 18 issues (99 findings)". A `<details>` like the coverage
+   * fold, shut when it arrives, so opening it is the engineer's press and nothing on this page
+   * holds its state. The lines continue the Start-here numbering, in the stylesheet.
    */
-  function attentionRow(row) {
-    var item = el('li', 'attention-row ' + stripeOf(row));
-    item.setAttribute('data-finding-id', String(row.finding_id || ''));
-    append(item, [
-      el('span', 'attention-id', row.finding_id || ''),
-      el('span', 'attention-reason', row.reason || ''),
-      el('span', 'attention-title', row.title || ''),
-      el('span', 'attention-check', row.check || ''),
-      attentionMeta(row)
-    ]);
-    if (typeof row.explanation === 'string' && row.explanation) {
-      item.appendChild(el('p', 'finding-explanation', row.explanation));
+  function attentionIndex(rows, shownCount) {
+    var fold = el('details', 'attention-more');
+    fold.appendChild(el(
+      'summary',
+      'attention-more-head',
+      'Show all ' + counted(rows.length, 'issue', 'issues')
+        + ' (' + counted(findingCount(rows), 'finding', 'findings') + ')'));
+
+    var lines = el('ol', 'attention-index');
+    for (var index = shownCount; index < rows.length; index++) {
+      lines.appendChild(attentionLine(rows[index] || {}));
     }
+    fold.appendChild(lines);
+    return fold;
+  }
+
+  /**
+   * One row as one line: which finding, its title, how many findings it folds when it folds
+   * more than one, and how many components it reaches. The stripe is the same restatement of
+   * the row's consequence class the Start-here cards carry, from the same shared map. The whole
+   * row stays in the report and in the finding's own card; a click on the line goes there.
+   */
+  function attentionLine(row) {
+    var item = el('li', 'attention-line ' + attention.stripeOf(row));
+    item.setAttribute('data-finding-id', String(row.finding_id || ''));
+
+    var members = row.member_finding_ids || [];
+    var components = row.component_ids || [];
+    append(item, [
+      el('span', 'line-id', row.finding_id || ''),
+      el('span', 'line-title', row.title || ''),
+      members.length > 1 ? el('span', 'line-members', TIMES + members.length) : null,
+      components.length
+        ? el('span', 'line-reach', counted(components.length, 'component', 'components'))
+        : null
+    ]);
     return item;
   }
 
-  /**
-   * The state a ranked row is in, as the backend already reported it: the status and the
-   * severity as words, and the components the row reaches in the face an id is read in. Read,
-   * never compared - the words are printed as they arrived.
-   */
-  function attentionMeta(row) {
-    var meta = el('span', 'attention-meta', joined([row.status, row.severity], DOT));
-    var components = list(row.component_ids);
-    if (components) {
-      if (meta.firstChild) {
-        write(meta, DOT);
-      }
-      meta.appendChild(el('span', 'mono', components));
+  /** How many findings the rows stand for: each row's members, or the row itself. */
+  function findingCount(rows) {
+    var total = 0;
+    for (var index = 0; index < rows.length; index++) {
+      var members = (rows[index] || {}).member_finding_ids;
+      total += (members && members.length) ? members.length : 1;
     }
-    return meta;
+    return total;
   }
 
-  /**
-   * Which stripe a ranked row carries. `key.judgement` is the ranking's own second key and it
-   * is 0 for the rows the policy says only an engineer can settle, which is the one thing about
-   * a row that outranks what kind of consequence it has (contracts/attention.md section 1).
-   *
-   * A consequence class that is not in the map - one the policy file added, or a value that
-   * happens to name something on `Object.prototype` - falls back to the quiet stripe rather
-   * than to whatever the prototype chain answers with.
-   */
-  function stripeOf(row) {
-    var key = row.key || {};
-    if (key.judgement === 0) {
-      return JUDGEMENT_STRIPE;
-    }
-
-    var stripe = CONSEQUENCE_STRIPE[row.consequence_class];
-    return (typeof stripe === 'string') ? stripe : DEFAULT_STRIPE;
+  /** A count and its noun, in the singular when there is one. */
+  function counted(count, one, many) {
+    return count + ' ' + (count === 1 ? one : many);
   }
 
   function coverageBucket(name, items) {
