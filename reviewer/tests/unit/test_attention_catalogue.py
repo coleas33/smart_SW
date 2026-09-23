@@ -28,8 +28,10 @@ Five sources, which is every place a `Finding.check` value can come from:
    accepts, which is fixed rather than caller-supplied;
 5. feature 010's document rules, each a module constant: the three `mass.CHECK_*` and
    `hygiene.HYGIENE_CHECKS`;
-6. nothing else: `build_finding` is the one finding constructor, and every caller of it
-   passes a `check` from one of the five sources above.
+6. feature 011's drawing standard comparison, `drawing_context.CONFORMANCE_CHECK`
+   (`drawing_profile.conformance`; added deliberately by feature 011 T056);
+7. nothing else: `build_finding` is the one finding constructor, and every caller of it
+   passes a `check` from one of the sources above.
 
 This test lands **after** the read-through (T022): the table it checks is one the owner
 has argued over folder by folder, not one a test invented.
@@ -49,6 +51,7 @@ from swreview.checks import (
     stack,
     tool_access,
 )
+from swreview.checks.drawing_context import CONFORMANCE_CHECK
 from swreview.checks.rms.registry import RULES as RMS_RULES
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
 from swreview.report.attention import load_policy
@@ -96,9 +99,16 @@ number is its file name or it is not."""
 
 
 def emittable() -> frozenset[str]:
-    """Every `Finding.check` value this build can write, from the five sources."""
+    """Every `Finding.check` value this build can write, from the six sources."""
     return frozenset(
-        {*RMS_RULES, *STANDARDS_RULES, *NUMERIC_CHECKS, *RULE_CHECKS, DRAWING_FINDING_CHECK}
+        {
+            *RMS_RULES,
+            *STANDARDS_RULES,
+            *NUMERIC_CHECKS,
+            *RULE_CHECKS,
+            DRAWING_FINDING_CHECK,
+            CONFORMANCE_CHECK,
+        }
     )
 
 
@@ -111,7 +121,10 @@ def test_the_five_sources_between_them_name_every_emittable_check() -> None:
     assert len(NUMERIC_CHECKS) == 13, "9 until feature 010 T036, 11 until T046, 12 until T060"
     assert len(RULE_CHECKS) == 8, "feature 010's mass (T066) and hygiene (T074) rules"
     assert DRAWING_FINDING_CHECK == "drawing.manufacturing_inputs"
-    assert len(emittable()) == 72, "the sources share no id (60 before feature 010)"
+    assert CONFORMANCE_CHECK == "drawing_profile.conformance"
+    assert len(emittable()) == 73, (
+        "the sources share no id (60 before feature 010, 72 before feature 011 T056)"
+    )
 
 
 def test_every_emittable_check_id_has_a_consequence_class() -> None:
