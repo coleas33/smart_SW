@@ -40,7 +40,7 @@ proves no read is refused.
 | Bare name | Why it is not denied |
 |---|---|
 | `set_Name`, `Select2` (drawing families), `CloseDoc`, `SetUserPreferenceToggle` (shared) | Feature 004's stage-1 allowlist has a key with this bare name (`IFeature.set_Name`, `IFeature.Select2`, `ISldWorks.CloseDoc`, `ISldWorks.SetUserPreferenceToggle`); denying the bare name would make that key override a read-only denial and move `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive` |
-| `OpenDoc6` | The extractor's one sanctioned read-only open (`SwSession.OpenReadOnly`), for models only (`attach.md` section 4) |
+| `OpenDoc6` | The extractor's one sanctioned read-only open (`SwSession.OpenReadOnly`), for models only (`attach.md` section 4). The read-only open of a confirmed drawing does not ride on this exclusion: it calls the qualified key `ISldWorks.OpenDoc6` through its own allowlist guard (section 7) |
 
 Names already denied (39 of the 621, from features 001, 006 and 010, or by a denied prefix) are
 listed in the table with the feature that denied them and are not added twice.
@@ -74,4 +74,19 @@ their tests pass unedited.
 
 For every extraction that reads a drawing: no member of this contract's denials, no
 `ActivateSheet`, `ActivateView` or `ActivateDoc*`, and no `OpenDoc*`. `PackageWriterTests` asserts
-it with the recording observer over the fake drawing reader; T062 records it at the seat.
+it with the recording observer over the fake drawing reader; T062 records it at the seat. The read
+of a confirmed drawing (section 7) shows exactly `ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6`
+and `ISldWorks.CloseDoc` under their qualified keys when it opened the drawing, none of them when
+the drawing was already open, and nothing else from the denials.
+
+## 7. The confirmed drawing's read-only open: an allowlist of its own (owner, 2026-09-23)
+
+The owner's answer to research R5 Q2 lets the product open a candidate the engineer confirms,
+read-only, "through the guarded seam, with its own allowlist entry". `Guard/DrawingOpenGuard.cs`
+is that entry: an `ICallGuard` allowing exactly `ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6`
+and `ISldWorks.CloseDoc` (ordinal), refusing every other qualified key, and handing every bare
+name to `ReadOnlyGuard` unchanged - the shape of feature 004's `RemodelGuard`, built only by
+`Sw/DrawingOpenScope.cs` (`confirmed-open.md` section 3). Of the three keys, only
+`DocumentVisible` overrides a read-only denial (section 1's shared row); a test pins that set.
+The entry is recorded in `specs/004-resilient-remodeler/contracts/guard-allowlist.md` beside the
+stage-1 list, and it widens neither `RemodelGuard` nor `ReadOnlyGuard`.

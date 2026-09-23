@@ -60,12 +60,12 @@ you" panel (009) shows it and 008's batch route answers it; nothing here changes
 
 | Key | When | `question` (at most 140 characters) | `options` | `blocks` |
 |---|---|---|---|---|
-| `candidates` | `drawing_candidates` non-empty | "A drawing with the same name sits beside {n} reviewed file(s) but is not open. Should the review read it?" | `I will open it and review again`; `Review without it`; `It is not the right drawing` | `drawing.manufacturing_inputs` |
+| `candidates` | `drawing_candidates` non-empty | "A drawing with the same name sits beside {n} reviewed file(s) but is not open. Should the review read it?" | `Yes, open it read-only and read it` (`CANDIDATE_CONFIRM`); `Review without it`; `It is not the right drawing` | `drawing.manufacturing_inputs` |
 | `governing:<document id>` | a reviewed document shown by two or more attached drawings; at most three such questions, in traversal order | "{k} open drawings show {stem}. Which one governs it?" - `{stem}` shortened with an ellipsis until the question fits | each drawing's file name when there are at most four and each fits in 60 characters, then `They all apply`; otherwise none | none |
 
 `what` for the candidates question names the candidate file names, the first ten, then "and {n}
-more"; `why`: "Fits, stacks and callouts stay unresolved without a drawing. The review never opens a file
-itself."; `entity_ids`: the candidates' document ids. For a governing question, `what` names the
+more"; `why`: "Fits, stacks and callouts stay unresolved without a drawing. The review opens a file only
+when you confirm it, read-only, and closes it again."; `entity_ids`: the candidates' document ids. For a governing question, `what` names the
 drawings' document ids and file names; `why`: "Open drawings of one part can disagree; the review
 uses them all, in a fixed order, until you say which governs."; `entity_ids`: the document id and
 the drawings' ids.
@@ -85,9 +85,12 @@ coverage, not a question: an answer cannot change what was extracted.
 
 ## 6. Answers
 
-Answers change nothing in the package and nothing already recorded; they are read by the brief
-(`brief.md` section 2, `answers`). "I will open it and review again" is the engineer's statement,
-not an action: nothing opens a file (FR-036).
+Answers change nothing already recorded; they are read by the brief (`brief.md` section 2,
+`answers`). One answer acts: `CANDIDATE_CONFIRM` to the candidate question has the product open
+each candidate read-only, read it into the package and close it again before the review resumes
+(`confirmed-open.md`, FR-036, FR-053 to FR-056; *amended 2026-09-23*, owner, research R5 Q2 - the
+first option was "I will open it and review again", the engineer's statement and not an action).
+Every other answer opens nothing.
 
 ## 7. The drawing arm of the payload pins
 

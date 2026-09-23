@@ -2,9 +2,9 @@
 
 **Feature**: `011-drawing-context` | **Plan**: [plan.md](plan.md) | **Contracts**: [contracts/](contracts/)
 
-Scenarios 0 to 10 run **offline**, with no SOLIDWORKS licence and no key. Scenarios 11 to 15 are
-marked **[W]** and need the licensed seat of the next sitting; they are the workstation tasks T062 to
-T068 and follow `contracts/probes.md`.
+Scenarios 0 to 10 and 8B run **offline**, with no SOLIDWORKS licence and no key. Scenarios 11 to 16
+are marked **[W]** and need the licensed seat of the next sitting; they are the workstation tasks
+T062 to T068 and T077 and follow `contracts/probes.md`.
 
 ## Prerequisites
 
@@ -128,6 +128,21 @@ Expected: on `plate-drawing`, one candidate question; on `assembly-drawings`, on
 with three drawings and "They all apply"; a repeat adds nothing; on a package with no drawing
 evidence the plan, the digest and the offered tools are byte-identical to before (FR-037).
 
+## Scenario 8B (US5, owner 2026-09-23): the confirmed candidate, opened read-only
+
+```powershell
+dotnet test ../extractor/SwReview.sln -c Release --no-build --nologo --filter "FullyQualifiedName~DrawingOpen|FullyQualifiedName~ConfirmedDrawingRead|FullyQualifiedName~BridgeDispatcher"
+uv run pytest tests/unit/test_confirmed_drawing_read.py tests/unit/test_bridge_client.py -q
+```
+
+Expected: the guard allows exactly its three qualified keys; with fakes the seam hides, opens with
+type 3 and options 3, restores, reads and closes only what it opened, after the identity check;
+an already-open drawing is read and never closed; `drawing.read` takes a run id and a document id
+and never a path, refuses each case of `contracts/confirmed-open.md` section 2 opening nothing,
+and appends the drawing with ids continuing the package's; with the switch as shipped it opens
+nothing and says so; confirming the candidate question calls it once per candidate within ten
+drawings and reloads the package; every other answer calls nothing; protocol 1.3 at both ends.
+
 ## Scenario 9 (US6): the brief
 
 ```powershell
@@ -181,6 +196,15 @@ research R4.
 
 On a drawing whose callouts the engineer names beforehand, D6 and D8 tie every checked callout to the
 right hole (SC-010); only then is `DRAWING_BINDING_VALIDATED` set, in its own commit.
+
+## Scenario 16 [W] (T077): the confirmed open, live
+
+Run `swreview-extract probe drawings --probe D14` beside a reviewed part whose same-name drawing is
+closed, then again with it open. Expected (SC-011): options 3, type 3; the active document
+unchanged and the engineer's window in front; the hidden drawing's views read; the file
+byte-identical, no save flag raised, not locked after the close; with the drawing already open,
+no visibility, open or close key gated. Only then set `DrawingOpenScope.SeatValidated`, in its own
+commit.
 
 ## Scenario 15 [W] (T067, T068): the pane and the profile
 

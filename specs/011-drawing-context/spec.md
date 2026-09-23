@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-23
 
-**Status**: Draft
+**Status**: Draft; amended 2026-09-23 with the owner's answers to research R5 (Q2 to Q9). Q2 changes the spec: a candidate drawing the engineer confirms is opened read-only by the product, read and closed (User Story 5, FR-015, FR-036, FR-053 to FR-056, SC-011); the other answers confirm the defaults already written.
 
 **Input**: The owner's direction of 2026-09-22 (`docs/roadmap-2026-09-22.md`, "Decisions taken 2026-09-22" and the feature 011 section): drawings are **read-only context before the next test** - fix the drawing attach refusal; attach the drawings already open in SOLIDWORKS to part and assembly reviews; extract their native dimensions, tolerances, notes and tables; a per-part drawing brief; questions in the pane. The architecture amendment of the same day (`sw-review-architecture-proposal.md`, "Amendment 2026-09-22: checks first, and drawings in two stages"): layer 3 is reached in two stages, and this is stage one; stage two, creating drawings, is feature 012, specified only after seat probes and a constitution amendment, and it starts from the owner's existing drawing-creation base repository, whose location has not been given yet. SOLIDWORKS 2024 has no programming interface that generates a drawing automatically. Tolerances come from four sources and drawing callouts are one of them (owner, 2026-09-22); feature 010's tolerance resolver already has that source's slot waiting. The general tolerance goes by decimal places (owner, 2026-09-23, feature 010 research R5), which needs the precision each dimension is written to, and only a drawing records that. Evidence: no review has yet seen a sheet - since 2026-09-18 the attach refuses a drawing before it asks for a configuration, so the drawing reading of feature 006 has only ever run under test fakes and the Standards tab fails on a drawing; every recorded evening review asked for drawings and left fits, stacks, alignment and manufacturing inputs unresolved.
 
@@ -28,7 +28,7 @@ An engineer opens a drawing in SOLIDWORKS and presses Standards, or extracts it 
 
 ### User Story 2 - The Open Drawings of a Reviewed Part or Assembly Join Its Review (Priority: P1)
 
-An engineer reviews an assembly with the drawings of two of its parts open in other SOLIDWORKS windows. The review reads those two drawings with the design, because their views show documents under review. A drawing open for something else is left alone. A part that has a drawing file of the same name beside it, not open, is not opened and the folder is never searched beyond that one name; the review says the file is there. Which drawings were read, and which were not, is stated.
+An engineer reviews an assembly with the drawings of two of its parts open in other SOLIDWORKS windows. The review reads those two drawings with the design, because their views show documents under review. A drawing open for something else is left alone. A part that has a drawing file of the same name beside it, not open, is not opened by the extraction and the folder is never searched beyond that one name; the review says the file is there, and asks (User Story 5). Which drawings were read, and which were not, is stated.
 
 **Why this priority**: every recorded review asked for drawings and had none; this is how drawing evidence reaches a review without the engineer exporting anything.
 
@@ -38,7 +38,7 @@ An engineer reviews an assembly with the drawings of two of its parts open in ot
 
 1. **Given** an open drawing whose views show the reviewed document or any document in its tree, **When** the design is extracted for review, **Then** the drawing is read and named among the design's drawings.
 2. **Given** an open drawing whose views show no document of the design, **When** the design is extracted, **Then** it is not read.
-3. **Given** a reviewed document with no open drawing and a drawing file of the same name in its folder, **When** the design is extracted, **Then** the file is recorded as a candidate and is not opened; no other file or folder is looked at.
+3. **Given** a reviewed document with no open drawing and a drawing file of the same name in its folder, **When** the design is extracted, **Then** the file is recorded as a candidate and is not opened; no other file or folder is looked at. (Only the engineer's confirmation opens it, User Story 5.)
 4. **Given** no open drawing shows the design, **When** the review starts, **Then** the review states that no drawing was read and how to include one.
 5. **Given** more open drawings than the extraction reads in one pass, **When** the design is extracted, **Then** the ones not read are named.
 
@@ -80,11 +80,11 @@ Beyond dimensions, the extraction reads what a drawing says about manufacturing:
 
 ### User Story 5 - Questions Only the Engineer Can Answer Reach the Pane (Priority: P2)
 
-When the review cannot tell something about the drawings that the engineer knows at a glance, it asks one short question in the pane's "Questions for you" panel, with the answers offered as buttons: a drawing file of the same name sits beside reviewed parts but is not open - open it and review again, review without it, or it is not the right drawing; two open drawings show the same part - which one governs it. The questions are few and never repeat within a review. Answers are recorded and become part of that part's drawing brief.
+When the review cannot tell something about the drawings that the engineer knows at a glance, it asks one short question in the pane's "Questions for you" panel, with the answers offered as buttons: a drawing file of the same name sits beside reviewed parts but is not open - yes, it is the drawing, open it read-only and read it; review without it; or it is not the right drawing; two open drawings show the same part - which one governs it. When the engineer confirms a candidate, the product opens it read-only itself, without showing it or taking focus from the engineer's window, reads it into the review, and closes it again; it never changes or saves it, and never closes a drawing the engineer had open *(owner, 2026-09-23, research R5 Q2: this replaces "the engineer opens it and reviews again")*. The questions are few and never repeat within a review. Answers are recorded and become part of that part's drawing brief.
 
 **Why this priority**: the owner asked for the same-name drawing to be offered as a question and never opened silently; the questions reuse the pane and the answer route features 008 and 009 built, so they cost no new screen.
 
-**Independent Test**: on a synthetic package with three candidate drawings and one part shown by two open drawings, the review's code-first pass raises exactly two questions - one naming the three candidates, one asking which drawing governs the part - both answerable with one click; calling the check again raises none.
+**Independent Test**: on a synthetic package with three candidate drawings and one part shown by two open drawings, the review's code-first pass raises exactly two questions - one naming the three candidates, one asking which drawing governs the part - both answerable with one click; calling the check again raises none. With fakes, confirming the candidates opens each read-only and hidden, reads it into the package and closes it; a drawing the engineer had open is read and not closed; the other answers open nothing. On the next sitting, probe D14.
 
 **Acceptance Scenarios**:
 
@@ -92,6 +92,9 @@ When the review cannot tell something about the drawings that the engineer knows
 2. **Given** a reviewed document shown by two to four open drawings, **When** the review starts, **Then** one question asks which governs it, offering each drawing and "they all apply".
 3. **Given** a design whose drawing evidence raises nothing to ask, **When** the review starts, **Then** no question is added.
 4. **Given** the questions were asked, **When** the check runs again in the same review, **Then** no question is added twice.
+5. **Given** the candidate question, **When** the engineer answers "yes, open it read-only and read it", **Then** before the review resumes each candidate is opened read-only without being shown or taking focus, read into the review with its sheets, views and callouts, and closed again, and the review says which it read; nothing is saved or changed.
+6. **Given** a confirmed candidate that the engineer has opened in the meantime, **When** it is read, **Then** it is read as it stands and left open.
+7. **Given** any other answer, or a review with no connection to SOLIDWORKS, **When** it is sent, **Then** nothing is opened, and in the second case the review says why the drawing was not read.
 
 ---
 
@@ -146,6 +149,12 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 - **A drawing in a vault view that is not cached locally**: whether it exists is asked without opening or fetching it; a failed check is a gap, never a guess.
 - **An attached drawing whose sheet cannot be enumerated without activating it**: that sheet is named unresolved; no sheet or window is ever activated.
 - **The same document shown by more than four open drawings**: the question offers no buttons and asks for the governing drawing's name.
+- **A confirmed candidate that cannot be opened** (gone since the extraction, or refused by SOLIDWORKS): nothing is retried and nothing else is opened; the review names it and why. The product never falls back to another file name or folder.
+- **A confirmed candidate that is already open** when the answer arrives (the engineer opened it): read as it stands and never closed.
+- **More confirmed candidates than the room left under ten drawings**: the first in traversal order are read until the package holds ten drawings; the rest are named, never opened.
+- **The read fails after the open**: the drawing is still closed, because the product opened it; what was not read is a named gap.
+- **Models the drawing loads when it opens**: the product closes only the drawing, never a model; whether SOLIDWORKS unloads them with it is probe D14's to record.
+- **A review started from the command line, or with no connection to SOLIDWORKS**: the confirmation is recorded and nothing is opened; the review says so.
 - **Recorded reviews with no drawing**: they replay exactly as before - no new question, no new tool offered, no finding lost.
 - **Checklist collision**: the conformance finding is named so that it cannot close the checklist's "drawing manufacturing inputs" item, which only an evaluation of those inputs may close.
 
@@ -157,14 +166,14 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 
 - **FR-001**: Extraction for grading or evidence MUST accept a drawing as the open document, binding no configuration to it, and MUST read it with the models its views show exactly as feature 006 designed (006 FR-024, FR-025).
 - **FR-002**: Every tool that needs a part or assembly - the live bridge, the terminal session, the review start, the model check - MUST keep declining a drawing by name, with the model to open instead.
-- **FR-003**: The command-line extraction MUST NOT open a drawing that is not already open; it MUST decline naming why.
+- **FR-003**: The command-line extraction MUST NOT open a drawing that is not already open; it MUST decline naming why. (The one product path that opens a drawing is FR-036's, from the pane, on the engineer's confirmation.)
 - **FR-004**: The Standards tab MUST grade a drawing that is the open document, live.
 
 **The guard, first (Foundational)**
 
 - **FR-005**: Before any new drawing read is added, the read-only guard MUST refuse every member that writes, creates, deletes, activates, selects, closes, opens or reloads anything in the drawing, sheet, view, dimension, annotation, note, symbol and table families this feature reads, and the document activation, closing, creation and macro members of the application; the membership MUST be derived mechanically from the SOLIDWORKS 2024 SP5 interop and checked for completeness by a test.
-- **FR-006**: The hardening MUST NOT widen or narrow the re-modeler's write allowlist (feature 004) and MUST NOT refuse any read the extractor performs; the one sanctioned read-only open stays permitted.
-- **FR-007**: Every extraction that reads a drawing MUST show, in its gate log, no mutating member, no sheet, view or document activation member, and no open or close member.
+- **FR-006**: The hardening MUST NOT widen or narrow the re-modeler's write allowlist (feature 004) and MUST NOT refuse any read the extractor performs; the one sanctioned read-only open of a model stays permitted, and the read-only open of a confirmed drawing (FR-053) is permitted only through its own allowlist entry.
+- **FR-007**: Every extraction that reads a drawing MUST show, in its gate log, no mutating member, no sheet, view or document activation member, and no open or close member; the read of a confirmed drawing (FR-053) shows exactly its allowlisted open, visibility and close keys and nothing else of the kind.
 
 **Attaching open drawings (US2)**
 
@@ -175,7 +184,7 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 - **FR-012**: For each reviewed document with no attached drawing, the extraction MUST record a drawing file of the same name in the same folder, when one exists, as a candidate; it MUST NOT open, fetch or list anything else; a failed existence check is a gap.
 - **FR-013**: At most ten drawings MUST be read per extraction, the root document's first, then in design order; every open drawing not read MUST be named in a gap.
 - **FR-014**: A review extraction that attached no drawing MUST say that no open drawing showed the design and how to include one, replacing today's sentence about the extraction profile.
-- **FR-015**: Nothing MUST be opened, activated, loaded, resolved, rebuilt or saved to attach or read a drawing (006 FR-044).
+- **FR-015**: Nothing MUST be opened, activated, loaded, resolved, rebuilt or saved to attach or read a drawing (006 FR-044), except the read-only open of a candidate the engineer confirmed (FR-036, FR-053 to FR-056), which activates, rebuilds and saves nothing.
 - **FR-016**: Every drawing record's identifiers MUST be unique within the package when several drawings are read.
 
 **Dimensions, tolerances and written precision (US3)**
@@ -205,7 +214,7 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 - **FR-033**: The check MUST record per reviewed document what drawing evidence was read and what was not usable, as coverage, and MUST raise at most one question about all candidate drawings and at most one question per document shown by two or more open drawings, three such at most, each at most 140 characters with at most five options of at most 60 characters.
 - **FR-034**: The questions MUST be ordinary evidence requests, written through the same writer the model's own requests use, so the pane's existing panel shows them and the existing batch route answers them.
 - **FR-035**: A repeat of the check within one review MUST add nothing (feature 008's re-call guard).
-- **FR-036**: The product MUST NOT open a candidate drawing on any answer.
+- **FR-036**: The product MUST open a candidate drawing only when the engineer confirms, in answer to the candidate question, that it is the document's drawing, and MUST NOT open anything on any other answer. *(Amended 2026-09-23, owner, research R5 Q2: first written "MUST NOT open a candidate drawing on any answer".)*
 - **FR-037**: A review of a package with no drawing evidence MUST offer the same tools, plan the same calls, open with the same digest and receive the same tool payloads as the same review before this feature; its findings MUST differ at most in the words that say why the drawing source bound nothing.
 
 **The drawing brief (US6)**
@@ -224,6 +233,13 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 - **FR-046**: Each attached or root drawing MUST be compared with the section's sheet formats, drafting standard, projection and unit; one finding per drawing MUST name every difference with the drawing's own value; an empty setting is skipped, never passed; the templates are recorded for feature 012 and not compared.
 - **FR-047**: The comparison's finding MUST NOT close the checklist's drawing manufacturing inputs item and MUST NOT enter the Standards tab's release verdict.
 
+**The read-only open of a confirmed candidate (US5; owner, 2026-09-23)**
+
+- **FR-053**: A confirmed candidate MUST be opened read-only, through a guarded seam whose allowlist names exactly the open, visibility and close members it uses and nothing else; the request MUST name the reviewed document, never a path, and the path MUST be the candidate the extraction recorded, recomputed and checked by the add-in from its own record of the review.
+- **FR-054**: The open MUST NOT change or save the drawing or any model, and MUST NOT activate the drawing or take focus from the engineer's window as far as the SOLIDWORKS API allows (probe D14).
+- **FR-055**: The product MUST close the drawing after reading it when, and only when, the product opened it, also when the read fails; it MUST NOT close a drawing that was already open, or any other document.
+- **FR-056**: The confirmed drawing MUST be read into the review's evidence exactly as an attached drawing is, with identifiers unique in the package and the ten-drawing bound kept, before the review resumes; the evidence MUST record that the review opened it, and any confirmed candidate not read MUST be named with why. The open MUST stay disabled until probe D14 has passed on the seat, and while it is disabled the review MUST say so.
+
 **Integration**
 
 - **FR-048**: Every new evidence field MUST be additive (evidence schema 1.6.0); packages written before it MUST load and serialize to their own bytes, and every check MUST treat an absent field as unknown.
@@ -235,7 +251,7 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 ### Key Entities
 
 - **Attached drawing**: an open drawing whose views show a document of the design, read with it; its sheets, views and records.
-- **Drawing candidate**: a drawing file of the same name beside a reviewed document, not open, never opened.
+- **Drawing candidate**: a drawing file of the same name beside a reviewed document, not open, never opened by the extraction; opened read-only by the product only when the engineer confirms it (owner, 2026-09-23).
 - **Native drawing dimension**: a dimension read from a drawing, with its text parts, written precision, unit, tolerance, kind and the model faces it is attached to.
 - **Drawing binding**: why a drawing dimension or annotation is, or is not, evidence about one subject: the view's document and configuration, whether it is up to date, and the attachment or model dimension that ties them.
 - **Drawing table**: a table on a sheet with its kind, title and cells.
@@ -248,7 +264,7 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 ### Measurable Outcomes
 
 - **SC-001**: On the next sitting, pressing Standards on a multi-sheet drawing grades it, where today it fails on every drawing; the extraction's gate log shows zero writing, activating, opening or closing members.
-- **SC-002**: On the next sitting, a review of a part or assembly with its drawings open reads each drawing that shows the design and no other, in every attempt, and opens nothing.
+- **SC-002**: On the next sitting, a review of a part or assembly with its drawings open reads each drawing that shows the design and no other, in every attempt, and opens nothing before the engineer confirms a candidate.
 - **SC-003**: On the synthetic package, every joint subject that carries a drawing tolerance is resolved from the drawing with the drawing, sheet, view and dimension cited; no subject is bound from a view of another configuration or an out-of-date view.
 - **SC-004**: On the synthetic package, every untoleranced drawing dimension with a known written precision and a matching band and unit receives the general tolerance, and none with an unknown precision, another unit or no band does.
 - **SC-005**: Every sheet of every read drawing is either read or named in a gap: no sheet silently absent.
@@ -257,20 +273,21 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 - **SC-008**: A review raises at most four drawing questions, each answerable with one click or one line.
 - **SC-009**: The read-only guard refuses every writing member of the drawing families on the 2024 SP5 interop, checked mechanically, and still refuses nothing the extractor reads.
 - **SC-010**: On the next sitting, on a drawing whose callouts are known, the binding attaches every checked callout to the right hole before any drawing value is allowed into a calculation.
+- **SC-011**: On the next sitting, a confirmed candidate is opened read-only with the composed flags, never becomes the active document, is read and closed; afterwards its file is byte-identical and not locked, no save flag rose, and a drawing the engineer had open is still open (probe D14).
 
 ## Assumptions
 
 - **The drawing source binds nothing until the seat confirms it** (FR-024): the binding by attached face and by model dimension is built and tested with fakes, and enabled by one recorded change after the seat probe passes on a known drawing - the same pattern as feature 006's transparency polarity. The same switch keeps native dimensions out of the fit, stack and alignment checks: the model can find them and name them, and the checks decline them with the seat's reason until the switch is set.
-- **Only open drawings are read.** The product never opens a drawing, a candidate or otherwise; the engineer opens it and extracts again. Whether the product should open a candidate read-only when the engineer answers "yes" is an owner question; the default is no.
-- **The Standards tab's graded set does not change**: a review's standards run does not grade attached drawings, and the Standards extraction attaches none (006 FR-025 amended for the review extraction only). Grading attached drawings is an owner question; the default is no.
+- **Only open drawings are read by the extraction.** The extraction never opens a drawing. A candidate the engineer confirms is opened read-only by the product, read and closed (owner, 2026-09-23, research R5 Q2), which replaces the first default, "the engineer opens it and extracts again".
+- **The Standards tab's graded set does not change**: a review's standards run does not grade attached drawings, and the Standards extraction attaches none (006 FR-025 amended for the review extraction only). A drawing is graded only when it is itself open (owner, 2026-09-23, research R5 Q3).
 - **A review of a drawing root in the Review tab stays out of scope**: the engineer opens the part or assembly and its open drawing is read with it; the refusal says so.
 - **At most ten drawings are read per extraction**, a bound on dump time; the rest are named.
-- **The general tolerance table of SOLIDWORKS** (an ISO 2768 class) is recorded and not converted, consistent with feature 010's decision to keep no standard tolerance table in code.
-- **A geometric tolerance value written without a unit** is in the drawing's own unit, as drafting practice reads it; the citation says so.
+- **The general tolerance table of SOLIDWORKS** (an ISO 2768 class) is recorded word for word, not converted, and binds nothing, consistent with feature 010's decision to keep no standard tolerance table in code; the company goes by decimal places only (owner, 2026-09-23, research R5 Q7).
+- **A geometric tolerance value written without a unit** is in the drawing's own unit, as drafting practice reads it; the citation says so (owner, 2026-09-23, research R5 Q6).
 - **Notes are recorded verbatim**; a general tolerance written in a note is shown to the engineer and never parsed into a tolerance; the profile's bands are the general source.
 - **The drawing tools are offered only when the package carries drawing evidence**, so recorded reviews are unchanged; the brief is always available from the command line.
 - **The brief's sections follow the roadmap**; when the owner's drawing-creation base repository is supplied, its expected inputs are evaluated and the brief is extended additively under a new brief version, in feature 012 if not before.
-- **The profile values of the drawing section are the owner's** and arrive with the regenerated profile at the next sitting; the repository ships fictional placeholders.
+- **The profile values of the drawing section are the owner's** and arrive with the regenerated profile at the next sitting; the repository ships fictional placeholders (owner, 2026-09-23, research R5 Q4). The drawing conformance finding is a review finding only, never a release-verdict failure (R5 Q5).
 - **The attention class of the one new finding** (manufacturing) is a first opinion for the owner's read-through, as feature 010's were.
 - **Evidence schema 1.6.0 and profile version 3** are this feature's: feature 010 took 1.5.0 and version 2 (010 research R5).
 - **Seat-dependent reads** (every read listed in the probes contract) are built behind reader seams with fakes and validated at the next sitting; none is trusted on a real document before its probe passes.
