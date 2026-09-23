@@ -129,6 +129,11 @@ the visible text of Results - skipping the contents of shut `<details>` and of h
 The backend half is a Python test on the same fixture: no display title (section 2) holds a
 `cmp:` id whose component has a non-blank name, and no summary word holds a check id or a raw token.
 
-*Landed as* (T065, `test_plain_words_fixture.py`): the page scan runs the last three checks and the
-backend test the summary half; the `cmp:` checks on both sides wait for T062 (section 2), and a
-probe of the page check on this tree finds exactly the interference titles it would change.
+*Landed as* (T065, `test_plain_words_fixture.py`): the page scan runs all four checks and the
+backend test both halves. The `cmp:` checks read the display titles (section 2, decision 2A of
+2026-09-23): on the page, `NoPartIdOfANamedPartIsVisible`, guarded by a fixture finding's
+`observed` naming a named part so it proves something; in Python, no display title of the
+snapshot or heading of `report.md` names a named part by id or is cut, where the recorded titles
+did both. `EveryTitleIsTheBackendsStringVerbatim` adds that every card, Start-here row and line
+behind "Show all" prints the fixture's `title` character for character - the page builds no
+title.
