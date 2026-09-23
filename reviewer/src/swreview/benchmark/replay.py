@@ -61,6 +61,7 @@ from swreview.benchmark.recording import (
 from swreview.checks.interference import CHECK as INTERFERENCE_CHECK
 from swreview.findings import Finding, SubjectKey, finding_subject_key
 from swreview.ir.loader import PACKAGE_FILE_NAME
+from swreview.prerun import ALREADY_RUN
 from swreview.report.session import Contact, ReviewSession
 from swreview.tokens import TOKENIZER_NAME, count_tokens, encoding
 from swreview.tools.registry import (
@@ -82,6 +83,7 @@ __all__ = [
     "ReplayCall",
     "ReplayFinding",
     "ReplayFindings",
+    "ReplayPasses",
     "ReplayReport",
     "ReplayRound",
     "ReplayTotals",
@@ -91,7 +93,9 @@ __all__ = [
     "play_review",
     "render_replay_lines",
     "replay",
+    "replay_passes",
     "replay_recording",
+    "report_of",
     "subject_of",
     "turn_plans",
 ]
@@ -190,6 +194,8 @@ class PlayedReview:
     """Steps setup wrote before the first model round (lever 5's pre-run)."""
     prefix: str = ""
     """The system prompt, the tool schemas and the opening message, as `_prefix` renders them."""
+    opening: str = ""
+    """The first user message the review opened on: the checks-first digest, when it ran."""
 
 
 class _Stop(BaseException):
@@ -305,7 +311,10 @@ def _prefix(run: ReviewRun) -> str:
 
 def _play(run: ReviewRun, turns: Sequence[TurnPlan]) -> PlayedReview:
     played = PlayedReview(
-        session=run.session, setup_steps=len(run.session.steps), prefix=_prefix(run)
+        session=run.session,
+        setup_steps=len(run.session.steps),
+        prefix=_prefix(run),
+        opening=run.opening_message,
     )
     tools = _RecordingTools(run.tools, run)
     run.tools = tools
@@ -466,8 +475,9 @@ def _rounds_of(
 
 # --- the replay: two passes, classes, accounting, findings (contracts/replay.md §3 to §7) ------
 
-CallClass = Literal["reproduced", "changed", "estimated", "carried"]
-"""How a recorded call was priced. User Story 2 adds `answered_from_checks`, User Story 3
+CallClass = Literal["reproduced", "changed", "estimated", "carried", "answered_from_checks"]
+"""How a recorded call was priced. `answered_from_checks` (User Story 2): the requested pass
+ran checks first and its re-call guard answered the call from the pre-run. User Story 3 adds
 `stored`; `carried` is a presentation round, which has no calls of its own."""
 
 BRIDGE_TOOLS = frozenset(function.__name__ for function in BRIDGE_TOOL_FUNCTIONS)
@@ -599,6 +609,60 @@ def replay(
     )
 
 
+@dataclass(frozen=True)
+class ReplayPasses:
+    """The two played passes of one recording: as recorded (A) and as requested (B)."""
+
+    recording: Recording
+    as_recorded: EfficiencySettings
+    requested: EfficiencySettings
+    first: PlayedReview
+    second: PlayedReview
+    with_profile: bool
+
+
+def replay_passes(
+    recording: Recording,
+    scratch: Path | str,
+    *,
+    requested: EfficiencySettings,
+    standards_profile: Path | str | None = None,
+) -> ReplayPasses:
+    """Play pass A and pass B of `recording` into `scratch/as-recorded` and `scratch/requested`.
+
+    The folders are the caller's: `replay_recording` hands a temporary one and lets it go;
+    an acceptance test keeps it to read what the requested pass wrote. Nothing is written
+    anywhere else, and never into the recording's own folder.
+    """
+    recorded_settings = recording.session.efficiency or EfficiencySettings()
+    plans = turn_plans(recording)
+    options: dict[str, Any] = {"standards_profile": standards_profile}
+    first = play_review(
+        recording.run_dir,
+        Path(scratch) / "as-recorded",
+        plans,
+        model=recording.session.model,
+        efficiency=recorded_settings,
+        **options,
+    )
+    second = play_review(
+        recording.run_dir,
+        Path(scratch) / "requested",
+        plans,
+        model=recording.session.model,
+        efficiency=requested,
+        **options,
+    )
+    return ReplayPasses(
+        recording=recording,
+        as_recorded=recorded_settings,
+        requested=requested,
+        first=first,
+        second=second,
+        with_profile=standards_profile is not None,
+    )
+
+
 def replay_recording(
     recording: Recording,
     *,
@@ -607,29 +671,20 @@ def replay_recording(
 ) -> ReplayReport:
     """`replay` over a recording already read."""
     encoding()  # a replay that cannot count has nothing to report: refuse before running
-    recorded_settings = recording.session.efficiency or EfficiencySettings()
-    plans = turn_plans(recording)
-    options: dict[str, Any] = {"standards_profile": standards_profile}
     with tempfile.TemporaryDirectory(prefix="swreview-replay-") as scratch:
-        first = play_review(
-            recording.run_dir,
-            Path(scratch) / "as-recorded",
-            plans,
-            model=recording.session.model,
-            efficiency=recorded_settings,
-            **options,
+        passes = replay_passes(
+            recording, scratch, requested=requested, standards_profile=standards_profile
         )
-        second = play_review(
-            recording.run_dir,
-            Path(scratch) / "requested",
-            plans,
-            model=recording.session.model,
-            efficiency=requested,
-            **options,
-        )
-    classes = _classify(recording, first, standards_profile is not None)
+    return report_of(passes)
+
+
+def report_of(passes: ReplayPasses) -> ReplayReport:
+    """Price and compare two played passes (`contracts/replay.md` sections 3 to 5)."""
+    recording, first, second = passes.recording, passes.first, passes.second
+    classes = _classify(recording, first, passes.with_profile)
+    answered = _answered_from_checks(classes, second)
     sizes_first, lower = _sizes(recording, first, classes)
-    sizes_second = _requested_sizes(first, second, classes, sizes_first)
+    sizes_second = _requested_sizes(first, second, classes, sizes_first, answered)
     rounds = _rounds(
         recording,
         classes,
@@ -638,6 +693,7 @@ def replay_recording(
         sizes_first,
         sizes_second,
         lower,
+        answered,
         prefix_difference=count_tokens(second.prefix) - count_tokens(first.prefix),
     )
     return ReplayReport(
@@ -647,12 +703,12 @@ def replay_recording(
         comparison="shape" if recording.provider == "gemini" else "exact",
         framing_tokens=FRAMING_TOKENS,
         settings=ReplaySettings(
-            as_recorded=PassSettings(efficiency=recorded_settings),
-            requested=PassSettings(efficiency=requested),
+            as_recorded=PassSettings(efficiency=passes.as_recorded),
+            requested=PassSettings(efficiency=passes.requested),
         ),
         rounds=rounds,
         totals=_totals(rounds),
-        findings=_findings(recording, classes, second),
+        findings=_findings(recording, classes, second, answered),
     )
 
 
@@ -768,17 +824,43 @@ def _sizes(
     return sizes, lower
 
 
+def _answered_from_checks(
+    classes: Sequence[_Classified], second: PlayedReview
+) -> dict[int, str]:
+    """The recorded calls pass B's re-call guard answered, by index, each with its reason.
+
+    Recognised by the guard's own answer (`prerun.ALREADY_RUN`), never by the tool's name:
+    a call the guard lets through - another group, a component subset, a call whose pre-run
+    attempt failed - keeps its pass-A class (`contracts/replay.md` section 3).
+    """
+    played = {call.index: call for r in second.rounds for call in r.calls}
+    answered: dict[int, str] = {}
+    for item in classes:
+        call = played.get(item.index)
+        if call is None or call.result.payload.get("status") != ALREADY_RUN:
+            continue
+        answered[item.index] = (
+            f"the pre-run ran this call at step {call.result.payload.get('ran_at_step')}"
+        )
+    return answered
+
+
 def _requested_sizes(
     first: PlayedReview,
     second: PlayedReview,
     classes: Sequence[_Classified],
     sizes_first: Mapping[int, int],
+    answered: Mapping[int, str],
 ) -> dict[int, int]:
-    """Pass B's size of every call: the current code's result, or pass A's estimate."""
+    """Pass B's size of every call: the current code's result, or pass A's estimate.
+
+    A call the guard answered is sized at the guard's answer whatever its pass-A class: the
+    answer is what the requested pass really sends, even behind an estimated call.
+    """
     played = {call.index: call for r in second.rounds for call in r.calls}
     sizes = dict(sizes_first)
     for item in classes:
-        if item.class_ != "estimated" and item.index in played:
+        if (item.class_ != "estimated" or item.index in answered) and item.index in played:
             sizes[item.index] = count_tokens(played[item.index].text)
     return sizes
 
@@ -791,6 +873,7 @@ def _rounds(
     sizes_first: Mapping[int, int],
     sizes_second: Mapping[int, int],
     lower: set[int],
+    answered: Mapping[int, str],
     *,
     prefix_difference: int,
 ) -> list[ReplayRound]:
@@ -813,7 +896,10 @@ def _rounds(
             items = [by_step[call.step] for call in recorded_round.calls]
             calls = [
                 ReplayCall(
-                    step=i.recorded.step, tool=i.recorded.tool, class_=i.class_, reason=i.reason
+                    step=i.recorded.step,
+                    tool=i.recorded.tool,
+                    class_="answered_from_checks" if i.index in answered else i.class_,
+                    reason=answered.get(i.index, i.reason),
                 )
                 for i in items
             ]
@@ -929,14 +1015,19 @@ def _contacts_by_group(session: ReviewSession) -> dict[tuple[str, str], list[Con
 
 
 def _findings(
-    recording: Recording, classes: Sequence[_Classified], second: PlayedReview
+    recording: Recording,
+    classes: Sequence[_Classified],
+    second: PlayedReview,
+    answered: Mapping[int, str],
 ) -> ReplayFindings:
     """Compare the recorded and requested findings as multisets (contracts/replay.md §5).
 
     A recorded interference finding whose group the requested pass judged a contact is
     reclassified first, whatever its step's class: the contact says what became of it, which
     is more than "not replayable" can. Each contact reclassifies one recorded finding, so the
-    comparison stays a multiset.
+    comparison stays a multiset. A finding of a step the requested pass answered from checks
+    is compared against the whole requested session - the pre-run wrote it there - even
+    when pass A had to estimate the step, and a missing one is lost.
     """
     by_step = {item.recorded.step: item for item in classes}
     unmatched_contacts = _contacts_by_group(second.session)
@@ -961,7 +1052,11 @@ def _findings(
             )
             continue
         step_class = by_step.get(item.step) if item.step is not None else None
-        if step_class is not None and step_class.class_ == "estimated":
+        if (
+            step_class is not None
+            and step_class.class_ == "estimated"
+            and step_class.index not in answered
+        ):
             not_replayable.append(
                 NotReplayableFinding(
                     check=item.finding.check,
@@ -1015,6 +1110,8 @@ def render_replay_lines(report: ReplayReport) -> list[str]:
             flags.append("lower bound")
         if any(c.class_ == "changed" for c in r.calls):
             flags.append("changed")
+        if any(c.class_ == "answered_from_checks" for c in r.calls):
+            flags.append("answered from checks")
         lines.append(
             f"{r.turn:>4} {r.round:>5} {r.recorded_input:>12,} {r.as_recorded_input:>12,} "
             f"{r.requested_input:>12,}  {', '.join(flags)}".rstrip()

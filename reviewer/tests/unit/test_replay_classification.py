@@ -20,7 +20,7 @@ from swreview.agent.settings import EfficiencySettings
 from swreview.benchmark.replay import ReplayReport, TurnPlan, replay
 from swreview.ir.loader import save_package
 from tests.support.prerun import prerun_package, standards_prerun_package
-from tests.support.replay import record_scripted_review, rewrite_events
+from tests.support.replay import record_scripted_review, rewrite_events, rewrite_session
 from tests.support.review_bridge import (
     RECORDED_INTERFERENCE_SETTINGS,
     VOLUME_UNIT_GAP,
@@ -216,3 +216,85 @@ def test_an_untouched_recording_is_reproduced_throughout(tmp_path: Path) -> None
 
     assert {klass for klass, _ in calls_of(report).values()} == {"reproduced"}
     assert all(reason is None for _, reason in calls_of(report).values())
+
+
+# --- answered from checks (feature 008 T049, User Story 2) ----------------------------------
+
+RMS_PART = ScriptedToolCall("check_rms_part", {"document_id": None})
+CHECKS_FIRST = EfficiencySettings(prerun_checks=True)
+
+
+def test_a_recorded_call_the_pre_run_already_ran_is_answered_from_checks(
+    tmp_path: Path,
+) -> None:
+    run = record_scripted_review(
+        tmp_path / "run", package(tmp_path), [TurnPlan(rounds=((RMS_PART,), (SUMMARY,)))]
+    )
+
+    report = replay(run, requested=CHECKS_FIRST)
+
+    klass, reason = calls_of(report)["check_rms_part"]
+    assert klass == "answered_from_checks"
+    assert reason == "the pre-run ran this call at step 0"
+    assert report.findings.lost == []
+
+
+def test_a_call_the_guard_does_not_catch_keeps_its_pass_a_class(tmp_path: Path) -> None:
+    run = record_scripted_review(
+        tmp_path / "run", package(tmp_path), [TurnPlan(rounds=((RMS_PART,), (SUMMARY,)))]
+    )
+
+    classes = calls_of(replay(run, requested=CHECKS_FIRST))
+
+    assert classes["get_package_summary"] == ("reproduced", None)
+
+
+def test_the_same_recording_with_checks_first_off_answers_nothing_from_checks(
+    tmp_path: Path,
+) -> None:
+    run = record_scripted_review(
+        tmp_path / "run", package(tmp_path), [TurnPlan(rounds=((RMS_PART,), (SUMMARY,)))]
+    )
+
+    classes = calls_of(replay(run, requested=EfficiencySettings()))
+
+    assert classes["check_rms_part"] == ("reproduced", None)
+
+
+def test_a_recorded_finding_of_an_answered_call_is_compared_against_the_whole_session(
+    tmp_path: Path,
+) -> None:
+    """Answered is not "not replayable": its findings must be in the requested session, which
+    the pre-run wrote, and one that is not there is lost."""
+    run = record_scripted_review(
+        tmp_path / "run", package(tmp_path), [TurnPlan(rounds=((RMS_PART,), (SUMMARY,)))]
+    )
+
+    def moved(session: dict[str, Any]) -> None:
+        session["findings"][0]["component_ids"] = ["cmp:0003"]
+
+    rewrite_session(run, moved)
+
+    report = replay(run, requested=CHECKS_FIRST)
+
+    assert calls_of(report)["check_rms_part"][0] == "answered_from_checks"
+    assert len(report.findings.lost) == 1
+    assert "cmp:0003" in report.findings.lost[0].subject
+    assert report.findings.not_replayable == []
+
+
+def test_an_answered_call_is_sized_at_the_guards_answer_in_the_requested_pass(
+    tmp_path: Path,
+) -> None:
+    run = record_scripted_review(
+        tmp_path / "run", package(tmp_path), [TurnPlan(rounds=((RMS_PART,), (SUMMARY,)))]
+    )
+
+    off = replay(run, requested=EfficiencySettings())
+    on = replay(run, requested=CHECKS_FIRST)
+
+    # Round 1 carries the answered call's result; the guard's counts are far smaller than
+    # the full envelope the recording resent, even with the digest added to the prefix.
+    assert on.rounds[1].requested_input - on.rounds[0].requested_input < (
+        off.rounds[1].requested_input - off.rounds[0].requested_input
+    )
