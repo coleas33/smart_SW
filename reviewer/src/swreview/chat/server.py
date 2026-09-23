@@ -767,6 +767,24 @@ def check_result(check_dir: Path, run: RmsCheckRun) -> dict[str, Any]:
         },
         "attention": to_jsonable_python(rank(run.session)),
         "not_examined": to_jsonable_python(not_examined(package)),
+        "rule_statements": rule_statements(run.findings, run.coverage),
+    }
+
+
+def rule_statements(
+    findings: Sequence[Mapping[str, Any]], coverage: Sequence[Mapping[str, Any]]
+) -> dict[str, str]:
+    """Every rule the grade names - in its findings, then its coverage rows - with its
+    `RULES` statement, each once, in the order first named (feature 009 T064).
+
+    So the Model check header can say what an unresolved rule requires rather than print
+    its id (contracts/plain-words.md section 6). An id the catalogue lacks - a checklist
+    item such as `modeling.resilience` - has no statement and is left out; the page prints
+    the id for it.
+    """
+    named = [str(row["check"]) for row in (*findings, *coverage)]
+    return {
+        rule_id: RULES[rule_id].statement for rule_id in dict.fromkeys(named) if rule_id in RULES
     }
 
 
@@ -1123,6 +1141,16 @@ class ChatServer:
         if self.development:
             providers.append(ProviderName.FAKE.value)
         return JSONResponse({"status": "ok", "version": __version__, "providers": providers})
+
+    async def labels(self, request: Request) -> Response:
+        """`GET /labels`: the card vocabulary of `review_words_v1.yaml`, verbatim.
+
+        Status, severity, coverage bucket, evidence status and contact kind words, and one
+        next-step sentence per error class (feature 009, contracts/plain-words.md section 1).
+        The Review tab asks for it once per `init` and prints tokens through it, so a wording
+        change is a data change. It reads no session and writes nothing.
+        """
+        return JSONResponse(load_words().labels.model_dump(mode="json"))
 
     async def models(self, request: Request) -> Response:
         raw = request.query_params.get("provider", DEFAULT_PROVIDER.value)
@@ -2257,6 +2285,7 @@ def create_app(
     routes = [
         Route("/health", server.health, methods=["GET"]),
         Route("/models", server.models, methods=["GET"]),
+        Route("/labels", server.labels, methods=["GET"]),
         Route("/sessions", server.create_session, methods=["POST"]),
         Route("/sessions/{chat_id}", server.get_session, methods=["GET"]),
         Route("/sessions/{chat_id}/events", server.events, methods=["GET"]),

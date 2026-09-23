@@ -284,6 +284,7 @@ ROUTES: tuple[tuple[str, str], ...] = (
     ("GET", "/sessions/{chat}/attention"),
     ("GET", "/sessions/{chat}/snapshot"),
     ("GET", "/reviews/20260913-120000-bracket"),
+    ("GET", "/labels"),
 )
 """Every route of the contract, with a placeholder for a chat id."""
 
@@ -404,6 +405,38 @@ def test_health_names_the_providers_this_build_runs(client: TestClient) -> None:
     assert body["version"]
     assert body["providers"][:2] == ["openai", "gemini"]
     assert "fake" not in body["providers"]
+
+
+def test_labels_answer_the_words_files_card_vocabulary(client: TestClient) -> None:
+    """`GET /labels` (feature 009 T059, contracts/plain-words.md section 1): the words file's
+    `labels` block, verbatim, with its version, so every word on a card is the backend's."""
+    from swreview.report.summary import load_words
+
+    response = client.get("/labels")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body == load_words().labels.model_dump(mode="json")
+    assert body["version"] == "review_words_v1"
+    assert set(body) == {
+        "version",
+        "status",
+        "severity",
+        "bucket",
+        "evidence_status",
+        "contact_kind",
+        "errors",
+    }
+    assert body["status"]["checked_within_scope"] == "checked within scope"
+    assert body["errors"]["TurnRunning"].startswith("A review turn is still running.")
+
+
+def test_labels_write_nothing_into_the_run_root(client: TestClient, run_root: Path) -> None:
+    before = sorted(str(path) for path in run_root.rglob("*"))
+
+    assert client.get("/labels").status_code == 200
+
+    assert sorted(str(path) for path in run_root.rglob("*")) == before
 
 
 def test_a_development_build_also_lists_the_scripted_provider(
