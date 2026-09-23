@@ -334,33 +334,44 @@ public sealed class ConPtyTests
     [Fact]
     public void TheCoalescerPostsASmallWriteAfterTheInterval()
     {
+        var interval = TimeSpan.FromMilliseconds(200);
         var gate = new ManualResetEventSlim(false);
         var posted = new List<byte[]>();
+        var clock = new System.Diagnostics.Stopwatch();
+        TimeSpan postedAfter = TimeSpan.Zero;
         using (var coalescer = new OutputCoalescer(
-            TimeSpan.FromMilliseconds(200),
+            interval,
             32 * 1024,
             chunk =>
             {
                 lock (posted)
                 {
+                    postedAfter = clock.Elapsed;
                     posted.Add(chunk);
                 }
 
                 gate.Set();
             }))
         {
+            clock.Start();
             coalescer.Append(Encoding.ASCII.GetBytes("$ "), 0, 2);
 
-            // A prompt is two bytes and must not wait for 32 KB that will never come...
-            lock (posted)
-            {
-                Assert.Empty(posted);
-            }
-
-            Assert.True(gate.Wait(5000), "the interval never flushed the buffer");
+            // A prompt is two bytes and must not wait for 32 KB that will never come, nor be
+            // posted on the spot. The time is taken inside the callback rather than by
+            // asserting "nothing yet" after Append: on a loaded machine the test thread can
+            // lose more than the interval between the two lines, and the flush then lands
+            // first although the coalescer did wait. The slack is the Windows timer
+            // resolution (15.6 ms), by which a timer may fire early. The wait is long because
+            // the flush runs on a thread-pool timer, and the parallel test run can hold every
+            // pool thread for several seconds (seen: 5 s passed with no flush while the reviewer
+            // suite ran beside it); a coalescer that never flushes still fails, only later.
+            Assert.True(gate.Wait(30000), "the interval never flushed the buffer");
             lock (posted)
             {
                 Assert.Equal(new[] { (byte)'$', (byte)' ' }, Assert.Single(posted));
+                Assert.True(
+                    postedAfter >= interval - TimeSpan.FromMilliseconds(20),
+                    $"posted after {postedAfter.TotalMilliseconds:F0} ms, before the interval");
             }
         }
     }
