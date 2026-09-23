@@ -327,3 +327,34 @@ name it used.
 - Secret policy: the general-chat secret is refused for every `remodel.*` command; the remodel
   secret is refused for `interference`.
 - The frozen interop-surface manifest and its two tests (`interop-manifest.md`).
+
+## The confirmed drawing's read-only open (feature 011): an allowlist entry of its own
+
+The owner's answer of 2026-09-23 to feature 011's research R5 Q2 lets the product open a candidate
+drawing the engineer confirms, read-only, "through the guarded seam, with its own allowlist entry"
+(`011-drawing-context/contracts/confirmed-open.md` section 3, `guard.md` section 7). This is that
+entry. `Guard/DrawingOpenGuard.cs` is an `ICallGuard` in the shape of `RemodelGuard`, built only by
+`Sw/DrawingOpenScope.cs`: the three keys below, matched **ordinally**; any other
+interface-qualified key refused naming it; a bare name - every read - answered by `ReadOnlyGuard`,
+unchanged.
+
+| Key (feature 011, confirmed open) | Used for | Composition, asserted as integers |
+|---|---|---|
+| `ISldWorks.DocumentVisible` | hide drawings opened from here on, then restore | `(false, swDocDRAWING = 3)` before the open; `(true, 3)` in a `finally`, also when the open throws or answers null |
+| `ISldWorks.OpenDoc6` | the one read-only open | type `3`; options exactly `ReadOnly (2) \| Silent (1) = 3`, never `ViewOnly (4)`, `RapidDraft (8)` or `LoadModel (16)`; configuration `""` |
+| `ISldWorks.CloseDoc` | close what the seam opened | only when the seam opened this drawing, and only after `GetOpenDocumentByName(path)` answers the **same COM identity** the open returned; otherwise nothing is closed and the read says why |
+
+**The close rule.** A drawing that was already open is read as it stands: no visibility call, no
+open, no close. The seam never closes any other document, and never a model the drawing loaded.
+
+**It widens neither guard.** Nothing is added to `ReadOnlyGuard` or to `RemodelGuard` (whose
+stage-1 allowlist and its pinned five overriding keys are unchanged). Of the three keys only
+`DocumentVisible` overrides a read-only denial (feature 011's shared `ISldWorks` row);
+`OpenDoc6` and `CloseDoc` are bare names `ReadOnlyGuard` already allows (feature 011's exclusions).
+`DrawingOpenGuardTests` pins the set, each refusal, the delegation and the one overriding key;
+`DrawingOpenScopeTests` pins the sequence, the integers, the close rule and the gate log.
+
+**Shipped off.** `DrawingOpenScope.SeatValidated` is false until probe D14 records at a licensed
+seat that the open neither changes, saves nor locks the drawing and leaves the engineer's window
+where it was (feature 011 T077); while it is false a closed drawing is refused and an already-open
+one is still read.
