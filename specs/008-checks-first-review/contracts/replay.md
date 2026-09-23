@@ -207,7 +207,10 @@ figure's own accounting (one `_Conversation` walk for both): each regrouped roun
 its recorded rounds' outputs together, a round rule R emptied is gone with its output, a call
 the replay could not run keeps pass B's estimate or stored result under its new position, and
 the closing round and every carried presentation round are priced as the strict figure prices
-them - so when neither rule changes anything the estimate equals the strict figure. `Regrouped`
+them - so when neither rule changes anything the estimate equals the strict figure. Every other
+field of pass B's pricing carries over unchanged, its view and the tool array its stubs are
+written against (lever 13, T114) included (*landed as*, review of `d805112..99269dd`; no
+committed figure moved). `Regrouped`
 is `{assumption, rules, rounds, total}`, `rounds` counting the regrouped main rounds and the
 carried ones. The human output prints it on the line after the round counts: `regrouped
 estimate (rule R, M): <total> over <rounds> rounds, assuming <assumption>`. A replay whose

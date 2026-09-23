@@ -1457,8 +1457,10 @@ def _regrouped_estimate(
     if regrouped is None:
         return None
     kept = [index for rounds in regrouped.turns for r in rounds for index in r.calls]
-    pricing = _Pricing(
-        view=requested.view,
+    # `replace`, so every other field of pass B's pricing - its view, the array its stubs
+    # are written against (lever 13, T114), and any field added later - carries over.
+    pricing = replace(
+        requested,
         estimates={
             position: requested.estimates[index]
             for position, index in enumerate(kept)

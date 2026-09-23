@@ -845,6 +845,55 @@ def test_when_the_rules_change_nothing_the_estimate_is_the_strict_figure(
         assert report.totals.carried_rounds == 1
 
 
+def test_the_regrouped_estimate_prices_stubs_against_the_strict_figures_array(
+    tmp_path: Path, package_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Section 6's "the strict figure's own accounting": the regrouped script's results are
+    priced with pass B's view and pass B's tool array, the one its stubs are written against
+    (lever 13, T114) - never with every tool offered, and so never with a field of pass B's
+    pricing left behind."""
+    from swreview.benchmark import replay as replay_module
+
+    run = record_scripted_review(
+        tmp_path / "run",
+        package_dir,
+        [TurnPlan(rounds=((SUMMARY,), (RMS_PART,), (COMPONENTS,), (HOLES,)), text="Ok.")],
+    )
+    requested = (
+        EfficiencySettings(
+            prerun_checks=True, withhold_prerun_tools=True, parallel_tool_calls=True
+        ),
+        MODEL_VIEW_PANE,
+    )
+    passes, _ = regrouped_of(run, tmp_path / "scratch", requested)
+    assert passes.regrouped is not None
+    assert "check_rms_part" not in passes.second.offered, "precondition: lever 13 withheld it"
+
+    seen: list[tuple[bool, Any, Any]] = []
+    regrouping = [False]
+    original_tokens = replay_module._results_tokens
+    original_estimate = replay_module._regrouped_estimate
+
+    def results_tokens(played: Any, pricing: Any, cache: Any) -> int:
+        seen.append((regrouping[0], pricing.view, pricing.offered))
+        return original_tokens(played, pricing, cache)
+
+    def regrouped_estimate(*args: Any, **kwargs: Any) -> Any:
+        regrouping[0] = True
+        try:
+            return original_estimate(*args, **kwargs)
+        finally:
+            regrouping[0] = False
+
+    monkeypatch.setattr(replay_module, "_results_tokens", results_tokens)
+    monkeypatch.setattr(replay_module, "_regrouped_estimate", regrouped_estimate)
+    report = report_of(passes)
+
+    assert report.regrouped is not None
+    regrouped = {(view, offered) for inside, view, offered in seen if inside}
+    assert regrouped == {(passes.requested_view, passes.second.offered)}
+
+
 def test_both_rules_merge_the_rounds_a_dropped_check_separated(
     tmp_path: Path, package_dir: Path
 ) -> None:
