@@ -335,6 +335,44 @@ def test_the_follow_up_words_come_from_the_recorded_growth(
     assert rounds_of(report)[-1][0] == rounds_of(report)[-1][1]
 
 
+def test_a_follow_up_after_a_stopped_turn_counts_the_stopped_turns_words_once(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    """Found by the drift rule (008 T117, `contracts/replay.md` section 4, rule 7).
+
+    The runner keeps a stopped turn's engineer message, so the next turn's request carries
+    both questions, and the recorded growth the next turn's words are read from is measured
+    from the last committed turn: it already holds the stopped turn's words. Adding them to
+    what the stopped turn counted would count its question twice on every later round.
+    """
+    stopped_question = "Look at the summary again, then the holes."
+    run = record_scripted_review(
+        tmp_path / "run",
+        package_dir,
+        [
+            TurnPlan(rounds=((SUMMARY,),), text="Done."),
+            TurnPlan(
+                kind="follow_up",
+                user_text=stopped_question,
+                rounds=((SUMMARY,), (HOLES,)),
+                end_reason="stopped",
+                stop_at_last_call=True,
+            ),
+            TurnPlan(kind="follow_up", user_text="And the components?", rounds=((COMPONENTS,),)),
+        ],
+    )
+    recording = read_recording(run)
+    assert [turn.end_reason for turn in recording.turns] == ["end", "stopped", "end"]
+    assert recording.turns[2].user_tokens == count_tokens(stopped_question) + count_tokens(
+        "And the components?"
+    )
+
+    report = replay(run, requested=ALL_OFF)
+
+    assert [r.as_recorded_input - r.recorded_input for r in report.rounds] == [0] * 6
+    assert report.totals.as_recorded == report.totals.recorded
+
+
 # --- the model's view (User Story 3, T078) ------------------------------------------------
 
 PANE_VIEW = (EfficiencySettings(), MODEL_VIEW_PANE)
