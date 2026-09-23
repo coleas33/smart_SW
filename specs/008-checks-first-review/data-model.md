@@ -96,8 +96,11 @@ where `class` is one of `reproduced`, `changed`, `estimated`, `carried`, `answer
 `rounds`, `total`.
 
 `ReplayFindings`: `recorded: int`, `replayed: int`, `lost: [{check, subject}]`,
-`added: [{check, subject}]`, `not_replayable: [{check, subject, step, reason}]`. `subject` is the
-printable form of `finding_subject_key` minus the check.
+`added: [{check, subject}]`, `not_replayable: [{check, subject, step, reason}]`,
+`reclassified: [{check, subject, step, group_key, contact_id}]` (feature 010 T094: a recorded
+`interference.static` whose group key and configuration equal a contact the requested pass
+recorded; neither lost nor not replayable). `subject` is the printable form of
+`finding_subject_key` minus the check.
 
 ## 3. The scripted provider (`agent/providers/fake.py`, test-facing)
 
