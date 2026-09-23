@@ -146,6 +146,6 @@ public sealed class GapCollector
     /// The exception type and message. The type matters: an InvalidCastException from
     /// interop reads very differently from a COMException with an HRESULT.
     /// </summary>
-    private static string Describe(Exception error) =>
+    internal static string Describe(Exception error) =>
         $"{error.GetType().Name}: {error.Message}";
 }
