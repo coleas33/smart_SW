@@ -23,13 +23,17 @@ from typer.testing import CliRunner
 
 from swreview import cli
 from swreview.agent.providers.fake import ScriptedToolCall
-from swreview.agent.settings import EfficiencySettings
 from swreview.benchmark.replay import TurnPlan, replay
 from swreview.checks import interference
 from swreview.ir.loader import save_package
 from swreview.ir.models import Volume
 from tests.support.prerun import FIRST_INSTANCE, GROUP_KEY, SECOND_INSTANCE, prerun_package
-from tests.support.replay import record_scripted_review, rewrite_session
+from tests.support.replay import (
+    ALL_OFF,
+    record_scripted_review,
+    rewrite_session,
+    without_stored_results,
+)
 from tests.support.review_bridge import (
     RECORDED_INTERFERENCE_SETTINGS,
     VOLUME_UNIT_GAP,
@@ -76,7 +80,7 @@ def test_a_finding_the_replay_no_longer_produces_is_lost_and_exits_1(run: Path) 
     original = json.loads((run / "session.json").read_text(encoding="utf-8"))["findings"][0]
     rewrite_session(run, moved)
 
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     assert [(item.check, item.subject) for item in report.findings.lost] == [
         (original["check"], report.findings.lost[0].subject)
@@ -98,7 +102,7 @@ def test_an_added_finding_is_reported_and_the_exit_stays_0(run: Path) -> None:
 
     rewrite_session(run, fewer)
 
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     assert report.findings.lost == []
     assert [item.check for item in report.findings.added] == [removed["check"]]
@@ -107,12 +111,14 @@ def test_an_added_finding_is_reported_and_the_exit_stays_0(run: Path) -> None:
     assert "added" in result.stdout
 
 
-def test_findings_of_an_estimated_step_are_not_replayable_and_not_lost(tmp_path: Path) -> None:
+def live_then_judged(tmp_path: Path) -> Path:
+    """A live call adding a group the package lacks, then that group judged: a finding the
+    replay, which has no bridge, can neither run nor reproduce."""
     package_dir = tmp_path / "package"
     save_package(prerun_package(), package_dir)
     row = interference_row("int:0101", ("cmp:0001", "cmp:0002"), NEW_GROUP, 7.0)
     answer = {"interferences": [row], "gaps": [VOLUME_UNIT_GAP]}
-    run = record_scripted_review(
+    return record_scripted_review(
         tmp_path / "run",
         package_dir,
         [TurnPlan(rounds=((LIVE,), (JUDGE_NEW,)), text="Done.")],
@@ -122,13 +128,35 @@ def test_findings_of_an_estimated_step_are_not_replayable_and_not_lost(tmp_path:
         ),
     )
 
-    report = replay(run, requested=EfficiencySettings())
+
+def test_findings_of_an_estimated_step_are_not_replayable_and_not_lost(tmp_path: Path) -> None:
+    run = without_stored_results(live_then_judged(tmp_path))
+
+    report = replay(run, requested=ALL_OFF)
 
     [item] = report.findings.not_replayable
     assert item.check.startswith("interference.")
     assert item.step == 1
-    assert item.reason
+    assert item.reason and "the current code returns error" in item.reason
     assert report.findings.lost == []
+    assert replay_cli(run).exit_code == 0
+
+
+def test_findings_of_a_stored_step_are_not_replayable_and_not_lost(tmp_path: Path) -> None:
+    """008 T078: a stored result sizes the call exactly, but cannot say what the current
+    code would find, so its step's findings are listed with the stored reason."""
+    run = live_then_judged(tmp_path)
+
+    report = replay(run, requested=ALL_OFF)
+
+    classes = [c.class_ for r in report.rounds for c in r.calls]
+    assert classes == ["stored", "stored"]
+    [item] = report.findings.not_replayable
+    assert item.check.startswith("interference.")
+    assert item.step == 1
+    assert item.reason and "stored result tool-results/step-1.json" in item.reason
+    assert report.findings.lost == []
+    assert [r.as_recorded_input for r in report.rounds] == [r.recorded_input for r in report.rounds]
     assert replay_cli(run).exit_code == 0
 
 
@@ -174,7 +202,7 @@ def test_a_recorded_finding_the_replay_judges_a_contact_is_reclassified_not_lost
     recorded = recorded_interference(run)
     assert recorded["calculation"]["inputs"]["group_key"] == GROUP_KEY
 
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     [item] = report.findings.reclassified
     assert (item.check, item.group_key, item.contact_id) == (
@@ -213,7 +241,7 @@ def test_reclassification_is_checked_before_an_estimated_step_makes_it_not_repla
         ),
     )
 
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     [item] = report.findings.reclassified
     assert (item.group_key, item.step) == (GROUP_KEY, 1)
@@ -240,7 +268,7 @@ def test_a_contact_in_another_configuration_reclassifies_nothing(
 
     rewrite_session(run, elsewhere)
 
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     assert report.findings.reclassified == []
     [lost] = report.findings.lost
@@ -269,7 +297,7 @@ def test_one_contact_reclassifies_one_recorded_finding_of_its_group(
 
     rewrite_session(run, twice)
 
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     assert len(report.findings.reclassified) == 1
     assert [item.check for item in report.findings.lost] == ["interference.static"]
@@ -295,7 +323,7 @@ def test_a_recorded_finding_with_no_group_key_is_never_reclassified(
 
     rewrite_session(run, keyless)
 
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     assert report.findings.reclassified == []
     assert [item.check for item in report.findings.lost] == ["interference.static"]
@@ -309,14 +337,14 @@ def test_duplicate_subject_keys_are_compared_as_a_multiset(run: Path) -> None:
 
     rewrite_session(run, doubled)
 
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     assert len(report.findings.lost) == 1
     assert report.findings.recorded == report.findings.replayed + 1
 
 
 def test_an_untouched_recording_loses_and_adds_nothing(run: Path) -> None:
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     assert report.findings.lost == []
     assert report.findings.added == []

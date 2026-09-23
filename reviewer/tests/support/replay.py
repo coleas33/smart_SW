@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -36,10 +37,13 @@ from typing import Any
 
 from swreview.agent.providers import FRAMING_TOKENS, TokenUsage
 from swreview.agent.runner import ANSWER_MESSAGE
-from swreview.benchmark.replay import PlayedRound, TurnPlan, play_review
+from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings
+from swreview.benchmark.replay import PlayedRound, Requested, TurnPlan, play_review
 from swreview.tokens import count_tokens
+from swreview.tools.registry import TOOL_RESULTS_DIR_NAME
 
 __all__ = [
+    "ALL_OFF",
     "DEFAULT_OUTPUT_TOKENS",
     "DEFAULT_PREFIX_TOKENS",
     "UsageFor",
@@ -49,7 +53,12 @@ __all__ = [
     "rewrite_events",
     "rewrite_session",
     "usage",
+    "without_stored_results",
 ]
+
+ALL_OFF: Requested = (EfficiencySettings(), MODEL_VIEW_OFF)
+"""A replay's requested settings with every lever and the model view off: the recording's own,
+for every recording made with the command line's defaults."""
 
 DEFAULT_PREFIX_TOKENS = 11_006
 """The first round's input on the big recording: the system prompt, the tools, the opening."""
@@ -161,6 +170,18 @@ def rewrite_session(run_dir: Path, change: Callable[[dict[str, Any]], None]) -> 
     session = json.loads(path.read_text(encoding="utf-8"))
     change(session)
     path.write_text(json.dumps(session, indent=2), encoding="utf-8")
+
+
+def without_stored_results(run_dir: Path) -> Path:
+    """Remove `run_dir/tool-results/`, as a review recorded before feature 008 stored none.
+
+    Every recording written here stores each step's full result, which the replay prices a
+    call it cannot run from (`stored`); a test of the estimation rules - the committed
+    fixtures' case, and every recording made before User Story 3 - needs the folder gone.
+    Returns `run_dir`.
+    """
+    shutil.rmtree(run_dir / TOOL_RESULTS_DIR_NAME)
+    return run_dir
 
 
 def folder_hashes(folder: Path) -> dict[str, str]:

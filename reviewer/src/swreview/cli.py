@@ -410,6 +410,14 @@ PaneDefaultsOption = Annotated[
         "calls on OpenAI, payload slimming, history pruning after two rounds).",
     ),
 ]
+ReplayPaneDefaultsOption = Annotated[
+    bool,
+    typer.Option(
+        "--pane-defaults/--no-pane-defaults",
+        help="Request exactly the settings a pane review runs with (the default); "
+        "--no-pane-defaults requests every change off, plus whatever else is named.",
+    ),
+]
 PayloadSlimmingOption = Annotated[
     bool,
     typer.Option(
@@ -2339,7 +2347,11 @@ def benchmark_replay(
         Path,
         typer.Argument(help="A review run folder: session.json, events.jsonl, package.json."),
     ],
+    pane_defaults: ReplayPaneDefaultsOption = True,
     lever: LeverOption = None,
+    payload_slimming: PayloadSlimmingOption = False,
+    history_pruning: HistoryPruningOption = False,
+    prune_after: PruneAfterOption = None,
     standards_profile: Annotated[
         Path | None,
         typer.Option(
@@ -2352,11 +2364,14 @@ def benchmark_replay(
     """Price a recorded review through the current code, offline, and name any lost finding.
 
     Replays the folder's recorded calls in their recorded rounds twice - as recorded, and with
-    the levers named by `--lever` - with a scripted provider, and prints every round's recorded,
+    the requested settings - with a scripted provider, and prints every round's recorded,
     as-recorded and requested input, the totals and the finding comparison (008
-    `contracts/replay.md`). No key, no network, no SOLIDWORKS, and nothing is written into
-    RUN_DIR. Exit 1 on a refusal (one sentence) or, after printing everything, when a recorded
-    finding is lost; exit 2 on an unknown or refused lever.
+    `contracts/replay.md`). The requested settings are the pane's for the recorded provider
+    unless `--no-pane-defaults`, plus any lever or model-view switch named, resolved as
+    `swreview review` resolves them. No key, no network, no SOLIDWORKS, and nothing is
+    written into RUN_DIR. Exit 1 on a refusal (one sentence) or, after printing everything,
+    when a recorded finding is lost; exit 2 on an unknown or refused lever or a
+    `--prune-after` below 1 or without pruning on.
     """
     with _errors_as_exit_1(RecordingRefused, TokenizerUnavailable):
         recording = read_recording(run_dir)
@@ -2364,7 +2379,14 @@ def benchmark_replay(
         provider = ProviderName(recording.provider)
     except ValueError:
         provider = ProviderName.FAKE
-    requested = _efficiency(lever, provider=provider)
+    requested = _review_settings(
+        provider,
+        pane_defaults=pane_defaults,
+        lever=lever,
+        payload_slimming=payload_slimming,
+        history_pruning=history_pruning,
+        prune_after=prune_after,
+    )
     with _errors_as_exit_1(RecordingRefused, TokenizerUnavailable):
         report = replay_recording(
             recording, requested=requested, standards_profile=standards_profile

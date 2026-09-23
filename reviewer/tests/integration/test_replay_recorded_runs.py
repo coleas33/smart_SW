@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from swreview.agent.settings import EfficiencySettings
+from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings
 from swreview.benchmark.replay import ReplayReport, replay
 
 DUMPS = (
@@ -48,7 +48,7 @@ pytestmark = [
 
 @cache
 def as_recorded(run: str) -> ReplayReport:
-    return replay(DUMPS / run, requested=EfficiencySettings())
+    return replay(DUMPS / run, requested=(EfficiencySettings(), MODEL_VIEW_OFF))
 
 
 @pytest.mark.parametrize("run", RUNS)

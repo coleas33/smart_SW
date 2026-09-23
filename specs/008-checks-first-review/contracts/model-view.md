@@ -95,7 +95,10 @@ message is replaced by its stub when all hold:
 4. its arguments are known by position from the preceding assistant message's `tool_calls`.
 
 User messages (the opening digest, the engineer's text, the answer message) and assistant
-messages are never touched; nothing is mutated; an unmatched tool message is kept. The stub
+messages are never touched; nothing is mutated; an unmatched tool message is kept. *Landed as
+(T079):* conditions 1, 2 and 4 - the ones that do not need the content - are
+`pruning.prunable(messages, N) -> {position: arguments}`, which `prune_history` applies condition
+3 to and the replay reads for a result it could not run (section 12). The stub
 (data-model section 11):
 
 ```json
@@ -148,3 +151,16 @@ sentence still reaches the model.
 `fake_chat_script(bridge_calls=n)` probes with `bridge_interference(component_ids=[],
 configuration="probe", settings=<all five stated>)` instead of `bridge_measure` on made-up
 references, so `--fail-bridge` still reaches the bridge now that the measure tool wants ids.
+
+## 12. The replay (reconciled, T079)
+
+`swreview benchmark replay` prices the view with the functions the adapters use, never with a
+copy of them (`replay.md` section 4, rule 4): each played round carries its neutral history
+(`PlayedRound.history`), the request is `request_messages(history, view)` - `prune_history`
+when the view prunes, with `finding_detail = payload_slimming` - and each result is
+`tool_result_text(content, compact = payload_slimming)`. Pass A reads the recording's own
+`session.model_view`. A stored result (`tool-results/step-<n>.json` naming the session, step,
+tool and arguments) is shown through `tools.model_view.model_view` when the pass slims and then
+pruned like any other; a result the replay could neither run nor find stored is priced at its
+recorded size until `prunable` says the adapters would stub it, and then at the part of its stub
+the replay can know (tool and arguments).

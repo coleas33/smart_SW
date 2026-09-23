@@ -33,6 +33,7 @@ from typing import Any
 __all__ = [
     "PRUNED_NOTE",
     "STUB_ID_CAP",
+    "prunable",
     "prune_history",
     "result_stub",
 ]
@@ -121,6 +122,35 @@ def _arguments_by_position(
     return arguments
 
 
+def prunable(
+    messages: Sequence[Mapping[str, Any]], prune_after_rounds: int
+) -> dict[int, Mapping[str, Any]]:
+    """The tool messages old enough to become stubs, by position, each with its arguments.
+
+    Three of the four conditions of `contracts/model-view.md` section 7: its age - the
+    number of assistant messages after it - is at least `prune_after_rounds`; it is not an
+    error; its arguments are known by position. The fourth - the stub shorter than the
+    content - needs the content, so it is the caller's: `prune_history` compares the two,
+    and the replay, which knows only the size of a result it could not run, compares that.
+    """
+    arguments = _arguments_by_position(messages)
+    old: dict[int, Mapping[str, Any]] = {}
+    age = 0
+    for index in range(len(messages) - 1, -1, -1):
+        message = messages[index]
+        role = message.get("role")
+        if role == "assistant":
+            age += 1
+        elif (
+            role == "tool"
+            and age >= prune_after_rounds
+            and not message.get("is_error")
+            and index in arguments
+        ):
+            old[index] = arguments[index]
+    return old
+
+
 def prune_history(
     messages: Sequence[Mapping[str, Any]],
     prune_after_rounds: int,
@@ -130,35 +160,24 @@ def prune_history(
     """The history as the next request should carry it: old results replaced by stubs.
 
     A `tool` message is replaced when all four hold (`contracts/model-view.md` section 7):
-    its age - the number of assistant messages after it - is at least `prune_after_rounds`;
-    it is not an error; its compact stub is shorter than its compact content; and its
-    arguments are known by position. A message that already is a stub is left as it is, so
-    pruning twice is pruning once. User and assistant messages - the opening digest, the
-    engineer's words, the answer message - are never touched. Returns a new list of new
-    dicts; `messages` and its dicts are never mutated.
+    it is `prunable` - old enough, not an error, its arguments known by position - and its
+    compact stub is shorter than its compact content. A message that already is a stub is
+    left as it is, so pruning twice is pruning once. User and assistant messages - the
+    opening digest, the engineer's words, the answer message - are never touched. Returns a
+    new list of new dicts; `messages` and its dicts are never mutated.
 
     `finding_detail` is whether `get_finding` is offered (payload slimming on); a stub never
     points the model at a tool it does not have.
     """
-    arguments = _arguments_by_position(messages)
     pruned: list[dict[str, Any]] = [dict(message) for message in messages]
-    age = 0
-    for index in range(len(messages) - 1, -1, -1):
+    for index, arguments in prunable(messages, prune_after_rounds).items():
         message = messages[index]
-        role = message.get("role")
-        if role == "assistant":
-            age += 1
-            continue
-        if role != "tool" or age < prune_after_rounds or message.get("is_error"):
-            continue
         content = message.get("content")
-        if index not in arguments or not isinstance(content, Mapping):
-            continue
-        if content.get("pruned") == PRUNED_NOTE:
+        if not isinstance(content, Mapping) or content.get("pruned") == PRUNED_NOTE:
             continue
         stub = result_stub(
             str(message.get("name", "")),
-            arguments[index],
+            arguments,
             content,
             finding_detail=finding_detail,
         )

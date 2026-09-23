@@ -5,6 +5,10 @@ three totals, the difference, the estimated-round count and the tokenizer; `--js
 `ReplayReport` and nothing else; a folder that is not a review is one line on stderr and exit
 1; an unknown lever is a usage error, exit 2. It needs no key and no network: with every route
 to the network and the provider factory patched to raise, it still prices the recording.
+
+From User Story 3 (T078) the requested settings are the pane's for the recorded provider unless
+`--no-pane-defaults`, plus any lever, `--payload-slimming`, `--history-pruning` or
+`--prune-after`, all resolved by the one `_review_settings` that `swreview review` uses.
 """
 
 from __future__ import annotations
@@ -18,7 +22,14 @@ from typing import Any
 import pytest
 
 from swreview import cli
+from swreview.agent.providers import ProviderName
 from swreview.agent.providers.fake import ScriptedToolCall
+from swreview.agent.settings import (
+    MODEL_VIEW_OFF,
+    EfficiencySettings,
+    ModelViewSettings,
+    pane_defaults,
+)
 from swreview.benchmark.replay import ReplayReport, TurnPlan
 from swreview.ir.loader import save_package
 from tests.support.prerun import prerun_package, standards_prerun_package
@@ -109,6 +120,105 @@ def test_a_lever_resolves_into_the_requested_settings(run: Path) -> None:
     assert report.settings.as_recorded.efficiency.trim_tool_descriptions is False
 
 
+# --- the requested settings from User Story 3 (T078) ---------------------------------------
+
+
+def requested_of(run: Path, *switches: str) -> tuple[EfficiencySettings, ModelViewSettings]:
+    report = ReplayReport.model_validate(
+        payload(invoke("benchmark", "replay", str(run), *switches, "--json"))
+    )
+    return report.settings.requested.efficiency, report.settings.requested.model_view
+
+
+def test_the_pane_defaults_are_the_default_request(run: Path) -> None:
+    pane = pane_defaults(ProviderName.FAKE)
+
+    assert requested_of(run) == (pane.efficiency, pane.model_view)
+    assert requested_of(run, "--pane-defaults") == (pane.efficiency, pane.model_view)
+
+
+def test_no_pane_defaults_requests_every_change_off(run: Path) -> None:
+    assert requested_of(run, "--no-pane-defaults") == (EfficiencySettings(), MODEL_VIEW_OFF)
+
+
+def test_the_model_view_switches_turn_on_one_at_a_time(run: Path) -> None:
+    assert requested_of(run, "--no-pane-defaults", "--payload-slimming")[1] == ModelViewSettings(
+        payload_slimming=True, history_pruning=False
+    )
+    assert requested_of(run, "--no-pane-defaults", "--history-pruning", "--prune-after", "1")[
+        1
+    ] == ModelViewSettings(payload_slimming=False, history_pruning=True, prune_after_rounds=1)
+    assert requested_of(run, "--prune-after", "1")[1].prune_after_rounds == 1
+
+
+@pytest.mark.parametrize(
+    ("switches", "named"),
+    [
+        (("--prune-after", "0"), "--prune-after"),
+        (("--no-pane-defaults", "--prune-after", "1"), "--history-pruning"),
+    ],
+)
+def test_a_prune_age_that_cannot_apply_is_a_usage_error(
+    run: Path, switches: tuple[str, ...], named: str
+) -> None:
+    result = invoke("benchmark", "replay", str(run), *switches)
+
+    assert result.exit_code == 2
+    assert named in result.output
+
+
+def test_every_switch_goes_through_the_shared_resolver(
+    run: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[dict[str, Any]] = []
+    resolve = cli._review_settings
+
+    def spy(provider: ProviderName, **switches: Any) -> Any:
+        calls.append({"provider": provider, **switches})
+        return resolve(provider, **switches)
+
+    monkeypatch.setattr(cli, "_review_settings", spy)
+
+    requested = requested_of(
+        run,
+        "--no-pane-defaults",
+        "--lever",
+        "trim_tool_descriptions",
+        "--payload-slimming",
+        "--history-pruning",
+        "--prune-after",
+        "3",
+    )
+
+    assert calls == [
+        {
+            "provider": ProviderName.FAKE,
+            "pane_defaults": False,
+            "lever": ["trim_tool_descriptions"],
+            "payload_slimming": True,
+            "history_pruning": True,
+            "prune_after": 3,
+        }
+    ]
+    assert requested == (
+        EfficiencySettings(trim_tool_descriptions=True),
+        ModelViewSettings(payload_slimming=True, history_pruning=True, prune_after_rounds=3),
+    )
+
+
+def test_the_human_output_names_both_model_views(run: Path) -> None:
+    lines = invoke("benchmark", "replay", str(run), "--prune-after", "1").stdout.splitlines()
+
+    assert any(
+        line.startswith("as recorded: every lever off; model view off") for line in lines
+    )
+    assert any(
+        line.startswith("requested: ")
+        and line.endswith("model view payload slimming, history pruning after 1 round")
+        for line in lines
+    )
+
+
 def test_an_unknown_lever_is_a_usage_error(run: Path) -> None:
     result = invoke("benchmark", "replay", str(run), "--lever", "no_such_lever")
 
@@ -131,6 +241,7 @@ def test_the_standards_profile_reaches_both_passes(tmp_path: Path) -> None:
                 "benchmark",
                 "replay",
                 str(run),
+                "--no-pane-defaults",
                 "--standards-profile",
                 str(EXAMPLE_PROFILE),
                 "--json",

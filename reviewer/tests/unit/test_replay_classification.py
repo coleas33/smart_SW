@@ -5,7 +5,9 @@ did: `reproduced` (same status, same summary), `changed` (same status, a differe
 estimated call before it in the turn: sized at the current code's result and listed), and
 `estimated` (a tool the current code does not offer offline or does not know, a status
 mismatch, or a divergence after an estimated call). The recordings are made with the scripted
-builder and then edited the way older code would have written them.
+builder and then edited the way older code would have written them - an estimated class needs
+the stored results gone (`without_stored_results`), since a call with one is `stored`
+(`test_replay_accounting.py`).
 """
 
 from __future__ import annotations
@@ -16,11 +18,17 @@ from typing import Any
 import pytest
 
 from swreview.agent.providers.fake import ScriptedToolCall
-from swreview.agent.settings import EfficiencySettings
+from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings
 from swreview.benchmark.replay import ReplayReport, TurnPlan, replay
 from swreview.ir.loader import save_package
 from tests.support.prerun import prerun_package, standards_prerun_package
-from tests.support.replay import record_scripted_review, rewrite_events, rewrite_session
+from tests.support.replay import (
+    ALL_OFF,
+    record_scripted_review,
+    rewrite_events,
+    rewrite_session,
+    without_stored_results,
+)
 from tests.support.review_bridge import (
     RECORDED_INTERFERENCE_SETTINGS,
     VOLUME_UNIT_GAP,
@@ -89,18 +97,23 @@ def test_an_unknown_tool_name_is_estimated_as_not_known(tmp_path: Path) -> None:
     )
     rewrite_events(run, rename("list_components", "list_retired_components"))
 
-    klass, reason = calls_of(replay(run, requested=EfficiencySettings()))["list_retired_components"]
+    klass, reason = calls_of(replay(run, requested=ALL_OFF))["list_retired_components"]
 
     assert klass == "estimated"
     assert reason is not None and "not known to the current code" in reason
 
 
 def test_a_bridge_tool_with_no_bridge_is_estimated(tmp_path: Path) -> None:
-    run = record_scripted_review(
-        tmp_path / "run", package(tmp_path), [TurnPlan(rounds=((LIVE,), (SUMMARY,)))], **bridged()
+    run = without_stored_results(
+        record_scripted_review(
+            tmp_path / "run",
+            package(tmp_path),
+            [TurnPlan(rounds=((LIVE,), (SUMMARY,)))],
+            **bridged(),
+        )
     )
 
-    klass, reason = calls_of(replay(run, requested=EfficiencySettings()))["bridge_interference"]
+    klass, reason = calls_of(replay(run, requested=ALL_OFF))["bridge_interference"]
 
     assert klass == "estimated"
     assert reason is not None and "bridge" in reason
@@ -109,16 +122,18 @@ def test_a_bridge_tool_with_no_bridge_is_estimated(tmp_path: Path) -> None:
 def test_check_standards_without_a_profile_is_estimated_and_with_one_reproduced(
     tmp_path: Path,
 ) -> None:
-    run = record_scripted_review(
-        tmp_path / "run",
-        package(tmp_path, standards=True),
-        [TurnPlan(rounds=((STANDARDS,), (SUMMARY,)))],
-        standards_profile=EXAMPLE_PROFILE,
+    run = without_stored_results(
+        record_scripted_review(
+            tmp_path / "run",
+            package(tmp_path, standards=True),
+            [TurnPlan(rounds=((STANDARDS,), (SUMMARY,)))],
+            standards_profile=EXAMPLE_PROFILE,
+        )
     )
 
-    without = calls_of(replay(run, requested=EfficiencySettings()))["check_standards"]
+    without = calls_of(replay(run, requested=ALL_OFF))["check_standards"]
     with_profile = calls_of(
-        replay(run, requested=EfficiencySettings(), standards_profile=EXAMPLE_PROFILE)
+        replay(run, requested=ALL_OFF, standards_profile=EXAMPLE_PROFILE)
     )["check_standards"]
 
     assert without[0] == "estimated"
@@ -127,14 +142,16 @@ def test_check_standards_without_a_profile_is_estimated_and_with_one_reproduced(
 
 
 def test_a_divergence_after_an_estimated_call_is_estimated(tmp_path: Path) -> None:
-    run = record_scripted_review(
-        tmp_path / "run",
-        package(tmp_path),
-        [TurnPlan(rounds=((LIVE,), (INTERFERENCES,)))],
-        **bridged(),
+    run = without_stored_results(
+        record_scripted_review(
+            tmp_path / "run",
+            package(tmp_path),
+            [TurnPlan(rounds=((LIVE,), (INTERFERENCES,)))],
+            **bridged(),
+        )
     )
 
-    klass, reason = calls_of(replay(run, requested=EfficiencySettings()))["list_interferences"]
+    klass, reason = calls_of(replay(run, requested=ALL_OFF))["list_interferences"]
 
     assert klass == "estimated"
     assert reason is not None and "after" in reason
@@ -152,7 +169,7 @@ def test_a_status_mismatch_is_estimated(tmp_path: Path) -> None:
 
     rewrite_events(run, missing)
 
-    klass, reason = calls_of(replay(run, requested=EfficiencySettings()))["get_component"]
+    klass, reason = calls_of(replay(run, requested=ALL_OFF))["get_component"]
 
     assert klass == "estimated"
     assert reason is not None and "error" in reason
@@ -174,7 +191,7 @@ def test_findings_renumbered_behind_an_estimated_call_still_reproduce(tmp_path: 
         ),
     )
 
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     klass, reason = calls_of(report)["check_rms_part"]
     assert (klass, reason) == ("reproduced", None)
@@ -197,7 +214,7 @@ def test_a_divergence_with_no_estimated_call_before_it_is_changed(tmp_path: Path
 
     rewrite_events(run, older)
 
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     klass, reason = calls_of(report)["list_components"]
     assert klass == "changed"
@@ -212,7 +229,7 @@ def test_an_untouched_recording_is_reproduced_throughout(tmp_path: Path) -> None
         tmp_path / "run", package(tmp_path), [TurnPlan(rounds=((SUMMARY,), (COMPONENTS,)))]
     )
 
-    report = replay(run, requested=EfficiencySettings())
+    report = replay(run, requested=ALL_OFF)
 
     assert {klass for klass, _ in calls_of(report).values()} == {"reproduced"}
     assert all(reason is None for _, reason in calls_of(report).values())
@@ -231,7 +248,7 @@ def test_a_recorded_call_the_pre_run_already_ran_is_answered_from_checks(
         tmp_path / "run", package(tmp_path), [TurnPlan(rounds=((RMS_PART,), (SUMMARY,)))]
     )
 
-    report = replay(run, requested=CHECKS_FIRST)
+    report = replay(run, requested=(CHECKS_FIRST, MODEL_VIEW_OFF))
 
     klass, reason = calls_of(report)["check_rms_part"]
     assert klass == "answered_from_checks"
@@ -244,7 +261,7 @@ def test_a_call_the_guard_does_not_catch_keeps_its_pass_a_class(tmp_path: Path) 
         tmp_path / "run", package(tmp_path), [TurnPlan(rounds=((RMS_PART,), (SUMMARY,)))]
     )
 
-    classes = calls_of(replay(run, requested=CHECKS_FIRST))
+    classes = calls_of(replay(run, requested=(CHECKS_FIRST, MODEL_VIEW_OFF)))
 
     assert classes["get_package_summary"] == ("reproduced", None)
 
@@ -256,7 +273,7 @@ def test_the_same_recording_with_checks_first_off_answers_nothing_from_checks(
         tmp_path / "run", package(tmp_path), [TurnPlan(rounds=((RMS_PART,), (SUMMARY,)))]
     )
 
-    classes = calls_of(replay(run, requested=EfficiencySettings()))
+    classes = calls_of(replay(run, requested=ALL_OFF))
 
     assert classes["check_rms_part"] == ("reproduced", None)
 
@@ -275,7 +292,7 @@ def test_a_recorded_finding_of_an_answered_call_is_compared_against_the_whole_se
 
     rewrite_session(run, moved)
 
-    report = replay(run, requested=CHECKS_FIRST)
+    report = replay(run, requested=(CHECKS_FIRST, MODEL_VIEW_OFF))
 
     assert calls_of(report)["check_rms_part"][0] == "answered_from_checks"
     assert len(report.findings.lost) == 1
@@ -290,8 +307,8 @@ def test_an_answered_call_is_sized_at_the_guards_answer_in_the_requested_pass(
         tmp_path / "run", package(tmp_path), [TurnPlan(rounds=((RMS_PART,), (SUMMARY,)))]
     )
 
-    off = replay(run, requested=EfficiencySettings())
-    on = replay(run, requested=CHECKS_FIRST)
+    off = replay(run, requested=ALL_OFF)
+    on = replay(run, requested=(CHECKS_FIRST, MODEL_VIEW_OFF))
 
     # Round 1 carries the answered call's result; the guard's counts are far smaller than
     # the full envelope the recording resent, even with the digest added to the prefix.
