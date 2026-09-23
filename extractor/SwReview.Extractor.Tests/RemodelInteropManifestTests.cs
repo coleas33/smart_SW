@@ -394,7 +394,7 @@ public class RemodelInteropManifestTests
     /// why this is an attribute rather than a branch inside the test: a branch would report a
     /// pass and a machine with no seat would look like a machine that checked.
     /// </summary>
-    private sealed class InteropAssembliesPresentFactAttribute : FactAttribute
+    internal sealed class InteropAssembliesPresentFactAttribute : FactAttribute
     {
         public InteropAssembliesPresentFactAttribute()
         {
@@ -407,7 +407,7 @@ public class RemodelInteropManifestTests
         }
     }
 
-    private static class InstalledInterop
+    internal static class InstalledInterop
     {
         private const string SldWorks = "SolidWorks.Interop.sldworks";
         private const string SwConst = "SolidWorks.Interop.swconst";
