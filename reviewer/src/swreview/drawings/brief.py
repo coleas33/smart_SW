@@ -34,6 +34,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from swreview.checks.drawing_context import compare_with_profile
 from swreview.checks.fastener_identity import joint_map_with_fasteners
 from swreview.checks.joint_alignment import check_nominal_alignment, tolerance_subjects
 from swreview.checks.joints import Joint, JointMap
@@ -370,6 +371,20 @@ def _answers_section(session: Any, subjects: set[str]) -> list[dict[str, Any]]:
     ]
 
 
+def _conformance_section(
+    package: EvidencePackage, index: DrawingIndex, profile: Any, document_id: str
+) -> list[dict[str, Any]]:
+    """Each drawing showing the document, compared with the profile's drawing standard: the
+    settings that differ and those skipped, by name, never by value (User Story 7)."""
+    showing = set(index.drawings_of(document_id))
+    return [
+        {"document_id": item.document_id, "differs": list(item.differs),
+         "skipped": list(item.skipped)}
+        for item in compare_with_profile(package, profile).drawings
+        if item.document_id in showing
+    ]
+
+
 def _profile_identity(profile: Any) -> str | None:
     if profile is None:
         return None
@@ -464,7 +479,10 @@ def build_brief(
         "interfaces": _interfaces_section(package, lookup, joints, document_id),
         "drawing": _drawing_section(package, index, document_id, component_set),
         "answers": _answers_section(session, {document_id, *component_set}),
-        "conformance": {"profile": _profile_identity(profile), "drawings": []},
+        "conformance": {
+            "profile": _profile_identity(profile),
+            "drawings": _conformance_section(package, index, profile, document_id),
+        },
         "omitted": {},
     }
     return DrawingBrief(content=_bounded(content))

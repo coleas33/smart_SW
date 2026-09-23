@@ -122,6 +122,12 @@ classes:
   stack.worst_case: interface
   # the drawing finding the model records -> manufacturing.
   drawing.manufacturing_inputs: manufacturing
+  # feature 011's drawing standard comparison -> manufacturing, a first opinion for the
+  # owner's read-through: a drawing in the wrong projection, format, standard or unit is read
+  # wrong downstream. A review finding only, never a release-verdict failure (owner,
+  # 2026-09-23, 011 research R5 Q5); its prefix is not `drawing.`, so it closes no checklist
+  # item.
+  drawing_profile.conformance: manufacturing
   # feature 010's mass and material checks -> manufacturing, first opinions for the owner's
   # read-through (research R2.22): a part with the wrong or no material is ordered, weighed
   # and costed wrong, whatever its geometry.

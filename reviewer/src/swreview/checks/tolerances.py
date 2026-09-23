@@ -78,6 +78,7 @@ __all__ = [
     "is_position_frame",
     "iso_dimension",
     "load_iso286",
+    "profile_name",
     "resolve_tolerance",
     "unique_model_dimension",
 ]
@@ -307,7 +308,8 @@ def iso_dimension(
 # --- the general tolerance block (contracts/tolerances.md section 3) ---------------------------
 
 
-def _profile_name(profile: StandardsProfile) -> str:
+def profile_name(profile: StandardsProfile) -> str:
+    """How a citation names the profile: by the first 12 hex of its sha256, never a value."""
     try:
         return f"the standards profile sha256 {profile.identity.sha256[:12]}"
     except RuntimeError:
@@ -341,7 +343,7 @@ def general_tolerance_dimension(
     if band is None:
         return f"the profile declares no band for {subject.decimal_places} decimal places"
     cited = (
-        f"general_tolerance of {_profile_name(profile)}, the {band.decimal_places}-decimal band"
+        f"general_tolerance of {profile_name(profile)}, the {band.decimal_places}-decimal band"
     )
     document = subject.document_id or "package"
     source = SourceRef(document_id=document, annotation=cited)

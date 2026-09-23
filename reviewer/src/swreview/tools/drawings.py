@@ -22,11 +22,13 @@ from typing import Any
 from swreview.bridge.client import BridgeError
 from swreview.checks.drawing_context import (
     CANDIDATE_CONFIRM,
+    CONFORMANCE_CHECK,
     CONTEXT_CHECK,
     QuestionSpec,
     candidate_question,
     run_drawing_context,
 )
+from swreview.checks.result import DocumentResult
 from swreview.drawings.brief import BriefRefused, build_brief
 from swreview.drawings.evidence import DrawingIndex
 from swreview.ir.loader import load_package
@@ -36,6 +38,7 @@ from swreview.tools.checks_mechanical import _attached_profile
 from swreview.tools.context import ToolContext, current_context, error_result
 from swreview.tools.joint_context import joint_analysis
 from swreview.tools.query import ToolResult
+from swreview.tools.recording import record_result
 from swreview.tools.session import record_evidence_request
 
 __all__ = [
@@ -79,14 +82,19 @@ def _record(context: ToolContext) -> dict[str, Any]:
     twice - even with no re-call guard in front of the tool (FR-035, SC-008).
     """
     session = context.require_session()
-    result = run_drawing_context(context.ir)
+    result = run_drawing_context(context.ir, profile=_attached_profile(context))
     for bucket in COVERAGE_BUCKETS:
         items = getattr(session.coverage, bucket)
-        items[:] = [item for item in items if item.check != CONTEXT_CHECK]
+        items[:] = [item for item in items if item.check not in (CONTEXT_CHECK, CONFORMANCE_CHECK)]
     counts = dict.fromkeys(COVERAGE_BUCKETS, 0)
     for coverage in result.coverage:
         context.record_coverage(coverage.status, coverage.coverage_item())
         counts[coverage.status] += 1
+    for bucket, item in result.conformance.coverage:
+        context.record_coverage(bucket, item)
+    finding_ids = _record_conformance(context, result.conformance.findings)
+    if isinstance(finding_ids, dict):
+        return finding_ids
     for spec in result.questions:
         if _already_asked(session.evidence_requests, spec):
             continue
@@ -104,10 +112,48 @@ def _record(context: ToolContext) -> dict[str, Any]:
         "drawings": len(context.ir.drawing_records),
         "candidates": len(context.ir.drawing_candidates),
         "questions": len(result.questions),
-        "findings": 0,
-        "finding_ids": [],
+        "findings": len(finding_ids),
+        "finding_ids": finding_ids,
         "coverage": counts,
     }
+
+
+def _record_conformance(
+    context: ToolContext, findings: Sequence[DocumentResult]
+) -> list[str] | dict[str, str]:
+    """Record each drawing's `drawing_profile.conformance` finding once, and return their ids,
+    or the error result of a finding the session refused.
+
+    A finding the session already holds for the same drawing, saying the same thing, is not
+    recorded twice: its id is returned instead, so a repeated call adds nothing (FR-035).
+    """
+    session = context.require_session()
+    ids: list[str] = []
+    for item in findings:
+        existing = next(
+            (
+                finding
+                for finding in session.findings
+                if finding.check == CONFORMANCE_CHECK
+                and [entry.document_id for entry in finding.provenance] == list(item.documents)
+                and finding.observed == item.result.observed
+            ),
+            None,
+        )
+        if existing is not None:
+            ids.append(existing.id)
+            continue
+        recorded = record_result(
+            context,
+            item.result,
+            component_ids=list(item.component_ids),
+            document_ids=list(item.document_ids),
+            tool_result_ids=[context.current_step_id],
+        )
+        if "error" in recorded:
+            return recorded
+        ids.append(recorded["finding"]["id"])
+    return ids
 
 
 def check_drawings() -> ToolResult:

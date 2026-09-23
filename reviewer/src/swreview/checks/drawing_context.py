@@ -30,30 +30,43 @@ id, so it closes nothing.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
+from swreview.checks.result import CheckResult, DocumentResult
+from swreview.checks.tolerances import profile_name
 from swreview.drawings.evidence import DrawingIndex, id_order
-from swreview.ir.models import Document, EvidencePackage
+from swreview.drawings.native import LENGTH_UNITS
+from swreview.ir.models import Document, DrawingRecord, DrawingSheetRecord, EvidencePackage
 from swreview.report.session import (
     MAX_OPTIONS,
     OPTION_MAX_LENGTH,
     QUESTION_MAX_LENGTH,
+    CoverageBucket,
     CoverageItem,
     CoverageScope,
 )
+
+if TYPE_CHECKING:  # the standards package reaches the runner; only the types are needed here
+    from swreview.checks.standards.profile import DrawingSection, StandardsProfile
 
 __all__ = [
     "CANDIDATES_WHY",
     "CANDIDATE_CONFIRM",
     "CANDIDATE_OPTIONS",
+    "COMPARED_SETTINGS",
+    "CONFORMANCE_CHECK",
     "CONTEXT_CHECK",
     "GOVERNING_LIMIT",
     "GOVERNING_WHY",
+    "NO_DRAWING_SECTION",
+    "ConformanceRun",
     "CoverageStatus",
     "DocumentDrawingCoverage",
+    "DrawingConformance",
     "DrawingContextResult",
     "QuestionSpec",
     "candidate_question",
+    "compare_with_profile",
     "run_drawing_context",
 ]
 
@@ -157,12 +170,36 @@ class QuestionSpec:
 
 
 @dataclass(frozen=True)
+class DrawingConformance:
+    """One drawing's comparison with the profile's drawing section (`contracts/profile.md` 2):
+    which settings differ, which the profile leaves empty, which values were not read."""
+
+    document_id: str
+    differs: tuple[str, ...]
+    skipped: tuple[str, ...]
+    unread: tuple[str, ...]
+    """Why each compared value that was not read could not be compared."""
+    agrees: tuple[str, ...]
+    """The settings compared and found in agreement."""
+
+
+@dataclass(frozen=True)
+class ConformanceRun:
+    """What `compare_with_profile` found: the findings, the coverage and each drawing's
+    comparison (for the brief), before anything is written."""
+
+    findings: tuple[DocumentResult, ...] = ()
+    coverage: tuple[tuple[CoverageBucket, CoverageItem], ...] = ()
+    drawings: tuple[DrawingConformance, ...] = ()
+
+
+@dataclass(frozen=True)
 class DrawingContextResult:
     """Everything the drawing check records, computed before anything is written."""
 
     coverage: tuple[DocumentDrawingCoverage, ...]
     questions: tuple[QuestionSpec, ...]
-    conformance: tuple[object, ...] = field(default=())
+    conformance: ConformanceRun = field(default_factory=ConformanceRun)
     """The drawing standard's comparison (User Story 7)."""
 
 
@@ -260,10 +297,262 @@ def _governing_question(
     )
 
 
+# --- the drawing standard (User Story 7, `contracts/profile.md` sections 2 and 3) -------------
+
+CONFORMANCE_CHECK = "drawing_profile.conformance"
+"""The one new finding id. Its prefix is not `drawing.`, so it cannot close the checklist's
+`drawing.manufacturing_inputs` item, which closes on any `drawing.` finding (research R2.18)."""
+
+NO_DRAWING_SECTION = "the standards profile is absent, which has no drawing section"
+
+COMPARED_SETTINGS: tuple[str, ...] = (
+    "sheet_formats",
+    "drafting_standard",
+    "projection",
+    "dimension_unit",
+)
+"""The settings compared, in the contract's order; the two templates are recorded for feature
+012 and never compared - a finished drawing does not record the template it was made from."""
+
+SETTING_LABELS: dict[str, str] = {
+    "sheet_formats": "sheet format",
+    "drafting_standard": "drafting standard",
+    "projection": "projection",
+    "dimension_unit": "dimension unit",
+}
+PROJECTION_WORDS: dict[bool, str] = {True: "first-angle", False: "third-angle"}
+
+
+def _gap_note(package: EvidencePackage, entity_id: str) -> str:
+    gap = next((item for item in package.gaps if item.entity_id == entity_id), None)
+    return "" if gap is None else f" ({gap.entity_kind}: {gap.reason})"
+
+
+def _sheets_compared(
+    package: EvidencePackage, record: DrawingRecord
+) -> tuple[list[DrawingSheetRecord], list[str]]:
+    sheets = sorted(record.sheets, key=lambda item: item.index)
+    unread = [] if sheets else [
+        f"the sheets of drawing {record.document_id} were not read"
+        f"{_gap_note(package, record.document_id)}"
+    ]
+    return sheets, unread
+
+
+def _compare(
+    package: EvidencePackage, record: DrawingRecord, section: DrawingSection, setting: str
+) -> tuple[list[str], list[str]] | None:
+    """`(the drawing's differing values, unread reasons)` for one setting, or `None` when the
+    profile leaves it empty. Every sentence states the drawing's own value, never the
+    profile's (006 FR-034)."""
+    drawing = record.document_id
+    if setting == "drafting_standard":
+        if not section.drafting_standard:
+            return None
+        value = record.drafting_standard_name
+        if value is None:
+            return [], [
+                f"the drafting standard of drawing {drawing} was not read"
+                f"{_gap_note(package, drawing)}"
+            ]
+        agrees = value.strip().casefold() == section.drafting_standard.strip().casefold()
+        return ([] if agrees else [f"the drawing's drafting standard is '{value}'"]), []
+    if setting == "dimension_unit":
+        if not section.dimension_unit:
+            return None
+        raw = record.length_unit_raw
+        if raw is None:
+            return [], [
+                f"the unit drawing {drawing} is dimensioned in was not read"
+                f"{_gap_note(package, drawing)}"
+            ]
+        named = LENGTH_UNITS.get(raw) or f"unit {raw} (swLengthUnit_e)"
+        return ([] if named == section.dimension_unit else [
+            f"the drawing is dimensioned in {named}"
+        ]), []
+    sheets, unread = _sheets_compared(package, record)
+    if setting == "sheet_formats":
+        if not section.sheet_formats:
+            return None
+        accepted = set(section.sheet_formats)
+        differs = [
+            f"sheet {sheet.name} uses the sheet format '{sheet.sheet_format_name}'"
+            for sheet in sheets
+            if sheet.sheet_format_name is not None and sheet.sheet_format_name not in accepted
+        ]
+        unread += [
+            f"the sheet format of sheet {sheet.name} was not read{_gap_note(package, sheet.id)}"
+            for sheet in sheets
+            if sheet.sheet_format_name is None
+        ]
+        return differs, unread
+    if not section.projection:
+        return None
+    wanted = section.projection == "first_angle"
+    differs = [
+        f"sheet {sheet.name} is drawn in {PROJECTION_WORDS[sheet.first_angle]} projection"
+        for sheet in sheets
+        if sheet.first_angle is not None and sheet.first_angle != wanted
+    ]
+    unread += [
+        f"the projection of sheet {sheet.name} was not read{_gap_note(package, sheet.id)}"
+        for sheet in sheets
+        if sheet.first_angle is None
+    ]
+    return differs, unread
+
+
+def _named(settings: list[str]) -> str:
+    return _file_names(settings)
+
+
+def _conformance_item(document_id: str, reason: str) -> CoverageItem:
+    return CoverageItem(
+        check=CONFORMANCE_CHECK,
+        scope=CoverageScope(document_ids=[document_id]),
+        reason=reason,
+        error=None,
+    )
+
+
+def compare_with_profile(
+    package: EvidencePackage, profile: StandardsProfile | None
+) -> ConformanceRun:
+    """Every attached or root drawing compared with the profile's drawing section
+    (`contracts/profile.md` section 2), in document-id order.
+
+    One `drawing_profile.conformance` finding per drawing that differs, naming each differing
+    setting with the drawing's own values; a `checked` item for a drawing every compared setting
+    of which agrees; an `unresolved` item naming each value that was not read; a `skipped` item
+    naming the settings the profile leaves empty; and, without a version 3 profile, one
+    `skipped` item for every drawing. Pure: nothing is recorded here.
+    """
+    records = sorted(package.drawing_records, key=lambda item: id_order(item.document_id))
+    if not records:
+        return ConformanceRun()
+    section = profile.drawing if profile is not None else None
+    if profile is None or section is None:
+        reason = (
+            NO_DRAWING_SECTION
+            if profile is None
+            else f"the standards profile is version {profile.version}, which has no drawing "
+            "section"
+        )
+        item = CoverageItem(
+            check=CONFORMANCE_CHECK,
+            scope=CoverageScope(document_ids=[record.document_id for record in records]),
+            reason=reason,
+            error=None,
+        )
+        return ConformanceRun(coverage=(("skipped", item),))
+
+    names = {document.document_id: document.file_name for document in package.documents}
+    components = {}
+    for component in package.components:
+        components.setdefault(component.document_id, []).append(component.id)
+    findings: list[DocumentResult] = []
+    coverage: list[tuple[CoverageBucket, CoverageItem]] = []
+    drawings: list[DrawingConformance] = []
+    for record in records:
+        drawing = record.document_id
+        differs: list[tuple[str, list[str]]] = []
+        unread: list[str] = []
+        skipped: list[str] = []
+        agrees: list[str] = []
+        for setting in COMPARED_SETTINGS:
+            outcome = _compare(package, record, section, setting)
+            if outcome is None:
+                skipped.append(setting)
+                continue
+            values, not_read = outcome
+            unread.extend(not_read)
+            if values:
+                differs.append((setting, values))
+            elif not not_read:
+                agrees.append(setting)
+        drawings.append(
+            DrawingConformance(
+                document_id=drawing,
+                differs=tuple(setting for setting, _ in differs),
+                skipped=tuple(skipped),
+                unread=tuple(unread),
+                agrees=tuple(agrees),
+            )
+        )
+        if skipped:
+            coverage.append((
+                "skipped",
+                _conformance_item(
+                    drawing,
+                    f"the profile leaves {_named(skipped)} empty, so drawing {drawing} was not "
+                    "compared in them",
+                ),
+            ))
+        if unread:
+            coverage.append(("unresolved", _conformance_item(drawing, "; ".join(unread))))
+        if agrees and not differs and not unread:
+            coverage.append((
+                "checked",
+                _conformance_item(
+                    drawing,
+                    f"drawing {drawing} agrees with the profile's drawing standard in "
+                    f"{_named(agrees)}",
+                ),
+            ))
+        if differs:
+            findings.append(
+                _conformance_finding(
+                    drawing, names.get(drawing, drawing), differs, skipped, unread,
+                    tuple(components.get(drawing, ())), profile,
+                )
+            )
+    return ConformanceRun(
+        findings=tuple(findings), coverage=tuple(coverage), drawings=tuple(drawings)
+    )
+
+
+def _conformance_finding(
+    drawing: str,
+    file_name: str,
+    differs: list[tuple[str, list[str]]],
+    skipped: list[str],
+    unread: list[str],
+    component_ids: tuple[str, ...],
+    profile: StandardsProfile,
+) -> DocumentResult:
+    stated = "; ".join(
+        f"{SETTING_LABELS[setting]}: {', '.join(values)}" for setting, values in differs
+    )
+    limits = [f"not compared, left empty in the profile: {_named(skipped)}"] if skipped else []
+    limits += [f"not compared, not read: {reason}" for reason in unread]
+    result = CheckResult(
+        check=CONFORMANCE_CHECK,
+        status="demonstrated",
+        severity="medium",
+        observed=f"{file_name} ({drawing}) differs from the company's drawing standard - {stated}",
+        requirement=(
+            "every drawing follows the company's drawing standard, the drawing section of "
+            f"{profile_name(profile)}: its accepted sheet formats, drafting standard, projection "
+            "and dimension unit"
+        ),
+        inputs=[drawing],
+        calculation=None,
+        coverage_limits=limits,
+        recommended_action=(
+            f"Bring {file_name} to the drawing standard in each setting named, or record why this "
+            "drawing differs."
+        ),
+    )
+    return DocumentResult(result=result, documents=(drawing,), component_ids=component_ids)
+
+
 def run_drawing_context(
-    package: EvidencePackage, index: DrawingIndex | None = None
+    package: EvidencePackage,
+    profile: StandardsProfile | None = None,
+    index: DrawingIndex | None = None,
 ) -> DrawingContextResult:
-    """The drawing check's coverage and questions over `package` (sections 3 and 4)."""
+    """The drawing check's coverage, questions and drawing-standard comparison over `package`
+    (sections 3 and 4, and `contracts/profile.md` section 2)."""
     index = index or DrawingIndex.for_package(package)
     names = {document.document_id: document.file_name for document in package.documents}
     subjects = _subjects(package)
@@ -286,4 +575,8 @@ def run_drawing_context(
             break
         questions.append(_governing_question(document, competing, names))
         governing += 1
-    return DrawingContextResult(coverage=coverage, questions=tuple(questions))
+    return DrawingContextResult(
+        coverage=coverage,
+        questions=tuple(questions),
+        conformance=compare_with_profile(package, profile),
+    )

@@ -114,7 +114,9 @@ goals:
   - id: drawings
     title: "Drawings"
     items: [drawing.manufacturing_inputs]
-    prefixes: [drawing., standards.drawing., rms.drawing.]
+    # `drawing_profile.` is feature 011's drawing standard comparison: a drawings finding,
+    # named so it cannot close the checklist item `drawing.manufacturing_inputs`.
+    prefixes: [drawing., drawing_profile., standards.drawing., rms.drawing.]
   - id: modelling_practice
     title: "Modelling practice"
     items: [modeling.resilience]
