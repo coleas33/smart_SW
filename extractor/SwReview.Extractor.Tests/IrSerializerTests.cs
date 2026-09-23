@@ -148,7 +148,7 @@ public class IrSerializerTests
         string json = PackageSerializer.Serialize(original);
         EvidencePackage restored = PackageSerializer.Deserialize(json);
 
-        Assert.Equal("1.5.0", restored.SchemaVersion);
+        Assert.Equal("1.6.0", restored.SchemaVersion);
         Assert.Equal(SampleReuseKey, restored.ReuseKey);
         Assert.Equal(
             new DateTimeOffset(2026, 9, 10, 8, 30, 0, TimeSpan.Zero),
@@ -215,7 +215,7 @@ public class IrSerializerTests
 
         EvidencePackage restored = PackageSerializer.Deserialize(PackageSerializer.Serialize(original));
 
-        Assert.Equal("1.5.0", restored.SchemaVersion);
+        Assert.Equal("1.6.0", restored.SchemaVersion);
         Assert.Equal(EvidencePackage.CurrentSchemaVersion, restored.SchemaVersion);
 
         Assert.Equal(6, restored.Features.Count);
@@ -323,7 +323,7 @@ public class IrSerializerTests
     {
         string json = PackageSerializer.Serialize(BuildSamplePackage());
 
-        Assert.Contains("\"schema_version\": \"1.5.0\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"schema_version\": \"1.6.0\"", json, StringComparison.Ordinal);
         Assert.Contains("\"folder_id\": null", json, StringComparison.Ordinal);
         Assert.Contains("\"raw_status\": null", json, StringComparison.Ordinal);
         Assert.Contains("\"consumer_ids\": null", json, StringComparison.Ordinal);
@@ -550,7 +550,7 @@ public class IrSerializerTests
         EvidencePackage restored =
             PackageSerializer.Deserialize(PackageSerializer.Serialize(BuildStandardsPackage()));
 
-        Assert.Equal("1.5.0", restored.SchemaVersion);
+        Assert.Equal("1.6.0", restored.SchemaVersion);
         Assert.Equal(DumpProfile.Standards, restored.Extractor.Profile);
 
         Document assembly = restored.Documents[0];
@@ -1592,9 +1592,11 @@ public class IrSerializerTests
     // 1.4.0 build wrote it apart from the version string (FR-028).
 
     [Fact]
-    public void CurrentSchemaVersion_IsOneFiveZero()
+    public void CurrentSchemaVersion_IsOneSixZero()
     {
-        Assert.Equal("1.5.0", EvidencePackage.CurrentSchemaVersion);
+        // Feature 011 T007 moved the minor again (the drawing context, below); every 1.5.0
+        // member this section measures is unchanged by it.
+        Assert.Equal("1.6.0", EvidencePackage.CurrentSchemaVersion);
     }
 
     [Fact]
@@ -1899,6 +1901,467 @@ public class IrSerializerTests
                 DatumIdentifierRaw = null,
                 Label = "A",
                 AttachedPersistRefs = { faceRef },
+            },
+        };
+
+        return package;
+    }
+
+    // ---- schema 1.6.0: the drawing context (feature 011 T007) ----------------------
+    //
+    // The additions of specs/011-drawing-context/data-model.md sections 1 and 2, with the
+    // names the Python models write. Every one is omitted when null or, for a list, when empty,
+    // so a package carrying none of it serializes exactly as a 1.5.0 build wrote it apart from
+    // the version string (FR-048).
+
+    /// <summary>Every name 1.6.0 adds, for the spelling and the omission tests.</summary>
+    private static readonly string[] DrawingContextMemberNames =
+    {
+        "is_detailing_mode", "length_unit_raw", "dimension_precision_raw",
+        "units_decimal_places_raw", "drafting_standard_name", "opened_by_review",
+        "sheet_format_path", "scale_numerator", "scale_denominator", "first_angle", "tables",
+        "referenced_configuration", "is_model_out_of_date", "is_model_loaded", "scale_decimal",
+        "orientation_name", "text_prefix", "text_suffix", "text_above", "text_below",
+        "precision_raw", "uses_document_precision", "units_raw", "uses_document_units",
+        "fit_hole_class", "fit_shaft_class", "is_reference", "driven_state_raw", "is_hole_callout",
+        "hole_callout_variables_raw", "attached_faces", "gtol_frames", "datum_identifier_raw",
+        "datum_label", "surface_finish_symbol_raw", "surface_finish_texts_raw",
+        "owner_view_id", "table_type_raw", "title", "bom_rows", "document_ids",
+        "unresolved_paths", "drawing_candidates", "via",
+    };
+
+    /// <summary>
+    /// The four 1.6.0 names an earlier model already writes elsewhere in a package -
+    /// <c>ComponentInstance.referenced_configuration</c>, and feature 010's
+    /// <c>ModelDimension</c> fit classes and <c>ModelAnnotation.datum_identifier_raw</c> - so
+    /// their absence is asserted on the drawing objects themselves rather than on the package.
+    /// </summary>
+    private static readonly string[] NamesSharedWithEarlierModels =
+    {
+        "referenced_configuration", "fit_hole_class", "fit_shaft_class", "datum_identifier_raw",
+    };
+
+    /// <summary>The 1.6.0 names no earlier model writes: absent from a package means absent.</summary>
+    private static IEnumerable<string> NamesOnlyTheDrawingContextWrites() =>
+        DrawingContextMemberNames.Except(NamesSharedWithEarlierModels);
+
+    /// <summary>The JSON one drawing object serializes to, with the package's options.</summary>
+    private static string DrawingJson(object value) => JsonSerializer.Serialize(value, PackageSerializer.Options);
+
+    [Fact]
+    public void DrawingContextPackage_SerializesToJsonThatValidatesAgainstTheContract()
+    {
+        string json = PackageSerializer.Serialize(BuildDrawingContextPackage());
+
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+    }
+
+    [Fact]
+    public void DrawingContextPackage_WritesTheMembersWithThePythonNames()
+    {
+        string json = PackageSerializer.Serialize(BuildDrawingContextPackage());
+
+        foreach (string name in DrawingContextMemberNames)
+        {
+            Assert.Contains("\"" + name + "\":", json, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("\"via\": \"edge\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"reason\": \"same_name_beside_model\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"opened_by_review\": true", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DrawingContextPackage_RoundTripsEveryMember()
+    {
+        EvidencePackage restored =
+            PackageSerializer.Deserialize(PackageSerializer.Serialize(BuildDrawingContextPackage()));
+
+        DrawingRecord drawing = Assert.Single(restored.DrawingRecords!);
+        Assert.False(drawing.IsDetailingMode);
+        Assert.Equal(0, drawing.LengthUnitRaw);
+        Assert.Equal(2, drawing.DimensionPrecisionRaw);
+        Assert.Equal(3, drawing.UnitsDecimalPlacesRaw);
+        Assert.Equal(4, drawing.TolerancePrecisionRaw);
+        Assert.Equal("FICTIONAL-STANDARD", drawing.DraftingStandardName);
+        Assert.True(drawing.OpenedByReview);
+
+        DrawingSheetRecord sheet = drawing.Sheets[0];
+        Assert.Equal(FictionalFormatPath, sheet.SheetFormatPath);
+        Assert.Equal(1.0, sheet.ScaleNumerator);
+        Assert.Equal(2.0, sheet.ScaleDenominator);
+        Assert.False(sheet.FirstAngle);
+
+        DrawingTable table = Assert.Single(sheet.Tables!);
+        Assert.Equal("dtb:0001", table.Id);
+        Assert.Equal("dsh:0001", table.SheetId);
+        Assert.Equal("dvw:0002", table.OwnerViewId);
+        Assert.Equal(2, table.TableTypeRaw);
+        Assert.Equal("FICTIONAL PARTS LIST", table.Title);
+        Assert.Equal(2, table.RowCount);
+        Assert.Equal(2, table.ColumnCount);
+        Assert.Equal(new[] { "1", null }, table.Rows[1].Cells);
+        BomRow bom = Assert.Single(table.BomRows!);
+        Assert.Equal(1, bom.Index);
+        Assert.Equal(new[] { "doc:housing" }, bom.DocumentIds);
+        Assert.Equal(new[] { FictionalWasherPath }, bom.UnresolvedPaths);
+
+        DrawingView front = sheet.Views[1];
+        Assert.Equal("Default", front.ReferencedConfiguration);
+        Assert.False(front.IsModelOutOfDate);
+        Assert.True(front.IsModelLoaded);
+        Assert.Equal(0.5, front.ScaleDecimal);
+        Assert.Equal("*Front", front.OrientationName);
+
+        DisplayDimensionRecord dimension = front.DisplayDimensions[0];
+        Assert.Equal("<MOD-DIAM>", dimension.TextPrefix);
+        Assert.Equal(string.Empty, dimension.TextSuffix);
+        Assert.Equal(string.Empty, dimension.TextAbove);
+        Assert.Equal("THRU", dimension.TextBelow);
+        Assert.Equal(2, dimension.PrecisionRaw);
+        Assert.Equal(3, dimension.TolerancePrecisionRaw);
+        Assert.False(dimension.UsesDocumentPrecision);
+        Assert.Equal(0, dimension.UnitsRaw);
+        Assert.True(dimension.UsesDocumentUnits);
+        Assert.Equal(ToleranceKind.Bilateral, dimension.Tolerance!.Kind);
+        Assert.Equal(0.05, dimension.Tolerance.Upper!.Value);
+        Assert.Equal(7, dimension.ToleranceTypeRaw);
+        Assert.Equal("H7", dimension.FitHoleClass);
+        Assert.Equal("g6", dimension.FitShaftClass);
+        Assert.False(dimension.IsReference);
+        Assert.Equal(1, dimension.DrivenStateRaw);
+        Assert.True(dimension.IsHoleCallout);
+        Assert.Equal(new[] { "<hw-diameter>=3.10", string.Empty }, dimension.HoleCalloutVariablesRaw);
+        Assert.Equal(2, dimension.AttachedFaces!.Count);
+        Assert.Equal(AttachedVia.Face, dimension.AttachedFaces[0].Via);
+        Assert.Equal(AttachedVia.Edge, dimension.AttachedFaces[1].Via);
+        Assert.Equal("doc:housing", dimension.AttachedFaces[0].Scope);
+
+        DrawingAnnotation gtol = front.Annotations[0];
+        GtolFrame frame = Assert.Single(gtol.GtolFrames!);
+        Assert.Equal(new[] { "0.05" }, frame.ValuesRaw);
+        Assert.Equal("A", gtol.DatumIdentifierRaw);
+        Assert.Single(gtol.AttachedFaces!);
+
+        DrawingAnnotation datum = front.Annotations[1];
+        Assert.Equal("B", datum.DatumLabel);
+
+        DrawingAnnotation finish = front.Annotations[2];
+        Assert.Equal(1, finish.SurfaceFinishSymbolRaw);
+        Assert.Equal(new[] { "1.6", string.Empty }, finish.SurfaceFinishTextsRaw);
+
+        DrawingCandidate candidate = Assert.Single(restored.DrawingCandidates!);
+        Assert.Equal("doc:housing", candidate.DocumentId);
+        Assert.Equal(FictionalCandidatePath, candidate.Path);
+        Assert.Equal(DrawingCandidateReason.SameNameBesideModel, candidate.Reason);
+    }
+
+    [Fact]
+    public void DrawingContextPackage_OmitsEveryUnreadMemberRatherThanWritingItsNull()
+    {
+        EvidencePackage package = BuildDrawingContextPackage();
+        DrawingRecord drawing = package.DrawingRecords![0];
+        drawing.IsDetailingMode = null;
+        drawing.LengthUnitRaw = null;
+        drawing.DimensionPrecisionRaw = null;
+        drawing.UnitsDecimalPlacesRaw = null;
+        drawing.TolerancePrecisionRaw = null;
+        drawing.DraftingStandardName = null;
+        drawing.OpenedByReview = null;
+        DrawingSheetRecord sheet = drawing.Sheets[0];
+        sheet.SheetFormatPath = null;
+        sheet.ScaleNumerator = null;
+        sheet.ScaleDenominator = null;
+        sheet.FirstAngle = null;
+        sheet.Tables = new List<DrawingTable>();
+        DrawingView front = sheet.Views[1];
+        front.ReferencedConfiguration = null;
+        front.IsModelOutOfDate = null;
+        front.IsModelLoaded = null;
+        front.ScaleDecimal = null;
+        front.OrientationName = null;
+        front.DisplayDimensions[0] = new DisplayDimensionRecord { Id = "ddm:0001", ViewId = "dvw:0002",
+            HoleCalloutVariablesRaw = new List<string>(), AttachedFaces = new List<AttachedFace>() };
+        front.Annotations.Clear();
+        front.Annotations.Add(new DrawingAnnotation { Id = "dan:0001", OwnerId = "dvw:0002",
+            GtolFrames = new List<GtolFrame>(), SurfaceFinishTextsRaw = new List<string>(),
+            AttachedFaces = new List<AttachedFace>() });
+        package.DrawingCandidates = new List<DrawingCandidate>();
+
+        string json = PackageSerializer.Serialize(package);
+
+        foreach (string name in NamesOnlyTheDrawingContextWrites())
+        {
+            Assert.DoesNotContain("\"" + name + "\"", json, StringComparison.Ordinal);
+        }
+
+        string drawingJson = DrawingJson(PackageSerializer.Deserialize(json).DrawingRecords![0]);
+        foreach (string name in NamesSharedWithEarlierModels)
+        {
+            Assert.DoesNotContain("\"" + name + "\"", drawingJson, StringComparison.Ordinal);
+        }
+
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+    }
+
+    [Fact]
+    public void AnEmptyBomRowListIsOmittedLikeEveryOther1_6_0List()
+    {
+        EvidencePackage package = BuildDrawingContextPackage();
+        BomRow row = package.DrawingRecords![0].Sheets[0].Tables![0].BomRows![0];
+        row.DocumentIds = new List<string>();
+        row.UnresolvedPaths = new List<string>();
+
+        string json = PackageSerializer.Serialize(package);
+
+        Assert.DoesNotContain("\"document_ids\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"unresolved_paths\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PackageWithNoneOfTheDrawingContext_NamesNoneOfTheNewMembers()
+    {
+        // The feature 006 standards package carries a drawing record with every 1.4.0 member
+        // and none of 1.6.0's: it must serialize without one new key.
+        EvidencePackage package = BuildStandardsPackage();
+        string json = PackageSerializer.Serialize(package);
+
+        foreach (string name in NamesOnlyTheDrawingContextWrites())
+        {
+            Assert.DoesNotContain("\"" + name + "\"", json, StringComparison.Ordinal);
+        }
+
+        string drawingJson = DrawingJson(package.DrawingRecords![0]);
+        foreach (string name in NamesSharedWithEarlierModels)
+        {
+            Assert.DoesNotContain("\"" + name + "\"", drawingJson, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void APackageWrittenAt150_RoundTripsToItsOwnText()
+    {
+        // A 1.5.0 package re-serialized by this build keeps its version and gains nothing.
+        EvidencePackage package = BuildTolerancePackage();
+        package.DrawingRecords = BuildStandardsPackage().DrawingRecords;
+        package.SchemaVersion = "1.5.0";
+        string written = PackageSerializer.Serialize(package);
+
+        string again = PackageSerializer.Serialize(PackageSerializer.Deserialize(written));
+
+        Assert.Equal(written, again);
+        Assert.Contains("\"schema_version\": \"1.5.0\"", again, StringComparison.Ordinal);
+        foreach (string name in NamesOnlyTheDrawingContextWrites())
+        {
+            Assert.DoesNotContain("\"" + name + "\"", again, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void APackageThePythonModelsWrote_DeserializesTheDrawingContext()
+    {
+        // Authored as text, in the shape the Python models serialize - empty lists and nulls
+        // omitted - so what is under test is that this assembly reads what the other side writes.
+        string json = PackageSerializer.Serialize(BuildSamplePackage()).Replace(
+            "\"gaps\": [",
+            "\"drawing_records\": [{\"document_id\": \"doc:drawing\", \"source\": \"native\", "
+            + "\"length_unit_raw\": 3, \"sheets\": [{\"id\": \"dsh:0001\", \"source\": \"native\", "
+            + "\"name\": \"Sheet1\", \"index\": 0, \"was_active\": true, \"views\": [{\"id\": "
+            + "\"dvw:0001\", \"sheet_id\": \"dsh:0001\", \"display_dimensions\": [{\"id\": "
+            + "\"ddm:0001\", \"view_id\": \"dvw:0001\", \"text_suffix\": \"\", \"attached_faces\": "
+            + "[{\"persist_ref\": \"QUJD\", \"scope\": \"doc:housing\", \"via\": \"face\"}]}]}], "
+            + "\"tables\": [{\"id\": \"dtb:0001\", \"sheet_id\": \"dsh:0001\", \"owner_view_id\": "
+            + "\"dvw:0001\", \"table_type_raw\": 5}]}]}], "
+            + "\"drawing_candidates\": [{\"document_id\": \"doc:housing\", \"path\": "
+            + "\"C:\\\\Fictional\\\\housing.SLDDRW\", \"reason\": \"same_name_beside_model\"}], "
+            + "\"gaps\": [");
+
+        EvidencePackage package = PackageSerializer.Deserialize(json);
+
+        DrawingRecord drawing = Assert.Single(package.DrawingRecords!);
+        Assert.Equal(3, drawing.LengthUnitRaw);
+        Assert.Null(drawing.OpenedByReview);
+        DrawingSheetRecord sheet = Assert.Single(drawing.Sheets);
+        DisplayDimensionRecord dimension = Assert.Single(Assert.Single(sheet.Views).DisplayDimensions);
+        Assert.Equal(string.Empty, dimension.TextSuffix);
+        Assert.Null(dimension.TextPrefix);
+        Assert.Null(dimension.HoleCalloutVariablesRaw);
+        Assert.Equal(AttachedVia.Face, Assert.Single(dimension.AttachedFaces!).Via);
+        DrawingTable table = Assert.Single(sheet.Tables!);
+        Assert.Equal(5, table.TableTypeRaw);
+        Assert.Null(table.BomRows);
+        Assert.Equal(@"C:\Fictional\housing.SLDDRW", Assert.Single(package.DrawingCandidates!).Path);
+
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+    }
+
+    [Fact]
+    public void ADrawingTableIdOutsideItsPattern_IsRefusedByTheContract()
+    {
+        EvidencePackage package = BuildDrawingContextPackage();
+        package.DrawingRecords![0].Sheets[0].Tables![0].Id = "tab:1";
+
+        Assert.False(Evaluate(PackageSerializer.Serialize(package)).IsValid);
+    }
+
+    [Fact]
+    public void OpenedByReviewFalse_IsRefusedByTheContract()
+    {
+        // True or absent, never false: an absent member already says the review did not open it.
+        EvidencePackage package = BuildDrawingContextPackage();
+        package.DrawingRecords![0].OpenedByReview = false;
+
+        Assert.False(Evaluate(PackageSerializer.Serialize(package)).IsValid);
+    }
+
+    [Fact]
+    public void EnumToJsonName_MatchesTheSchemaSpellingForTheDrawingContextEnums()
+    {
+        Assert.Equal("face", PackageSerializer.EnumToJsonName(AttachedVia.Face));
+        Assert.Equal("edge", PackageSerializer.EnumToJsonName(AttachedVia.Edge));
+        Assert.Equal(
+            "same_name_beside_model",
+            PackageSerializer.EnumToJsonName(DrawingCandidateReason.SameNameBesideModel));
+    }
+
+    private const string FictionalFormatPath = @"C:\Fictional\formats\fictional-format-a.slddrt";
+
+    private const string FictionalWasherPath = @"C:\Fictional\library\fictional-washer.SLDPRT";
+
+    private const string FictionalCandidatePath = @"C:\Fictional\designs\housing.SLDDRW";
+
+    /// <summary>
+    /// <see cref="BuildStandardsPackage"/> plus every schema 1.6.0 addition on its drawing
+    /// record, and one drawing candidate. Kept apart from the standards package so that one
+    /// still measures "a 1.4.0 drawing record gains nothing".
+    /// </summary>
+    internal static EvidencePackage BuildDrawingContextPackage()
+    {
+        EvidencePackage package = BuildStandardsPackage();
+        string faceRef = Convert.ToBase64String(new byte[] { 0x46, 0x41, 0x43 });
+        string edgeFaceRef = Convert.ToBase64String(new byte[] { 0x45, 0x44, 0x47 });
+
+        DrawingRecord drawing = package.DrawingRecords![0];
+        drawing.IsDetailingMode = false;
+        drawing.LengthUnitRaw = 0;
+        drawing.DimensionPrecisionRaw = 2;
+        drawing.UnitsDecimalPlacesRaw = 3;
+        drawing.TolerancePrecisionRaw = 4;
+        drawing.DraftingStandardName = "FICTIONAL-STANDARD";
+        drawing.OpenedByReview = true;
+
+        DrawingSheetRecord sheet = drawing.Sheets[0];
+        sheet.SheetFormatPath = FictionalFormatPath;
+        sheet.ScaleNumerator = 1.0;
+        sheet.ScaleDenominator = 2.0;
+        sheet.FirstAngle = false;
+        sheet.Tables = new List<DrawingTable>
+        {
+            new DrawingTable
+            {
+                Id = "dtb:0001",
+                SheetId = "dsh:0001",
+                OwnerViewId = "dvw:0002",
+                TableTypeRaw = 2,
+                Title = "FICTIONAL PARTS LIST",
+                RowCount = 2,
+                ColumnCount = 2,
+                Rows =
+                {
+                    new RevisionTableRow { Index = 0, Cells = { "ITEM", "QTY" } },
+                    new RevisionTableRow { Index = 1, Cells = { "1", null } },
+                },
+                BomRows = new List<BomRow>
+                {
+                    new BomRow
+                    {
+                        Index = 1,
+                        DocumentIds = new List<string> { "doc:housing" },
+                        UnresolvedPaths = new List<string> { FictionalWasherPath },
+                    },
+                },
+            },
+        };
+
+        DrawingView front = sheet.Views[1];
+        front.ReferencedConfiguration = "Default";
+        front.IsModelOutOfDate = false;
+        front.IsModelLoaded = true;
+        front.ScaleDecimal = 0.5;
+        front.OrientationName = "*Front";
+
+        DisplayDimensionRecord dimension = front.DisplayDimensions[0];
+        dimension.TextPrefix = "<MOD-DIAM>";
+        dimension.TextSuffix = string.Empty;
+        dimension.TextAbove = string.Empty;
+        dimension.TextBelow = "THRU";
+        dimension.PrecisionRaw = 2;
+        dimension.TolerancePrecisionRaw = 3;
+        dimension.UsesDocumentPrecision = false;
+        dimension.UnitsRaw = 0;
+        dimension.UsesDocumentUnits = true;
+        dimension.Tolerance = new Tolerance
+        {
+            Kind = ToleranceKind.Bilateral,
+            Upper = new IrMeasure(0.05, "mm"),
+            Lower = new IrMeasure(0.0, "mm"),
+            Source = new SourceRef { DocumentId = "doc:drawing", Sheet = "Sheet1", Annotation = "ddm:0001" },
+        };
+        dimension.ToleranceTypeRaw = 7;
+        dimension.FitHoleClass = "H7";
+        dimension.FitShaftClass = "g6";
+        dimension.IsReference = false;
+        dimension.DrivenStateRaw = 1;
+        dimension.IsHoleCallout = true;
+        dimension.HoleCalloutVariablesRaw = new List<string> { "<hw-diameter>=3.10", string.Empty };
+        dimension.AttachedFaces = new List<AttachedFace>
+        {
+            new AttachedFace { PersistRef = faceRef, Scope = "doc:housing", Via = AttachedVia.Face },
+            new AttachedFace { PersistRef = edgeFaceRef, Scope = "doc:housing", Via = AttachedVia.Edge },
+        };
+
+        front.Annotations.Clear();
+        front.Annotations.Add(new DrawingAnnotation
+        {
+            Id = "dan:0001",
+            OwnerId = "dvw:0002",
+            TypeRaw = 5,
+            GtolFrames = new List<GtolFrame>
+            {
+                new GtolFrame { Number = 1, SymbolsRaw = { "<GTOL-POSI>" }, ValuesRaw = { "0.05" } },
+            },
+            DatumIdentifierRaw = "A",
+            AttachedFaces = new List<AttachedFace>
+            {
+                new AttachedFace { PersistRef = faceRef, Scope = "doc:housing", Via = AttachedVia.Face },
+            },
+        });
+        front.Annotations.Add(new DrawingAnnotation
+        {
+            Id = "dan:0002",
+            OwnerId = "dvw:0002",
+            TypeRaw = 2,
+            DatumLabel = "B",
+        });
+        front.Annotations.Add(new DrawingAnnotation
+        {
+            Id = "dan:0003",
+            OwnerId = "dvw:0002",
+            TypeRaw = 7,
+            SurfaceFinishSymbolRaw = 1,
+            SurfaceFinishTextsRaw = new List<string> { "1.6", string.Empty },
+        });
+
+        package.DrawingCandidates = new List<DrawingCandidate>
+        {
+            new DrawingCandidate
+            {
+                DocumentId = "doc:housing",
+                Path = FictionalCandidatePath,
+                Reason = DrawingCandidateReason.SameNameBesideModel,
             },
         };
 

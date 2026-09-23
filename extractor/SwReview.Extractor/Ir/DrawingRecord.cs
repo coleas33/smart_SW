@@ -48,6 +48,53 @@ public sealed class DrawingRecord
     /// </summary>
     [JsonPropertyName("sheets")]
     public List<DrawingSheetRecord> Sheets { get; set; } = new List<DrawingSheetRecord>();
+
+    /// <summary>IDrawingDoc.IsDetailingMode; null plus a drawing_document_settings gap (schema 1.6.0).</summary>
+    [JsonPropertyName("is_detailing_mode")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsDetailingMode { get; set; }
+
+    /// <summary>GetUserPreferenceInteger(swUnitsLinear = 47), swLengthUnit_e verbatim (1.6.0).</summary>
+    [JsonPropertyName("length_unit_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? LengthUnitRaw { get; set; }
+
+    /// <summary>GetUserPreferenceInteger(swDetailingLinearDimPrecision = 24) (1.6.0).</summary>
+    [JsonPropertyName("dimension_precision_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? DimensionPrecisionRaw { get; set; }
+
+    /// <summary>GetUserPreferenceInteger(swUnitsLinearDecimalPlaces = 49), recorded until probe D4 says which default governs (1.6.0).</summary>
+    [JsonPropertyName("units_decimal_places_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? UnitsDecimalPlacesRaw { get; set; }
+
+    /// <summary>GetUserPreferenceInteger(swDetailingLinearTolPrecision = 25) (1.6.0).</summary>
+    [JsonPropertyName("tolerance_precision_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? TolerancePrecisionRaw { get; set; }
+
+    /// <summary>GetUserPreferenceString(swDetailingDimensionStandardName = 65) verbatim (1.6.0).</summary>
+    [JsonPropertyName("drafting_standard_name")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DraftingStandardName { get; set; }
+
+    /// <summary>True only when the product opened this drawing read-only at the engineer's confirmation (011 contracts/confirmed-open.md); null and omitted otherwise, and never false - the contract pins it to true (1.6.0).</summary>
+    [JsonPropertyName("opened_by_review")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? OpenedByReview { get; set; }
+
+    /// <summary>
+    /// Nulls every empty schema 1.6.0 list in this drawing, so each is omitted rather than
+    /// written as <c>[]</c> (<see cref="EvidencePackage.OmitEmptyAdditiveArrays"/>).
+    /// </summary>
+    internal void OmitEmptyAdditiveArrays()
+    {
+        foreach (DrawingSheetRecord sheet in Sheets)
+        {
+            sheet.OmitEmptyAdditiveArrays();
+        }
+    }
 }
 
 /// <summary>
@@ -102,6 +149,31 @@ public sealed class DrawingSheetRecord
     [JsonPropertyName("revision_tables")]
     public List<RevisionTable> RevisionTables { get; set; } = new List<RevisionTable>();
 
+    /// <summary>ISheet.GetTemplateName(), the .slddrt path; null plus a drawing_sheet gap (schema 1.6.0).</summary>
+    [JsonPropertyName("sheet_format_path")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SheetFormatPath { get; set; }
+
+    /// <summary>ISheet.GetProperties2() item 2; both scale numbers or neither (1.6.0).</summary>
+    [JsonPropertyName("scale_numerator")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? ScaleNumerator { get; set; }
+
+    /// <summary>ISheet.GetProperties2() item 3 (1.6.0).</summary>
+    [JsonPropertyName("scale_denominator")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? ScaleDenominator { get; set; }
+
+    /// <summary>ISheet.GetProperties2() item 4; true is first-angle projection (1.6.0).</summary>
+    [JsonPropertyName("first_angle")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? FirstAngle { get; set; }
+
+    /// <summary>Every table on the sheet that is not a revision table; null when there is none (1.6.0).</summary>
+    [JsonPropertyName("tables")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<DrawingTable>? Tables { get; set; }
+
     [JsonPropertyName("persist_ref")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PersistRef { get; set; }
@@ -109,6 +181,23 @@ public sealed class DrawingSheetRecord
     [JsonPropertyName("persist_ref_scope")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PersistRefScope { get; set; }
+
+    internal void OmitEmptyAdditiveArrays()
+    {
+        Tables = AdditiveArrays.NullIfEmpty(Tables);
+        if (Tables != null)
+        {
+            foreach (DrawingTable table in Tables)
+            {
+                table.OmitEmptyAdditiveArrays();
+            }
+        }
+
+        foreach (DrawingView view in Views)
+        {
+            view.OmitEmptyAdditiveArrays();
+        }
+    }
 }
 
 /// <summary>
@@ -165,6 +254,31 @@ public sealed class DrawingView
     [JsonPropertyName("notes")]
     public List<DrawingNote> Notes { get; set; } = new List<DrawingNote>();
 
+    /// <summary>IView.ReferencedConfiguration; null plus a drawing_view_state gap (schema 1.6.0).</summary>
+    [JsonPropertyName("referenced_configuration")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ReferencedConfiguration { get; set; }
+
+    /// <summary>IView.IsModelOutOfDate(); null means unread, and binds nothing (1.6.0).</summary>
+    [JsonPropertyName("is_model_out_of_date")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsModelOutOfDate { get; set; }
+
+    /// <summary>IView.IsModelLoaded() (1.6.0).</summary>
+    [JsonPropertyName("is_model_loaded")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsModelLoaded { get; set; }
+
+    /// <summary>IView.ScaleDecimal (1.6.0).</summary>
+    [JsonPropertyName("scale_decimal")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? ScaleDecimal { get; set; }
+
+    /// <summary>IView.GetOrientationName() (1.6.0).</summary>
+    [JsonPropertyName("orientation_name")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? OrientationName { get; set; }
+
     [JsonPropertyName("persist_ref")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PersistRef { get; set; }
@@ -172,6 +286,19 @@ public sealed class DrawingView
     [JsonPropertyName("persist_ref_scope")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PersistRefScope { get; set; }
+
+    internal void OmitEmptyAdditiveArrays()
+    {
+        foreach (DisplayDimensionRecord dimension in DisplayDimensions)
+        {
+            dimension.OmitEmptyAdditiveArrays();
+        }
+
+        foreach (DrawingAnnotation annotation in Annotations)
+        {
+            annotation.OmitEmptyAdditiveArrays();
+        }
+    }
 }
 
 /// <summary>
@@ -231,6 +358,96 @@ public sealed class DisplayDimensionRecord
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public Measure? Value { get; set; }
 
+    /// <summary>IDisplayDimension.GetText(1) verbatim, the empty string kept; null plus a dimension_text gap (schema 1.6.0).</summary>
+    [JsonPropertyName("text_prefix")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TextPrefix { get; set; }
+
+    /// <summary>GetText(2), as <see cref="TextPrefix"/>.</summary>
+    [JsonPropertyName("text_suffix")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TextSuffix { get; set; }
+
+    /// <summary>GetText(3), as <see cref="TextPrefix"/>.</summary>
+    [JsonPropertyName("text_above")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TextAbove { get; set; }
+
+    /// <summary>GetText(4), as <see cref="TextPrefix"/>.</summary>
+    [JsonPropertyName("text_below")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TextBelow { get; set; }
+
+    /// <summary>IDisplayDimension.GetPrimaryPrecision2 (1.6.0).</summary>
+    [JsonPropertyName("precision_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? PrecisionRaw { get; set; }
+
+    /// <summary>IDisplayDimension.GetPrimaryTolPrecision2 (1.6.0).</summary>
+    [JsonPropertyName("tolerance_precision_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? TolerancePrecisionRaw { get; set; }
+
+    /// <summary>IDisplayDimension.GetUseDocPrecision (1.6.0).</summary>
+    [JsonPropertyName("uses_document_precision")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? UsesDocumentPrecision { get; set; }
+
+    /// <summary>IDisplayDimension.GetUnits, swLengthUnit_e for a length (1.6.0).</summary>
+    [JsonPropertyName("units_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? UnitsRaw { get; set; }
+
+    /// <summary>IDisplayDimension.GetUseDocUnits (1.6.0).</summary>
+    [JsonPropertyName("uses_document_units")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? UsesDocumentUnits { get; set; }
+
+    /// <summary>IDimension.Tolerance, read and mapped by the same code as ModelDimension.tolerance; null is never 'none' (1.6.0).</summary>
+    [JsonPropertyName("tolerance")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Tolerance? Tolerance { get; set; }
+
+    /// <summary>IDimensionTolerance.Type verbatim, swTolType_e (1.6.0).</summary>
+    [JsonPropertyName("tolerance_type_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ToleranceTypeRaw { get; set; }
+
+    /// <summary>IDimensionTolerance.GetHoleFitValue, for a fit type (1.6.0).</summary>
+    [JsonPropertyName("fit_hole_class")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FitHoleClass { get; set; }
+
+    /// <summary>IDimensionTolerance.GetShaftFitValue, for a fit type (1.6.0).</summary>
+    [JsonPropertyName("fit_shaft_class")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FitShaftClass { get; set; }
+
+    /// <summary>IDisplayDimension.IsReferenceDim (1.6.0).</summary>
+    [JsonPropertyName("is_reference")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsReference { get; set; }
+
+    /// <summary>IDimension.DrivenState verbatim, swDimensionDrivenState_e (1.6.0).</summary>
+    [JsonPropertyName("driven_state_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? DrivenStateRaw { get; set; }
+
+    /// <summary>IDisplayDimension.IsHoleCallout (1.6.0).</summary>
+    [JsonPropertyName("is_hole_callout")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsHoleCallout { get; set; }
+
+    /// <summary>IDisplayDimension.GetHoleCalloutVariables, each verbatim, in order (1.6.0).</summary>
+    [JsonPropertyName("hole_callout_variables_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? HoleCalloutVariablesRaw { get; set; }
+
+    /// <summary>The model faces the dimension is attached to, where SOLIDWORKS says (1.6.0).</summary>
+    [JsonPropertyName("attached_faces")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<AttachedFace>? AttachedFaces { get; set; }
+
     [JsonPropertyName("persist_ref")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PersistRef { get; set; }
@@ -238,6 +455,12 @@ public sealed class DisplayDimensionRecord
     [JsonPropertyName("persist_ref_scope")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PersistRefScope { get; set; }
+
+    internal void OmitEmptyAdditiveArrays()
+    {
+        HoleCalloutVariablesRaw = AdditiveArrays.NullIfEmpty(HoleCalloutVariablesRaw);
+        AttachedFaces = AdditiveArrays.NullIfEmpty(AttachedFaces);
+    }
 }
 
 /// <summary>
@@ -278,6 +501,36 @@ public sealed class DrawingAnnotation
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? IsDangling { get; set; }
 
+    /// <summary>A geometric tolerance's frames (type 5), feature 010's frame reads (schema 1.6.0).</summary>
+    [JsonPropertyName("gtol_frames")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<GtolFrame>? GtolFrames { get; set; }
+
+    /// <summary>IGtol.GetDatumIdentifier, for a geometric tolerance (1.6.0).</summary>
+    [JsonPropertyName("datum_identifier_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DatumIdentifierRaw { get; set; }
+
+    /// <summary>IDatumTag.GetLabel, for a datum tag (type 2; 1.6.0).</summary>
+    [JsonPropertyName("datum_label")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DatumLabel { get; set; }
+
+    /// <summary>ISFSymbol.GetSymbol, for a surface finish symbol (type 7; 1.6.0).</summary>
+    [JsonPropertyName("surface_finish_symbol_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? SurfaceFinishSymbolRaw { get; set; }
+
+    /// <summary>ISFSymbol.GetTextAtIndex(0..GetTextCount-1) verbatim (1.6.0).</summary>
+    [JsonPropertyName("surface_finish_texts_raw")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? SurfaceFinishTextsRaw { get; set; }
+
+    /// <summary>For types 2, 5 and 7 (1.6.0).</summary>
+    [JsonPropertyName("attached_faces")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<AttachedFace>? AttachedFaces { get; set; }
+
     [JsonPropertyName("persist_ref")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PersistRef { get; set; }
@@ -285,6 +538,13 @@ public sealed class DrawingAnnotation
     [JsonPropertyName("persist_ref_scope")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PersistRefScope { get; set; }
+
+    internal void OmitEmptyAdditiveArrays()
+    {
+        GtolFrames = AdditiveArrays.NullIfEmpty(GtolFrames);
+        SurfaceFinishTextsRaw = AdditiveArrays.NullIfEmpty(SurfaceFinishTextsRaw);
+        AttachedFaces = AdditiveArrays.NullIfEmpty(AttachedFaces);
+    }
 }
 
 /// <summary>

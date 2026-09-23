@@ -12,7 +12,7 @@ namespace SwReview.Extractor.Ir;
 public sealed class EvidencePackage
 {
     /// <summary>The schema version this package was written against.</summary>
-    public const string CurrentSchemaVersion = "1.5.0";
+    public const string CurrentSchemaVersion = "1.6.0";
 
     /// <summary>Semver; consumers reject any major other than 1 (FR-016).</summary>
     [JsonPropertyName("schema_version")]
@@ -147,6 +147,14 @@ public sealed class EvidencePackage
     public List<ModelAnnotation>? ModelAnnotations { get; set; }
 
     /// <summary>
+    /// Same-name drawing files beside reviewed documents that no attached drawing shows
+    /// (schema 1.6.0, feature 011), in traversal order. Null and omitted when there is none.
+    /// </summary>
+    [JsonPropertyName("drawing_candidates")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<DrawingCandidate>? DrawingCandidates { get; set; }
+
+    /// <summary>
     /// The last suppress-test run appended to this package, or null. A dump overwrites the
     /// package and drops it, exactly as it drops interference results.
     /// </summary>
@@ -158,15 +166,16 @@ public sealed class EvidencePackage
     public List<Gap> Gaps { get; set; } = new List<Gap>();
 
     /// <summary>
-    /// Nulls the schema 1.4.0 and 1.5.0 arrays when they carry no rows, so they are omitted
-    /// rather than written as <c>[]</c> (contracts/ir-additions.md, additivity rule point 3;
-    /// feature 010 FR-028).
+    /// Nulls the schema 1.4.0, 1.5.0 and 1.6.0 arrays when they carry no rows, so they are
+    /// omitted rather than written as <c>[]</c> (contracts/ir-additions.md, additivity rule
+    /// point 3; feature 010 FR-028; feature 011 FR-048), the 1.6.0 lists inside each drawing
+    /// record included.
     ///
     /// Done here, once, on the way into <see cref="PackageSerializer.Serialize"/>, rather
     /// than in every caller that builds a package: a caller that forgot would write an empty
     /// array that is contract-valid, passes every schema check, and still moves every golden
-    /// package on disk. Only these four are touched; every array feature 001 shipped keeps
-    /// its <c>[]</c>.
+    /// package on disk. Only these five, and the 1.6.0 lists inside a drawing record, are
+    /// touched; every array feature 001 shipped keeps its <c>[]</c>.
     /// </summary>
     internal void OmitEmptyAdditiveArrays()
     {
@@ -174,6 +183,16 @@ public sealed class EvidencePackage
         {
             DrawingRecords = null;
         }
+
+        if (DrawingRecords != null)
+        {
+            foreach (DrawingRecord record in DrawingRecords)
+            {
+                record.OmitEmptyAdditiveArrays();
+            }
+        }
+
+        DrawingCandidates = AdditiveArrays.NullIfEmpty(DrawingCandidates);
 
         if (CutListItems != null && CutListItems.Count == 0)
         {
