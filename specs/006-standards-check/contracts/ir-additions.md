@@ -360,3 +360,12 @@ Not an IR field, but it is what fills `documents[]`, the manifest and
 - **The dump does not discover the drawings of an open model.** A drawing enters a package only
   when the drawing itself is the dumped document, or when the package was produced elsewhere and
   handed to the command line.
+- **Amended 2026-09-23 by feature 011**, on the owner's decision of 2026-09-22
+  (`specs/011-drawing-context/contracts/open-drawings.md`): under the `Full` (review) extraction of
+  a part or assembly root, the drawings already open in SOLIDWORKS whose views show a document of
+  the design are read with it, and enter `documents[]`, the manifest and
+  `design.drawing_document_ids`. The `Standards` and `ModelCheck` extractions are unchanged and
+  still never discover a drawing; a drawing is graded only when it is itself open (owner,
+  2026-09-23, 011 research R5 Q3). Nothing is opened to attach a drawing; feature 011's one
+  read-only open is of a candidate the engineer confirms in a review
+  (011 `contracts/confirmed-open.md`), never in a Standards run.
