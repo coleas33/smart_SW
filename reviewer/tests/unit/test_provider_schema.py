@@ -67,11 +67,14 @@ NO_ARGUMENT_TOOLS: frozenset[str] = frozenset(
         "get_review_checklist",
         "check_rms_assembly",
         "check_joints",
+        "check_mass_material",
+        "check_hygiene",
     }
 )
-"""The five tools the contract gives no arguments at all (`check_joints` from feature 010).
-Their parameters object is legitimately empty: "accepts nothing" is exactly right for a
-tool that takes nothing, and it is the one place a zero-property object is allowed."""
+"""The seven tools the contract gives no arguments at all (`check_joints`,
+`check_mass_material` and `check_hygiene` from feature 010). Their parameters object is
+legitimately empty: "accepts nothing" is exactly right for a tool that takes nothing, and it
+is the one place a zero-property object is allowed."""
 
 
 def tool_ids(functions: tuple[Callable[..., Any], ...]) -> list[str]:
@@ -151,7 +154,10 @@ CONTRACT_CURATED_TOOLS = {
 
 def test_the_contract_tables_parse() -> None:
     """Guard the parser itself: a silently empty golden would assert nothing below."""
-    assert len(CONTRACT_CURATED_TOOLS) == 33, "32 until feature 010 T028 added check_joints"
+    assert len(CONTRACT_CURATED_TOOLS) == 35, (
+        "32 until feature 010 T028 added check_joints, 33 until T067 and T075 added "
+        "check_mass_material and check_hygiene"
+    )
     assert CONTRACT_CURATED_TOOLS["list_components"] == ("parent_id", "include_suppressed")
     assert CONTRACT_CURATED_TOOLS["get_package_summary"] == ()
     assert CONTRACT_BRIDGE_TOOLS["bridge_interference"] == (

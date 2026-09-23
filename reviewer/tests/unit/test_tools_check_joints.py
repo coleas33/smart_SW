@@ -61,7 +61,11 @@ def test_check_joints_takes_no_argument_and_is_a_check_tool() -> None:
 
 
 def test_check_joints_is_the_first_code_first_check() -> None:
-    assert checks_mechanical.CODE_FIRST_CHECKS == ("check_joints",)
+    assert checks_mechanical.CODE_FIRST_CHECKS == (
+        "check_joints",
+        "check_mass_material",
+        "check_hygiene",
+    )
 
 
 def test_the_joint_map_check_is_not_a_checklist_item() -> None:

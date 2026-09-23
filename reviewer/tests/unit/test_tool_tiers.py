@@ -86,6 +86,8 @@ CHECK = (
     "check_rms_assembly",
     "check_rms_equations",
     "check_joints",
+    "check_mass_material",
+    "check_hygiene",
 )
 SESSION = (
     "request_evidence",
@@ -97,8 +99,9 @@ SESSION = (
 BRIDGE = ("bridge_capture", "bridge_measure", "bridge_interference")
 
 EVERY_TOOL = (*QUERY, *MEASUREMENT, *CHECK, *SESSION)
-"""The 33 curated tools in registration order - the array a no-bridge run sends today
-(32 until feature 010 T028 registered `check_joints`)."""
+"""The 35 curated tools in registration order - the array a no-bridge run sends today
+(32 until feature 010 T028 registered `check_joints`, 33 until T067 and T075 registered
+`check_mass_material` and `check_hygiene`)."""
 
 RMS_TIER = (
     "list_features",
@@ -133,13 +136,15 @@ WITHOUT_RMS_TIER = (
     "check_hole_alignment",
     "check_interference_group",
     "check_joints",
+    "check_mass_material",
+    "check_hygiene",
     "request_evidence",
     "mark_coverage",
     "record_drawing_finding",
     "get_review_checklist",
     "request_capture",
 )
-"""The 27 the RMS tier leaves, written out rather than filtered: this list is the pin."""
+"""The 29 the RMS tier leaves, written out rather than filtered: this list is the pin."""
 
 GRADABLE: dict[str, Any] = {
     "full assembly, tree dumped": full_assembly_with_tree,
@@ -181,7 +186,7 @@ def test_a_package_with_feature_rows_keeps_every_tool_with_the_flag_on(build: An
 def test_a_package_with_no_feature_rows_loses_the_rms_tier_and_nothing_else(
     build: Any,
 ) -> None:
-    """33 tools to 27, and the 27 are named here rather than derived from the registry."""
+    """35 tools to 29, and the 29 are named here rather than derived from the registry."""
     assert tuple(offered(build(), efficiency=ON)) == WITHOUT_RMS_TIER
 
 

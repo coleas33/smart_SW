@@ -66,7 +66,7 @@ __all__ = [
     "record_joint_map",
 ]
 
-CODE_FIRST_CHECKS: tuple[str, ...] = ("check_joints",)
+CODE_FIRST_CHECKS: tuple[str, ...] = ("check_joints", "check_mass_material", "check_hygiene")
 """The argument-free check tools the pre-run calls, in order. Each must be in
 `registry.check_tools()` and take no parameter; `test_code_first_registration.py` holds it
 to both."""
@@ -179,9 +179,7 @@ def _attached_profile(context: ToolContext) -> StandardsProfile | None:
     return None if run is None else run.profile
 
 
-def _head_sweeper(
-    context: ToolContext, meshes: BodyMeshes
-) -> tuple[EnvelopeOf | None, str]:
+def _head_sweeper(context: ToolContext, meshes: BodyMeshes) -> tuple[EnvelopeOf | None, str]:
     """What sweeps each placed screw's head, or `None` and why no sweep can be made.
 
     Every body the package holds is swept, the screw's own excluded. With lever 10a's lazy
@@ -255,16 +253,12 @@ def _record_identity(context: ToolContext, results: Sequence[CheckResult]) -> To
 
 
 def check_joints() -> ToolResult:
-    """Find every joint of the assembly from its geometry, and check how each lines up.
+    """Find every joint from the geometry and check it: alignment, stack-up, fastener
+    identity, thread, engagement, bottoming, tool access and head fit.
 
     Notes:
-        Takes no argument. A joint is two or more parts whose holes - or a hole and a screw
-        or pin face - share an axis: parallel, overlapping in projection and touching along
-        it. Each pattern of joints is recorded as checked coverage; a pair that misses by a
-        little is listed for the engineer, never reported, and every hole or face the map
-        could not use is skipped coverage saying why. Each joint's offset is then checked
-        against the clearance its fastener leaves, with the position budget as a callout,
-        and a pattern of identical results is one finding naming every joint.
+        Takes no argument. A near miss is listed, never reported; what the map could not use
+        is skipped coverage saying why.
     """
     context = current_context()
     session = context.require_session()
@@ -316,9 +310,7 @@ def check_joints() -> ToolResult:
     )
 
 
-def _record_documents(
-    context: ToolContext, results: Sequence[DocumentResult]
-) -> ToolResult | None:
+def _record_documents(context: ToolContext, results: Sequence[DocumentResult]) -> ToolResult | None:
     """Record document-scope results, each bound to its instances or, for the root, to its
     document; the error result if one is refused."""
     for item in results:
@@ -347,11 +339,10 @@ def _record_coverage(
 
 def check_mass_material() -> ToolResult:
     """Check every part has a material or a deliberate mass override, that its density fits
-    its material, and flag assembly mass overrides.
+    the material, and flag assembly mass overrides.
 
     Notes:
-        Takes no argument. Parts that pass the material rule are counted; unread parts and
-        bodies are counted too, never assumed.
+        Takes no argument. Unread parts and bodies are counted, never assumed.
     """
     context = current_context()
     session = context.require_session()
@@ -377,8 +368,8 @@ def check_hygiene() -> ToolResult:
     revisions, and suppressed or lightweight components.
 
     Notes:
-        Takes no argument. The property names come from the attached standards profile;
-        without one the property checks are skipped, saying which setting is missing.
+        Takes no argument. Property names come from the attached standards profile; without
+        one those checks are skipped.
     """
     # Deferred for the reason `_attached_profile` gives: hygiene reads a standards module.
     from swreview.checks.hygiene import run_hygiene_checks

@@ -52,9 +52,17 @@ them is 50 joints in 11 pattern groups, pinned by its own golden). `check_mass_m
 
 | Tool | Docstring summary (the model's view) | Families |
 |---|---|---|
-| `check_joints()` | Finds every joint from the geometry and checks each one: alignment, the stack-up when tolerances are read, fastener identity, thread match, engagement and bottoming, tool access and head fit. Takes no argument. | US2 to US5, US8 |
-| `check_mass_material()` | Checks every part has a material or a deliberate mass override, that its density fits the material, and flags assembly mass overrides. Takes no argument. | US6 |
-| `check_hygiene()` | Checks part numbers against file names, duplicate descriptions and part numbers, revisions, and suppressed or lightweight components. Takes no argument. | US7 |
+| `check_joints()` | Find every joint from the geometry and check it: alignment, stack-up, fastener identity, thread, engagement, bottoming, tool access and head fit. (Notes: takes no argument.) | US2 to US5, US8 |
+| `check_mass_material()` | Check every part has a material or a deliberate mass override, that its density fits the material, and flag assembly mass overrides. (Notes: takes no argument.) | US6 |
+| `check_hygiene()` | Check part numbers against file names, duplicate descriptions and part numbers, revisions, and suppressed or lightweight components. (Notes: takes no argument.) | US7 |
+
+**As registered (T067, T075).** The summaries are the docstrings' first paragraphs verbatim,
+each under lever 2's 160-character cap (`test_tool_notes_prompt.py`); the wording first
+planned for `check_joints` was 191 characters and was shortened to the list above. The
+`Notes:` blocks are one or two sentences each, because the three tools brought the curated
+array to 35,844 bytes on OpenAI and 35,915 on Gemini against `ARRAY_CEILING` 36,000
+(`test_tool_payload.py`): 85 bytes of headroom, which the next tool's docstring must respect or
+the ceiling must be revisited deliberately.
 
 A second call in one session records its findings again, exactly as a second `check_rms_part`
 does today. Answering repeats is one mechanism in one place, feature 008's re-call guard

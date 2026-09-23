@@ -317,9 +317,10 @@ def over_the_cap(spec: ToolSpec) -> set[str]:
 
 
 def test_the_split_covers_every_tool_that_reaches_a_provider() -> None:
-    """36: the 35 T056 rewrote and feature 010's `check_joints`, whose description was
-    written under the cap; the number the caps are asserted over."""
-    assert len(ALL_TOOL_FUNCTIONS) == 36
+    """38: the 35 T056 rewrote and feature 010's `check_joints`, `check_mass_material` and
+    `check_hygiene`, whose descriptions were written under the cap; the number the caps are
+    asserted over."""
+    assert len(ALL_TOOL_FUNCTIONS) == 38
 
 
 @pytest.mark.parametrize(

@@ -125,6 +125,8 @@ def check_tools() -> tuple[Callable[..., Any], ...]:
         rms_checks.check_rms_assembly,
         rms_checks.check_rms_equations,
         checks_mechanical.check_joints,
+        checks_mechanical.check_mass_material,
+        checks_mechanical.check_hygiene,
     )
 
 

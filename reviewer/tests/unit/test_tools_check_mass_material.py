@@ -3,9 +3,8 @@
 `contracts/code-first.md` section 3 and `contracts/mass-material.md` section 5: the tool
 takes no argument, records the passes of `mass.material_assigned` as one `checked` item and
 every density verdict as a finding, counts what was not read in one skipped item, and
-returns counts rather than a payload. The registration pins (`check_tools()`,
-`CODE_FIRST_CHECKS`, the tool-array bytes) land with the registration commit and are
-asserted in `test_code_first_registration.py`.
+returns counts rather than a payload. It is a check tool and the second name in
+`CODE_FIRST_CHECKS` (T067), so the pre-run calls it after `check_joints` at no model round.
 """
 
 from __future__ import annotations
@@ -18,8 +17,10 @@ from typing import Any
 import pytest
 
 from swreview.ir.loader import load_package
+from swreview.tools import checks_mechanical
 from swreview.tools.checks_mechanical import check_mass_material
 from swreview.tools.context import ToolContext, build_context, use_context
+from swreview.tools.registry import ToolRegistry, check_tools
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "mechanical"
 
@@ -37,6 +38,20 @@ def big() -> tuple[ToolContext, dict[str, Any]]:
 
 def test_the_tool_takes_no_argument() -> None:
     assert inspect.signature(check_mass_material).parameters == {}
+
+
+def test_it_is_a_check_tool_and_the_second_code_first_check() -> None:
+    assert check_mass_material in check_tools()
+    assert checks_mechanical.CODE_FIRST_CHECKS.index("check_mass_material") == 1
+
+
+def test_through_the_registry_it_is_one_real_step_and_refuses_an_argument() -> None:
+    context = build_context(load_package(FIXTURES / "small-assembly"))
+    tools = {tool.name: tool for tool in ToolRegistry().build(context)}
+
+    assert tools["check_mass_material"].call({}).payload["status"] == "recorded"
+    assert [step.tool for step in context.require_session().steps] == ["check_mass_material"]
+    assert tools["check_mass_material"].call({"document_id": "doc:0001"}).is_error is True
 
 
 def test_it_returns_counts_and_the_documents_it_reached(big) -> None:
@@ -138,8 +153,9 @@ def test_the_root_assembly_binds_to_its_document() -> None:
     from tests.support.mechanical import PackageBuilder
 
     builder = PackageBuilder(design_stem="FICT-KALO-0000")
-    part = builder.document("FICT-KALOMIR-0001", "part", material="6061-T6", mass_kg=0.27,
-                            volume_mm3=100_000.0)
+    part = builder.document(
+        "FICT-KALOMIR-0001", "part", material="6061-T6", mass_kg=0.27, volume_mm3=100_000.0
+    )
     builder.component(part, component_id="cmp:0001")
     builder.set_mass(builder.root_id, 1.0, 100_000.0)
     package = builder.build().package

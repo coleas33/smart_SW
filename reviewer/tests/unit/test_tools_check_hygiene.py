@@ -3,7 +3,8 @@
 `contracts/hygiene.md` sections 3 and 5: the tool takes no argument, reads the property names
 from the standards run attached to the context - never loading a profile itself - and with
 no run attached still runs the component check while the property checks are skipped naming
-their settings. The registration pins land with the registration commit.
+their settings. It is a check tool and the third name in `CODE_FIRST_CHECKS` (T075), so the
+pre-run calls it after `check_mass_material` at no model round.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from swreview.ir.loader import load_package
 from swreview.tools import checks_mechanical
 from swreview.tools.checks_mechanical import check_hygiene
 from swreview.tools.context import ToolContext, build_context, use_context
+from swreview.tools.registry import ToolRegistry, check_tools
 from swreview.tools.standards_checks import StandardsRun, attach_standards_run
 
 REVIEWER = Path(__file__).resolve().parents[1].parent
@@ -49,6 +51,20 @@ def attached() -> tuple[ToolContext, dict[str, Any]]:
 
 def test_the_tool_takes_no_argument() -> None:
     assert inspect.signature(check_hygiene).parameters == {}
+
+
+def test_it_is_a_check_tool_and_the_third_code_first_check() -> None:
+    assert check_hygiene in check_tools()
+    assert checks_mechanical.CODE_FIRST_CHECKS.index("check_hygiene") == 2
+
+
+def test_through_the_registry_it_is_one_real_step_and_refuses_an_argument() -> None:
+    context = build_context(load_package(FIXTURES / "small-assembly"))
+    tools = {tool.name: tool for tool in ToolRegistry().build(context)}
+
+    assert tools["check_hygiene"].call({}).payload["profile"] == "absent"
+    assert [step.tool for step in context.require_session().steps] == ["check_hygiene"]
+    assert tools["check_hygiene"].call({"profile": "profile-a"}).is_error is True
 
 
 def test_the_tool_never_loads_a_profile_itself() -> None:
