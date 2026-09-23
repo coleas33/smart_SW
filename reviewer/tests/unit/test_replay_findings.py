@@ -23,10 +23,18 @@ from typer.testing import CliRunner
 
 from swreview import cli
 from swreview.agent.providers.fake import ScriptedToolCall
-from swreview.benchmark.replay import TurnPlan, replay
+from swreview.benchmark import replay as replay_module
+from swreview.benchmark.replay import (
+    TurnPlan,
+    judged_group,
+    reclassifying_contacts,
+    replay,
+)
 from swreview.checks import interference
+from swreview.checks.interference import CHECK
 from swreview.ir.loader import save_package
 from swreview.ir.models import Volume
+from swreview.report.session import Contact, load_session
 from tests.support.prerun import FIRST_INSTANCE, GROUP_KEY, SECOND_INSTANCE, prerun_package
 from tests.support.replay import (
     ALL_OFF,
@@ -350,3 +358,91 @@ def test_an_untouched_recording_loses_and_adds_nothing(run: Path) -> None:
     assert report.findings.added == []
     assert report.findings.not_replayable == []
     assert report.findings.recorded == report.findings.replayed > 0
+
+
+# --- one rule for the replay and the fixture generator (008 T119, decision 3A) ----------------
+
+
+def contact(contact_id: str, group_key: str, configuration: str = "Default") -> Contact:
+    return Contact(
+        id=contact_id,
+        kind="zero_volume",
+        group_key=group_key,
+        configuration=configuration,
+        interference_ids=["int:0001"],
+        component_ids=[FIRST_INSTANCE, SECOND_INSTANCE],
+        volume_mm3=0.0,
+        joint_id=None,
+        reason="touching at nominal size",
+        tool_result_ids=[1],
+    )
+
+
+def test_each_contact_reclassifies_the_first_recorded_finding_of_its_group_and_configuration() -> (
+    None
+):
+    """Positional, in recorded order: `None` for a finding no contact reclassifies - one with
+    no judged group, one in another configuration, one of a group whose contact is spent."""
+    first, other = contact("C-001", GROUP_KEY), contact("C-002", NEW_GROUP, "Other")
+    groups = [
+        None,
+        (GROUP_KEY, "Default"),
+        (GROUP_KEY, "Default"),
+        (NEW_GROUP, "Default"),
+        (NEW_GROUP, "Other"),
+    ]
+
+    assert reclassifying_contacts(groups, [other, first]) == [None, first, None, None, other]
+    assert reclassifying_contacts(groups, []) == [None] * len(groups)
+    assert reclassifying_contacts([], [first]) == []
+
+
+def test_judged_group_reads_an_interference_findings_group_from_its_calculation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = record_before_contacts(
+        monkeypatch,
+        tmp_path / "run",
+        touching_package_dir(tmp_path),
+        turns=[TurnPlan(rounds=((SUMMARY,), (JUDGE_TOUCHING,)), text="Done.")],
+    )
+    [finding] = [f for f in load_session(run / "session.json").findings if f.check == CHECK]
+    assert finding.calculation is not None
+    inputs = finding.calculation.inputs
+
+    assert judged_group(finding) == (GROUP_KEY, "Default")
+    assert judged_group(finding.model_copy(update={"check": "hole.coaxiality"})) is None
+    assert judged_group(finding.model_copy(update={"calculation": None})) is None
+    keyless = {name: value for name, value in inputs.items() if name != "group_key"}
+    no_key = finding.calculation.model_copy(update={"inputs": keyless})
+    assert judged_group(finding.model_copy(update={"calculation": no_key})) is None
+
+
+def test_the_replays_findings_go_through_the_shared_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_findings` calls `reclassifying_contacts` over `judged_group` of every recorded
+    finding - the functions the fixture generator imports - and nothing else decides."""
+    run = record_before_contacts(
+        monkeypatch,
+        tmp_path / "run",
+        touching_package_dir(tmp_path),
+        turns=[TurnPlan(rounds=((SUMMARY,), (JUDGE_TOUCHING,)), text="Done.")],
+    )
+    calls: list[tuple[list[Any], list[str]]] = []
+    real = replay_module.reclassifying_contacts
+
+    def spy(groups: Any, contacts: Any) -> Any:
+        calls.append((list(groups), [item.id for item in contacts]))
+        return real(groups, contacts)
+
+    monkeypatch.setattr(replay_module, "reclassifying_contacts", spy)
+
+    report = replay(run, requested=ALL_OFF)
+
+    [(groups, contact_ids)] = calls
+    recorded = load_session(run / "session.json").findings
+    assert groups == [judged_group(finding) for finding in recorded]
+    assert (GROUP_KEY, "Default") in groups
+    assert contact_ids == ["C-001"]
+    assert [item.contact_id for item in report.findings.reclassified] == ["C-001"]

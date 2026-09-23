@@ -91,6 +91,7 @@ __all__ = [
     "FOLLOW_UP_PLACEHOLDER",
     "REGROUPED_ASSUMPTION",
     "CallClass",
+    "JudgedGroup",
     "PlayedCall",
     "PlayedReview",
     "PlayedRound",
@@ -109,7 +110,9 @@ __all__ = [
     "TurnKind",
     "TurnPlan",
     "estimated_sizes",
+    "judged_group",
     "play_review",
+    "reclassifying_contacts",
     "render_replay_lines",
     "replay",
     "replay_passes",
@@ -1546,7 +1549,12 @@ def subject_of(key: SubjectKey) -> str:
     return "; ".join(parts)
 
 
-def _judged_group(finding: Finding) -> tuple[str, str] | None:
+JudgedGroup = tuple[str, str]
+"""`(group key, configuration)`: what a recorded interference finding judged, and what a
+contact names."""
+
+
+def judged_group(finding: Finding) -> JudgedGroup | None:
     """`(group key, configuration)` of a recorded interference finding, or `None`.
 
     The group key is read from the recorded calculation's inputs, where the interference
@@ -1561,12 +1569,27 @@ def _judged_group(finding: Finding) -> tuple[str, str] | None:
     return group_key, finding.configuration
 
 
-def _contacts_by_group(session: ReviewSession) -> dict[tuple[str, str], list[Contact]]:
-    """The requested pass's contacts by `(group key, configuration)`, in the order recorded."""
-    contacts: dict[tuple[str, str], list[Contact]] = {}
-    for contact in session.contacts:
-        contacts.setdefault((contact.group_key, contact.configuration), []).append(contact)
-    return contacts
+def reclassifying_contacts(
+    groups: Sequence[JudgedGroup | None], contacts: Sequence[Contact]
+) -> list[Contact | None]:
+    """The contact that reclassifies each recorded finding, by position; `None` for the rest.
+
+    `groups` holds `judged_group` of every recorded finding, in recorded order, named as the
+    contacts are named: the replay passes them as recorded, the fixture generator carries
+    them into the fixture's fictional names first. A finding whose group key and
+    configuration equal a contact's is reclassified as that contact, and each contact
+    reclassifies one finding - the first of its group still unmatched - so the comparison
+    stays a multiset (`contracts/replay.md` section 5; feature 010 T095). The one rule the
+    replay's reclassified list and the generator's finding check both apply (decision 3A).
+    """
+    unmatched: dict[JudgedGroup, list[Contact]] = {}
+    for contact in contacts:
+        unmatched.setdefault((contact.group_key, contact.configuration), []).append(contact)
+    matched: list[Contact | None] = []
+    for group in groups:
+        pool = unmatched.get(group) if group is not None else None
+        matched.append(pool.pop(0) if pool else None)
+    return matched
 
 
 def _findings(
@@ -1585,17 +1608,17 @@ def _findings(
     when pass A had to estimate the step, and a missing one is lost.
     """
     by_step = {item.recorded.step: item for item in classes}
-    unmatched_contacts = _contacts_by_group(second.session)
+    contacts = reclassifying_contacts(
+        [judged_group(item.finding) for item in recording.findings], second.session.contacts
+    )
     reclassified: list[ReclassifiedFinding] = []
     not_replayable: list[NotReplayableFinding] = []
     replayable: Counter[SubjectKey] = Counter()
     recorded_all: Counter[SubjectKey] = Counter()
-    for item in recording.findings:
+    for item, contact in zip(recording.findings, contacts, strict=True):
         key = finding_subject_key(item.finding)
         recorded_all[key] += 1
-        group = _judged_group(item.finding)
-        if group is not None and unmatched_contacts.get(group):
-            contact = unmatched_contacts[group].pop(0)
+        if contact is not None:
             reclassified.append(
                 ReclassifiedFinding(
                     check=item.finding.check,

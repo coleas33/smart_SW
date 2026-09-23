@@ -51,8 +51,11 @@ package when it reproduces the recorded one (same status, same summary, and a si
 framing noise of the recorded growth), and the recorded growth otherwise.
 
 **It checks itself and refuses to write** unless the fixture's finding-key multiset equals the
-recording's (through the same map), every result of 5,000 tokens or more is within 5% of its
-recorded size, no identifying token of the recording - three characters or more with a
+recording's (through the same map) - less each recorded `interference.static` finding that a
+contact of the fixture reclassifies, by the replay's own rule (`reclassifying_contacts` over
+`judged_group`, imported, never copied; owner decision 3A of 2026-09-23), since feature 010's
+code records a touching group as a contact - every result of 5,000 tokens or more is within
+5% of its recorded size, no identifying token of the recording - three characters or more with a
 letter, or five digits or more - remains in any string of the three files or inside a
 persistent reference, no word of three letters or more of a recorded property key or value
 remains in the fixture's property keys and values unless the example profile names it, and
@@ -118,9 +121,12 @@ from swreview.benchmark.recording import (  # noqa: E402
     read_recording,
 )
 from swreview.benchmark.replay import (  # noqa: E402
+    JudgedGroup,
     PlayedRound,
     estimated_sizes,
+    judged_group,
     play_review,
+    reclassifying_contacts,
     same_summary,
     turn_plans,
 )
@@ -197,6 +203,17 @@ def live_call(recording: Recording) -> RecordedCall | None:
     return calls[0] if calls else None
 
 
+def fixture_group(fmap: FictionalMap, group: JudgedGroup) -> JudgedGroup:
+    """A recorded `(group key, configuration)` in the fixture's names.
+
+    The key as free text and the configuration as a field value: exactly how `judged_rows`
+    writes the rows the fixture's groups - and so its contacts - are built from, so a recorded
+    finding and the contact the current code records for its group name the same group.
+    """
+    group_key, configuration = group
+    return fmap.text(group_key), fmap.value(configuration)
+
+
 def judged_rows(recording: Recording, fmap: FictionalMap) -> list[dict[str, Any]]:
     """The rows behind every recorded interference finding, from its calculation inputs."""
     rows: list[dict[str, Any]] = []
@@ -205,6 +222,9 @@ def judged_rows(recording: Recording, fmap: FictionalMap) -> list[dict[str, Any]
         if not finding.check.startswith("interference.") or finding.calculation is None:
             continue
         inputs = {key: str(value) for key, value in finding.calculation.inputs.items()}
+        group_key, configuration = fixture_group(
+            fmap, (inputs["group_key"], inputs["configuration"])
+        )
         settings = {
             "treat_coincident_as_interference": inputs["treat_coincident_as_interference"]
             == "True",
@@ -223,9 +243,9 @@ def judged_rows(recording: Recording, fmap: FictionalMap) -> list[dict[str, Any]
                 interference_row(
                     row_id,
                     tuple(pair.split("+")),
-                    fmap.text(inputs["group_key"]),
+                    group_key,
                     volume_m3=volume_mm3 / 1e9,
-                    configuration=fmap.value(inputs["configuration"]),
+                    configuration=configuration,
                     settings=settings,
                 )
             )
@@ -408,6 +428,40 @@ def scrambled_key(fmap: FictionalMap, key: SubjectKey) -> SubjectKey:
     )
 
 
+def finding_problems(
+    recording: Recording, written: Recording, fmap: FictionalMap
+) -> tuple[list[str], int]:
+    """Why the fixture's findings are not the recording's, and how many it reclassified.
+
+    The recording's finding keys, through the map, must be the fixture's as a multiset - after
+    taking out every recorded finding a contact of the fixture reclassifies (decision 3A,
+    `contracts/replay.md` section 8). That is the replay's own rule, imported: a recorded
+    `interference.static` finding whose group, carried into the fixture's names
+    (`fixture_group`), is a contact's group and configuration. Since feature 010 the current
+    code records a touching group as a contact, where the recorded review wrote a finding.
+    """
+    contacts = reclassifying_contacts(
+        [
+            None if group is None else fixture_group(fmap, group)
+            for group in (judged_group(item.finding) for item in recording.findings)
+        ],
+        written.session.contacts,
+    )
+    expected = Counter(
+        scrambled_key(fmap, finding_subject_key(item.finding))
+        for item, contact in zip(recording.findings, contacts, strict=True)
+        if contact is None
+    )
+    actual = Counter(finding_subject_key(item.finding) for item in written.findings)
+    problems: list[str] = []
+    if expected != actual:
+        problems.append(
+            f"the finding keys differ: {sum((expected - actual).values())} recorded keys are "
+            f"missing and {sum((actual - expected).values())} are new"
+        )
+    return problems, sum(1 for contact in contacts if contact is not None)
+
+
 def documents_of(folder: Path, name: str) -> list[Any]:
     """The JSON documents of one fixture file: one per line of the event log."""
     text = (folder / name).read_text(encoding="utf-8")
@@ -474,8 +528,9 @@ def self_check(
     recorded_folders: set[str],
     public: frozenset[str],
     generic_property_words: set[str],
-) -> list[str]:
-    """Why the fixture must not be written; empty when it may.
+) -> tuple[list[str], int]:
+    """Why the fixture must not be written - empty when it may - and how many recorded
+    findings its contacts reclassified (`finding_problems`).
 
     `generic_property_words` are generic words made strict only by a property key or value.
     Outside the package the reviewer writes them in its own sentences (`not`, `and`), and the
@@ -483,17 +538,7 @@ def self_check(
     were recorded - the property keys and values (`surviving_property_words`) - rather than
     by the leak check.
     """
-    problems: list[str] = []
-    expected = Counter(
-        scrambled_key(fmap, finding_subject_key(item.finding)) for item in recording.findings
-    )
-    written = read_recording(fixture)
-    actual = Counter(finding_subject_key(item.finding) for item in written.findings)
-    if expected != actual:
-        problems.append(
-            f"the finding keys differ: {sum((expected - actual).values())} recorded keys are "
-            f"missing and {sum((actual - expected).values())} are new"
-        )
+    problems, reclassified = finding_problems(recording, read_recording(fixture), fmap)
     for index, (size, how) in sorted(sizes.items()):
         if size < LARGE_RESULT_TOKENS:
             continue
@@ -506,7 +551,7 @@ def self_check(
     problems += leaks(fixture, denied)
     problems += surviving_property_words(raw_package, fixture, public)
     problems += recorded_folders_found(fixture, recorded_folders)
-    return problems
+    return problems, reclassified
 
 
 # --- the run ---------------------------------------------------------------------------------
@@ -604,7 +649,7 @@ def generate(recorded_dir: Path, name: str, groups: int | None) -> int:
             model=recording.session.model,
             **bridge_options(live, rows),
         )
-        problems = self_check(
+        problems, reclassified = self_check(
             recording,
             raw,
             out,
@@ -636,8 +681,8 @@ def generate(recorded_dir: Path, name: str, groups: int | None) -> int:
     estimated = sum(1 for _, how in sizes.values() if how != "reproduced")
     print(
         f"wrote {target}: {len(sizes)} calls ({estimated} sized from the recorded growth), "
-        f"{len(recording.findings)} findings; the denylist holds {len(entries)} tokens and "
-        f"{len(folders)} folder names"
+        f"{len(recording.findings)} findings ({reclassified} reclassified as contacts); the "
+        f"denylist holds {len(entries)} tokens and {len(folders)} folder names"
     )
     return 0
 
