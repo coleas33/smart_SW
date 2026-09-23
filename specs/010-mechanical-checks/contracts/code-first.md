@@ -88,6 +88,14 @@ test of its own); a withheld `check_joints` makes the two families carry the tie
 `repeat_key` maps each name in `CODE_FIRST_CHECKS` to `(tool,)`. A repeat is answered with the
 recorded digest and records nothing new (008 `contracts/checks-first.md` section 5).
 
+*Landed as* (T092-T093): 008's T044 already read the tuple in `repeat_key`, so T093 adds no
+code, only the three names to 008's table and to `agent-tools.md`. The tuple is read when the
+key is asked for, so a later argument-free check joins the guard by joining `CODE_FIRST_CHECKS`
+and one that leaves the tuple leaves the guard; arguments a model adds are ignored, as for
+`check_rms_part`'s `document_id`. The answer's `outcome` is the recorded counts summary as
+given (`check_digest` returns a payload that is not a findings envelope unchanged), and a
+check whose pre-run call failed runs again (`test_prerun_repeat_guard.py`).
+
 ## 6. Callable as functions
 
 Each family is also a plain function over the package, usable from a test or a script with no
