@@ -33,6 +33,19 @@ Feature 010's `tests/fixtures/mechanical/` is read by the builders and never reg
 The pathological package for the brief's bound (500 notes, 300 dimensions, 60 joints) is built in
 `test_drawing_brief.py` from the builders and never committed.
 
+*Landed as (T012, 2026-09-23)*: the generator's module docstring is the case table with every id.
+Three readings the table above leaves open were decided there: the plate's dowel hole is the
+tolerances assembly's Ø3.0 (`fac:0001`), so drawing A's bilateral dimension is Ø3.00 +0.010/0.000;
+"the pin hole" is the plate's only other hole in a joint, the counterbore's Ø4.5 through bore
+(`fac:0002`), whose two equal 4.5 mm model dimensions leave feature 010's screw stack unresolved;
+and "the plate's other dowel dimension" is the model item of `mdm:0001` on the same dowel hole,
+named with a document suffix spelled differently. A drawing dimension's value is in metres, as
+`DrawingDumper` writes it. The drawing root is built with feature 006's standards builder and its
+record rebuilt whole with every 1.6.0 member; `opened_by_review` appears on no fixture, since only
+the confirmed read-only open writes it. The drawing vocabulary reads a word and the number run into
+it apart (`Sheet1`), and the denylist scan leaves out the published head codes, as feature 010's
+does (`tests/support/fixture_denylist.PUBLISHED_HEAD_CODES`, moved there from 010's test).
+
 ## 3. Fictional strings only
 
 Every path is under `C:\Fictional\`; file names, sheet names, view names, notes, table cells and

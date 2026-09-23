@@ -159,31 +159,34 @@ _TOKEN = re.compile(r"[A-Za-z0-9]+")
 _SIZE_OR_ID = re.compile(r"^(?:m?\d+(?:x\d+)?|x\d+|\d+x\d+|\d+)$", re.IGNORECASE)
 
 
-def _built_from_vocabulary(token: str) -> bool:
-    """Whether `token` is one or more `VOCABULARY` words run together (`KALOMIR`)."""
+def _built_from_vocabulary(token: str, vocabulary: frozenset[str] = VOCABULARY) -> bool:
+    """Whether `token` is one or more `vocabulary` words run together (`KALOMIR`)."""
     word = token.lower()
     reachable = [True] + [False] * len(word)
     for end in range(1, len(word) + 1):
         reachable[end] = any(
-            reachable[start] and word[start:end] in VOCABULARY for start in range(end)
+            reachable[start] and word[start:end] in vocabulary for start in range(end)
         )
     return reachable[-1]
 
 
-def fictional_offences(text: str) -> list[str]:
+def fictional_offences(text: str, vocabulary: frozenset[str] = VOCABULARY) -> list[str]:
     """The tokens of `text` that are neither vocabulary nor a size, a number or an id.
 
     A token may be several vocabulary syllables run together; a single character (a
     revision letter) identifies nothing and passes. A library material name counts as
     fictional as a whole, because it is SOLIDWORKS' own and already committed. An empty list
-    means the text is built only from the vocabulary.
+    means the text is built only from the vocabulary. `vocabulary` is feature 010's unless a
+    caller extends it, as feature 011's drawing fixtures do (`tests/support/drawings.py`).
     """
     if text in LIBRARY_MATERIALS:
         return []
     return [
         token
         for token in _TOKEN.findall(text)
-        if len(token) > 1 and not _SIZE_OR_ID.match(token) and not _built_from_vocabulary(token)
+        if len(token) > 1
+        and not _SIZE_OR_ID.match(token)
+        and not _built_from_vocabulary(token, vocabulary)
     ]
 
 

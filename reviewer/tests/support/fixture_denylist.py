@@ -28,6 +28,7 @@ from tests.support.scramble import denylist_path, read_denylist
 __all__ = [
     "DENYLIST_PATH",
     "MIN_TOKEN_LENGTH",
+    "PUBLISHED_HEAD_CODES",
     "glb_json",
     "json_strings",
     "load_denylist",
@@ -40,6 +41,12 @@ DENYLIST_PATH = denylist_path()
 
 MIN_TOKEN_LENGTH = 3
 """Shorter tokens are ignored: two characters match everywhere and prove nothing."""
+
+PUBLISHED_HEAD_CODES: frozenset[str] = frozenset({"shc", "fht", "bht"})
+"""Head codes feature 010's `contracts/fasteners.md` prints as the vendor grammar the parser
+reads. A denylist built from recorded names can hold one - the recorded screws were named with
+it - but it names a screw style, it is already published in this repository's specs, and the
+fixtures cannot exercise the parser without it. Every fictional-fixture scan leaves them out."""
 
 
 def load_denylist(path: Path = DENYLIST_PATH) -> frozenset[str] | None:

@@ -194,8 +194,10 @@ def build_dimension(**overrides: Any) -> DisplayDimensionRecord:
         **NEW_FIELDS[DisplayDimensionRecord],
         "tolerance": build_tolerance(),
         "hole_callout_variables_raw": ["<hw-diameter>=3.10", ""],
-        "attached_faces": [build_attached_face(), build_attached_face(
-            persist_ref=persist_ref("fac:0002"), via="edge")],
+        "attached_faces": [
+            build_attached_face(),
+            build_attached_face(persist_ref=persist_ref("fac:0002"), via="edge"),
+        ],
     }
     fields.update(overrides)
     return DisplayDimensionRecord(**fields)
@@ -526,8 +528,13 @@ def test_a_table_count_is_never_negative(field: str) -> None:
 def test_a_table_omits_what_it_does_not_have() -> None:
     written = json.loads(
         build_table(
-            title=None, row_count=None, column_count=None, rows=[], bom_rows=[],
-            persist_ref=None, persist_ref_scope=None,
+            title=None,
+            row_count=None,
+            column_count=None,
+            rows=[],
+            bom_rows=[],
+            persist_ref=None,
+            persist_ref_scope=None,
         ).model_dump_json()
     )
 

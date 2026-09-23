@@ -40,6 +40,7 @@ from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from tests.support.fixture_denylist import (
     DENYLIST_PATH,
+    PUBLISHED_HEAD_CODES,
     glb_json,
     json_strings,
     load_denylist,
@@ -54,11 +55,6 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "mechanical"
 VECTOR_TABLE = (
     REPO_ROOT / "specs" / "010-mechanical-checks" / "contracts" / "fastener-name-vectors.json"
 )
-PUBLISHED_HEAD_CODES: frozenset[str] = frozenset({"shc", "fht", "bht"})
-"""Head codes `contracts/fasteners.md` prints as the vendor grammar the parser reads. A
-denylist built from recorded names can hold one - the recorded screws were named with it -
-but it names a screw style, it is already published in this repository's specs, and the
-fixtures cannot exercise the parser without it."""
 
 
 def packages() -> dict[str, EvidencePackage]:

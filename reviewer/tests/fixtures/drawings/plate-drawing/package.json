@@ -1,0 +1,1965 @@
+{
+  "schema_version": "1.6.0",
+  "package_id": "01100000-0000-4000-8000-000000000011",
+  "created_at": "2026-09-23T09:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.0.0-fictional",
+    "sw_version": "2024 SP5",
+    "machine": "FICT-SEAT",
+    "profile": "full",
+    "phases": [
+      {
+        "name": "document",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "manifest",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "mate",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "feature",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "equation",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "cutlist",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "drawing",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "hole",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "tolerance",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "fastener",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "face",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "body",
+        "elapsed_ms": 1,
+        "status": "ok"
+      }
+    ]
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:0001",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-TULMVEN-0000.SLDASM",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0002",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-TULMKALO-3001.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0003",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-TULMSORN-3002.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0004",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-PIN-3X12-3003.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0005",
+        "vault_path": "C:\\Fictional\\Vault\\SHC_M4-0.7X8_FICT-3004.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0006",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-TULMKALO-3001.SLDDRW",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0007",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-TULMKALO-3001-B.SLDDRW",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:fict",
+    "name": "FICT-TULMVEN-0000",
+    "root_assembly_document_id": "doc:0001",
+    "active_configuration": "Default",
+    "drawing_document_ids": [
+      "doc:0006",
+      "doc:0007"
+    ]
+  },
+  "documents": [
+    {
+      "document_id": "doc:0001",
+      "kind": "assembly",
+      "file_name": "FICT-TULMVEN-0000.SLDASM",
+      "path": "C:\\Fictional\\Vault\\FICT-TULMVEN-0000.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Part Ref": "FICT-TULMVEN-0000",
+        "Meridian Summary": "TULM VEN",
+        "MeridianRev": "A"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:0002",
+      "kind": "part",
+      "file_name": "FICT-TULMKALO-3001.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT-TULMKALO-3001.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Part Ref": "FICT-TULMKALO-3001",
+        "Meridian Summary": "TULM KALO",
+        "MeridianRev": "A"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null,
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0003",
+      "kind": "part",
+      "file_name": "FICT-TULMSORN-3002.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT-TULMSORN-3002.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Part Ref": "FICT-TULMSORN-3002",
+        "Meridian Summary": "TULM SORN",
+        "MeridianRev": "A"
+      },
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": null,
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0004",
+      "kind": "part",
+      "file_name": "FICT-PIN-3X12-3003.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT-PIN-3X12-3003.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Part Ref": "FICT-PIN-3X12-3003",
+        "Meridian Summary": "PIN TULM 3003",
+        "MeridianRev": "A"
+      },
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": null,
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0005",
+      "kind": "part",
+      "file_name": "SHC_M4-0.7X8_FICT-3004.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\SHC_M4-0.7X8_FICT-3004.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Description": "SCREW, SOC M4-0.7 X 8 MM, FICTIONAL",
+        "Meridian Part Ref": "SHC_M4-0.7X8_FICT-3004",
+        "Meridian Summary": "SCREW TULM",
+        "MeridianRev": "A"
+      },
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": {
+        "mass_kg": 0.001997582,
+        "volume_m3": 2.54469005e-7,
+        "center_of_mass": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "configuration": "Default"
+      },
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0006",
+      "kind": "drawing",
+      "file_name": "FICT-TULMKALO-3001.SLDDRW",
+      "path": "C:\\Fictional\\Vault\\FICT-TULMKALO-3001.SLDDRW",
+      "configurations": [],
+      "active_configuration": "",
+      "custom_properties": {
+        "Meridian Part Ref": "FICT-TULMKALO-3001",
+        "Meridian Summary": "TULM KALO DRAWING",
+        "MeridianRev": "A"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:0007",
+      "kind": "drawing",
+      "file_name": "FICT-TULMKALO-3001-B.SLDDRW",
+      "path": "C:\\Fictional\\Vault\\FICT-TULMKALO-3001-B.SLDDRW",
+      "configurations": [],
+      "active_configuration": "",
+      "custom_properties": {
+        "Meridian Part Ref": "FICT-TULMKALO-3001-B",
+        "Meridian Summary": "TULM KALO DRAWING",
+        "MeridianRev": "A"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-TULMKALO-3001-1",
+      "document_id": "doc:0002",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-TULMKALO-3001-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-TULMSORN-3002-1",
+      "document_id": "doc:0003",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-TULMSORN-3002-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-PIN-3X12-3003-1",
+      "document_id": "doc:0004",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-PIN-3X12-3003-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:0001",
+      "name": "SHC_M4-0.7X8_FICT-3004-1",
+      "document_id": "doc:0005",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.02
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0016
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "SHC_M4-0.7X8_FICT-3004-1",
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [],
+  "holes": [
+    {
+      "id": "hol:0001",
+      "persist_ref": "aG9sOjAwMDE=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0001",
+      "feature_name": "FICT-HOLE-0001",
+      "hole_type": "clearance",
+      "standard": "ISO",
+      "size": "Ø3.0",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0001"
+      ],
+      "wizard": {}
+    },
+    {
+      "id": "hol:0002",
+      "persist_ref": "aG9sOjAwMDI=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0001",
+      "feature_name": "FICT-HOLE-0002",
+      "hole_type": "counterbore",
+      "standard": "ISO",
+      "size": "M4",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0002",
+        "fac:0003"
+      ],
+      "wizard": {
+        "fit_class_raw": "swScrewClearanceNormal",
+        "thru_hole_diameter": {
+          "value": 0.0045,
+          "unit": "m"
+        },
+        "counterbore_diameter": {
+          "value": 0.008,
+          "unit": "m"
+        },
+        "counterbore_depth": {
+          "value": 0.0044,
+          "unit": "m"
+        }
+      }
+    },
+    {
+      "id": "hol:0003",
+      "persist_ref": "aG9sOjAwMDM=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0002",
+      "feature_name": "FICT-HOLE-0003",
+      "hole_type": "clearance",
+      "standard": "ISO",
+      "size": "Ø3.0",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0004"
+      ],
+      "wizard": {}
+    },
+    {
+      "id": "hol:0004",
+      "persist_ref": "aG9sOjAwMDQ=",
+      "persist_ref_scope": "doc:0003",
+      "component_id": "cmp:0002",
+      "feature_name": "FICT-HOLE-0004",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M4x0.7",
+      "thread_designation": "M4x0.7",
+      "thread_depth": {
+        "value": 8.0,
+        "unit": "mm"
+      },
+      "hole_depth": {
+        "value": 10.0,
+        "unit": "mm"
+      },
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.02,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0005"
+      ],
+      "wizard": {
+        "tap_drill_diameter": {
+          "value": 0.0033,
+          "unit": "m"
+        }
+      }
+    }
+  ],
+  "threads": [],
+  "fasteners": [],
+  "faces": [
+    {
+      "id": "fac:0001",
+      "persist_ref": "ZmFjOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0015,
+          "y": -0.0015,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.0015,
+          "y": 0.0015,
+          "z": 0.006
+        }
+      },
+      "area_m2": 0.000056548667764616275
+    },
+    {
+      "id": "fac:0002",
+      "persist_ref": "ZmFjOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.00225
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.017750000000000002,
+          "y": -0.00225,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.02225,
+          "y": 0.00225,
+          "z": 0.0016
+        }
+      },
+      "area_m2": 0.00002261946710584651
+    },
+    {
+      "id": "fac:0003",
+      "persist_ref": "ZmFjOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.004
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.016,
+          "y": -0.004,
+          "z": 0.0016
+        },
+        "max": {
+          "x": 0.024,
+          "y": 0.004,
+          "z": 0.006
+        }
+      },
+      "area_m2": 0.00011058406140636073
+    },
+    {
+      "id": "fac:0004",
+      "persist_ref": "ZmFjOjAwMDQ=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "body_id": "bod:0002",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0015,
+          "y": -0.0015,
+          "z": -0.006
+        },
+        "max": {
+          "x": 0.0015,
+          "y": 0.0015,
+          "z": 0.0
+        }
+      },
+      "area_m2": 0.000056548667764616275
+    },
+    {
+      "id": "fac:0005",
+      "persist_ref": "ZmFjOjAwMDU=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "body_id": "bod:0002",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.00165
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.01835,
+          "y": -0.00165,
+          "z": -0.01
+        },
+        "max": {
+          "x": 0.02165,
+          "y": 0.00165,
+          "z": 0.0
+        }
+      },
+      "area_m2": 0.00010367255756846317
+    },
+    {
+      "id": "fac:0006",
+      "persist_ref": "ZmFjOjAwMDY=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0003",
+      "body_id": "bod:0003",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0015,
+          "y": -0.0015,
+          "z": -0.005
+        },
+        "max": {
+          "x": 0.0015,
+          "y": 0.0015,
+          "z": 0.005
+        }
+      },
+      "area_m2": 0.0000942477796076938
+    },
+    {
+      "id": "fac:0007",
+      "persist_ref": "ZmFjOjAwMDc=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0004",
+      "body_id": "bod:0004",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.0,
+          "z": 0.0016
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.002
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.018000000000000002,
+          "y": -0.002,
+          "z": -0.0064
+        },
+        "max": {
+          "x": 0.022,
+          "y": 0.002,
+          "z": 0.0016
+        }
+      },
+      "area_m2": 0.00010053096491487339
+    }
+  ],
+  "bodies": [
+    {
+      "id": "bod:0001",
+      "persist_ref": "Ym9kOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "mesh_file": "meshes/bod-0001.glb",
+      "triangle_count": 144,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0002",
+      "persist_ref": "Ym9kOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "mesh_file": "meshes/bod-0002.glb",
+      "triangle_count": 96,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0003",
+      "persist_ref": "Ym9kOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0003",
+      "mesh_file": "meshes/bod-0003.glb",
+      "triangle_count": 48,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0004",
+      "persist_ref": "Ym9kOjAwMDQ=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0004",
+      "mesh_file": "meshes/bod-0004.glb",
+      "triangle_count": 96,
+      "is_solid": true
+    }
+  ],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "drawing_records": [
+    {
+      "document_id": "doc:0006",
+      "source": "native",
+      "active_sheet_name": "Sheet1",
+      "sheets": [
+        {
+          "id": "dsh:0001",
+          "source": "native",
+          "name": "Sheet1",
+          "index": 0,
+          "sheet_format_name": "FICTIONAL-FORMAT-A",
+          "was_active": true,
+          "views": [
+            {
+              "id": "dvw:0001",
+              "sheet_id": "dsh:0001",
+              "name": "Sheet Format1",
+              "view_type_raw": 1,
+              "notes": [
+                {
+                  "id": "dnt:0001",
+                  "owner_id": "dvw:0001",
+                  "text": "FICTIONAL NOTE 1",
+                  "persist_ref": "ZG50OjAwMDE=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "dnt:0002",
+                  "owner_id": "dvw:0001",
+                  "text": "GENERAL TOLERANCE FICTIONAL: .X 0.4 .XX 0.15 .XXX 0.04",
+                  "persist_ref": "ZG50OjAwMDI=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "dnt:0003",
+                  "owner_id": "dvw:0001",
+                  "text": "BREAK SHARP EDGES FICTIONAL",
+                  "persist_ref": "ZG50OjAwMDM=",
+                  "persist_ref_scope": "doc:0006"
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDE=",
+              "persist_ref_scope": "doc:0006"
+            },
+            {
+              "id": "dvw:0002",
+              "sheet_id": "dsh:0001",
+              "name": "Drawing View1",
+              "view_type_raw": 7,
+              "referenced_document_id": "doc:0002",
+              "referenced_model_path": "C:\\Fictional\\Vault\\FICT-TULMKALO-3001.SLDPRT",
+              "referenced_configuration": "Default",
+              "is_model_out_of_date": false,
+              "is_model_loaded": true,
+              "scale_decimal": 1.0,
+              "orientation_name": "*Front",
+              "display_dimensions": [
+                {
+                  "id": "ddm:0001",
+                  "view_id": "dvw:0002",
+                  "name": "KALOMIR11@FICT-TULMKALO-3001",
+                  "dimension_type_raw": 6,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.003,
+                    "unit": "m"
+                  },
+                  "text_prefix": "<MOD-DIAM>",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance": {
+                    "kind": "bilateral",
+                    "upper": {
+                      "value": 0.00001,
+                      "unit": "m"
+                    },
+                    "lower": {
+                      "value": 0.0,
+                      "unit": "m"
+                    },
+                    "source": {
+                      "document_id": "doc:0006",
+                      "sheet": "Sheet1",
+                      "view": "Drawing View1",
+                      "annotation": "ddm:0001",
+                      "persist_ref": null,
+                      "page": null,
+                      "bbox": null
+                    }
+                  },
+                  "tolerance_type_raw": 2,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "attached_faces": [
+                    {
+                      "persist_ref": "ZmFjOjAwMDE=",
+                      "scope": "doc:0002",
+                      "via": "face"
+                    }
+                  ],
+                  "persist_ref": "ZGRtOjAwMDE=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "ddm:0002",
+                  "view_id": "dvw:0002",
+                  "name": "KALOMIR1@FICT-HOLE-0001@fict-tulmkalo-3001.sldprt",
+                  "dimension_type_raw": 6,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.003,
+                    "unit": "m"
+                  },
+                  "text_prefix": "<MOD-DIAM>",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance_type_raw": 8,
+                  "fit_hole_class": "H7",
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "persist_ref": "ZGRtOjAwMDI=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "ddm:0003",
+                  "view_id": "dvw:0002",
+                  "name": "KALOMIR13@FICT-TULMKALO-3001",
+                  "dimension_type_raw": 6,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.0045,
+                    "unit": "m"
+                  },
+                  "text_prefix": "<MOD-DIAM>",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": true,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance": {
+                    "kind": "none",
+                    "upper": null,
+                    "lower": null,
+                    "source": {
+                      "document_id": "doc:0006",
+                      "sheet": "Sheet1",
+                      "view": "Drawing View1",
+                      "annotation": "ddm:0003",
+                      "persist_ref": null,
+                      "page": null,
+                      "bbox": null
+                    }
+                  },
+                  "tolerance_type_raw": 0,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "attached_faces": [
+                    {
+                      "persist_ref": "ZmFjOjAwMDI=",
+                      "scope": "doc:0002",
+                      "via": "face"
+                    }
+                  ],
+                  "persist_ref": "ZGRtOjAwMDM=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "ddm:0004",
+                  "view_id": "dvw:0002",
+                  "name": "KALOMIR14@FICT-TULMKALO-3001",
+                  "dimension_type_raw": 6,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.008,
+                    "unit": "m"
+                  },
+                  "text_prefix": "<MOD-DIAM>",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 1,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance_type_raw": 10,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "attached_faces": [
+                    {
+                      "persist_ref": "ZmFjOjAwMDM=",
+                      "scope": "doc:0002",
+                      "via": "face"
+                    }
+                  ],
+                  "persist_ref": "ZGRtOjAwMDQ=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "ddm:0005",
+                  "view_id": "dvw:0002",
+                  "name": "KALOMIR15@FICT-TULMKALO-3001",
+                  "dimension_type_raw": 2,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.02,
+                    "unit": "m"
+                  },
+                  "text_prefix": "",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance_type_raw": 11,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "persist_ref": "ZGRtOjAwMDU=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "ddm:0006",
+                  "view_id": "dvw:0002",
+                  "name": "KALOMIR16@FICT-TULMKALO-3001",
+                  "dimension_type_raw": 6,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.0045,
+                    "unit": "m"
+                  },
+                  "text_prefix": "<MOD-DIAM>",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance": {
+                    "kind": "none",
+                    "upper": null,
+                    "lower": null,
+                    "source": {
+                      "document_id": "doc:0006",
+                      "sheet": "Sheet1",
+                      "view": "Drawing View1",
+                      "annotation": "ddm:0006",
+                      "persist_ref": null,
+                      "page": null,
+                      "bbox": null
+                    }
+                  },
+                  "tolerance_type_raw": 0,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": true,
+                  "hole_callout_variables_raw": [
+                    "<MOD-DIAM>4.50 THRU",
+                    "<HOLE-CB-DIAM>8.00",
+                    "<HOLE-DEPTH>4.40"
+                  ],
+                  "attached_faces": [
+                    {
+                      "persist_ref": "ZmFjOjAwMDI=",
+                      "scope": "doc:0002",
+                      "via": "face"
+                    }
+                  ],
+                  "persist_ref": "ZGRtOjAwMDY=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "ddm:0007",
+                  "view_id": "dvw:0002",
+                  "name": "KALOMIR17@FICT-TULMKALO-3001",
+                  "dimension_type_raw": 2,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.0044,
+                    "unit": "m"
+                  },
+                  "text_prefix": "",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance": {
+                    "kind": "none",
+                    "upper": null,
+                    "lower": null,
+                    "source": {
+                      "document_id": "doc:0006",
+                      "sheet": "Sheet1",
+                      "view": "Drawing View1",
+                      "annotation": "ddm:0007",
+                      "persist_ref": null,
+                      "page": null,
+                      "bbox": null
+                    }
+                  },
+                  "tolerance_type_raw": 0,
+                  "is_reference": true,
+                  "driven_state_raw": 2,
+                  "is_hole_callout": false,
+                  "attached_faces": [
+                    {
+                      "persist_ref": "ZmFjOjAwMDI=",
+                      "scope": "doc:0002",
+                      "via": "edge"
+                    },
+                    {
+                      "persist_ref": "ZmFjOjAwMDM=",
+                      "scope": "doc:0002",
+                      "via": "edge"
+                    }
+                  ],
+                  "persist_ref": "ZGRtOjAwMDc=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "ddm:0008",
+                  "view_id": "dvw:0002",
+                  "name": "KALOMIR18@FICT-TULMKALO-3001",
+                  "dimension_type_raw": 13,
+                  "is_overridden": false,
+                  "text_prefix": "",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance": {
+                    "kind": "none",
+                    "upper": null,
+                    "lower": null,
+                    "source": {
+                      "document_id": "doc:0006",
+                      "sheet": "Sheet1",
+                      "view": "Drawing View1",
+                      "annotation": "ddm:0008",
+                      "persist_ref": null,
+                      "page": null,
+                      "bbox": null
+                    }
+                  },
+                  "tolerance_type_raw": 0,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "persist_ref": "ZGRtOjAwMDg=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "ddm:0009",
+                  "view_id": "dvw:0002",
+                  "name": "KALOMIR19@FICT-TULMKALO-3001",
+                  "dimension_type_raw": 6,
+                  "is_overridden": true,
+                  "override_value": {
+                    "value": 0.0030499999999999998,
+                    "unit": "m"
+                  },
+                  "value": {
+                    "value": 0.003,
+                    "unit": "m"
+                  },
+                  "text_prefix": "<MOD-DIAM>",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance": {
+                    "kind": "none",
+                    "upper": null,
+                    "lower": null,
+                    "source": {
+                      "document_id": "doc:0006",
+                      "sheet": "Sheet1",
+                      "view": "Drawing View1",
+                      "annotation": "ddm:0009",
+                      "persist_ref": null,
+                      "page": null,
+                      "bbox": null
+                    }
+                  },
+                  "tolerance_type_raw": 0,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "attached_faces": [
+                    {
+                      "persist_ref": "ZmFjOjAwMDE=",
+                      "scope": "doc:0002",
+                      "via": "face"
+                    }
+                  ],
+                  "persist_ref": "ZGRtOjAwMDk=",
+                  "persist_ref_scope": "doc:0006"
+                }
+              ],
+              "annotations": [
+                {
+                  "id": "dan:0001",
+                  "owner_id": "dvw:0002",
+                  "name": "GTOL1",
+                  "type_raw": 5,
+                  "is_dangling": false,
+                  "gtol_frames": [
+                    {
+                      "number": 1,
+                      "symbols_raw": [
+                        "<GTOL-POSI>",
+                        "<MOD-DIAM>",
+                        "",
+                        "",
+                        "",
+                        ""
+                      ],
+                      "values_raw": [
+                        "0.05",
+                        "",
+                        "A",
+                        "B",
+                        ""
+                      ]
+                    }
+                  ],
+                  "attached_faces": [
+                    {
+                      "persist_ref": "ZmFjOjAwMDE=",
+                      "scope": "doc:0002",
+                      "via": "face"
+                    }
+                  ],
+                  "persist_ref": "ZGFuOjAwMDE=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "dan:0002",
+                  "owner_id": "dvw:0002",
+                  "name": "DATUMTAG1",
+                  "type_raw": 2,
+                  "is_dangling": false,
+                  "datum_label": "A",
+                  "persist_ref": "ZGFuOjAwMDI=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "dan:0003",
+                  "owner_id": "dvw:0002",
+                  "name": "DATUMTAG2",
+                  "type_raw": 2,
+                  "is_dangling": false,
+                  "datum_label": "B",
+                  "persist_ref": "ZGFuOjAwMDM=",
+                  "persist_ref_scope": "doc:0006"
+                },
+                {
+                  "id": "dan:0004",
+                  "owner_id": "dvw:0002",
+                  "name": "SFSYMBOL1",
+                  "type_raw": 7,
+                  "is_dangling": false,
+                  "surface_finish_symbol_raw": 1,
+                  "surface_finish_texts_raw": [
+                    "1.6",
+                    ""
+                  ],
+                  "attached_faces": [
+                    {
+                      "persist_ref": "ZmFjOjAwMDI=",
+                      "scope": "doc:0002",
+                      "via": "face"
+                    }
+                  ],
+                  "persist_ref": "ZGFuOjAwMDQ=",
+                  "persist_ref_scope": "doc:0006"
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDI=",
+              "persist_ref_scope": "doc:0006"
+            }
+          ],
+          "revision_tables": [
+            {
+              "id": "drv:0001",
+              "sheet_id": "dsh:0001",
+              "current_revision_raw": "A",
+              "row_count": 2,
+              "column_count": 3,
+              "rows": [
+                {
+                  "index": 0,
+                  "cells": [
+                    "REV",
+                    "DESCRIPTION",
+                    "DATE"
+                  ]
+                },
+                {
+                  "index": 1,
+                  "cells": [
+                    "A",
+                    "FICTIONAL RELEASE",
+                    "2026-09-23"
+                  ]
+                }
+              ],
+              "persist_ref": "ZHJ2OjAwMDE=",
+              "persist_ref_scope": "doc:0006"
+            }
+          ],
+          "sheet_format_path": "C:\\Fictional\\Formats\\FICTIONAL-FORMAT-A.slddrt",
+          "scale_numerator": 1.0,
+          "scale_denominator": 1.0,
+          "first_angle": false,
+          "tables": [
+            {
+              "id": "dtb:0001",
+              "sheet_id": "dsh:0001",
+              "owner_view_id": "dvw:0001",
+              "table_type_raw": 5,
+              "title": "TITLE BLOCK",
+              "row_count": 2,
+              "column_count": 2,
+              "rows": [
+                {
+                  "index": 0,
+                  "cells": [
+                    "TITLE",
+                    "FICT-TULMKALO-3001"
+                  ]
+                },
+                {
+                  "index": 1,
+                  "cells": [
+                    "REV",
+                    "A"
+                  ]
+                }
+              ],
+              "persist_ref": "ZHRiOjAwMDE=",
+              "persist_ref_scope": "doc:0006"
+            },
+            {
+              "id": "dtb:0002",
+              "sheet_id": "dsh:0001",
+              "owner_view_id": "dvw:0001",
+              "table_type_raw": 9,
+              "title": "GENERAL TOLERANCE",
+              "row_count": 3,
+              "column_count": 2,
+              "rows": [
+                {
+                  "index": 0,
+                  "cells": [
+                    "DECIMALS",
+                    "TOLERANCE"
+                  ]
+                },
+                {
+                  "index": 1,
+                  "cells": [
+                    "X",
+                    "0.4"
+                  ]
+                },
+                {
+                  "index": 2,
+                  "cells": [
+                    "XX",
+                    "0.15"
+                  ]
+                }
+              ],
+              "persist_ref": "ZHRiOjAwMDI=",
+              "persist_ref_scope": "doc:0006"
+            },
+            {
+              "id": "dtb:0003",
+              "sheet_id": "dsh:0001",
+              "owner_view_id": "dvw:0001",
+              "table_type_raw": 1,
+              "title": "HOLE TABLE",
+              "row_count": 3,
+              "column_count": 4,
+              "rows": [
+                {
+                  "index": 0,
+                  "cells": [
+                    "TAG",
+                    "X LOC",
+                    "Y LOC",
+                    "SIZE"
+                  ]
+                },
+                {
+                  "index": 1,
+                  "cells": [
+                    "1",
+                    "0",
+                    "0",
+                    "3.00"
+                  ]
+                },
+                {
+                  "index": 2,
+                  "cells": [
+                    "2",
+                    "20",
+                    "0",
+                    "4.50"
+                  ]
+                }
+              ],
+              "persist_ref": "ZHRiOjAwMDM=",
+              "persist_ref_scope": "doc:0006"
+            }
+          ],
+          "persist_ref": "ZHNoOjAwMDE=",
+          "persist_ref_scope": "doc:0006"
+        }
+      ],
+      "is_detailing_mode": false,
+      "length_unit_raw": 0,
+      "dimension_precision_raw": 2,
+      "units_decimal_places_raw": 2,
+      "tolerance_precision_raw": 3,
+      "drafting_standard_name": "FICTIONAL-STANDARD"
+    },
+    {
+      "document_id": "doc:0007",
+      "source": "native",
+      "active_sheet_name": "Sheet1",
+      "sheets": [
+        {
+          "id": "dsh:0002",
+          "source": "native",
+          "name": "Sheet1",
+          "index": 0,
+          "sheet_format_name": "FICTIONAL-FORMAT-A",
+          "was_active": true,
+          "views": [
+            {
+              "id": "dvw:0003",
+              "sheet_id": "dsh:0002",
+              "name": "Drawing View1",
+              "view_type_raw": 7,
+              "referenced_document_id": "doc:0002",
+              "referenced_model_path": "C:\\Fictional\\Vault\\FICT-TULMKALO-3001.SLDPRT",
+              "referenced_configuration": "FICT-VENTA",
+              "is_model_out_of_date": false,
+              "is_model_loaded": true,
+              "scale_decimal": 1.0,
+              "orientation_name": "*Front",
+              "display_dimensions": [
+                {
+                  "id": "ddm:0010",
+                  "view_id": "dvw:0003",
+                  "name": "KALOMIR21@FICT-TULMKALO-3001",
+                  "dimension_type_raw": 6,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.003,
+                    "unit": "m"
+                  },
+                  "text_prefix": "<MOD-DIAM>",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance": {
+                    "kind": "bilateral",
+                    "upper": {
+                      "value": 0.00002,
+                      "unit": "m"
+                    },
+                    "lower": {
+                      "value": 5e-6,
+                      "unit": "m"
+                    },
+                    "source": {
+                      "document_id": "doc:0007",
+                      "sheet": "Sheet1",
+                      "view": "Drawing View1",
+                      "annotation": "ddm:0010",
+                      "persist_ref": null,
+                      "page": null,
+                      "bbox": null
+                    }
+                  },
+                  "tolerance_type_raw": 2,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "attached_faces": [
+                    {
+                      "persist_ref": "ZmFjOjAwMDE=",
+                      "scope": "doc:0002",
+                      "via": "face"
+                    }
+                  ],
+                  "persist_ref": "ZGRtOjAwMTA=",
+                  "persist_ref_scope": "doc:0007"
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDM=",
+              "persist_ref_scope": "doc:0007"
+            },
+            {
+              "id": "dvw:0004",
+              "sheet_id": "dsh:0002",
+              "name": "Drawing View2",
+              "view_type_raw": 7,
+              "referenced_document_id": "doc:0002",
+              "referenced_model_path": "C:\\Fictional\\Vault\\FICT-TULMKALO-3001.SLDPRT",
+              "referenced_configuration": "Default",
+              "is_model_out_of_date": true,
+              "is_model_loaded": true,
+              "scale_decimal": 1.0,
+              "orientation_name": "*Top",
+              "display_dimensions": [
+                {
+                  "id": "ddm:0011",
+                  "view_id": "dvw:0004",
+                  "name": "KALOMIR22@FICT-TULMKALO-3001",
+                  "dimension_type_raw": 6,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.0045,
+                    "unit": "m"
+                  },
+                  "text_prefix": "<MOD-DIAM>",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 3,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance": {
+                    "kind": "none",
+                    "upper": null,
+                    "lower": null,
+                    "source": {
+                      "document_id": "doc:0007",
+                      "sheet": "Sheet1",
+                      "view": "Drawing View2",
+                      "annotation": "ddm:0011",
+                      "persist_ref": null,
+                      "page": null,
+                      "bbox": null
+                    }
+                  },
+                  "tolerance_type_raw": 0,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "attached_faces": [
+                    {
+                      "persist_ref": "ZmFjOjAwMDI=",
+                      "scope": "doc:0002",
+                      "via": "face"
+                    }
+                  ],
+                  "persist_ref": "ZGRtOjAwMTE=",
+                  "persist_ref_scope": "doc:0007"
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDQ=",
+              "persist_ref_scope": "doc:0007"
+            }
+          ],
+          "sheet_format_path": "C:\\Fictional\\Formats\\FICTIONAL-FORMAT-A.slddrt",
+          "scale_numerator": 1.0,
+          "scale_denominator": 1.0,
+          "first_angle": false,
+          "persist_ref": "ZHNoOjAwMDI=",
+          "persist_ref_scope": "doc:0007"
+        }
+      ],
+      "is_detailing_mode": false,
+      "length_unit_raw": 0,
+      "dimension_precision_raw": 2,
+      "units_decimal_places_raw": 2,
+      "tolerance_precision_raw": 3,
+      "drafting_standard_name": "FICTIONAL-STANDARD"
+    }
+  ],
+  "features": [],
+  "equations": [],
+  "model_dimensions": [
+    {
+      "id": "mdm:0001",
+      "document_id": "doc:0002",
+      "feature_name": "FICT-HOLE-0001",
+      "name": "KALOMIR1@FICT-HOLE-0001",
+      "dimension_type": "diameter",
+      "dimension_type_raw": 6,
+      "nominal": {
+        "value": 0.003,
+        "unit": "m"
+      },
+      "tolerance_type_raw": 8,
+      "fit_hole_class": "H7",
+      "persist_ref": "bWRtOjAwMDE=",
+      "persist_ref_scope": "doc:0002"
+    },
+    {
+      "id": "mdm:0002",
+      "document_id": "doc:0002",
+      "feature_name": "FICT-HOLE-0001",
+      "name": "KALOMIR2@FICT-HOLE-0001",
+      "dimension_type": "diameter",
+      "dimension_type_raw": 6,
+      "nominal": {
+        "value": 0.0045,
+        "unit": "m"
+      },
+      "tolerance": {
+        "kind": "bilateral",
+        "upper": {
+          "value": 0.0001,
+          "unit": "m"
+        },
+        "lower": {
+          "value": 0.0,
+          "unit": "m"
+        },
+        "source": {
+          "document_id": "doc:0002",
+          "sheet": null,
+          "view": null,
+          "annotation": "KALOMIR2@FICT-HOLE-0001",
+          "persist_ref": null,
+          "page": null,
+          "bbox": null
+        }
+      },
+      "persist_ref": "bWRtOjAwMDI=",
+      "persist_ref_scope": "doc:0002"
+    },
+    {
+      "id": "mdm:0003",
+      "document_id": "doc:0002",
+      "feature_name": "FICT-HOLE-0001",
+      "name": "KALOMIR3@FICT-HOLE-0001",
+      "dimension_type": "diameter",
+      "dimension_type_raw": 6,
+      "nominal": {
+        "value": 0.0045,
+        "unit": "m"
+      },
+      "tolerance": {
+        "kind": "bilateral",
+        "upper": {
+          "value": 0.0002,
+          "unit": "m"
+        },
+        "lower": {
+          "value": 0.0,
+          "unit": "m"
+        },
+        "source": {
+          "document_id": "doc:0002",
+          "sheet": null,
+          "view": null,
+          "annotation": "KALOMIR3@FICT-HOLE-0001",
+          "persist_ref": null,
+          "page": null,
+          "bbox": null
+        }
+      },
+      "persist_ref": "bWRtOjAwMDM=",
+      "persist_ref_scope": "doc:0002"
+    },
+    {
+      "id": "mdm:0004",
+      "document_id": "doc:0003",
+      "feature_name": "FICT-HOLE-0001",
+      "name": "KALOMIR4@FICT-HOLE-0001",
+      "dimension_type": "diameter",
+      "dimension_type_raw": 6,
+      "nominal": {
+        "value": 0.003,
+        "unit": "m"
+      },
+      "tolerance": {
+        "kind": "bilateral",
+        "upper": {
+          "value": 0.000012,
+          "unit": "m"
+        },
+        "lower": {
+          "value": 2e-6,
+          "unit": "m"
+        },
+        "source": {
+          "document_id": "doc:0003",
+          "sheet": null,
+          "view": null,
+          "annotation": "KALOMIR4@FICT-HOLE-0001",
+          "persist_ref": null,
+          "page": null,
+          "bbox": null
+        }
+      },
+      "persist_ref": "bWRtOjAwMDQ=",
+      "persist_ref_scope": "doc:0003"
+    },
+    {
+      "id": "mdm:0005",
+      "document_id": "doc:0004",
+      "feature_name": "FICT-HOLE-0001",
+      "name": "KALOMIR5@FICT-HOLE-0001",
+      "dimension_type": "diameter",
+      "dimension_type_raw": 6,
+      "nominal": {
+        "value": 0.003,
+        "unit": "m"
+      },
+      "tolerance": {
+        "kind": "bilateral",
+        "upper": {
+          "value": 0.0,
+          "unit": "m"
+        },
+        "lower": {
+          "value": -6e-6,
+          "unit": "m"
+        },
+        "source": {
+          "document_id": "doc:0004",
+          "sheet": null,
+          "view": null,
+          "annotation": "KALOMIR5@FICT-HOLE-0001",
+          "persist_ref": null,
+          "page": null,
+          "bbox": null
+        }
+      },
+      "persist_ref": "bWRtOjAwMDU=",
+      "persist_ref_scope": "doc:0004"
+    }
+  ],
+  "model_annotations": [
+    {
+      "id": "man:0001",
+      "document_id": "doc:0002",
+      "kind": "gtol",
+      "frames": [
+        {
+          "number": 1,
+          "symbols_raw": [
+            "<IGTOL-POSI>",
+            "<MOD-DIAM>"
+          ],
+          "values_raw": [
+            "0.02"
+          ]
+        }
+      ],
+      "is_dimxpert": false,
+      "attached_persist_refs": [
+        "ZmFjOjAwMDE="
+      ],
+      "persist_ref": "bWFuOjAwMDE=",
+      "persist_ref_scope": "doc:0002"
+    }
+  ],
+  "drawing_candidates": [
+    {
+      "document_id": "doc:0003",
+      "path": "C:\\Fictional\\Vault\\FICT-TULMSORN-3002.SLDDRW",
+      "reason": "same_name_beside_model"
+    }
+  ],
+  "rms_suppress_test": null,
+  "gaps": [
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0001",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0002",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0003",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0004",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0005",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "dimension_unit",
+      "entity_id": "ddm:0008",
+      "reason": "Dimension ddm:0008 reports type 13, which names no unit, so its value was not recorded rather than recorded with a guessed one.",
+      "error": null
+    }
+  ]
+}
