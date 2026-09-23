@@ -63,6 +63,16 @@ lever 5.
 
 A hang is not detectable: the pipe transport has no read timeout (research R2.23).
 
+*Landed as (T042).* The sentences count in English: "the 1 group the package already holds was
+judged", "1 detected row was dropped because ..." / "<n> detected rows were dropped because
+...", "the root is a part with 4 components". The live line counts the rows the call **added**
+(`rows_added`) and the distinct groups among them, so "rows in groups" are the rows the pre-run
+then judged; rows dropped for colliding ids are the unresolved line's count. The collision and
+the failed write are `unresolved` items (`NotEvaluated.bucket`), the rest `skipped`, and every
+one renders its line under "NOT evaluated, and why". A clean detection's line replaces the
+call's own `Evaluated:` line. The host's gaps are kept once in memory too, so the in-memory
+package equals the written one and a Retry grows neither.
+
 ## 4. The opening digest
 
 `DIGEST_HEADER`, `Evaluated:` and `NOT evaluated, and why:` stay. Within `Evaluated:`:
@@ -94,6 +104,7 @@ The opening message is never pruned (`model-view.md` section 7).
 | `check_rms_assembly`, `check_standards` | `(tool,)` |
 | `check_interference_group` | `(tool, group_key)` |
 | `bridge_interference` | `(tool, configuration, sorted-JSON settings)`, only when `component_ids` is empty |
+| every name in feature 010's `CODE_FIRST_CHECKS` (*landed as*, T044, research R2.52) | `(tool,)`: they take no argument |
 
 A hit records one real step through `registry.record_call` (status `ok`, no coverage, no finding
 event) and answers:

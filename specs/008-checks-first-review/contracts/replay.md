@@ -76,6 +76,19 @@ was not offered offline is decided by name: a bridge tool needs the live bridge,
 tool needs `--standards-profile`, and a name no registry list holds is not known to the current
 code; the reason says which. The fixture generator uses the same comparison.
 
+*Reconciled with the code (T050).* `answered_from_checks` is recognised by the guard's own
+answer in pass B (`status: "already_run"`), never by the tool's name, and its reason is "the
+pre-run ran this call at step N". It is the class the report names and the class that decides
+pass B's size and the finding rule, **whatever pass A's class was**: behind an estimated call
+(the big fixture's three touching groups judged after the live call) the guard's answer is
+still exactly what pass B sends, and the recorded findings of the step are still compared
+against the requested session the pre-run wrote. Pass A keeps its own class for its own
+sizing, so a round whose pass-A figure is an estimate stays flagged `estimated`. A call the
+guard lets through keeps its pass-A class. `replay_passes(recording, scratch, ...)` plays both
+passes into a folder the caller keeps (the acceptance tests read the requested session and its
+opening message from it); `report_of(passes)` prices them; `replay_recording` does both over a
+temporary folder.
+
 ## 4. The accounting
 
 ```
@@ -229,6 +242,7 @@ test says why it skipped that part when the file is absent).
 |---|---|
 | US1 | Pass A within 1% of the recorded input on every round of every fixture; the finding set exact - since feature 010, recorded = replayed + reclassified, with 3, 2 and 0 touching groups reclassified as contacts on `big-assembly`, `small-assembly-a` and `small-assembly-b`; the big fixture: four estimated rounds - `bridge_interference`, and since feature 010 the three touching groups judged after it, whose contact results a replay cannot separate from the live call's effect - and one carried round; its recorded total 12.4M within 1% (SC-001) |
 | US2 | Checks first alone (requested efficiency `prerun_checks=True`, model view off; on the command line `--lever prerun_checks`, or `--no-pane-defaults --lever prerun_checks` once US3 has landed): no recorded finding lost on any fixture; on the big fixture the requested total below pass A's, every one of the 113 groups judged, one interference finding per group (SC-006 offline); the recorded RMS and assembly calls classed `answered_from_checks` |
+| US2 *landed as* (T049, T050, 2026-09-23) | `--lever prerun_checks --standards-profile ../config/standards.example.yaml`: `big-assembly` recorded 12,456,095, as recorded 12,456,346, requested 4,216,180 (-66.2%); `small-assembly-a` 1,619,376 / 1,619,476 / 1,236,021 (-23.7%); `small-assembly-b` 1,497,696 / 1,497,774 / 1,132,636 (-24.4%). No recorded finding lost and none not replayable on any fixture; 3, 2 and 0 reclassified as contacts; 9, 1 and 0 added (feature 010's `hole.nominal_alignment` from the pre-run's `check_joints`). Every one of the 113 groups judged - since feature 010, one finding or one contact each; every recorded `check_rms_*` call `answered_from_checks`; the RMS verdict multiset equal to the recording's |
 | US3 | `--pane-defaults` on the big fixture under 1,000,000 requested input tokens with no loss (SC-002); the session's findings identical with the model-view settings on and off (SC-007); every step of the requested pass stored under `tool-results/` (SC-008); every result older than the prune age a stub in every reconstructed request |
 | US4 | The regrouped estimate under 300,000 for each small fixture, with the strict figure below the recorded total (SC-003, amended); the big fixture's follow-up round under 30,000 (SC-004); three answers in one batch replay as one resumed turn (SC-005, scripted) |
 | US5 | Every step's `result_tokens` in the requested pass's session equals the replay's count of that call's full payload (one tokenizer, one serialization) |
