@@ -15,20 +15,35 @@ the pane's "Questions for you" panel and feature 008's batch route serve them un
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
+from swreview.bridge.client import BridgeError
 from swreview.checks.drawing_context import (
+    CANDIDATE_CONFIRM,
     CONTEXT_CHECK,
     QuestionSpec,
+    candidate_question,
     run_drawing_context,
 )
+from swreview.drawings.evidence import DrawingIndex
+from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
-from swreview.report.session import EvidenceRequest
+from swreview.report.session import CoverageItem, CoverageScope, EvidenceRequest
 from swreview.tools.context import ToolContext, current_context
 from swreview.tools.query import ToolResult
 from swreview.tools.session import record_evidence_request
 
-__all__ = ["DRAWINGS_TOOL", "check_drawings", "drawing_evidence"]
+__all__ = [
+    "CONFIRMED_OPEN_CHECK",
+    "DRAWINGS_TOOL",
+    "NO_CONNECTION",
+    "TEN_DRAWINGS",
+    "check_drawings",
+    "drawing_evidence",
+    "read_confirmed_candidates",
+]
 
 DRAWINGS_TOOL = "check_drawings"
 """The family's check, named once for the pre-run's plan, its re-call key and lever 13."""
@@ -99,3 +114,114 @@ def check_drawings() -> ToolResult:
         Takes no argument.
     """
     return _record(current_context())
+
+
+# --- the confirmed read-only open (User Story 5 part B, `contracts/confirmed-open.md` 1) ---------
+
+CONFIRMED_OPEN_CHECK = "drawing.confirmed_open"
+"""The coverage `check` of one confirmed candidate's outcome: never a finding's, never a
+checklist item's id, so it closes nothing."""
+
+MAX_DRAWINGS = 10
+"""The drawings one package holds at most (FR-013, FR-056): the confirmed reads stop there."""
+
+NO_CONNECTION = (
+    "no SOLIDWORKS connection in this review, so the drawing was not opened; open it and "
+    "review again"
+)
+TEN_DRAWINGS = "the package already holds ten drawings, so this one was not opened"
+
+
+def _is_confirmed_candidate(request: EvidenceRequest, spec: QuestionSpec | None) -> bool:
+    """The request is exactly the candidate question this package asks, answered with
+    `CANDIDATE_CONFIRM` exactly: the one answer that acts. The page recognises nothing."""
+    return (
+        spec is not None
+        and request.status == "answered"
+        and request.answer == CANDIDATE_CONFIRM
+        and request.question == spec.question
+        and tuple(request.options) == spec.options
+        and tuple(request.entity_ids) == spec.entity_ids
+    )
+
+
+def _read_outcome(result: Any) -> str:
+    """What the host's `drawing.read` result says happened (section 2's result shape)."""
+    body = result if isinstance(result, dict) else {}
+    sheets = body.get("sheets")
+    counted = (
+        f"{sheets} sheet" if sheets == 1 else f"{sheets} sheets" if sheets is not None else ""
+    )
+    if not body.get("opened"):
+        return "read as it stood; it was already open, so it was left open"
+    if body.get("closed"):
+        return f"opened read-only, read and closed ({counted})"
+    return f"opened read-only and read ({counted}), but not closed again: close it in SOLIDWORKS"
+
+
+def _confirmed_item(document_id: str, reason: str, error: str | None = None) -> CoverageItem:
+    return CoverageItem(
+        check=CONFIRMED_OPEN_CHECK,
+        scope=CoverageScope(document_ids=[document_id]),
+        reason=reason,
+        error=error,
+    )
+
+
+def read_confirmed_candidates(
+    context: ToolContext, answered: Sequence[EvidenceRequest], run_dir: Path
+) -> list[CoverageItem]:
+    """Read every confirmed candidate through the bridge, then reload the package.
+
+    Called by `ReviewRun.answer_evidence_batch` after the answers are marked and before the
+    resumed turn (`contracts/confirmed-open.md` section 1). It acts only on an answered request
+    that is this package's candidate question answered `CANDIDATE_CONFIRM`; then it asks
+    `context.bridge.drawing_read(run_id, document_id)` once per candidate, in the question's
+    order, with the run folder's own name as `run_id` and never a path, while the package holds
+    fewer than ten drawing records. The host (the add-in) opens, reads, appends and closes;
+    this side only asks, records one `drawing.confirmed_open` coverage item per candidate, and
+    reloads `run_dir/package.json` into `context` when a read succeeded. Returns the items
+    recorded, in the question's order; nothing else in the session changes.
+    """
+    spec = candidate_question(DrawingIndex.for_package(context.ir))
+    if not any(_is_confirmed_candidate(request, spec) for request in answered):
+        return []
+    assert spec is not None
+    held = len(context.ir.drawing_records)
+    outcomes: list[tuple[str, str, str | None, bool]] = []
+    for document_id in spec.entity_ids:
+        if context.bridge is None:
+            outcomes.append((document_id, NO_CONNECTION, None, False))
+            continue
+        if held >= MAX_DRAWINGS:
+            outcomes.append((document_id, TEN_DRAWINGS, None, False))
+            continue
+        try:
+            result = context.bridge.drawing_read(run_dir.name, document_id)
+        except BridgeError as error:
+            outcomes.append((document_id, str(error), type(error).__name__, False))
+            continue
+        held += 1
+        outcomes.append((document_id, _read_outcome(result), None, True))
+
+    reload_error = None
+    if any(read for *_, read in outcomes):
+        try:
+            context.reload_package(load_package(run_dir))
+        except (OSError, ValueError) as error:
+            reload_error = f"{type(error).__name__}: {error}"
+    items: list[CoverageItem] = []
+    for document_id, reason, error, read in outcomes:
+        if read and reload_error is not None:
+            item = _confirmed_item(
+                document_id,
+                f"{reason}; but the package in the run folder could not be reloaded: "
+                f"{reload_error}",
+                reload_error,
+            )
+            context.record_coverage("unresolved", item)
+        else:
+            item = _confirmed_item(document_id, reason, error)
+            context.record_coverage("checked" if read else "unresolved", item)
+        items.append(item)
+    return items

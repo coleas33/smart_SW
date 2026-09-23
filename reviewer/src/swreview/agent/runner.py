@@ -113,6 +113,7 @@ from swreview.report.session import (
     save_session,
 )
 from swreview.tools.context import ToolContext, build_context
+from swreview.tools.drawings import read_confirmed_candidates
 from swreview.tools.query import package_summary
 from swreview.tools.registry import TOOL_RESULTS_DIR_NAME, RecordedTool, ToolRegistry
 
@@ -869,6 +870,10 @@ class ReviewRun:
             request.answered_at = utc_now()
             self.sink.emit("evidence.answered", {"request_id": request_id, "answer": answer})
 
+        # Feature 011 (owner, 2026-09-23): a confirmed drawing candidate is read read-only by
+        # the host before the review resumes, so the resumed turn sees it. Every other answer
+        # does nothing here (`contracts/confirmed-open.md` section 1).
+        read_confirmed_candidates(self.context, requests, self.out_dir)
         before = len(self.session.findings)
         self._ask(answers_message(answers))
         for finding in _reconcile_reruns(self.session, before):

@@ -180,11 +180,25 @@ class ToolContext:
     context does not import the checks that fill it."""
 
     def __post_init__(self) -> None:
+        self._index_package()
+
+    def _index_package(self) -> None:
         package = self.package.package
         self._components = {item.id: item for item in package.components}
         self._documents = {item.document_id: item for item in package.documents}
         self._holes = {item.id: item for item in package.holes}
         self._fasteners = {item.id: item for item in package.fasteners}
+
+    def reload_package(self, package: LoadedPackage) -> None:
+        """Replace the package every tool reads, and the lookups built over it.
+
+        Feature 011's confirmed read-only open (`contracts/confirmed-open.md` section 1): the
+        host appends the drawing it read to the run folder's `package.json`, and the review
+        resumes over that package, so the resumed turn and every tool see the new records.
+        Nothing in the session changes.
+        """
+        self.package = package
+        self._index_package()
 
     @property
     def ir(self) -> EvidencePackage:
