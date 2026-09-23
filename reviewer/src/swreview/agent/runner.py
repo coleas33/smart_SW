@@ -114,7 +114,7 @@ from swreview.report.session import (
 )
 from swreview.tools.context import ToolContext, build_context
 from swreview.tools.query import package_summary
-from swreview.tools.registry import TOOL_RESULTS_DIR_NAME, ToolRegistry
+from swreview.tools.registry import TOOL_RESULTS_DIR_NAME, RecordedTool, ToolRegistry
 
 SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_v1.md"
 SESSION_FILE_NAME = "session.json"
@@ -1239,8 +1239,11 @@ def start_review(
         # wrapper outside it sees a guarded answer like any other result; with checks first
         # off there is no pre-run and the adapter is handed the dispatch itself.
         offered: ToolSet = tools
+        # The array the adapter encodes, and so the one the prompt's tool notes describe:
+        # read from the one filter that builds it (lever 13's lives in the guard).
+        array: Iterable[RecordedTool] = tools
         if prerun is not None:
-            offered = PrerunGuard(tools, prerun, folded=session.folded_families)
+            offered = array = PrerunGuard(tools, prerun, folded=session.folded_families)
         # Lever 13 (feature 008 FR-030): the tools the pre-run ran to completion, which the
         # guard leaves off the array; empty with the lever or checks first off. The checklist
         # the model reads - in the system prompt and from `get_review_checklist` - stops
@@ -1266,7 +1269,7 @@ def start_review(
         system=build_system_prompt(
             checklist,
             loaded.package,
-            [tool.spec for tool in tools if tool.name not in withheld],
+            [tool.spec for tool in array],
             efficiency=session.efficiency,
             withheld=withheld,
         ),

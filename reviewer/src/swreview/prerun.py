@@ -54,7 +54,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal
 
-from swreview.agent.providers import ProviderTool, ToolCallRequest, ToolCallResult, call_tool
+from swreview.agent.providers import ToolCallRequest, ToolCallResult, call_tool
 from swreview.agent.settings import EfficiencySettings, checks_first
 from swreview.checks.fastener_identity import joint_map_with_fasteners
 from swreview.checks.interference import STATIC_SCOPE_LIMIT
@@ -77,7 +77,7 @@ from swreview.tools import checks_mechanical
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import ToolContext
 from swreview.tools.model_view import check_digest, count_findings
-from swreview.tools.registry import ToolDispatch, record_call
+from swreview.tools.registry import RecordedTool, ToolDispatch, record_call
 
 __all__ = [
     "ALREADY_RUN",
@@ -112,6 +112,7 @@ __all__ = [
     "PrerunCall",
     "PrerunGuard",
     "PrerunResult",
+    "answers_repeat",
     "attach_standards",
     "gate_brief",
     "not_evaluated_families",
@@ -1022,7 +1023,8 @@ def withheld_tools(
     *completed* when it has no error and a `repeat_key`, so the re-call guard can answer
     any repeat of it; a tool is a candidate only when every one of its calls completed and
     it is on the wire now - a tool a tier withheld was never offered, and is not this
-    lever's to claim.
+    lever's to claim. "Completed" is `answers_repeat`, the rule the guard's ledger is built
+    by, so every withheld tool's calls are in the ledger by construction.
 
     - The three RMS tools leave together, and only when each ran package-wide (no
       `document_id`): one step of the system prompt and one checklist sentence name all
@@ -1046,14 +1048,8 @@ def withheld_tools(
         made.setdefault(call.tool, []).append(call)
 
     def completed(name: str) -> bool:
-        return (
-            name in offered
-            and bool(made.get(name))
-            and all(
-                call.error is None and repeat_key(call.tool, call.arguments) is not None
-                for call in made[name]
-            )
-        )
+        calls = made.get(name, [])
+        return name in offered and bool(calls) and all(answers_repeat(call) for call in calls)
 
     withheld: list[str] = []
     if all(
@@ -1299,6 +1295,16 @@ def repeat_key(tool: str, arguments: Mapping[str, Any]) -> tuple[Any, ...] | Non
     return None
 
 
+def answers_repeat(call: PrerunCall) -> bool:
+    """Whether the guard answers a repeat of this pre-run call: it completed, and has a key.
+
+    The one rule behind both the guard's ledger and lever 13's "completed" (`withheld_tools`):
+    a tool leaves the array only when every one of its calls is in the ledger, so a model that
+    calls it anyway is answered `already_run`, never run twice (FR-012, FR-030).
+    """
+    return call.error is None and repeat_key(call.tool, call.arguments) is not None
+
+
 class PrerunGuard:
     """The run's `ToolSet` with the pre-run's answers in front of it (research R2.19).
 
@@ -1325,11 +1331,13 @@ class PrerunGuard:
         self.withheld = frozenset(prerun.withheld)
         self._ledger: dict[tuple[Any, ...], PrerunCall] = {}
         for call in prerun.calls:
-            key = repeat_key(call.tool, call.arguments)
-            if call.error is None and key is not None:
+            if answers_repeat(call):
+                key = repeat_key(call.tool, call.arguments)
+                assert key is not None  # `answers_repeat` holds only for a call with a key
                 self._ledger.setdefault(key, call)
 
-    def __iter__(self) -> Iterator[ProviderTool]:
+    def __iter__(self) -> Iterator[RecordedTool]:
+        """The array the adapters encode, and the one the prompt's tool notes describe."""
         return (tool for tool in self.tools if tool.name not in self.withheld)
 
     def __len__(self) -> int:

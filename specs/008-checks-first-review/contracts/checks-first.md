@@ -151,7 +151,9 @@ below happens.
 
 `prerun.withheld_tools(context, tools, calls)` returns the tools that leave, in pre-run order,
 and `PrerunResult.withheld` holds them. A call *completed* when `PrerunCall.error is None` and
-`repeat_key(tool, arguments)` is not `None`, so the guard can answer any repeat.
+`repeat_key(tool, arguments)` is not `None`, so the guard can answer any repeat: that is
+`prerun.answers_repeat(call)`, the one rule both this function and the guard's ledger read
+(*landed as*, review of `d805112..99269dd`).
 
 | Tool | Leaves the array when |
 |---|---|
@@ -166,7 +168,8 @@ A tool that is not in the dispatch's offered tools (withheld by tier) is never l
 **Mechanism.** `PrerunGuard.__iter__` and `__len__` leave out `prerun.withheld`; `call` is
 unchanged, so a withheld tool called anyway reaches the guard's ledger and is answered
 `already_run` (section 5), and anything the ledger misses reaches the dispatch, which still
-holds the tool. The system prompt's tool notes (lever 2) are built from the offered tools only.
+holds the tool. The system prompt's tool notes (lever 2) are built from the offered tools only,
+read from the guard's own iteration rather than a second filter.
 A name nothing registers gets the dispatch's unknown-tool error, whose list of available tools
 is the guard's array (`ToolDispatch.call(..., offered=...)`), never a withheld name: an error
 result is never pruned (*landed as*, review of `d805112..99269dd`).
