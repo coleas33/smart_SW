@@ -49,7 +49,13 @@ from starlette.testclient import TestClient
 from swreview.agent.providers import AgentEvent, AgentProvider, ProviderName
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import PROFILE_CHECK
-from swreview.agent.settings import MASK, ProviderSettings, pane_efficiency
+from swreview.agent.settings import (
+    MASK,
+    MODEL_VIEW_PANE,
+    ProviderSettings,
+    pane_defaults,
+    pane_efficiency,
+)
 from swreview.chat.server import SESSION_FILES, _sse, create_app
 from swreview.chat.sessions import ChatState
 from swreview.ir.loader import save_package
@@ -545,6 +551,20 @@ def test_a_pane_review_runs_checks_first(client: TestClient, app: Any, run_dir: 
     run = app.state.server.chats[UUID(chat_id)].run
     assert DIGEST_HEADER in str(run.messages[0]["content"])
     assert session.folded_families == ["rms"]
+
+
+def test_a_pane_review_records_the_pane_defaults_model_view(
+    client: TestClient, run_dir: Path
+) -> None:
+    """Feature 008 T076, FR-023: payload slimming and history pruning are pane defaults,
+    decided with the levers by one function, and the session records both."""
+    chat_id = start_session(client, run_dir)["chat_id"]
+    settle(client, chat_id)
+
+    written = json.loads((run_dir / "session.json").read_text(encoding="utf-8"))
+    pane = pane_defaults(ProviderName.FAKE)
+    assert written["model_view"] == pane.model_view.model_dump() == MODEL_VIEW_PANE.model_dump()
+    assert written["efficiency"] == pane.efficiency.model_dump()
 
 
 def test_configured_standards_profile_reaches_review_setup_and_blank_is_absent(

@@ -89,7 +89,7 @@ from swreview.agent.settings import (
     DEFAULT_PROVIDER,
     ProviderSettings,
     default_model,
-    pane_efficiency,
+    pane_defaults,
     redact,
 )
 from swreview.benchmark.timing import TIMING_INPUTS
@@ -2012,6 +2012,10 @@ class ChatServer:
         except Exception as exc:
             raise ProviderFailed.wrapping(exc) from exc
         bridge = chat.bridge or {}
+        # Feature 008: the pane's levers and model view are decided in one place - checks
+        # first, payload slimming and history pruning since 2026-09-22 - and recorded on the
+        # session like any other run's.
+        defaults = pane_defaults(settings.provider)
         try:
             run = start_review(
                 chat.run_dir,
@@ -2021,9 +2025,8 @@ class ChatServer:
                 effort=settings.effort,
                 key_source=settings.key_source,
                 retry_of=self._review_retry_of(chat),
-                # Feature 008: the pane's levers are decided in one place - checks first
-                # since 2026-09-22 - and recorded on the session like any other run's.
-                efficiency=pane_efficiency(settings.provider),
+                efficiency=defaults.efficiency,
+                model_view=defaults.model_view,
                 standards_profile=standards_profile,
                 bridge=bool(bridge),
                 pipe_name=str(bridge.get("pipe") or DEFAULT_PIPE_NAME),
