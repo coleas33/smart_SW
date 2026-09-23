@@ -286,12 +286,212 @@ fieldset.field {
   body rather than a property on each, so a card that streams in meanwhile is hidden too and
   every one of them comes back when the reviewed document does.
 */
+body.results-stale #summary,
 body.results-stale #attention-panel,
 body.results-stale #not-examined,
 body.results-stale #coverage-panel,
+body.results-stale #contacts,
 body.results-stale .card.finding,
+body.results-stale .finding-group,
 body.results-stale .card.evidence {
   display: none;
+}
+
+/* ---- tier 1: the review in ten seconds (feature 009 User Story 3) ------------------------- */
+
+/*
+  The summary: the headline, Decide / Fix / Verify, the questions, the parts not loaded and one
+  line per check goal, every number and word of it the backend's. Compact on purpose - on the
+  big assembly the headline, the three groups and every goal that was not reached must be on
+  screen in a 300 by 600 pane before anything is scrolled (SC-001). The hues restate what the
+  backend already said: `group-<kind>` and `goal-<state>` are class names the page interpolated,
+  never compared (contracts/review-summary.md section 5).
+*/
+.summary-panel {
+  padding-top: 8px;
+}
+
+.summary {
+  display: grid;
+  gap: 4px;
+}
+
+.summary-headline {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: var(--text-lead);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.summary-groups,
+.summary-goals {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.summary-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  padding: 1px 0 1px 8px;
+  border-left: 3px solid var(--quiet);
+}
+
+.group-label {
+  min-width: 4.2em;
+  font-family: var(--display);
+  font-size: var(--text-lead);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.group-text {
+  color: var(--ink-2);
+}
+
+.group-goals {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: var(--text-small);
+  line-height: 1.3;
+}
+
+.summary-group.group-decide {
+  border-left-color: var(--judge);
+}
+
+.summary-group.group-decide .group-label {
+  color: var(--judge);
+}
+
+.summary-group.group-fix {
+  border-left-color: var(--critical);
+}
+
+.summary-group.group-fix .group-label {
+  color: var(--critical);
+}
+
+.summary-group.group-verify {
+  border-left-color: var(--warn);
+}
+
+.summary-group.group-verify .group-label {
+  color: var(--warn);
+}
+
+.summary-group.group-decided,
+.summary-group.group-within_scope {
+  border-left-color: var(--good);
+}
+
+.summary-group.group-decided .group-label,
+.summary-group.group-within_scope .group-label {
+  color: var(--good);
+}
+
+.summary-questions,
+.summary-not-loaded {
+  margin: 0;
+  font-size: var(--text-small);
+}
+
+.summary-questions {
+  color: var(--judge);
+  font-weight: 600;
+}
+
+.summary-not-loaded {
+  color: var(--warn);
+}
+
+.goal-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  font-size: var(--text-small);
+  line-height: 1.35;
+}
+
+/* A dot in the goal's own hue, so the column of goals reads at a glance. */
+.goal-head::before {
+  content: "\25cf";
+  color: var(--quiet);
+  font-size: var(--text-label);
+}
+
+.goal-title {
+  color: var(--ink);
+}
+
+.goal-state {
+  color: var(--muted);
+}
+
+.goal-reason {
+  color: var(--muted);
+}
+
+.goal-reason::before {
+  content: "\00b7";
+  margin-right: 6px;
+}
+
+.summary-goal.goal-issues .goal-head::before,
+.summary-goal.goal-issues .goal-state {
+  color: var(--critical);
+}
+
+.summary-goal.goal-checked .goal-head::before,
+.summary-goal.goal-checked .goal-state {
+  color: var(--good);
+}
+
+.summary-goal.goal-not_reached .goal-head::before,
+.summary-goal.goal-not_reached .goal-state {
+  color: var(--warn);
+}
+
+.summary-goal.goal-not_applicable .goal-head::before,
+.summary-goal.goal-not_applicable .goal-state {
+  color: var(--quiet);
+}
+
+/* The recorded sentence is one press away: the line itself is the fold's head. */
+.goal-fold > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.goal-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.goal-fold > summary::after {
+  content: "\25b8";
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.goal-fold[open] > summary::after {
+  content: "\25be";
+}
+
+.goal-detail {
+  margin: 2px 0 4px 14px;
+  padding-left: 8px;
+  border-left: 2px solid var(--hair);
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* ---- tier 1: what to start with ---------------------------------------------------------- */
@@ -338,6 +538,20 @@ body.results-stale .card.evidence {
   color: var(--warn);
   font-size: var(--text-small);
   overflow-wrap: anywhere;
+}
+
+/* The instances behind the names-only headline: ids, one press away (feature 009 FR-012). */
+.not-examined-fold > summary {
+  margin-top: 2px;
+  color: var(--warn);
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
+.not-examined-ids {
+  margin: 2px 0 0;
+  padding-left: 14px;
+  color: var(--ink-2);
 }
 
 .attention-row {
@@ -789,6 +1003,43 @@ body.results-stale .card.evidence {
   border-left-color: var(--quiet);
 }
 
+/*
+  The modelling-practice findings, one fold (FR-010): the backend's line as its head, the cards
+  inside it exactly as they are anywhere else. The quiet hue - the owner folded these away so
+  the decisions and the fixes read first.
+*/
+.finding-group {
+  border-left: 3px solid var(--quiet);
+  border-bottom: 1px solid var(--hair-2);
+}
+
+.finding-group > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 4px 7px 10px;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+
+.finding-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.finding-group > summary::after {
+  content: "\25b8";
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.finding-group[open] > summary::after {
+  content: "\25be";
+}
+
 /* ---- the fold of a finding ------------------------------------------------------------------ */
 
 .details {
@@ -1109,6 +1360,71 @@ body.results-stale .card.evidence {
   margin: 0;
   color: var(--muted);
   font-size: var(--text-small);
+}
+
+/* ---- tier 3: size-for-size contacts, apart from the findings (FR-011) ---------------------------- */
+
+.contacts > summary,
+.contact-fold > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.contacts > summary::-webkit-details-marker,
+.contact-fold > summary::-webkit-details-marker {
+  display: none;
+}
+
+.contacts > summary {
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  font-weight: 600;
+}
+
+.contacts > summary::after,
+.contact-fold > summary::after {
+  content: "\25b8";
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.contacts[open] > summary::after,
+.contact-fold[open] > summary::after {
+  content: "\25be";
+}
+
+.contact-lines {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contact {
+  margin: 2px 0;
+  padding: 3px 0 3px 10px;
+  border-left: 2px solid var(--hair);
+  font-size: var(--text-small);
+}
+
+.contact-text {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.contact-kind,
+.contact-configuration {
+  color: var(--muted);
+}
+
+.contact-ids {
+  margin: 2px 0 0;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
 }
 
 /* ---- the follow-up ------------------------------------------------------------------------------- */

@@ -72,6 +72,9 @@
   /** The multiplication sign a folded row's member count is written with, as an escape. */
   var TIMES = '\u00d7';
 
+  /** The unit a contact's overlap volume is recorded in (feature 010's `volume_mm3`), as an escape. */
+  var CUBIC_MILLIMETRES = 'mm\u00b3';
+
   // ---- formatting ---------------------------------------------------------------------
 
   function location(reference) {
@@ -605,11 +608,21 @@
 
     var shown = attention.amplified(ranking);
     panel.appendChild(el('p', 'attention-count', countLine(ranking, shown.length)));
-    panel.appendChild(attention.rowList(shown));
+    panel.appendChild(attention.rowList(shown, rowOptions(ranking)));
     if (shown.length < rows.length) {
       panel.appendChild(attentionIndex(rows, shown.length));
     }
     return panel;
+  }
+
+  /**
+   * What the Review tab hands the shared row's meta line: the summary's component names, so a
+   * row names parts rather than ids (feature 009 FR-012). A ranking with no summary - an older
+   * backend - hands nothing, and the row prints ids exactly as the check tabs do.
+   */
+  function rowOptions(ranking) {
+    var summary = ranking ? ranking.summary : null;
+    return (summary && summary.component_names) ? { names: summary.component_names } : undefined;
   }
 
   /**
@@ -682,6 +695,174 @@
       total += (members && members.length) ? members.length : 1;
     }
     return total;
+  }
+
+  // ---- the summary (feature 009 User Story 3) ------------------------------------------
+
+  /**
+   * The review in ten seconds, at the top of Results: the headline, Decide / Fix / Verify (and
+   * decided and within limits when the backend sent them), the questions, the parts not
+   * loaded, and one line per check goal (contracts/review-summary.md section 5).
+   *
+   * A printer and nothing more. Every number, every word and every order here is the
+   * backend's: `report/summary.py` counts the findings by the policy's own keys and states each
+   * goal, and this prints what it was handed, in the order it was handed it (FR-009). The two
+   * class names interpolate the group's `kind` and the goal's `state`, so the stylesheet can
+   * colour them without any script comparing either to anything (PageRuleScanTests).
+   */
+  function summaryBlock(summary) {
+    var body = summary || {};
+    var block = el('div', 'summary');
+    block.appendChild(el('p', 'summary-headline', body.headline));
+
+    var groups = el('ul', 'summary-groups');
+    var groupRows = body.groups || [];
+    for (var index = 0; index < groupRows.length; index++) {
+      groups.appendChild(summaryGroup(groupRows[index] || {}));
+    }
+    block.appendChild(groups);
+
+    if (body.questions && body.questions.text) {
+      block.appendChild(el('p', 'summary-questions', body.questions.text));
+    }
+    if (body.not_loaded && body.not_loaded.text) {
+      block.appendChild(el('p', 'summary-not-loaded', body.not_loaded.text));
+    }
+
+    var goals = el('ul', 'summary-goals');
+    var goalRows = body.goals || [];
+    for (var goal = 0; goal < goalRows.length; goal++) {
+      goals.appendChild(goalLine(goalRows[goal] || {}));
+    }
+    block.appendChild(goals);
+    return block;
+  }
+
+  /** One group: its label in the lead face, its sentence, and its goals as "title count". */
+  function summaryGroup(group) {
+    var item = el('li', 'summary-group group-' + String(group.kind || ''));
+    item.appendChild(el('span', 'group-label', group.label));
+    item.appendChild(el('span', 'group-text', group.text));
+
+    var goals = group.by_goal || [];
+    if (goals.length) {
+      var line = el('span', 'group-goals');
+      for (var index = 0; index < goals.length; index++) {
+        var count = goals[index] || {};
+        if (index > 0) {
+          write(line, DOT);
+        }
+        line.appendChild(el('span', 'group-goal', joined([count.title, scalar(count.count)], ' ')));
+      }
+      item.appendChild(line);
+    }
+    return item;
+  }
+
+  /**
+   * One check goal: its title, its state in words and the few words of its reason. The
+   * sentence the run recorded behind that reason - a close-out row's reason can run to four
+   * hundred characters, and is never cut (FR-027's own principle) - is behind a shut fold whose
+   * head is the line itself, so the line reads the same whether or not there is one.
+   */
+  function goalLine(line) {
+    var item = el('li', 'summary-goal goal-' + String(line.state || ''));
+    var parts = [
+      el('span', 'goal-title', line.title),
+      el('span', 'goal-state', line.state_label),
+      line.reason ? el('span', 'goal-reason', line.reason) : null
+    ];
+
+    if (typeof line.detail === 'string' && line.detail) {
+      var fold = el('details', 'goal-fold');
+      fold.appendChild(append(el('summary', 'goal-head'), parts));
+      fold.appendChild(el('p', 'goal-detail', line.detail));
+      item.appendChild(fold);
+    } else {
+      item.appendChild(append(el('div', 'goal-head'), parts));
+    }
+    return item;
+  }
+
+  /**
+   * The not-loaded warning when the backend sent its names-only headline (feature 009 FR-012,
+   * contracts/plain-words.md section 3): the headline, then each instance's id and state in a
+   * shut fold beneath it, so the ids are one press away and off the default view. A warning
+   * with no headline is printed by `app.js` as its sentence alone, exactly as before this
+   * feature - the sentence already names the ids, and a fold would say them twice.
+   */
+  function notExaminedHeadline(warning) {
+    var body = warning || {};
+    var block = el('div', 'not-examined-body');
+    block.appendChild(el('span', 'not-examined-headline', body.headline));
+
+    var instances = body.instances || [];
+    if (instances.length) {
+      var fold = el('details', 'not-examined-fold');
+      fold.appendChild(el('summary', 'not-examined-fold-head', 'Which ones'));
+      var lines = el('ul', 'not-examined-ids');
+      for (var index = 0; index < instances.length; index++) {
+        var instance = instances[index] || {};
+        lines.appendChild(el('li', 'mono', joined([
+          instance.id,
+          instance.state ? '(' + instance.state + ')' : ''
+        ], ' ')));
+      }
+      fold.appendChild(lines);
+      block.appendChild(fold);
+    }
+    return block;
+  }
+
+  /**
+   * The fold the modelling-practice findings are moved into (FR-010): shut when it arrives, its
+   * head the backend's own line ("Modelling practice: 51 findings across 12 rules"), its body
+   * empty. `app.js` moves the cards the summary names into it; nothing here chooses them.
+   */
+  function findingGroup(title) {
+    var group = el('details', 'finding-group');
+    group.appendChild(el('summary', 'finding-group-head', title));
+    group.appendChild(el('div', 'finding-group-body'));
+    return group;
+  }
+
+  /**
+   * The size-for-size contacts, one shut fold apart from the findings (FR-011): its head the
+   * backend's line ("2 size-for-size contacts"), one line per contact naming the two parts, the
+   * kind in words and the configuration, and the component ids and the volume behind each
+   * line's own fold. Every word is the summary's (`ContactView.text`, `kind_label`); the page
+   * composes no name and computes no count.
+   */
+  function contactList(contacts) {
+    var body = contacts || {};
+    var fold = el('details', 'contacts');
+    fold.appendChild(el('summary', 'contacts-head', body.text));
+
+    var lines = el('ul', 'contact-lines');
+    var items = body.items || [];
+    for (var index = 0; index < items.length; index++) {
+      lines.appendChild(contactLine(items[index] || {}));
+    }
+    fold.appendChild(lines);
+    return fold;
+  }
+
+  function contactLine(contact) {
+    var line = el('li', 'contact');
+    var own = el('details', 'contact-fold');
+    own.appendChild(append(el('summary', 'contact-head'), [
+      el('span', 'contact-text', contact.text),
+      el('span', 'contact-kind', contact.kind_label),
+      contact.configuration ? el('span', 'contact-configuration', contact.configuration) : null
+    ]));
+
+    var ids = list(contact.component_ids);
+    if (typeof contact.volume_mm3 === 'number' && isFinite(contact.volume_mm3)) {
+      ids = joined([ids, contact.volume_mm3 + ' ' + CUBIC_MILLIMETRES], DOT);
+    }
+    own.appendChild(el('p', 'contact-ids mono', ids));
+    line.appendChild(own);
+    return line;
   }
 
   /** A count and its noun, in the singular when there is one. */
@@ -787,6 +968,10 @@
     errorCard: errorCard,
     coverageSummary: coverageSummary,
     attentionPanel: attentionPanel,
+    summaryBlock: summaryBlock,
+    findingGroup: findingGroup,
+    contactList: contactList,
+    notExaminedHeadline: notExaminedHeadline,
     entityRequest: entityRequest,
     usageLine: usageLine
   };

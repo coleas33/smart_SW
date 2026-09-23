@@ -133,14 +133,26 @@
 <p id="stale-review" class="stale-review" role="status" hidden></p>
 
 <!--
+  The review in ten seconds (feature 009 User Story 3): the headline, Decide / Fix / Verify, the
+  questions, the parts not loaded and one line per check goal. The backend computes every number
+  and word of it and sends it beside the ranking (`summary` on GET /sessions/{chat_id}/attention);
+  app.js prints it here, above everything else the review shows, and computes nothing
+  (contracts/review-summary.md section 5). Hidden until a summary arrives, so a backend that sends
+  none leaves the page exactly as it was (FR-030).
+-->
+<section id="summary" class="panel summary-panel" aria-label="Review summary" hidden></section>
+
+<!--
   What to start with: the rows the backend ranked, read from `GET /sessions/{chat_id}/attention`
   when the session ends and pinned above the transcript, because a panel under a transcript that
   has just grown by a whole review is a panel nobody scrolls to (contracts/attention.md
   section 6). Hidden until there is something to show.
 -->
 <!-- The extractor's coverage warning is a separate, wrapping surface so a long sentence is
-     readable in the narrow pane instead of being squeezed into the header status badge. -->
-<p id="not-examined" class="not-examined" hidden></p>
+     readable in the narrow pane instead of being squeezed into the header status badge. A div
+     rather than a paragraph since feature 009: with the backend's names-only headline it holds
+     a fold of the instances' ids beneath the headline, and a fold is not phrasing content. -->
+<div id="not-examined" class="not-examined" hidden></div>
 
 <section id="review-preparation" class="panel" aria-labelledby="preparation-heading" hidden>
   <h2 id="preparation-heading">Before this review</h2>
@@ -174,6 +186,14 @@
 </div>
 
 <main id="transcript" class="transcript folded" aria-live="polite"></main>
+
+<!--
+  The size-for-size contacts (feature 009 FR-011, the owner's decision of 2026-09-23): one shut
+  list after the findings and apart from them, printed from the summary's `contacts`. A contact is
+  not a finding, so it is never in a finding card, in Start here or in the modelling-practice
+  group. Hidden while there are none.
+-->
+<section id="contacts" class="panel" aria-label="Size-for-size contacts" hidden></section>
 
 <section id="coverage-panel" class="panel" hidden></section>
 
