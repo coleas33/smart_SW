@@ -3,7 +3,7 @@
 Should-fix findings left unapplied by the adversarial review rounds of 2026-09-13. Every must-fix from the same rounds was applied and is in the history; these are quality and hardening items, confirmed by a reviewer but not required to pass the gates. Generated from the workflow outputs of the implementation session; file and line references are as of the commit each round reviewed and may have drifted.
 
 
-Total items: 1187. Generated 2026-09-13; feature 003, 004 and 005 sections appended 2026-09-16, the handoff rounds the same day. Feature 006 spec review appended 2026-09-17. Feature 006 implementation rounds A-E appended 2026-09-17.
+Total items: 1200. Generated 2026-09-13; feature 003, 004 and 005 sections appended 2026-09-16, the handoff rounds the same day. Feature 006 spec review appended 2026-09-17. Feature 006 implementation rounds A-E appended 2026-09-17. The open follow-ups of features 008 and 009 appended 2026-09-23.
 
 
 ## Pre-test diagnostics (items 1, 3, 4, 8)
@@ -2074,3 +2074,40 @@ Should-fix findings from the adversarial reviews of each feature 003 phase, the 
   - Fix: Add a sentence to the Scenario 5 comment saying that `<passing-id>` is only unfailing while SC-014 is unsettled, and name what to substitute after T102 (a second fixture, or drop the passing-id case there and prove `unused` on a different package).
 - **specs/006-standards-check/quickstart.md:322** (polish-docs) - Scenario 6 says "Also assert, in the same pass: ... every byte of both package directories is unchanged after the runs." Nothing in `TestTheMatchedPair` asserts it; SC-010 is asserted generically elsewhere (reviewer/tests/unit/test_cli_check_standards.py:322) over a different fixture, and the golden harness copies packages into a scratch dir rather than grading them in place, so the pair's own directories are never the subject of an immutability assertion. The quickstart states a measurement that the pass it names does not make.
   - Fix: Either add a digest-before/digest-after assertion over both fixture directories to TestTheMatchedPair, or reword the quickstart to point at the general SC-010 test as the place that measurement is made.
+
+
+## Features 008 and 009: open follow-ups (2026-09-23)
+
+The follow-ups research R5 of `specs/008-checks-first-review/` (008 T098) and of `specs/009-engineer-workspace/` (009 T075) leave open, each re-read against main on 2026-09-23; file and line references are as of that tree.
+
+### 008 checks-first review (7)
+
+- **reviewer/src/swreview/bridge/client.py:185** (follow-up) - The named-pipe transport reads a byte at a time with no read timeout: `NamedPipeTransport.timeout_s` is stored (:161) and never read, so a live detection that never answers blocks checks first's pre-run, and with it `POST /sessions`, for as long as SOLIDWORKS hangs (008 research R2.23). Every failure the pipe can report already becomes failed coverage and a not-evaluated line; a hang cannot be told from a slow answer.
+  - Fix: an injectable transport with a real read timeout (the module docstring's optional `pywin32` transport, :33-36), or moving the pre-run into `ReviewRun.start()` so a hang delays the first turn rather than session creation. The setup latency measured at the next sitting (008 T104) decides which.
+- **reviewer/src/swreview/mcp/server.py:294** (follow-up) - MCP general chat binds the dispatch with no model view, so a command-line model reads full payloads, persist references included, while `bridge_capture` and `bridge_measure` now take package entity ids (008 R2.27, R2.38) and answer a pasted reference with an error naming it.
+  - Fix: give MCP the slimmed view (`tools/model_view.view_of`) without `get_finding`, which needs a review session, and pin the MCP payloads in `test_tool_payload.py`'s `mcp` rows.
+- **reviewer/src/swreview/tools/session.py:502** (follow-up) - `request_capture` resolves its entity server-side for three kinds (component, hole, fastener) through `ToolContext`, while the bridge tools use the pure `resolve_entity_ref` over ten kinds (`tools/refs.py:103`; 008 R2.27). Two resolvers with different reach for one question.
+  - Fix: move `request_capture` onto `resolve_entity_ref` in a change of its own: it widens the kinds a capture can be requested for, so it needs its own tests and a docstring change.
+- **reviewer/src/swreview/agent/runner.py:618** (backlog) - `_verdict_key` is `(check, component_ids, drawing locations, configuration)` and ignores hole ids, so `_reconcile_reruns` (:635) can fold two `hole.coaxiality` findings on the same two components that differ only by their holes into one (008 R2.8; the replay's `finding_subject_key` in `findings.py` includes entity-id inputs for exactly this reason).
+  - Fix: key `_verdict_key` on `finding_subject_key` (or add the entity-id inputs it uses), with a test of a resumed turn re-running one of two hole-pair findings on the same components.
+- **reviewer/src/swreview/benchmark/compare.py:500** (follow-up) - `_check_one_study` refuses runs of one study that differ in commit, effort, set file, checklist, step budget or explanation mode, but never reads `session.model_view`, so two runs made with different model views (slimming, pruning age) would be placed in one comparison.
+  - Fix: add the session's `model_view` to the refused differences, the refusal naming the field.
+- **reviewer/src/swreview/tools/registry.py:391** (follow-up) - A reused command-line `--out` folder keeps the higher-numbered `tool-results/step-<n>.json` files of an earlier, longer run beside the new run's; each envelope's `session_id` (:381) identifies them, but nothing removes or refuses them, so a reader listing the folder sees steps the session does not have.
+  - Fix: clear `tool-results/` when a review session starts in a folder (`agent/runner.py:1139`, where the folder is set), or refuse a folder whose files carry another `session_id`.
+- **reviewer/src/swreview/report/explanations.py:123** (watch item) - Research R5 records that the explanation request sends the top rows' finding inputs, which can carry inline persist references (`<id> <name> [<type>] persist_ref=<ref>`, `checks/rules/results.py:158`, `checks/standards/report.py:238`); it is not a tool result, so FR-015's view does not cover it. Re-read 2026-09-23: `_finding_payload` sends no `inputs` - titles, the observed, requirement and action text, component ids and names, source ids - so no reference reaches the request today.
+  - Fix: none needed now. If `inputs` or another field that can carry a reference is ever added, strip it with `tools/model_view.REF_IN_TEXT` and pin that no `persist_ref=` reaches `_prompt`'s output.
+
+### 009 engineer workspace (6)
+
+- **reviewer/src/swreview/chat/server.py:1232** (backlog) - The backend adds every chat to `ChatServer.chats` and never evicts one, so a night of kept reviews holds every run's package in memory (009 R5; 1.48 MB on disk for the recorded big assembly).
+  - Fix: evict an ended chat once its snapshot is on disk (the disk route of 009 US6 already restores a folder read-only after a restart), keeping the live one and any with a turn in flight.
+- **reviewer/src/swreview/agent/runner.py:959** (backlog) - A follow-up question is appended to `ReviewRun.messages` and emits no event, so the page's pinned follow-up answer does not survive a reload: the answer's text is on the stream, the question it answers is not.
+  - Fix: an in-memory list of follow-ups on `ReviewRun` served with the snapshot, or a new event type (which moves `chat-events.schema.json`, a contract 009 kept still).
+- **reviewer/src/swreview/checks/hole_alignment.py:104** (owner, later) - Hole-alignment titles keep hole ids ("The axes of hol:0012 and hol:0019 ...", also :136): the title is the first sentence of `observed` (`tools/recording.py:39`), and plain words need the hole-to-part map.
+  - Fix: name each hole by its part and feature in the title helper (`report/names.py`) once the map reaches it, without changing `observed`, which is evidence.
+- **reviewer/src/swreview/checks/rms/assembly.py:391** (owner, later) - SOLIDWORKS API tokens (`swMateCONCENTRIC`, `swSelFACES`) reach RMS titles from the checks' observed strings (`{mate.id} ({mate.type}) references ...`; the part rules' `name [type_name]` lists, `checks/rms/part.py:239`). Rewording them changes findings' evidence and every RMS golden.
+  - Fix: a display table from API token to words applied in the title helper only, leaving `observed` as the evidence it is.
+- **reviewer/src/swreview/report/markdown.py:66** (owner) - `report.md` does not lead with the summary the Review tab prints (one source, `report/summary.py`); left out so the report goldens hold (009 R5).
+  - Fix: render `review_summary` at the top of `render_report` in a change that regenerates the `.md` goldens deliberately.
+- **reviewer/src/swreview/report/review_words_v1.yaml:118** (owner) - Research R5 left open whether modelling practice belongs under the hygiene goal or is a ninth goal line; it landed as the ninth goal (`modelling_practice`, prefix `rms.`; 009 T010, T016), a data row awaiting the owner's confirmation.
+  - Fix: the owner's decision. Moving it under hygiene is one row of the goal table plus the fixture counts of `test_review_summary_fixture.py`.
