@@ -56,6 +56,15 @@ opening nothing, when any step fails:
    compares; the file exists;
 5. the package holds fewer than ten drawing records.
 
+Item 1's records are `ReviewHost.ReviewRunDirectory(run_id)` in the add-in (T074, pane lane,
+2026-09-23): the run folder of the review whose `SessionRecord.RunId` equals `run_id` ignoring
+case, or null. The id is compared with the folder name and nothing else - never combined with,
+compared with or read as a path, so a full, relative or `..` spelling answers null. Only a review
+record answers; a Model check, Standards or remodel record (`TrackCheck`) never does. An id that
+two reviews' distinct folders share (the run root moved between them) answers null. The add-in
+hands this lookup to its `IConfirmedDrawingSource`; a null answer is item 1's refusal, which names
+the `run_id`, and the package's presence in the folder is still item 1's to check.
+
 Then, through the seam of section 3: the drawing is opened when it is not already open, read by the
 existing drawing phase (`DrawingDumper`, the reader by document) with every drawing id and the
 drawing's `doc:` id continuing the package's own sequences and each view's referenced document
