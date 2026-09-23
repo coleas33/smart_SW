@@ -412,7 +412,9 @@ class ReviewSession(ReviewModel):
     Optional for the same reason `provider_info` is: a session written before the field
     existed has none, and it loads unchanged. Every run this build makes records it, even
     with every lever off, because `benchmark compare` cannot attribute a results row to a
-    configuration without it and refuses a run that carries none.
+    configuration without it and refuses a run that carries none. Lever 13,
+    `withhold_prerun_tools`, is written only when on (feature 008 amendment): absent reads as
+    off, so every session written before it keeps its bytes.
     """
 
     usage: SessionUsage | None = None
@@ -500,6 +502,11 @@ class ReviewSession(ReviewModel):
             data.pop("folded_families", None)
         if self.model_view is None:
             data.pop("model_view", None)
+        efficiency = data.get("efficiency")
+        if isinstance(efficiency, dict) and not efficiency.get("withhold_prerun_tools"):
+            # Lever 13 (feature 008 amendment, 2026-09-23) is written only when on, so a
+            # session written before it existed - twelve booleans - keeps its bytes.
+            efficiency.pop("withhold_prerun_tools", None)
         return data
 
 

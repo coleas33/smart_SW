@@ -146,7 +146,7 @@ names it checks first. `LEVER_NAMES` and `GATED_ALONE` do not change.
 
 | Name | Definition |
 |---|---|
-| `EfficiencySettings.withhold_prerun_tools: bool = False` | Lever 13: the tools checks first ran to completion leave the array (`contracts/checks-first.md` section 7). Optional in `review-session.schema.json` and not in `required`, so older sessions validate and load with it off |
+| `EfficiencySettings.withhold_prerun_tools: bool = False` | Lever 13: the tools checks first ran to completion leave the array (`contracts/checks-first.md` section 7). Optional in `review-session.schema.json` and not in `required`; `ReviewSession`'s serializer writes it only when on, so every older session keeps its bytes and loads with it off (*landed as*, T108) |
 | `pane_efficiency(provider)` | also sets `withhold_prerun_tools=True`, for every provider |
 | `efficiency_from_levers` | refuses `withhold_prerun_tools` without `prerun_checks` or `procedural_gate`; `GATED_ALONE` does not change |
 

@@ -166,7 +166,13 @@ def test_the_record_agrees_with_the_session_the_runner_wrote(
 
     assert result.exit_code == 0, result.stdout + result.stderr
     session = json.loads((out / "cover" / "session.json").read_text(encoding="utf-8"))
-    assert read_record(out)["efficiency"] == session["efficiency"]
+    # The record names all thirteen levers; the session writes lever 13 only when it is on
+    # (feature 008 amendment), so an off arm's session carries the other twelve, equal.
+    assert "withhold_prerun_tools" not in session["efficiency"]
+    assert read_record(out)["efficiency"] == {
+        **session["efficiency"],
+        "withhold_prerun_tools": False,
+    }
 
 
 def test_a_baseline_run_records_lever_none_and_arm_baseline(

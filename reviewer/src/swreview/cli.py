@@ -407,8 +407,9 @@ PaneDefaultsOption = Annotated[
     bool,
     typer.Option(
         "--pane-defaults",
-        help="Run with exactly the settings a pane review runs with (checks first, parallel "
-        "calls on OpenAI, payload slimming, history pruning after two rounds).",
+        help="Run with exactly the settings a pane review runs with (checks first and the "
+        "tools it ran leaving the array, parallel calls on OpenAI, payload slimming, history "
+        "pruning after two rounds).",
     ),
 ]
 ReplayPaneDefaultsOption = Annotated[
