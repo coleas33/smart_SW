@@ -567,6 +567,41 @@ the analyst's reflection found `OverrideMass` on `MassProperty` and not on `IMas
 (fact 27). VERIFIED the denylist and its rule (`Guard/ReadOnlyGuard.cs:23-149`) and that two test
 classes pin its membership (`GuardTests.cs:303` `StandardsDenylistTests`, `RemodelGuardTests.cs`).
 
+### R2.25 The mass and hygiene families close their checklist items with one summary row each (amendment 2026-09-23)
+
+**Decision** (2026-09-23, recorded with the owner's decision 3A work that lands T098-T099;
+T108; `contracts/mass-material.md` section 3, `contracts/hygiene.md` section 2).
+`check_mass_material` and `check_hygiene` each end by writing one coverage row under their
+checklist item's id - `mass.material` and `hygiene`, each family module's `SUMMARY_CHECK` - as
+the RMS and standards families write `modeling.resilience` and `standards.release`. The row is
+`checked` (neither family writes an unresolved row; the tool ran over the package), its reason
+counts what the call wrote and found - `"<c> checked, <s> skipped coverage item(s) over <n>
+document(s); <f> finding(s)"` - and its scope is the configuration reviewed. It is written with
+`replace_coverage`, so a repeated call leaves one row. The tools' results do not change: their
+`coverage` counts stay the per-check rows. The two checklist items name no tool, as
+`standards.release` names none: "Closed by a mass finding, or by the family's summary coverage
+item" and the same for hygiene.
+
+**Why.** The checklist closes an item on a finding under its prefix, or on a coverage row whose
+check *is* the item id; it never matches coverage by prefix. Both tools write per-check rows
+only (`mass.material_assigned`, `mass.coverage`, `hygiene.revision_present`, ...), so a run with
+no finding would leave its item open and the review would end saying the item "ended without a
+finding or a coverage entry" - false, since the family ran. The first attempt at T098-T099
+found this. Naming `check_mass_material` or `check_hygiene` in an item would tell the model to
+call a tool lever 13 withholds once checks first has run it (008 FR-030): the sweep in
+`test_withheld_wording.py` forbids that, and a rewording per item would be two more sentences
+to keep matching exactly; with checks first off, the tool's own description tells the model
+what it checks, as it does for `check_standards`.
+
+**Alternatives.**
+
+| Option | Why not |
+|---|---|
+| Match coverage by prefix in the checklist | Every per-check row of every family would close items, `mass.coverage`'s skipped row among them. |
+| Leave the item to the model's `mark_coverage` | A check tool can answer it; the system prompt's rule for the RMS item is not to mark by hand. |
+| A bucket that follows what was skipped | The hygiene component check writes no row for its passes, so "nothing checked" cannot be told from "nothing to find"; the reason carries the counts instead. |
+| Name the tools and add two lever 13 rewordings | Above: more exact sentences to keep matching, for words the tools' descriptions already carry. |
+
 ## R3. Verified facts the plan relies on
 
 **Packages** (analyst fact 1, re-checked). 830-02342: 26 documents (23 parts, 3 assemblies), 89
@@ -622,6 +657,7 @@ terminal profile (check tools are in neither); every golden of `report/markdown.
 | FR-010 | worst case "when every contributor has a tolerance" | the declared-model rule of R2.7 (size and position, or size only with position excluded and named) | Principle I; `fit.size_only` precedent |
 | FR-018 | "count bodies it could not read" | met by the existing `body` gaps, counted in the Python mass coverage item; no new extractor field | the gaps exist (R3) |
 | FR-019 | the part number "property" and "revision" | the property names the standards profile (version 2) declares; skipped coverage without a profile | R2.17, R2.19 |
+| Polish, T098-T099 (2026-09-23) | two checklist items closed "on their findings and on their summary coverage", which neither tool wrote | each tool writes one summary row under its item's id (T108); the items name no tool | R2.25 |
 
 ## R5. Open items, and the owner's answers of 2026-09-23
 
