@@ -230,6 +230,7 @@ def test_the_session_contract_defines_the_two_new_types_it_refs() -> None:
 
 LEVER_11 = "procedural_gate"
 LEVER_12 = "compact_queries"
+LEVER_13 = "withhold_prerun_tools"
 
 
 def efficiency_block() -> dict[str, Any]:
@@ -256,20 +257,55 @@ def test_the_compact_query_lever_is_optional_in_the_session_contract() -> None:
     assert LEVER_12 not in block["required"]
 
 
-def test_a_session_carrying_all_twelve_levers_validates(tmp_path: Path) -> None:
+def test_lever_13_is_optional_in_the_session_contract() -> None:
+    """Feature 008's amendment of 2026-09-23 (research R2.53): declared, never required."""
+    block = efficiency_block()
+
+    assert LEVER_13 in block["properties"]
+    assert LEVER_13 not in block["required"]
+
+
+def test_a_session_carrying_all_thirteen_levers_validates_and_loads(tmp_path: Path) -> None:
+    """Lever 13 is written when it is on - every pane review - and read back as it ran."""
     from swreview.agent.settings import EfficiencySettings
 
     session = build_session()
-    session.efficiency = EfficiencySettings()
+    session.efficiency = EfficiencySettings(prerun_checks=True, withhold_prerun_tools=True)
     path = tmp_path / "session.json"
     save_session(session, path)
 
     written = json.loads(path.read_text(encoding="utf-8"))
 
-    assert len(written["efficiency"]) == 12
+    assert len(written["efficiency"]) == 13
     assert written["efficiency"][LEVER_11] is False
     assert written["efficiency"][LEVER_12] is False
+    assert written["efficiency"][LEVER_13] is True
     session_validator().validate(written)
+    assert load_session(path).efficiency == session.efficiency
+
+
+def test_lever_13_off_is_omitted_so_every_older_session_keeps_its_bytes(
+    tmp_path: Path,
+) -> None:
+    """A session written before lever 13 existed carries twelve booleans; one written with
+    it off is written the same way, so committed sessions round-trip to their own bytes
+    (FR-028), and both load with the lever off."""
+    from swreview.agent.settings import EfficiencySettings
+
+    session = build_session()
+    session.efficiency = EfficiencySettings(prerun_checks=True)
+    path = tmp_path / "session.json"
+    save_session(session, path)
+    written = json.loads(path.read_text(encoding="utf-8"))
+
+    assert LEVER_13 not in written["efficiency"]
+    assert len(written["efficiency"]) == 12
+    session_validator().validate(written)
+    loaded = load_session(path)
+    assert loaded.efficiency == EfficiencySettings(prerun_checks=True)
+    assert loaded.efficiency.withhold_prerun_tools is False
+    save_session(loaded, tmp_path / "again.json")
+    assert (tmp_path / "again.json").read_bytes() == path.read_bytes()
 
 
 def test_a_session_written_before_lever_eleven_existed_still_validates(

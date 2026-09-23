@@ -67,9 +67,12 @@ EXPECTED_LEVERS: tuple[str, ...] = (
     "carry_over_rms",
     "procedural_gate",
     "compact_queries",
+    "withhold_prerun_tools",
 )
-"""The twelve levers of data-model.md section 7, written out once so the model cannot lose
+"""The thirteen levers of data-model.md section 7, written out once so the model cannot lose
 one without this module noticing. Every other test here takes the names from the model.
+Lever 13, `withhold_prerun_tools`, is the owner's of 2026-09-23 (feature 008 research R2.53),
+appended last like lever 11.
 
 Lever 11 is **appended**, never inserted: `LEVER_NAMES` is this tuple, and a name inserted
 in the middle would reorder every refusal message and every `--help` listing that iterates
@@ -95,7 +98,7 @@ def test_every_lever_is_a_field_and_every_field_defaults_to_off() -> None:
     settings = EfficiencySettings()
 
     assert tuple(EfficiencySettings.model_fields) == EXPECTED_LEVERS
-    assert [getattr(settings, name) for name in EXPECTED_LEVERS] == [False] * 12
+    assert [getattr(settings, name) for name in EXPECTED_LEVERS] == [False] * 13
 
 
 def test_lever_names_come_from_the_model() -> None:
@@ -137,13 +140,13 @@ def test_no_levers_resolve_to_every_flag_off() -> None:
     assert efficiency_from_levers(()) == EfficiencySettings()
 
 
-def test_an_unknown_lever_name_names_the_twelve_valid_ones() -> None:
+def test_an_unknown_lever_name_names_the_thirteen_valid_ones() -> None:
     with pytest.raises(ValueError) as caught:
         efficiency_from_levers(["turbo_mode"])
 
     message = str(caught.value)
     assert "turbo_mode" in message
-    assert "the twelve levers" in message
+    assert "the thirteen levers" in message
     for name in LEVER_NAMES:
         assert name in message
 
@@ -243,11 +246,11 @@ def test_study_none_refuses_an_off_or_on_arm(arm: str) -> None:
         check_study_arm(study="none", arm=arm, efficiency=EfficiencySettings())
 
 
-def test_an_unknown_study_name_names_the_twelve_levers() -> None:
+def test_an_unknown_study_name_names_the_thirteen_levers() -> None:
     with pytest.raises(ValueError) as caught:
         check_study_arm(study="turbo_mode", arm="on", efficiency=EfficiencySettings())
 
-    assert "the twelve levers" in str(caught.value)
+    assert "the thirteen levers" in str(caught.value)
     for name in LEVER_NAMES:
         assert name in str(caught.value)
 
@@ -657,15 +660,17 @@ def test_the_pane_runs_checks_first_on_every_provider(provider: ProviderName) ->
     assert checks_first(pane) is True
 
 
-PANE_LEVERS = ("prerun_checks", "parallel_tool_calls")
-"""The levers the pane decides per provider: checks first (User Story 2) and, for OpenAI,
-parallel tool calls (User Story 4, T080). Every other lever is the class default."""
+PANE_LEVERS = ("prerun_checks", "withhold_prerun_tools", "parallel_tool_calls")
+"""The levers the pane decides per provider: checks first (User Story 2), the pre-run's tools
+leaving the array (the amendment of 2026-09-23, T107) and, for OpenAI, parallel tool calls
+(User Story 4, T080). Every other lever is the class default."""
 
 
 @pytest.mark.parametrize("provider", list(ProviderName))
 def test_every_other_pane_lever_is_the_class_default(provider: ProviderName) -> None:
-    """Checks first is the one lever User Story 2 turns on in the pane; US4 widens this by
-    exactly `parallel_tool_calls` (T080)."""
+    """Checks first is the lever User Story 2 turns on in the pane; the amendment of
+    2026-09-23 widens this by exactly `withhold_prerun_tools` (T107), and US4 by exactly
+    `parallel_tool_calls` (T080)."""
     pane = pane_efficiency(provider).model_dump()
     default = EfficiencySettings().model_dump()
 
@@ -712,3 +717,84 @@ def test_the_pane_default_does_not_loosen_the_gated_alone_rule() -> None:
     arm nobody may run (`GATED_ALONE` unchanged)."""
     with pytest.raises(ValueError, match="levers 5 and 7 never share an arm"):
         efficiency_from_levers(["prerun_checks", "coverage_stop"], provider=ProviderName.OPENAI)
+
+
+# --- lever 13: the tools checks first ran leave the array (feature 008 T107) ---------------
+
+
+@pytest.mark.parametrize("provider", list(ProviderName))
+def test_the_pane_withholds_the_tools_checks_first_ran_on_every_provider(
+    provider: ProviderName,
+) -> None:
+    """Both providers: the array is resent every round whoever the provider is (R2.53)."""
+    assert pane_efficiency(provider).withhold_prerun_tools is True
+
+
+def test_lever_13_alone_is_refused_in_one_sentence_naming_the_levers_it_needs() -> None:
+    """Without a pre-run nothing is withheld, so the arm would measure nothing - the rule
+    `parallel_tool_calls` with Gemini already follows (research R2.53)."""
+    with pytest.raises(ValueError) as caught:
+        efficiency_from_levers(["withhold_prerun_tools"])
+
+    message = str(caught.value)
+    assert "withhold_prerun_tools" in message
+    assert "prerun_checks" in message
+    assert "procedural_gate" in message
+    assert "measure nothing" in message
+    assert "." not in message.replace("`", "").rstrip("."), "one sentence"
+
+
+@pytest.mark.parametrize("pre_run", ["prerun_checks", "procedural_gate"])
+def test_lever_13_with_either_pre_run_is_allowed(pre_run: str) -> None:
+    settings = efficiency_from_levers(["withhold_prerun_tools", pre_run])
+
+    assert settings.withhold_prerun_tools is True
+    assert getattr(settings, pre_run) is True
+    assert checks_first(settings) is True
+
+
+def test_lever_13_never_turns_checks_first_on_by_itself() -> None:
+    """The flag withholds only what a pre-run ran; it is not a third way to run one."""
+    assert checks_first(EfficiencySettings(withhold_prerun_tools=True)) is False
+
+
+def test_review_refuses_lever_13_without_a_pre_run(
+    tmp_path: Path, tmp_package_dir: Path
+) -> None:
+    result = invoke(
+        "review",
+        str(tmp_package_dir),
+        "--out",
+        str(tmp_path / "run"),
+        "--provider",
+        "fake",
+        "--lever",
+        "withhold_prerun_tools",
+    )
+
+    assert result.exit_code == 2
+    assert "measure nothing" in " ".join((result.stdout + result.stderr).split())
+    assert not (tmp_path / "run").exists()
+
+
+def test_review_accepts_lever_13_with_checks_first_and_records_both(
+    tmp_path: Path, tmp_package_dir: Path
+) -> None:
+    out = tmp_path / "run"
+    result = invoke(
+        "review",
+        str(tmp_package_dir),
+        "--out",
+        str(out),
+        "--provider",
+        "fake",
+        "--lever",
+        "prerun_checks",
+        "--lever",
+        "withhold_prerun_tools",
+    )
+
+    assert result.exit_code == 0, result.stdout + result.stderr
+    assert load_session(out / "session.json").efficiency == EfficiencySettings(
+        prerun_checks=True, withhold_prerun_tools=True
+    )

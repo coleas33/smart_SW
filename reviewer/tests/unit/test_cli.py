@@ -2495,7 +2495,11 @@ def reviewed_settings(tmp_package_dir: Path, out: Path, *flags: str) -> dict[str
 def test_review_records_every_change_off_by_default(tmp_package_dir: Path, tmp_path: Path) -> None:
     recorded = reviewed_settings(tmp_package_dir, tmp_path / "run")
 
-    assert recorded["efficiency"] == EfficiencySettings().model_dump()
+    # Lever 13 is written only when on (feature 008 amendment), so an all-off session carries
+    # the twelve booleans it carried before the lever existed.
+    all_off = EfficiencySettings().model_dump()
+    del all_off["withhold_prerun_tools"]
+    assert recorded["efficiency"] == all_off
     assert recorded["model_view"] == MODEL_VIEW_OFF.model_dump()
     assert (tmp_path / "run" / "tool-results").is_dir(), "every result is kept either way"
 

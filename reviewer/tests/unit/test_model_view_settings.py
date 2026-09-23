@@ -1,8 +1,9 @@
 """The model-view settings: what the model reads is a setting, not a lever (feature 008 T052).
 
 Payload slimming and history pruning change what the model reads, never what the review
-records, so they are settings beside `EfficiencySettings` rather than a thirteenth and
-fourteenth lever: `LEVER_NAMES` and every lever-count pin stay as they are (research R2.32).
+records, so they are settings beside `EfficiencySettings` rather than two more levers:
+`LEVER_NAMES` and every lever-count pin stay as they are (research R2.32; the owner's lever
+13 of 2026-09-23 is the one lever added since, R2.53).
 Two named values cover every surface: `MODEL_VIEW_OFF` for the command line and `benchmark
 run`, `MODEL_VIEW_PANE` for the pane, and `pane_defaults(provider)` is the one function the
 pane, `swreview review --pane-defaults` and the replay read. The session records what ran;
@@ -70,7 +71,9 @@ def test_the_pane_defaults_are_one_function_of_the_provider(provider: ProviderNa
 
 
 def test_the_view_settings_are_not_levers() -> None:
-    assert len(LEVER_NAMES) == 12
+    """Thirteen levers since the owner's lever 13 of 2026-09-23 (research R2.53); the view
+    settings are still none of them."""
+    assert len(LEVER_NAMES) == 13
     assert not {"payload_slimming", "history_pruning", "prune_after_rounds"} & set(LEVER_NAMES)
 
 

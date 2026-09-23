@@ -408,7 +408,7 @@ def _enterprise_switch(env: Mapping[str, str]) -> str | None:
 class EfficiencySettings(BaseModel):
     """Which efficiency levers this run has on. Every field defaults to off.
 
-    One object for all twelve flags rather than one plumbed argument per lever (OQ-1):
+    One object for all thirteen flags rather than one plumbed argument per lever (OQ-1):
     threaded as one keyword argument through `start_review`, `ReviewRun`, `run_benchmark`
     and `cli._review_fn` exactly as `effort` and `max_steps` already are, and recorded
     whole on `session.efficiency`. Without that record no results row can be attributed to
@@ -472,6 +472,13 @@ class EfficiencySettings(BaseModel):
     compact_queries: bool = False
     """Experimental bounded package discovery pages; opt-in and default-off."""
 
+    withhold_prerun_tools: bool = False
+    """Lever 13, pane default since 2026-09-23: a check tool checks first ran to completion
+    leaves the tool array for the rest of the session (feature 008 FR-030,
+    `contracts/checks-first.md` section 7). Inert without a pre-run, which is why
+    `efficiency_from_levers` refuses it without lever 5 or lever 11. Appended last, for the
+    reason lever 11 was."""
+
 
 def checks_first(efficiency: EfficiencySettings | None) -> bool:
     """Does this run run its argument-free checks before the first turn? (feature 008)
@@ -487,14 +494,18 @@ def checks_first(efficiency: EfficiencySettings | None) -> bool:
 def pane_efficiency(provider: ProviderName) -> EfficiencySettings:
     """The levers every pane review runs with: the one place the pane's defaults are decided.
 
-    Checks first on every provider, and parallel tool calls on OpenAI only, since the
-    owner's decision of 2026-09-22 (feature 008 User Stories 2 and 4, research R2.14,
-    R2.40): Gemini has no switch and already makes parallel calls, and the scripted provider
-    reads no request field, so both record the lever off. The command line and `benchmark
-    run` stay all off; `swreview review --pane-defaults` reproduces this.
+    Checks first on every provider, since the owner's decision of 2026-09-22 (feature 008
+    User Story 2); parallel tool calls on OpenAI only, from the same decision (User Story 4,
+    research R2.14, R2.40): Gemini has no switch and already makes parallel calls, and the
+    scripted provider reads no request field, so both record the lever off; and the tools
+    checks first ran leaving the array, for every provider, since 2026-09-23 (lever 13,
+    research R2.53). The command line and `benchmark run` stay all off; `swreview review
+    --pane-defaults` reproduces this.
     """
     return EfficiencySettings(
-        prerun_checks=True, parallel_tool_calls=provider is ProviderName.OPENAI
+        prerun_checks=True,
+        withhold_prerun_tools=True,
+        parallel_tool_calls=provider is ProviderName.OPENAI,
     )
 
 
@@ -503,7 +514,7 @@ class ModelViewSettings(BaseModel):
 
     Settings, not levers: they change what the model *reads*, never what the review records -
     the session, the package, the report and every stored result keep the full payload - so
-    `LEVER_NAMES` and every lever-count pin stay at twelve (research R2.32). Frozen and
+    they are not in `LEVER_NAMES` and move no lever-count pin (research R2.32). Frozen and
     closed for the reason `EfficiencySettings` is: the session records what ran. The two
     booleans have no default on purpose, so a caller states both; `MODEL_VIEW_OFF` and
     `MODEL_VIEW_PANE` are the two values every surface uses.
@@ -597,7 +608,7 @@ class ExtractionSettings(BaseModel):
 
 
 LEVER_NAMES: tuple[str, ...] = tuple(EfficiencySettings.model_fields)
-"""The twelve lever names, taken from the model so nothing has to retype them.
+"""The thirteen lever names, taken from the model so nothing has to retype them.
 
 Every refusal message below, the `--lever` option and the pane guard iterate this, so a
 lever added to the model is covered by all of them without a second edit anywhere.
@@ -619,7 +630,7 @@ NO_STUDY = "none"
 
 
 def _levers_sentence() -> str:
-    return "the twelve levers are " + ", ".join(LEVER_NAMES)
+    return "the thirteen levers are " + ", ".join(LEVER_NAMES)
 
 
 GATED_ALONE: tuple[tuple[str, int, str, int], ...] = (
@@ -678,6 +689,17 @@ def efficiency_from_levers(
             "--lever parallel_tool_calls with --provider gemini: Gemini already makes "
             "parallel tool calls and has no disable switch, so this arm would measure "
             "nothing"
+        )
+
+    if (
+        "withhold_prerun_tools" in chosen
+        and "prerun_checks" not in chosen
+        and "procedural_gate" not in chosen
+    ):
+        raise ValueError(
+            "--lever withhold_prerun_tools without --lever prerun_checks or --lever "
+            "procedural_gate: lever 13 withholds only the tools checks first ran, and "
+            "without a pre-run this arm would measure nothing"
         )
 
     if not allow_workstation_levers:
