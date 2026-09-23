@@ -108,10 +108,10 @@ def test_a_package_that_was_not_timed_carries_no_rows() -> None:
 
 def test_the_phases_member_needs_no_new_schema_version() -> None:
     """1.3.0 is where the reuse fields and this member arrived; the minor has moved again
-    since (1.4.0, the standards evidence; 1.5.0, the tolerance evidence) and this member
-    was not what moved it."""
-    assert SCHEMA_VERSION == "1.5.0"
-    assert build_package().schema_version == "1.5.0"
+    since (1.4.0, the standards evidence; 1.5.0, the tolerance evidence; 1.6.0, the drawing
+    context) and this member was not what moved it."""
+    assert SCHEMA_VERSION == "1.6.0"
+    assert build_package().schema_version == "1.6.0"
 
 
 def test_the_field_description_names_every_phase_the_dump_runs_in_order() -> None:
