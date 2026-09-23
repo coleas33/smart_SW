@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from swreview.agent.providers import FRAMING_TOKENS, tool_result_text
-from swreview.agent.settings import MODEL_VIEW_OFF
+from swreview.agent.settings import LEVER_NAMES, MODEL_VIEW_OFF
 from swreview.benchmark.recording import UNCOMMITTED_ENDS, RecordedRound, Recording
 from swreview.benchmark.replay import (
     PlayedCall,
@@ -125,6 +125,12 @@ def _refuse_what_the_rule_is_not_for(passes: ReplayPasses, report: ReplayReport)
         raise DriftRuleRefused(
             "the rule holds a replay with the recording's own settings, and this one requested "
             "others; replay the recording as it was recorded"
+        )
+    levers_on = [name for name in LEVER_NAMES if getattr(passes.as_recorded, name)]
+    if levers_on:
+        raise DriftRuleRefused(
+            f"the recording was made with {', '.join(levers_on)} on; the rule is written for "
+            "recordings made with every lever off"
         )
     if passes.as_recorded_view != MODEL_VIEW_OFF:
         raise DriftRuleRefused(

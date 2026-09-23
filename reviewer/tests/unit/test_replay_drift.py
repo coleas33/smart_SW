@@ -16,8 +16,8 @@ computes the rule; this module proves it on scripted recordings built by the acc
 - a replay defect - a framing constant the rule does not share - leaves a residual, and the
   rule names each round it sits on;
 - a round the replay flags lower bound is outside the rule, listed apart;
-- a replay whose settings are not the recording's, a model view on, and a stored result are
-  refused, each in one sentence naming what.
+- a replay whose settings are not the recording's, a model view on, a lever on, and a stored
+  result are refused, each in one sentence naming what.
 """
 
 from __future__ import annotations
@@ -376,6 +376,20 @@ def test_a_recording_made_with_the_model_view_on_is_refused(
     passes = played(run, tmp_path / "scratch", (EfficiencySettings(), MODEL_VIEW_PANE))
 
     with pytest.raises(DriftRuleRefused, match="model view"):
+        round_drifts(passes, report_of(passes))
+
+
+@pytest.mark.parametrize("lever", ["prerun_checks", "coverage_stop", "tool_tiers"])
+def test_a_recording_made_with_a_lever_on_is_refused(
+    tmp_path: Path, package_dir: Path, lever: str
+) -> None:
+    """Replayed with its own settings, and still not a recording the rule is written for: it
+    holds recordings made with every lever off, the three recorded reviews."""
+    efficiency = EfficiencySettings(**{lever: True})
+    run = recorded(tmp_path, package_dir, efficiency=efficiency)
+    passes = played(run, tmp_path / "scratch", (efficiency, MODEL_VIEW_OFF))
+
+    with pytest.raises(DriftRuleRefused, match=f"with {lever} on"):
         round_drifts(passes, report_of(passes))
 
 
