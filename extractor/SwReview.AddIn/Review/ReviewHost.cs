@@ -454,6 +454,59 @@ public sealed class ReviewHost : IDisposable
         }
     }
 
+    /// <summary>
+    /// Feature 011 T074: the run folder of the review this host started whose folder is named
+    /// <paramref name="runId"/>, or null. The one lookup the bridge's `drawing.read` resolves its
+    /// `run_id` through (specs/011-drawing-context/contracts/confirmed-open.md section 2, item 1),
+    /// read-only, from the host's own records - as `report.open` resolves a chat.
+    ///
+    /// <b>The id is never read as a path.</b> It is compared with each record's
+    /// <see cref="SessionRecord.RunId"/> and with nothing else - never combined, normalized or
+    /// probed - so a full folder, a relative one or a traversal answers null even when it spells a
+    /// folder this host tracked. Ignoring case, because the id names a folder and Windows folder
+    /// names are not case-sensitive (<c>RemodelHost.FindRun</c> matches a run id the same way).
+    ///
+    /// <b>Only a review answers.</b> A Model check's, a Standards run's or a remodel run's record
+    /// (<see cref="TrackCheck"/>) is not a review: it has no candidate question a confirmation
+    /// could have come from, and a remodel folder is the run that writes to a copy.
+    ///
+    /// <b>An ambiguous id answers null.</b> Two reviews' folders share a name only when a settings
+    /// save moved the run root between them, and reading a drawing into the wrong review's package
+    /// is worse than refusing. The same folder tracked twice is one folder.
+    ///
+    /// Asked on the SOLIDWORKS application thread while the page pump may be tracking a run, so it
+    /// reads under the list's lock like every other reader here.
+    /// </summary>
+    public string? ReviewRunDirectory(string? runId)
+    {
+        if (string.IsNullOrWhiteSpace(runId))
+        {
+            return null;
+        }
+
+        SessionRecord[] matches;
+        lock (_sessionsLock)
+        {
+            matches = _sessions
+                .Where(session => !session.IsCheck && session.ChatId != null)
+                .Where(session => string.Equals(session.RunId, runId, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        }
+
+        if (matches.Length == 0)
+        {
+            return null;
+        }
+
+        string folder = SameFolder(matches[0].RunDirectory);
+        bool ambiguous = matches.Any(session =>
+            !string.Equals(SameFolder(session.RunDirectory), folder, StringComparison.OrdinalIgnoreCase));
+        return ambiguous ? null : matches[0].RunDirectory;
+    }
+
+    /// <summary>A tracked folder without its trailing separator, so one folder spelt two ways is one.</summary>
+    private static string SameFolder(string runDirectory) => runDirectory.TrimEnd('\\', '/');
+
     /// <summary>Whether any chat this host started has a turn in flight.</summary>
     public bool AnyTurnRunning()
     {

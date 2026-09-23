@@ -1086,6 +1086,245 @@ public sealed class ReviewHostTests
         }
     }
 
+    // ---- the run a drawing.read names (feature 011 T073) ---------------------------------
+
+    /// <summary>
+    /// `drawing.read` names the review it is for by `run_id`, the run folder's own name, and the
+    /// host resolves it from its own session records - exactly as `report.open` resolves a chat -
+    /// before anything is opened (specs/011-drawing-context/contracts/confirmed-open.md section 2,
+    /// item 1). A review's run id answers that review's folder.
+    /// </summary>
+    [Fact]
+    public void AReviewsRunIdResolvesToItsRunFolder()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string first = world.TrackedRun("chat-1");
+            string second = world.TrackedRun("chat-2");
+            world.Host.TrackSession("chat-1", first);
+            world.Host.TrackSession("chat-2", second);
+
+            Assert.Equal(first, world.Host.ReviewRunDirectory(world.Host.FindSession("chat-1")!.RunId));
+            Assert.Equal(second, world.Host.ReviewRunDirectory(Path.GetFileName(second)));
+        }
+    }
+
+    /// <summary>
+    /// The id names a folder, and a folder name is not case-sensitive on Windows, so neither is
+    /// the match - as <c>RemodelHost.FindRun</c> matches a remodel run's id.
+    /// </summary>
+    [Fact]
+    public void TheRunIdIsMatchedIgnoringCase()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string review = world.TrackedRun("chat-1");
+            world.Host.TrackSession("chat-1", review);
+
+            Assert.Equal(review, world.Host.ReviewRunDirectory(Path.GetFileName(review).ToUpperInvariant()));
+        }
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("20260913-142530-chat-404")]
+    public void AnUnknownOrBlankRunIdResolvesToNothing(string? runId)
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            world.Host.TrackSession("chat-1", world.TrackedRun("chat-1"));
+
+            Assert.Null(world.Host.ReviewRunDirectory(runId));
+        }
+    }
+
+    /// <summary>
+    /// A Model check's record, and a Standards or remodel run's - all tracked through
+    /// <see cref="ReviewHost.TrackCheck"/> - never answer: none of them is a review, so none has a
+    /// candidate question a confirmation could have come from, and a remodel folder is the run
+    /// that writes to a copy. The id is right; the record is the wrong kind.
+    /// </summary>
+    [Theory]
+    [InlineData("bracket-check")]
+    [InlineData("bracket-remodel")]
+    public void ACheckOrRemodelRecordResolvesToNothingThoughItsRunIdMatches(string name)
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun(name);
+            SessionRecord record = world.Host.TrackCheck(run);
+
+            Assert.Equal(Path.GetFileName(run), record.RunId);
+            Assert.Null(world.Host.ReviewRunDirectory(record.RunId));
+        }
+    }
+
+    /// <summary>
+    /// A check that shares a review's folder name - a check run in the same second on the same
+    /// document - does not hide the review, and is not answered in its place.
+    /// </summary>
+    [Fact]
+    public void ACheckWithTheSameFolderNameDoesNotHideTheReview()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string review = world.TrackedRun("chat-1");
+            string elsewhere = Path.Combine(world.Settings.RunRoot, "checks", Path.GetFileName(review));
+            Directory.CreateDirectory(elsewhere);
+            world.Host.TrackSession("chat-1", review);
+            world.Host.TrackCheck(elsewhere);
+
+            Assert.Equal(review, world.Host.ReviewRunDirectory(Path.GetFileName(review)));
+        }
+    }
+
+    /// <summary>
+    /// The id is never read as a path: it is compared with each record's folder name and with
+    /// nothing else, so a full folder path, a relative one or a traversal answers nothing even when
+    /// it spells a folder this host tracked (T073: "never read as a path").
+    /// </summary>
+    [Fact]
+    public void ARunIdIsNeverReadAsAPath()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string review = world.TrackedRun("chat-1");
+            string name = Path.GetFileName(review);
+            world.Host.TrackSession("chat-1", review);
+
+            foreach (string spelling in new[]
+            {
+                review,
+                review + Path.DirectorySeparatorChar,
+                name + Path.DirectorySeparatorChar,
+                "." + Path.DirectorySeparatorChar + name,
+                Path.Combine("..", "runs", name),
+                Path.Combine(world.Settings.RunRoot, name),
+                Path.Combine(name, "..", name),
+                "/" + name,
+            })
+            {
+                Assert.True(
+                    world.Host.ReviewRunDirectory(spelling) == null,
+                    "'" + spelling + "' was read as a path and resolved to a run folder.");
+            }
+        }
+    }
+
+    [Fact]
+    public void AForgottenReviewResolvesToNothing()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string review = world.TrackedRun("chat-1");
+            world.Host.TrackSession("chat-1", review);
+            Assert.True(world.Host.ForgetSession("chat-1"));
+
+            Assert.Null(world.Host.ReviewRunDirectory(Path.GetFileName(review)));
+        }
+    }
+
+    /// <summary>
+    /// Two reviews whose folders share a name - possible only when a settings save moved the run
+    /// root between them - are ambiguous, and an ambiguous id answers nothing: reading a drawing
+    /// into the wrong review's package would be worse than refusing. One folder tracked for two
+    /// chats, however its separator is spelt, is one folder, and answers.
+    /// </summary>
+    [Fact]
+    public void TwoReviewFoldersSharingANameAnswerNothingButOneFolderTrackedTwiceAnswers()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string review = world.TrackedRun("chat-1");
+            string name = Path.GetFileName(review);
+            string movedRoot = Path.Combine(world.Settings.RunRoot, "moved-root", name.ToUpperInvariant());
+            Directory.CreateDirectory(movedRoot);
+
+            world.Host.TrackSession("chat-1", review);
+            world.Host.TrackSession("chat-1b", review + Path.DirectorySeparatorChar);
+            Assert.Equal(review, world.Host.ReviewRunDirectory(name));
+
+            world.Host.TrackSession("chat-2", movedRoot);
+            Assert.Null(world.Host.ReviewRunDirectory(name));
+        }
+    }
+
+    /// <summary>
+    /// The lookup is asked on the SOLIDWORKS application thread, where the bridge answers
+    /// `drawing.read`, while the page pump tracks reviews and checks; it reads under the list's
+    /// lock like every other reader (<see cref="TheReviewListIsReadUnderTheLockWhileThePumpAppends"/>).
+    /// </summary>
+    [Fact]
+    public void TheRunLookupIsReadUnderTheLockWhileThePumpAppends()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun("chat-x");
+            string name = Path.GetFileName(run);
+            var failures = new List<Exception>();
+            var stop = new ManualResetEventSlim();
+
+            var pump = new Thread(() =>
+            {
+                try
+                {
+                    for (int i = 0; i < 500 && !stop.IsSet; i++)
+                    {
+                        world.Host.TrackSession("chat-" + i, run);
+                        world.Host.TrackCheck(run);
+                        world.Host.ForgetSession("chat-" + (i - 1));
+                    }
+                }
+                catch (Exception failure)
+                {
+                    lock (failures)
+                    {
+                        failures.Add(failure);
+                    }
+                }
+                finally
+                {
+                    stop.Set();
+                }
+            })
+            {
+                IsBackground = true,
+            };
+
+            pump.Start();
+            try
+            {
+                while (!stop.IsSet)
+                {
+                    world.Host.ReviewRunDirectory(name);
+                }
+            }
+            catch (Exception failure)
+            {
+                lock (failures)
+                {
+                    failures.Add(failure);
+                }
+            }
+
+            stop.Set();
+            Assert.True(pump.Join(TimeSpan.FromSeconds(30)), "the pump thread never finished.");
+            Assert.True(failures.Count == 0, failures.Count == 0 ? string.Empty : failures[0].ToString());
+            Assert.Equal(run, world.Host.ReviewRunDirectory(name));
+        }
+    }
+
     // ---- entity.show --------------------------------------------------------------------
 
     [Fact]
