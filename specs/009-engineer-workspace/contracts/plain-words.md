@@ -73,6 +73,16 @@ missing:" and the statement of each unresolved rule (`rule_statements[id]`, the 
 catalogue lacks it), with the ids behind a shut fold, or "Every rule reached a verdict." The body's
 `grade.fraction` and the report are unchanged. The Standards header is unchanged.
 
+*Landed as* (T067, T069, T071, T073): the lookup is one prototype-guarded `labelOf(labels,
+group, token, fallback)` in `web/shared/attention.js`, which `render.js` reuses; the shared meta
+line is `attentionMeta(row, options)` with `options.labels` and `options.names` (tasks.md's
+signature); `render.plainError(error, labels)` is the one error shape, used only when labels are
+present - with none, the error card keeps its class chip and message, a card's status line
+"Class: message", and the settings save line its old wording (FR-030); the check tabs' rule id is
+`p.rule-line > span.rule-id` first inside the row's fold, whose summary reads "Rule" when nothing
+else is behind it; Model check's ids are in `details.unresolved-ids`. `ErrorLabelsCoverTheHostTests`
+reads the words file by indentation and is skipped until the py lane's T008 writes it.
+
 ## 7. The default-view scan (SC-003)
 
 A WebView2 test loads the big-assembly pane fixture with its labels, finishes the review, and reads

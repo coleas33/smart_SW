@@ -56,6 +56,15 @@
   var attention = window.SwReviewAttention;
   var DOT = attention.DOT;
 
+  /*
+    The backend's card vocabulary (`GET /labels`, feature 009 FR-024) reaches these renderers as
+    an argument - `labels` - and is looked up through the shared script's one prototype-guarded
+    `labelOf`: no labels, a token they do not name, or a token naming something on
+    `Object.prototype` prints what this page printed before, so an older backend renders exactly
+    as it did (FR-030). This file holds no words of its own for any of them.
+  */
+  var labelOf = attention.labelOf;
+
   /**
    * The fallback when a ranking arrives with no rows and no sentence of its own. The backend
    * always sends one (FR-024); this is what the panel says rather than standing empty if it
@@ -277,7 +286,7 @@
    * fact printed before the fold until U10, and its first sentence is the title itself, so a
    * narrow pane stacked the same words twice under every headline and hid the next finding.
    */
-  function findingCard(finding) {
+  function findingCard(finding, labels) {
     var body = finding || {};
     var severity = String(body.severity || 'info');
     var status = String(body.status || 'unresolved');
@@ -290,9 +299,11 @@
     line.appendChild(el('span', 'finding-id mono', body.id));
     // The status and the severity reach a class name by interpolation, never by comparison:
     // the hue is the stylesheet's business and the page compares neither (PageRuleScanTests).
-    line.appendChild(el('span', 'chip status-' + status, status));
-    line.appendChild(el('span', 'chip sev-' + severity, severity));
-    line.appendChild(el('span', 'finding-check mono', body.check));
+    // The words on the chips are the backend's labels for them (feature 009 FR-024).
+    line.appendChild(el('span', 'chip status-' + status, labelOf(labels, 'status', status, status)));
+    line.appendChild(el('span', 'chip sev-' + severity, labelOf(labels, 'severity', severity, severity)));
+    // The check id is not on the line since feature 009 (FR-025): it is developer vocabulary, and
+    // it is the fold's first labelled row, "Rule" - one press away, never gone.
     head.appendChild(line);
     head.appendChild(el('h3', 'title', body.title || '(untitled finding)'));
     card.appendChild(head);
@@ -368,8 +379,9 @@
    * `observed` is the first row, because it is the evidence the verdict rests on and the first
    * thing an engineer who opened the fold is looking for. (`app.js` puts the finding's U5
    * explanation above it once the ranking arrives: the plain-language sentence reads before the
-   * evidence it explains.) `id` and `check` are not repeated here - they are the first two
-   * things on the line above. Everything else the finding carries is here, including the two
+   * evidence it explains.) The first labelled row is "Rule", the check id, which left the line
+   * above with feature 009 (FR-025); `id` is not repeated - it is the first thing on the line.
+   * Everything else the finding carries is here, including the two
    * carry-over fields: a verdict this run did not compute but carried over from an earlier
    * session is a different claim from one it computed, and an engineer reading a finding is
    * owed that in the same place as its provenance.
@@ -381,6 +393,7 @@
     append(panel, [
       body.observed ? el('p', 'facts', body.observed) : null,
       labelled([
+        ['Rule', body.check],
         ['Affects', list(body.component_ids) || locations(body.drawing_locations)],
         ['Requirement', body.requirement],
         ['Recommended', body.recommended_action],
@@ -491,13 +504,14 @@
    * engineer gave in one submission and resumes the review once. A box on each card was a second
    * way in, and each answer through it cost a turn of its own.
    */
-  function evidenceCard(request) {
+  function evidenceCard(request, labels) {
     var body = request || {};
-    var card = el('article', 'card evidence status-' + String(body.status || 'open'));
+    var lifecycle = String(body.status || 'open');
+    var card = el('article', 'card evidence status-' + lifecycle);
     card.setAttribute('data-request-id', String(body.id || ''));
 
     var head = el('header', 'card-head');
-    head.appendChild(el('span', 'chip evidence-status', body.status || 'open'));
+    head.appendChild(el('span', 'chip evidence-status', labelOf(labels, 'evidence_status', lifecycle, lifecycle)));
     head.appendChild(el('h3', 'title', 'The review needs an input'));
     card.appendChild(head);
 
@@ -600,7 +614,9 @@
     }
     panel.appendChild(actions);
 
-    if (more.note && more.note.text) {
+    if (more.note && more.note.error) {
+      panel.appendChild(append(el('div', 'question-status bad'), [plainError(more.note.error, more.labels)]));
+    } else if (more.note && more.note.text) {
       panel.appendChild(el('p', more.note.bad ? 'question-status bad' : 'question-status', more.note.text));
     }
     return panel;
@@ -639,16 +655,23 @@
    * try the review again as a new session that says which one it replaces (FR-028), fix the
    * settings, or read the log.
    */
-  function errorCard(error) {
+  function errorCard(error, labels) {
     var body = error || {};
     var card = el('article', 'card error');
 
+    // With the backend's labels the card says what to do next and keeps the class and the
+    // message in a fold (feature 009 FR-026); with none - an older backend - it reads exactly as
+    // it did before, the class as a chip and the message under it (FR-030).
     var head = el('header', 'card-head');
-    head.appendChild(el('span', 'chip error-class', body.error_class || 'Error'));
+    if (!labels) {
+      head.appendChild(el('span', 'chip error-class', body.error_class || 'Error'));
+    }
     head.appendChild(el('h3', 'title', 'The review stopped'));
     card.appendChild(head);
 
-    card.appendChild(el('p', 'message', body.message || 'the backend reported an error'));
+    card.appendChild(labels
+      ? plainError(body, labels)
+      : el('p', 'message', body.message || 'the backend reported an error'));
 
     var row = el('div', 'row card-actions');
     row.appendChild(button('Retry', 'retry', 'action retry'));
@@ -661,12 +684,37 @@
   }
 
   /**
+   * An error in plain words (feature 009 FR-026, contracts/plain-words.md section 5): the
+   * sentence the backend's labels give its class - what the engineer can do next - or, for a
+   * class they do not name, its message; and the class and the message behind a shut fold, where
+   * they are still one press away. The one shape every error surface on this page uses when the
+   * labels are there: the error card, a card's status line, the questions panel, the settings save.
+   */
+  function plainError(error, labels) {
+    var body = error || {};
+    var errorClass = String(body.error_class || 'Error');
+    var message = String(body.message || '');
+
+    var block = el('div', 'plain-error');
+    block.appendChild(el('p', 'plain-error-text', labelOf(labels, 'errors', errorClass, message || errorClass)));
+
+    var fold = el('details', 'error-fold');
+    fold.appendChild(el('summary', 'error-fold-head', 'Details'));
+    fold.appendChild(el('p', 'error-class mono', errorClass));
+    if (message) {
+      fold.appendChild(el('p', 'error-message', message));
+    }
+    block.appendChild(fold);
+    return block;
+  }
+
+  /**
    * What the review did and did not look at, as one summary that is rebuilt on every
    * `coverage` event rather than appended to - a bucket's contents are the whole truth about
    * it, and a list that only grows would show a re-run's items twice (constitution Principle
    * III: silence is not coverage).
    */
-  function coverageSummary(entries) {
+  function coverageSummary(entries, labels) {
     var order = ['checked', 'skipped', 'unresolved', 'failed', 'out_of_scope'];
     var buckets = {};
     var index;
@@ -692,8 +740,8 @@
       if (!items.length) {
         continue;
       }
-      counts.push(items.length + ' ' + bucketLabel(name));
-      groups.push(coverageBucket(name, items));
+      counts.push(items.length + ' ' + bucketWord(name, labels));
+      groups.push(coverageBucket(name, items, labels));
     }
 
     var panel = el('section', 'coverage');
@@ -721,6 +769,11 @@
     return String(name).replace(/_/g, ' ');
   }
 
+  /** The backend's word for a bucket (feature 009 FR-024), `bucketLabel`'s spacing when it has none. */
+  function bucketWord(name, labels) {
+    return labelOf(labels, 'bucket', name, bucketLabel(name));
+  }
+
   /**
    * What to start with: every row the backend ranked, in the order it supplied them.
    *
@@ -737,7 +790,7 @@
    * reads a severity, compares two rows or sorts; the counts are the backend's numbers.
    * `PageRuleScanTests` is the test that keeps it that way.
    */
-  function attentionPanel(ranking) {
+  function attentionPanel(ranking, labels) {
     var panel = el('section', 'attention');
     panel.appendChild(el('h3', 'eyebrow attention-heading', attention.HEADING));
 
@@ -750,7 +803,7 @@
 
     var shown = attention.amplified(ranking);
     panel.appendChild(el('p', 'attention-count', countLine(ranking, shown.length)));
-    panel.appendChild(attention.rowList(shown, rowOptions(ranking)));
+    panel.appendChild(attention.rowList(shown, rowOptions(ranking, labels)));
     if (shown.length < rows.length) {
       panel.appendChild(attentionIndex(rows, shown.length));
     }
@@ -759,12 +812,14 @@
 
   /**
    * What the Review tab hands the shared row's meta line: the summary's component names, so a
-   * row names parts rather than ids (feature 009 FR-012). A ranking with no summary - an older
-   * backend - hands nothing, and the row prints ids exactly as the check tabs do.
+   * row names parts rather than ids (feature 009 FR-012), and the backend's labels, so its status
+   * and severity are words (FR-024). A ranking with no summary and no labels - an older backend -
+   * hands nothing, and the row prints ids and tokens exactly as the check tabs do.
    */
-  function rowOptions(ranking) {
+  function rowOptions(ranking, labels) {
     var summary = ranking ? ranking.summary : null;
-    return (summary && summary.component_names) ? { names: summary.component_names } : undefined;
+    var names = (summary && summary.component_names) || null;
+    return (names || labels) ? { names: names, labels: labels || null } : undefined;
   }
 
   /**
@@ -1064,9 +1119,9 @@
     return count + ' ' + (count === 1 ? one : many);
   }
 
-  function coverageBucket(name, items) {
+  function coverageBucket(name, items, labels) {
     var group = el('div', 'coverage-bucket bucket-' + name);
-    group.appendChild(el('h4', 'bucket-name', bucketLabel(name) + DOT + items.length));
+    group.appendChild(el('h4', 'bucket-name', bucketWord(name, labels) + DOT + items.length));
 
     var lines = el('ul', 'bucket-items');
     for (var index = 0; index < items.length; index++) {
@@ -1163,6 +1218,7 @@
     evidenceCard: evidenceCard,
     questionsPanel: questionsPanel,
     errorCard: errorCard,
+    plainError: plainError,
     coverageSummary: coverageSummary,
     attentionPanel: attentionPanel,
     summaryBlock: summaryBlock,

@@ -509,17 +509,45 @@ public sealed class StandardsPageTests
         JsonElement rendered = Render(
             "return JSON.stringify({ok: true, "
             + "ids: attrs('#attention .attention-row', 'data-finding-id'), "
-            + "checks: texts('#attention .attention-check'), "
+            + "checks: attrs('#attention .attention-row', 'data-check'), "
+            + "visibleChecks: document.querySelectorAll('#attention .attention-check').length, "
             + "reasons: texts('#attention .attention-reason'), "
             + "heading: texts('#attention .attention-heading')[0], "
             + "text: document.getElementById('attention').textContent});");
 
         Assert.Equal(AttentionSample.ShownFindingIds, Strings(rendered, "ids"));
+
+        // `data-check`, and no visible check id, since feature 009 (FR-025, research R2.21).
         Assert.Equal(AttentionSample.ShownChecks, Strings(rendered, "checks"));
+        Assert.Equal(0, rendered.GetProperty("visibleChecks").GetInt32());
+        Assert.All(AttentionSample.ShownChecks, check => Assert.DoesNotContain(check, rendered.GetProperty("text").GetString()!));
         Assert.Equal(AttentionSample.ShownReasons, Strings(rendered, "reasons"));
         Assert.Equal(AttentionSample.Heading, rendered.GetProperty("heading").GetString());
 
         Assert.DoesNotContain(AttentionSample.BeyondTopN, rendered.GetProperty("text").GetString()!);
+    }
+
+    /// <summary>
+    /// Feature 009 T068, on this tab too: every rule row has a fold, its rule id is inside it and
+    /// on the line nowhere, and a finding's row leads with its statement (FR-025).
+    /// </summary>
+    [Fact]
+    public void ARuleRowShowsItsStatementAsItsTitleAndItsRuleIdOnlyInsideItsFold()
+    {
+        JsonElement rendered = Render(SharedCheckPageTests.RuleRowsScript);
+
+        JsonElement[] rules = rendered.GetProperty("rules").EnumerateArray().ToArray();
+        Assert.NotEmpty(rules);
+        foreach (JsonElement rule in rules)
+        {
+            string id = rule.GetProperty("id").GetString()!;
+            Assert.True(rule.GetProperty("hasFold").GetBoolean(), id + " has no fold.");
+            Assert.True(rule.GetProperty("idInFold").GetBoolean(), id + "'s rule id is not inside its fold.");
+            Assert.Equal(id, rule.GetProperty("idText").GetString());
+            Assert.False(rule.GetProperty("idOutside").GetBoolean(), id + "'s rule id is on the line.");
+        }
+
+        Assert.Contains(rules, rule => rule.GetProperty("afterHead").GetString() == "statement");
     }
 
     /// <summary>

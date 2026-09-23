@@ -178,22 +178,29 @@ public sealed class ReviewPageInjectionTests
     private static readonly Lazy<JsonElement> Shapes = new Lazy<JsonElement>(RenderShapes);
 
     /// <summary>
-    /// The finding's line states the three things that decide whether to read further: which
-    /// finding it is, what the backend concluded and how hard, and which check said so. The
-    /// status reaches a class name by interpolation - `status-&lt;status&gt;` - so the stylesheet
-    /// can colour it without any script comparing a status to anything (PageRuleScanTests).
+    /// The finding's line states what decides whether to read further: which finding it is, and
+    /// what the backend concluded and how hard. The status reaches a class name by interpolation -
+    /// `status-&lt;status&gt;` - so the stylesheet can colour it without any script comparing a
+    /// status to anything (PageRuleScanTests).
+    ///
+    /// Until feature 009 the line named the check as well
+    /// (`TheFindingsFirstLineNamesTheFindingItsStateAndItsCheck`). A check id is developer
+    /// vocabulary, so it moved into the fold (FR-025, research R2.21): the fold's first labelled
+    /// row is "Rule", and the id is there - one press away, never gone.
     /// </summary>
     [Fact]
-    public void TheFindingsFirstLineNamesTheFindingItsStateAndItsCheck()
+    public void TheFindingsFirstLineNamesTheFindingItsStateAndNotItsCheck()
     {
         JsonElement card = Shapes.Value.GetProperty("carried");
 
         Assert.Equal(
-            new[] { "finding-id mono", "chip status-unresolved", "chip sev-low", "finding-check mono" },
+            new[] { "finding-id mono", "chip status-unresolved", "chip sev-low" },
             Strings(card, "lineChildren"));
         Assert.Equal("F-011", card.GetProperty("findingId").GetString());
         Assert.Equal(new[] { "unresolved", "low" }, Strings(card, "chipTexts"));
-        Assert.Equal("provenance.vault_version", card.GetProperty("check").GetString());
+        Assert.DoesNotContain("provenance.vault_version", card.GetProperty("headText").GetString()!);
+        Assert.Equal("Rule", Strings(card, "labels")[0]);
+        Assert.Equal("provenance.vault_version", Strings(card, "values")[0]);
         Assert.Equal("The vault version of the housing is unknown", card.GetProperty("title").GetString());
     }
 
@@ -245,7 +252,9 @@ public sealed class ReviewPageInjectionTests
         JsonElement card = Shapes.Value.GetProperty("carried");
         string[] labels = Strings(card, "labels");
 
-        Assert.Equal("Affects", labels[0]);
+        // "Rule" leads since feature 009 moved the check id off the line (FR-025); "Affects"
+        // follows it, as it led before.
+        Assert.Equal(new[] { "Rule", "Affects" }, labels.Take(2).ToArray());
         Assert.Contains("Carried over from", labels);
         Assert.Contains("Carried over at", labels);
         Assert.Contains("2026-09-17T08:00:00Z", Strings(card, "values"));
@@ -361,8 +370,12 @@ public sealed class ReviewPageInjectionTests
             Strings(start, "metas")[0]);
         Assert.Equal("cmp:0002, cmp:0003", Strings(start, "monos")[0]);
 
-        // The three the panel always showed are untouched.
+        // The reasons the panel always showed are untouched. The checks are carried on each row
+        // as `data-check` and shown nowhere since feature 009 (FR-025, research R2.21): a check id
+        // is developer vocabulary, and it is one click away on the finding card's "Rule" row.
         Assert.Equal(AttentionSample.ShownChecks, Strings(start, "checks"));
+        Assert.Equal(0, start.GetProperty("visibleChecks").GetInt32());
+        Assert.All(AttentionSample.ShownChecks, check => Assert.DoesNotContain(check, start.GetProperty("text").GetString()!));
         Assert.Equal(AttentionSample.ShownReasons, Strings(start, "reasons"));
     }
 
@@ -818,7 +831,7 @@ var findingShape = function (value) {
     lineChildren: childClasses(card.querySelector('.card-head .card-line')),
     findingId: textOf(card, '.card-line .finding-id'),
     chipTexts: textsOf(card, '.card-line .chip'),
-    check: textOf(card, '.card-line .finding-check'),
+    headText: card.querySelector('.card-head').textContent,
     title: textOf(card, '.card-head .title'),
     factsInFold: textOf(card, '.details > .facts'),
     firstInFold: fold.firstElementChild ? fold.firstElementChild.className : '',
@@ -877,7 +890,14 @@ var startShape = function (value) {
     titles: textsOf(panel, '.attention-title'),
     metas: textsOf(panel, '.attention-meta'),
     monos: textsOf(panel, '.attention-meta .mono'),
-    checks: textsOf(panel, '.attention-check'),
+    checks: (function () {
+      var rows = panel.querySelectorAll('.attention-row');
+      var out = [];
+      for (var i = 0; i < rows.length; i++) { out.push(rows[i].getAttribute('data-check')); }
+      return out;
+    }()),
+    visibleChecks: panel.querySelectorAll('.attention-check').length,
+    text: panel.textContent,
     reasons: textsOf(panel, '.attention-reason'),
     injected: seen.injected,
     handlers: seen.handlers

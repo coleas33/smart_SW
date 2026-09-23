@@ -929,11 +929,14 @@
      * One rule: a line, and a fold.
      *
      * The line is what the rule is and what was seen - a bucket badge in the bucket's own colour,
-     * the check id, the statement as the title, and the observed string as the facts under it.
-     * What an engineer does about it - the recommended action, the note an acceptance left, and
-     * the Accept control itself - is one press away, because a list where every row states its
+     * the statement as the title, and the observed string as the facts under it. What an
+     * engineer does about it - the recommended action, the note an acceptance left, and the
+     * Accept control itself - is one press away, because a list where every row states its
      * remedy in full is a list nobody skims, and the four paragraphs used to be
      * indistinguishable from one another.
+     *
+     * The rule id left the line with feature 009 (FR-025): it is developer vocabulary, so it is
+     * the first thing inside the fold, and every row has a fold now - a coverage row too.
      *
      * Nothing is dropped: everything that was on the row before is still on the row, and the
      * fold is in the DOM whether it is open or not.
@@ -951,7 +954,6 @@
         'span',
         'badge bucket bucket-' + row.bucket,
         BUCKET_LABELS[row.bucket] || row.bucket));
-      head.appendChild(dom.el('span', 'rule-id', row.ruleId));
       item.appendChild(head);
 
       if (row.statement) {
@@ -974,28 +976,26 @@
         item.appendChild(subjectList(row));
       }
 
-      var fold = ruleFold(row, stated);
-      if (fold) {
-        item.appendChild(fold);
-      }
-
+      item.appendChild(ruleFold(row, stated));
       return item;
     }
 
     /**
-     * What one press on a rule opens, or null when the row has nothing to keep behind one: the
-     * recommended action, the note an acceptance left, and the Accept control.
+     * What one press on a rule opens: the rule id first (feature 009 FR-025), then the
+     * recommended action, the note an acceptance left, and the Accept control. Every row has one,
+     * so the id is always one press away and never on the line.
      */
     function ruleFold(row, stated) {
       var recommended = !!(row.reason && stated);
       var acceptable = !!(row.acceptable && !row.exception);
-      if (!recommended && !row.exception && !acceptable) {
-        return null;
-      }
 
       var fold = dom.el('details', 'rule-fold');
       fold.appendChild(dom.el(
         'summary', 'rule-fold-summary', foldLabel(recommended, !!row.exception, acceptable)));
+
+      var rule = dom.el('p', 'rule-line', 'Rule ');
+      rule.appendChild(dom.el('span', 'rule-id', row.ruleId));
+      fold.appendChild(rule);
 
       if (recommended) {
         fold.appendChild(dom.el('p', 'reason', row.reason));
@@ -1010,7 +1010,10 @@
       return fold;
     }
 
-    /** What the press says it opens, named after what is actually behind it. */
+    /**
+     * What the press says it opens, named after what is actually behind it - the rule id alone,
+     * on a row with nothing else to keep behind a fold, is "Rule".
+     */
     function foldLabel(recommended, accepted, acceptable) {
       if (recommended && acceptable) {
         return 'Recommended, and accept';
@@ -1024,7 +1027,10 @@
       if (acceptable) {
         return 'Accept';
       }
-      return 'What was accepted';
+      if (accepted) {
+        return 'What was accepted';
+      }
+      return 'Rule';
     }
 
     function exceptionText(exception) {

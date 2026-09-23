@@ -151,6 +151,11 @@
     // number and word in it is the backend's; the page prints it and slices it.
     summary: null,
 
+    // The backend's card vocabulary (`GET /labels`, feature 009 User Story 7), read after every
+    // `init` that names a backend, or null: an older backend, or before the first read. Handed to
+    // the renderers as an argument; null prints the tokens exactly as before (FR-030).
+    labels: null,
+
     // Questions for you (feature 009 User Story 4): what the engineer has typed, chosen and
     // skipped, per chat id - `{answers: {request id: text}, skipped: {request id: true}}` - kept in
     // page memory while the page lives, so choosing another review and coming back keeps them;
@@ -652,13 +657,37 @@
    */
   function showError(error) {
     var body = error || {};
-    ui.errors.appendChild(render.errorCard(body));
+    ui.errors.appendChild(render.errorCard(body, state.labels));
     appendCard(errorLine(body));
   }
 
   /** The Transcript's line for an error: its class and its message - transcript vocabulary. */
   function errorLine(body) {
     return render.textBlock('error', String(body.error_class || 'Error') + ': ' + String(body.message || ''));
+  }
+
+  /**
+   * An error into a status line (feature 009 FR-026): the backend's sentence for its class with
+   * the class and the message in a fold, through `render.plainError` - or, with no labels (an
+   * older backend), `legacy`, the words that line always printed (FR-030).
+   */
+  function errorInto(node, error, legacy) {
+    render.clear(node);
+    if (state.labels) {
+      node.appendChild(render.plainError(errorBody(error), state.labels));
+      return;
+    }
+    render.write(node, legacy);
+  }
+
+  /** A card's own refusal (a decision, Show, the log), on its status line and in the card's hue. */
+  function cardError(card, error, legacy) {
+    var status = card ? card.querySelector('.card-status') : null;
+    if (!status) {
+      return;
+    }
+    status.className = 'card-status bad';
+    errorInto(status, error, legacy);
   }
 
   /** The assistant's text, streamed. One block per turn, filled in delta by delta. */
@@ -793,7 +822,7 @@
    */
   function placeFinding(body) {
     var existing = state.findings[body.id];
-    var card = render.findingCard(body);
+    var card = render.findingCard(body, state.labels);
     if (existing) {
       // A re-run replaces its verdict rather than showing two (data-model, resume semantics).
       existing.card.parentNode.replaceChild(card, existing.card);
@@ -805,7 +834,7 @@
   }
 
   function showEvidence(body) {
-    var card = appendCard(render.evidenceCard(body));
+    var card = appendCard(render.evidenceCard(body, state.labels));
     state.evidence[body.id] = { body: body, card: card };
   }
 
@@ -821,7 +850,7 @@
       entity_ids: entry.body.entity_ids,
       status: 'answered',
       answer: body.answer
-    });
+    }, state.labels);
     entry.card.parentNode.replaceChild(answered, entry.card);
     entry.card = answered;
   }
@@ -853,7 +882,7 @@
 
   function renderCoverage() {
     render.clear(ui.coverage);
-    ui.coverage.appendChild(render.coverageSummary(state.coverage));
+    ui.coverage.appendChild(render.coverageSummary(state.coverage, state.labels));
     ui.coverage.hidden = false;
   }
 
@@ -1015,7 +1044,7 @@
    */
   function applyRanking(ranking) {
     render.clear(ui.attention);
-    ui.attention.appendChild(render.attentionPanel(ranking));
+    ui.attention.appendChild(render.attentionPanel(ranking, state.labels));
     syncFindingExplanations(ranking);
     ui.attention.hidden = false;
 
@@ -1109,6 +1138,23 @@
       }
       group.parentNode.removeChild(group);
     }
+  }
+
+  // ---- the backend's words (feature 009 User Story 7) --------------------------------------
+
+  /**
+   * `GET /labels`: the status, severity, bucket, evidence and error words the cards print
+   * (contracts/plain-words.md section 1). Read after every `init` that names a backend - a
+   * settings save restarts the backend and re-inits the page - and kept only when the answer is
+   * an object; anything else, a 404 from an older backend included, leaves the page on its raw
+   * tokens (FR-030).
+   */
+  function loadLabels() {
+    call('/labels', 'GET').then(function (labels) {
+      state.labels = (labels && typeof labels === 'object') ? labels : null;
+    }, function () {
+      state.labels = null;
+    });
   }
 
   // ---- kept reviews (feature 009 User Story 6) ---------------------------------------------
@@ -1765,7 +1811,7 @@
         return;
       case 'log':
         send('log.open', {}).catch(function (error) {
-          cardStatus(card, error.message, true);
+          cardError(card, error, error.message);
         });
         return;
       default:
@@ -1921,7 +1967,7 @@
           + (payload.full_path ? ' Look for ' + payload.full_path + ' in the tree.' : ''),
         true);
     }).catch(function (error) {
-      cardStatus(card, error.message, true);
+      cardError(card, error, error.message);
     });
   }
 
@@ -1943,7 +1989,7 @@
     ).then(function (finding) {
       showDisposition(card, finding && finding.disposition);
     }).catch(function (error) {
-      cardStatus(card, error.errorClass + ': ' + error.message, true);
+      cardError(card, error, error.errorClass + ': ' + error.message);
     });
   }
 
@@ -1968,7 +2014,7 @@
       questions,
       draftOf(state.chatId),
       state.questionIndex,
-      { resumeText: state.summary.resume_text, note: state.questionNote }));
+      { resumeText: state.summary.resume_text, note: state.questionNote, labels: state.labels }));
     ui.questions.hidden = false;
     syncQuestionControls();
   }
@@ -2160,7 +2206,9 @@
         loadAttention();
         return;
       }
-      state.questionNote = { text: error.message, bad: true };
+      // Any other refusal: the backend's sentence for its class, the class and the message in a
+      // fold (feature 009 FR-026) - or, with no labels, its message as before.
+      state.questionNote = state.labels ? { error: errorBody(error) } : { text: error.message, bad: true };
       renderQuestions();
     });
   }
@@ -2391,9 +2439,9 @@
       requestInit(false);
     }).catch(function (error) {
       ui.saveState.className = 'note bad';
-      ui.saveState.textContent = error.errorClass === 'TurnRunning'
+      errorInto(ui.saveState, error, error.errorClass === 'TurnRunning'
         ? error.message
-        : (error.errorClass + ': ' + error.message);
+        : (error.errorClass + ': ' + error.message));
     }).then(function () {
       ui.save.disabled = false;
     });
@@ -2432,6 +2480,9 @@
       renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', false);
       if (loadModels && state.backend) {
         refreshModels();
+      }
+      if (state.backend) {
+        loadLabels();
       }
       // The reviews the host kept for this SOLIDWORKS session, and - a page reloaded with one of
       // them open - that review shown again (contracts/sessions.md sections 5 and 6).

@@ -10,8 +10,9 @@
 
   What is here is what is about the RMS rule family and nothing else:
 
-  1. The grade header - the bucket counts, the fraction, and the rules that reached no verdict
-     named beside it. The Standards page renders a verdict into the same slot.
+  1. The grade header - the bucket counts, and the rules that reached no verdict named beside
+     them by their statements (feature 009 FR-028). The Standards page renders a verdict into the
+     same slot.
   2. The start verb: one press of Model check, against this family's scope and this family's
      evaluation route.
 
@@ -115,9 +116,8 @@
    * The grade, into the slot the shared half has just cleared.
    *
    * A summary rather than a headline: the thing to act on is the list below, not the score. So
-   * the heading is an eyebrow, the six counts are one muted inline row, and the fraction sets
-   * only its own number in ink. Every element and every string the contract and the tests pin
-   * is unchanged - what moved is which of them the eye lands on first.
+   * the heading is an eyebrow, the six counts are one muted inline row, and the rules that
+   * reached no verdict follow in words.
    */
   function renderGrade(result, node) {
     if (!result || !result.grade) {
@@ -150,37 +150,46 @@
       return;
     }
 
-    node.appendChild(fractionLine(grade));
-
-    // The unresolved rules travel with the counts, by name. A score with the missing rules
-    // named beside it is a grade; a score on its own is a claim.
-    node.appendChild(unresolvedLine(grade.unresolved_rule_ids || []));
+    // The unresolved rules travel with the counts, by what they say. A score with the missing
+    // rules named beside it is a grade; a score on its own is a claim. Named by statement since
+    // feature 009 (FR-028): the fraction of the rules that reached a verdict is a number only its
+    // author reads, and it stays in the body and the report; the rule ids are behind a fold.
+    node.appendChild(unresolvedRules(grade.unresolved_rule_ids || [], result.rule_statements));
   }
 
-  /** The fraction, with the number itself in its own element and the sentence around it. */
-  function fractionLine(grade) {
-    var line = dom.el('p', 'fraction');
-    if (typeof grade.fraction === 'number') {
-      line.appendChild(dom.el('b', 'fraction-n', grade.fraction.toFixed(2)));
-      dom.write(line, ' of the rules that reached a verdict were checked');
-      return line;
-    }
-
-    dom.write(line, 'No fraction: no rule reached a verdict.');
-    return line;
-  }
-
-  /** The rules that reached no verdict, named in the mono face so they read as names. */
-  function unresolvedLine(unresolved) {
-    var line = dom.el('p', 'unresolved-rules');
+  /**
+   * The rules that reached no verdict: "Not graded, evidence missing:" and each rule's statement
+   * - the backend's `RULES` text, `rule_statements` on the body - with the ids in a shut fold, in
+   * the mono face so they read as names. A rule the catalogue has no statement for, and every rule
+   * on a body with no `rule_statements` (a backend before feature 009), is named by its id rather
+   * than dropped. None unresolved says so in words.
+   */
+  function unresolvedRules(unresolved, statements) {
+    var block = dom.el('div', 'unresolved-rules');
     if (!unresolved.length) {
-      dom.write(line, 'Every rule reached a verdict.');
-      return line;
+      block.appendChild(dom.el('p', 'unresolved-lead', 'Every rule reached a verdict.'));
+      return block;
     }
 
-    dom.write(line, 'Unresolved, so not graded: ');
-    line.appendChild(dom.el('span', 'mono', dom.list(unresolved)));
-    return line;
+    block.appendChild(dom.el('p', 'unresolved-lead', 'Not graded, evidence missing:'));
+    var list = dom.el('ul', 'unresolved-statements');
+    for (var index = 0; index < unresolved.length; index++) {
+      list.appendChild(dom.el('li', '', statementOf(statements, unresolved[index])));
+    }
+    block.appendChild(list);
+
+    var fold = dom.el('details', 'unresolved-ids');
+    fold.appendChild(dom.el('summary', '', 'Rule ids'));
+    fold.appendChild(dom.el('p', 'mono', dom.list(unresolved)));
+    block.appendChild(fold);
+    return block;
+  }
+
+  /** A rule's statement from the body's map - an own string property only - or its id. */
+  function statementOf(statements, ruleId) {
+    var id = String(ruleId);
+    var statement = (statements && Object.prototype.hasOwnProperty.call(statements, id)) ? statements[id] : null;
+    return typeof statement === 'string' && statement ? statement : id;
   }
 
   function gradeHeading(result) {

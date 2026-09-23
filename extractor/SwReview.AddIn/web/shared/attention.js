@@ -89,9 +89,10 @@
   }
 
   /**
-   * One ranked row: which finding, the reason the policy placed it, what it says, which check
-   * said it, the state it is in, and - when the backend persisted one - the plain-language
-   * explanation of it (contracts/attention.md section 6, U5).
+   * One ranked row: which finding, the reason the policy placed it, what it says, the state it
+   * is in, and - when the backend persisted one - the plain-language explanation of it
+   * (contracts/attention.md section 6, U5). Which check said it travels on the row as
+   * `data-check`.
    *
    * The stripe is the one piece of colour here, and it restates a field rather than adding a
    * judgement of its own: `consequence_class` through a map, or the judgement key when the
@@ -100,11 +101,15 @@
   function attentionRow(row, options) {
     var item = dom.el('li', 'attention-row ' + stripeOf(row));
     item.setAttribute('data-finding-id', String(row.finding_id || ''));
+
+    // The check id is carried, not shown (feature 009 FR-025, contracts/attention.md section 6):
+    // it is developer vocabulary, on every tab. The finding's card names it in its fold, and the
+    // rule lists name it in each rule's fold.
+    item.setAttribute('data-check', String(row.check || ''));
     dom.append(item, [
       dom.el('span', 'attention-id', row.finding_id || ''),
       dom.el('span', 'attention-reason', row.reason || ''),
       dom.el('span', 'attention-title', row.title || ''),
-      dom.el('span', 'attention-check', row.check || ''),
       attentionMeta(row, options)
     ]);
     if (typeof row.explanation === 'string' && row.explanation) {
@@ -124,14 +129,19 @@
    * finding card's fold. Without it - the check tabs, which pass nothing - the components are
    * ids in the face an id is read in, exactly as before. The lookup is guarded as `stripeOf`'s
    * is, so an id that names something on `Object.prototype` prints as itself.
+   *
+   * `options.labels` is the backend's card vocabulary (`GET /labels`, feature 009 FR-024): the
+   * status and the severity are printed in its words when it names them, and as the tokens they
+   * arrived as when it does not - or when no labels were passed, which is the check tabs.
    */
   function attentionMeta(row, options) {
+    var labels = (options && options.labels) || null;
     var words = [];
     if (row.status) {
-      words.push(String(row.status));
+      words.push(labelOf(labels, 'status', row.status, String(row.status)));
     }
     if (row.severity) {
-      words.push(String(row.severity));
+      words.push(labelOf(labels, 'severity', row.severity, String(row.severity)));
     }
 
     var names = (options && options.names) || null;
@@ -144,6 +154,24 @@
       meta.appendChild(dom.el('span', names ? 'attention-components' : 'attention-components mono', components));
     }
     return meta;
+  }
+
+  /**
+   * The backend's word for one token, from one group of its labels (`GET /labels`: `status`,
+   * `severity`, `bucket`, `evidence_status`, `errors`), or `fallback` - what the page printed
+   * before feature 009 - when there are no labels, the group does not name the token, or the
+   * token names something on `Object.prototype`. Only an own string property is a label.
+   *
+   * Written once, here, because both the shared Start-here row and the Review page's cards look
+   * words up the same way; a map read keyed by a token is a lookup, never a comparison
+   * (PageRuleScanTests).
+   */
+  function labelOf(labels, group, token, fallback) {
+    var own = Object.prototype.hasOwnProperty;
+    var table = (labels && own.call(labels, group)) ? labels[group] : null;
+    var key = String(token);
+    var word = (table && typeof table === 'object' && own.call(table, key)) ? table[key] : null;
+    return typeof word === 'string' ? word : fallback;
   }
 
   /** Each component id replaced by its name when the map gives it a non-blank string. */
@@ -184,6 +212,7 @@
     rowList: rowList,
     attentionRow: attentionRow,
     attentionMeta: attentionMeta,
+    labelOf: labelOf,
     stripeOf: stripeOf
   };
 })();

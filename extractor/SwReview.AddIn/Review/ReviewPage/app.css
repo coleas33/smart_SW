@@ -711,16 +711,11 @@ body.results-stale .card.evidence {
   line-height: 1.35;
 }
 
-.attention-check {
-  grid-column: 2 / -1;
-  grid-row: 3;
-  color: var(--muted);
-  word-break: break-all;
-}
-
+/* The check travels as `data-check` and is shown nowhere (feature 009 FR-025): the meta line
+   follows the title directly. */
 .attention-meta {
   grid-column: 2 / -1;
-  grid-row: 4;
+  grid-row: 3;
   color: var(--muted);
   font-size: var(--text-small);
 }
@@ -1240,11 +1235,6 @@ body.view-transcript #results {
   color: var(--ink-2);
 }
 
-.finding-check {
-  color: var(--muted);
-  word-break: break-all;
-}
-
 .facts {
   margin: 4px 0 0;
   color: var(--ink-2);
@@ -1551,6 +1541,37 @@ body.view-transcript #results {
   margin: 4px 0 0;
   color: var(--critical);
   white-space: pre-wrap;
+}
+
+/*
+  An error in plain words (feature 009 FR-026): what to do next, and the class and the message
+  one press away in the fold - on the error card, a card's status line, the questions panel and
+  the settings save alike.
+*/
+.plain-error-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.card.error .plain-error-text {
+  margin-top: 4px;
+  color: var(--critical);
+}
+
+.error-fold > summary {
+  color: var(--accent);
+  font-size: var(--text-label);
+  cursor: pointer;
+}
+
+.error-fold .error-class,
+.error-fold .error-message {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: var(--text-label);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* ---- tier 3: what the review did not reach ------------------------------------------------------ */

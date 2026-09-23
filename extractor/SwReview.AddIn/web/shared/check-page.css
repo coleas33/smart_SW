@@ -340,13 +340,8 @@ body.result-stale .check-result {
   overflow-wrap: anywhere;
 }
 
-.attention-check {
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: var(--text-label);
-  word-break: normal;
-  overflow-wrap: anywhere;
-}
+/* No `.attention-check` rule: the row carries its check as `data-check` and shows no id (feature
+   009 FR-025, contracts/attention.md section 6). */
 
 .attention-meta {
   color: var(--muted);
@@ -594,6 +589,13 @@ body.result-stale .check-result {
 .badge.bucket.bucket-unresolved {
   background: var(--open-bg);
   color: var(--open);
+}
+
+/* The rule id, first inside the row's fold since feature 009 (FR-025). */
+.rule-line {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: var(--text-small);
 }
 
 .rule-id {
