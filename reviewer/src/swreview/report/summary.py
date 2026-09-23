@@ -9,9 +9,9 @@ package, in words read from `review_words_v1.yaml` (research R2.5).
 It is pure: it reads its arguments and the words file, imports no provider and no
 settings, and writes nothing. `report/attention.py` does not import it, so the ranking,
 `attention.json` and both check bodies carry no summary (research R2.2); the rows of the
-ranking the Review tab prints carry display titles (`review_ranking`, decision 2A). For
-that reason the session, the ledger and the coverage bucket names are not imported at run
-time: `report/session.py` pulls the provider port in, so the bucket
+ranking the Review tab prints carry display titles (`review_ranking`, decision 2A). Because
+it imports no provider, the session, the ledger and the coverage bucket names are not
+imported at run time: `report/session.py` pulls the provider port in, so the bucket
 names are copied below and asserted against the session's own in the tests, the way
 `attention.CHECKLIST_ITEM_IDS` is.
 
