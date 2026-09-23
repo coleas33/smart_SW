@@ -234,7 +234,7 @@ description: "Task list for the automatic mechanical checks"
 - [x] T094 [008] Extend `reviewer/tests/unit/test_replay_findings.py` (008 T021): a recorded `interference.static` finding whose group key and configuration equal a replayed contact's is reported as reclassified as contact and not counted as lost, and the exit stays 0 when that is the only difference (`contracts/contacts.md` section 6). After 008 T023
 - [x] T095 [008] Implement the reclassification in `reviewer/src/swreview/benchmark/replay.py` and record it in 008's `contracts/replay.md`. Acceptance: T094 green
 - [x] T096 [008] Write `reviewer/tests/unit/test_joint_map_on_replay_fixture.py`: the foundational joint map over 008's big-assembly replay fixture reproduces research R3's counts (132 instances, 47 kept pairs, 50 joints, 11 pattern groups, the two candidates) - geometry survives 008's scrambling, which renames strings only (RK-1). Test only. After 008 T018
-- [ ] T097 [008] Write the SC-006 acceptance beside 008's replay tests (`reviewer/tests/unit/test_replay_code_first_checks.py`): replaying the big-assembly fixture with checks first shows `check_joints`, `check_mass_material` and `check_hygiene` as pre-run steps and no added model round. Test only. After 008 T023 and 008's checks-first tasks, and after T075
+- [x] T097 [008] Write the SC-006 acceptance beside 008's replay tests (`reviewer/tests/unit/test_replay_code_first_checks.py`): replaying the big-assembly fixture with checks first shows `check_joints`, `check_mass_material` and `check_hygiene` as pre-run steps and no added model round. Test only. After 008 T023 and 008's checks-first tasks, and after T075
 
 ---
 
