@@ -1066,7 +1066,12 @@ def start_review(
         # findings and events are the ones a model-driven call would have produced. `None`
         # with the flag off, and then nothing above is different either.
         prerun = prerun_checks(
-            context, tools, efficiency=session.efficiency, standards=standards_gap
+            context,
+            tools,
+            efficiency=session.efficiency,
+            standards=standards_gap,
+            package_dir=loaded.base_dir,
+            out_dir=out,
         )
         # A configured standards profile is review coverage even when the optional
         # pre-run/gate levers are off.  `prerun_checks` records this family when it runs;

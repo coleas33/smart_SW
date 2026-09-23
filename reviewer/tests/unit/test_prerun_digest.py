@@ -34,10 +34,13 @@ from swreview.prerun import (
     GATE_JUDGEMENT_HEADER,
     GATE_START_HERE_HEADER,
     INTERFERENCE_TOOL,
+    LIVE_NO_BRIDGE,
     NOT_EVALUATED_HEADER,
     PRERUN_CHECK_PREFIX,
+    PRERUN_INTERFERENCE_SETTINGS,
     STANDARDS_FAMILY_NAME,
     STANDARDS_NO_PROFILE,
+    LiveOutcome,
     NotEvaluated,
     PrerunCall,
     PrerunResult,
@@ -119,17 +122,32 @@ def standards_gap() -> NotEvaluated:
     )
 
 
+def expected_families() -> tuple[NotEvaluated, ...]:
+    """The families a checks-first review of `prerun_package()` with no bridge and no
+    profile counts: the "no profile" standards family (T037), and - the package holds one
+    interference group and SOLIDWORKS is not attached - the "live detection did not run"
+    interference family (T042)."""
+    no_bridge = LiveOutcome(
+        configuration="Default",
+        settings=PRERUN_INTERFERENCE_SETTINGS,
+        not_attempted=LIVE_NO_BRIDGE,
+    )
+    return not_evaluated_families(prerun_package(), (), standards_gap(), live=no_bridge)
+
+
 def test_every_not_evaluated_line_is_a_skipped_coverage_item_with_the_same_sentence(
     tmp_path: Any,
 ) -> None:
-    """Feature 008 T037, edited deliberately: under checks first the standards family is
-    attached, so a review with no profile counts the "no profile" family beside the others
-    (US2 scenario 3). The same-sentence assertion still holds for every family."""
+    """Feature 008 T037 and T042, edited deliberately: under checks first the standards
+    family is attached, so a review with no profile counts the "no profile" family beside
+    the others (US2 scenario 3), and a package holding rows with no SOLIDWORKS attached
+    says live detection did not run. The same-sentence assertion still holds for every
+    family."""
     run, session = started(tmp_path, "on", efficiency=ON)
     digest = opening_of(run)
     written = skipped_by_check(session)
 
-    families = not_evaluated_families(prerun_package(), (), standards_gap())
+    families = expected_families()
     assert {family.check for family in families} == set(written)
     for family in families:
         assert written[family.check] == family.reason
@@ -173,9 +191,7 @@ def test_the_counts_in_the_digest_equal_the_counts_in_the_session(tmp_path: Any)
     for finding in others:
         assert finding.id in digest
         assert finding.check in digest
-    assert len(skipped_by_check(session)) == len(
-        not_evaluated_families(prerun_package(), (), standards_gap())
-    )
+    assert len(skipped_by_check(session)) == len(expected_families())
 
 
 def family_line(session: ReviewSession) -> str:

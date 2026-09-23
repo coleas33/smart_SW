@@ -1,6 +1,11 @@
 """Running the deterministic checks that enumerate themselves, before the first turn.
 
-Lever 5 (`EfficiencySettings.prerun_checks`, default off and staying off). A model-driven
+Lever 5 (`EfficiencySettings.prerun_checks`), which feature 008 calls **checks first**: off in
+the class and on the command line, the pane's default since 2026-09-22 (`agent/settings.py`
+`pane_efficiency`). With SOLIDWORKS attached it also runs live interference detection first,
+judges every group it found and writes the rows into the run folder's package; a model that
+asks for one of these checks again is answered from the recorded result by `PrerunGuard`
+(`contracts/checks-first.md`). A model-driven
 review spends a round trip asking for each check whose scope is already decided by the
 package: three RMS calls that take no argument worth choosing, and one call per
 interference group SOLIDWORKS already grouped. Those round trips buy nothing - the answer
@@ -46,14 +51,16 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, Literal
 
 from swreview.agent.providers import ToolCallRequest, ToolCallResult, call_tool
 from swreview.agent.settings import EfficiencySettings, checks_first
 from swreview.checks.fastener_identity import joint_map_with_fasteners
+from swreview.checks.interference import STATIC_SCOPE_LIMIT
 from swreview.checks.joints import JointMap
 from swreview.findings import Finding
-from swreview.ir.models import EvidencePackage
+from swreview.ir.loader import append_interference_run
+from swreview.ir.models import EvidencePackage, Gap, Interference
 from swreview.report.attention import (
     FAMILY_TITLES,
     Ranking,
@@ -83,8 +90,10 @@ __all__ = [
     "GATE_START_HERE_HEADER",
     "INTERFERENCE_TOOL",
     "JOINTS_TOOL",
+    "LIVE_INTERFERENCE_TOOL",
     "NOT_EVALUATED_HEADER",
     "PRERUN_CHECK_PREFIX",
+    "PRERUN_INTERFERENCE_SETTINGS",
     "PRERUN_TOOLS",
     "RMS_PRERUN_TOOLS",
     "STANDARDS_FAMILY_NAME",
@@ -93,6 +102,7 @@ __all__ = [
     "STANDARDS_UNGRADABLE_ROOT",
     "STANDARDS_UNREADABLE",
     "UNNAMED_ERROR",
+    "LiveOutcome",
     "NotEvaluated",
     "PrerunCall",
     "PrerunResult",
@@ -118,6 +128,55 @@ None takes an argument the pre-run has to choose: `check_rms_part` and
 
 INTERFERENCE_TOOL = "check_interference_group"
 """The fourth: one call per group `groups_of` enumerates."""
+
+LIVE_INTERFERENCE_TOOL = "bridge_interference"
+"""Checks first's live call (feature 008): once, the whole assembly, before everything else,
+through the same dispatch the model uses, when SOLIDWORKS is attached."""
+
+PRERUN_INTERFERENCE_SETTINGS: dict[str, Any] = {
+    "treat_coincident_as_interference": True,
+    "treat_subassemblies_as_components": True,
+    "include_multibody": True,
+    "ignore_hidden": False,
+    "fastener_folder_treatment": "include",
+}
+"""The detection settings the live call states, all five: exactly what the model chose on
+the recorded 830 run, so the pre-run reproduces its groups and keeps every recorded finding
+reachable (research R2.17). Every row carries them, and the digest line prints them."""
+
+LIVE_NO_BRIDGE = "no_bridge"
+LIVE_NOT_ASSEMBLY = "not_assembly"
+"""Why live detection was not attempted: no bridge (or no live tool), or a root it cannot
+run on. `LiveOutcome.not_attempted` holds one of the two; each renders its own sentence."""
+
+INTERFERENCE_NOT_REPORTED = (
+    "the package reports no interference, so no group was checked. That is what SOLIDWORKS "
+    "detected, not a claim that detection was run over every configuration."
+)
+INTERFERENCE_NOT_ATTACHED = (
+    "SOLIDWORKS is not attached, so live detection did not run; the {groups} the package "
+    "already holds {verb} judged"
+)
+INTERFERENCE_NEEDS_ASSEMBLY = (
+    "live detection needs an assembly with two components or more; the root is {kind} with "
+    "{components}"
+)
+INTERFERENCE_FAILED = "live detection failed: {error}; it was not evaluated"
+INTERFERENCE_COLLIDED = (
+    "{rows} dropped because their ids collide with rows of another configuration"
+)
+INTERFERENCE_NOT_WRITTEN = "the detected rows could not be written to package.json: {error}"
+INTERFERENCE_CLEAN = "live detection over {configuration} found no interference ({settings})"
+"""The interference family's sentences under checks first (`contracts/checks-first.md`
+section 3): each is a coverage item's reason and a digest line, so the report and the model
+read one claim. `INTERFERENCE_NOT_REPORTED` is the pre-008 sentence, unchanged."""
+
+INTERFERENCE_ROWS_CHECK_FAMILY = "interference_rows"
+"""The family a failed write of the detected rows is counted under:
+`coverage.prerun.interference_rows`, unresolved, the findings still recorded."""
+
+INTERFERENCE_CHECKLIST_ITEM = "interference"
+"""The checklist item a clean live detection closes with a `checked` item."""
 
 
 def prerun_tools() -> tuple[str, ...]:
@@ -288,6 +347,11 @@ class NotEvaluated:
     reason: str
     """The counts and the why, in one sentence. The coverage item's reason verbatim."""
 
+    bucket: Literal["skipped", "unresolved"] = "skipped"
+    """Where the coverage item is written. `skipped` for a family nobody ran; `unresolved`
+    for work that ran and left something undecided - detected rows dropped for colliding
+    ids, or rows that could not be written (feature 008)."""
+
     def coverage_item(self) -> CoverageItem:
         return CoverageItem(
             check=self.check, scope=CoverageScope(), reason=self.reason, error=None
@@ -332,6 +396,60 @@ def _outcome_counts(findings: Sequence[Finding], contacts: Sequence[Contact]) ->
     return ", ".join(counts) or "no findings"
 
 
+def _settings_text(settings: Mapping[str, Any]) -> str:
+    """`treat_coincident_as_interference=true, ...`: the five stated settings on one line."""
+    return ", ".join(
+        f"{name}={str(value).lower() if isinstance(value, bool) else value}"
+        for name, value in settings.items()
+    )
+
+
+@dataclass(frozen=True)
+class LiveOutcome:
+    """What checks first's live interference detection did (feature 008, data-model section 8).
+
+    Present on every checks-first pre-run: `not_attempted` says why the call was never made
+    (`LIVE_NO_BRIDGE`, `LIVE_NOT_ASSEMBLY`), and otherwise `step_index` is the call's step
+    and the rest is what it found, dropped and could not write. Every non-empty outcome is
+    a coverage row and a digest line (`not_evaluated_families`); the re-call guard answers a
+    repeat of the call from `groups`, `rows_added`, `configuration` and `settings`.
+    """
+
+    configuration: str
+    settings: Mapping[str, Any]
+    step_index: int | None = None
+    not_attempted: str | None = None
+    groups: int = 0
+    """Distinct groups among the rows the call added: what the pre-run then judged."""
+    rows_detected: int = 0
+    rows_added: int = 0
+    rows_collided: int = 0
+    """Rows the call returned whose ids another configuration's rows already hold, which
+    `bridge_interference` drops (research R2.16)."""
+    error: str | None = None
+    persist_error: str | None = None
+
+    @property
+    def succeeded(self) -> bool:
+        """The call was made and answered; a failed write does not undo what it found."""
+        return self.step_index is not None and self.error is None
+
+    def line(self, call: PrerunCall) -> str:
+        """The call's `Evaluated:` line: its error, a clean result, or rows in groups."""
+        if not self.succeeded:
+            return call.line()
+        if self.rows_detected == 0:
+            clean = INTERFERENCE_CLEAN.format(
+                configuration=self.configuration, settings=_settings_text(self.settings)
+            )
+            return f"  interference: {clean}"
+        return (
+            f"  {LIVE_INTERFERENCE_TOOL}({self.configuration}) -> "
+            f"{_plural(self.rows_added, 'row')} in {_plural(self.groups, 'group')} "
+            f"({_settings_text(self.settings)})"
+        )
+
+
 DIGEST_ID_CAP = 20
 """How many finding ids one `(check, status)` line of the opening digest names.
 
@@ -356,6 +474,8 @@ class PrerunResult:
     families: tuple[str, ...] = ()
     """The session's folded families when the pre-run ran (`["rms"]` under checks first):
     their findings are one counts line in the digest, never a list of ids."""
+    live: LiveOutcome | None = None
+    """What live interference detection did, or why it was not attempted (feature 008)."""
 
     @property
     def findings(self) -> tuple[Finding, ...]:
@@ -384,15 +504,21 @@ class PrerunResult:
 
         A tool called once renders exactly `PrerunCall.line()`; a tool called several times
         - `check_interference_group` once per group - collapses to one line of counts, so
-        a thousand groups are one line rather than a thousand.
+        a thousand groups are one line rather than a thousand. The live detection call
+        renders its own line from `LiveOutcome` (`contracts/checks-first.md` section 3).
         """
         by_tool: dict[str, list[PrerunCall]] = {}
         for call in self.calls:
             by_tool.setdefault(call.tool, []).append(call)
-        return [
-            calls[0].line() if len(calls) == 1 else _collapsed_line(tool, calls)
-            for tool, calls in by_tool.items()
-        ]
+        lines: list[str] = []
+        for tool, calls in by_tool.items():
+            if tool == LIVE_INTERFERENCE_TOOL and self.live is not None and len(calls) == 1:
+                lines.append(self.live.line(calls[0]))
+            elif len(calls) == 1:
+                lines.append(calls[0].line())
+            else:
+                lines.append(_collapsed_line(tool, calls))
+        return lines
 
     def _finding_lines(self) -> list[str]:
         """One line per folded family or per check and status, in recording order."""
@@ -634,43 +760,34 @@ def not_evaluated_families(
     package: EvidencePackage,
     withheld: Sequence[tuple[str, str]],
     standards: NotEvaluated | None = None,
+    *,
+    live: LiveOutcome | None = None,
 ) -> tuple[NotEvaluated, ...]:
     """Every line of the "NOT evaluated" block, counted against `package`.
 
     Three families are here on every run, because no enumerator can decide their scope, and
     four more appear conditionally: a pre-run tool a tier withheld, which carries the
     tier's own sentence rather than a second one written here (contracts/levers.md, levers 4
-    and 5); interference when the package reports none, so "no group was checked" is a
-    statement about the package rather than a silence; hole alignment when feature 010's
-    `check_joints` runs and its joint map could not reach a hole - the joint map is what
-    judges alignment now, so the line says what it missed, and a withheld `check_joints`
-    speaks for itself; and the standards family when `attach_standards` could not attach a
-    run.
+    and 5); interference, whenever there is something to say about it (below); hole
+    alignment when feature 010's `check_joints` runs and its joint map could not reach a
+    hole - the joint map is what judges alignment now, so the line says what it missed, and
+    a withheld `check_joints` speaks for itself; and the standards family when
+    `attach_standards` could not attach a run.
 
     Args:
         package: The package under review; every count comes off it.
         withheld: `(tool name, reason)` for each pre-run tool this run did not offer.
         standards: What `attach_standards` returned, or `None` when the standards run is
-            attached and the checks will run - which is also what a review that never asked
-            for one passes, because a family nobody asked about is not a gap this block
-            reports (FR-030: lever 5's digest is unchanged by lever 11 existing).
+            attached and the checks will run.
+        live: What checks first's live detection did, or why it did not run (feature 008);
+            `None` states nothing about detection and keeps the pre-008 rule - "no group
+            was checked" when the package reports no interference.
     """
     families = [
         NotEvaluated(check=f"{PRERUN_CHECK_PREFIX}{name}", label=name, reason=reason)
         for name, reason in withheld
     ]
-    if not groups_of(package):
-        families.append(
-            NotEvaluated(
-                check=f"{PRERUN_CHECK_PREFIX}interference",
-                label="interference",
-                reason=(
-                    "the package reports no interference, so no group was checked. That is "
-                    "what SOLIDWORKS detected, not a claim that detection was run over "
-                    "every configuration."
-                ),
-            )
-        )
+    families.extend(_interference_families(package, live))
     withheld_names = {name for name, _ in withheld}
     joints_run = (
         JOINTS_TOOL in checks_mechanical.CODE_FIRST_CHECKS and JOINTS_TOOL not in withheld_names
@@ -725,12 +842,96 @@ def not_evaluated_families(
     return tuple(families)
 
 
+def _interference(
+    reason: str, *, bucket: Literal["skipped", "unresolved"] = "skipped"
+) -> NotEvaluated:
+    return NotEvaluated(
+        check=f"{PRERUN_CHECK_PREFIX}interference",
+        label="interference",
+        reason=reason,
+        bucket=bucket,
+    )
+
+
+def _interference_families(
+    package: EvidencePackage, live: LiveOutcome | None
+) -> list[NotEvaluated]:
+    """What the interference family says, from the package and the live outcome.
+
+    `contracts/checks-first.md` section 3, one row per outcome: no bridge (the package's own
+    groups were judged, or it reported none), a root live detection cannot run on, a failed
+    call, rows dropped for colliding ids, rows that could not be written. A clean or
+    successful detection says nothing here - its line is the call's own, and a clean one is
+    also a `checked` item written by `prerun_checks`.
+    """
+    groups = groups_of(package)
+    if live is None or live.not_attempted == LIVE_NO_BRIDGE:
+        if not groups:
+            return [_interference(INTERFERENCE_NOT_REPORTED)]
+        if live is None:
+            return []
+        return [
+            _interference(
+                INTERFERENCE_NOT_ATTACHED.format(
+                    groups=_plural(len(groups), "group"),
+                    verb="was" if len(groups) == 1 else "were",
+                )
+            )
+        ]
+    if live.not_attempted == LIVE_NOT_ASSEMBLY:
+        return [
+            _interference(
+                INTERFERENCE_NEEDS_ASSEMBLY.format(
+                    kind=_root_kind(package),
+                    components=_plural(len(package.components), "component"),
+                )
+            )
+        ]
+    families: list[NotEvaluated] = []
+    if live.error is not None:
+        families.append(_interference(INTERFERENCE_FAILED.format(error=live.error)))
+    if live.rows_collided:
+        rows = (
+            "1 detected row was"
+            if live.rows_collided == 1
+            else f"{live.rows_collided} detected rows were"
+        )
+        families.append(
+            _interference(INTERFERENCE_COLLIDED.format(rows=rows), bucket="unresolved")
+        )
+    if live.persist_error is not None:
+        families.append(
+            NotEvaluated(
+                check=f"{PRERUN_CHECK_PREFIX}{INTERFERENCE_ROWS_CHECK_FAMILY}",
+                label="interference",
+                reason=INTERFERENCE_NOT_WRITTEN.format(error=live.persist_error),
+                bucket="unresolved",
+            )
+        )
+    return families
+
+
+def _root_document(package: EvidencePackage) -> Any | None:
+    root = package.design.root_assembly_document_id
+    return next((d for d in package.documents if d.document_id == root), None)
+
+
+def _root_kind(package: EvidencePackage) -> str:
+    """`an assembly`, `a part`, `a drawing`, or what the package does not say."""
+    document = _root_document(package)
+    if document is None:
+        return "a document the package does not carry"
+    return f"{'an' if document.kind[0] in 'aeiou' else 'a'} {document.kind}"
+
+
 def prerun_checks(
     context: ToolContext,
     tools: ToolDispatch,
     *,
     efficiency: EfficiencySettings,
     standards: NotEvaluated | None = None,
+    package_dir: Path | None = None,
+    out_dir: Path | None = None,
 ) -> PrerunResult | None:
     """Run the self-enumerating checks into `context`'s session, or `None` with the flag off.
 
@@ -754,6 +955,10 @@ def prerun_checks(
         standards: What `attach_standards` returned, so the family it could not grade is
             counted and printed beside the four the pre-run never grades. `None` when the
             run is attached, and when the review never asked for one.
+        package_dir: The folder the package was loaded from, whose `package.json` the live
+            rows are merged from (feature 008, FR-009).
+        out_dir: The run folder the merged `package.json` is written to - the package's own
+            folder in the pane, `--out` on the command line, whose input is never written.
 
     Returns:
         What was run and what was not, so the caller can render the digest or the brief, or
@@ -764,41 +969,189 @@ def prerun_checks(
 
     session = context.require_session()
     calls: list[PrerunCall] = []
+    live = _live_interference(context, tools, calls, package_dir=package_dir, out_dir=out_dir)
     for name, arguments in planned_calls(context, tools):
-        before = len(session.findings)
-        contacts_before = len(session.contacts)
-        step_index = len(session.steps)
-        result = call_tool(
-            request=ToolCallRequest(
-                call_id=f"prerun_{len(calls) + 1}", name=name, arguments=arguments
-            ),
-            tools=tools,
-            on_event=context.emit_event,
-            step_index=step_index,
-            clock=perf_counter,
-        )
-        calls.append(
-            PrerunCall(
-                tool=name,
-                arguments=dict(arguments),
-                step_index=step_index,
-                findings=tuple(session.findings[before:]),
-                error=_error_of(result),
-                contacts=tuple(session.contacts[contacts_before:]),
-                payload=result.payload,
-            )
-        )
+        calls.append(_prerun_call(context, tools, name, arguments, len(calls)))
 
+    if live.succeeded and live.rows_detected == 0:
+        context.record_coverage("checked", _clean_detection_item(live))
     withheld_prerun_tools = [
         (tool.name, tool.reason) for tool in tools.withheld if tool.name in prerun_tools()
     ]
-    families = not_evaluated_families(context.ir, withheld_prerun_tools, standards)
+    families = not_evaluated_families(context.ir, withheld_prerun_tools, standards, live=live)
     for family in families:
-        context.record_coverage("skipped", family.coverage_item())
+        context.record_coverage(family.bucket, family.coverage_item())
     return PrerunResult(
         calls=tuple(calls),
         not_evaluated=families,
         families=tuple(session.folded_families),
+        live=live,
+    )
+
+
+def _prerun_call(
+    context: ToolContext,
+    tools: ToolDispatch,
+    name: str,
+    arguments: Mapping[str, Any],
+    number: int,
+) -> PrerunCall:
+    """One call through the dispatch, with the events around it, as the session recorded it."""
+    session = context.require_session()
+    before = len(session.findings)
+    contacts_before = len(session.contacts)
+    step_index = len(session.steps)
+    result = call_tool(
+        request=ToolCallRequest(
+            call_id=f"prerun_{number + 1}", name=name, arguments=dict(arguments)
+        ),
+        tools=tools,
+        on_event=context.emit_event,
+        step_index=step_index,
+        clock=perf_counter,
+    )
+    return PrerunCall(
+        tool=name,
+        arguments=dict(arguments),
+        step_index=step_index,
+        findings=tuple(session.findings[before:]),
+        error=_error_of(result),
+        contacts=tuple(session.contacts[contacts_before:]),
+        payload=result.payload,
+    )
+
+
+def _live_precondition(context: ToolContext, tools: ToolDispatch) -> str | None:
+    """Why live detection cannot run here, or `None` when it can (research R2.16).
+
+    It needs the bridge - and the live tool the dispatch registers with it - and a root
+    assembly with two components or more: a part, or an assembly of one, has nothing to
+    interfere with.
+    """
+    if context.bridge is None or tools.get(LIVE_INTERFERENCE_TOOL) is None:
+        return LIVE_NO_BRIDGE
+    root = _root_document(context.ir)
+    if root is None or root.kind != "assembly" or len(context.ir.components) < 2:
+        return LIVE_NOT_ASSEMBLY
+    return None
+
+
+def _live_interference(
+    context: ToolContext,
+    tools: ToolDispatch,
+    calls: list[PrerunCall],
+    *,
+    package_dir: Path | None,
+    out_dir: Path | None,
+) -> LiveOutcome:
+    """Checks first's first call: live detection once, its rows judged next, and written.
+
+    The reviewed configuration's rows are removed from the in-memory package before the
+    call - the host numbers rows from `int:0001` on every request and `bridge_interference`
+    drops a row whose id the package already holds, so a Retry would otherwise judge stale
+    rows (the rule `PackageAppender.Merge` applies on the console) - and put back exactly
+    as they were when the call fails. On success the rows the call added are what
+    `planned_calls` then judges, the host's gaps are kept once, and both are merged into
+    `out_dir/package.json` (`ir/loader.append_interference_run`). Nothing here raises: a
+    failed call is the dispatch's own failed item, and a failed write is an outcome.
+    """
+    package = context.ir
+    configuration = package.design.active_configuration
+    settings = dict(PRERUN_INTERFERENCE_SETTINGS)
+    reason = _live_precondition(context, tools)
+    if reason is not None:
+        return LiveOutcome(configuration=configuration, settings=settings, not_attempted=reason)
+
+    original = list(package.interferences)
+    package.interferences[:] = [row for row in original if row.configuration != configuration]
+    kept = {id(row) for row in package.interferences}
+    gaps_before = len(package.gaps)
+    call = _prerun_call(
+        context,
+        tools,
+        LIVE_INTERFERENCE_TOOL,
+        {"component_ids": [], "configuration": configuration, "settings": settings},
+        len(calls),
+    )
+    calls.append(call)
+    if call.error is not None:
+        package.interferences[:] = original
+        return LiveOutcome(
+            configuration=configuration,
+            settings=settings,
+            step_index=call.step_index,
+            error=call.error,
+        )
+
+    added = [row for row in package.interferences if id(row) not in kept]
+    added_ids = {id(row) for row in added}
+    detected = call.payload.get("interferences") if call.payload is not None else None
+    rows_detected = len(detected) if isinstance(detected, list) else len(added)
+    new_gaps = _keep_new_gaps_once(package, gaps_before)
+    groups = {
+        (group.configuration, group.group_key)
+        for group in groups_of(package)
+        if any(id(row) in added_ids for row in group.interferences)
+    }
+    return LiveOutcome(
+        configuration=configuration,
+        settings=settings,
+        step_index=call.step_index,
+        groups=len(groups),
+        rows_detected=rows_detected,
+        rows_added=len(added),
+        rows_collided=max(0, rows_detected - len(added)),
+        persist_error=_persist_rows(package_dir, out_dir, configuration, added, new_gaps),
+    )
+
+
+def _keep_new_gaps_once(package: EvidencePackage, gaps_before: int) -> list[Gap]:
+    """The gaps the call appended, less any the package already held; returns those kept.
+
+    `bridge_interference` appends every gap the host reports, so a Retry would hold the
+    volume-unit caveat twice in memory while the written file holds it once. The in-memory
+    package is made to agree with the file, because a re-render reads the file.
+    """
+    earlier = package.gaps[:gaps_before]
+    kept: list[Gap] = []
+    for gap in package.gaps[gaps_before:]:
+        if gap not in earlier and gap not in kept:
+            kept.append(gap)
+    package.gaps[gaps_before:] = kept
+    return kept
+
+
+def _persist_rows(
+    package_dir: Path | None,
+    out_dir: Path | None,
+    configuration: str,
+    rows: Sequence[Interference],
+    gaps: Sequence[Gap],
+) -> str | None:
+    """Write the live rows into the run folder's package; the error as a sentence, or `None`."""
+    if package_dir is None or out_dir is None:
+        return "no run folder was given to this pre-run, so the rows were not written"
+    try:
+        append_interference_run(package_dir, out_dir, configuration, rows, gaps)
+    except (OSError, ValueError) as error:
+        return f"{type(error).__name__}: {error}"
+    return None
+
+
+def _clean_detection_item(live: LiveOutcome) -> CoverageItem:
+    """A clean live detection, closed as `checked` within its stated scope (research R2.20).
+
+    A statement about what SOLIDWORKS computed in one configuration with five stated
+    settings - never a pass beyond it, which is what `STATIC_SCOPE_LIMIT` says.
+    """
+    clean = INTERFERENCE_CLEAN.format(
+        configuration=live.configuration, settings=_settings_text(live.settings)
+    )
+    return CoverageItem(
+        check=INTERFERENCE_CHECKLIST_ITEM,
+        scope=CoverageScope(configuration=live.configuration),
+        reason=f"{clean}; {STATIC_SCOPE_LIMIT}",
+        error=None,
     )
 
 

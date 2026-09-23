@@ -28,6 +28,7 @@ Findings recorded: 5
   interference.static - 1 demonstrated: F-005
 
 NOT evaluated, and why:
+  interference: SOLIDWORKS is not attached, so live detection did not run; the 1 group the package already holds was judged
   fastener joints: 1 fastener in the package; no joint was evaluated. Which components a screw clamps is not derivable from the package, so name the fastener, the hole and the clamped stack yourself with `check_fastener_joint`.
   fit: no interface was evaluated: `check_fit` needs two drawing dimensions identified as the bore and the shaft of one interface, which nothing in the package says.
   axial stack: no stack was evaluated: `check_axial_stack` needs an ordered list of dimensions with signs and the gap they set, which nothing in the package says.
