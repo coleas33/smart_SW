@@ -119,6 +119,17 @@ body {
 }
 
 /*
+  Two rows of session buttons at a docked pane's 300 px, not three: at the default 11 px the
+  second row (Open report, Open run folder, View log) needs 280 px of the row's 276 and View log
+  wrapped alone onto a third, pushing the summary's last not-reached goal below the fold on the
+  big assembly (SC-001, feature 009 T032).
+*/
+.session .row button {
+  padding-left: 9px;
+  padding-right: 9px;
+}
+
+/*
   The run folder, the stream state and the running cost, on one muted line. Three stacked grey
   sentences of equal weight is what let the pane report four contradictory things at once
   (docs/pane-findings-2026-09-18.md); an empty one takes no room at all.
