@@ -41,8 +41,9 @@ drives the *same* wrapper rather than a second copy of it:
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -257,6 +258,13 @@ def error_payload(message: str) -> dict[str, Any]:
     return {"error": message}
 
 
+TOOL_RESULTS_DIR_NAME = "tool-results"
+"""The run-folder sub-folder every recorded step's full result is written into (FR-021)."""
+
+TOOL_RESULTS_CHECK = "coverage.tool_results"
+"""The coverage check a stored result that could not be written is failed under."""
+
+
 # --- recording -----------------------------------------------------------------------
 
 
@@ -283,6 +291,10 @@ class ToolCallRecord:
     and broke: `failed` says the tool broke, and this one did not. Defaulted, so the chat
     log and every existing caller are unchanged.
     """
+    payload: Mapping[str, Any] | None = field(default=None, compare=False)
+    """The call's full result, for the stored copy `SessionSink` writes (feature 008,
+    FR-021). Not a field of the trace line - the chat log never writes it - and left out of
+    equality, so two records of one call compare as they always did."""
 
 
 @runtime_checkable
@@ -318,17 +330,17 @@ class SessionSink:
 
     def record(self, record: ToolCallRecord) -> None:
         session = self.session
-        session.steps.append(
-            InvestigationStep(
-                index=len(session.steps),
-                tool=record.tool,
-                arguments=record.arguments,
-                result_summary=record.result_summary,
-                status=record.status,
-                elapsed_s=record.elapsed_s,
-                error=record.error,
-            )
+        step = InvestigationStep(
+            index=len(session.steps),
+            tool=record.tool,
+            arguments=record.arguments,
+            result_summary=record.result_summary,
+            status=record.status,
+            elapsed_s=record.elapsed_s,
+            error=record.error,
         )
+        session.steps.append(step)
+        self._store(session, step, record)
         if record.error is None or record.withheld:
             return
         self.context.record_coverage(
@@ -342,6 +354,49 @@ class SessionSink:
                 error=record.error,
             ),
         )
+
+    def _store(
+        self, session: ReviewSession, step: InvestigationStep, record: ToolCallRecord
+    ) -> None:
+        """Write the step's full result to `tool-results/step-<index>.json` (FR-021, SC-008).
+
+        Here, at the one funnel every recorded step passes through - ok, error, withheld,
+        an invented name, the pre-run's calls and the guard's answers alike - and which
+        also decides the index, so the file name and the step cannot disagree. Written
+        before the call returns, so it is on disk before the adapter's next request.
+        `session_id` makes a stale file from an earlier run in a reused folder detectable.
+        A write that fails is failed coverage naming the step, and never a raise: a tool
+        call must never raise.
+        """
+        folder = self.context.tool_results_dir
+        if folder is None or record.payload is None:
+            return
+        envelope = {
+            "session_id": str(session.session_id),
+            "step": step.index,
+            "tool": step.tool,
+            "arguments": step.arguments,
+            "status": step.status,
+            "payload": to_jsonable_python(dict(record.payload)),
+        }
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / f"step-{step.index}.json").write_text(
+                json.dumps(envelope, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            )
+        except OSError as error:
+            self.context.record_coverage(
+                "failed",
+                CoverageItem(
+                    check=TOOL_RESULTS_CHECK,
+                    scope=CoverageScope(),
+                    reason=(
+                        f"the full result of step {step.index} ({step.tool}) could not be "
+                        f"written to {folder}; the session still records its summary"
+                    ),
+                    error=f"{type(error).__name__}: {error}",
+                ),
+            )
 
 
 # --- one recorded tool ----------------------------------------------------------------
@@ -400,6 +455,7 @@ class RecordedTool:
         sink: RecordingSink,
         forced_failure: bool = False,
         trim_description: bool = False,
+        slim: bool = False,
     ) -> None:
         self.spec = spec
         self.context = context
@@ -407,6 +463,9 @@ class RecordedTool:
         self.forced_failure = forced_failure
         self.trim_description = trim_description
         """Lever 2, applied here rather than in `spec_for`: see `description`."""
+        self.slim = slim
+        """Payload slimming (feature 008): `_finish` computes the model's view beside the
+        payload. Per run, like `trim_description`, never in the process-global spec cache."""
 
     @property
     def name(self) -> str:
@@ -491,7 +550,24 @@ class RecordedTool:
             elapsed_s=elapsed_s,
             error=error,
         )
-        return ToolCallResult(call_id=call_id, payload=payload, is_error=error is not None)
+        # Feature 008: the view is computed here, once, beside the record - after the call
+        # recorded its step and its findings from the payload, so no view can change either.
+        view = _model_view(self.name, payload) if self.slim else None
+        return ToolCallResult(
+            call_id=call_id, payload=payload, is_error=error is not None, view=view
+        )
+
+
+def _model_view(tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """`tools/model_view.model_view`, imported when first needed.
+
+    Deferred because `tools/model_view.py` builds its view table from this module's own
+    `check_tools()` when it is imported: importing it at the top of this file would ask for
+    that list before this module had defined it.
+    """
+    from swreview.tools.model_view import model_view
+
+    return model_view(tool_name, payload)
 
 
 def record_call(
@@ -522,6 +598,7 @@ def record_call(
             elapsed_s=max(elapsed_s, 0.0),
             error=error,
             withheld=withheld,
+            payload=payload,
         )
     )
 
@@ -846,6 +923,7 @@ class ToolRegistry:
         if unknown:
             raise ValueError(f"fail_tool names no such tool: {unknown}; known: {names}")
         trim = efficiency is not None and efficiency.trim_tool_descriptions
+        slim = model_view is not None and model_view.payload_slimming
         tools = tuple(
             RecordedTool(
                 spec_for(function),
@@ -853,6 +931,7 @@ class ToolRegistry:
                 sink=recorder,
                 forced_failure=function.__name__ in forced,
                 trim_description=trim,
+                slim=slim,
             )
             for function in functions
         )

@@ -162,6 +162,10 @@ class ToolContext:
     emit: EventCallback | None = None
     extraction: ExtractionSettings = field(default_factory=ExtractionSettings)
     lazy_bodies_fetched: int = 0
+    tool_results_dir: Path | None = None
+    """Where every recorded step's full result is written, as `step-<index>.json` (feature
+    008, FR-021). Set only by `start_review`, to `<out>/tool-results`, so a check run, the
+    Model check tab and MCP general chat write none."""
     finding_ids: FindingIdAllocator = field(default_factory=FindingIdAllocator)
     evidence_request_ids: EvidenceRequestIdAllocator = field(
         default_factory=EvidenceRequestIdAllocator

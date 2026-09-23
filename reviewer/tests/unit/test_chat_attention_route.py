@@ -122,7 +122,16 @@ def get(client: TestClient, chat_id: str) -> Any:
 
 
 def files_in(directory: Path) -> dict[str, bytes]:
-    return {path.name: path.read_bytes() for path in sorted(directory.iterdir())}
+    """Every file under `directory`, keyed by its relative path.
+
+    Feature 008 T066, edited deliberately: a review writes `tool-results/step-<n>.json`, so
+    the folder holds a sub-folder, and the snapshot walks it - a write into `tool-results/`
+    is then caught too, which the flat listing could not see."""
+    return {
+        path.relative_to(directory).as_posix(): path.read_bytes()
+        for path in sorted(directory.rglob("*"))
+        if path.is_file()
+    }
 
 
 # --- 1. the ranking a settled review answers with --------------------------------------

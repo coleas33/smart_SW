@@ -62,6 +62,7 @@ from swreview.agent.providers import (
     TurnResult,
     call_tool,
     error_body,
+    model_payload,
     register,
     tool_result_text,
     tools_withdrawn,
@@ -436,7 +437,7 @@ class OpenAIProvider:
                     history.append(_tool_message(request, {"error": BUDGET_EXHAUSTED}, True))
                     continue
                 result = self._call(request, tools, on_event)
-                history.append(_tool_message(request, result.payload, result.is_error))
+                history.append(_tool_message(request, model_payload(result), result.is_error))
                 steps += 1
 
             if steps >= max_steps:

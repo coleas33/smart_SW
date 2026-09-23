@@ -282,12 +282,22 @@ def test_the_last_round_of_a_stopped_turn_has_no_observable_growth(
 
 
 def test_reading_writes_nothing(tmp_path: Path, package_dir: Path) -> None:
+    """Feature 008 T066, edited deliberately: a review run folder now holds the
+    `tool-results/` sub-folder, so the snapshot walks every file by relative path - which
+    also proves reading writes nothing into it."""
     run = recorded(tmp_path, package_dir, [TurnPlan(rounds=((SUMMARY,),))])
-    before = {p.name: p.read_bytes() for p in run.iterdir()}
+
+    def snapshot() -> dict[str, bytes]:
+        return {
+            p.relative_to(run).as_posix(): p.read_bytes() for p in run.rglob("*") if p.is_file()
+        }
+
+    before = snapshot()
+    assert any(name.startswith("tool-results/") for name in before)
 
     read_recording(run)
 
-    assert {p.name: p.read_bytes() for p in run.iterdir()} == before
+    assert snapshot() == before
 
 
 # --- refusals ----------------------------------------------------------------------------

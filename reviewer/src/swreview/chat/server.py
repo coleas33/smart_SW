@@ -136,6 +136,7 @@ from swreview.report.session import load_session
 from swreview.report.snapshot import review_snapshot
 from swreview.report.summary import load_words, review_ranking
 from swreview.report.unexamined import not_examined
+from swreview.tools.registry import TOOL_RESULTS_DIR_NAME
 
 __all__ = [
     "DEFAULT_ALLOW_ORIGIN",
@@ -538,7 +539,10 @@ def _next_free_index(run_dir: Path) -> int:
     after two retries.
     """
     index = 1
-    while any(_rotated(run_dir / name, index).exists() for name in SESSION_FILES):
+    while any(
+        _rotated(run_dir / name, index).exists()
+        for name in (*SESSION_FILES, TOOL_RESULTS_DIR_NAME)
+    ):
         index += 1
     return index
 
@@ -1986,6 +1990,12 @@ class ChatServer:
         record = chat.run_dir / ATTENTION_FILE_NAME
         if record.is_file():
             record.rename(_rotated(record, index))
+        # Feature 008 (FR-021): the rotated session's stored results go with it, at the same
+        # index, so `tool-results.1/` sits beside `session.1.json` and the retry starts on an
+        # empty folder rather than beside another session's files.
+        results = chat.run_dir / TOOL_RESULTS_DIR_NAME
+        if results.is_dir():
+            results.rename(_rotated(results, index))
 
     # --- the review ------------------------------------------------------------------
 

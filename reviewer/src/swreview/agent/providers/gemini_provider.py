@@ -63,6 +63,7 @@ from swreview.agent.providers import (
     TurnResult,
     call_tool,
     error_body,
+    model_payload,
     register,
     tools_withdrawn,
     usage_body,
@@ -451,7 +452,7 @@ class GeminiProvider:
                         "role": "tool",
                         "call_id": result.call_id,
                         "name": request.name,
-                        "content": result.payload,
+                        "content": model_payload(result),
                         "is_error": result.is_error,
                     }
                 )
@@ -740,7 +741,7 @@ def _tool_content(
     return types.Content(
         role="tool",
         parts=[
-            _response_part(request.name, result.call_id, result.payload, result.is_error)
+            _response_part(request.name, result.call_id, model_payload(result), result.is_error)
             for request, result in zip(requests, results, strict=True)
         ],
     )
