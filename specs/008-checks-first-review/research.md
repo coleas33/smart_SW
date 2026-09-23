@@ -1113,10 +1113,12 @@ reaches the guard and the dispatch. The array is decided before the first reques
 changes after it (lever 3's prefix guarantee).
 
 **Why.** The tool array is sent on every round. After checks first, a completed tool can only
-earn the model an `already_run` answer, yet the seven tools the pre-run always runs weigh about
-7,000 bytes of the slimmed pane array (about 1,700 tokens a round; the pinned figures are
-`test_tool_payload.py`'s, regenerated with `--write`), and `check_standards` another 1,500 when
-a profile is attached. The owner raised `ARRAY_CEILING` to 38,000 on the understanding that these
+earn the model an `already_run` answer, yet the seven tools the pre-run always runs weigh
+6,983 bytes of the slimmed pane array on OpenAI and 6,668 on Gemini (about 1,496 and 1,435
+o200k tokens a round; the pinned figures are `test_tool_payload.py`'s `PRERUN_SAVED_BYTES` and
+`PRERUN_SAVED_TOKENS`, regenerated with `--write`; the spec commit's estimate of about 1,700
+tokens predated T115's measurement), and `check_standards` another 1,500 when a profile is
+attached. The owner raised `ARRAY_CEILING` to 38,000 on the understanding that these
 tools leave next.
 
 **The rule, each clause an edge the tests pin.**
@@ -1158,7 +1160,7 @@ than asking for a call - rewording it would move every array pin of every run.
 
 | Option | Why not |
 |---|---|
-| Raise the ceiling instead | Pays about 1,700 tokens every round for tools that can only answer `already_run`; the ceiling is headroom, not a target, and the owner chose the other way. |
+| Raise the ceiling instead | Pays about 1,496 o200k tokens every round on OpenAI (1,435 on Gemini; T115's pins) for tools that can only answer `already_run`; the ceiling is headroom, not a target, and the owner chose the other way. |
 | Trim the descriptions of these tools | Keeps each schema's structure on the wire (lever 2's floor), leaves the tools callable for nothing, and adds a second trim path beside lever 2. |
 | Withhold only the RMS tools | The largest three, but the other four already-run tools stay on every round for no reason that separates them. |
 
