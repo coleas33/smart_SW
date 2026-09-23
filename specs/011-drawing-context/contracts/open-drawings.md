@@ -59,9 +59,12 @@ and were not read: {paths}. Close some and extract again to read them."
 ## 5. Candidates
 
 For each part or assembly document the traversal reached that no attached drawing references,
-`<directory of its path>\<file stem>.SLDDRW` is asked once. When it exists, one `DrawingCandidate`
-`{document_id, path, reason: "same_name_beside_model"}` is written, in traversal order. Nothing
-opens, reads, lists or fetches the file; no other name, extension or folder is asked about.
+`<directory of its path>\<file stem>.SLDDRW` is asked once - one function,
+`OpenDrawingDiscovery.CandidatePath`, which the confirmed open recomputes with. When it exists, one
+`DrawingCandidate` `{document_id, path, reason: "same_name_beside_model"}` is written, in
+traversal order. The extraction never opens, reads, lists or fetches the file; no other name,
+extension or folder is asked about. Only the engineer's confirmation of the candidate question
+opens it, read-only, through `confirmed-open.md` (owner, 2026-09-23, research R5 Q2).
 Suppressed and lightweight components' documents are asked about too - their files exist whether
 or not the component is resolved. A document without a path is not asked about.
 

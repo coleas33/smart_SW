@@ -181,10 +181,11 @@ download - which is probe D13, so until it answers, a thrown or slow check is a 
 guess. Only one exact name is tried: numbering conventions (`-SHT1`, a revision suffix) are the
 company's and would be a guessed pattern.
 
-**Alternatives**: opening the candidate read-only when found (rejected: FR-036; an owner question
-with a default of no, R5); searching the folder for any drawing (rejected: the vault is not walked);
-checking in Python (rejected: the reviewer may run on a machine that cannot see the vault; the
-extractor runs where the files are).
+**Alternatives**: opening the candidate read-only when found (rejected: nothing is opened without
+the engineer's word; *amended 2026-09-23*: the owner answered R5 Q2 yes, so a candidate the
+engineer **confirms** is opened read-only, R2.23); searching the folder for any drawing (rejected:
+the vault is not walked); checking in Python (rejected: the reviewer may run on a machine that
+cannot see the vault; the extractor runs where the files are).
 
 ### R2.5 Several drawings in one package: one set of identifiers, one reader per drawing
 
@@ -444,10 +445,12 @@ predicate table beside `CODE_FIRST_CHECKS` (rejected: a second registration mech
 
 - **one candidate question** when the package has drawing candidates: question "A drawing with the
   same name sits beside {n} reviewed file(s) but is not open. Should the review read it?", options
-  `I will open it and review again`, `Review without it`, `It is not the right drawing`; `what`
-  names the candidate files (first ten, then a count); `why` says fits, stacks and callouts stay
-  unresolved without a drawing and that the review never opens a file itself; `entity_ids` the
-  documents' ids;
+  `Yes, open it read-only and read it`, `Review without it`, `It is not the right drawing`
+  (*amended 2026-09-23*, owner, R5 Q2: the first option was `I will open it and review again`;
+  the confirmation now has the product open the candidate read-only, R2.23); `what` names the
+  candidate files (first ten, then a count); `why` says fits, stacks and callouts stay unresolved
+  without a drawing and that the review opens a file only read-only and only when the engineer
+  confirms it; `entity_ids` the documents' ids;
 - **one governing-drawing question per document shown by two or more attached drawings**, three
   at most, in traversal order: question "{k} open drawings show {file stem}. Which one governs it?"
   truncated to 140 characters by shortening the stem, options each drawing's file name when there
@@ -596,6 +599,57 @@ model dimensions the resolver needs already exist with known answers.
 - **Add a finding for an interface with no drawing callout.** The brief lists each interface's
   binding; a finding waits until the binding is validated on a seat and the owner asks for it.
 
+### R2.23 A confirmed candidate is opened read-only, read, and closed (owner, 2026-09-23, R5 Q2)
+
+**Decision**: the candidate question's first option becomes "Yes, open it read-only and read it".
+When the engineer sends it, the **backend** - which wrote the question and owns its strings, so the
+page compares nothing - asks the add-in over the bridge, once per confirmed candidate, with a new
+review-scope command `drawing.read {document_id}` (protocol 1.3). The **host** resolves everything
+from its own records: the chat's run folder (as `report.open` does), that package's
+`documents[]` row and `drawing_candidates[]` row for the id, and the candidate path recomputed as
+discovery computes it; no path ever travels in a request. It then opens the drawing through a
+**guarded seam** of its own - `DrawingOpenGuard`, an allowlist of exactly three interface-qualified
+keys (`ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6`, `ISldWorks.CloseDoc`), recorded as one
+entry in `004-resilient-remodeler/contracts/guard-allowlist.md` - with `OpenDoc6(path, drawing,
+ReadOnly | Silent = 3)` between `DocumentVisible(false, drawing)` and its restore in a `finally`,
+so the drawing is not shown and takes no focus. It reads the drawing with the existing drawing
+phase, ids continuing the package's sequences, appends it to the run's `package.json` through
+`PackageAppender` (the extractor still writes every package byte), and closes it in a `finally`
+**only when the seam opened it**, after checking that the path answers the same COM identity. A
+drawing the engineer opened in the meantime is read as it stands and never closed. The backend
+reloads the package before the resumed turn, so the turn sees the drawing.
+
+**Why**: the owner's answer to Q2, and every rule the answer states. The bridge is the only channel
+from the reasoning side to SOLIDWORKS, and it is already authenticated and scoped (feature 002);
+`tessellate` is the precedent of a review-scope command that names a package id and has the host
+choose every path. A dedicated allowlist guard, as feature 004's `RemodelGuard` is, makes "the one
+read-only open" a closed set a test can pin rather than a bare name riding on the read-only
+denylist's exclusion of `OpenDoc6`. The add-in's bridge runs on the SOLIDWORKS thread, so the
+engineer cannot touch the drawing between the open and the close; "close only what we opened" is
+decidable from one read before the open. `DocumentVisible` is the documented way to open a
+document without showing it; it is session state, not a saved preference, and is restored in a
+`finally`.
+
+**Alternatives**: re-running the whole review extraction with the drawing open (rejected: minutes
+on a large assembly, and a second package mid-review renumbers every attached drawing); returning
+the record over the bridge for the backend to merge (rejected: the backend would write
+`package.json`, which only the extractor writes, and would re-implement the path matching); a page
+message after the answer (rejected: the page would have to recognise the answer's words, and the
+page compares nothing); riding on the bare `OpenDoc6` exclusion (rejected: the owner asked for an
+allowlist entry of its own, and a bare name cannot tell the model open from the drawing open in the
+gate log).
+
+**What the seat must confirm** (probe D14, T077): the open-mode flags as composed; that the drawing
+never becomes the active document and the engineer's window keeps focus; that views of the hidden
+drawing read; that the file's size, write time and hash are unchanged and no save flag rises; that
+the file is not locked for the engineer after the close; and whether the models the drawing loaded
+stay loaded after it closes. Until then the seam ships **off**, as the drawing binding does (R2.8):
+`DrawingOpenScope.SeatValidated = false`, and while it is false `drawing.read` opens nothing and
+answers "the read-only open of a confirmed drawing is not yet validated on a seat (feature 011
+probe D14)", which the review records; the probe itself runs the seam from the console with the
+switch overridden for that one command. T077 sets it true in a commit of its own citing the probe
+record, or leaves it false and records why.
+
 ## R3. Verified facts the plan relies on
 
 - **No drawing has been extracted live.** `SwSession.Attach` refuses a drawing (`SwSession.cs:78`,
@@ -674,6 +728,7 @@ T107).
 | D11 | `GetProperties2` (projection, scale), `GetTemplateName`, and the document's unit, precision and standard name on a drawing | R2.7, R2.18 |
 | D12 | `ReferencedConfiguration`, `IsModelOutOfDate`, `IsModelLoaded` on an up-to-date view, a view left out of date after a model edit, and a drawing in detailing mode | R2.6 |
 | D13 | `File.Exists` on a vault-view path whose file is not cached locally: the answer, the time taken, and whether the file was fetched | R2.4 |
+| D14 | The confirmed candidate's read-only open (R2.23): the open-mode integer, the active document and focus before, during and after, the hidden drawing's views, the file's size, write time and hash and every save flag before and after, the file's lock after the close, and the open-document set before and after | R2.23, SC-011 |
 
 ## R5. Owner decisions recorded here, and the questions still open
 
@@ -685,19 +740,27 @@ starting from the owner's base repository; tolerances come from four sources, dr
 of them; the general tolerance goes by decimal places (2026-09-23, 010 R5); feature 010 takes IR
 1.5.0 and profile version 2 and 011 the next versions (2026-09-23, 010 R5).
 
-**Open, each with the default this package ships** (none blocks the offline tasks):
+**Answered by the owner on 2026-09-23** (Q2 to Q9). Q2 is the only answer that differs from the
+default this package shipped; it is designed in R2.23 and specified in `contracts/confirmed-open.md`,
+and its tasks are Phase 7B (T069 to T077). Every other answer confirms the shipped default, so no
+requirement or task moves for it.
+
+| # | Question | Answer (owner, 2026-09-23) | Moves |
+|---|---|---|---|
+| Q2 | Should a candidate drawing be opened read-only when the engineer answers "yes"? | **Yes, the product opens it.** When the engineer confirms that a same-name drawing which is not open is this part's drawing, the product opens it read-only itself - overriding the shipped default ("the engineer opens it and reviews again"). It never changes or saves the drawing, never activates it or takes focus from the engineer's window if the API allows that, and closes it again when the product opened it; it never closes a drawing the engineer had open. The one read-only open goes through the guarded seam with its own allowlist entry; a seat probe verifies the open-mode flags, that the file is not locked for the engineer, and that nothing is written | FR-015, FR-036, US5, `contracts/confirmed-open.md`, T069 to T077 |
+| Q3 | Should the Standards tab, or a review's standards run, grade the drawings attached to a part or assembly? | **No.** A drawing is graded only when it is itself open | nothing (FR-011 as shipped) |
+| Q4 | The drawing section's values | **The profile version 3 drawing values stay fictional placeholders** in the repository; the owner writes the real ones with the version 3 profile | nothing (T029 as shipped) |
+| Q5 | Is a drawing that differs from the drawing section a review finding only, or also a Standards check in the release verdict? | **A review finding only** (manufacturing class), never a release-verdict failure | nothing (FR-047 as shipped) |
+| Q6 | A geometric tolerance value written on a drawing with no unit: read in the drawing's unit? | **Yes** (the default accepted): read in the drawing's unit and cited so | nothing (FR-029 as shipped) |
+| Q7 | Does the company use SOLIDWORKS' general tolerance table (an ISO 2768 class), or only the decimal-place convention? | **Decimal places only.** A dimension governed by the ISO 2768 table is recorded word for word and binds nothing. The real band values are still to come; `config/standards.example.yaml` keeps its clearly labelled example bands | nothing (FR-021, R2.9 as shipped) |
+| Q8 | Should `rms.drawing.model_items_preferred` be evaluated now that the extraction records model items? | **No** (the default accepted): it stays out of scope | nothing |
+| Q9 | Does `ARRAY_CEILING` hold the bridged review arrays? | **No** (the default accepted): the bridged arrays are pinned and not asserted | nothing (FR-050, T054 as shipped) |
+
+**Still open:**
 
 | # | Question | Default | Blocks |
 |---|---|---|---|
 | Q1 | Where is the drawing-creation base repository? | The brief ships the roadmap's five sections at `brief_version: 1`; when the location is given, its expected inputs are evaluated (T061) and the brief is extended additively, in 012 if not before | the brief's final content, feature 012 |
-| Q2 | Should a candidate drawing be opened read-only when the engineer answers "yes"? | No: the engineer opens it and reviews again; the extractor keeps its one read-only open, for models | nothing |
-| Q3 | Should the Standards tab, or a review's standards run, grade the drawings attached to a part or assembly? | No: a drawing is graded when it is itself open and pressed; the release verdict does not depend on which windows are open | nothing |
-| Q4 | The drawing section's values: accepted sheet formats, drafting standard name, projection, the unit drawings are dimensioned in, the templates | Fictional placeholders in the repository; the owner writes the real ones with the version 3 profile at the next sitting; empty settings are skipped | conformance and the general tolerance on real runs |
-| Q5 | Is a drawing that differs from the drawing section a review finding only, or also a Standards check in the release verdict? | A review finding, `drawing_profile.conformance`, class manufacturing, outside the release verdict | nothing |
-| Q6 | A geometric tolerance value written on a drawing with no unit: read in the drawing's unit? | Yes, cited "read in the drawing's unit" | the position source on real runs |
-| Q7 | Does the company use SOLIDWORKS' general tolerance table (an ISO 2768 class), or only the decimal-place convention? | Decimal places only; a table-governed dimension is recorded and binds nothing | nothing |
-| Q8 | Should `rms.drawing.model_items_preferred` be evaluated now that the extraction records model items? | No: it stays out of scope "advisory by decision" | nothing |
-| Q9 | Does `ARRAY_CEILING` hold the bridged review arrays, which were over it before this feature (39,542 and 39,898 bytes on OpenAI)? Added 2026-09-23 on review (R2.20) | No, as today: they are pinned and not asserted, and the drawing arm pins the bridged slim array with the family the same way | nothing in this feature; a lever that trims the bridged arrays if the answer is yes |
 
 ## R6. Relation to the features around it
 

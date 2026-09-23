@@ -30,7 +30,11 @@ Make drawings read-only evidence for reviews, in the order the next sitting need
    feeds the stack-up.
 6. **The drawing check and its questions** (US5): an argument-free check, offered and planned only
    when a package carries drawing evidence, records drawing coverage per document and raises at most
-   four questions through the evidence-request writer the pane already shows.
+   four questions through the evidence-request writer the pane already shows. **Amended
+   2026-09-23** (owner, research R5 Q2, R2.23): when the engineer confirms a candidate, the backend
+   asks the add-in over the bridge (`drawing.read`, protocol 1.3, a document id and never a path);
+   the add-in opens the drawing read-only and hidden through a guarded seam with its own allowlist,
+   reads it into the run's package, and closes it when it opened it - shipped off until probe D14.
 7. **The brief** (US6): a bounded, deterministic brief per part from feature 010's joint map,
    callouts and resolver, served on demand by a tool and a command.
 8. **Conformance** (US7): each drawing compared with the profile's drawing section, one finding per
@@ -82,13 +86,14 @@ test).
 
 **Constraints**: the constitution's Principles I to VI; the read-only rule with no new exception; no
 drawing value in a calculation before T066; no tolerance, precision or unit inferred - a missing one
-is unresolved; nothing opened, activated, selected, rebuilt or saved; every new evidence field
+is unresolved; nothing opened, activated, selected, rebuilt or saved (the one open is a candidate
+the engineer confirms, read-only, hidden, closed again - owner 2026-09-23); every new evidence field
 additive; every existing tool signature, docstring and payload pin unmoved; `ARRAY_CEILING` 38,000;
 replay unchanged; nothing from any recorded package or company in the repository.
 
 **Scale/Scope**: seven user stories; one new argument-free check and one new query tool in a
 conditional family; one new finding id; eleven new gap kinds; evidence schema 1.6.0; profile version
-3; three fixtures; 580 generated guard denials; about 68 tasks, 7 of them on the seat.
+3; three fixtures; 580 generated guard denials; about 77 tasks, 8 of them on the seat (T069 to T077 added 2026-09-23 for the owner's Q2 answer).
 
 ## Constitution Check
 
@@ -103,7 +108,7 @@ table).*
 | IV. Semantic fidelity and traceability | Persistent refs; versioned schema; native over exported | Every new record carries its persistent reference when SOLIDWORKS gives one, scoped to its own drawing; attachments carry the model face's reference scoped to its part; IR 1.6.0 is additive and versioned; tolerances come from native drawing data, never from a PDF where a native sheet exists (a native sheet wins over an ingested one of the same name). | PASS |
 | V. Engineered enough | DRY; explicit; no speculation | One tolerance mapping for model and drawing dimensions; one table walk for every table; one annotation record enriched by type; one conversion for three tools; one evidence-request writer for the model and the check; the brief reuses 010's joint map, callout and resolver; the guard table generated, not typed; two named attach entry points instead of a flag. No new transport, provider or agent stage. The templates in the profile are data for 012 and are named as such. | PASS |
 | VI. Findings inspectable, coverage tracked | Reproducible findings; coverage visible | Drawing coverage per reviewed document (read, unusable and why, candidate); the limit gap names every unread drawing; the brief counts every omission; the one new finding names each difference with the drawing's value; nothing is a blanket exclusion. | PASS |
-| Technical constraint: documents are read, not written | No mutation | Every change is a read; 580 writers newly refused before any new read lands; the gate log of a drawing extraction shows no writer, activation, open or close member (FR-007). | PASS |
+| Technical constraint: documents are read, not written | No mutation | Every change is a read; 580 writers newly refused before any new read lands; the gate log of a drawing extraction shows no writer, activation, open or close member (FR-007). The owner's Q2 answer adds one read-only open of a confirmed candidate: it writes and saves nothing, activates nothing, closes only what it opened, and goes through an allowlist of three keys (`contracts/confirmed-open.md`); a read-only open is a read, so no exception is needed. | PASS |
 | Technical constraint: 2026 dependencies | None | Every member named was reflected on the 2024 SP5 interop (32.5.0.48); Auto-Generate Drawing (2026) is not used. | PASS |
 | Technical constraint: pilot scope | Findings, not GD&T creation | The brief reports each interface's existing tolerance and feature 010's recommended callout; nothing dimensions or tolerances a drawing. | PASS |
 | Technical constraint: curated tools only | No generic execution | One argument-free check and one query tool; the application's macro members are newly refused. | PASS |
@@ -189,8 +194,13 @@ extractor/SwReview.Extractor/
 ├── Dump/SwDrawingReader.cs             # CHANGED: Drawing(document), PersistRef(document, entity), new reads
 ├── Dump/ToleranceDumper.cs             # CHANGED: the tolerance read and mapping shared with DrawingDumper
 ├── Dump/SwDump.cs                      # CHANGED: AttachForDump; the open-drawing source wired
+├── Guard/DrawingOpenGuard.cs           # NEW (Q2): the confirmed open's three-key allowlist
+├── Sw/DrawingOpenScope.cs              # NEW (Q2): the guarded seam, close-if-we-opened-it, the switch
+├── Dump/ConfirmedDrawingRead.cs        # NEW (Q2): drawing.read's host side; PackageAppender.MergeDrawing
+├── Bridge/{BridgeDispatcher.cs, BridgeProtocol.cs, SecretPolicy.cs}  # CHANGED (Q2): drawing.read, 1.3, review scope
 └── Ir/DrawingRecord.cs, Ir/DrawingTable.cs (NEW), Ir/EvidencePackage.cs   # CHANGED: 1.6.0
 extractor/SwReview.AddIn/Review/{SwReviewDump.cs, ReviewHost.cs}           # CHANGED: AttachForDump; the sentence
+extractor/SwReview.AddIn/ToolService/ToolServiceHost.cs                    # CHANGED (Q2): the confirmed-drawing source
 extractor/SwReview.Extractor.Console/Program.cs                            # CHANGED: dump and probe standards
                                                                            #          use AttachForDump; probe drawings
 extractor/tools/list-writer-members.ps1                                    # NEW: generates the guard table
@@ -230,7 +240,8 @@ Research in [research.md](research.md) (R1 to R6). Design in [data-model.md](dat
    `AttachForDump`; a drawing session binds no configuration and the type says so (R2.1).
 3. **Only open drawings, only those that show the design, at most ten, matched by full path**;
    discovery precedes the document phase and runs in the reuse probe; no phase row (R2.3).
-4. **A candidate is a name, never a file opened**; one exact name, one folder (R2.4).
+4. **A candidate is a name, never a file the extraction opens**; one exact name, one folder (R2.4);
+   only the engineer's confirmation opens it, read-only, through its own allowlist (R2.23).
 5. **Ids are the package's**, not the drawing's; a root drawing numbers as before (R2.5).
 6. **Usable views only**: the reviewed configuration, up to date, model loaded, not detailing (R2.6).
 7. **One tolerance mapping, one table walk, one annotation record** (R2.7, R2.12).
@@ -256,6 +267,7 @@ Research in [research.md](research.md) (R1 to R6). Design in [data-model.md](dat
 | 5 | **US3** (P1) | the dimension, view, drawing and sheet reads; profile version 3; the conversion; the binding (disabled); the resolver's drawing answer; the tools on native sheets; the acceptance | Validation only |
 | 6 | **US4** (P2) | typed annotations, attachments and every table; the position source | Validation only |
 | 7 | **US5** (P2) | the evidence-request writer; the coverage and questions; the conditional family and plan; the replay proof | No |
+| 7B | **US5, part B** (P2, owner 2026-09-23) | the guarded seam and its allowlist; `drawing.read` and the merge; the add-in wiring; the backend's trigger and reload | Validation only (D14) |
 | 8 | **US6** (P2) | the brief, its tool and command; the drawing arm pinned | No |
 | 9 | **US7** (P3) | conformance and its class | No |
 | 10 | Polish | README, the 001, 007 and 008 contract rows, the quickstart, the checklist | No |
@@ -267,6 +279,8 @@ drawing is read (T010 before T019). The fixtures before any Python acceptance te
 before the resolver's unit rule (T029 before T035). The evidence-request writer before the check
 writes a question (T044 before T048). The drawing arm pinned only after both tools exist (T055 after
 T053), with `--write`, in a commit of its own. `DRAWING_BINDING_VALIDATED` set only by T066.
+The guard before the confirmed open's seam (T004 before T069); `DrawingOpenScope.SeatValidated` set
+only by T077.
 
 **Sequencing against the other features.** 011 needs 008, 009 and 010 on main, which they are. The
 files 011 shares with other features' likely changes - `prerun.py`, `tools/registry.py`,
@@ -294,6 +308,7 @@ location of the owner's drawing-creation base repository for T061.
 | RK-9 | Profile version 3 breaks the owner's real profile. | The loader keeps reading versions 1 and 2; the drawing sources stay absent until the owner writes version 3. |
 | RK-10 | The questions flood the pane on a large assembly. | One aggregated candidate question; at most three governing questions; coverage for the rest. |
 | RK-11 | The conformance finding closes the checklist's drawing item. | The `drawing_profile.` prefix; a test asserts the item stays open. |
+| RK-12 | The confirmed open activates the drawing, takes focus, locks or writes the file, or closes a document the engineer had open. | A three-key allowlist; options asserted as the integer 3; hidden around the open; close only what the seam opened, after a COM-identity check; the switch off until probe D14 passes (T077). |
 
 ## Complexity Tracking
 

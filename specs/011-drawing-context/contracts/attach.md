@@ -61,7 +61,9 @@ drawing to `SwReviewDump.Run`.
 `AttachForDump` with a `documentPath` ending `.slddrw` that `GetOpenDocumentByName` does not answer
 refuses before `OpenReadOnly`: "'{path}' is a drawing that is not open in SOLIDWORKS. Open it
 first: the extractor does not open drawings, because opening one loads every model its views
-show." `OpenReadOnly` opens part and assembly files only.
+show." `OpenReadOnly` opens part and assembly files only. The one product path that opens a
+drawing is not an attach: it is the read-only open of a candidate the engineer confirmed, through
+its own guarded seam (`confirmed-open.md`, owner 2026-09-23).
 
 ## 5. The Review tab's refusal
 

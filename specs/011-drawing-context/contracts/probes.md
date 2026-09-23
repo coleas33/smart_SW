@@ -34,6 +34,7 @@ all that apply to the open document's kind.
 | D11 | the D1 drawing | `GetProperties2` items, `GetTemplateName` present or not, preferences 13, 47, 65 answered or not | R4 |
 | D12 | an up-to-date view, a view left out of date after a model edit, and a drawing in detailing mode | per view: `ReferencedConfiguration` present, `IsModelOutOfDate`, `IsModelLoaded`; `IsDetailingMode` | R4 |
 | D13 | a reviewed part in a vault view whose same-name drawing is not cached locally | `File.Exists` answer, elapsed ms, and whether the local cache gained the file (checked by timestamp before and after, printed as a boolean) | R4 |
+| D14 | a reviewed part whose same-name drawing is not open, then the same with the drawing open (`--probe D14`, the one probe that opens a document: it runs `DrawingOpenScope` with its switch overridden for this command) | the `OpenDoc6` type and options integers; the active document's identity (a boolean "unchanged") before, during and after, and whether the engineer's window kept focus; the hidden drawing's sheet and view counts as read; the drawing file's size, write time and SHA-256 equality (booleans) and every open document's save flag before and after; after the close, whether `GetOpenDocumentByName` still answers and whether an exclusive read open of the file succeeds (not locked); the open-document count before, during and after; with the drawing already open, that no visibility, open or close key was gated | R4, T077, SC-011 |
 
 ## 3. What each probe's answer changes
 
@@ -45,3 +46,4 @@ all that apply to the open document's kind.
 | D7: a whole rendered text is readable | a later task may record it; `text_as_read` stays composed until then |
 | D12: out-of-date views read reliably | nothing; an unreliable read keeps such views unusable (their evidence is unused, never guessed) |
 | D13: the check fetches the file or takes over a second | discovery skips the candidate check under a vault view and writes one `drawing_candidate` gap saying so - one rule in `OpenDrawingDiscovery`, recorded in research and `open-drawings.md` section 5 |
+| D14: every answer as `confirmed-open.md` requires | T077 sets `DrawingOpenScope.SeatValidated = true` in its own commit citing the record; the drawing activated, took focus, was written, stayed locked, or its hidden views did not read: the switch stays false and research R4 records why; models left loaded after the close are recorded, never closed by the product |

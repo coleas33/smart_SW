@@ -29,6 +29,7 @@ from `required`; `SCHEMA_VERSION` and `EvidencePackage.CurrentSchemaVersion` bec
 | `units_decimal_places_raw` | int \| null | `GetUserPreferenceInteger(swUnitsLinearDecimalPlaces = 49)` | recorded until probe D4 says which default governs |
 | `tolerance_precision_raw` | int \| null | `GetUserPreferenceInteger(swDetailingLinearTolPrecision = 25)` | |
 | `drafting_standard_name` | str \| null | `GetUserPreferenceString(swDetailingDimensionStandardName = 65)` | verbatim; compared by US7 |
+| `opened_by_review` | bool \| null | the confirmed open (`contracts/confirmed-open.md`) | `true` only when the product opened this drawing read-only at the engineer's confirmation; omitted otherwise, never `false` (owner, 2026-09-23, research R5 Q2) |
 
 Whether a record is the package's root drawing or an attached one is **derived**, not stored: it is
 the root when `document_id == design.root_assembly_document_id`.
@@ -155,6 +156,10 @@ existence check failed), `drawing_document_settings`, `drawing_view_state`, `dim
 | `AttachedDrawings` | `Dump/OpenDrawingDiscovery.cs` | the ordered drawings to read (at most ten), the ones named in the limit gap, the candidates; pure `Discover(tree, documents, fileExists, options)` |
 | Drawing id allocators | `Dump/DumpContracts.cs` `DumpScope` | `dsh`, `dvw`, `ddm`, `dan`, `dnt`, `drv`, `dtb`, moved from `DrawingTraversal` |
 | `IDrawingReader` changes | `Dump/DrawingDumper.cs` | `Drawing(object document)`, `PersistRef(object document, object entity)`; the new reads of section 1 |
+| `OpenDrawingDiscovery.CandidatePath` | `Dump/OpenDrawingDiscovery.cs` | `<directory>\<stem>.SLDDRW` of a model path: the one rule discovery and the confirmed open both use |
+| `DrawingOpenGuard` | `Guard/DrawingOpenGuard.cs` | the confirmed open's allowlist: `ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6`, `ISldWorks.CloseDoc` (`contracts/confirmed-open.md` section 3) |
+| `DrawingOpenScope`, `IDrawingOpenHost` | `Sw/DrawingOpenScope.cs` | the guarded seam: already open or opened (`OpenedByReview`), hide-open-restore, close only what it opened after the identity check; `SeatValidated = false` until T077 |
+| `IConfirmedDrawingSource`, `ConfirmedDrawingRead` | `Bridge/BridgeDispatcher.cs`, `Dump/ConfirmedDrawingRead.cs` | the `drawing.read` command's host side: the refusals, the read with ids continuing the package's, `PackageAppender.MergeDrawing` |
 
 `ComponentTreeResult.AttachedDrawings` carries discovery's result from `PackageWriter.Build` to
 `DocumentPaths`, `BuildDesign` and the drawing phase.
@@ -207,9 +212,15 @@ Replaces feature 010's `drawing_tolerance(package, subject) -> Dimension | None`
 | `DocumentDrawingCoverage` | `document_id`, `read: tuple[drawing ids]`, `unusable: tuple[(view, why)]`, `candidate: str \| None`, `status: Literal["checked", "skipped", "unresolved"]` | one `drawing.context` coverage item per reviewed part or assembly document |
 | `QuestionSpec` | `key`, `what`, `why`, `entity_ids`, `question`, `options`, `blocks` | a question `check_drawings` will write; `key` is `candidates` or `governing:<document id>` |
 | `DrawingContextResult` | `coverage`, `questions`, `conformance` (from US7) | `run_drawing_context(package, profile=None)` |
+| `CANDIDATE_CONFIRM` | `"Yes, open it read-only and read it"` | the candidate question's first option; the one answer that acts (`contracts/confirmed-open.md` section 1) |
 
 `check_drawings()` returns `{"status": "recorded", "drawings": <read>, "candidates": <n>,
 "questions": <n>, "findings": <n>, "finding_ids": [...], "coverage": {...}}`.
+
+`tools/drawings.read_confirmed_candidates(context, answered)` is called by
+`ReviewRunner.answer_evidence_batch` and writes one `drawing.confirmed_open` coverage item per
+confirmed candidate (`checked` or `unresolved` with the reason); like `drawing.context` it is a
+coverage `check`, never a finding's, and closes nothing.
 
 ## 6. The brief (`drawings/brief.py`)
 

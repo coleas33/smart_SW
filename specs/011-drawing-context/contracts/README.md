@@ -11,7 +11,8 @@
 | The brief: sections, sources, bounds, refusals, the tool and the command | `brief.md` | `drawings/brief.py`, `tools/drawings.py`, `cli.py` → the model, the engineer, feature 012 |
 | Profile version 3 and conformance: the `drawing` section, the loader, the comparison, `drawing_profile.conformance` | `profile.md` | `checks/standards/profile.py`, `checks/drawing_context.py` → the review's findings, the brief |
 | Fixtures: the three synthetic packages, their case table, the generator, the denylist test | `fixtures.md` | `tests/support/drawings.py`, `tests/fixtures/drawings/` → every acceptance test here |
-| Seat probes: `swreview-extract probe drawings`, D1 to D13, what each prints and records | `probes.md` | `SwReview.Extractor.Console/Program.cs` → `research.md` R4, the seat tasks |
+| The read-only open of a confirmed candidate (owner, 2026-09-23): the backend's trigger, the `drawing.read` bridge command, the guarded seam and its allowlist, the close rule, the switch | `confirmed-open.md` | `agent/runner.py`, `tools/drawings.py`, `Bridge/BridgeDispatcher.cs`, `Guard/DrawingOpenGuard.cs`, `Sw/DrawingOpenScope.cs`, the add-in's tool service → the run's `package.json`, `drawing.confirmed_open` coverage |
+| Seat probes: `swreview-extract probe drawings`, D1 to D14, what each prints and records | `probes.md` | `SwReview.Extractor.Console/Program.cs` → `research.md` R4, the seat tasks |
 
 ## Versioning
 
@@ -37,8 +38,10 @@ not change.
 ## Where these contracts land in other features' packages
 
 Feature 001's `contracts/agent-tools.md` gains the drawing family's two rows and `contracts/cli.md`
-the `swreview drawing brief` row; its `ir.schema.json` is regenerated at 1.6.0. Feature 004's
-`contracts/guard-allowlist.md` gains the generated "Feature 011" table. Feature 006's `spec.md`
+the `swreview drawing brief` row; its `ir.schema.json` is regenerated at 1.6.0; the bridge's
+`PROTOCOL.md` (both ends) goes to 1.3 with `drawing.read`. Feature 002's secret scopes gain
+`drawing.read` in the review scope only. Feature 004's `contracts/guard-allowlist.md` gains the
+generated "Feature 011" table and the confirmed drawing's allowlist entry. Feature 006's `spec.md`
 FR-025 and `contracts/ir-additions.md` section 7 record the review extraction's amendment (T001);
 its `contracts/profile.md` carries the version 3 block and `research.md` R5 one row per new field.
 Feature 007's `contracts/attention.md` notes the one new class. Feature 008's
