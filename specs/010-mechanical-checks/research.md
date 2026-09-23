@@ -623,19 +623,27 @@ terminal profile (check tools are in neither); every golden of `report/markdown.
 | FR-018 | "count bodies it could not read" | met by the existing `body` gaps, counted in the Python mass coverage item; no new extractor field | the gaps exist (R3) |
 | FR-019 | the part number "property" and "revision" | the property names the standards profile (version 2) declares; skipped coverage without a profile | R2.17, R2.19 |
 
-## R5. Open items that stay open
+## R5. Open items, and the owner's answers of 2026-09-23
+
+Settled on 2026-09-23 (owner's answers, or settled by the real standards profile):
+
+| Item | Answer | Effect on the tasks |
+|---|---|---|
+| The drive of the head codes `FHT` and `BHT` | **Torx**: FHT = flat head Torx, BHT = button head Torx (owner) | `fastener_names.yaml` ships `FHT` and `BHT` with drive `torx`; `tool_envelopes.yaml` gains a Torx key envelope; tool access for those 36 screws reaches a verdict (US5) |
+| The shop's tool set | **Pilot defaults for now** (owner); the table is data and is replaced later | US5 ships the pilot envelopes labelled "pilot default" on every result |
+| The general tolerance | **By decimal places** (owner): the bands are declared in standards profile version 2 (for example `.X`, `.XX`, `.XXX` and angles); no standard table in code | US8's general source reads the declared bands; the actual band values are still to be supplied with the regenerated profile |
+| A screw through-tapped into thin sheet | **A finding at low severity** (owner), carrying the sheet thickness | US4's engagement check emits `fastener.engagement` at `low` when the tapped part is through-tapped and thinner than 1.5 x d, and at the normal severity otherwise |
+| Whether the part-number pattern should match the file stem | **No change**: the real profile's pattern includes the extension, so whole-name matching is right; the 0-of-30 result came from the workstation's example profile | none |
+| Whether `material_assigned` falls back to the active configuration | **No**: the real profile names `Default`, which the recorded parts carry | none |
+| Which feature lands IR 1.5.0 and profile version 2 first | **010**, which comes before 011 in the roadmap's waves | 011 takes the next versions |
+
+Still open:
 
 | Item | Owner | Blocks |
 |---|---|---|
-| The drive of the head codes `FHT` and `BHT` (the trailing letter is not assumed to mean Torx); until filled in `fastener_names.yaml`, tool access for 36 of 68 screws is unresolved naming the code | owner | US5 verdicts for those heads |
-| The shop's tool set: key across-flats, socket outside diameters, and the reach each needs; the table ships pilot defaults that say so | owner | US5 verdicts being more than pilot defaults |
-| The real standards profile regenerated at version 2 with the company's general tolerance block and the part-number and description property names | owner | the general source (US8) and the hygiene property checks (US7) on real runs |
-| Whether the part-number pattern should match the file stem (feature 006 matches the whole name with its extension) | owner | nothing in 010; FR-020 reports the likely error either way |
-| Whether `material_assigned` should fall back to the active configuration when the profile's configuration is absent | owner | nothing in 010; `mass.material_assigned` is profile-independent |
+| The real standards profile regenerated at version 2 with the decimal-place general tolerance bands and the part-number and description property names | owner | the general source (US8) and the hygiene property checks (US7) on real runs |
 | Confirmation of the twelve new ids' consequence classes (R2.22) at the next read-through | owner | nothing; they ship as a first opinion |
-| Which features lands 1.5.0 of the IR and version 2 of the profile first, 010 or 011, and 011's drawing section referencing `general_tolerance` | whoever starts 011 | the second feature's version numbers |
 | The interference volume unit and `IsPossibleInterference` on zero-volume rows (T069 of feature 001) | next sitting | the contact rule's inputs being verified at the source |
-| Whether a through-tapped thin sheet (an M3 in 1.7 mm steel) is a finding or a known exception class | owner | nothing; it is reported as demonstrated and can be excepted |
 
 ## R6. Where this design differs from the analyst's recommendations
 
