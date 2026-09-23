@@ -23,6 +23,7 @@ from swreview.checks import interference as interference_check
 from swreview.checks.interference import ContactVerdict, InterferenceGroup
 from swreview.ir.models import EvidencePackage
 from swreview.report.session import Contact
+from swreview.tools.checks_mechanical import BodyMeshes, joint_analysis
 from swreview.tools.context import ToolContext, current_context, error_result
 from swreview.tools.query import ToolResult, as_json
 from swreview.tools.recording import record_result
@@ -92,7 +93,15 @@ def check_interference_group(group_key: str) -> ToolResult:
         return selected
 
     store = context.exception_store()
-    outcome = interference_check.classify_group(selected, context.ir, store)
+    # The joint map is built once per context and kept there: the thread-model rule reads
+    # which screw threads into which part (feature 010 T049).
+    outcome = interference_check.classify_group(
+        selected,
+        context.ir,
+        store,
+        joint_map=joint_analysis(context).joint_map,
+        mesh_of=BodyMeshes(context).mesh_of,
+    )
     if outcome.contact is not None:
         return _record_contact(context, selected, outcome.contact)
     assert outcome.finding is not None

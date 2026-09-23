@@ -22,26 +22,46 @@ repeats is feature 008's re-call guard, in one place.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from itertools import combinations
 from typing import Any
 
-from swreview.checks.joint_alignment import run_joint_checks
+import trimesh
+
+from swreview.checks.fastener_identity import (
+    RecognisedFastener,
+    fastener_group,
+    joint_map_with_fasteners,
+    run_fastener_checks,
+)
+from swreview.checks.joint_alignment import JointResult, run_joint_checks
 from swreview.checks.joints import (
     Candidate,
     Joint,
     JointMap,
     JointMapGap,
-    build_joint_map,
     fold_by_pattern,
     folded_result,
     joint_label,
+    pattern_group,
 )
+from swreview.checks.result import CheckResult
 from swreview.report.session import CoverageBucket, CoverageItem, CoverageScope
 from swreview.tools.context import ToolContext, current_context
+from swreview.tools.measure import load_body_mesh
 from swreview.tools.query import ToolResult
 from swreview.tools.recording import record_result
 
-__all__ = ["CODE_FIRST_CHECKS", "JOINT_MAP_CHECK", "check_joints", "record_joint_map"]
+__all__ = [
+    "CODE_FIRST_CHECKS",
+    "JOINT_MAP_CHECK",
+    "BodyMeshes",
+    "JointAnalysis",
+    "check_joints",
+    "joint_analysis",
+    "record_joint_map",
+]
 
 CODE_FIRST_CHECKS: tuple[str, ...] = ("check_joints",)
 """The argument-free check tools the pre-run calls, in order. Each must be in
@@ -107,11 +127,21 @@ def _gap_item(gap: JointMapGap) -> CoverageItem:
     )
 
 
+def _unplaced_item(fastener: RecognisedFastener) -> CoverageItem:
+    return CoverageItem(
+        check=JOINT_MAP_CHECK,
+        scope=CoverageScope(component_ids=[fastener.component_id]),
+        reason=f"{fastener.designation} was not placed: {fastener.unplaced_reason}",
+        error=None,
+    )
+
+
 def record_joint_map(context: ToolContext, joint_map: JointMap) -> Counter[CoverageBucket]:
     """Write the map as coverage (`contracts/joint-map.md` section 7); return what was written.
 
-    One `checked` item per pattern group, one `skipped` item per candidate and per gap -
-    the package-level "no hole was extracted" and "the hole phase did not run" among them.
+    One `checked` item per pattern group, one `skipped` item per candidate, per gap - the
+    package-level "no hole was extracted" and "the hole phase did not run" among them - and
+    per recognised fastener no rule placed.
     """
     configuration = context.ir.design.active_configuration
     written: Counter[CoverageBucket] = Counter()
@@ -127,7 +157,92 @@ def record_joint_map(context: ToolContext, joint_map: JointMap) -> Counter[Cover
         record("skipped", _candidate_item(candidate, configuration))
     for gap in joint_map.gaps:
         record("skipped", _gap_item(gap))
+    for fastener in joint_map.unplaced:
+        record("skipped", _unplaced_item(fastener))
     return written
+
+
+# --- what every joint check reads, once per context -------------------------------------------
+
+
+@dataclass(frozen=True)
+class JointAnalysis:
+    """The recognised fasteners and the joint map they are placed in."""
+
+    recognised: tuple[RecognisedFastener, ...]
+    joint_map: JointMap
+
+
+def joint_analysis(context: ToolContext) -> JointAnalysis:
+    """The context's joint analysis, built on first use and kept on the context (T049), so
+    `check_joints` and the interference tool's thread-model rule read one map, built once."""
+    if context.joint_analysis is None:
+        recognised, joint_map = joint_map_with_fasteners(context.ir)
+        context.joint_analysis = JointAnalysis(recognised=recognised, joint_map=joint_map)
+    analysis: JointAnalysis = context.joint_analysis
+    return analysis
+
+
+class BodyMeshes:
+    """The package's body meshes by component, each loaded at most once per tool call.
+
+    The tool layer's half of "pure but for the mesh load": the checks take a `mesh_of`
+    callable and never open a file. A component whose bodies are absent or unloadable
+    reads as `None` and its reason is kept, so a check can name it rather than skip it.
+    """
+
+    def __init__(self, context: ToolContext) -> None:
+        self._context = context
+        self._meshes: dict[str, trimesh.Trimesh | None] = {}
+        self.reasons: dict[str, str] = {}
+
+    def mesh_of(self, component_id: str) -> trimesh.Trimesh | None:
+        if component_id not in self._meshes:
+            bodies = [body for body in self._context.ir.bodies if body.component_id == component_id]
+            loaded = []
+            for body in bodies:
+                mesh, reason = load_body_mesh(self._context, body)
+                if mesh is None:
+                    self.reasons[component_id] = reason or f"{component_id} body {body.id}"
+                    loaded = []
+                    break
+                loaded.append(mesh)
+            if not bodies:
+                self.reasons[component_id] = f"{component_id} has no exported body mesh"
+            self._meshes[component_id] = trimesh.util.concatenate(loaded) if loaded else None
+        return self._meshes[component_id]
+
+
+def _record_folded(
+    context: ToolContext,
+    results: Sequence[JointResult],
+    group_of: Callable[[Joint], str] = pattern_group,
+) -> ToolResult | None:
+    """Record `results` one finding per folded group; the error result if one is refused."""
+    pairs = [(item.joint, item.result) for item in results]
+    for joints, result in fold_by_pattern(pairs, group_of):
+        recorded = record_result(
+            context,
+            folded_result(joints, result),
+            component_ids=sorted({cid for joint in joints for cid in joint.component_ids}),
+            tool_result_ids=[context.current_step_id],
+        )
+        if "error" in recorded:
+            return recorded
+    return None
+
+
+def _record_identity(context: ToolContext, results: Sequence[CheckResult]) -> ToolResult | None:
+    for result in results:
+        recorded = record_result(
+            context,
+            result,
+            component_ids=[str(item) for item in result.inputs],
+            tool_result_ids=[context.current_step_id],
+        )
+        if "error" in recorded:
+            return recorded
+    return None
 
 
 def check_joints() -> ToolResult:
@@ -146,19 +261,24 @@ def check_joints() -> ToolResult:
     session = context.require_session()
     findings_before = len(session.findings)
 
-    joint_map = build_joint_map(context.ir)
+    analysis = joint_analysis(context)
+    joint_map = analysis.joint_map
     written = record_joint_map(context, joint_map)
     checks = run_joint_checks(context.ir, joint_map)
-    for joints, result in fold_by_pattern([(item.joint, item.result) for item in checks.results]):
-        recorded = record_result(
-            context,
-            folded_result(joints, result),
-            component_ids=sorted({cid for joint in joints for cid in joint.component_ids}),
-            tool_result_ids=[context.current_step_id],
-        )
-        if "error" in recorded:
-            return recorded
-    for item in checks.skipped:
+    refused = _record_folded(context, checks.results)
+    if refused is not None:
+        return refused
+
+    meshes = BodyMeshes(context)
+    fasteners = run_fastener_checks(
+        context.ir, joint_map, analysis.recognised, mesh_of=meshes.mesh_of
+    )
+    refused = _record_folded(context, fasteners.results, fastener_group) or _record_identity(
+        context, fasteners.identity
+    )
+    if refused is not None:
+        return refused
+    for item in (*checks.skipped, *fasteners.skipped):
         context.record_coverage("skipped", item)
         written["skipped"] += 1
 
@@ -174,6 +294,7 @@ def check_joints() -> ToolResult:
             },
             "pattern_groups": len(joint_map.pattern_groups()),
             "candidates": len(joint_map.candidates),
+            "recognised_fasteners": len(analysis.recognised),
             "unplaced_fasteners": len(joint_map.unplaced),
         },
     )

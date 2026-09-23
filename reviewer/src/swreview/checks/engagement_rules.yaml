@@ -1,22 +1,26 @@
 # Minimum usable thread engagement, expressed as a multiple of the nominal thread
-# diameter, by the material of the tapped part. Values are common design guidance for
-# steel fasteners of property class 8.8 / 10.9 in a tapped hole; the rule that applied is
-# cited in every finding so an engineer can override it per project.
+# diameter, by the material of the tapped part. The rule that applied is cited in every
+# finding so an engineer can override it per project.
 #
 # Source notes:
-#   steel        1.0 x d   general machine-design guidance (e.g. Machinery's Handbook,
-#                          "length of engagement" for equal-strength steel)
+#   steel        1.5 x d   owner decision 2026-09-23 (feature 010 research R2.14)
 #   cast_iron    1.5 x d   common guidance for lower-shear-strength ferrous castings
-#   aluminum     1.5 x d   common guidance; many companies use 2.0 x d for 6061-T6
+#   aluminum     1.5 x d   owner decision 2026-09-23 (feature 010 research R2.14)
 #   plastic      2.5 x d   common guidance for thermoplastics with metal inserts absent
 #   unknown      (none)    no rule applied; the check stays unresolved
+#
+# The owner's answer was typed "1.td into both" (steel and aluminium). The only reading that
+# is a ratio and matches the aluminium row this file already carried is 1.5 x d, and that is
+# what both rows say; the spec's Assumptions and research R2.14 record the same reading, so a
+# wrong one is visible in three places. Until 2026-09-23 steel was 1.0 x d (Machinery's
+# Handbook, length of engagement for steel into steel).
 version: 1
 default_material_class: unknown
 material_classes:
   steel:
-    min_engagement_ratio: 1.0
+    min_engagement_ratio: 1.5
     matches: ["steel", "stainless", "aisi", "sae 10", "4140", "4340", "a36", "s355", "17-4"]
-    source: "Machinery's Handbook, length of engagement for steel into steel"
+    source: "Owner decision 2026-09-23: at least 1.5 x d into steel and aluminium alike"
   cast_iron:
     min_engagement_ratio: 1.5
     matches: ["cast iron", "gray iron", "ductile", "gg", "ggg", "astm a48"]
@@ -24,7 +28,7 @@ material_classes:
   aluminum:
     min_engagement_ratio: 1.5
     matches: ["aluminum", "aluminium", "6061", "7075", "5052", "2024", "al "]
-    source: "Common guidance for aluminum alloys; consider 2.0 x d for high-load joints"
+    source: "Owner decision 2026-09-23: at least 1.5 x d into steel and aluminium alike"
   plastic:
     min_engagement_ratio: 2.5
     matches: ["abs", "nylon", "pa6", "pa66", "delrin", "acetal", "pom", "peek", "polycarbonate", "pc", "pla", "petg"]

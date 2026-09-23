@@ -1,0 +1,1598 @@
+rules_version: 1
+instance_count: 132
+joints:
+- id: jnt:0001
+  kind: screw
+  instances:
+  - hol:0003#1
+  cylinders: []
+  reference: hol:0003#1
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0011
+  pattern_key: screw|hol:0003@cmp:0011
+  axis_aligned: true
+  pairs: []
+  fastener:
+    component_id: cmp:0071
+    designation: M5x0.8
+    placement: origin
+    placed_on: hol:0003#1
+- id: jnt:0002
+  kind: screw
+  instances:
+  - hol:0003#2
+  cylinders: []
+  reference: hol:0003#2
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0011
+  pattern_key: screw|hol:0003@cmp:0011
+  axis_aligned: true
+  pairs: []
+  fastener:
+    component_id: cmp:0072
+    designation: M5x0.8
+    placement: origin
+    placed_on: hol:0003#2
+- id: jnt:0003
+  kind: screw
+  instances:
+  - hol:0003#3
+  cylinders: []
+  reference: hol:0003#3
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0011
+  pattern_key: screw|hol:0003@cmp:0011
+  axis_aligned: true
+  pairs: []
+  fastener:
+    component_id: cmp:0073
+    designation: M5x0.8
+    placement: origin
+    placed_on: hol:0003#3
+- id: jnt:0004
+  kind: screw
+  instances:
+  - hol:0003#4
+  cylinders: []
+  reference: hol:0003#4
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0011
+  pattern_key: screw|hol:0003@cmp:0011
+  axis_aligned: true
+  pairs: []
+  fastener:
+    component_id: cmp:0074
+    designation: M5x0.8
+    placement: origin
+    placed_on: hol:0003#4
+- id: jnt:0005
+  kind: screw
+  instances:
+  - hol:0003#5
+  cylinders: []
+  reference: hol:0003#5
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0011
+  pattern_key: screw|hol:0003@cmp:0011
+  axis_aligned: true
+  pairs: []
+  fastener:
+    component_id: cmp:0075
+    designation: M5x0.8
+    placement: origin
+    placed_on: hol:0003#5
+- id: jnt:0006
+  kind: screw
+  instances:
+  - hol:0003#6
+  cylinders: []
+  reference: hol:0003#6
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0011
+  pattern_key: screw|hol:0003@cmp:0011
+  axis_aligned: true
+  pairs: []
+  fastener:
+    component_id: cmp:0076
+    designation: M5x0.8
+    placement: origin
+    placed_on: hol:0003#6
+- id: jnt:0007
+  kind: screw
+  instances:
+  - hol:0003#7
+  cylinders: []
+  reference: hol:0003#7
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0011
+  pattern_key: screw|hol:0003@cmp:0011
+  axis_aligned: true
+  pairs: []
+  fastener:
+    component_id: cmp:0077
+    designation: M5x0.8
+    placement: origin
+    placed_on: hol:0003#7
+- id: jnt:0008
+  kind: screw
+  instances:
+  - hol:0003#8
+  cylinders: []
+  reference: hol:0003#8
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0011
+  pattern_key: screw|hol:0003@cmp:0011
+  axis_aligned: true
+  pairs: []
+  fastener:
+    component_id: cmp:0078
+    designation: M5x0.8
+    placement: origin
+    placed_on: hol:0003#8
+- id: jnt:0009
+  kind: screw
+  instances:
+  - hol:0004#1
+  - hol:0010#2
+  cylinders:
+  - face_id: fac:0154
+    component_id: cmp:0016
+    diameter_mm: 8.0
+    role: in_bore
+    instance_id: hol:0004#1
+    offset_mm: 0.0
+    overlap_mm: 14.375
+  reference: hol:0004#1
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0003
+  - cmp:0016
+  pattern_key: screw|hol:0004@cmp:0001,hol:0010@cmp:0003
+  axis_aligned: true
+  pairs:
+  - a: hol:0004#1
+    b: hol:0010#2
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 7.9
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0016
+    designation: M8x1.25
+    placement: face
+    placed_on: hol:0004#1
+- id: jnt:0010
+  kind: screw
+  instances:
+  - hol:0004#2
+  - hol:0010#1
+  cylinders: []
+  reference: hol:0004#2
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0003
+  pattern_key: screw|hol:0004@cmp:0001,hol:0010@cmp:0003
+  axis_aligned: true
+  pairs:
+  - a: hol:0004#2
+    b: hol:0010#1
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 7.9
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0065
+    designation: M8x1.25
+    placement: origin
+    placed_on: hol:0004#2
+- id: jnt:0011
+  kind: screw
+  instances:
+  - hol:0004#3
+  - hol:0010#3
+  cylinders: []
+  reference: hol:0004#3
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0003
+  pattern_key: screw|hol:0004@cmp:0001,hol:0010@cmp:0003
+  axis_aligned: true
+  pairs:
+  - a: hol:0004#3
+    b: hol:0010#3
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 7.9
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0066
+    designation: M8x1.25
+    placement: origin
+    placed_on: hol:0004#3
+- id: jnt:0012
+  kind: screw
+  instances:
+  - hol:0006#1
+  - hol:0011#1
+  cylinders:
+  - face_id: fac:0155
+    component_id: cmp:0018
+    diameter_mm: 8.5
+    role: in_bore
+    instance_id: hol:0006#1
+    offset_mm: 0.0
+    overlap_mm: 10.225
+  reference: hol:0006#1
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0003
+  - cmp:0018
+  pattern_key: screw|hol:0006@cmp:0001,hol:0011@cmp:0003
+  axis_aligned: true
+  pairs:
+  - a: hol:0006#1
+    b: hol:0011#1
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 9.75
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0018
+    designation: M10x1.5
+    placement: face
+    placed_on: hol:0006#1
+- id: jnt:0013
+  kind: screw
+  instances:
+  - hol:0006#2
+  - hol:0011#2
+  cylinders: []
+  reference: hol:0006#2
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0003
+  pattern_key: screw|hol:0006@cmp:0001,hol:0011@cmp:0003
+  axis_aligned: true
+  pairs:
+  - a: hol:0006#2
+    b: hol:0011#2
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 9.75
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0067
+    designation: M10x1.5
+    placement: origin
+    placed_on: hol:0006#2
+- id: jnt:0014
+  kind: screw
+  instances:
+  - hol:0006#3
+  - hol:0011#3
+  cylinders: []
+  reference: hol:0006#3
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0003
+  pattern_key: screw|hol:0006@cmp:0001,hol:0011@cmp:0003
+  axis_aligned: true
+  pairs:
+  - a: hol:0006#3
+    b: hol:0011#3
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 9.75
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0068
+    designation: M10x1.5
+    placement: origin
+    placed_on: hol:0006#3
+- id: jnt:0015
+  kind: screw
+  instances:
+  - hol:0012#1
+  - hol:0024#1
+  cylinders:
+  - face_id: fac:0152
+    component_id: cmp:0061
+    diameter_mm: 8.0
+    role: in_bore
+    instance_id: hol:0012#1
+    offset_mm: 0.0
+    overlap_mm: 14.6
+  - face_id: fac:0153
+    component_id: cmp:0061
+    diameter_mm: 13.0
+    role: in_counterbore
+    instance_id: hol:0024#1
+    offset_mm: 0.0
+    overlap_mm: 8.0
+  reference: hol:0012#1
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0003
+  - cmp:0061
+  pattern_key: screw|hol:0012@cmp:0001,hol:0024@cmp:0003
+  axis_aligned: true
+  pairs:
+  - a: hol:0012#1
+    b: hol:0024#1
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 7.9
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0061
+    designation: M8x1.25
+    placement: face
+    placed_on: hol:0012#1
+- id: jnt:0016
+  kind: screw
+  instances:
+  - hol:0012#2
+  - hol:0024#2
+  cylinders: []
+  reference: hol:0012#2
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0003
+  pattern_key: screw|hol:0012@cmp:0001,hol:0024@cmp:0003
+  axis_aligned: true
+  pairs:
+  - a: hol:0012#2
+    b: hol:0024#2
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 7.9
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0062
+    designation: M8x1.25
+    placement: origin
+    placed_on: hol:0012#2
+- id: jnt:0017
+  kind: screw
+  instances:
+  - hol:0012#3
+  - hol:0024#3
+  cylinders: []
+  reference: hol:0012#3
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0003
+  pattern_key: screw|hol:0012@cmp:0001,hol:0024@cmp:0003
+  axis_aligned: true
+  pairs:
+  - a: hol:0012#3
+    b: hol:0024#3
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 7.9
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0063
+    designation: M8x1.25
+    placement: origin
+    placed_on: hol:0012#3
+- id: jnt:0018
+  kind: screw
+  instances:
+  - hol:0012#4
+  - hol:0024#4
+  cylinders: []
+  reference: hol:0012#4
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0003
+  pattern_key: screw|hol:0012@cmp:0001,hol:0024@cmp:0003
+  axis_aligned: true
+  pairs:
+  - a: hol:0012#4
+    b: hol:0024#4
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 7.9
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0064
+    designation: M8x1.25
+    placement: origin
+    placed_on: hol:0012#4
+- id: jnt:0019
+  kind: screw
+  instances:
+  - hol:0013#1
+  cylinders:
+  - face_id: fac:0156
+    component_id: cmp:0007
+    diameter_mm: 3.3
+    role: in_bore
+    instance_id: hol:0013#1
+    offset_mm: 0.0
+    overlap_mm: 10.247595
+  reference: hol:0013#1
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0006
+  - cmp:0007
+  pattern_key: screw|hol:0013@cmp:0006
+  axis_aligned: false
+  pairs: []
+  fastener:
+    component_id: cmp:0007
+    designation: M4x0.7
+    placement: face
+    placed_on: hol:0013#1
+- id: jnt:0020
+  kind: screw
+  instances:
+  - hol:0014#1
+  - hol:0019#15
+  cylinders:
+  - face_id: fac:0150
+    component_id: cmp:0027
+    diameter_mm: 3.0
+    role: in_bore
+    instance_id: hol:0014#1
+    offset_mm: 0.0
+    overlap_mm: 5.133
+  reference: hol:0014#1
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  - cmp:0027
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#1
+    b: hol:0019#15
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0027
+    designation: M3x0.5
+    placement: face
+    placed_on: hol:0014#1
+- id: jnt:0021
+  kind: screw
+  instances:
+  - hol:0014#2
+  - hol:0019#1
+  cylinders: []
+  reference: hol:0014#2
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#2
+    b: hol:0019#1
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0044
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#2
+- id: jnt:0022
+  kind: screw
+  instances:
+  - hol:0014#3
+  - hol:0019#2
+  cylinders: []
+  reference: hol:0014#3
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#3
+    b: hol:0019#2
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0045
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#3
+- id: jnt:0023
+  kind: screw
+  instances:
+  - hol:0014#4
+  - hol:0019#3
+  cylinders: []
+  reference: hol:0014#4
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#4
+    b: hol:0019#3
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0046
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#4
+- id: jnt:0024
+  kind: screw
+  instances:
+  - hol:0014#5
+  - hol:0019#4
+  cylinders: []
+  reference: hol:0014#5
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#5
+    b: hol:0019#4
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0047
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#5
+- id: jnt:0025
+  kind: screw
+  instances:
+  - hol:0014#6
+  - hol:0019#5
+  cylinders: []
+  reference: hol:0014#6
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#6
+    b: hol:0019#5
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0048
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#6
+- id: jnt:0026
+  kind: screw
+  instances:
+  - hol:0014#7
+  - hol:0019#6
+  cylinders: []
+  reference: hol:0014#7
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#7
+    b: hol:0019#6
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0049
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#7
+- id: jnt:0027
+  kind: screw
+  instances:
+  - hol:0014#8
+  - hol:0019#7
+  cylinders: []
+  reference: hol:0014#8
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#8
+    b: hol:0019#7
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0050
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#8
+- id: jnt:0028
+  kind: screw
+  instances:
+  - hol:0014#9
+  - hol:0019#8
+  cylinders: []
+  reference: hol:0014#9
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#9
+    b: hol:0019#8
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0051
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#9
+- id: jnt:0029
+  kind: screw
+  instances:
+  - hol:0014#10
+  - hol:0019#9
+  cylinders: []
+  reference: hol:0014#10
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#10
+    b: hol:0019#9
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0052
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#10
+- id: jnt:0030
+  kind: screw
+  instances:
+  - hol:0014#11
+  - hol:0019#10
+  cylinders: []
+  reference: hol:0014#11
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#11
+    b: hol:0019#10
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0053
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#11
+- id: jnt:0031
+  kind: screw
+  instances:
+  - hol:0014#12
+  - hol:0019#11
+  cylinders: []
+  reference: hol:0014#12
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#12
+    b: hol:0019#11
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0054
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#12
+- id: jnt:0032
+  kind: screw
+  instances:
+  - hol:0014#13
+  - hol:0019#12
+  cylinders: []
+  reference: hol:0014#13
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#13
+    b: hol:0019#12
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0055
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#13
+- id: jnt:0033
+  kind: screw
+  instances:
+  - hol:0014#14
+  - hol:0019#13
+  cylinders: []
+  reference: hol:0014#14
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#14
+    b: hol:0019#13
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0056
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#14
+- id: jnt:0034
+  kind: screw
+  instances:
+  - hol:0014#15
+  - hol:0019#14
+  cylinders: []
+  reference: hol:0014#15
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0014@cmp:0001,hol:0019@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0014#15
+    b: hol:0019#14
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0057
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0014#15
+- id: jnt:0035
+  kind: screw
+  instances:
+  - hol:0015#1
+  - hol:0020#4
+  cylinders:
+  - face_id: fac:0151
+    component_id: cmp:0024
+    diameter_mm: 3.0
+    role: in_bore
+    instance_id: hol:0015#1
+    offset_mm: 0.0
+    overlap_mm: 5.883
+  reference: hol:0015#1
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  - cmp:0024
+  pattern_key: screw|hol:0015@cmp:0001,hol:0020@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0015#1
+    b: hol:0020#4
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0024
+    designation: M3x0.5
+    placement: face
+    placed_on: hol:0015#1
+- id: jnt:0036
+  kind: screw
+  instances:
+  - hol:0015#2
+  - hol:0020#1
+  cylinders: []
+  reference: hol:0015#2
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0015@cmp:0001,hol:0020@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0015#2
+    b: hol:0020#1
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0058
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0015#2
+- id: jnt:0037
+  kind: screw
+  instances:
+  - hol:0015#3
+  - hol:0020#2
+  cylinders: []
+  reference: hol:0015#3
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0015@cmp:0001,hol:0020@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0015#3
+    b: hol:0020#2
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0059
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0015#3
+- id: jnt:0038
+  kind: screw
+  instances:
+  - hol:0015#4
+  - hol:0020#3
+  cylinders: []
+  reference: hol:0015#4
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0015@cmp:0001,hol:0020@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0015#4
+    b: hol:0020#3
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.95
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0060
+    designation: M3x0.5
+    placement: origin
+    placed_on: hol:0015#4
+- id: jnt:0039
+  kind: screw
+  instances:
+  - hol:0016#1
+  - hol:0023#1
+  cylinders:
+  - face_id: fac:0149
+    component_id: cmp:0017
+    diameter_mm: 2.0
+    role: in_bore
+    instance_id: hol:0016#1
+    offset_mm: 0.0
+    overlap_mm: 2.205
+  reference: hol:0016#1
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  - cmp:0017
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#1
+    b: hol:0023#1
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0017
+    designation: M2x0.4
+    placement: face
+    placed_on: hol:0016#1
+- id: jnt:0040
+  kind: screw
+  instances:
+  - hol:0016#2
+  - hol:0023#2
+  cylinders: []
+  reference: hol:0016#2
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#2
+    b: hol:0023#2
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0029
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#2
+- id: jnt:0041
+  kind: screw
+  instances:
+  - hol:0016#3
+  - hol:0023#3
+  cylinders: []
+  reference: hol:0016#3
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#3
+    b: hol:0023#3
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0030
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#3
+- id: jnt:0042
+  kind: screw
+  instances:
+  - hol:0016#4
+  - hol:0023#4
+  cylinders: []
+  reference: hol:0016#4
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#4
+    b: hol:0023#4
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0031
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#4
+- id: jnt:0043
+  kind: screw
+  instances:
+  - hol:0016#5
+  - hol:0023#5
+  cylinders: []
+  reference: hol:0016#5
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#5
+    b: hol:0023#5
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0032
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#5
+- id: jnt:0044
+  kind: screw
+  instances:
+  - hol:0016#6
+  - hol:0023#6
+  cylinders: []
+  reference: hol:0016#6
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#6
+    b: hol:0023#6
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0033
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#6
+- id: jnt:0045
+  kind: screw
+  instances:
+  - hol:0016#7
+  - hol:0023#7
+  cylinders: []
+  reference: hol:0016#7
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#7
+    b: hol:0023#7
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0034
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#7
+- id: jnt:0046
+  kind: screw
+  instances:
+  - hol:0016#8
+  - hol:0023#8
+  cylinders: []
+  reference: hol:0016#8
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#8
+    b: hol:0023#8
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0035
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#8
+- id: jnt:0047
+  kind: screw
+  instances:
+  - hol:0016#9
+  - hol:0023#9
+  cylinders: []
+  reference: hol:0016#9
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#9
+    b: hol:0023#9
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0036
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#9
+- id: jnt:0048
+  kind: screw
+  instances:
+  - hol:0016#10
+  - hol:0023#10
+  cylinders: []
+  reference: hol:0016#10
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#10
+    b: hol:0023#10
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0037
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#10
+- id: jnt:0049
+  kind: screw
+  instances:
+  - hol:0016#11
+  - hol:0023#11
+  cylinders: []
+  reference: hol:0016#11
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#11
+    b: hol:0023#11
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0038
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#11
+- id: jnt:0050
+  kind: screw
+  instances:
+  - hol:0016#12
+  - hol:0023#12
+  cylinders: []
+  reference: hol:0016#12
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#12
+    b: hol:0023#12
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0039
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#12
+- id: jnt:0051
+  kind: screw
+  instances:
+  - hol:0016#13
+  - hol:0023#13
+  cylinders: []
+  reference: hol:0016#13
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#13
+    b: hol:0023#13
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0040
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#13
+- id: jnt:0052
+  kind: screw
+  instances:
+  - hol:0016#14
+  - hol:0023#14
+  cylinders: []
+  reference: hol:0016#14
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#14
+    b: hol:0023#14
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0041
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#14
+- id: jnt:0053
+  kind: screw
+  instances:
+  - hol:0016#15
+  - hol:0023#15
+  cylinders: []
+  reference: hol:0016#15
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#15
+    b: hol:0023#15
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0042
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#15
+- id: jnt:0054
+  kind: screw
+  instances:
+  - hol:0016#16
+  - hol:0023#16
+  cylinders: []
+  reference: hol:0016#16
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0001
+  - cmp:0002
+  pattern_key: screw|hol:0016@cmp:0001,hol:0023@cmp:0002
+  axis_aligned: true
+  pairs:
+  - a: hol:0016#16
+    b: hol:0023#16
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 2.0
+    gap_mm: 0.0
+  fastener:
+    component_id: cmp:0043
+    designation: M2x0.4
+    placement: origin
+    placed_on: hol:0016#16
+- id: jnt:0055
+  kind: pin
+  instances:
+  - hol:0017#1
+  - hol:0027#1
+  cylinders: []
+  reference: hol:0017#1
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0004
+  - cmp:0005
+  pattern_key: pin|hol:0017@cmp:0004,hol:0027@cmp:0005
+  axis_aligned: true
+  pairs:
+  - a: hol:0017#1
+    b: hol:0027#1
+    angle_deg: 0.0
+    offset_mm: 0.0
+    radius_sum_mm: 3.0
+    gap_mm: 0.0
+- id: jnt:0056
+  kind: pin
+  instances:
+  - hol:0018#1
+  - hol:0027#2
+  cylinders: []
+  reference: hol:0018#1
+  offset_mm: 0.75
+  component_ids:
+  - cmp:0004
+  - cmp:0005
+  pattern_key: pin|hol:0018@cmp:0004,hol:0027@cmp:0005
+  axis_aligned: true
+  pairs:
+  - a: hol:0018#1
+    b: hol:0027#2
+    angle_deg: 0.0
+    offset_mm: 0.75
+    radius_sum_mm: 3.05
+    gap_mm: 0.0
+- id: jnt:0057
+  kind: screw
+  instances:
+  - hol:0021#1
+  cylinders:
+  - face_id: fac:0157
+    component_id: cmp:0008
+    diameter_mm: 3.0
+    role: in_bore
+    instance_id: hol:0021#1
+    offset_mm: 0.0
+    overlap_mm: 1.394
+  reference: hol:0021#1
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0008
+  - cmp:0009
+  pattern_key: screw|hol:0021@cmp:0009
+  axis_aligned: true
+  pairs: []
+  fastener:
+    component_id: cmp:0008
+    designation: M3x0.5
+    placement: face
+    placed_on: hol:0021#1
+- id: jnt:0058
+  kind: screw
+  instances:
+  - hol:0022#1
+  cylinders: []
+  reference: hol:0022#1
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0006
+  pattern_key: screw|hol:0022@cmp:0006
+  axis_aligned: true
+  pairs: []
+  fastener:
+    component_id: cmp:0070
+    designation: M4x0.7
+    placement: origin
+    placed_on: hol:0022#1
+- id: jnt:0059
+  kind: screw
+  instances:
+  - hol:0025#2
+  cylinders:
+  - face_id: fac:0158
+    component_id: cmp:0069
+    diameter_mm: 6.75
+    role: in_bore
+    instance_id: hol:0025#2
+    offset_mm: 0.0
+    overlap_mm: 10.0
+  reference: hol:0025#2
+  offset_mm: 0.0
+  component_ids:
+  - cmp:0011
+  - cmp:0069
+  pattern_key: screw|hol:0025@cmp:0011
+  axis_aligned: true
+  pairs: []
+  fastener:
+    component_id: cmp:0069
+    designation: M8x1.25
+    placement: face
+    placed_on: hol:0025#2
+pattern_groups:
+  screw|hol:0003@cmp:0011:
+  - jnt:0001
+  - jnt:0002
+  - jnt:0003
+  - jnt:0004
+  - jnt:0005
+  - jnt:0006
+  - jnt:0007
+  - jnt:0008
+  screw|hol:0004@cmp:0001,hol:0010@cmp:0003:
+  - jnt:0009
+  - jnt:0010
+  - jnt:0011
+  screw|hol:0006@cmp:0001,hol:0011@cmp:0003:
+  - jnt:0012
+  - jnt:0013
+  - jnt:0014
+  screw|hol:0012@cmp:0001,hol:0024@cmp:0003:
+  - jnt:0015
+  - jnt:0016
+  - jnt:0017
+  - jnt:0018
+  screw|hol:0013@cmp:0006:
+  - jnt:0019
+  screw|hol:0014@cmp:0001,hol:0019@cmp:0002:
+  - jnt:0020
+  - jnt:0021
+  - jnt:0022
+  - jnt:0023
+  - jnt:0024
+  - jnt:0025
+  - jnt:0026
+  - jnt:0027
+  - jnt:0028
+  - jnt:0029
+  - jnt:0030
+  - jnt:0031
+  - jnt:0032
+  - jnt:0033
+  - jnt:0034
+  screw|hol:0015@cmp:0001,hol:0020@cmp:0002:
+  - jnt:0035
+  - jnt:0036
+  - jnt:0037
+  - jnt:0038
+  screw|hol:0016@cmp:0001,hol:0023@cmp:0002:
+  - jnt:0039
+  - jnt:0040
+  - jnt:0041
+  - jnt:0042
+  - jnt:0043
+  - jnt:0044
+  - jnt:0045
+  - jnt:0046
+  - jnt:0047
+  - jnt:0048
+  - jnt:0049
+  - jnt:0050
+  - jnt:0051
+  - jnt:0052
+  - jnt:0053
+  - jnt:0054
+  pin|hol:0017@cmp:0004,hol:0027@cmp:0005:
+  - jnt:0055
+  pin|hol:0018@cmp:0004,hol:0027@cmp:0005:
+  - jnt:0056
+  screw|hol:0021@cmp:0009:
+  - jnt:0057
+  screw|hol:0022@cmp:0006:
+  - jnt:0058
+  screw|hol:0025@cmp:0011:
+  - jnt:0059
+candidates:
+- members:
+  - hol:0018#2
+  - hol:0024#1
+  reason: overlap_near
+  values:
+    angle_deg: 0.0
+    offset_mm: 7.006
+    radius_sum_mm: 6.05
+    gap_mm: 0.0
+- members:
+  - hol:0018#2
+  - hol:0027#1
+  reason: assigned_elsewhere
+  values:
+    angle_deg: 0.0
+    offset_mm: 0.75
+    radius_sum_mm: 3.05
+    gap_mm: 0.0
+gaps:
+- subject: cmp:0001
+  reason: 3 cylinder faces on cmp:0001 are in no hole feature; the component has holes
+    of its own, and the package does not say whether such a face is a bore or a boss,
+    so none is used as a joint member
+- subject: cmp:0003
+  reason: 4 cylinder faces on cmp:0003 are in no hole feature; the component has holes
+    of its own, and the package does not say whether such a face is a bore or a boss,
+    so none is used as a joint member
+- subject: cmp:0005
+  reason: 3 cylinder faces on cmp:0005 are in no hole feature; the component has holes
+    of its own, and the package does not say whether such a face is a bore or a boss,
+    so none is used as a joint member
+- subject: cmp:0011
+  reason: 3 cylinder faces on cmp:0011 are in no hole feature; the component has holes
+    of its own, and the package does not say whether such a face is a bore or a boss,
+    so none is used as a joint member
+- subject: hol:0007
+  reason: hol:0007 has no cylinder face, so no instance of it can be measured
+- subject: hol:0009
+  reason: hol:0009 has no cylinder face, so no instance of it can be measured
+unplaced:
+- component_id: cmp:0079
+  designation: M5x0.8
+  reason: it has no face in a hole and its origin lies on no hole instance's axis
+- component_id: cmp:0080
+  designation: M5x0.8
+  reason: it has no face in a hole and its origin lies on no hole instance's axis
+- component_id: cmp:0081
+  designation: M5x0.8
+  reason: it has no face in a hole and its origin lies on no hole instance's axis
+- component_id: cmp:0082
+  designation: M5x0.8
+  reason: it has no face in a hole and its origin lies on no hole instance's axis
+- component_id: cmp:0083
+  designation: M5x0.8
+  reason: it has no face in a hole and its origin lies on no hole instance's axis
+- component_id: cmp:0084
+  designation: M5x0.8
+  reason: it has no face in a hole and its origin lies on no hole instance's axis
+- component_id: cmp:0085
+  designation: M5x0.8
+  reason: it has no face in a hole and its origin lies on no hole instance's axis
+- component_id: cmp:0086
+  designation: M5x0.8
+  reason: it has no face in a hole and its origin lies on no hole instance's axis
+- component_id: cmp:0087
+  designation: M5x0.8
+  reason: it has no face in a hole and its origin lies on no hole instance's axis
+- component_id: cmp:0088
+  designation: M5x0.8
+  reason: it has no face in a hole and its origin lies on no hole instance's axis
+- component_id: cmp:0089
+  designation: M5x0.8
+  reason: it has no face in a hole and its origin lies on no hole instance's axis

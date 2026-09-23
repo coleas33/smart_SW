@@ -128,8 +128,26 @@ class ClearanceTerm:
 
 
 def fastener_size(joint: Joint, package: EvidencePackage) -> FastenerSize | None:
-    """`F` by research R2.5's precedence, or `None` when nothing in the package states it."""
-    del package  # the recognised fastener of US4 is read from the joint, not the package
+    """`F` by research R2.5's precedence, or `None` when nothing in the package states it.
+
+    A recognised screw placed in the joint comes first - its thread's nominal major
+    diameter, the fastener at maximum material - unless its shank or its names contradict
+    that size, when the next source speaks instead.
+    """
+    del package  # the recognised fastener is read from the joint, not the package
+    placed = joint.fastener
+    if placed is not None and placed.size_trusted and placed.fastener.thread_designation:
+        nominal = parse_thread(placed.fastener.thread_designation).nominal_diameter
+        if nominal is not None:
+            return FastenerSize(
+                mm=round_length(units.as_mm(nominal)),
+                source=(
+                    f"the thread of the recognised screw {placed.component_id} "
+                    f"({placed.fastener.thread_designation})"
+                ),
+                threaded=True,
+                component_id=placed.component_id,
+            )
     if joint.kind == "pin" and joint.cylinders:
         member = joint.cylinders[0]
         return FastenerSize(
@@ -666,11 +684,18 @@ def run_joint_checks(
     lookup = lookup or NoSources()
     results: list[JointResult] = []
     not_applicable: list[Joint] = []
+    single: list[Joint] = []
     stacks = lookup.holds_any_source()
     for joint in joint_map.joints:
         nominal = check_nominal_alignment(joint, package, lookup if stacks else None)
         if nominal is None:
             not_applicable.append(joint)
+            continue
+        if len(joint.instances) + len(joint.cylinders) < 2:
+            # A lone clearance instance and a screw placed by its origin: no second measured
+            # axis, and the origin is on the hole's axis by construction (the placement rule),
+            # so any verdict would be vacuous.
+            single.append(joint)
             continue
         results.append(JointResult(joint, nominal))
         if stacks:
@@ -688,6 +713,16 @@ def run_joint_checks(
         skipped.append(_skipped(CHECK_NOMINAL, not_applicable, reason))
         if stacks:
             skipped.append(_skipped(CHECK_STACK, not_applicable, reason))
+    if single:
+        names = ", ".join(joint.id for joint in single)
+        reason = (
+            f"one measured member only in {names}: a screw placed by its origin in a clearance "
+            "hole gives no second axis to line up, and the part it threads into has no "
+            "extracted hole"
+        )
+        skipped.append(_skipped(CHECK_NOMINAL, single, reason))
+        if stacks:
+            skipped.append(_skipped(CHECK_STACK, single, reason))
     if not stacks and joint_map.joints:
         searched = ", ".join(SOURCE_LABELS[source] for source in SOURCE_ORDER)
         skipped.append(

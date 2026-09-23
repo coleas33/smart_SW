@@ -44,9 +44,10 @@ payload the model has to page through:
  "coverage": {"checked": 9, "skipped": 14, "unresolved": 0}}
 ```
 
-`check_joints` adds `"joints": {"total": 50, "by_kind": {"screw": 47, "pin": 2,
-"unclassified": 1}}, "pattern_groups": 11, "candidates": 2, "unplaced_fasteners": 0` (the
-foundational map of the big fixture; the numbers grow when US4 places fasteners). `check_mass_material` adds `"documents": 26`;
+`check_joints` adds `"joints": {"total": 59, "by_kind": {"screw": 57, "pin": 2}},
+"pattern_groups": 13, "candidates": 2, "recognised_fasteners": 68, "unplaced_fasteners": 11`
+(the big fixture's map with its recognised fasteners placed; the foundational map without
+them is 50 joints in 11 pattern groups, pinned by its own golden). `check_mass_material` adds `"documents": 26`;
 `check_hygiene` adds `"documents": 26, "profile": "attached" | "absent"`.
 
 | Tool | Docstring summary (the model's view) | Families |

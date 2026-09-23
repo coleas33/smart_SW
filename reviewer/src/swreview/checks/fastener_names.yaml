@@ -1,0 +1,49 @@
+# What a fastener's name says, as data (feature 010, contracts/fasteners.md section 1).
+#
+# `checks/fastener_names.py` reads a screw's kind, head, size, pitch and length from its file
+# name, its Description property and its configuration name. The grammar is code; the words
+# are here, so an engineer can read which head code meant which head and add a vendor's code
+# without touching the parser.
+#
+# head_codes: the vendor codes the recorded assemblies carry in `<CODE>_M<d>-<p>X<L>_...`
+# file names (research R2.11). `drive` says which tool turns the head; a code whose drive is
+# not known carries `drive: null`, and tool access for it stays unresolved rather than
+# guessing a key (constitution Principle I). SHC is socket head cap with a hex socket; FHT and
+# BHT are flat head and button head with a Torx drive (owner answer 2026-09-23, research R5).
+#
+# kinds and heads: the vocabulary a name is matched against, word by word for a kind and as a
+# literal phrase for a head, longest phrase first so "socket head cap" wins over "cap". The
+# C# parser (FastenerNameParser.cs) carries the same lists, and both parsers answer the same
+# rows of contracts/fastener-name-vectors.json, so the two cannot drift.
+
+version: 1
+
+head_codes:
+  SHC:
+    kind: screw
+    head_type: socket head cap
+    drive: hex_socket
+  FHT:
+    kind: screw
+    head_type: flat head
+    drive: torx
+  BHT:
+    kind: screw
+    head_type: button head
+    drive: torx
+
+kinds: [screw, bolt, nut, washer, pin]
+
+heads:
+  - socket countersunk head
+  - socket button head
+  - socket head cap
+  - button head cap
+  - hex socket head
+  - cheese head
+  - hex flange
+  - flat head
+  - hex head
+  - pan head
+  - round head
+  - countersunk

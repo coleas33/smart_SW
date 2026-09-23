@@ -26,11 +26,16 @@ whether the interference matters - that needs the design intent, which is the en
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from swreview.checks.result import CheckResult, unresolved
+from swreview import units
+from swreview.checks.fastener import parse_thread
+from swreview.checks.fastener_identity import MeshOf, screw_extent
+from swreview.checks.joints import Joint, JointMap
+from swreview.checks.result import CheckResult, round_length, unresolved
 from swreview.exceptions import ExceptionStore, ReviewException
 from swreview.findings import Calculation, Severity
 from swreview.ir.models import EvidencePackage, Interference, Volume
@@ -372,11 +377,85 @@ def _contact(group: InterferenceGroup) -> ContactVerdict | None:
     )
 
 
+def _thread_bound(
+    item: Interference,
+    joint_map: JointMap,
+    package: EvidencePackage,
+    mesh_of: MeshOf | None,
+) -> tuple[Joint, float] | None:
+    """The screw joint `item` is the thread model of, and the annulus volume that bounds it:
+    `pi/4 (d^2 - D^2) L` in mm3 (research R2.10). `None` when the pair is not one joint's
+    screw and tapped part, or any of `d`, `D`, `L` is not known exactly."""
+    pair = set(item.component_ids)
+    for joint in joint_map.joints:
+        placed, tapped = joint.fastener, joint.tapped_instance
+        if placed is None or tapped is None or pair != {placed.component_id, tapped.component_id}:
+            continue
+        if not placed.size_trusted or not tapped.axis_aligned:
+            return None
+        designation = placed.fastener.thread_designation
+        major = None if designation is None else parse_thread(designation).nominal_diameter
+        mesh = None if mesh_of is None or placed.shank_face_id else mesh_of(placed.component_id)
+        extent = screw_extent(joint, package, mesh)
+        if major is None or extent is None:
+            return None
+        geometry = tapped.geometry
+        low, high = (value * 1000.0 for value in geometry.span(geometry.origin, geometry.direction))
+        overlap = round_length(min(extent.high_mm, high) - max(extent.low_mm, low))
+        d = units.as_mm(major)
+        if overlap <= 0.0 or d <= tapped.bore_mm:
+            return None
+        return joint, round(math.pi / 4.0 * (d**2 - tapped.bore_mm**2) * overlap, PLACES)
+    return None
+
+
+def _thread_model(
+    group: InterferenceGroup,
+    joint_map: JointMap,
+    package: EvidencePackage,
+    mesh_of: MeshOf | None,
+) -> ContactVerdict | None:
+    """Rule 5: every member is a screw overlapping the part it threads into by no more than
+    the annulus its modelled thread explains; `None` when any member is anything else."""
+    bounds: list[tuple[Interference, Joint, float]] = []
+    for item in group.interferences:
+        if item.volume is None:
+            return None
+        found = _thread_bound(item, joint_map, package, mesh_of)
+        if found is None or volume_mm3(item.volume) > found[1]:
+            return None
+        bounds.append((item, *found))
+
+    item, joint, bound = max(
+        bounds,
+        key=lambda entry: volume_mm3(entry[0].volume),  # type: ignore[arg-type]
+    )
+    assert item.volume is not None
+    pair = f"{group.component_ids[0]} and {', '.join(group.component_ids[1:])}"
+    joints = ", ".join(dict.fromkeys(entry[1].id for entry in bounds))
+    return ContactVerdict(
+        kind="thread_model",
+        group_key=group.group_key,
+        configuration=group.configuration,
+        interference_ids=tuple(entry.id for entry in group.interferences),
+        component_ids=tuple(group.component_ids),
+        volume_mm3=volume_mm3(item.volume),
+        reason=(
+            f"{pair} overlap in configuration {group.configuration} by "
+            f"{_volume_text(item.volume)} ({_plural_pairs(len(group.interferences))}), within "
+            f"the {_number(bound)} mm3 a thread modelled as a cylinder explains in joint "
+            f"{joints}; this is a contact of the thread model, not an interference."
+        ),
+        joint_id=joint.id,
+    )
+
+
 def classify_group(
     group: InterferenceGroup,
     package: EvidencePackage,
     exceptions: ExceptionStore | None = None,
-    joint_map: object | None = None,
+    joint_map: JointMap | None = None,
+    mesh_of: MeshOf | None = None,
 ) -> GroupOutcome:
     """Whether one grouped condition is a finding or a contact (feature 010 `contracts/
     contacts.md` section 1), first rule that matches:
@@ -386,13 +465,14 @@ def classify_group(
     3. a `needs_review` exception: the `suspected` finding of today;
     4. every member touching - no volume above `CONTACT_VOLUME_MM3`, or no volume and the
        possible flag - a **contact**, never a finding (owner decision 2026-09-23);
-    5. a thread modelled as a cylinder, bounded by the annulus it can explain: arrives with
-       feature 010 US4, which is what `joint_map` is for; accepted and unused until then;
+    5. with a `joint_map`, every member a screw overlapping the part it threads into by no
+       more than `pi/4 (d^2 - D^2) L`, the annulus a thread modelled as a cylinder explains:
+       a **thread-model contact** linked to the joint (research R2.10). `mesh_of` gives a
+       screw with no extracted face its extent along the joint;
     6. otherwise the finding of today, a positive volume `demonstrated`.
 
     Rules 1 to 3 and 6 are `check_interference_group`'s verdicts unchanged, byte for byte.
     """
-    del joint_map  # rule 5, feature 010 T049
     if group.status == "computed":
         exception = (
             None
@@ -401,6 +481,8 @@ def classify_group(
         )
         if exception is None:
             contact = _contact(group)
+            if contact is None and joint_map is not None:
+                contact = _thread_model(group, joint_map, package, mesh_of)
             if contact is not None:
                 return GroupOutcome(finding=None, contact=contact)
     return GroupOutcome(

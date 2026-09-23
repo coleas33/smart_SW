@@ -128,10 +128,13 @@ def test_the_digest_names_the_two_families_that_are_enumerable_and_still_not_pre
     digest = opening_of(run)
 
     assert NOT_EVALUATED_HEADER in digest
-    # One screw is in the fixture, counted and not evaluated. Feature 010 T036, edited
-    # deliberately: the hole-alignment line is what the joint map could not reach - both
-    # of the fixture's holes carry no cylinder face - instead of a coaxial pair count.
-    assert "1 fastener" in digest
+    # Feature 010 T036 and T046, edited deliberately: with `check_joints` planned, both lines
+    # are what the joint map could not reach. The fixture's one screw is recognised and not
+    # placed - its holes carry no cylinder face - instead of "1 fastener" counted for the
+    # model to judge; and the hole-alignment line names the faceless holes instead of a
+    # coaxial pair count.
+    assert "  fastener joints: 1 recognised fastener was not placed in any joint." in digest
+    assert "1 fastener in the package" not in digest
     assert (
         "  hole alignment: 2 holes have no cylinder face or belong to a component that "
         "was not read; they are in no joint."
@@ -203,9 +206,12 @@ def test_an_empty_model_check_package_enumerates_nothing_and_says_so(
         "the hole phase did not run (profile model_check)"
     ]
     assert f"Findings recorded: {len(session.findings)}" in digest
-    assert "0 fastener" in digest
-    # Feature 010 T037: with check_joints planned, a package with no hole row leaves
-    # the joint map nothing to have missed, so the hole-alignment family renders no line.
+    # Feature 010 T037 and T046, edited deliberately (was `"0 fastener" in digest`): with
+    # check_joints planned, a package with no hole row and no fastener leaves the joint map
+    # nothing to have missed, so neither the fastener-joint nor the hole-alignment family
+    # renders a line.
+    assert f"{PRERUN_CHECK_PREFIX}fastener_joint" not in skipped_by_check(session)
+    assert "fastener joints:" not in digest
     assert f"{PRERUN_CHECK_PREFIX}hole_alignment" not in skipped_by_check(session)
     assert NOT_EVALUATED_HEADER in digest
     assert "interference" in skipped_by_check(session)[f"{PRERUN_CHECK_PREFIX}interference"]

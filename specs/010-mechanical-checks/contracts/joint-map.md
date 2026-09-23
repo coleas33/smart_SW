@@ -57,8 +57,15 @@ transform's translation within `origin_on_axis_mm` of an instance axis and one b
 parallel within `parallel_deg`); otherwise unplaced. A fastener placed on an instance in no joint
 forms a one-instance joint with it. A fastener whose origin lies on two instances' axes of
 different joints is placed on the one with a tapped instance, else left unplaced with both named.
+A second fastener landing in a joint that already holds one is unplaced naming the first (a face
+placement taking precedence over an origin one). Placement is decided before any lone instance
+joins the map, so the order fasteners are placed in cannot change where any lands; the map with
+fasteners is identical under any order of the package's arrays, as the foundational map is.
 The map without `fasteners` (the foundational map) and the map with them are pinned by separate
-goldens.
+goldens (`test_joint_map_acceptance/big-assembly.yml`, `test_fastener_identity/
+big-assembly-with-fasteners.yml`). A joint whose only members are one clearance instance and a
+screw placed by its origin has no second measured axis: alignment names it once in a skipped
+item rather than passing it vacuously.
 
 ## 6. Kinds
 
