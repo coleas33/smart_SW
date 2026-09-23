@@ -73,4 +73,15 @@
     </Content>
   </ItemGroup>
 
+  <!--
+    Feature 010 T050. The fastener-name vector table both parsers read (contracts/fasteners.md
+    section 2): the Python parser and FastenerNameParser answer the same rows, so the two
+    cannot drift. Copied, not duplicated, for the reason ir.schema.json is.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\specs\010-mechanical-checks\contracts\fastener-name-vectors.json" Link="fastener-name-vectors.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

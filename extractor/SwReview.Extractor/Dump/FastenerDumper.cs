@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using SwReview.Extractor.Fasteners;
@@ -19,10 +20,15 @@ namespace SwReview.Extractor.Dump;
 ///
 ///   1. the referenced configuration's own custom properties (Description, Length, Size,
 ///      Part Number) - <c>identity_source: "custom_property"</c>
-///   2. the referenced configuration NAME parsed by <see cref="FastenerNameParser"/> -
-///      <c>identity_source: "name_parse"</c>, which the reviewer flags as suspected
+///   2. the referenced configuration NAME, the description and the document's file name,
+///      parsed by <see cref="FastenerNameParser"/> - <c>identity_source: "name_parse"</c>
 ///
-/// A field neither source supplies stays null. Head diameter and height are NOT measured
+/// Which components are fasteners at all is <see cref="IsFastenerCandidate"/>'s: every
+/// Toolbox part, and since feature 010 any part whose names give a kind and a size (the
+/// vendor screws no Toolbox flag marks, research R2.11). Every candidate gets the shank-face
+/// request, so the reviewer can cross-check the parsed size against the measured shank.
+///
+/// A field no source supplies stays null. Head diameter and height are NOT measured
 /// from the geometry in this build: a head diameter read off the wrong cylinder would
 /// silently clear a counterbore clearance check, so it is left null with a Gap.
 /// </summary>
@@ -41,6 +47,17 @@ public sealed class FastenerDumper : IFastenerSource
         _refs = refs ?? throw new ArgumentNullException(nameof(refs));
     }
 
+    /// <summary>
+    /// Whether the fastener phase treats a component as a fastener (feature 010 T053): a
+    /// Toolbox part always, as before; any other part when its names give a kind and a size
+    /// (<see cref="FastenerNameParser.IsCandidate"/>). Pure, so the gate is tested with no
+    /// seat; the dumper hands it the file name, the description and the configuration name it
+    /// read.
+    /// </summary>
+    public static bool IsFastenerCandidate(
+        bool isToolbox, string? fileName, string? description, string? configuration) =>
+        isToolbox || FastenerNameParser.IsCandidate(fileName, description, configuration);
+
     public IReadOnlyList<Fastener> Dump(DumpScope scope)
     {
         if (scope == null)
@@ -52,11 +69,6 @@ public sealed class FastenerDumper : IFastenerSource
 
         foreach (ScopedComponent component in scope.Components)
         {
-            if (!component.Node.IsToolbox)
-            {
-                continue;
-            }
-
             scope.Gaps.TryStep("fastener", null, $"identify fastener '{component.Node.Key}'", () =>
             {
                 Fastener? fastener = ReadFastener(component, scope);
@@ -78,13 +90,30 @@ public sealed class FastenerDumper : IFastenerSource
         }
 
         SwGate gate = _session.Gate;
-        string id = scope.FastenerIds.Next();
         string configuration = component.Node.ReferencedConfiguration;
+        string fileName = Path.GetFileName(component.Node.DocumentPath);
 
         var model = gate.Call("GetModelDoc2", () => handle.GetModelDoc2()) as IModelDoc2;
         Dictionary<string, string> properties = model == null
             ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             : PropertyDumper.ReadProperties(model, configuration, gate);
+
+        // A vendor part keeps its Description at the document level, not per configuration,
+        // so the document's own properties are asked when the configuration names none: the
+        // gate's "a description that parses" would otherwise never see the vendor form.
+        string? description = Lookup(properties, DescriptionProperties)
+            ?? (model == null
+                ? null
+                : Lookup(PropertyDumper.ReadProperties(model, string.Empty, gate), DescriptionProperties));
+
+        // The gate (T053). The id is allocated only for a candidate, so fas:NNNN still counts
+        // fasteners and not components.
+        if (!IsFastenerCandidate(component.Node.IsToolbox, fileName, description, configuration))
+        {
+            return null;
+        }
+
+        string id = scope.FastenerIds.Next();
 
         if (model == null)
         {
@@ -97,8 +126,7 @@ public sealed class FastenerDumper : IFastenerSource
                 null);
         }
 
-        string? description = Lookup(properties, DescriptionProperties);
-        FastenerIdentity parsed = FastenerNameParser.Parse(configuration, description);
+        FastenerIdentity parsed = FastenerNameParser.Parse(configuration, description, fileName);
 
         var fastener = new Fastener
         {
@@ -140,8 +168,9 @@ public sealed class FastenerDumper : IFastenerSource
                 GapKind.NotExtracted,
                 "fastener",
                 fastener.Id,
-                $"Neither the configuration name '{component.Node.ReferencedConfiguration}' nor the "
-                + "configuration's custom properties gave a thread designation.",
+                $"Neither the configuration name '{component.Node.ReferencedConfiguration}', the "
+                + "description, the file name nor the configuration's custom properties gave a "
+                + "thread designation.",
                 null);
         }
 
