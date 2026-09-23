@@ -33,6 +33,7 @@ from swreview.ir.loader import load_package, save_package
 from swreview.ir.models import EvidencePackage
 from swreview.tools.drawings import (
     CONFIRMED_OPEN_CHECK,
+    MAX_DRAWINGS,
     NO_CONNECTION,
     TEN_DRAWINGS,
     read_confirmed_candidates,
@@ -245,6 +246,18 @@ def test_the_reads_stop_when_the_package_holds_ten_drawings(tmp_path: Path) -> N
     assert outcomes[parts[0]][0] == "checked"
     assert outcomes[parts[1]] == outcomes[parts[2]] == ("unresolved", TEN_DRAWINGS)
     assert TEN_DRAWINGS == "the package already holds ten drawings, so this one was not opened"
+
+
+def test_the_bound_and_its_sentence_are_the_hosts() -> None:
+    """The backend stops where the host would refuse, in the host's words: `MAX_DRAWINGS` is
+    `OpenDrawingDiscovery.MaxAttachedDrawings` and `TEN_DRAWINGS` the sentence
+    `ConfirmedDrawingRead` refuses with (`contracts/confirmed-open.md` section 2, item 5)."""
+    dump = Path(__file__).resolve().parents[3] / "extractor" / "SwReview.Extractor" / "Dump"
+    discovery = (dump / "OpenDrawingDiscovery.cs").read_text(encoding="utf-8")
+    host_read = (dump / "ConfirmedDrawingRead.cs").read_text(encoding="utf-8")
+
+    assert f"public const int MaxAttachedDrawings = {MAX_DRAWINGS};" in discovery
+    assert f'new ConfirmedDrawingRefused("{TEN_DRAWINGS}")' in host_read
 
 
 @pytest.mark.parametrize(
