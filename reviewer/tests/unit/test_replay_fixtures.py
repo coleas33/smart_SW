@@ -12,6 +12,12 @@ User Story 2 (T049) and User Story 3 (T078) add their acceptance: checks first a
 pane defaults - checks first, the slim view, stubs after two rounds - under a million requested
 tokens on the big fixture with no recorded finding lost, the same findings with the view on and
 off, every step's full result stored, and both prune ages priced for the owner.
+
+User Story 4 (T086) adds the follow-up and the regrouped estimate, priced with the pane
+defaults of the provider the recordings ran on (OpenAI, so parallel calls are on): the big
+fixture's follow-up question under 30,000 input tokens (SC-004), and each small fixture's
+labelled regrouped estimate under 300,000 with its strict figure below the recorded total
+(SC-003 as amended).
 """
 
 from __future__ import annotations
@@ -378,6 +384,93 @@ def test_every_result_past_the_prune_age_is_a_stub_in_every_request(
             )
             assert compact(stubbed) >= compact(full), (played.turn, played.index, index)
     assert stubs > 0
+
+
+# --- the User Story 4 acceptance: follow-ups and the regrouped estimate (008 T086) -----------
+
+SMALL = ("small-assembly-a", "small-assembly-b")
+REGROUPED_TARGET = 300_000
+"""SC-003 as amended (research R2.43, R4): each small fixture's regrouped estimate."""
+FOLLOW_UP_TARGET = 30_000
+"""SC-004: the big fixture's follow-up question, against 405k recorded."""
+
+
+def openai_pane_request(prune_after: int = 2) -> Requested:
+    """The pane defaults of the provider the recorded reviews ran on.
+
+    The recordings the fixtures are shaped like were OpenAI reviews; the fixtures' sessions
+    say `fake` only because the generator drove the scripted provider. The OpenAI pane adds
+    parallel tool calls to what `pane_request` gives, which is what rule M models; on the
+    command line it is `--lever parallel_tool_calls`.
+    """
+    pane = pane_defaults(ProviderName.OPENAI)
+    return pane.efficiency, pane.model_view.model_copy(update={"prune_after_rounds": prune_after})
+
+
+@cache
+def with_openai_pane(name: str, prune_after: int = 2) -> ReplayReport:
+    return replay(
+        FIXTURES / name,
+        requested=openai_pane_request(prune_after),
+        standards_profile=EXAMPLE_PROFILE,
+    )
+
+
+def test_the_openai_pane_is_the_fixture_pane_plus_parallel_calls() -> None:
+    efficiency, view = openai_pane_request()
+    fixture_efficiency, fixture_view = pane_request("small-assembly-a")
+
+    assert view == fixture_view
+    assert efficiency == fixture_efficiency.model_copy(update={"parallel_tool_calls": True})
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_the_openai_pane_loses_no_recorded_finding(name: str) -> None:
+    findings = with_openai_pane(name).findings
+
+    assert findings.lost == []
+    assert findings.not_replayable == []
+    assert len(findings.reclassified) == RECLASSIFIED[name]
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_the_regrouped_estimate_applies_both_rules_with_its_assumption(name: str) -> None:
+    report = with_openai_pane(name)
+
+    assert report.regrouped is not None
+    assert report.regrouped.rules == ["R", "M"]
+    assert report.regrouped.assumption.startswith("the model does not repeat a check")
+    assert report.regrouped.total < report.totals.requested
+    assert report.regrouped.rounds < len(report.rounds)
+
+
+@pytest.mark.parametrize("name", SMALL)
+def test_each_small_fixture_is_cut_below_its_recorded_total(name: str) -> None:
+    """SC-003's strict half: the recorded rounds, priced with the pane defaults."""
+    report = with_openai_pane(name)
+
+    assert report.totals.requested < report.totals.recorded
+
+
+@pytest.mark.parametrize("name", SMALL)
+def test_each_small_fixtures_regrouped_estimate_is_under_the_target(name: str) -> None:
+    """SC-003 as amended: the labelled regrouped estimate under 300,000 input tokens."""
+    report = with_openai_pane(name)
+
+    assert report.regrouped is not None
+    assert report.regrouped.total < REGROUPED_TARGET, (
+        f"{name}: regrouped {report.regrouped.total:,}, strict {report.totals.requested:,}"
+    )
+
+
+def test_the_big_assemblys_follow_up_is_under_thirty_thousand() -> None:
+    """SC-004: the follow-up question's request carries stubs, not payloads."""
+    report = with_openai_pane("big-assembly")
+
+    [follow_up] = [r for r in report.rounds if (r.turn, r.round) == (1, 0)]
+    assert follow_up.kind == "main"
+    assert follow_up.requested_input < FOLLOW_UP_TARGET
+    assert follow_up.recorded_input > 400_000
 
 
 def test_both_prune_ages_are_priced_for_the_owner() -> None:

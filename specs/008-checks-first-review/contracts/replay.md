@@ -196,6 +196,29 @@ not repeat a check the digest reported, and batches consecutive calls to one too
 
 A round left empty disappears. SC-003 is gated on this figure (research R2.43, R4).
 
+*Landed as (T087).* The rules apply to pass B's script in the order R, then M, so two rounds of
+one tool that a dropped check separated are consecutive for rule M (the model the estimate
+assumes never made the call between them). A call is "estimated or stored" by its pass-A class;
+a round that rule R only partly empties keeps its other calls and its whole output. The
+regrouped script is played through the current code with the requested settings, like pass B,
+into `scratch/regrouped` (`ReplayPasses.regrouped`: the rules, each turn's `RegroupedRound`s
+with the recorded rounds they stand for, and the played review), and priced by the strict
+figure's own accounting (one `_Conversation` walk for both): each regrouped round's output is
+its recorded rounds' outputs together, a round rule R emptied is gone with its output, a call
+the replay could not run keeps pass B's estimate or stored result under its new position, and
+the closing round and every carried presentation round are priced as the strict figure prices
+them - so when neither rule changes anything the estimate equals the strict figure. `Regrouped`
+is `{assumption, rules, rounds, total}`, `rounds` counting the regrouped main rounds and the
+carried ones. The human output prints it on the line after the round counts: `regrouped
+estimate (rule R, M): <total> over <rounds> rounds, assuming <assumption>`. A replay whose
+requested settings meet neither condition plays no third pass and reports `regrouped: null`.
+
+The recorded provider decides the default request, and the committed fixtures record `fake`
+(their generator drove the scripted provider), whose pane runs checks first but not parallel
+calls: `swreview benchmark replay <fixture>` therefore prints rule R alone, and `--lever
+parallel_tool_calls` adds rule M - the request an OpenAI pane review makes, which is what the
+recorded reviews were. The US4 acceptance prices the fixtures with `pane_defaults(openai)`.
+
 ## 7. The report
 
 Human output, in order: the run, the provider, `tokens counted with o200k_base` and the
@@ -290,6 +313,7 @@ test says why it skipped that part when the file is absent).
 | US3 | `--pane-defaults` on the big fixture under 1,000,000 requested input tokens with no loss (SC-002); the session's findings identical with the model-view settings on and off (SC-007); every step of the requested pass stored under `tool-results/` (SC-008); every result older than the prune age a stub in every reconstructed request |
 | US3 *landed as* (T078, T079, 2026-09-23) | The default request - `pane_defaults(fake)`: checks first, payload slimming, history pruning after two rounds - with `--standards-profile ../config/standards.example.yaml`: `big-assembly` recorded 12,456,095, as recorded 12,455,282, requested **740,472 (-94.1%)**, and 695,948 (-94.4%) at `--prune-after 1`; `small-assembly-a` 1,619,376 / 1,619,532 / 531,638 (-67.2%), 517,966 (-68.0%) at 1; `small-assembly-b` 1,497,696 / 1,497,378 / 512,414 (-65.8%), 500,142 (-66.6%) at 1. Against checks first alone (US2's 4,225,060, 1,236,667 and 1,133,500) the view and the stubs take a further 82%, 57% and 55%. No recorded finding lost and none not replayable on any fixture, at either prune age; 3, 2 and 0 reclassified as contacts; 62, 7 and 5 added, as under checks first alone. The big fixture's requested session records the same findings and contacts with the view off (SC-007) and one stored result per step (SC-008); its four estimated rounds are the live call and the three touching groups judged after it, as under US1 |
 | US4 | The regrouped estimate under 300,000 for each small fixture, with the strict figure below the recorded total (SC-003, amended); the big fixture's follow-up round under 30,000 (SC-004); three answers in one batch replay as one resumed turn (SC-005, scripted) |
+| US4 *landed as* (T086, T087, 2026-09-23) | `pane_defaults(openai)` - checks first, parallel calls, payload slimming, history pruning after two rounds - with `--standards-profile ../config/standards.example.yaml` (on the command line `--lever parallel_tool_calls` on a fixture): regrouped estimate, rules R and M, `small-assembly-a` **283,163** over 21 rounds (strict 531,638 over 39, recorded 1,619,376), `small-assembly-b` **274,957** over 20 rounds (strict 512,414 over 37, recorded 1,497,696), `big-assembly` 305,864 over 16 rounds (strict 740,472 over 41); at `--prune-after 1` 269,998, 262,915 and 262,555. The margin under 300,000 is 5.6% and 8.3%. With the fixtures' own `pane_defaults(fake)` (rule R alone) the regrouped estimates are 443,019, 441,570 and 544,558. The big fixture's follow-up round (turn 1, round 0): **24,480** requested against 407,399 recorded (24,013 at `--prune-after 1`). No recorded finding lost on any fixture; 3, 2 and 0 reclassified; 62, 7 and 5 added, as under US3. A two-answer batch replays through `answer_evidence_batch` as one resumed turn in both passes (scripted) |
 | US5 | Every step's `result_tokens` in the requested pass's session equals the replay's count of that call's full payload (one tokenizer, one serialization) |
 
 ## 10. Real recordings

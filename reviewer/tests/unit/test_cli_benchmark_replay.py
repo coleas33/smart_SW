@@ -252,6 +252,37 @@ def test_the_standards_profile_reaches_both_passes(tmp_path: Path) -> None:
     assert graded.rounds[0].calls[0].class_ == "reproduced"
 
 
+# --- the regrouped estimate from User Story 4 (T086) ----------------------------------------
+
+
+def regrouped_of(run: Path, *switches: str) -> Any:
+    report = ReplayReport.model_validate(
+        payload(invoke("benchmark", "replay", str(run), *switches, "--json"))
+    )
+    return report.regrouped
+
+
+def test_the_regrouped_estimate_follows_the_requested_levers(run: Path) -> None:
+    """The fake recording's pane runs checks first (rule R); `--lever parallel_tool_calls`
+    adds what an OpenAI pane runs (rule M); with every change off neither rule applies."""
+    assert regrouped_of(run).rules == ["R"]
+    assert regrouped_of(run, "--lever", "parallel_tool_calls").rules == ["R", "M"]
+    assert regrouped_of(run, "--no-pane-defaults") is None
+
+
+def test_the_human_output_prints_the_regrouped_estimate_after_the_round_counts(
+    run: Path,
+) -> None:
+    lines = invoke("benchmark", "replay", str(run)).stdout.splitlines()
+
+    rounds = next(index for index, line in enumerate(lines) if line.startswith("rounds:"))
+    assert lines[rounds + 1].startswith("regrouped estimate (rule R): ")
+    assert lines[rounds + 1].endswith(
+        "assuming the model does not repeat a check the digest reported, and batches "
+        "consecutive calls to one tool"
+    )
+
+
 def test_benchmark_lists_replay_in_its_help() -> None:
     result = invoke("benchmark", "--help")
 

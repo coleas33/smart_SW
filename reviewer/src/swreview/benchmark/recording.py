@@ -10,9 +10,11 @@ review's turns and rounds from `events.jsonl`, using only the markers the log ca
 - a `usage` after the turn's `text.done` and before its `turn.ended` is the **presentation**
   request, told apart by position alone (its `round_index` follows on from the main rounds);
   a turn that ends with no text therefore has that round counted as a main round;
-- a turn preceded by `evidence.answered` events is an **answer** turn carrying them; any other
-  turn after the first is a **follow-up**, whose words are sized from the recorded growth
-  because no event records the text;
+- a turn preceded by `evidence.answered` events is an **answer** turn carrying them, in
+  recorded order - several of them are answers the engineer sent together, one batch that
+  resumed one turn (`answer_evidence_batch`, feature 008 User Story 4); any other turn after
+  the first is a **follow-up**, whose words are sized from the recorded growth because no
+  event records the text;
 - a `tool.started` with no `tool.finished` - the call a Stop interrupted - is dropped;
 - steps written before the first `usage` (a recorded pre-run) are `setup_steps`, never
   scripted;

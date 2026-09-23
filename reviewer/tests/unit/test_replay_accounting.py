@@ -15,11 +15,18 @@ own neutral history as the adapters send them - through `prune_history`, compact
 reads the recording's own view; a call the replay cannot run is sized from its stored result
 when the run folder keeps one for this session, and an estimated one becomes a stub on the
 adapters' schedule, priced at the part of the stub the replay can know.
+
+User Story 4 (T086): answers the engineer sent together replay as one resumed turn through
+`answer_evidence_batch`, and a labelled regrouped estimate prices pass B's script with rule R
+(checks first: drop the calls the guard answered) and rule M (parallel calls: merge consecutive
+rounds of one tool within a turn, never a call the replay could not run), a round left empty
+gone, by the strict figure's own accounting.
 """
 
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -27,6 +34,7 @@ from uuid import uuid4
 
 import pytest
 
+from swreview.agent import runner
 from swreview.agent.providers import FRAMING_TOKENS, TokenUsage, tool_result_text
 from swreview.agent.providers.fake import ScriptedToolCall
 from swreview.agent.providers.pruning import PRUNED_NOTE, prune_history, result_stub
@@ -34,13 +42,16 @@ from swreview.agent.settings import MODEL_VIEW_OFF, MODEL_VIEW_PANE, EfficiencyS
 from swreview.benchmark.recording import read_recording
 from swreview.benchmark.replay import (
     PlayedRound,
+    ReplayPasses,
     ReplayReport,
     TurnPlan,
     estimated_sizes,
+    render_replay_lines,
     replay,
     replay_passes,
     report_of,
 )
+from swreview.findings import finding_subject_key
 from swreview.ir.loader import save_package
 from swreview.tokens import count_tokens
 from swreview.tools.model_view import model_view
@@ -564,6 +575,288 @@ def test_an_estimated_result_past_the_prune_age_is_priced_as_the_stub_the_replay
         base + 3 * DEFAULT_OUTPUT_TOKENS + stub + FRAMING_TOKENS + others(3)
     )
     assert [c.class_ for c in rounds[0].calls] == ["estimated"]
+
+
+# --- answers sent together (User Story 4, T086, SC-005) -------------------------------------
+
+ASKS = tuple(
+    ScriptedToolCall(
+        "request_evidence", {"what": what, "why": "fit check", "entity_ids": ["cmp:0002"]}
+    )
+    for what in ("the drawing", "the drawing revision")
+)
+BATCH = (("ER-002", "It is rev B."), ("ER-001", "The drawing is attached."))
+
+
+def test_answers_sent_together_replay_as_one_resumed_turn(
+    tmp_path: Path, package_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = record_scripted_review(
+        tmp_path / "run",
+        package_dir,
+        [
+            TurnPlan(rounds=(ASKS,), text="Need two things."),
+            TurnPlan(kind="answer", answers=BATCH, rounds=((SUMMARY,),), text="Thanks."),
+        ],
+    )
+    batches: list[list[tuple[str, str]]] = []
+    batch = runner.ReviewRun.answer_evidence_batch
+
+    def spy(self: runner.ReviewRun, answers: Sequence[tuple[str, str]]) -> Any:
+        batches.append(list(answers))
+        return batch(self, answers)
+
+    monkeypatch.setattr(runner.ReviewRun, "answer_evidence_batch", spy)
+
+    passes = replay_passes(read_recording(run), tmp_path / "scratch", requested=ALL_OFF)
+    report = report_of(passes)
+
+    assert batches == [list(BATCH), list(BATCH)], "one batch per pass, never one turn per answer"
+    assert [(r.turn, r.round) for r in report.rounds] == [(0, 0), (0, 1), (1, 0), (1, 1)]
+    assert [r.as_recorded_input for r in report.rounds] == [r.recorded_input for r in report.rounds]
+    for folder in ("as-recorded", "requested"):
+        events = [
+            json.loads(line)
+            for line in (tmp_path / "scratch" / folder / "events.jsonl").read_text().splitlines()
+        ]
+        kinds = [event["type"] for event in events]
+        assert kinds.count("evidence.answered") == 2
+        assert kinds.count("turn.ended") == 2
+    assert {request.id: request.status for request in passes.first.session.evidence_requests} == {
+        "ER-001": "answered",
+        "ER-002": "answered",
+    }
+
+
+# --- the regrouped estimate (User Story 4, T086, contracts/replay.md section 6) --------------
+
+HOLES_AGAIN = ScriptedToolCall("list_holes", {"component_id": "cmp:0002", "hole_type": None})
+MATES = ScriptedToolCall("list_mates", {"component_id": None})
+MATES_AGAIN = ScriptedToolCall("list_mates", {"component_id": "cmp:0002"})
+CHECKS_FIRST_ONLY = (EfficiencySettings(prerun_checks=True), MODEL_VIEW_OFF)
+PARALLEL_ONLY = (EfficiencySettings(parallel_tool_calls=True), MODEL_VIEW_OFF)
+BOTH_RULES = (EfficiencySettings(prerun_checks=True, parallel_tool_calls=True), MODEL_VIEW_OFF)
+ASSUMPTION = (
+    "the model does not repeat a check the digest reported, and batches consecutive calls to "
+    "one tool"
+)
+
+
+def regrouped_tools(passes: ReplayPasses) -> list[list[list[str]]]:
+    """The regrouped script as played: each turn's rounds that asked for calls, by tool."""
+    assert passes.regrouped is not None
+    played = passes.regrouped.played.rounds
+    return [
+        [[call.tool for call in r.calls] for r in played if r.turn == turn and r.calls]
+        for turn in range(len(passes.recording.turns))
+    ]
+
+
+def regrouped_of(
+    run: Path, scratch: Path, requested: Any
+) -> tuple[ReplayPasses, ReplayReport]:
+    passes = replay_passes(read_recording(run), scratch, requested=requested)
+    return passes, report_of(passes)
+
+
+def test_no_regrouped_estimate_when_neither_rule_applies(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    run = record_scripted_review(
+        tmp_path / "run", package_dir, [TurnPlan(rounds=((HOLES,), (HOLES_AGAIN,)))]
+    )
+
+    passes, report = regrouped_of(run, tmp_path / "scratch", ALL_OFF)
+
+    assert report.regrouped is None
+    assert passes.regrouped is None
+    assert not (tmp_path / "scratch" / "regrouped").exists()
+    assert not any(line.startswith("regrouped") for line in render_replay_lines(report))
+
+
+def test_rule_r_drops_every_call_the_checks_already_answered(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    run = record_scripted_review(
+        tmp_path / "run",
+        package_dir,
+        [TurnPlan(rounds=((SUMMARY,), (RMS_PART,), (RMS_PART, COMPONENTS), (HOLES,)), text="Ok.")],
+    )
+
+    passes, report = regrouped_of(run, tmp_path / "scratch", CHECKS_FIRST_ONLY)
+
+    assert report.regrouped is not None
+    assert report.regrouped.rules == ["R"]
+    assert report.regrouped.assumption == ASSUMPTION
+    answered = [c for r in report.rounds for c in r.calls if c.class_ == "answered_from_checks"]
+    assert [c.tool for c in answered] == ["check_rms_part", "check_rms_part"]
+    assert regrouped_tools(passes) == [
+        [["get_package_summary"], ["list_components"], ["list_holes"]]
+    ]
+    assert report.regrouped.rounds == len(report.rounds) - 1, "the emptied round disappears"
+    assert report.regrouped.total < report.totals.requested
+
+
+def test_rule_m_merges_consecutive_rounds_of_one_tool_but_never_across_a_turn(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    run = record_scripted_review(
+        tmp_path / "run",
+        package_dir,
+        [
+            TurnPlan(rounds=((HOLES,), (HOLES_AGAIN,), (COMPONENTS,)), text="Done."),
+            TurnPlan(
+                kind="follow_up",
+                user_text="And the components?",
+                rounds=((COMPONENTS,), (MATES,), (MATES_AGAIN, MATES)),
+                text="Ok.",
+            ),
+        ],
+    )
+
+    passes, report = regrouped_of(run, tmp_path / "scratch", PARALLEL_ONLY)
+
+    assert report.regrouped is not None
+    assert report.regrouped.rules == ["M"]
+    assert regrouped_tools(passes) == [
+        [["list_holes", "list_holes"], ["list_components"]],
+        [["list_components"], ["list_mates", "list_mates", "list_mates"]],
+    ]
+    assert report.regrouped.rounds == len(report.rounds) - 2
+    assert report.regrouped.total < report.totals.requested
+    played = [call for r in passes.regrouped.played.rounds for call in r.calls]  # type: ignore[union-attr]
+    assert [call.arguments for call in played] == [
+        dict(call.arguments)
+        for call in (HOLES, HOLES_AGAIN, COMPONENTS, COMPONENTS, MATES, MATES_AGAIN, MATES)
+    ], "the merged calls keep their recorded order"
+
+
+def test_rule_m_applies_only_with_parallel_calls(tmp_path: Path, package_dir: Path) -> None:
+    run = record_scripted_review(
+        tmp_path / "run", package_dir, [TurnPlan(rounds=((HOLES,), (HOLES_AGAIN,)))]
+    )
+
+    passes, report = regrouped_of(run, tmp_path / "scratch", CHECKS_FIRST_ONLY)
+
+    assert report.regrouped is not None
+    assert report.regrouped.rules == ["R"]
+    assert regrouped_tools(passes) == [[["list_holes"], ["list_holes"]]]
+
+
+def test_rule_m_never_merges_a_call_the_replay_estimated(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    run = without_stored_results(
+        record_scripted_review(
+            tmp_path / "run",
+            package_dir,
+            [TurnPlan(rounds=((LIVE,), (LIVE,), (COMPONENTS,)))],
+            **with_bridge(answers=2),
+        )
+    )
+
+    passes, report = regrouped_of(run, tmp_path / "scratch", PARALLEL_ONLY)
+
+    assert {c.class_ for c in report.rounds[0].calls + report.rounds[1].calls} == {"estimated"}
+    assert regrouped_tools(passes) == [
+        [["bridge_interference"], ["bridge_interference"], ["list_components"]]
+    ]
+
+
+def test_rule_m_never_merges_a_call_sized_from_its_stored_result(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    run = record_scripted_review(
+        tmp_path / "run",
+        package_dir,
+        [TurnPlan(rounds=((LIVE,), (LIVE,), (COMPONENTS,)))],
+        **with_bridge(answers=2),
+    )
+
+    passes, report = regrouped_of(run, tmp_path / "scratch", PARALLEL_ONLY)
+
+    assert {c.class_ for c in report.rounds[0].calls + report.rounds[1].calls} == {"stored"}
+    assert regrouped_tools(passes) == [
+        [["bridge_interference"], ["bridge_interference"], ["list_components"]]
+    ]
+
+
+def test_when_the_rules_change_nothing_the_estimate_is_the_strict_figure(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    """The regrouped rounds are priced by the strict figure's own accounting, and a carried
+    presentation round stays in at its recorded size."""
+    run = record_scripted_review(
+        tmp_path / "run",
+        package_dir,
+        [
+            TurnPlan(rounds=((SUMMARY,), (RMS_PART,), (HOLES,)), text="Found some."),
+            TurnPlan(kind="follow_up", user_text="And the mates?", rounds=((MATES,),), text="Ok."),
+        ],
+        presentation=usage(1_874, 519),
+    )
+
+    for index, requested in enumerate((PARALLEL_ONLY, (PARALLEL_ONLY[0], MODEL_VIEW_PANE))):
+        _, report = regrouped_of(run, tmp_path / f"scratch-{index}", requested)
+
+        assert report.regrouped is not None
+        assert report.regrouped.total == report.totals.requested
+        assert report.regrouped.rounds == len(report.rounds)
+        assert report.totals.carried_rounds == 1
+
+
+def test_both_rules_merge_the_rounds_a_dropped_check_separated(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    """R runs first: a round left empty is gone before M looks for consecutive rounds."""
+    run = record_scripted_review(
+        tmp_path / "run",
+        package_dir,
+        [TurnPlan(rounds=((MATES,), (RMS_PART,), (MATES_AGAIN,), (SUMMARY,)), text="Ok.")],
+    )
+
+    passes, report = regrouped_of(run, tmp_path / "scratch", BOTH_RULES)
+
+    assert report.regrouped is not None
+    assert report.regrouped.rules == ["R", "M"]
+    assert regrouped_tools(passes) == [[["list_mates", "list_mates"], ["get_package_summary"]]]
+
+
+def test_the_regrouped_script_records_the_requested_passes_findings(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    """Dropping a call the guard answered and batching calls change no verdict."""
+    run = record_scripted_review(
+        tmp_path / "run",
+        package_dir,
+        [TurnPlan(rounds=((RMS_PART,), (HOLES,), (HOLES_AGAIN,)), text="Ok.")],
+    )
+
+    passes, _ = regrouped_of(run, tmp_path / "scratch", BOTH_RULES)
+
+    assert passes.regrouped is not None
+    assert Counter(
+        finding_subject_key(finding) for finding in passes.regrouped.played.session.findings
+    ) == Counter(finding_subject_key(finding) for finding in passes.second.session.findings)
+
+
+def test_the_regrouped_estimate_is_printed_with_its_assumption(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    run = record_scripted_review(
+        tmp_path / "run", package_dir, [TurnPlan(rounds=((HOLES,), (HOLES_AGAIN,)), text="Ok.")]
+    )
+
+    _, report = regrouped_of(run, tmp_path / "scratch", PARALLEL_ONLY)
+    lines = render_replay_lines(report)
+
+    assert report.regrouped is not None
+    [line] = [line for line in lines if line.startswith("regrouped estimate")]
+    assert f"{report.regrouped.total:,}" in line
+    assert ASSUMPTION in line
+    assert lines.index(line) == next(
+        index for index, text in enumerate(lines) if text.startswith("rounds:")
+    ) + 1
 
 
 def _text_of(run: Path, step: int) -> str:

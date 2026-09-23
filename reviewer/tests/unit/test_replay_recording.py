@@ -37,6 +37,10 @@ RMS_ASSEMBLY = ScriptedToolCall("check_rms_assembly")
 ASK = ScriptedToolCall(
     "request_evidence", {"what": "the drawing", "why": "fit check", "entity_ids": ["cmp:0002"]}
 )
+ASK_AGAIN = ScriptedToolCall(
+    "request_evidence",
+    {"what": "the drawing revision", "why": "fit check", "entity_ids": ["cmp:0002"]},
+)
 PRESENTATION = TokenUsage(
     input_tokens=1_874,
     cached_input_tokens=0,
@@ -163,6 +167,35 @@ def test_an_answered_request_makes_an_answer_turn(tmp_path: Path, package_dir: P
     assert [turn.kind for turn in recording.turns] == ["opening", "answer"]
     assert recording.turns[1].answers == (("ER-001", answer),)
     assert recording.turns[0].answers == ()
+
+
+def test_answers_sent_together_are_one_answer_turn_carrying_every_pair(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    """Feature 008 T086 (contracts/replay.md section 2, research R2.42): consecutive
+    `evidence.answered` events before one resumed turn are one batch, in recorded order."""
+    answers = (("ER-002", "It is rev B."), ("ER-001", "The drawing is attached."))
+    run = recorded(
+        tmp_path,
+        package_dir,
+        [
+            TurnPlan(rounds=((ASK, ASK_AGAIN),), text="Asked."),
+            TurnPlan(kind="answer", answers=answers, rounds=((SUMMARY,),), text="Thanks."),
+        ],
+    )
+    events = [json.loads(line) for line in (run / "events.jsonl").read_text().splitlines()]
+    kinds = [event["type"] for event in events]
+    first_answer = kinds.index("evidence.answered")
+    assert kinds[first_answer : first_answer + 3] == ["evidence.answered"] * 2 + ["usage"]
+
+    recording = read_recording(run)
+
+    assert [turn.kind for turn in recording.turns] == ["opening", "answer"]
+    assert recording.turns[1].answers == answers
+    assert [[call.tool for call in r.calls] for r in recording.turns[1].rounds] == [
+        ["get_package_summary"],
+        [],
+    ]
 
 
 def test_a_stopped_turn_drops_its_dangling_call(tmp_path: Path, package_dir: Path) -> None:

@@ -27,7 +27,7 @@ from swreview.agent.providers import (
     tool_result_text,
 )
 from swreview.agent.providers.fake import ScriptedToolCall
-from swreview.agent.runner import ANSWER_MESSAGE
+from swreview.agent.runner import ANSWER_MESSAGE, answers_message
 from swreview.agent.settings import EfficiencySettings
 from swreview.benchmark.replay import PlayedRound, TurnPlan
 from swreview.ir.loader import load_package, save_package
@@ -409,6 +409,40 @@ def test_an_answer_turn_opens_on_the_runners_answer_message(
         "role": "user",
         "content": ANSWER_MESSAGE.format(request_id="ER-001", answer="It is rev B."),
     }
+
+
+def test_answers_sent_together_resume_one_turn_on_the_runners_batch_message(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    """Feature 008 T086: a batch of answers is one resumed turn, in the history and in the
+    recorded usage alike - both through `runner.answers_message`."""
+    asks = tuple(
+        ScriptedToolCall(
+            "request_evidence", {"what": what, "why": "fit check", "entity_ids": ["cmp:0002"]}
+        )
+        for what in ("the drawing", "the drawing revision")
+    )
+    answers = (("ER-002", "Rev B."), ("ER-001", "Attached."))
+    turns = [
+        TurnPlan(rounds=(asks,), text="Need two things."),
+        TurnPlan(kind="answer", answers=answers, text="Thanks."),
+    ]
+    seen = played_rounds(tmp_path, package_dir, turns)
+    out = record_scripted_review(tmp_path / "recorded", package_dir, turns)
+
+    [answer] = [played for played in seen if played.turn == 1]
+    message = answers_message(answers)
+    assert answer.history[-1] == {"role": "user", "content": message}
+    assert message.splitlines()[1:3] == ["- ER-002: Rev B.", "- ER-001: Attached."]
+    answered = [e["body"] for e in events_of(out) if e["type"] == "evidence.answered"]
+    assert answered == [{"request_id": rid, "answer": text} for rid, text in answers]
+    inputs = usage_inputs(out)
+    assert inputs[2] == inputs[1] + DEFAULT_OUTPUT_TOKENS + count_tokens(message)
+
+
+def test_an_answer_turn_needs_at_least_one_answer() -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        TurnPlan(kind="answer", answers=())
 
 
 # --- determinism ---------------------------------------------------------------------------
