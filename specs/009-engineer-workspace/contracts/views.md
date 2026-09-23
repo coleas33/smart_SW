@@ -26,6 +26,14 @@ displayed. Neither label carries a count.
 Results shows no tool card, no tool argument and no token count; Transcript shows every prose block,
 tool call and finding marker in the order the events arrived, with the counts.
 
+*Landed as* (T047): the Transcript view is `<section id="transcript-view">`, holding the head
+(`#transcript-head`: `#transcript-counts`, then `#run-dir`, `#stream-state`, `#usage-line`) and
+the record itself, `<main id="transcript">`, which is what scrolls; the switch buttons are
+`#view-results` and `#view-transcript`; Results' error cards are in `#errors`, the pins in
+`#answers`, Collapse all in `#findings-head` over `#findings`, and the contacts fold is its own
+`#contacts` section right after `#findings`. Start here lost its own 14rem scroll viewport:
+Results scrolls as one.
+
 "Collapse all" sits in Results over the findings. The old transcript fold (its toggle, the
 `folded` class and its rules) is gone.
 

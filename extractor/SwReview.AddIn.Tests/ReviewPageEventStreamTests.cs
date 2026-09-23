@@ -119,32 +119,43 @@ public sealed class ReviewPageEventStreamTests
     }
 
     /// <summary>
-    /// The transcript arrives folded and the one control over it unfolds it.
+    /// The review opens on Results, and the switch shows the Transcript instead (feature 009
+    /// User Story 5, contracts/views.md section 1).
     ///
-    /// The tool calls and the model's prose are the record of how the review reached its
-    /// findings, not the findings themselves, so they fold to a count until they are wanted. The
-    /// fold is a class rather than the `hidden` property because the findings, the evidence
-    /// requests and the error cards stay on screen inside a folded transcript - folded, it reads
-    /// as the findings ledger.
+    /// Until feature 009 this test pinned a transcript that arrived folded and a header that
+    /// unfolded it (`TheTranscriptArrivesFoldedAndItsHeaderUnfoldsIt`): one container that
+    /// interleaved findings with tool cards and hid the prose with a class. Results and
+    /// Transcript are two views now, and each owns the pane in turn: the chosen one is a class on
+    /// `body`, the switch says which with `aria-pressed`, and the other view is not displayed.
     /// </summary>
     [Fact]
-    public void TheTranscriptArrivesFoldedAndItsHeaderUnfoldsIt()
+    public void TheReviewOpensOnResultsAndTheSwitchShowsTheTranscript()
     {
         Conversation run = Scripted.Value;
 
-        Assert.Equal("transcript folded", run.TranscriptClassFolded);
-        Assert.Equal("transcript", run.TranscriptClassUnfolded);
+        Assert.Contains("view-results", run.BodyClassOnResults.Split(' '));
+        Assert.DoesNotContain("view-transcript", run.BodyClassOnResults.Split(' '));
+
+        JsonElement switched = run.SwitchedToTranscript;
+        Assert.Contains("view-transcript", switched.GetProperty("bodyClass").GetString()!.Split(' '));
+        Assert.DoesNotContain("view-results", switched.GetProperty("bodyClass").GetString()!.Split(' '));
+        Assert.Equal("true", switched.GetProperty("transcriptPressed").GetString());
+        Assert.Equal("false", switched.GetProperty("resultsPressed").GetString());
+        Assert.Equal("none", switched.GetProperty("resultsDisplay").GetString());
+        Assert.NotEqual("none", switched.GetProperty("transcriptDisplay").GetString());
     }
 
     /// <summary>
-    /// The folded transcript's header counts what it is hiding, and says what is running while
-    /// it runs.
+    /// The Transcript's own head counts the calls and the rounds, and says what is running while
+    /// it runs - and none of it is in Results, which shows no tool call and no token count
+    /// (FR-018).
     ///
-    /// The count is the whole point of the fold: a transcript folded to nothing is one an
-    /// engineer cannot tell from an empty one, and "I cannot tell a finished review from a hung
-    /// one" is the complaint this page already has on record
-    /// (docs/pane-findings-2026-09-18.md). The two numbers come from two different events - a
-    /// round trip from `usage`, a call from `tool.finished` - so both are watched moving.
+    /// The count is what makes a hung review tell itself from a finished one ("I cannot tell a
+    /// finished review from a hung one" is the complaint this page already has on record,
+    /// docs/pane-findings-2026-09-18.md). The two numbers come from two different events - a
+    /// round trip from `usage`, a call from `tool.finished` - so both are watched moving. Until
+    /// feature 009 they were the transcript fold's button label; they are the Transcript view's
+    /// head now.
     /// </summary>
     [Fact]
     public void TheTranscriptHeaderCountsTheRoundsTheCallsAndWhatIsRunning()
@@ -155,13 +166,22 @@ public sealed class ReviewPageEventStreamTests
         Assert.Contains("0 tool calls", run.TranscriptHeadAfterUsage);
         Assert.Contains("1 round", run.TranscriptHeadAfterUsage);
 
-        // While the call is in flight the header is the only place it is visible at all.
+        // While the call is in flight the head is where it is visible.
         Assert.Contains("check_rms_part", run.TranscriptHeadWhileToolRuns);
         Assert.Contains("0 tool calls", run.TranscriptHeadWhileToolRuns);
 
         Assert.Contains("1 tool call", run.TranscriptHeadAfterTool);
         Assert.DoesNotContain("1 tool calls", run.TranscriptHeadAfterTool);
         Assert.DoesNotContain("check_rms_part", run.TranscriptHeadAfterTool);
+
+        // ...and not in Results, in either state.
+        foreach (string results in new[] { run.ResultsWhileToolRuns, run.ResultsAfterTool })
+        {
+            Assert.DoesNotContain("check_rms_part", results);
+            Assert.DoesNotContain("tool call", results);
+            Assert.DoesNotContain("1 round", results);
+            Assert.DoesNotContain("round trip", results);
+        }
     }
 
     /// <summary>
@@ -227,13 +247,28 @@ public sealed class ReviewPageEventStreamTests
         Assert.Equal(1, run.Count("events.close"));
     }
 
+    /// <summary>
+    /// A follow-up's answer is pinned in Results under the question that produced it, and the
+    /// view does not change (FR-019, the owner's decision of 2026-09-23, contracts/views.md
+    /// section 4).
+    ///
+    /// Until feature 009 this test pinned the opposite move
+    /// (`AFollowUpUnfoldsTheTranscriptSoItsAssistantAnswerIsVisible`): the follow-up unfolded the
+    /// whole transcript so the answer would not be hidden behind tool chrome. The answer is
+    /// pinned in Results now - the engineer never has to switch to read it - and the same text
+    /// is also a prose block in the Transcript, where the chronology keeps it.
+    /// </summary>
     [Fact]
-    public void AFollowUpUnfoldsTheTranscriptSoItsAssistantAnswerIsVisible()
+    public void AFollowUpAnswerIsPinnedInResultsWithoutSwitching()
     {
         Conversation run = Scripted.Value;
+        JsonElement pinned = run.PinnedAfterFollowup;
 
-        Assert.Equal("transcript", run.TranscriptClassAfterFollowup);
-        Assert.True(run.AnswerVisibleAfterFollowup);
+        Assert.Contains("view-results", pinned.GetProperty("bodyClass").GetString()!.Split(' '));
+        Assert.Equal("What does this mean?", pinned.GetProperty("question").GetString());
+        Assert.Equal("The answer is visible.", pinned.GetProperty("answer").GetString());
+        Assert.True(pinned.GetProperty("rendered").GetBoolean(), "the pinned answer is not on screen in Results.");
+        Assert.True(pinned.GetProperty("inTranscript").GetBoolean(), "the answer is not a prose block in the Transcript.");
     }
 
     /// <summary>
@@ -320,24 +355,26 @@ public sealed class ReviewPageEventStreamTests
                 await Push(page, SseFrames.Frame(16, "usage", UsageBody));
                 await OffscreenReviewPage.Settled(page);
                 run.UsageLineAfterUsageFrame = await TextOf(page, "usage-line");
-                run.TranscriptHeadAfterUsage = await TextOf(page, "transcript-toggle");
+                run.TranscriptHeadAfterUsage = await TextOf(page, "transcript-head");
 
-                // One tool call, started and finished, so the folded transcript's header can be
-                // watched moving. Their `seq` is below the highest already read, so the
-                // reconnect assertion above still sees 16 as the high-water mark: the page
-                // appends in arrival order and only ever raises `lastSeq`.
+                // One tool call, started and finished, so the Transcript's head can be watched
+                // moving. Their `seq` is below the highest already read, so the reconnect
+                // assertion above still sees 16 as the high-water mark: the page appends in
+                // arrival order and only ever raises `lastSeq`.
                 await Push(page, SseFrames.Frame(8, "tool.started", ToolStarted));
                 await OffscreenReviewPage.Settled(page);
-                run.TranscriptHeadWhileToolRuns = await TextOf(page, "transcript-toggle");
+                run.TranscriptHeadWhileToolRuns = await TextOf(page, "transcript-head");
+                run.ResultsWhileToolRuns = await TextOf(page, "results");
 
                 await Push(page, SseFrames.Frame(9, "tool.finished", ToolFinished));
                 await OffscreenReviewPage.Settled(page);
-                run.TranscriptHeadAfterTool = await TextOf(page, "transcript-toggle");
-                run.TranscriptClassFolded = await ClassOf(page, "transcript");
+                run.TranscriptHeadAfterTool = await TextOf(page, "transcript-head");
+                run.ResultsAfterTool = await TextOf(page, "results");
+                run.BodyClassOnResults = await BodyClass(page);
 
-                await page.ExecuteScriptAsync("document.getElementById('transcript-toggle').click()");
+                await page.ExecuteScriptAsync("document.getElementById('view-transcript').click()");
                 await OffscreenReviewPage.Settled(page);
-                run.TranscriptClassUnfolded = await ClassOf(page, "transcript");
+                run.SwitchedToTranscript = await ViewState(page);
 
                 await Closed(page);
                 await OffscreenReviewPage.Settled(page);
@@ -354,22 +391,18 @@ public sealed class ReviewPageEventStreamTests
                 run.StreamStateAfterSessionEnded = await TextOf(page, "stream-state");
                 run.ControlsAfterSessionEnded = await Controls(page);
 
-                // Re-fold the transcript, then ask a follow-up. The page must open the fold
-                // before posting so the engineer's answer cannot be hidden behind tool chrome.
+                // Back to Results, then ask a follow-up. Its answer must be pinned there, with
+                // the view left alone.
                 await page.ExecuteScriptAsync(FollowupFetchStub);
                 await page.ExecuteScriptAsync(
-                    "var toggle = document.getElementById('transcript-toggle');"
-                        + "if (toggle.getAttribute('aria-expanded') === 'true') toggle.click();"
-                        + "if (document.getElementById('transcript').className !== 'transcript folded')"
-                        + " throw new Error('follow-up regression setup did not leave transcript folded');"
+                    "document.getElementById('view-results').click();"
                         + "var input = document.getElementById('followup-text');"
                         + "input.value = 'What does this mean?';"
                         + "document.getElementById('followup').dispatchEvent(new Event('submit', {cancelable:true}));0");
                 await OffscreenReviewPage.Settled(page);
                 await Push(page, SseFrames.Frame(200, "text.done", @"{""text"":""The answer is visible.""}"));
                 await OffscreenReviewPage.Settled(page);
-                run.TranscriptClassAfterFollowup = await ClassOf(page, "transcript");
-                run.AnswerVisibleAfterFollowup = await AnswerVisible(page);
+                run.PinnedAfterFollowup = await Pinned(page);
 
                 run.Delays = await Delays(page);
             });
@@ -409,16 +442,39 @@ public sealed class ReviewPageEventStreamTests
         return page.ExecuteScriptAsync("0");
     }
 
-    private static async Task<bool> AnswerVisible(CoreWebView2 page)
-    {
-        string raw = await page.ExecuteScriptAsync(@"(function () {
+    /// <summary>The last pinned answer in Results, the view, and whether the answer is also in the Transcript.</summary>
+    private static Task<JsonElement> Pinned(CoreWebView2 page) => Json(page, @"(function () {
+  var pins = document.querySelectorAll('#answers .pinned');
+  var pin = pins.length ? pins[pins.length - 1] : null;
   var blocks = document.querySelectorAll('#transcript .block.assistant');
-  if (!blocks.length) { return false; }
-  var answer = blocks[blocks.length - 1];
-  return answer.textContent.indexOf('The answer is visible.') >= 0
-    && getComputedStyle(answer).display !== 'none';
+  var inTranscript = false;
+  for (var i = 0; i < blocks.length; i++) {
+    if (blocks[i].textContent.indexOf('The answer is visible.') >= 0) { inTranscript = true; }
+  }
+  return JSON.stringify({
+    bodyClass: document.body.className,
+    question: pin ? pin.querySelector('.pinned-question').textContent : null,
+    answer: pin ? pin.querySelector('.pinned-answer').textContent : null,
+    rendered: !!pin && pin.getClientRects().length > 0 && pin.checkVisibility(),
+    inTranscript: inTranscript
+  });
 }())");
-        return JsonDocument.Parse(raw).RootElement.GetBoolean();
+
+    /// <summary>What the switch and the two views say after the Transcript button is pressed.</summary>
+    private static Task<JsonElement> ViewState(CoreWebView2 page) => Json(page, @"JSON.stringify({
+  bodyClass: document.body.className,
+  transcriptPressed: document.getElementById('view-transcript').getAttribute('aria-pressed'),
+  resultsPressed: document.getElementById('view-results').getAttribute('aria-pressed'),
+  resultsDisplay: getComputedStyle(document.getElementById('results')).display,
+  transcriptDisplay: getComputedStyle(document.getElementById('transcript-view')).display
+})");
+
+    private static async Task<JsonElement> Json(CoreWebView2 page, string script)
+    {
+        string raw = await page.ExecuteScriptAsync(script);
+        string json = JsonDocument.Parse(raw).RootElement.GetString()
+            ?? throw new InvalidOperationException("the page reported nothing: " + raw);
+        return JsonDocument.Parse(json).RootElement.Clone();
     }
 
     private static async Task<string> TextOf(CoreWebView2 page, string elementId)
@@ -428,10 +484,9 @@ public sealed class ReviewPageEventStreamTests
         return JsonDocument.Parse(raw).RootElement.GetString() ?? string.Empty;
     }
 
-    private static async Task<string> ClassOf(CoreWebView2 page, string elementId)
+    private static async Task<string> BodyClass(CoreWebView2 page)
     {
-        string raw = await page.ExecuteScriptAsync(
-            "document.getElementById('" + elementId + "').className");
+        string raw = await page.ExecuteScriptAsync("document.body.className");
         return JsonDocument.Parse(raw).RootElement.GetString() ?? string.Empty;
     }
 
@@ -573,9 +628,13 @@ public sealed class ReviewPageEventStreamTests
 
         public string TranscriptHeadAfterTool { get; set; } = string.Empty;
 
-        public string TranscriptClassFolded { get; set; } = string.Empty;
+        public string ResultsWhileToolRuns { get; set; } = string.Empty;
 
-        public string TranscriptClassUnfolded { get; set; } = string.Empty;
+        public string ResultsAfterTool { get; set; } = string.Empty;
+
+        public string BodyClassOnResults { get; set; } = string.Empty;
+
+        public JsonElement SwitchedToTranscript { get; set; }
 
         public string TranscriptAfterSessionEnded { get; set; } = string.Empty;
 
@@ -583,9 +642,7 @@ public sealed class ReviewPageEventStreamTests
 
         public JsonElement ControlsAfterSessionEnded { get; set; }
 
-        public string TranscriptClassAfterFollowup { get; set; } = string.Empty;
-
-        public bool AnswerVisibleAfterFollowup { get; set; }
+        public JsonElement PinnedAfterFollowup { get; set; }
 
         public IReadOnlyList<int> Delays { get; set; } = new int[0];
 

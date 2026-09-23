@@ -20,6 +20,11 @@ namespace SwReview.AddIn.Tests;
 /// follows the row, proves the fold stayed shut, presses the card's own Details - the press an
 /// engineer makes - and measures that: the same 80 px floor, the same follow-up box, the same
 /// explanation, now inside the fold.
+///
+/// Feature 009 User Story 5 moved the findings out of the one container they shared with the
+/// transcript and into Results (contracts/views.md section 2), so the fold is measured against
+/// `#results`, the view that scrolls it, and the card is found in `#findings`. The floor is
+/// unchanged.
 /// </summary>
 public sealed class ReviewPageNarrowLayoutTests
 {
@@ -146,17 +151,17 @@ public sealed class ReviewPageNarrowLayoutTests
         string raw = await page.ExecuteScriptAsync(@"(function () {
   var row = document.querySelector('#attention-panel .attention-row');
   if (!row) { return JSON.stringify({error:'no attention row'}); }
-  var card = document.querySelector('#transcript .card.finding[data-finding-id=""F-007""]');
+  var card = document.querySelector('#findings .card.finding[data-finding-id=""F-007""]');
   if (!card) { return JSON.stringify({error:'no finding card'}); }
   row.click();
   var details = card.querySelector('.details');
   var hiddenAfterRowClick = details.hidden;
   card.querySelector('[data-action=""expand""]').click();
-  var transcript = document.getElementById('transcript').getBoundingClientRect();
+  var results = document.getElementById('results').getBoundingClientRect();
   var viewportHeight = window.innerHeight;
   var rect = details.getBoundingClientRect();
-  var top = Math.max(rect.top, transcript.top, 0);
-  var bottom = Math.min(rect.bottom, transcript.bottom, viewportHeight);
+  var top = Math.max(rect.top, results.top, 0);
+  var bottom = Math.min(rect.bottom, results.bottom, viewportHeight);
   var followup = document.getElementById('followup').getBoundingClientRect();
   return JSON.stringify({
     hiddenAfterRowClick: hiddenAfterRowClick,

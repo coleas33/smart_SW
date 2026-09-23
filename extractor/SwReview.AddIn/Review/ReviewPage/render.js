@@ -187,6 +187,35 @@
   }
 
   /**
+   * Where a finding was recorded, as one line in the Transcript: "F-007 recorded: <title>"
+   * (feature 009 User Story 5, contracts/views.md section 5). The finding's card lives in
+   * Results; a card cannot stand in two places, so the chronology keeps this line where the
+   * card used to interrupt the prose.
+   */
+  function findingMarker(finding) {
+    var body = finding || {};
+    var block = textBlock('system marker', String(body.id || '') + ' recorded: ' + String(body.title || ''));
+    block.setAttribute('data-finding-id', String(body.id || ''));
+    return block;
+  }
+
+  /**
+   * One follow-up and its answer, pinned in Results (FR-019, contracts/views.md section 4): the
+   * question the engineer asked, then the answer once the turn's `text.done` arrives - or, until
+   * then, that it is on its way. `answer` is the text itself, or the page's sentence for a turn
+   * that ended without one.
+   */
+  function pinnedAnswer(pin) {
+    var body = pin || {};
+    var answered = typeof body.answer === 'string';
+    var block = el('div', 'pinned');
+    block.appendChild(el('p', 'pinned-question', body.question));
+    block.appendChild(el(
+      'p', answered ? 'pinned-answer' : 'pinned-answer waiting', answered ? body.answer : 'Waiting for the answer.'));
+    return block;
+  }
+
+  /**
    * One tool call, on one line: how it went, what it was, what came back and how long it took
    * (FR-002). `tool` is a `tool.started` body merged with its `tool.finished` body, so the card
    * can be built when the call starts and filled in when it ends.
@@ -1073,6 +1102,8 @@
     field: field,
     list: list,
     textBlock: textBlock,
+    findingMarker: findingMarker,
+    pinnedAnswer: pinnedAnswer,
     toolCard: toolCard,
     findingCard: findingCard,
     dispositionText: dispositionText,
