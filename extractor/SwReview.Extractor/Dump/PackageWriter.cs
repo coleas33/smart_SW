@@ -82,6 +82,7 @@ public sealed class PackageWriter
     private readonly IFaceSource _faces;
     private readonly IMeshSource _meshes;
     private readonly IToleranceSource? _tolerances;
+    private readonly IOpenDrawingSource? _openDrawings;
     private readonly string? _swVersion;
     private readonly string _machine;
 
@@ -100,7 +101,8 @@ public sealed class PackageWriter
         IMeshSource meshes,
         string? swVersion,
         string? machine = null,
-        IToleranceSource? tolerances = null)
+        IToleranceSource? tolerances = null,
+        IOpenDrawingSource? openDrawings = null)
     {
         _components = components ?? throw new ArgumentNullException(nameof(components));
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
@@ -126,6 +128,11 @@ public sealed class PackageWriter
         // are: a build with no reader wired records it `skipped`, which says so, rather than
         // writing no model_dimensions[] beside a row that claims it ran.
         _tolerances = tolerances;
+
+        // Feature 011: the open drawings a review reads with the design. Optional for the reason
+        // the phases above are: a build with no source wired discovers nothing, and its drawing
+        // gap says which phase did not run rather than what SOLIDWORKS had open.
+        _openDrawings = openDrawings;
         _swVersion = swVersion;
         _machine = machine ?? Environment.MachineName;
     }
@@ -184,6 +191,16 @@ public sealed class PackageWriter
                 + "Save it first: the package's document ids and its manifest are derived from the path.");
         }
 
+        // After the traversal and before the document phase, in the full build and in the reuse
+        // probe alike, because the attached drawings enter documents[] and the manifest the reuse
+        // key is taken over (feature 011, contracts/open-drawings.md sections 1 and 7). Not a
+        // phase row: the twelve names stay twelve.
+        bool discovered = _openDrawings != null && OpenDrawingDiscovery.RunsFor(tree, options);
+        if (discovered)
+        {
+            tree.AttachedDrawings = OpenDrawingDiscovery.Discover(tree, _openDrawings!, options, gaps);
+        }
+
         DumpScope scope = ScopeFor(gaps, options, tree);
 
         var package = new EvidencePackage
@@ -194,6 +211,13 @@ public sealed class PackageWriter
             Extractor = BuildExtractorInfo(options),
             Design = BuildDesign(tree),
         };
+
+        // In traversal order; assigned only when there is one, so a package with none carries no
+        // member (the additivity rule).
+        if (tree.AttachedDrawings.Candidates.Count > 0)
+        {
+            package.DrawingCandidates = new List<DrawingCandidate>(tree.AttachedDrawings.Candidates);
+        }
 
         bool aborted = false;
         IReadOnlyList<Document> documents = Array.Empty<Document>();
@@ -212,7 +236,7 @@ public sealed class PackageWriter
 
         if (keyOnly)
         {
-            return Finish(package, scope, gaps, phases, options);
+            return Finish(package, scope, gaps, phases, options, discovered);
         }
 
         if (!aborted)
@@ -279,12 +303,12 @@ public sealed class PackageWriter
             });
         }
 
-        // The drawing phase runs only when the root document IS a drawing (FR-025). The dump
-        // does not go looking for the drawings of an open model: a drawing enters a package
-        // when it is itself the dumped document, and not otherwise.
-        bool drawingRoot = tree.RootDocumentKind == DocumentKind.Drawing;
-
-        if (!aborted && standardsEvidence && drawingRoot && _drawings != null)
+        // The drawing phase reads the drawings of the scope: the root when the root document IS
+        // a drawing (FR-025), and under a review the open drawings discovery attached (feature
+        // 011, contracts/open-drawings.md section 4). It runs once for all of them, and its row
+        // is ok when every drawing was read and failed otherwise, the phase's own gaps saying
+        // which. With no drawing to read it does not run, and Finish says why.
+        if (!aborted && standardsEvidence && scope.Drawings.Count > 0 && _drawings != null)
         {
             aborted |= !RunPhase(gaps, phases, "drawing", "read the drawing sheets", () =>
             {
@@ -293,6 +317,8 @@ public sealed class PackageWriter
                 {
                     package.DrawingRecords = new List<DrawingRecord>(records);
                 }
+
+                return records.Count == scope.Drawings.Count;
             });
         }
 
@@ -355,7 +381,7 @@ public sealed class PackageWriter
                 package.Bodies.AddRange(_meshes.Dump(scope, meshDirectory)));
         }
 
-        return Finish(package, scope, gaps, phases, options);
+        return Finish(package, scope, gaps, phases, options, discovered);
     }
 
     /// <summary>
@@ -371,7 +397,8 @@ public sealed class PackageWriter
         DumpScope scope,
         GapCollector gaps,
         PhaseLog phases,
-        DumpOptions options)
+        DumpOptions options,
+        bool discovered)
     {
         AddComponentInstances(package, scope);
         AddSkippedFeatureTypes(scope);
@@ -389,14 +416,7 @@ public sealed class PackageWriter
         // rather than a fact about the extractor that is no longer true (FR-024).
         if (!phases.Ran("drawing"))
         {
-            gaps.Add(
-                GapKind.Unsupported,
-                "drawing",
-                null,
-                "Drawing sheets were not read natively: the drawing phase did not run under "
-                + $"the '{PackageSerializer.EnumToJsonName(options.Profile)}' profile. Any "
-                + "sheets in this package came from the PDF ingest.",
-                null);
+            gaps.Add(GapKind.Unsupported, "drawing", null, DrawingGap(scope.Tree, options, discovered), null);
         }
 
         // Last, because the key is taken over the manifest and the component instances and
@@ -407,6 +427,29 @@ public sealed class PackageWriter
 
         package.Gaps.AddRange(gaps.Gaps);
         return package;
+    }
+
+    /// <summary>
+    /// Why the drawing phase did not run, by case (feature 011, contracts/open-drawings.md
+    /// section 6). A review that looked for the open drawings of its design says what it found -
+    /// none that shows it, or that the open documents could not be listed at all, since "none
+    /// shows it" would then be a claim nobody checked; every other build names the profile that
+    /// skipped the phase, as before.
+    /// </summary>
+    private static string DrawingGap(ComponentTreeResult tree, DumpOptions options, bool discovered)
+    {
+        if (discovered && tree.AttachedDrawings.Drawings.Count == 0)
+        {
+            return tree.AttachedDrawings.Listed
+                ? "No open drawing shows this design, so no drawing was read natively. Open its "
+                    + "drawing in SOLIDWORKS and extract again to include it."
+                : "The drawings open in SOLIDWORKS could not be listed, so no drawing was read "
+                    + "natively. Extract again to include them.";
+        }
+
+        return "Drawing sheets were not read natively: the drawing phase did not run under "
+            + $"the '{PackageSerializer.EnumToJsonName(options.Profile)}' profile. Any "
+            + "sheets in this package came from the PDF ingest.";
     }
 
     /// <summary>
@@ -421,10 +464,21 @@ public sealed class PackageWriter
         AllocateComponentIds(scope);
 
         // A drawing root is the one drawing its own dump reads (feature 006); the open drawings
-        // a review attaches join the list after discovery (feature 011).
+        // a review attached are read after it, each with the rule that ties its views to the
+        // documents this review reached (feature 011).
         if (tree.RootDocumentKind == DocumentKind.Drawing)
         {
             scope.Drawings.Add(new ScopedDrawing(tree.RootDocumentPath, tree.RootDocument));
+        }
+
+        if (tree.AttachedDrawings.Drawings.Count > 0)
+        {
+            Func<string, string?> reviewed =
+                OpenDrawingDiscovery.DocumentResolver(TraversedDocumentPaths(tree));
+            foreach (AttachedDrawing drawing in tree.AttachedDrawings.Drawings)
+            {
+                scope.Drawings.Add(new ScopedDrawing(drawing.Path, drawing.Handle, reviewed));
+            }
         }
 
         return scope;
@@ -562,8 +616,32 @@ public sealed class PackageWriter
     /// than reporting them some other way. The drawing's own custom properties then come from
     /// the document phase, which is what <c>standards.drawing.revision_matches</c> compares a
     /// revision table against.
+    ///
+    /// Then the open drawings a review attached, in order (feature 011, contracts/open-drawings.md
+    /// section 4), so each gets a <c>documents[]</c> row of kind drawing, with its own custom
+    /// properties, and a manifest entry.
     /// </summary>
     private static IReadOnlyList<string> DocumentPaths(ComponentTreeResult tree)
+    {
+        var paths = new List<string>(TraversedDocumentPaths(tree));
+        var seen = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+
+        foreach (AttachedDrawing drawing in tree.AttachedDrawings.Drawings)
+        {
+            if (seen.Add(drawing.Path))
+            {
+                paths.Add(drawing.Path);
+            }
+        }
+
+        return paths;
+    }
+
+    /// <summary>
+    /// Every distinct document the traversal reached, root first - the documents a review's
+    /// attached drawings are matched against.
+    /// </summary>
+    private static IReadOnlyList<string> TraversedDocumentPaths(ComponentTreeResult tree)
     {
         var paths = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -612,6 +690,14 @@ public sealed class PackageWriter
             design.DrawingDocumentIds.Add(DocumentIds.For(tree.RootDocumentPath));
         }
 
+        // A review's attached drawings, in order (feature 011, contracts/open-drawings.md
+        // section 4). The root stays the root: an attached drawing is read with the design, it
+        // is not the design's document.
+        foreach (AttachedDrawing drawing in tree.AttachedDrawings.Drawings)
+        {
+            design.DrawingDocumentIds.Add(DocumentIds.For(drawing.Path));
+        }
+
         return design;
     }
 
@@ -637,13 +723,31 @@ public sealed class PackageWriter
     /// no elapsed time would read exactly like one that never ran.
     /// </summary>
     private static bool RunPhase(
-        GapCollector gaps, PhaseLog phases, string entityKind, string description, Action phase)
+        GapCollector gaps, PhaseLog phases, string entityKind, string description, Action phase) =>
+        RunPhase(gaps, phases, entityKind, description, () =>
+        {
+            phase();
+            return true;
+        });
+
+    /// <summary>
+    /// <see cref="RunPhase(GapCollector, PhaseLog, string, string, Action)"/> for a phase that
+    /// can finish without throwing and still not have read everything it was given (the
+    /// <c>drawing</c> phase over several drawings, feature 011): false records the row
+    /// <c>failed</c>, and the phase's own gaps say what it could not read.
+    /// </summary>
+    private static bool RunPhase(
+        GapCollector gaps, PhaseLog phases, string entityKind, string description, Func<bool> phase)
     {
         Stopwatch clock = Stopwatch.StartNew();
         DumpPhaseStatus status = DumpPhaseStatus.Ok;
         try
         {
-            phase();
+            if (!phase())
+            {
+                status = DumpPhaseStatus.Failed;
+            }
+
             return true;
         }
         catch (CircuitOpenError ex)

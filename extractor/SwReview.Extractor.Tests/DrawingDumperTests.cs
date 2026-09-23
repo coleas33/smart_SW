@@ -185,6 +185,120 @@ public class DrawingDumperTests
         Assert.Equal(_scope.DocumentId(SecondDrawingPath), gap.EntityId);
     }
 
+    // ---- an attached drawing's views (feature 011 T020, open-drawings.md section 3) ------
+    //
+    // A drawing a review attached is read with the rule that ties a view's path to a document
+    // of the package (ScopedDrawing.ReviewedDocumentId). A view that shows a document outside
+    // the review keeps its path, names no document, and is one gap on the view - once per
+    // outside path per drawing - exactly as the assembly-drawings fixture records it. A drawing
+    // root has no such rule and is read as feature 006 reads it.
+
+    private const string OutsidePath = @"C:\vault\other\unrelated.SLDPRT";
+
+    [Fact]
+    public void Dump_AnAttachedDrawingsViewOfAnOutsideDocument_KeepsItsPathNamesNoDocumentAndIsOneGapOnTheView()
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        view.ReferencedModelPath = OutsidePath;
+        view.ReferencedDocument = new FakeModel(OutsidePath);
+
+        DrawingView record = Single(DumpAttached());
+
+        Assert.Null(record.ReferencedDocumentId);
+        Assert.Equal(OutsidePath, record.ReferencedModelPath);
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_referenced_document", gap.EntityKind);
+        Assert.Equal(GapKind.NotExtracted, gap.Kind);
+        Assert.Equal(record.Id, gap.EntityId);
+        Assert.Equal("references '" + OutsidePath + "', which is not part of this review", gap.Reason);
+
+        // The outside model is not read: its document is not asked for.
+        Assert.DoesNotContain("ReferencedDocument", _observer.Members, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_TwoViewsOfOneOutsideDocument_AreOneGapOnTheFirstView()
+    {
+        FakeSheet sheet = _reader.AddSheet("Sheet1");
+        FakeView first = sheet.AddView("Drawing View1");
+        first.ReferencedModelPath = OutsidePath;
+        FakeView second = sheet.AddView("Drawing View2");
+        second.ReferencedModelPath = OutsidePath.ToUpperInvariant();
+
+        DrawingRecord record = Assert.Single(DumpAttached());
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal(record.Sheets[0].Views[0].Id, gap.EntityId);
+        Assert.All(record.Sheets[0].Views, view => Assert.Null(view.ReferencedDocumentId));
+    }
+
+    [Fact]
+    public void Dump_AnAttachedDrawingsViewOfAReviewedDocument_NamesThePackagesDocumentHoweverThePathIsSpelled()
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        const string Spelled = @"C:\VAULT\bracket-assy\sub\..\HOUSING.sldprt";
+        view.ReferencedModelPath = Spelled;
+        view.ReferencedDocument = new FakeModel(Spelled);
+
+        DrawingView record = Single(DumpAttached());
+
+        Assert.Equal(DocumentIds.For(HousingPath), record.ReferencedDocumentId);
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Fact]
+    public void Dump_AnAttachedDrawingsViewOfAReviewedDocumentThatIsNotLoaded_KeepsTheNotLoadedGap()
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        view.ReferencedModelPath = HousingPath;
+        view.ReferencedDocument = null;
+
+        DrawingView record = Single(DumpAttached());
+
+        Assert.Null(record.ReferencedDocumentId);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_referenced_document", gap.EntityKind);
+        Assert.Contains("is not loaded", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_AnAttachedDrawingsViewThatShowsNothing_RaisesNoGap()
+    {
+        _reader.AddSheet("Sheet1").AddView("Sheet format view").ReferencedModelPath = "";
+
+        DrawingView record = Single(DumpAttached());
+
+        Assert.Null(record.ReferencedDocumentId);
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Fact]
+    public void Dump_ADrawingRootsViewOfAModelOutsideItsForest_IsReadAsFeature006ReadsIt()
+    {
+        // No reviewed-document rule on a drawing root: an unloaded model is "not loaded", never
+        // "not part of this review".
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        view.ReferencedModelPath = OutsidePath;
+        view.ReferencedDocument = null;
+
+        Single(Dump());
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Contains("is not loaded", gap.Reason, StringComparison.Ordinal);
+    }
+
+    /// <summary>The root fake drawing, read as a drawing a review attached to a design of the housing.</summary>
+    private IReadOnlyList<DrawingRecord> DumpAttached()
+    {
+        _scope = NewScope();
+        _scope.Drawings.Add(new ScopedDrawing(
+            DrawingPath,
+            _reader.RootDocument,
+            OpenDrawingDiscovery.DocumentResolver(new[] { HousingPath })));
+        return new DrawingDumper(_gate, _reader).Dump(_scope);
+    }
+
     /// <summary>One view with a dimension, an annotation, a note and a revision table.</summary>
     private static void ScriptOneOfEach(FakeSheet sheet)
     {

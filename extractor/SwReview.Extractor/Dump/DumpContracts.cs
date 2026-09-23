@@ -226,6 +226,14 @@ public sealed class ComponentTreeResult
     /// interop assembly, as <see cref="ComponentNode.Handle"/> is; null in tests that need none.
     /// </summary>
     public object? RootDocument { get; set; }
+
+    /// <summary>
+    /// What open-drawing discovery found for a review of this part or assembly (feature 011,
+    /// contracts/open-drawings.md section 4): the drawings the <c>drawing</c> phase reads, in
+    /// order, and the candidates. <see cref="Dump.AttachedDrawings.None"/> until
+    /// <see cref="PackageWriter"/> runs discovery, and for every build that does not.
+    /// </summary>
+    public AttachedDrawings AttachedDrawings { get; set; } = AttachedDrawings.None;
 }
 
 /// <summary>
@@ -260,7 +268,8 @@ public sealed class DrawingIdAllocators
 /// </summary>
 public sealed class ScopedDrawing
 {
-    public ScopedDrawing(string documentPath, object? document)
+    public ScopedDrawing(
+        string documentPath, object? document, Func<string, string?>? reviewedDocumentId = null)
     {
         if (string.IsNullOrWhiteSpace(documentPath))
         {
@@ -269,12 +278,22 @@ public sealed class ScopedDrawing
 
         DocumentPath = documentPath;
         Document = document;
+        ReviewedDocumentId = reviewedDocumentId;
     }
 
     public string DocumentPath { get; }
 
     /// <summary>The live <c>IModelDoc2</c>, typed as object; null when none was handed over.</summary>
     public object? Document { get; }
+
+    /// <summary>
+    /// For a drawing read <b>with</b> a reviewed design - one discovery attached, or one the
+    /// engineer confirmed - the rule that ties a view's referenced path to a document of the
+    /// package, or null for a path outside the review
+    /// (<see cref="OpenDrawingDiscovery.DocumentResolver"/>, contracts/open-drawings.md section 3).
+    /// Null for a drawing root, whose views are read as feature 006 reads them.
+    /// </summary>
+    public Func<string, string?>? ReviewedDocumentId { get; }
 }
 
 /// <summary>A component that has been given its package id.</summary>
@@ -453,6 +472,24 @@ public sealed class DumpScope
         _faceRequests.Add(request);
         return request.FaceId!;
     }
+}
+
+/// <summary>
+/// The two seams open-drawing discovery needs (feature 011, contracts/open-drawings.md section
+/// 2): the documents SOLIDWORKS already has open, and whether a file exists. Nothing here opens,
+/// loads, activates or lists a folder; <see cref="SwOpenDrawingReader"/> is the SOLIDWORKS side,
+/// and <see cref="OpenDrawingDiscovery.Discover"/> holds every rule.
+/// </summary>
+public interface IOpenDrawingSource
+{
+    /// <summary>
+    /// <c>ISldWorks.GetDocuments</c>: every open document, in the order SOLIDWORKS lists them, each
+    /// read lazily so a document that does not answer costs one gap and not the listing.
+    /// </summary>
+    IReadOnlyList<OpenDocument> OpenDocuments();
+
+    /// <summary>Whether a file exists on disk from this process; nothing is opened or read.</summary>
+    bool FileExists(string path);
 }
 
 /// <summary>Walks the component tree. The only phase that runs before ids exist.</summary>

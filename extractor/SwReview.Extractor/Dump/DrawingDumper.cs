@@ -337,7 +337,9 @@ public sealed class DrawingDumper : IDrawingSource
             () => _reader.ActiveSheetName(drawing!));
 
         var pass = new DrawingPass(
-            new DrawingTraversal(documentId, activeSheetName, scope.DrawingIds), document);
+            new DrawingTraversal(documentId, activeSheetName, scope.DrawingIds),
+            document,
+            scoped.ReviewedDocumentId);
 
         List<string>? names = scope.Gaps.TryStep(
             "drawing_sheet",
@@ -360,20 +362,36 @@ public sealed class DrawingDumper : IDrawingSource
     }
 
     /// <summary>
-    /// One drawing's pass: the traversal that orders and numbers its records, and the document
-    /// every persistent reference of it is scoped to (feature 011).
+    /// One drawing's pass: the traversal that orders and numbers its records, the document every
+    /// persistent reference of it is scoped to, and - for a drawing read with a reviewed design -
+    /// the rule that ties a view's path to a document of the package, with the outside paths this
+    /// drawing has already named (feature 011).
     /// </summary>
     private sealed class DrawingPass
     {
-        public DrawingPass(DrawingTraversal traversal, object document)
+        private readonly HashSet<string> _outsideNamed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public DrawingPass(
+            DrawingTraversal traversal, object document, Func<string, string?>? reviewedDocumentId)
         {
             Traversal = traversal;
             Document = document;
+            ReviewedDocumentId = reviewedDocumentId;
         }
 
         public DrawingTraversal Traversal { get; }
 
         public object Document { get; }
+
+        /// <summary>Null for a drawing root; see <see cref="ScopedDrawing.ReviewedDocumentId"/>.</summary>
+        public Func<string, string?>? ReviewedDocumentId { get; }
+
+        /// <summary>
+        /// True the first time an outside path is named in this drawing, so its gap is written
+        /// once per path, on the first view that shows it (contracts/open-drawings.md section 3).
+        /// </summary>
+        public bool NameOutside(string path) =>
+            _outsideNamed.Add(OpenDrawingDiscovery.Key(path) ?? path.Trim());
     }
 
     /// <summary>One sheet: its own reads, then its views, then its revision-table cross-check.</summary>
@@ -497,7 +515,7 @@ public sealed class DrawingDumper : IDrawingSource
             () => _gate.Call(
                 "GetReferencedModelName", () => _reader.ReferencedModelPath(view)));
 
-        ReadReferencedDocument(scope, record, view, where);
+        ReadReferencedDocument(scope, pass, record, view, where);
 
         ScopedPersistRef? reference = scope.Gaps.TryStep(
             "drawing_view",
@@ -519,10 +537,23 @@ public sealed class DrawingDumper : IDrawingSource
     /// model that is not loaded is a gap naming it, and every part- and assembly-scope check
     /// for that document is then unresolved coverage (FR-025). <b>Nothing is opened or
     /// loaded to close it.</b>
+    ///
+    /// A drawing read with a reviewed design (feature 011) ties the view to a document of the
+    /// package by discovery's matching; a view that shows a document outside the review keeps its
+    /// path, names no document and is one gap on the view per outside path, and that document is
+    /// not asked for (contracts/open-drawings.md section 3).
     /// </summary>
     private void ReadReferencedDocument(
-        DumpScope scope, DrawingView record, object view, string where)
+        DumpScope scope, DrawingPass pass, DrawingView record, object view, string where)
     {
+        if (pass.ReviewedDocumentId != null
+            && !string.IsNullOrWhiteSpace(record.ReferencedModelPath)
+            && pass.ReviewedDocumentId(record.ReferencedModelPath!) == null)
+        {
+            NameOutside(scope, pass, record, record.ReferencedModelPath!);
+            return;
+        }
+
         object? referenced = scope.Gaps.TryStep(
             "drawing_referenced_document",
             record.Id,
@@ -563,7 +594,40 @@ public sealed class DrawingDumper : IDrawingSource
             return;
         }
 
-        record.ReferencedDocumentId = scope.DocumentId(path!);
+        if (pass.ReviewedDocumentId == null)
+        {
+            record.ReferencedDocumentId = scope.DocumentId(path!);
+            return;
+        }
+
+        // The package's own id for the document, however this view spells its path.
+        string? reviewed = pass.ReviewedDocumentId(path!);
+        if (reviewed == null)
+        {
+            NameOutside(scope, pass, record, path!);
+            return;
+        }
+
+        record.ReferencedDocumentId = reviewed;
+    }
+
+    /// <summary>
+    /// A view of an attached or confirmed drawing that shows a document outside the review: one
+    /// <c>drawing_referenced_document</c> gap on the first view that shows each such path.
+    /// </summary>
+    private static void NameOutside(DumpScope scope, DrawingPass pass, DrawingView record, string path)
+    {
+        if (!pass.NameOutside(path))
+        {
+            return;
+        }
+
+        scope.Gaps.Add(
+            GapKind.NotExtracted,
+            "drawing_referenced_document",
+            record.Id,
+            $"references '{path}', which is not part of this review",
+            null);
     }
 
     private void ReadDimensions(
