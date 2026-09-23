@@ -254,6 +254,8 @@ description: "Task list for checks-first review and the token budget"
 
 Every main round falls, by 1,940 to 1,954 tokens on the first two fixtures (eight tools leave: the seven and `check_standards`) and 1,665 to 1,679 on the third (seven: it holds no interference group, so the pre-run never called that tool and it stays). No recorded finding is lost or not replayable in any of the nine runs; reclassified stays 3, 2 and 0. The replay has no bridge, so it prices the unbridged array; a bridged pane review keeps `check_interference_group` and saves about 1,230 tokens a round where these save about 1,500 on the wire-byte estimate (`test_tool_payload.py`).
 
+Re-measured on main after the four lanes of 2026-09-23 merged (feature 008 US4 and US5, feature 009 T016-T017, feature 010 T092-T097), with the same commands: every figure in the table is unchanged, and so is each *before* figure when lever 13 is turned off by hand (`--no-pane-defaults --lever prerun_checks --payload-slimming --history-pruning`). With US4's parallel calls, the OpenAI pane (`--lever parallel_tool_calls` on a fixture), lever 13 takes the regrouped estimate from 283,163, 274,957 and 305,864 to **244,167, 243,134 and 276,620** (small-assembly-a, small-assembly-b, big-assembly), so SC-003's margin under 300,000 widens from 5.6% and 8.3% to 18.6% and 19.0%. The big fixture's follow-up round falls from 24,480 to 22,534 (SC-004). No recorded finding is lost or not replayable in any run; reclassified stays 3, 2 and 0 (`contracts/replay.md` section 9).
+
 **Checkpoint**: the pane offers the model only the tools it can still use, and the replay proves the saving without losing a finding.
 
 ---
