@@ -23,8 +23,8 @@ from swreview.checks import interference as interference_check
 from swreview.checks.interference import ContactVerdict, InterferenceGroup
 from swreview.ir.models import EvidencePackage
 from swreview.report.session import Contact
-from swreview.tools.checks_mechanical import BodyMeshes, joint_analysis
 from swreview.tools.context import ToolContext, current_context, error_result
+from swreview.tools.joint_context import BodyMeshes, joint_analysis
 from swreview.tools.query import ToolResult, as_json
 from swreview.tools.recording import record_result
 

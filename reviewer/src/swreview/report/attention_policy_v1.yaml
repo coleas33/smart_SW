@@ -128,6 +128,13 @@ classes:
   mass.material_assigned: manufacturing
   mass.density: manufacturing
   mass.assembly_override: manufacturing
+  # feature 010's house rules -> hygiene: nothing is wrong with the geometry; the records
+  # around it disagree with themselves or are incomplete.
+  hygiene.part_number_matches_file: hygiene
+  hygiene.duplicate_description: hygiene
+  hygiene.duplicate_part_number: hygiene
+  hygiene.revision_present: hygiene
+  hygiene.component_not_resolved: hygiene
 
 # What no enumerator can see, one sentence per pre-run family. Read by the gate's brief
 # only (`prerun.not_evaluated_families`, and the standards half). These are not gaps in

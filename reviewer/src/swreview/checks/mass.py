@@ -28,8 +28,9 @@ import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from swreview.checks.documents import DocumentTree
 from swreview.checks.material_classes import MaterialClasses, load_material_classes
-from swreview.checks.result import CheckResult, unresolved
+from swreview.checks.result import CheckResult, DocumentResult, unresolved
 from swreview.findings import Calculation
 from swreview.ir.models import ComponentInstance, Document, EvidencePackage
 from swreview.report.session import CoverageItem, CoverageScope
@@ -40,7 +41,6 @@ __all__ = [
     "CHECK_DENSITY",
     "CHECK_MATERIAL_ASSIGNED",
     "DEFAULT_TOLERANCE",
-    "DocumentResult",
     "MassChecks",
     "SUM_TOLERANCE",
     "run_mass_checks",
@@ -66,21 +66,6 @@ DENSITY_PLACES = 3
 
 
 @dataclass(frozen=True)
-class DocumentResult:
-    """One check's verdict on one document, and what the finding binds to."""
-
-    result: CheckResult
-    document_id: str
-    component_ids: tuple[str, ...]
-    """The document's instances; empty for the root assembly, which has none."""
-
-    @property
-    def document_ids(self) -> tuple[str, ...]:
-        """Binds a finding to a document with no component instance (the root)."""
-        return () if self.component_ids else (self.document_id,)
-
-
-@dataclass(frozen=True)
 class MassChecks:
     """The three checks' findings, their counted passes, and what was not read."""
 
@@ -98,53 +83,6 @@ def _plural(count: int, noun: str, plural: str | None = None) -> str:
     return f"{count} {noun if count == 1 else (plural or noun + 's')}"
 
 
-class _Tree:
-    """The documents the component tree reaches, and what was read of them."""
-
-    def __init__(self, package: EvidencePackage) -> None:
-        self.package = package
-        self.documents = {item.document_id: item for item in package.documents}
-        self.not_opened = {
-            gap.entity_id
-            for gap in package.gaps
-            if gap.entity_kind == "document" and gap.kind == "not_extracted"
-        }
-        self.instances: dict[str, list[ComponentInstance]] = {}
-        for component in sorted(package.components, key=lambda item: item.id):
-            self.instances.setdefault(component.document_id, []).append(component)
-        root = package.design.root_assembly_document_id
-        reached = {root, *self.instances}
-        self.reached = [self.documents[key] for key in sorted(reached) if key in self.documents]
-
-    def read(self, component: ComponentInstance) -> bool:
-        return (
-            component.suppression == "resolved"
-            and component.document_id not in self.not_opened
-        )
-
-    def opened(self, document: Document) -> bool:
-        """The document was opened: not flagged unread, and the root or some instance read."""
-        if document.document_id in self.not_opened:
-            return False
-        if document.document_id == self.package.design.root_assembly_document_id:
-            return True
-        return any(self.read(item) for item in self.instances.get(document.document_id, ()))
-
-    def component_ids(self, document: Document) -> tuple[str, ...]:
-        return tuple(item.id for item in self.instances.get(document.document_id, ()))
-
-    def children(self, document: Document) -> list[ComponentInstance]:
-        """The direct children of the document's first instance (or of the root)."""
-        if document.document_id == self.package.design.root_assembly_document_id:
-            parent = None
-        else:
-            owners = self.instances.get(document.document_id)
-            if not owners:
-                return []
-            parent = owners[0].id
-        return [item for item in self.package.components if item.parent_id == parent]
-
-
 def _override_gap(package: EvidencePackage, document_id: str) -> str:
     reasons = [
         gap.reason
@@ -154,7 +92,7 @@ def _override_gap(package: EvidencePackage, document_id: str) -> str:
     return "; ".join(reasons) if reasons else "no override value and no gap were recorded"
 
 
-def _material_assigned(tree: _Tree, document: Document) -> CheckResult | None:
+def _material_assigned(tree: DocumentTree, document: Document) -> CheckResult | None:
     """`None` for a pass, else the finding."""
     if document.material or document.mass_overridden is True:
         return None
@@ -273,7 +211,7 @@ def _density(
     )
 
 
-def _assembly_override(tree: _Tree, document: Document) -> CheckResult | None:
+def _assembly_override(tree: DocumentTree, document: Document) -> CheckResult | None:
     mass = document.mass
     if document.mass_overridden is False or mass is None:
         return None
@@ -350,7 +288,7 @@ def _assembly_override(tree: _Tree, document: Document) -> CheckResult | None:
 
 
 def _coverage(
-    tree: _Tree, classless: Sequence[Document], unread: Sequence[ComponentInstance]
+    tree: DocumentTree, classless: Sequence[Document], unread: Sequence[ComponentInstance]
 ) -> CoverageItem | None:
     lightweight = sum(1 for item in unread if item.suppression == "lightweight")
     suppressed = sum(1 for item in unread if item.suppression == "suppressed")
@@ -384,7 +322,7 @@ def run_mass_checks(
     """The three mass checks over every document the tree reaches (`contracts/code-first.md`
     section 6): findings with what they bind to, the counted passes, the coverage count."""
     classes = classes or load_material_classes()
-    tree = _Tree(package)
+    tree = DocumentTree(package)
     findings: list[DocumentResult] = []
     passed: list[Document] = []
     classless: list[Document] = []
@@ -397,18 +335,18 @@ def run_mass_checks(
             if assigned is None:
                 passed.append(document)
             else:
-                findings.append(DocumentResult(assigned, document.document_id, components))
+                findings.append(DocumentResult(assigned, (document.document_id,), components))
             if document.mass_overridden is True:
                 continue
             density = _density(document, classes)
             if density is None:
                 classless.append(document)
             else:
-                findings.append(DocumentResult(density, document.document_id, components))
+                findings.append(DocumentResult(density, (document.document_id,), components))
         elif document.kind == "assembly":
             override = _assembly_override(tree, document)
             if override is not None:
-                findings.append(DocumentResult(override, document.document_id, components))
+                findings.append(DocumentResult(override, (document.document_id,), components))
 
     checked = []
     if passed:

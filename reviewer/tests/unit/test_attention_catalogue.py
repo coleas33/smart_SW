@@ -26,7 +26,8 @@ Five sources, which is every place a `Finding.check` value can come from:
    `CHECK_STACK`, `fastener_identity.CHECK_IDENTITY` and `tool_access.CHECK_HEAD_FIT`;
 4. `tools/session.py` `DRAWING_FINDING_CHECK` - the one id `record_drawing_finding`
    accepts, which is fixed rather than caller-supplied;
-5. feature 010's document rules, each a module constant: the three `mass.CHECK_*`;
+5. feature 010's document rules, each a module constant: the three `mass.CHECK_*` and
+   `hygiene.HYGIENE_CHECKS`;
 6. nothing else: `build_finding` is the one finding constructor, and every caller of it
    passes a `check` from one of the five sources above.
 
@@ -41,6 +42,7 @@ from swreview.checks import (
     fastener_identity,
     fit,
     hole_alignment,
+    hygiene,
     interference,
     joint_alignment,
     mass,
@@ -85,10 +87,12 @@ RULE_CHECKS: frozenset[str] = frozenset(
         mass.CHECK_MATERIAL_ASSIGNED,
         mass.CHECK_DENSITY,
         mass.CHECK_ASSEMBLY_OVERRIDE,
+        *hygiene.HYGIENE_CHECKS,
     }
 )
-"""Feature 010's document rules, each a module constant: the three `mass.` ids. None is a
-judgement family - a material either is assigned or is not."""
+"""Feature 010's document rules, each a module constant: the three `mass.` ids and the five
+`hygiene.` ids. None is a judgement family - a material is assigned or it is not, a part
+number is its file name or it is not."""
 
 
 def emittable() -> frozenset[str]:
@@ -105,9 +109,9 @@ def test_the_five_sources_between_them_name_every_emittable_check() -> None:
     assert len(RMS_RULES) == 34
     assert len(STANDARDS_RULES) == 16
     assert len(NUMERIC_CHECKS) == 13, "9 until feature 010 T036, 11 until T046, 12 until T060"
-    assert len(RULE_CHECKS) == 3, "feature 010's mass rules (T066)"
+    assert len(RULE_CHECKS) == 8, "feature 010's mass (T066) and hygiene (T074) rules"
     assert DRAWING_FINDING_CHECK == "drawing.manufacturing_inputs"
-    assert len(emittable()) == 67, "the sources share no id (60 before feature 010)"
+    assert len(emittable()) == 72, "the sources share no id (60 before feature 010)"
 
 
 def test_every_emittable_check_id_has_a_consequence_class() -> None:

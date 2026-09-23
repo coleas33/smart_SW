@@ -32,8 +32,9 @@ from swreview.checks.tool_access import (
     sweep_head,
 )
 from swreview.ir.models import Angle, EvidencePackage, HoleWizardData, Quantity
-from swreview.tools.checks_mechanical import BodyMeshes, check_joints
+from swreview.tools.checks_mechanical import check_joints
 from swreview.tools.context import ToolContext, context_for, use_context
+from swreview.tools.joint_context import BodyMeshes
 from tests.support.mechanical import Built, Face, Instance, PackageBuilder, box_mesh
 
 Z = (0.0, 0.0, 1.0)

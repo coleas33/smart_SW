@@ -26,11 +26,20 @@ property (hygiene.part_number_property)"`. Passes are not findings: a document t
 check is counted in one `checked` item per check, because these checks have no calculation to
 keep.
 
+As landed (T071): property names are matched without regard to case, as SOLIDWORKS matches
+them; every hygiene finding is `low` severity (the records disagree, not the geometry);
+`hygiene.revision_present` reads the version 1 setting `revision.property`, so it runs on a
+version 1 profile and is skipped only with no profile attached; a document read twice as two
+instances is one document, never a duplicate of itself; the documents are those
+`checks/documents.DocumentTree` walks, the same set the mass checks walk.
+
 ## 3. The profile names
 
 Read from the standards run attached to the context (`tools/standards_checks.standards_run`); the
 hygiene tool never loads a profile itself. No property name appears in the source; the test
-profiles carry fictional ones.
+profiles carry fictional ones. The tool imports the standards modules inside its function, as
+`prerun.py` and the registry do, because a module under `checks/standards/` reaches the runner,
+which imports the pre-run, which imports the tool module.
 
 ## 4. The data card's zero-match profile error (FR-020)
 
