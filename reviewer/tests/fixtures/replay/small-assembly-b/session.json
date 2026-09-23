@@ -1,9 +1,9 @@
 {
-  "session_id": "3c098560-9d87-41a5-b7a0-65cee07f8ea0",
+  "session_id": "0d634516-66f4-45b7-83e2-ce9241a4944b",
   "package_id": "011bb926-a012-4587-bdf8-d1480ac3ec90",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-23T17:16:32.560725Z",
-  "ended_at": "2026-09-23T17:16:32.624108Z",
+  "started_at": "2026-09-23T19:58:37.165578Z",
+  "ended_at": "2026-09-23T19:58:37.243682Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -96,7 +96,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"268-88428\",\"configuration\":\"Default\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":3,\"component_count\":4,\"ma…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000021599997126031667,
+      "elapsed_s": 0.00002529999619582668,
       "result_bytes": 473,
       "result_tokens": 163
     },
@@ -107,7 +107,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000028700000257231295,
+      "elapsed_s": 0.000028599999495781958,
       "result_bytes": 3838,
       "result_tokens": 843
     },
@@ -118,7 +118,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"not_extracted\",\"entity_kind\":\"component\",\"entity_id\":null,\"reason\":\"'ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2' has no loaded model document, so Toolbox identity could man be…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000036299999919719994,
+      "elapsed_s": 0.0000368999972124584,
       "result_bytes": 7215,
       "result_tokens": 2222
     },
@@ -132,7 +132,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"268-88428\",\"full_path\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Default\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000021699997887481004,
+      "elapsed_s": 0.0000185999961104244,
       "result_bytes": 221,
       "result_tokens": 74
     },
@@ -146,7 +146,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"full_path\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configura…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000016999998479150236,
+      "elapsed_s": 0.0000168999977177009,
       "result_bytes": 801,
       "result_tokens": 325
     },
@@ -159,7 +159,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0001\",\"persist_ref\":\"aEIAAAUAAAD//v8AAAAAAA==\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"parent_id\":null,\"referenced_configur…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006829999620094895,
+      "elapsed_s": 0.00006969999958528206,
       "result_bytes": 3303,
       "result_tokens": 1382
     },
@@ -172,7 +172,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0002\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0000368999972124584,
+      "elapsed_s": 0.000039200000173877925,
       "result_bytes": 1260,
       "result_tokens": 554
     },
@@ -185,7 +185,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0003\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00004410000110510737,
+      "elapsed_s": 0.00004939999780617654,
       "result_bytes": 4923,
       "result_tokens": 2380
     },
@@ -198,7 +198,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-8…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00028440000460250303,
+      "elapsed_s": 0.0003045999983442016,
       "result_bytes": 27503,
       "result_tokens": 12651
     },
@@ -212,7 +212,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:8a412bc4633c\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005360000068321824,
+      "elapsed_s": 0.00006880000000819564,
       "result_bytes": 2820,
       "result_tokens": 1176
     },
@@ -226,7 +226,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000017600003047846258,
+      "elapsed_s": 0.00001630000042496249,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -239,7 +239,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAABkAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMateCOORDINATE\",\"entities\":[{\"component_id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAY…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000034500000765547156,
+      "elapsed_s": 0.00003319999814266339,
       "result_bytes": 4371,
       "result_tokens": 2106
     },
@@ -252,7 +252,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.006069699993531685,
+      "elapsed_s": 0.006422400001611095,
       "result_bytes": 34484,
       "result_tokens": 12593
     },
@@ -263,7 +263,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-004\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0013671999986399896,
+      "elapsed_s": 0.001275900001928676,
       "result_bytes": 6219,
       "result_tokens": 2568
     },
@@ -276,7 +276,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-005\",\"check\":\"rms.params.global_variables_present\",\"title\":\"the equation manager holds no equations\",\"status\":\"demonstrated\",\"severity\":\"medium\",\"component_i…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0012289000005694106,
+      "elapsed_s": 0.0012426000030245632,
       "result_bytes": 2376,
       "result_tokens": 692
     },
@@ -297,7 +297,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[],\"added_to_package\":0,\"gaps\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000034199998481199145,
+      "elapsed_s": 0.00003440000000409782,
       "result_bytes": 106,
       "result_tokens": 31
     },
@@ -311,7 +311,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000014999997802078724,
+      "elapsed_s": 0.000015400000847876072,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -322,7 +322,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-007\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde\\u2026\",\"status\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.005330699998012278,
+      "elapsed_s": 0.0052244999969843775,
       "result_bytes": 5164,
       "result_tokens": 1579
     },
@@ -341,7 +341,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Vault version and local-modified status for doc:681d2181ba04, doc:792f2ea287a0, and doc:8a412bc4633c; revision for doc:792f2ea287a0.\",\"why\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017389999993611127,
+      "elapsed_s": 0.00017189999925903976,
       "result_bytes": 520,
       "result_tokens": 164
     },
@@ -364,7 +364,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"Native part and assembly drawings for the reviewed Default configuration, with readable text layers, including material, general tolerance, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000152299995534122,
+      "elapsed_s": 0.0001512000017100945,
       "result_bytes": 745,
       "result_tokens": 205
     },
@@ -383,7 +383,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"Resolved geometry for dowel-pin instances cmp:0002 and cmp:0003, including their cylindrical axes/diameter and the mating 3.0 mm hole axes, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00015519999578827992,
+      "elapsed_s": 0.00015020000137155876,
       "result_bytes": 598,
       "result_tokens": 155
     },
@@ -403,7 +403,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-004\",\"what\":\"Functional axial gap or preload requirement for the assembled Default configuration, with the complete contributing drawing dimensions and t…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00013359999866224825,
+      "elapsed_s": 0.00016680000408086926,
       "result_bytes": 502,
       "result_tokens": 127
     },
@@ -434,7 +434,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"provenance\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014309999824035913,
+      "elapsed_s": 0.00013670000043930486,
       "result_bytes": 507,
       "result_tokens": 152
     },
@@ -465,7 +465,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"D…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001314999972237274,
+      "elapsed_s": 0.0001373999984934926,
       "result_bytes": 540,
       "result_tokens": 161
     },
@@ -503,7 +503,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:0004…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001269999993382953,
+      "elapsed_s": 0.0001706000039121136,
       "result_bytes": 543,
       "result_tokens": 168
     },
@@ -534,7 +534,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\":[\"a…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012939999578520656,
+      "elapsed_s": 0.00012799999967683107,
       "result_bytes": 465,
       "result_tokens": 132
     },
@@ -565,7 +565,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"out_of_scope\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"position…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001357000001007691,
+      "elapsed_s": 0.00014120000560069457,
       "result_bytes": 492,
       "result_tokens": 152
     },
@@ -605,7 +605,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:000…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012789999891538173,
+      "elapsed_s": 0.00012739999510813504,
       "result_bytes": 587,
       "result_tokens": 175
     },
@@ -636,7 +636,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"checked\",\"coverage_item\":{\"check\":\"interference\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001384999995934777,
+      "elapsed_s": 0.00013920000492362306,
       "result_bytes": 668,
       "result_tokens": 159
     },
@@ -647,7 +647,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000056400000175926834,
+      "elapsed_s": 0.00005729999975301325,
       "result_bytes": 3885,
       "result_tokens": 850
     },
@@ -678,7 +678,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"coverage.closeout\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00018850000196835026,
+      "elapsed_s": 0.00015420000272570178,
       "result_bytes": 656,
       "result_tokens": 181
     },
@@ -689,7 +689,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005360000068321824,
+      "elapsed_s": 0.00005499999679159373,
       "result_bytes": 3891,
       "result_tokens": 851
     }
@@ -3157,7 +3157,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.0010563833333333333,
+    "unattended_runtime_minutes": 0.0013017333333333334,
     "net_saved_minutes": null
   }
 }
