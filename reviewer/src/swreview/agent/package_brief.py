@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from typing import Any
 
+from swreview.drawings.native import native_sheet_count
 from swreview.ir.models import ComponentInstance, Document, EvidencePackage, ManifestEntry
 
 __all__ = ["MAX_BRIEF_BYTES", "MAX_COMPONENT_ROWS", "MAX_DOCUMENT_ROWS", "package_brief"]
@@ -254,6 +255,10 @@ def package_brief(
         gap_summary_parts.append(f"(+{len(gap_kinds_all) - len(gap_summary_parts)} more)")
     gap_summary = ", ".join(gap_summary_parts) or "none"
     drawing_dimensions = sum(len(sheet.dimensions) for sheet in package.drawings)
+    # Feature 011: the natively read sheets, beside the ingested ones, only when there are
+    # any - a package without them opens with exactly the bytes it opened with before.
+    native_sheets = native_sheet_count(package)
+    native_count = f" native_drawing_sheets={native_sheets}" if native_sheets else ""
     root_kind = _value(root.kind, limit=24) if root is not None else "unknown"
 
     standards_note = _standards_note(standards_gap)
@@ -289,7 +294,7 @@ def package_brief(
             f"documents={len(documents)} components={component_total} mates={len(package.mates)} "
             f"holes={len(package.holes)} fasteners={len(package.fasteners)} "
             f"interferences={len(package.interferences)} drawing_sheets={len(package.drawings)} "
-            f"drawing_dimensions={drawing_dimensions}",
+            f"drawing_dimensions={drawing_dimensions}{native_count}",
             f"missing_evidence: gaps={len(package.gaps)} ({gap_summary}) "
             f"skipped_phases={','.join(skipped_phases) if skipped_phases else 'none'} "
             f"drawing_documents={len(package.design.drawing_document_ids)}",
