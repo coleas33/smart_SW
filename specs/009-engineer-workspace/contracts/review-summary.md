@@ -39,7 +39,7 @@ rule_count, finding_ids}`. The partition holds: the group counts plus the family
 
 ## 3. The goals
 
-The table is `goals` in the words file: `{id, title, items, prefixes}`. A finding's check belongs to
+The table is `goals` in the words file: `{id, title, items, prefixes}`. Nine goals, in this order: interference, fasteners, hole alignment, fits and stacks, tool access, mass and material, hygiene, drawings, and modelling practice (`items: [modeling.resilience]`, `prefixes: [rms.]`, a goal of its own since 2026-09-23 so modelling findings never fill the hygiene line). A finding's check belongs to
 the goal with the longest prefix it starts with; a coverage item matches a goal when its `check` is
 one of the goal's `items` or starts with one of its `prefixes`. One `GoalLine` per goal, in table
 order, the state first match winning:
