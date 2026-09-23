@@ -11,6 +11,7 @@ and refuses to be entered twice at once - SOLIDWORKS answers on one thread.
 
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Any
 
@@ -18,11 +19,15 @@ import pytest
 
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import start_review
-from swreview.bridge.client import BridgeError, BridgeOpenError
+from swreview.bridge.client import COMMANDS as CLIENT_COMMANDS
+from swreview.bridge.client import BridgeClient, BridgeError, BridgeOpenError
 from swreview.ir.loader import save_package
 from swreview.ir.models import Gap, Interference
 from tests.support.prerun import prerun_package
 from tests.support.review_bridge import (
+    _SIGNATURES,
+    COMMANDS,
+    DEFAULT_SUPPORTS,
     RECORDED_INTERFERENCE_SETTINGS,
     VOLUME_UNIT_GAP,
     ScriptedReviewBridge,
@@ -144,6 +149,44 @@ def test_it_behaves_like_a_client_for_the_runner() -> None:
     assert bridge.last_error is None
     bridge.close()
     assert bridge.closed is True
+
+
+def _client_signature(name: str) -> tuple[tuple[str, Any], ...]:
+    """`BridgeClient.<name>`'s parameters after `self`, a required one defaulting to None."""
+    parameters = list(inspect.signature(getattr(BridgeClient, name)).parameters.values())[1:]
+    empty = inspect.Parameter.empty
+    return tuple(
+        (parameter.name, None if parameter.default is empty else parameter.default)
+        for parameter in parameters
+    )
+
+
+def test_its_calls_are_exactly_the_clients_coarse_calls_with_the_clients_signatures() -> None:
+    """One call per `client.COMMANDS` entry (`drawing.read` is the method `drawing_read`), each
+    named and defaulted exactly as `BridgeClient` declares it: a command added to the client
+    and not here would be an `AttributeError` in a review this bridge stands in for."""
+    methods = tuple(command.replace(".", "_") for command in CLIENT_COMMANDS)
+
+    assert COMMANDS == methods
+    assert DEFAULT_SUPPORTS == methods
+    for name in methods:
+        assert _SIGNATURES[name] == _client_signature(name), name
+        assert callable(getattr(ScriptedReviewBridge(), name)), name
+
+
+def test_it_answers_drawing_read_by_name_and_records_the_call() -> None:
+    answer = {"document_id": "doc:0003", "drawing_document_id": "doc:0008", "opened": True,
+              "closed": True, "sheets": 1, "gaps": 0}
+    bridge = ScriptedReviewBridge(results={"drawing_read": [answer]})
+
+    assert bridge.drawing_read("fict-run", "doc:0003") == answer
+    assert bridge.calls == [("drawing_read", {"run_id": "fict-run", "document_id": "doc:0003"})]
+
+
+def test_without_drawing_read_in_supports_it_has_no_drawing_read_attribute() -> None:
+    bridge = ScriptedReviewBridge(supports=("ping", "capture", "measure", "interference"))
+
+    assert not hasattr(bridge, "drawing_read")
 
 
 # --- the rows it answers with ------------------------------------------------------------
