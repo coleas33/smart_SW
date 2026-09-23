@@ -29,9 +29,11 @@ public sealed class DimensionSighting
 /// The dimension reads <see cref="ToleranceDumper"/> needs, with no interop type in the signature
 /// (<see cref="SwDimensionToleranceReader"/> is the SOLIDWORKS one). Every member that maps to one
 /// interop call is gated by the dumper under that call's name; <see cref="DisplayDimensions"/> and
-/// <see cref="PersistRef"/> span several calls and gate them inside the implementation.
+/// <see cref="PersistRef"/> span several calls and gate them inside the implementation. The six
+/// tolerance reads are <see cref="IDimensionToleranceReads"/>, which a drawing's display dimension
+/// is read through too (feature 011).
 /// </summary>
-public interface IDimensionToleranceReader
+public interface IDimensionToleranceReader : IDimensionToleranceReads
 {
     /// <summary><c>IComponent2.GetModelDoc2</c>; null when the document is not loaded.</summary>
     object? Document(ScopedComponent component);
@@ -55,24 +57,6 @@ public interface IDimensionToleranceReader
 
     /// <summary><c>IDimension.GetSystemValue3(swThisConfiguration, null)</c>'s number; null when none.</summary>
     double? SystemValue(object dimension);
-
-    /// <summary><c>IDimension.Tolerance</c> (<c>IDimensionTolerance</c>); null when it gives none.</summary>
-    object? Tolerance(object dimension);
-
-    /// <summary><c>IDimensionTolerance.Type</c> verbatim (<c>swTolType_e</c>).</summary>
-    int ToleranceType(object tolerance);
-
-    /// <summary><c>IDimensionTolerance.GetMinValue2</c>'s value; null when it is not valid for the type.</summary>
-    double? ToleranceMin(object tolerance);
-
-    /// <summary><c>IDimensionTolerance.GetMaxValue2</c>'s value; null when it is not valid for the type.</summary>
-    double? ToleranceMax(object tolerance);
-
-    /// <summary><c>IDimensionTolerance.GetHoleFitValue</c>.</summary>
-    string? HoleFitValue(object tolerance);
-
-    /// <summary><c>IDimensionTolerance.GetShaftFitValue</c>.</summary>
-    string? ShaftFitValue(object tolerance);
 
     /// <summary>The display dimension's persistent reference, scoped to its part; null when none.</summary>
     ScopedPersistRef? PersistRef(object document, object entity);
@@ -369,14 +353,21 @@ public sealed class ToleranceDumper : IToleranceSource
     }
 
     /// <summary>
-    /// The dimension's tolerance, read as one: its type, the fit classes for a fit type, and the
-    /// two signed deviations for a kind that carries them. Assigned only once every read has
-    /// answered, so a read that throws leaves no half of a tolerance behind.
+    /// The dimension's tolerance, read as one through <see cref="DimensionTolerance.Read"/> - the
+    /// read and mapping the drawing's display dimensions share (feature 011) - and assigned only
+    /// once every read has answered, so a read that throws leaves no half of a tolerance behind.
     /// </summary>
     private void ReadTolerance(DumpScope scope, object dimension, ModelDimension record, string unit)
     {
-        object? tolerance = _gate.CallOptional("Tolerance", () => _dimensions.Tolerance(dimension));
-        if (tolerance == null)
+        var source = new SourceRef
+        {
+            DocumentId = record.DocumentId,
+            Annotation = record.Name,
+            PersistRef = record.PersistRef,
+        };
+
+        DimensionToleranceReading reading = DimensionTolerance.Read(_gate, _dimensions, dimension, source, unit);
+        if (reading.Missing)
         {
             scope.Gaps.Add(
                 GapKind.NotExtracted,
@@ -387,64 +378,21 @@ public sealed class ToleranceDumper : IToleranceSource
             return;
         }
 
-        int type = _gate.CallOptional("DimensionTolerance.Type", () => _dimensions.ToleranceType(tolerance));
+        record.Tolerance = reading.Tolerance;
+        record.ToleranceTypeRaw = reading.TypeRaw;
+        record.FitHoleClass = reading.HoleFit;
+        record.FitShaftClass = reading.ShaftFit;
 
-        string? holeFit = null;
-        string? shaftFit = null;
-        if (IsFitType(type))
-        {
-            holeFit = HoleDumper.Blank(_gate.CallOptional("GetHoleFitValue", () => _dimensions.HoleFitValue(tolerance)));
-            shaftFit = HoleDumper.Blank(_gate.CallOptional("GetShaftFitValue", () => _dimensions.ShaftFitValue(tolerance)));
-        }
-
-        ToleranceKind? kind = KindOf(type);
-        Tolerance? reading = null;
-        var invalid = new List<string>();
-        if (kind != null)
-        {
-            reading = new Tolerance
-            {
-                Kind = kind.Value,
-                Source = new SourceRef
-                {
-                    DocumentId = record.DocumentId,
-                    Annotation = record.Name,
-                    PersistRef = record.PersistRef,
-                },
-            };
-
-            if (kind == ToleranceKind.Bilateral || kind == ToleranceKind.Symmetric)
-            {
-                double? min = _gate.CallOptional("GetMinValue2", () => _dimensions.ToleranceMin(tolerance));
-                double? max = _gate.CallOptional("GetMaxValue2", () => _dimensions.ToleranceMax(tolerance));
-                reading.Lower = min == null ? null : new IrMeasure(min.Value, unit);
-                reading.Upper = max == null ? null : new IrMeasure(max.Value, unit);
-                if (min == null)
-                {
-                    invalid.Add("GetMinValue2");
-                }
-
-                if (max == null)
-                {
-                    invalid.Add("GetMaxValue2");
-                }
-            }
-        }
-
-        record.Tolerance = reading;
-        record.ToleranceTypeRaw = type;
-        record.FitHoleClass = holeFit;
-        record.FitShaftClass = shaftFit;
-
-        if (invalid.Count > 0)
+        if (reading.InvalidLimits.Count > 0)
         {
             scope.Gaps.Add(
                 GapKind.NotExtracted,
                 "model_dimension",
                 record.Id,
                 $"Dimension '{record.Name}' has a tolerance of type "
-                + $"{type.ToString(CultureInfo.InvariantCulture)} but {string.Join(" and ", invalid)} "
-                + "reported the value not valid for it, so that limit is unknown.",
+                + $"{reading.TypeRaw.ToString(CultureInfo.InvariantCulture)} but "
+                + $"{string.Join(" and ", reading.InvalidLimits)} reported the value not valid for it, so "
+                + "that limit is unknown.",
                 null);
         }
     }

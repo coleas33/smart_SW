@@ -1013,6 +1013,822 @@ public class DrawingDumperTests
             "ResolveAllLightWeightComponents", _observer.Members, StringComparer.OrdinalIgnoreCase);
     }
 
+    // ---- native evidence at 1.6.0 (feature 011 T026, contracts/native-evidence.md section 3) ----
+    //
+    // Every new read answering, throwing (its gap kind) and, for a reference read, answering
+    // null. The fake answers every one of them by default, so the feature 006 tests above keep
+    // their gap counts: a gap here is always one a test asked for.
+
+    /// <summary>A lone sheet that is the active one, so an empty view list is no gap of its own.</summary>
+    private FakeSheet ActiveSheet()
+    {
+        _reader.ActiveSheetName = "Sheet1";
+        return _reader.AddSheet("Sheet1");
+    }
+
+    // -- the drawing --
+
+    [Fact]
+    public void Dump_RecordsTheDrawingsSettings()
+    {
+        ActiveSheet();
+        FakeDrawing drawing = _reader.Root;
+        drawing.IntegerPreferences[47] = 3;
+        drawing.IntegerPreferences[24] = 2;
+        drawing.IntegerPreferences[49] = 4;
+        drawing.IntegerPreferences[25] = 3;
+        drawing.DraftingStandard = "FICTIONAL-STANDARD";
+
+        DrawingRecord record = Assert.Single(Dump());
+
+        Assert.False(record.IsDetailingMode);
+        Assert.Equal(3, record.LengthUnitRaw);
+        Assert.Equal(2, record.DimensionPrecisionRaw);
+        Assert.Equal(4, record.UnitsDecimalPlacesRaw);
+        Assert.Equal(3, record.TolerancePrecisionRaw);
+        Assert.Equal("FICTIONAL-STANDARD", record.DraftingStandardName);
+        Assert.Empty(_scope.Gaps.Gaps);
+
+        // The enumerators of contracts/native-evidence.md section 3, each asked with option 0,
+        // of the drawing's own document.
+        Assert.Equal(new[] { 47, 24, 49, 25 }, drawing.IntegerPreferencesAsked);
+        Assert.Equal(new[] { 65 }, drawing.StringPreferencesAsked);
+        Assert.Contains("IsDetailingMode", _observer.Members, StringComparer.Ordinal);
+        Assert.Contains("GetUserPreferenceInteger", _observer.Members, StringComparer.Ordinal);
+        Assert.Contains("GetUserPreferenceString", _observer.Members, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_ADrawingInDetailingMode_SaysSo()
+    {
+        ActiveSheet();
+        _reader.Root.IsDetailingMode = true;
+
+        Assert.True(Assert.Single(Dump()).IsDetailingMode);
+    }
+
+    [Theory]
+    [InlineData("IsDetailingMode")]
+    [InlineData("47")]
+    [InlineData("24")]
+    [InlineData("49")]
+    [InlineData("25")]
+    [InlineData("65")]
+    public void Dump_ADrawingSettingThatThrows_IsNullPlusADrawingDocumentSettingsGapAndTheRestAreRead(string setting)
+    {
+        ActiveSheet();
+        _reader.Root.Throwing.Add(setting);
+
+        DrawingRecord record = Assert.Single(Dump());
+
+        var read = new Dictionary<string, object?>
+        {
+            ["IsDetailingMode"] = record.IsDetailingMode,
+            ["47"] = record.LengthUnitRaw,
+            ["24"] = record.DimensionPrecisionRaw,
+            ["49"] = record.UnitsDecimalPlacesRaw,
+            ["25"] = record.TolerancePrecisionRaw,
+            ["65"] = record.DraftingStandardName,
+        };
+        Assert.Null(read[setting]);
+        Assert.All(read.Where(pair => pair.Key != setting), pair => Assert.NotNull(pair.Value));
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_document_settings", gap.EntityKind);
+        Assert.Equal(_scope.DocumentId(DrawingPath), gap.EntityId);
+        Assert.Equal(GapKind.ToolError, gap.Kind);
+    }
+
+    [Fact]
+    public void Dump_ADraftingStandardThatAnswersNull_IsNullPlusAGap()
+    {
+        ActiveSheet();
+        _reader.Root.DraftingStandard = null;
+
+        Assert.Null(Assert.Single(Dump()).DraftingStandardName);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_document_settings", gap.EntityKind);
+        Assert.Equal(GapKind.NotExtracted, gap.Kind);
+    }
+
+    // -- the sheet --
+
+    [Fact]
+    public void Dump_RecordsTheSheetsTemplateScaleAndProjection()
+    {
+        FakeSheet sheet = ActiveSheet();
+        sheet.TemplateName = @"C:\Fictional\Formats\FICTIONAL-FORMAT-A.slddrt";
+        sheet.Properties = new[] { 12d, 0d, 1d, 2d, 1d, 0.42, 0.297 };
+
+        DrawingSheetRecord record = Assert.Single(Dump()).Sheets[0];
+
+        Assert.Equal(@"C:\Fictional\Formats\FICTIONAL-FORMAT-A.slddrt", record.SheetFormatPath);
+        Assert.Equal(1d, record.ScaleNumerator);
+        Assert.Equal(2d, record.ScaleDenominator);
+        Assert.True(record.FirstAngle);
+        Assert.Empty(_scope.Gaps.Gaps);
+        Assert.Contains("GetTemplateName", _observer.Members, StringComparer.Ordinal);
+        Assert.Contains("GetProperties2", _observer.Members, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_ASheetInThirdAngleProjection_IsNotFirstAngle()
+    {
+        ActiveSheet().Properties = new[] { 12d, 0d, 1d, 1d, 0d, 0.42, 0.297 };
+
+        Assert.False(Assert.Single(Dump()).Sheets[0].FirstAngle);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Dump_ATemplateNameThatThrowsOrAnswersNull_IsNullPlusADrawingSheetGap(bool throws)
+    {
+        FakeSheet sheet = ActiveSheet();
+        if (throws)
+        {
+            sheet.Throwing.Add("GetTemplateName");
+        }
+        else
+        {
+            sheet.TemplateName = null;
+        }
+
+        DrawingSheetRecord record = Assert.Single(Dump()).Sheets[0];
+
+        Assert.Null(record.SheetFormatPath);
+        Assert.NotNull(record.ScaleNumerator);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_sheet", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    [Theory]
+    [InlineData("throws")]
+    [InlineData("null")]
+    [InlineData("short")]
+    public void Dump_SheetPropertiesThatCannotBeRead_LeaveScaleAndProjectionNullPlusADrawingSheetGap(string how)
+    {
+        FakeSheet sheet = ActiveSheet();
+        if (how == "throws")
+        {
+            sheet.Throwing.Add("GetProperties2");
+        }
+        else
+        {
+            sheet.Properties = how == "null" ? null : new[] { 12d, 0d, 1d, 1d };
+        }
+
+        DrawingSheetRecord record = Assert.Single(Dump()).Sheets[0];
+
+        Assert.Null(record.ScaleNumerator);
+        Assert.Null(record.ScaleDenominator);
+        Assert.Null(record.FirstAngle);
+        Assert.NotNull(record.SheetFormatPath);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_sheet", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    // -- the view --
+
+    [Fact]
+    public void Dump_RecordsTheViewsStateScaleAndOrientation()
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        view.ReferencedConfigurationName = "Machined";
+        view.OutOfDate = true;
+        view.Loaded = true;
+        view.Scale = 0.5;
+        view.Orientation = "*Top";
+
+        DrawingView record = Single(Dump());
+
+        Assert.Equal("Machined", record.ReferencedConfiguration);
+        Assert.True(record.IsModelOutOfDate);
+        Assert.True(record.IsModelLoaded);
+        Assert.Equal(0.5, record.ScaleDecimal);
+        Assert.Equal("*Top", record.OrientationName);
+        Assert.Empty(_scope.Gaps.Gaps);
+        foreach (string member in new[] { "ReferencedConfiguration", "IsModelOutOfDate", "IsModelLoaded", "ScaleDecimal", "GetOrientationName" })
+        {
+            Assert.Contains(member, _observer.Members, StringComparer.Ordinal);
+        }
+    }
+
+    [Theory]
+    [InlineData("ReferencedConfiguration", "drawing_view_state")]
+    [InlineData("IsModelOutOfDate", "drawing_view_state")]
+    [InlineData("IsModelLoaded", "drawing_view_state")]
+    [InlineData("ScaleDecimal", "drawing_view")]
+    [InlineData("GetOrientationName", "drawing_view")]
+    public void Dump_AViewReadThatThrows_IsNullPlusItsGapOnTheView(string member, string gapKind)
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        view.Throwing.Add(member);
+
+        DrawingView record = Single(Dump());
+
+        var read = new Dictionary<string, object?>
+        {
+            ["ReferencedConfiguration"] = record.ReferencedConfiguration,
+            ["IsModelOutOfDate"] = record.IsModelOutOfDate,
+            ["IsModelLoaded"] = record.IsModelLoaded,
+            ["ScaleDecimal"] = record.ScaleDecimal,
+            ["GetOrientationName"] = record.OrientationName,
+        };
+        Assert.Null(read[member]);
+        Assert.All(read.Where(pair => pair.Key != member), pair => Assert.NotNull(pair.Value));
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps, g => g.EntityKind == gapKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    [Theory]
+    [InlineData("ReferencedConfiguration", "drawing_view_state")]
+    [InlineData("GetOrientationName", "drawing_view")]
+    public void Dump_AViewTextReadThatAnswersNull_IsNullPlusItsGap(string member, string gapKind)
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        if (member == "ReferencedConfiguration")
+        {
+            view.ReferencedConfigurationName = null;
+        }
+        else
+        {
+            view.Orientation = null;
+        }
+
+        DrawingView record = Single(Dump());
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal(gapKind, gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+        Assert.Equal(GapKind.NotExtracted, gap.Kind);
+    }
+
+    // -- the display dimension: text, precision and units --
+
+    [Fact]
+    public void Dump_RecordsADimensionsFourTextPartsVerbatimTheEmptyStringKept()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 6;
+        dimension.Texts = new string?[] { "<MOD-DIAM>", "THRU", "", "2X" };
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Equal("<MOD-DIAM>", record.TextPrefix);
+        Assert.Equal("THRU", record.TextSuffix);
+        Assert.Equal(string.Empty, record.TextAbove);
+        Assert.Equal("2X", record.TextBelow);
+        Assert.Equal(new[] { 1, 2, 3, 4 }, dimension.TextPartsAsked);
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Dump_ATextPartThatThrowsOrAnswersNull_IsNullPlusADimensionTextGap(bool throws)
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        if (throws)
+        {
+            dimension.Throwing.Add("GetText2");
+        }
+        else
+        {
+            dimension.Texts = new string?[] { "", null, "", "" };
+        }
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.TextSuffix);
+        Assert.Equal(string.Empty, record.TextPrefix);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("dimension_text", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    [Fact]
+    public void Dump_RecordsADimensionsPrecisionAndUnits()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Precision = 3;
+        dimension.TolerancePrecision = 4;
+        dimension.UsesDocumentPrecision = true;
+        dimension.Units = 3;
+        dimension.UsesDocumentUnits = false;
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Equal(3, record.PrecisionRaw);
+        Assert.Equal(4, record.TolerancePrecisionRaw);
+        Assert.True(record.UsesDocumentPrecision);
+        Assert.Equal(3, record.UnitsRaw);
+        Assert.False(record.UsesDocumentUnits);
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Theory]
+    [InlineData("GetPrimaryPrecision2")]
+    [InlineData("GetPrimaryTolPrecision2")]
+    [InlineData("GetUseDocPrecision")]
+    [InlineData("GetUnits")]
+    [InlineData("GetUseDocUnits")]
+    public void Dump_APrecisionOrUnitReadThatThrows_IsNullPlusADimensionPrecisionGap(string member)
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Throwing.Add(member);
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        var read = new Dictionary<string, object?>
+        {
+            ["GetPrimaryPrecision2"] = record.PrecisionRaw,
+            ["GetPrimaryTolPrecision2"] = record.TolerancePrecisionRaw,
+            ["GetUseDocPrecision"] = record.UsesDocumentPrecision,
+            ["GetUnits"] = record.UnitsRaw,
+            ["GetUseDocUnits"] = record.UsesDocumentUnits,
+        };
+        Assert.Null(read[member]);
+        Assert.All(read.Where(pair => pair.Key != member), pair => Assert.NotNull(pair.Value));
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("dimension_precision", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    // -- the display dimension: the tolerance, through feature 010's reads and mapping --
+
+    [Fact]
+    public void Dump_ABilateralToleranceIsMappedAsTheModelDimensionsIsAndCitesTheDrawing()
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        FakeDimension dimension = view.AddDimension("D1@Sketch1");
+        dimension.Type2 = 6;
+        dimension.Tolerance = new Fakes.FakeTolerance { Type = 2, Min = 0.0, Max = 0.00001 };
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Equal(2, record.ToleranceTypeRaw);
+        Tolerance tolerance = record.Tolerance!;
+        Assert.Equal(ToleranceKind.Bilateral, tolerance.Kind);
+        Assert.Equal(0.00001, tolerance.Upper!.Value);
+        Assert.Equal("m", tolerance.Upper!.Unit);
+        Assert.Equal(0.0, tolerance.Lower!.Value);
+        Assert.Equal(_scope.DocumentId(DrawingPath), tolerance.Source.DocumentId);
+        Assert.Equal("Sheet1", tolerance.Source.Sheet);
+        Assert.Equal("Drawing View1", tolerance.Source.View);
+        Assert.Equal(record.Id, tolerance.Source.Annotation);
+        Assert.Null(record.FitHoleClass);
+        Assert.Empty(_scope.Gaps.Gaps);
+
+        // The same gated names feature 010's ToleranceDumper reads the tolerance through.
+        foreach (string member in new[] { "GetDimension2", "Tolerance", "DimensionTolerance.Type", "GetMinValue2", "GetMaxValue2" })
+        {
+            Assert.Contains(member, _observer.Members, StringComparer.Ordinal);
+        }
+    }
+
+    [Theory]
+    [InlineData(0, ToleranceKind.None)]
+    [InlineData(1, ToleranceKind.Basic)]
+    [InlineData(3, ToleranceKind.Bilateral)]
+    [InlineData(4, ToleranceKind.Symmetric)]
+    public void Dump_EachToleranceTypeTakesFeature010sKind(int type, ToleranceKind kind)
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Tolerance = new Fakes.FakeTolerance { Type = type, Min = -0.0001, Max = 0.0001 };
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Equal(kind, record.Tolerance!.Kind);
+        Assert.Equal(type, record.ToleranceTypeRaw);
+        Assert.Equal(ToleranceDumper.KindOf(type), record.Tolerance!.Kind);
+    }
+
+    [Theory]
+    [InlineData(10)]
+    [InlineData(11)]
+    [InlineData(5)]
+    public void Dump_ABlockGeneralOrOtherToleranceIsANullToleranceWithItsTypeKept(int type)
+    {
+        // BLOCK 10 and GENERAL 11 have no IR kind: null, never "none"; Python reads the raw type
+        // (contracts/drawing-source.md section 4).
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Tolerance = new Fakes.FakeTolerance { Type = type };
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.Tolerance);
+        Assert.Equal(type, record.ToleranceTypeRaw);
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Fact]
+    public void Dump_AFitWithToleranceCarriesBothClassesAndItsDeviations()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 6;
+        dimension.Tolerance = new Fakes.FakeTolerance { Type = 8, Min = 0.0, Max = 0.000012, HoleFit = "H7", ShaftFit = "g6" };
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Equal("H7", record.FitHoleClass);
+        Assert.Equal("g6", record.FitShaftClass);
+        Assert.Equal(ToleranceKind.Bilateral, record.Tolerance!.Kind);
+        Assert.Equal(8, record.ToleranceTypeRaw);
+    }
+
+    [Fact]
+    public void Dump_AFitOnlyCarriesItsClassesAndNoKind()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 6;
+        dimension.Tolerance = new Fakes.FakeTolerance { Type = 7, HoleFit = "H7", ShaftFit = "" };
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.Tolerance);
+        Assert.Equal("H7", record.FitHoleClass);
+        Assert.Null(record.FitShaftClass);
+    }
+
+    [Fact]
+    public void Dump_ADimensionThatGivesNoModelDimension_IsOneDimensionToleranceGap()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.HasModelDimension = false;
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.Tolerance);
+        Assert.Null(record.ToleranceTypeRaw);
+        Assert.Null(record.DrivenStateRaw);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("dimension_tolerance", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    [Theory]
+    [InlineData("GetDimension2")]
+    [InlineData("Tolerance")]
+    [InlineData("ToleranceType")]
+    public void Dump_AToleranceReadThatThrows_IsADimensionToleranceGapAndNoHalfOfATolerance(string member)
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Tolerance = new Fakes.FakeTolerance { Type = 2, Min = 0, Max = 0.00001 };
+        if (member == "ToleranceType")
+        {
+            dimension.Tolerance.Throwing.Add(member);
+        }
+        else
+        {
+            dimension.Throwing.Add(member);
+        }
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.Tolerance);
+        Assert.Null(record.ToleranceTypeRaw);
+        Assert.Contains(_scope.Gaps.Gaps, gap => gap.EntityKind == "dimension_tolerance" && gap.EntityId == record.Id);
+        Assert.All(_scope.Gaps.Gaps, gap => Assert.Equal("dimension_tolerance", gap.EntityKind));
+    }
+
+    [Fact]
+    public void Dump_ADimensionWithNoToleranceObject_IsADimensionToleranceGap()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Tolerance = null;
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.Tolerance);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("dimension_tolerance", gap.EntityKind);
+        Assert.Contains("IDimensionTolerance", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_ALimitReportedNotValidForItsType_IsNullAndNamedInADimensionToleranceGap()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Tolerance = new Fakes.FakeTolerance { Type = 2, Min = null, Max = 0.00001 };
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.Tolerance!.Lower);
+        Assert.NotNull(record.Tolerance!.Upper);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("dimension_tolerance", gap.EntityKind);
+        Assert.Contains("GetMinValue2", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_ADimensionWhoseUnitIsUnknown_ReadsNoToleranceAndSaysSo()
+    {
+        // Its limits could only be written with a guessed unit, so they are not read at all.
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 13;
+        dimension.Tolerance = new Fakes.FakeTolerance { Type = 2, Min = 0, Max = 0.00001 };
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.Tolerance);
+        Assert.Null(record.ToleranceTypeRaw);
+        Assert.Single(_scope.Gaps.Gaps, g => g.EntityKind == "dimension_unit");
+        Gap gap = Assert.Single(_scope.Gaps.Gaps, g => g.EntityKind == "dimension_tolerance");
+        Assert.Equal(record.Id, gap.EntityId);
+        Assert.DoesNotContain("Tolerance", _observer.Members, StringComparer.Ordinal);
+    }
+
+    // -- the display dimension: reference, driven state and hole callout --
+
+    [Fact]
+    public void Dump_RecordsTheReferenceFlagAndTheDrivenState()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.IsReference = true;
+        dimension.DrivenState = 2;
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.True(record.IsReference);
+        Assert.Equal(2, record.DrivenStateRaw);
+        Assert.Contains("IsReferenceDim", _observer.Members, StringComparer.Ordinal);
+        Assert.Contains("DrivenState", _observer.Members, StringComparer.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("IsReferenceDim")]
+    [InlineData("DrivenState")]
+    public void Dump_AReferenceOrDrivenStateReadThatThrows_IsNullPlusADimensionOverrideGap(string member)
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Throwing.Add(member);
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(member == "IsReferenceDim" ? (object?)record.IsReference : record.DrivenStateRaw);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("dimension_override", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    [Fact]
+    public void Dump_AHoleCalloutRecordsItsVariablesVerbatimInOrder()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 6;
+        dimension.IsHoleCallout = true;
+        dimension.CalloutVariables = new List<string> { "<hw-cbore-dia>=0.008", "<hw-cbore-depth>=0.0044", "<hw-thru>=" };
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.True(record.IsHoleCallout);
+        Assert.Equal(dimension.CalloutVariables, record.HoleCalloutVariablesRaw);
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Fact]
+    public void Dump_ADimensionThatIsNoHoleCallout_ReadsNoVariables()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 6;
+        dimension.IsHoleCallout = false;
+        dimension.CalloutVariables = new List<string> { "never read" };
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.False(record.IsHoleCallout);
+        Assert.Null(record.HoleCalloutVariablesRaw);
+        Assert.Equal(0, dimension.CalloutVariableReads);
+    }
+
+    [Theory]
+    [InlineData("IsHoleCallout")]
+    [InlineData("GetHoleCalloutVariables")]
+    [InlineData("null")]
+    public void Dump_AHoleCalloutReadThatFails_IsADimensionTextGap(string how)
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 6;
+        dimension.IsHoleCallout = true;
+        if (how == "null")
+        {
+            dimension.CalloutVariables = null;
+        }
+        else
+        {
+            dimension.Throwing.Add(how);
+        }
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.HoleCalloutVariablesRaw);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("dimension_text", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    // -- attachments (the "Attachments" rule) --
+
+    private const string PartModelPath = @"C:\Fictional\plate\plate.SLDPRT";
+
+    [Fact]
+    public void Dump_AnAttachedFaceIsOneRowScopedToItsPartDocument()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 6;
+        dimension.Attach(new FakeModelFace(PartModelPath, "RmFjZTE="));
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        AttachedFace face = Assert.Single(record.AttachedFaces!);
+        Assert.Equal("RmFjZTE=", face.PersistRef);
+        Assert.Equal(DocumentIds.For(PartModelPath), face.Scope);
+        Assert.Equal(AttachedVia.Face, face.Via);
+        Assert.Empty(_scope.Gaps.Gaps);
+        foreach (string member in new[] { "GetAnnotation", "GetAttachedEntities3", "GetCorrespondingEntity" })
+        {
+            Assert.Contains(member, _observer.Members, StringComparer.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Dump_AnAttachedEdgeIsItsTwoAdjacentFacesViaEdge()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Attach(new FakeModelEdge(
+            new FakeModelFace(PartModelPath, "RmFjZUE="), new FakeModelFace(PartModelPath, "RmFjZUI=")));
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Equal(new[] { "RmFjZUE=", "RmFjZUI=" }, record.AttachedFaces!.Select(face => face.PersistRef));
+        Assert.All(record.AttachedFaces!, face => Assert.Equal(AttachedVia.Edge, face.Via));
+        Assert.Contains("GetTwoAdjacentFaces2", _observer.Members, StringComparer.Ordinal);
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Fact]
+    public void Dump_FacesAreDeduplicatedByReference()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        var face = new FakeModelFace(PartModelPath, "RmFjZUE=");
+        dimension.Attach(face);
+        dimension.Attach(new FakeModelEdge(face, new FakeModelFace(PartModelPath, "RmFjZUI=")));
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Equal(new[] { "RmFjZUE=", "RmFjZUI=" }, record.AttachedFaces!.Select(row => row.PersistRef));
+        Assert.Equal(new[] { AttachedVia.Face, AttachedVia.Edge }, record.AttachedFaces!.Select(row => row.Via));
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Fact]
+    public void Dump_AVertexAndAnUnmappedEntityAreDroppedAndCountedInOneGap()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Attach(new FakeModelFace(PartModelPath, "RmFjZTE="));
+        dimension.Attach(new FakeModelVertex());
+        dimension.AttachUnmapped();
+        dimension.Attach(new FakeModelFace(PartModelPath, null));
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Single(record.AttachedFaces!);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_attachment", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+        Assert.Equal(GapKind.NotExtracted, gap.Kind);
+        Assert.Contains("3 of 4 attached entities could not be tied to a model face", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_AnAttachmentStepThatThrows_DropsThatEntityIntoTheCountWithTheError()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        var face = new FakeModelFace(PartModelPath, "RmFjZTE=") { DocumentFailure = new InvalidOperationException("no component") };
+        dimension.Attach(face);
+        dimension.Attach(new FakeModelFace(PartModelPath, "RmFjZTI="));
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Equal(new[] { "RmFjZTI=" }, record.AttachedFaces!.Select(row => row.PersistRef));
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Contains("1 of 2 attached entities", gap.Reason, StringComparison.Ordinal);
+        Assert.Contains("no component", gap.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_AnAnnotationThatCannotListItsAttachments_IsOneDrawingAttachmentGap()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+        dimension.Throwing.Add("GetAttachedEntities3");
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.AttachedFaces);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_attachment", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    [Fact]
+    public void Dump_ADimensionAttachedToNothing_HasNoFacesAndNoGap()
+    {
+        FakeDimension dimension = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddDimension("D1@Sketch1");
+        dimension.Type2 = 2;
+
+        DisplayDimensionRecord record = Single(Dump()).DisplayDimensions[0];
+
+        Assert.Null(record.AttachedFaces);
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Theory]
+    [InlineData("not loaded")]
+    [InlineData("unread")]
+    [InlineData("detailing")]
+    public void Dump_AViewWhoseModelIsNotAvailable_AttemptsNoAttachmentAndIsOneGapNamingTheView(string why)
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        FakeDimension first = view.AddDimension("D1@Sketch1");
+        first.Type2 = 6;
+        first.Attach(new FakeModelFace(PartModelPath, "RmFjZTE="));
+        view.AddDimension("D2@Sketch1").Type2 = 6;
+        switch (why)
+        {
+            case "not loaded":
+                view.Loaded = false;
+                break;
+            case "unread":
+                view.Throwing.Add("IsModelLoaded");
+                break;
+            default:
+                _reader.Root.IsDetailingMode = true;
+                break;
+        }
+
+        DrawingView record = Single(Dump());
+
+        Assert.All(record.DisplayDimensions, dimension => Assert.Null(dimension.AttachedFaces));
+        Assert.Equal(2, record.DisplayDimensions.Count);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps, g => g.EntityKind == "drawing_attachment");
+        Assert.Equal(record.Id, gap.EntityId);
+        Assert.DoesNotContain("GetAttachedEntities3", _observer.Members, StringComparer.Ordinal);
+        Assert.DoesNotContain("GetAnnotation", _observer.Members, StringComparer.Ordinal);
+
+        // The dimensions themselves are still read in full.
+        Assert.All(record.DisplayDimensions, dimension => Assert.NotNull(dimension.TextPrefix));
+    }
+
+    [Fact]
+    public void Dump_AViewWithNoDimensionAndNoModel_RaisesNoAttachmentGap()
+    {
+        _reader.AddSheet("Sheet1").AddView("Sheet Format1").Loaded = false;
+
+        Dump();
+
+        Assert.DoesNotContain(_scope.Gaps.Gaps, g => g.EntityKind == "drawing_attachment");
+    }
+
+    [Fact]
+    public void Dump_TheNewReadsNameOnlyReadMembersToTheGate()
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        FakeDimension dimension = view.AddDimension("D1@Sketch1");
+        dimension.Type2 = 6;
+        dimension.IsHoleCallout = true;
+        dimension.CalloutVariables = new List<string> { "<hw-thru>=" };
+        dimension.Attach(new FakeModelEdge(new FakeModelFace(PartModelPath, "QQ=="), new FakeModelFace(PartModelPath, "Qg==")));
+
+        Dump();
+
+        Assert.Empty(_observer.Refusals);
+        Assert.All(_observer.Members, member => ReadOnlyGuard.Assert(member));
+        Assert.DoesNotContain(_observer.Members, member => member.StartsWith("Activate", StringComparison.Ordinal)
+            || member.StartsWith("Select", StringComparison.Ordinal)
+            || member.StartsWith("Set", StringComparison.Ordinal)
+            || member.StartsWith("OpenDoc", StringComparison.Ordinal));
+    }
+
     // ---- helpers -------------------------------------------------------------------
 
     private IReadOnlyList<DrawingRecord> Dump()
@@ -1121,6 +1937,95 @@ public class DrawingDumperTests
         public double Value { get; set; }
 
         public Exception? OverrideFailure { get; set; }
+
+        // Feature 011 (native-evidence.md section 3). Every read answers by default.
+
+        /// <summary>GetText(1..4): prefix, suffix, callout above, callout below.</summary>
+        public string?[] Texts { get; set; } = { "", "", "", "" };
+
+        public List<int> TextPartsAsked { get; } = new List<int>();
+
+        public int Precision { get; set; } = 2;
+
+        public int TolerancePrecision { get; set; } = 3;
+
+        public bool UsesDocumentPrecision { get; set; }
+
+        public int Units { get; set; }
+
+        public bool UsesDocumentUnits { get; set; } = true;
+
+        /// <summary>False when GetDimension2 gives no IDimension.</summary>
+        public bool HasModelDimension { get; set; } = true;
+
+        /// <summary>Feature 010's fake tolerance; NONE by default, so no limit is read.</summary>
+        public Fakes.FakeTolerance? Tolerance { get; set; } = new Fakes.FakeTolerance { Type = 0 };
+
+        public bool IsReference { get; set; }
+
+        public int DrivenState { get; set; } = 1;
+
+        public bool IsHoleCallout { get; set; }
+
+        public List<string>? CalloutVariables { get; set; }
+
+        public int CalloutVariableReads { get; set; }
+
+        /// <summary>What GetAttachedEntities3 answers for this dimension's annotation.</summary>
+        public List<FakeDrawingEntity?> Entities { get; } = new List<FakeDrawingEntity?>();
+
+        /// <summary>Members that throw when read ("GetText2" for the suffix, "Tolerance", ...).</summary>
+        public HashSet<string> Throwing { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>A drawing entity whose model counterpart is <paramref name="model"/>.</summary>
+        public void Attach(object model) => Entities.Add(new FakeDrawingEntity(model));
+
+        /// <summary>A drawing entity GetCorrespondingEntity maps to nothing.</summary>
+        public void AttachUnmapped() => Entities.Add(new FakeDrawingEntity(null));
+    }
+
+    /// <summary>One entity GetAttachedEntities3 answers, and its model counterpart.</summary>
+    private sealed class FakeDrawingEntity
+    {
+        public FakeDrawingEntity(object? corresponding)
+        {
+            Corresponding = corresponding;
+        }
+
+        public object? Corresponding { get; }
+    }
+
+    /// <summary>A model face: its owning part document and its persistent reference.</summary>
+    private sealed class FakeModelFace
+    {
+        public FakeModelFace(string documentPath, string? persistRef)
+        {
+            DocumentPath = documentPath;
+            PersistRef = persistRef;
+        }
+
+        public string DocumentPath { get; }
+
+        public string? PersistRef { get; }
+
+        /// <summary>What finding its owning document throws, or null.</summary>
+        public Exception? DocumentFailure { get; set; }
+    }
+
+    /// <summary>A model edge and its two adjacent faces.</summary>
+    private sealed class FakeModelEdge
+    {
+        public FakeModelEdge(params FakeModelFace[] faces)
+        {
+            Faces = faces;
+        }
+
+        public IReadOnlyList<FakeModelFace> Faces { get; }
+    }
+
+    /// <summary>A model entity that is neither a face nor an edge.</summary>
+    private sealed class FakeModelVertex
+    {
     }
 
     private sealed class FakeView
@@ -1142,6 +2047,19 @@ public class DrawingDumperTests
         public List<FakeNote> Notes { get; } = new List<FakeNote>();
 
         public List<FakeTable> Tables { get; } = new List<FakeTable>();
+
+        // Feature 011 (native-evidence.md section 3).
+        public string? ReferencedConfigurationName { get; set; } = "Default";
+
+        public bool OutOfDate { get; set; }
+
+        public bool Loaded { get; set; } = true;
+
+        public double Scale { get; set; } = 1.0;
+
+        public string? Orientation { get; set; } = "*Front";
+
+        public HashSet<string> Throwing { get; } = new HashSet<string>(StringComparer.Ordinal);
 
         public FakeDimension AddDimension(string? name)
         {
@@ -1193,6 +2111,14 @@ public class DrawingDumperTests
 
         public List<FakeView> Views { get; } = new List<FakeView>();
 
+        // Feature 011 (native-evidence.md section 3).
+        public string? TemplateName { get; set; } = @"C:\Fictional\Formats\FICTIONAL-FORMAT-A.slddrt";
+
+        /// <summary>GetProperties2: paper size, template, scale numerator and denominator, first angle, width, height.</summary>
+        public double[]? Properties { get; set; } = { 12d, 0d, 1d, 1d, 0d, 0.42, 0.297 };
+
+        public HashSet<string> Throwing { get; } = new HashSet<string>(StringComparer.Ordinal);
+
         public FakeView AddView(string? name)
         {
             var view = new FakeView { Name = name, Type = 4 };
@@ -1227,6 +2153,27 @@ public class DrawingDumperTests
         public Exception? ActiveSheetFailure { get; set; }
 
         public Exception? SheetNamesFailure { get; set; }
+
+        // Feature 011 (native-evidence.md section 3).
+        public bool IsDetailingMode { get; set; }
+
+        /// <summary>GetUserPreferenceInteger answers, by enumerator.</summary>
+        public Dictionary<int, int> IntegerPreferences { get; } = new Dictionary<int, int>
+        {
+            [47] = 0,
+            [24] = 2,
+            [49] = 2,
+            [25] = 3,
+        };
+
+        public string? DraftingStandard { get; set; } = "FICTIONAL-STANDARD";
+
+        public List<int> IntegerPreferencesAsked { get; } = new List<int>();
+
+        public List<int> StringPreferencesAsked { get; } = new List<int>();
+
+        /// <summary>"IsDetailingMode", or a preference enumerator as text, that throws when read.</summary>
+        public HashSet<string> Throwing { get; } = new HashSet<string>(StringComparer.Ordinal);
     }
 
     private sealed class FakeDrawingReader : IDrawingReader
@@ -1243,6 +2190,12 @@ public class DrawingDumperTests
 
         /// <summary>The root drawing's document handle, which the scope names it by.</summary>
         public object RootDocument { get; } = new object();
+
+        /// <summary>The root drawing itself, for the settings a test scripts.</summary>
+        public FakeDrawing Root => _root;
+
+        /// <summary>Feature 010's tolerance fake answers the tolerance reads, shared rather than copied.</summary>
+        private readonly Fakes.FakeDimensionToleranceReader _tolerances = new Fakes.FakeDimensionToleranceReader();
 
         /// <summary>
         /// What <see cref="IDrawingReader.Drawing"/> answers for the root document; null makes
@@ -1414,6 +2367,14 @@ public class DrawingDumperTests
         ScopedPersistRef? IDrawingReader.PersistRef(object document, object entity)
         {
             ReferenceDocumentsAsked.Add(document);
+            if (entity is FakeModelFace face)
+            {
+                string modelPath = ((FakeModel)document).Path;
+                return face.PersistRef == null
+                    ? null
+                    : new ScopedPersistRef(face.PersistRef, DocumentIds.For(modelPath), modelPath);
+            }
+
             string? reference = entity is FakeSheet sheet
                 ? sheet.PersistRef
                 : entity is FakeView view ? view.PersistRef : null;
@@ -1425,6 +2386,139 @@ public class DrawingDumperTests
                 ? null
                 : new ScopedPersistRef(reference, DocumentIds.For(path), path);
         }
+
+        // ---- feature 011 (native-evidence.md section 3) ----
+
+        bool IDrawingReader.IsDetailingMode(object drawing) =>
+            Answer(Of(drawing).Throwing, "IsDetailingMode", Of(drawing).IsDetailingMode);
+
+        int IDrawingReader.UserPreferenceInteger(object document, int preference)
+        {
+            FakeDrawing drawing = _byDocument[document];
+            drawing.IntegerPreferencesAsked.Add(preference);
+            return Answer(drawing.Throwing, Text(preference), drawing.IntegerPreferences[preference]);
+        }
+
+        string? IDrawingReader.UserPreferenceString(object document, int preference)
+        {
+            FakeDrawing drawing = _byDocument[document];
+            drawing.StringPreferencesAsked.Add(preference);
+            return Answer(drawing.Throwing, Text(preference), drawing.DraftingStandard);
+        }
+
+        string? IDrawingReader.SheetTemplateName(object sheet) =>
+            Answer(Sheet(sheet).Throwing, "GetTemplateName", Sheet(sheet).TemplateName);
+
+        IReadOnlyList<double>? IDrawingReader.SheetProperties(object sheet) =>
+            Answer(Sheet(sheet).Throwing, "GetProperties2", Sheet(sheet).Properties);
+
+        string? IDrawingReader.ReferencedConfiguration(object view) =>
+            Answer(View(view).Throwing, "ReferencedConfiguration", View(view).ReferencedConfigurationName);
+
+        bool IDrawingReader.IsModelOutOfDate(object view) =>
+            Answer(View(view).Throwing, "IsModelOutOfDate", View(view).OutOfDate);
+
+        bool IDrawingReader.IsModelLoaded(object view) =>
+            Answer(View(view).Throwing, "IsModelLoaded", View(view).Loaded);
+
+        double IDrawingReader.ScaleDecimal(object view) =>
+            Answer(View(view).Throwing, "ScaleDecimal", View(view).Scale);
+
+        string? IDrawingReader.OrientationName(object view) =>
+            Answer(View(view).Throwing, "GetOrientationName", View(view).Orientation);
+
+        string? IDrawingReader.DimensionText(object dimension, int part)
+        {
+            FakeDimension found = Dimension(dimension);
+            found.TextPartsAsked.Add(part);
+            return Answer(found.Throwing, "GetText" + Text(part), found.Texts[part - 1]);
+        }
+
+        int IDrawingReader.PrimaryPrecision(object dimension) =>
+            Answer(Dimension(dimension).Throwing, "GetPrimaryPrecision2", Dimension(dimension).Precision);
+
+        int IDrawingReader.PrimaryTolerancePrecision(object dimension) =>
+            Answer(Dimension(dimension).Throwing, "GetPrimaryTolPrecision2", Dimension(dimension).TolerancePrecision);
+
+        bool IDrawingReader.UsesDocumentPrecision(object dimension) =>
+            Answer(Dimension(dimension).Throwing, "GetUseDocPrecision", Dimension(dimension).UsesDocumentPrecision);
+
+        int IDrawingReader.Units(object dimension) =>
+            Answer(Dimension(dimension).Throwing, "GetUnits", Dimension(dimension).Units);
+
+        bool IDrawingReader.UsesDocumentUnits(object dimension) =>
+            Answer(Dimension(dimension).Throwing, "GetUseDocUnits", Dimension(dimension).UsesDocumentUnits);
+
+        /// <summary>The display dimension stands for its own IDimension.</summary>
+        object? IDrawingReader.DimensionOf(object dimension)
+        {
+            FakeDimension found = Dimension(dimension);
+            return Answer<object?>(found.Throwing, "GetDimension2", found.HasModelDimension ? found : null);
+        }
+
+        bool IDrawingReader.IsReferenceDimension(object dimension) =>
+            Answer(Dimension(dimension).Throwing, "IsReferenceDim", Dimension(dimension).IsReference);
+
+        int IDrawingReader.DrivenState(object modelDimension) =>
+            Answer(Dimension(modelDimension).Throwing, "DrivenState", Dimension(modelDimension).DrivenState);
+
+        bool IDrawingReader.IsHoleCallout(object dimension) =>
+            Answer(Dimension(dimension).Throwing, "IsHoleCallout", Dimension(dimension).IsHoleCallout);
+
+        IReadOnlyList<string>? IDrawingReader.HoleCalloutVariables(object dimension)
+        {
+            FakeDimension found = Dimension(dimension);
+            found.CalloutVariableReads++;
+            return Answer(found.Throwing, "GetHoleCalloutVariables", found.CalloutVariables);
+        }
+
+        /// <summary>The display dimension stands for its own annotation.</summary>
+        object? IDrawingReader.DimensionAnnotation(object dimension) =>
+            Answer<object?>(Dimension(dimension).Throwing, "GetAnnotation", dimension);
+
+        IReadOnlyList<object?> IDrawingReader.AttachedEntities(object annotation) =>
+            Answer<IReadOnlyList<object?>>(
+                Dimension(annotation).Throwing,
+                "GetAttachedEntities3",
+                Dimension(annotation).Entities.Cast<object?>().ToList());
+
+        object? IDrawingReader.CorrespondingEntity(object view, object entity) =>
+            ((FakeDrawingEntity)entity).Corresponding;
+
+        AttachedEntityKind IDrawingReader.EntityKind(object entity) => entity switch
+        {
+            FakeModelFace _ => AttachedEntityKind.Face,
+            FakeModelEdge _ => AttachedEntityKind.Edge,
+            _ => AttachedEntityKind.Other,
+        };
+
+        IReadOnlyList<object> IDrawingReader.AdjacentFaces(object edge) =>
+            ((FakeModelEdge)edge).Faces.Cast<object>().ToList();
+
+        object? IDrawingReader.FaceDocument(object view, object face)
+        {
+            var found = (FakeModelFace)face;
+            return found.DocumentFailure != null ? throw found.DocumentFailure : new FakeModel(found.DocumentPath);
+        }
+
+        object? IDimensionToleranceReads.Tolerance(object dimension) =>
+            Answer(Dimension(dimension).Throwing, "Tolerance", Dimension(dimension).Tolerance);
+
+        int IDimensionToleranceReads.ToleranceType(object tolerance) => _tolerances.ToleranceType(tolerance);
+
+        double? IDimensionToleranceReads.ToleranceMin(object tolerance) => _tolerances.ToleranceMin(tolerance);
+
+        double? IDimensionToleranceReads.ToleranceMax(object tolerance) => _tolerances.ToleranceMax(tolerance);
+
+        string? IDimensionToleranceReads.HoleFitValue(object tolerance) => _tolerances.HoleFitValue(tolerance);
+
+        string? IDimensionToleranceReads.ShaftFitValue(object tolerance) => _tolerances.ShaftFitValue(tolerance);
+
+        /// <summary><paramref name="value"/>, or a throw when <paramref name="member"/> is scripted to fail.</summary>
+        private static T Answer<T>(HashSet<string> throwing, string member, T value) =>
+            throwing.Contains(member) ? throw new InvalidOperationException($"{member} did not answer") : value;
+
+        private static string Text(int value) => value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         private static FakeDrawing Of(object drawing) => (FakeDrawing)drawing;
 

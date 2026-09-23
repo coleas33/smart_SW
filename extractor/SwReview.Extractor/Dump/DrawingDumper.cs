@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.PersistRefs;
 using SwReview.Extractor.Sw;
@@ -26,6 +28,18 @@ public readonly struct RevisionTableShape
 }
 
 /// <summary>
+/// What a model entity an annotation is attached to is, as far as the attachment rule cares
+/// (feature 011, contracts/native-evidence.md section 3, "Attachments"): a face is kept, an edge
+/// becomes its two adjacent faces, and anything else adds no row. A COM cast, not a call.
+/// </summary>
+public enum AttachedEntityKind
+{
+    Face,
+    Edge,
+    Other,
+}
+
+/// <summary>
 /// What <see cref="DrawingDumper"/> needs SOLIDWORKS to answer, so that every decision the
 /// dumper makes - what becomes a gap, what is recorded when a read fails, what is never
 /// called - is testable on a machine with no seat. The same seam
@@ -39,7 +53,7 @@ public readonly struct RevisionTableShape
 /// them inside the implementation. The dumper does not gate those a second time: one read
 /// reported twice is a gate log that counts calls nobody made.
 /// </summary>
-public interface IDrawingReader
+public interface IDrawingReader : IDimensionToleranceReads
 {
     /// <summary>
     /// <paramref name="document"/> as an <c>IDrawingDoc</c>, or null when it is not a drawing:
@@ -165,9 +179,122 @@ public interface IDrawingReader
     /// The record's persistent reference, scoped to <paramref name="document"/> - the drawing
     /// being read, so each drawing's references are its own (feature 011); null when
     /// SOLIDWORKS gave none, which PROBE-10 says is the likely answer for most of these
-    /// kinds. Gates <c>GetPersistReference3</c> itself.
+    /// kinds. Gates <c>GetPersistReference3</c> itself. An attached model face's reference is
+    /// asked of its own part document the same way.
     /// </summary>
     ScopedPersistRef? PersistRef(object document, object entity);
+
+    // ---- feature 011 (IR 1.6.0, contracts/native-evidence.md section 3) ----------------------
+    //
+    // One interop read each, gated by the dumper under the member named, unless the summary says
+    // the member gates its several calls itself. The tolerance reads are IDimensionToleranceReads,
+    // feature 010's, on the display dimension's IDimension.
+
+    /// <summary><c>IDrawingDoc.IsDetailingMode()</c>.</summary>
+    bool IsDetailingMode(object drawing);
+
+    /// <summary>
+    /// <c>IModelDocExtension.GetUserPreferenceInteger(preference, 0)</c> of the drawing's own
+    /// document (<c>swUnitsLinear</c> 47, <c>swDetailingLinearDimPrecision</c> 24,
+    /// <c>swUnitsLinearDecimalPlaces</c> 49, <c>swDetailingLinearTolPrecision</c> 25).
+    /// </summary>
+    int UserPreferenceInteger(object document, int preference);
+
+    /// <summary>
+    /// <c>IModelDocExtension.GetUserPreferenceString(preference, 0)</c>
+    /// (<c>swDetailingDimensionStandardName</c> 65).
+    /// </summary>
+    string? UserPreferenceString(object document, int preference);
+
+    /// <summary><c>ISheet.GetTemplateName()</c>: the sheet format's <c>.slddrt</c> path.</summary>
+    string? SheetTemplateName(object sheet);
+
+    /// <summary>
+    /// <c>ISheet.GetProperties2()</c>: paper size, template, scale numerator, scale denominator,
+    /// first angle, width, height and the rest, verbatim; null when it answered nothing.
+    /// </summary>
+    IReadOnlyList<double>? SheetProperties(object sheet);
+
+    /// <summary><c>IView.ReferencedConfiguration</c>.</summary>
+    string? ReferencedConfiguration(object view);
+
+    /// <summary><c>IView.IsModelOutOfDate()</c>.</summary>
+    bool IsModelOutOfDate(object view);
+
+    /// <summary><c>IView.IsModelLoaded()</c>.</summary>
+    bool IsModelLoaded(object view);
+
+    /// <summary><c>IView.ScaleDecimal</c>.</summary>
+    double ScaleDecimal(object view);
+
+    /// <summary><c>IView.GetOrientationName()</c>.</summary>
+    string? OrientationName(object view);
+
+    /// <summary>
+    /// <c>IDisplayDimension.GetText(part)</c>, <c>swDimensionTextParts_e</c>: prefix 1, suffix 2,
+    /// callout above 3, callout below 4.
+    /// </summary>
+    string? DimensionText(object dimension, int part);
+
+    /// <summary><c>IDisplayDimension.GetPrimaryPrecision2()</c>.</summary>
+    int PrimaryPrecision(object dimension);
+
+    /// <summary><c>IDisplayDimension.GetPrimaryTolPrecision2()</c>.</summary>
+    int PrimaryTolerancePrecision(object dimension);
+
+    /// <summary><c>IDisplayDimension.GetUseDocPrecision()</c>.</summary>
+    bool UsesDocumentPrecision(object dimension);
+
+    /// <summary><c>IDisplayDimension.GetUnits()</c>, <c>swLengthUnit_e</c> for a length.</summary>
+    int Units(object dimension);
+
+    /// <summary><c>IDisplayDimension.GetUseDocUnits()</c>.</summary>
+    bool UsesDocumentUnits(object dimension);
+
+    /// <summary>
+    /// <c>IDisplayDimension.GetDimension2(0)</c>: the <c>IDimension</c> the tolerance and the
+    /// driven state are read from; null when it gives none.
+    /// </summary>
+    object? DimensionOf(object dimension);
+
+    /// <summary><c>IDisplayDimension.IsReferenceDim()</c>.</summary>
+    bool IsReferenceDimension(object dimension);
+
+    /// <summary><c>IDimension.DrivenState</c> of <see cref="DimensionOf"/>'s answer, verbatim.</summary>
+    int DrivenState(object modelDimension);
+
+    /// <summary><c>IDisplayDimension.IsHoleCallout()</c>.</summary>
+    bool IsHoleCallout(object dimension);
+
+    /// <summary>
+    /// <c>IDisplayDimension.GetHoleCalloutVariables()</c>, each variable as "name=value" verbatim,
+    /// in order; null when it answered nothing. Gates the enumeration and every variable's reads
+    /// itself, because one list is several members.
+    /// </summary>
+    IReadOnlyList<string>? HoleCalloutVariables(object dimension);
+
+    /// <summary><c>IDisplayDimension.GetAnnotation()</c>: the annotation its attachments are read from.</summary>
+    object? DimensionAnnotation(object dimension);
+
+    /// <summary><c>IAnnotation.GetAttachedEntities3()</c>; a null entry is a dangling attachment.</summary>
+    IReadOnlyList<object?> AttachedEntities(object annotation);
+
+    /// <summary><c>IView.GetCorrespondingEntity(entity)</c>: the model entity; null when it maps to none.</summary>
+    object? CorrespondingEntity(object view, object entity);
+
+    /// <summary>Whether a model entity is a face, an edge, or neither: a COM cast, not gated.</summary>
+    AttachedEntityKind EntityKind(object entity);
+
+    /// <summary><c>IEdge.GetTwoAdjacentFaces2()</c>.</summary>
+    IReadOnlyList<object> AdjacentFaces(object edge);
+
+    /// <summary>
+    /// The part document that owns a model face: the view's referenced document for a part
+    /// drawing, the face's component's document for an assembly drawing
+    /// (<c>IEntity.GetComponent</c>, <c>IComponent2.GetModelDoc2</c>). Gates its reads itself; null
+    /// when no document answers. Nothing is opened or resolved.
+    /// </summary>
+    object? FaceDocument(object view, object face);
 }
 
 /// <summary>
@@ -225,6 +352,37 @@ public sealed class DrawingDumper : IDrawingSource
     /// </summary>
     private static readonly HashSet<int> LengthDimensionTypes =
         new HashSet<int> { 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 15 };
+
+    /// <summary>
+    /// <c>swUserPreferenceIntegerValue_e</c> (reflected on 2024 SP5): the drawing's settings the
+    /// package records (feature 011, contracts/native-evidence.md section 3).
+    /// </summary>
+    private const int LengthUnitPreference = 47;
+
+    private const int DimensionPrecisionPreference = 24;
+
+    private const int DecimalPlacesPreference = 49;
+
+    private const int TolerancePrecisionPreference = 25;
+
+    /// <summary><c>swUserPreferenceStringValue_e.swDetailingDimensionStandardName</c>.</summary>
+    private const int DraftingStandardPreference = 65;
+
+    /// <summary><c>swDimensionTextParts_e</c>: prefix, suffix, callout above, callout below.</summary>
+    private const int TextPrefix = 1;
+
+    private const int TextSuffix = 2;
+
+    private const int TextAbove = 3;
+
+    private const int TextBelow = 4;
+
+    /// <summary>The items of <c>ISheet.GetProperties2()</c> the sheet's scale and projection are.</summary>
+    private const int ScaleNumeratorItem = 2;
+
+    private const int ScaleDenominatorItem = 3;
+
+    private const int FirstAngleItem = 4;
 
     private readonly SwGate _gate;
     private readonly IDrawingReader _reader;
@@ -341,6 +499,8 @@ public sealed class DrawingDumper : IDrawingSource
             document,
             scoped.ReviewedDocumentId);
 
+        ReadSettings(scope, pass, drawing!, documentId);
+
         List<string>? names = scope.Gaps.TryStep(
             "drawing_sheet",
             documentId,
@@ -360,6 +520,38 @@ public sealed class DrawingDumper : IDrawingSource
 
         return pass.Traversal.Record;
     }
+
+    /// <summary>
+    /// The drawing's settings (feature 011): detailing mode, the length unit, the default
+    /// dimension and tolerance precisions and decimal places, and the drafting standard, each a
+    /// <c>drawing_document_settings</c> gap on the drawing when it cannot be read.
+    /// </summary>
+    private void ReadSettings(DumpScope scope, DrawingPass pass, object drawing, string documentId)
+    {
+        DrawingRecord record = pass.Traversal.Record;
+        const string Settings = "drawing_document_settings";
+
+        record.IsDetailingMode = Read(
+            scope, Settings, documentId, "read whether the drawing is in detailing mode",
+            "IsDetailingMode", () => _reader.IsDetailingMode(drawing));
+        record.LengthUnitRaw = ReadPreference(scope, pass, documentId, LengthUnitPreference, "length unit");
+        record.DimensionPrecisionRaw = ReadPreference(
+            scope, pass, documentId, DimensionPrecisionPreference, "default dimension precision");
+        record.UnitsDecimalPlacesRaw = ReadPreference(
+            scope, pass, documentId, DecimalPlacesPreference, "length decimal places");
+        record.TolerancePrecisionRaw = ReadPreference(
+            scope, pass, documentId, TolerancePrecisionPreference, "default tolerance precision");
+        record.DraftingStandardName = ReadText(
+            scope, Settings, documentId, "read the drawing's drafting standard",
+            "GetUserPreferenceString", () => _reader.UserPreferenceString(pass.Document, DraftingStandardPreference));
+
+        pass.DetailingMode = record.IsDetailingMode;
+    }
+
+    private int? ReadPreference(DumpScope scope, DrawingPass pass, string documentId, int preference, string what) =>
+        Read(
+            scope, "drawing_document_settings", documentId, $"read the drawing's {what}",
+            "GetUserPreferenceInteger", () => _reader.UserPreferenceInteger(pass.Document, preference));
 
     /// <summary>
     /// One drawing's pass: the traversal that orders and numbers its records, the document every
@@ -385,6 +577,9 @@ public sealed class DrawingDumper : IDrawingSource
 
         /// <summary>Null for a drawing root; see <see cref="ScopedDrawing.ReviewedDocumentId"/>.</summary>
         public Func<string, string?>? ReviewedDocumentId { get; }
+
+        /// <summary>The drawing's detailing mode as read; null when it could not be.</summary>
+        public bool? DetailingMode { get; set; }
 
         /// <summary>
         /// True the first time an outside path is named in this drawing, so its gap is written
@@ -439,6 +634,8 @@ public sealed class DrawingDumper : IDrawingSource
             $"read the sheet format of '{sheetName}'",
             "GetSheetFormatName", () => _reader.SheetFormatName(sheet!));
 
+        ReadSheetFormatAndScale(scope, record, sheet!, sheetName);
+
         ScopedPersistRef? reference = scope.Gaps.TryStep(
             "drawing_sheet",
             record.Id,
@@ -482,6 +679,45 @@ public sealed class DrawingDumper : IDrawingSource
         CrossCheckRevisionTable(scope, record, sheet!, sheetName);
     }
 
+    /// <summary>
+    /// The sheet format's path, and the scale and projection from <c>GetProperties2</c> (feature
+    /// 011): items 2 and 3 are the scale, item 4 is first angle. Properties that cannot be read, or
+    /// that answer fewer than five items, leave all three null with one gap.
+    /// </summary>
+    private void ReadSheetFormatAndScale(DumpScope scope, DrawingSheetRecord record, object sheet, string sheetName)
+    {
+        record.SheetFormatPath = ReadText(
+            scope, "drawing_sheet", record.Id, $"read the sheet format path of '{sheetName}'",
+            "GetTemplateName", () => _reader.SheetTemplateName(sheet));
+
+        IReadOnlyList<double>? properties = null;
+        if (!scope.Gaps.TryStep(
+            "drawing_sheet",
+            record.Id,
+            $"read the scale and projection of sheet '{sheetName}'",
+            () => { properties = _gate.Call("GetProperties2", () => _reader.SheetProperties(sheet)); }))
+        {
+            return;
+        }
+
+        if (properties == null || properties.Count <= FirstAngleItem)
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                "drawing_sheet",
+                record.Id,
+                $"GetProperties2 answered {(properties == null ? "nothing" : properties.Count.ToString(CultureInfo.InvariantCulture) + " values")} "
+                + $"for sheet '{sheetName}', fewer than the five its scale and projection are read "
+                + "from, so neither was recorded.",
+                null);
+            return;
+        }
+
+        record.ScaleNumerator = properties[ScaleNumeratorItem];
+        record.ScaleDenominator = properties[ScaleDenominatorItem];
+        record.FirstAngle = properties[FirstAngleItem] != 0d;
+    }
+
     /// <summary>One view, and everything it owns.</summary>
     private void ReadView(
         DumpScope scope,
@@ -516,6 +752,7 @@ public sealed class DrawingDumper : IDrawingSource
                 "GetReferencedModelName", () => _reader.ReferencedModelPath(view)));
 
         ReadReferencedDocument(scope, pass, record, view, where);
+        ReadViewState(scope, record, view, where);
 
         ScopedPersistRef? reference = scope.Gaps.TryStep(
             "drawing_view",
@@ -526,10 +763,102 @@ public sealed class DrawingDumper : IDrawingSource
         record.PersistRef = reference?.Base64;
         record.PersistRefScope = reference?.ScopeDocumentId;
 
-        ReadDimensions(scope, pass, record, view, where);
+        var context = new ViewContext(record, view, sheetName, AttachmentsUnavailable(pass, record));
+        ReadDimensions(scope, pass, context, where);
         ReadAnnotations(scope, pass, record, view, where);
         ReadNotes(scope, pass, record, view, where);
         ReadRevisionTables(scope, pass, sheet, view, where);
+        NameSkippedAttachments(scope, context);
+    }
+
+    /// <summary>
+    /// The view's state (feature 011): the configuration it shows, whether its model is out of
+    /// date or loaded - <c>drawing_view_state</c> gaps - and its scale and orientation -
+    /// <c>drawing_view</c> gaps.
+    /// </summary>
+    private void ReadViewState(DumpScope scope, DrawingView record, object view, string where)
+    {
+        const string State = "drawing_view_state";
+
+        record.ReferencedConfiguration = ReadText(
+            scope, State, record.Id, $"read the configuration {where} shows",
+            "ReferencedConfiguration", () => _reader.ReferencedConfiguration(view));
+        record.IsModelOutOfDate = Read(
+            scope, State, record.Id, $"read whether the model of {where} is out of date",
+            "IsModelOutOfDate", () => _reader.IsModelOutOfDate(view));
+        record.IsModelLoaded = Read(
+            scope, State, record.Id, $"read whether the model of {where} is loaded",
+            "IsModelLoaded", () => _reader.IsModelLoaded(view));
+        record.ScaleDecimal = Read(
+            scope, "drawing_view", record.Id, $"read the scale of {where}",
+            "ScaleDecimal", () => _reader.ScaleDecimal(view));
+        record.OrientationName = ReadText(
+            scope, "drawing_view", record.Id, $"read the orientation of {where}",
+            "GetOrientationName", () => _reader.OrientationName(view));
+    }
+
+    /// <summary>
+    /// Why the attachments of this view's dimensions and annotations cannot be read, or null when
+    /// they can (feature 011, the "Attachments" rule): they need the view's model, so a model that
+    /// is not loaded - or not known to be - and a drawing in detailing mode attempt none.
+    /// </summary>
+    private static string? AttachmentsUnavailable(DrawingPass pass, DrawingView view)
+    {
+        if (pass.DetailingMode == true)
+        {
+            return "the drawing is in detailing mode, which loads no model";
+        }
+
+        if (view.IsModelLoaded == false)
+        {
+            return $"the model of view {view.Id} is not loaded";
+        }
+
+        return view.IsModelLoaded == null
+            ? $"whether the model of view {view.Id} is loaded could not be read"
+            : null;
+    }
+
+    /// <summary>One drawing_attachment gap naming the view whose attachments were not attempted.</summary>
+    private static void NameSkippedAttachments(DumpScope scope, ViewContext context)
+    {
+        if (context.SkippedAttachments == 0)
+        {
+            return;
+        }
+
+        scope.Gaps.Add(
+            GapKind.NotExtracted,
+            "drawing_attachment",
+            context.View.Id,
+            $"What {context.SkippedAttachments.ToString(CultureInfo.InvariantCulture)} dimensions and "
+            + $"annotations of view {context.View.Id} are attached to was not read: "
+            + $"{context.AttachmentsUnavailable}. Nothing was loaded to read it.",
+            null);
+    }
+
+    /// <summary>One view as its dimensions and annotations need it while they are read.</summary>
+    private sealed class ViewContext
+    {
+        public ViewContext(DrawingView view, object handle, string sheetName, string? attachmentsUnavailable)
+        {
+            View = view;
+            Handle = handle;
+            SheetName = sheetName;
+            AttachmentsUnavailable = attachmentsUnavailable;
+        }
+
+        public DrawingView View { get; }
+
+        public object Handle { get; }
+
+        public string SheetName { get; }
+
+        /// <summary>Why no attachment of this view is read, or null when they are.</summary>
+        public string? AttachmentsUnavailable { get; }
+
+        /// <summary>How many dimensions and annotations had their attachments not attempted.</summary>
+        public int SkippedAttachments { get; set; }
     }
 
     /// <summary>
@@ -630,14 +959,13 @@ public sealed class DrawingDumper : IDrawingSource
             null);
     }
 
-    private void ReadDimensions(
-        DumpScope scope, DrawingPass pass, DrawingView view, object handle, string where)
+    private void ReadDimensions(DumpScope scope, DrawingPass pass, ViewContext view, string where)
     {
         IReadOnlyList<object>? dimensions = scope.Gaps.TryStep(
             "dimension_override",
-            view.Id,
+            view.View.Id,
             $"enumerate the display dimensions of {where}",
-            () => _gate.Call("GetDisplayDimensions", () => _reader.DisplayDimensions(handle)));
+            () => _gate.Call("GetDisplayDimensions", () => _reader.DisplayDimensions(view.Handle)));
 
         foreach (object dimension in dimensions ?? new List<object>())
         {
@@ -645,15 +973,19 @@ public sealed class DrawingDumper : IDrawingSource
         }
     }
 
-    /// <summary>One display dimension: its identity, its override flag, and its two values.</summary>
+    /// <summary>
+    /// One display dimension: its identity, its override flag, and its two values; then (feature
+    /// 011) its text, precision and units, its tolerance and driven state, whether it is a
+    /// reference dimension or a hole callout, and the model faces it is attached to.
+    /// </summary>
     private void ReadDimension(
         DumpScope scope,
         DrawingPass pass,
-        DrawingView view,
+        ViewContext view,
         object dimension,
         string where)
     {
-        DisplayDimensionRecord record = pass.Traversal.AddDimension(view);
+        DisplayDimensionRecord record = pass.Traversal.AddDimension(view.View);
 
         record.Name = ReadText(
             scope, "dimension_override", record.Id,
@@ -718,6 +1050,14 @@ public sealed class DrawingDumper : IDrawingSource
                 null);
         }
 
+        ReadDimensionText(scope, record, dimension, where);
+        ReadDimensionPrecision(scope, record, dimension, where);
+        ReadModelDimension(scope, pass, view, record, dimension, unit, where);
+        ReadReferenceAndHoleCallout(scope, record, dimension, where);
+        record.AttachedFaces = ReadAttachments(
+            scope, view, record.Id, $"dimension {record.Id} on {where}",
+            () => _gate.Call("GetAnnotation", () => _reader.DimensionAnnotation(dimension)));
+
         ScopedPersistRef? reference = scope.Gaps.TryStep(
             "dimension_override",
             record.Id,
@@ -726,6 +1066,344 @@ public sealed class DrawingDumper : IDrawingSource
 
         record.PersistRef = reference?.Base64;
         record.PersistRefScope = reference?.ScopeDocumentId;
+
+        // The tolerance cites the dimension as feature 010's cites its model dimension, by
+        // persistent reference too once there is one.
+        if (record.Tolerance != null)
+        {
+            record.Tolerance.Source.PersistRef = record.PersistRef;
+        }
+    }
+
+    /// <summary>The four text parts, verbatim, the empty string kept; <c>dimension_text</c> gaps.</summary>
+    private void ReadDimensionText(DumpScope scope, DisplayDimensionRecord record, object dimension, string where)
+    {
+        string? Part(int part, string name) => ReadText(
+            scope, "dimension_text", record.Id, $"read the {name} text of dimension {record.Id} on {where}",
+            "GetText", () => _reader.DimensionText(dimension, part));
+
+        record.TextPrefix = Part(TextPrefix, "prefix");
+        record.TextSuffix = Part(TextSuffix, "suffix");
+        record.TextAbove = Part(TextAbove, "callout-above");
+        record.TextBelow = Part(TextBelow, "callout-below");
+    }
+
+    /// <summary>The written precision and units, own or the document's; <c>dimension_precision</c> gaps.</summary>
+    private void ReadDimensionPrecision(DumpScope scope, DisplayDimensionRecord record, object dimension, string where)
+    {
+        const string Precision = "dimension_precision";
+        string of = $"dimension {record.Id} on {where}";
+
+        record.PrecisionRaw = Read(
+            scope, Precision, record.Id, $"read the precision of {of}",
+            "GetPrimaryPrecision2", () => _reader.PrimaryPrecision(dimension));
+        record.TolerancePrecisionRaw = Read(
+            scope, Precision, record.Id, $"read the tolerance precision of {of}",
+            "GetPrimaryTolPrecision2", () => _reader.PrimaryTolerancePrecision(dimension));
+        record.UsesDocumentPrecision = Read(
+            scope, Precision, record.Id, $"read whether {of} uses the document's precision",
+            "GetUseDocPrecision", () => _reader.UsesDocumentPrecision(dimension));
+        record.UnitsRaw = Read(
+            scope, Precision, record.Id, $"read the units of {of}",
+            "GetUnits", () => _reader.Units(dimension));
+        record.UsesDocumentUnits = Read(
+            scope, Precision, record.Id, $"read whether {of} uses the document's units",
+            "GetUseDocUnits", () => _reader.UsesDocumentUnits(dimension));
+    }
+
+    /// <summary>
+    /// The dimension's <c>IDimension</c>: its tolerance, through feature 010's reads and mapping
+    /// (<see cref="DimensionTolerance.Read"/>, shared, not copied) - <c>dimension_tolerance</c>
+    /// gaps - and its driven state, a <c>dimension_override</c> gap. A dimension whose unit is
+    /// unknown reads no tolerance: its limits could only be written with a guessed unit.
+    /// </summary>
+    private void ReadModelDimension(
+        DumpScope scope,
+        DrawingPass pass,
+        ViewContext view,
+        DisplayDimensionRecord record,
+        object dimension,
+        string? unit,
+        string where)
+    {
+        const string ToleranceGap = "dimension_tolerance";
+        string of = $"dimension {record.Id} on {where}";
+
+        object? model = null;
+        if (!scope.Gaps.TryStep(
+            ToleranceGap, record.Id, $"read the IDimension of {of}",
+            () => { model = _gate.Call("GetDimension2", () => _reader.DimensionOf(dimension)); }))
+        {
+            return;
+        }
+
+        if (model == null)
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                ToleranceGap,
+                record.Id,
+                $"Dimension {record.Id} on {where} gave no IDimension, so its tolerance and driven "
+                + "state are unknown.",
+                null);
+            return;
+        }
+
+        if (unit == null)
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                ToleranceGap,
+                record.Id,
+                $"Dimension {record.Id} on {where} names no unit, so its tolerance was not read: its "
+                + "limits could only be recorded with a guessed unit.",
+                null);
+        }
+        else
+        {
+            var source = new SourceRef
+            {
+                DocumentId = pass.Traversal.Record.DocumentId,
+                Sheet = view.SheetName,
+                View = view.View.Name,
+                Annotation = record.Id,
+            };
+
+            scope.Gaps.TryStep(
+                ToleranceGap,
+                record.Id,
+                $"read the tolerance of {of}",
+                () => ApplyTolerance(scope, record, DimensionTolerance.Read(_gate, _reader, model!, source, unit), where));
+        }
+
+        record.DrivenStateRaw = Read(
+            scope, "dimension_override", record.Id, $"read the driven state of {of}",
+            "DrivenState", () => _reader.DrivenState(model!));
+    }
+
+    private static void ApplyTolerance(
+        DumpScope scope, DisplayDimensionRecord record, DimensionToleranceReading reading, string where)
+    {
+        if (reading.Missing)
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                "dimension_tolerance",
+                record.Id,
+                $"Dimension {record.Id} on {where} gave no IDimensionTolerance, so its tolerance is unknown.",
+                null);
+            return;
+        }
+
+        record.Tolerance = reading.Tolerance;
+        record.ToleranceTypeRaw = reading.TypeRaw;
+        record.FitHoleClass = reading.HoleFit;
+        record.FitShaftClass = reading.ShaftFit;
+
+        if (reading.InvalidLimits.Count > 0)
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                "dimension_tolerance",
+                record.Id,
+                $"Dimension {record.Id} on {where} has a tolerance of type "
+                + $"{reading.TypeRaw.ToString(CultureInfo.InvariantCulture)} but "
+                + $"{string.Join(" and ", reading.InvalidLimits)} reported the value not valid for it, so "
+                + "that limit is unknown.",
+                null);
+        }
+    }
+
+    /// <summary>
+    /// Whether the dimension is a reference dimension (<c>dimension_override</c>) and a hole
+    /// callout, with its variables when it is one (<c>dimension_text</c>).
+    /// </summary>
+    private void ReadReferenceAndHoleCallout(
+        DumpScope scope, DisplayDimensionRecord record, object dimension, string where)
+    {
+        string of = $"dimension {record.Id} on {where}";
+
+        record.IsReference = Read(
+            scope, "dimension_override", record.Id, $"read whether {of} is a reference dimension",
+            "IsReferenceDim", () => _reader.IsReferenceDimension(dimension));
+        record.IsHoleCallout = Read(
+            scope, "dimension_text", record.Id, $"read whether {of} is a hole callout",
+            "IsHoleCallout", () => _reader.IsHoleCallout(dimension));
+
+        if (record.IsHoleCallout != true)
+        {
+            return;
+        }
+
+        IReadOnlyList<string>? variables = null;
+        bool answered = scope.Gaps.TryStep(
+            "dimension_text", record.Id, $"read the hole callout variables of {of}",
+            () => { variables = _reader.HoleCalloutVariables(dimension); });
+
+        if (answered && variables == null)
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                "dimension_text",
+                record.Id,
+                $"Hole callout {record.Id} on {where} gave no variables, so what it calls out was not read.",
+                null);
+        }
+
+        if (variables != null && variables.Count > 0)
+        {
+            record.HoleCalloutVariablesRaw = new List<string>(variables);
+        }
+    }
+
+    /// <summary>
+    /// The model faces one dimension or typed annotation is attached to (feature 011, the
+    /// "Attachments" rule of contracts/native-evidence.md section 3, probe D6): each entity of
+    /// <c>GetAttachedEntities3</c> mapped through the view to its model entity; a face kept, an
+    /// edge its two adjacent faces <c>via: edge</c>; each face scoped to its own part document by
+    /// that document's persistent reference, and deduplicated by reference. An entity that adds no
+    /// row - another kind, a step that answers null or throws - is counted, and the record gets one
+    /// <c>drawing_attachment</c> gap. Null when there is no row. Not attempted at all when the
+    /// view's model is not available: the view's one gap says so.
+    /// </summary>
+    private List<AttachedFace>? ReadAttachments(
+        DumpScope scope, ViewContext view, string entityId, string what, Func<object?> annotation)
+    {
+        if (view.AttachmentsUnavailable != null)
+        {
+            view.SkippedAttachments++;
+            return null;
+        }
+
+        object? handle = null;
+        if (!scope.Gaps.TryStep(
+            "drawing_attachment", entityId, $"read the annotation of {what}", () => { handle = annotation(); }))
+        {
+            return null;
+        }
+
+        if (handle == null)
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                "drawing_attachment",
+                entityId,
+                $"The {what} gave no annotation, so what it is attached to was not read.",
+                null);
+            return null;
+        }
+
+        IReadOnlyList<object?>? entities = scope.Gaps.TryStep(
+            "drawing_attachment", entityId, $"read the entities {what} is attached to",
+            () => _gate.Call("GetAttachedEntities3", () => _reader.AttachedEntities(handle!)));
+        if (entities == null || entities.Count == 0)
+        {
+            return null;
+        }
+
+        var faces = new List<AttachedFace>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var errors = new List<string>();
+        int dropped = 0;
+
+        foreach (object? entity in entities)
+        {
+            if (!TieEntity(view, entity, faces, seen, errors))
+            {
+                dropped++;
+            }
+        }
+
+        if (dropped > 0)
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                "drawing_attachment",
+                entityId,
+                $"{dropped.ToString(CultureInfo.InvariantCulture)} of "
+                + $"{entities.Count.ToString(CultureInfo.InvariantCulture)} attached entities could not be "
+                + $"tied to a model face ({what}).",
+                errors.Count == 0 ? null : string.Join("; ", errors));
+        }
+
+        return faces.Count == 0 ? null : faces;
+    }
+
+    /// <summary>
+    /// One attached entity: whether it tied to at least one model face. A step that throws is kept
+    /// in <paramref name="errors"/> and the entity counts as not tied; a guard refusal or an open
+    /// circuit is not a property of the model and ends the dump, as everywhere else.
+    /// </summary>
+    private bool TieEntity(
+        ViewContext view, object? entity, List<AttachedFace> faces, HashSet<string> seen, List<string> errors)
+    {
+        if (entity == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            object? model = _gate.Call(
+                "GetCorrespondingEntity", () => _reader.CorrespondingEntity(view.Handle, entity));
+            if (model == null)
+            {
+                return false;
+            }
+
+            switch (_reader.EntityKind(model))
+            {
+                case AttachedEntityKind.Face:
+                    return TieFace(view, model, AttachedVia.Face, faces, seen);
+                case AttachedEntityKind.Edge:
+                    bool tied = false;
+                    foreach (object face in _gate.Call("GetTwoAdjacentFaces2", () => _reader.AdjacentFaces(model)))
+                    {
+                        tied |= TieFace(view, face, AttachedVia.Edge, faces, seen);
+                    }
+
+                    return tied;
+                default:
+                    return false;
+            }
+        }
+        catch (CircuitOpenError)
+        {
+            throw;
+        }
+        catch (MutatingCallError)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            errors.Add(GapCollector.Describe(ex));
+            return false;
+        }
+    }
+
+    /// <summary>One model face, scoped to its own part document; true when it has a reference.</summary>
+    private bool TieFace(
+        ViewContext view, object face, AttachedVia via, List<AttachedFace> faces, HashSet<string> seen)
+    {
+        object? document = _reader.FaceDocument(view.Handle, face);
+        if (document == null)
+        {
+            return false;
+        }
+
+        ScopedPersistRef? reference = _reader.PersistRef(document, face);
+        if (reference == null)
+        {
+            return false;
+        }
+
+        if (seen.Add(reference.ScopeDocumentId + "|" + reference.Base64))
+        {
+            faces.Add(new AttachedFace { PersistRef = reference.Base64, Scope = reference.ScopeDocumentId, Via = via });
+        }
+
+        return true;
     }
 
     private void ReadAnnotations(
@@ -981,6 +1659,19 @@ public sealed class DrawingDumper : IDrawingSource
         }
 
         return text;
+    }
+
+    /// <summary>
+    /// One gated read of a value (feature 011): null plus a gap of <paramref name="entityKind"/>
+    /// when it threw. A value type has no null answer to record.
+    /// </summary>
+    private T? Read<T>(
+        DumpScope scope, string entityKind, string entityId, string reason, string member, Func<T> read)
+        where T : struct
+    {
+        T? value = null;
+        scope.Gaps.TryStep(entityKind, entityId, reason, () => { value = _gate.Call(member, read); });
+        return value;
     }
 
     /// <summary>

@@ -128,3 +128,37 @@ null; two drawings in one scope with distinct ids and each drawing's references 
 the revision-table tests of feature 006 unedited and green. `DrawingTraversalTests` edited
 deliberately where they construct a traversal with its own allocators. `IrSerializerTests` for every
 new member omitted when null or empty and present when set, and a 1.5.0 fixture round-tripping.
+
+## 5. Landed as (T026, T027, 2026-09-23)
+
+- **One tolerance mapping.** Feature 010's six tolerance reads are `IDimensionToleranceReads`
+  (`Dump/DimensionTolerance.cs`), which `IDimensionToleranceReader` and `IDrawingReader` both
+  extend; `DimensionTolerance.Read(gate, reads, dimension, source, unit)` is the read and the
+  mapping (`ToleranceDumper.KindOf`, `IsFitType`) both dumpers call, under the gated names
+  `ToleranceDumper` always used (`Tolerance`, `DimensionTolerance.Type`, `GetHoleFitValue`,
+  `GetShaftFitValue`, `GetMinValue2`, `GetMaxValue2`). `SwDrawingReader` answers them through a
+  `SwDimensionToleranceReader`. A drawing dimension's tolerance cites `{document_id: the drawing,
+  sheet, view, annotation: its ddm id, persist_ref}`. A dimension whose unit is unknown reads no
+  tolerance - its limits could only be written with a guessed unit - and says so in a
+  `dimension_tolerance` gap; a dimension that gives no `IDimension` is one `dimension_tolerance`
+  gap naming both the tolerance and the driven state.
+- **The reader seam's new members** are named for their interop read (`IsDetailingMode`,
+  `UserPreferenceInteger`, `UserPreferenceString`, `SheetTemplateName`, `SheetProperties`,
+  `ReferencedConfiguration`, `IsModelOutOfDate`, `IsModelLoaded`, `ScaleDecimal`,
+  `OrientationName`, `DimensionText`, `PrimaryPrecision`, `PrimaryTolerancePrecision`,
+  `UsesDocumentPrecision`, `Units`, `UsesDocumentUnits`, `DimensionOf`, `IsReferenceDimension`,
+  `DrivenState`, `IsHoleCallout`, `HoleCalloutVariables`, `DimensionAnnotation`,
+  `AttachedEntities`, `CorrespondingEntity`, `EntityKind`, `AdjacentFaces`, `FaceDocument`), each
+  gated by the dumper under the interop member's name except `HoleCalloutVariables` (the list and
+  each variable's `VariableName`, `Length`, `Angle` or `String`, as "name=value") and `FaceDocument`
+  (`ReferencedDocument`, and for an assembly view `GetComponent` and `GetModelDoc2`), which gate
+  their own. Hole callout variables are read only for a hole callout.
+- **`GetProperties2`** that answers fewer than five values leaves the scale and projection null
+  with one `drawing_sheet` gap; item 4 non-zero is first angle.
+- **Attachments.** Not attempted when the view's model is not loaded, when whether it is loaded
+  could not be read, or when the drawing is in detailing mode; the view then carries one
+  `drawing_attachment` gap counting the dimensions (and, from T040, annotations) whose attachments
+  were not read, and a view with none raises no gap. The per-record gap reads "{n} of {m} attached
+  entities could not be tied to a model face ({what})", its `error` listing any step that threw;
+  a record that could not list its attachments is one `drawing_attachment` gap. An edge counts as
+  tied when at least one adjacent face is; faces are deduplicated by scope and reference.

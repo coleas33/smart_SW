@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using SolidWorks.Interop.sldworks;
 using SwReview.Extractor.PersistRefs;
 using SwReview.Extractor.Sw;
@@ -32,10 +34,17 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
     private readonly ISwSession _session;
     private readonly PersistRefService _refs;
 
+    /// <summary>
+    /// Feature 010's tolerance reads, which a drawing's display dimension is read through too
+    /// (feature 011): one reading of one interop answer, not a copy.
+    /// </summary>
+    private readonly SwDimensionToleranceReader _tolerances;
+
     public SwDrawingReader(ISwSession session, PersistRefService refs)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _refs = refs ?? throw new ArgumentNullException(nameof(refs));
+        _tolerances = new SwDimensionToleranceReader(session.Gate, refs);
     }
 
     private SwGate Gate => _session.Gate;
@@ -193,6 +202,153 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
 
     public ScopedPersistRef? PersistRef(object document, object entity) =>
         _refs.TryGet((IModelDoc2)document, entity);
+
+    // ---- feature 011 (IR 1.6.0, contracts/native-evidence.md section 3) --------------------
+    //
+    // One interop read each, gated by DrawingDumper under the member name it names, except the
+    // two that span several calls and gate them here (HoleCalloutVariables, FaceDocument).
+    // Nothing is activated, selected, opened, resolved or written.
+
+    public bool IsDetailingMode(object drawing) => Doc(drawing).IsDetailingMode();
+
+    public int UserPreferenceInteger(object document, int preference) =>
+        ((IModelDoc2)document).Extension.GetUserPreferenceInteger(preference, 0);
+
+    public string? UserPreferenceString(object document, int preference) =>
+        ((IModelDoc2)document).Extension.GetUserPreferenceString(preference, 0);
+
+    public string? SheetTemplateName(object sheet) => AsSheet(sheet).GetTemplateName();
+
+    public IReadOnlyList<double>? SheetProperties(object sheet) =>
+        AsSheet(sheet).GetProperties2() switch
+        {
+            double[] values => values,
+            object[] boxed => boxed.Select(value => Convert.ToDouble(value, CultureInfo.InvariantCulture)).ToList(),
+            _ => null,
+        };
+
+    public string? ReferencedConfiguration(object view) => AsView(view).ReferencedConfiguration;
+
+    public bool IsModelOutOfDate(object view) => AsView(view).IsModelOutOfDate();
+
+    public bool IsModelLoaded(object view) => AsView(view).IsModelLoaded();
+
+    public double ScaleDecimal(object view) => AsView(view).ScaleDecimal;
+
+    public string? OrientationName(object view) => AsView(view).GetOrientationName();
+
+    public string? DimensionText(object dimension, int part) => AsDisplayDimension(dimension).GetText(part);
+
+    public int PrimaryPrecision(object dimension) => AsDisplayDimension(dimension).GetPrimaryPrecision2();
+
+    public int PrimaryTolerancePrecision(object dimension) => AsDisplayDimension(dimension).GetPrimaryTolPrecision2();
+
+    public bool UsesDocumentPrecision(object dimension) => AsDisplayDimension(dimension).GetUseDocPrecision();
+
+    public int Units(object dimension) => AsDisplayDimension(dimension).GetUnits();
+
+    public bool UsesDocumentUnits(object dimension) => AsDisplayDimension(dimension).GetUseDocUnits();
+
+    public object? DimensionOf(object dimension) => AsDisplayDimension(dimension).GetDimension2(0);
+
+    public bool IsReferenceDimension(object dimension) => AsDisplayDimension(dimension).IsReferenceDim();
+
+    public int DrivenState(object modelDimension) => ((IDimension)modelDimension).DrivenState;
+
+    public bool IsHoleCallout(object dimension) => AsDisplayDimension(dimension).IsHoleCallout();
+
+    /// <summary>
+    /// Every callout variable as "name=value", verbatim, in order: the name is
+    /// <c>ICalloutVariable.VariableName</c>, and the value is the length, angle or string the
+    /// variable's own interface carries (reflected on 2024 SP5), empty for any other kind. The
+    /// enumeration and each read are gated here, because one list is several members.
+    /// </summary>
+    public IReadOnlyList<string>? HoleCalloutVariables(object dimension)
+    {
+        if (!(Gate.Call("GetHoleCalloutVariables", () => AsDisplayDimension(dimension).GetHoleCalloutVariables())
+            is object[] items))
+        {
+            return null;
+        }
+
+        var variables = new List<string>(items.Length);
+        foreach (object item in items)
+        {
+            if (!(item is ICalloutVariable variable))
+            {
+                continue;
+            }
+
+            string name = Gate.Call("VariableName", () => variable.VariableName) ?? string.Empty;
+            string value = item switch
+            {
+                ICalloutLengthVariable length => Gate.Call("Length", () => length.Length).ToString("R", CultureInfo.InvariantCulture),
+                ICalloutAngleVariable angle => Gate.Call("Angle", () => angle.Angle).ToString("R", CultureInfo.InvariantCulture),
+                ICalloutStringVariable text => Gate.Call("String", () => text.String) ?? string.Empty,
+                _ => string.Empty,
+            };
+
+            variables.Add(name + "=" + value);
+        }
+
+        return variables;
+    }
+
+    public object? DimensionAnnotation(object dimension) => AsDisplayDimension(dimension).GetAnnotation();
+
+    public IReadOnlyList<object?> AttachedEntities(object annotation) =>
+        AsAnnotation(annotation).GetAttachedEntities3() is object[] entities
+            ? entities
+            : Array.Empty<object?>();
+
+    public object? CorrespondingEntity(object view, object entity) => AsView(view).GetCorrespondingEntity(entity);
+
+    public AttachedEntityKind EntityKind(object entity) => entity switch
+    {
+        IFace2 _ => AttachedEntityKind.Face,
+        IEdge _ => AttachedEntityKind.Edge,
+        _ => AttachedEntityKind.Other,
+    };
+
+    public IReadOnlyList<object> AdjacentFaces(object edge) => Items(((IEdge)edge).GetTwoAdjacentFaces2());
+
+    /// <summary>
+    /// The part document that owns a model face. For a part drawing that is the view's referenced
+    /// document; for an assembly drawing the face belongs to a component, whose document is asked
+    /// for (<c>IEntity.GetComponent</c>, <c>IComponent2.GetModelDoc2</c>). Every read is gated
+    /// here; a lightweight or suppressed component answers no document, and nothing is resolved to
+    /// make it answer one.
+    /// </summary>
+    public object? FaceDocument(object view, object face)
+    {
+        var referenced = Gate.Call("ReferencedDocument", () => AsView(view).ReferencedDocument) as IModelDoc2;
+        if (referenced == null)
+        {
+            return null;
+        }
+
+        if (SwSession.KindOf(referenced, Gate) != Ir.DocumentKind.Assembly)
+        {
+            return referenced;
+        }
+
+        var component = Gate.Call("GetComponent", () => ((IEntity)face).GetComponent()) as IComponent2;
+        return component == null
+            ? null
+            : Gate.Call("GetModelDoc2", () => component.GetModelDoc2()) as IModelDoc2;
+    }
+
+    public object? Tolerance(object dimension) => _tolerances.Tolerance(dimension);
+
+    public int ToleranceType(object tolerance) => _tolerances.ToleranceType(tolerance);
+
+    public double? ToleranceMin(object tolerance) => _tolerances.ToleranceMin(tolerance);
+
+    public double? ToleranceMax(object tolerance) => _tolerances.ToleranceMax(tolerance);
+
+    public string? HoleFitValue(object tolerance) => _tolerances.HoleFitValue(tolerance);
+
+    public string? ShaftFitValue(object tolerance) => _tolerances.ShaftFitValue(tolerance);
 
     /// <summary>
     /// Every model a view on any sheet references, in sheet and view order, with duplicates
