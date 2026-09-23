@@ -200,3 +200,4 @@ labels:
     UnknownMessage: "The add-in did not understand the page. Close and reopen the task pane."
     UnknownModel: "That model is not offered by the provider. Choose another model in Settings."
     UnknownProvider: "That provider is not available. Choose another provider in Settings."
+    UnknownReview: "That review's run folder can no longer be read. Remove its chip, or review the model again."
