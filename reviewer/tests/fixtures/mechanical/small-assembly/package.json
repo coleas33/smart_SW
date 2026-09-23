@@ -1,0 +1,1211 @@
+{
+  "schema_version": "1.4.0",
+  "package_id": "01000000-0000-4000-8000-000000000010",
+  "created_at": "2026-09-23T09:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.0.0-fictional",
+    "sw_version": "2024 SP5",
+    "machine": "FICT-SEAT",
+    "profile": "full",
+    "phases": [
+      {
+        "name": "document",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "manifest",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "mate",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "feature",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "equation",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "cutlist",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "hole",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "fastener",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "face",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "body",
+        "elapsed_ms": 1,
+        "status": "ok"
+      }
+    ]
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:0001",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-ARVOSORN-0000.SLDASM",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0002",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-ARVOQUILL-2001.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0003",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-PIN-3X12-2002.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:fict",
+    "name": "FICT-ARVOSORN-0000",
+    "root_assembly_document_id": "doc:0001",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:0001",
+      "kind": "assembly",
+      "file_name": "FICT-ARVOSORN-0000.SLDASM",
+      "path": "C:\\Fictional\\Vault\\FICT-ARVOSORN-0000.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Part Ref": "FICT-ARVOSORN-0000",
+        "Meridian Summary": "ARVO SORN",
+        "MeridianRev": "A"
+      },
+      "config_properties": {},
+      "material": null,
+      "mass": {
+        "mass_kg": 0.3722,
+        "volume_m3": 0.000132457655107,
+        "center_of_mass": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "configuration": "Default"
+      }
+    },
+    {
+      "document_id": "doc:0002",
+      "kind": "part",
+      "file_name": "FICT-ARVOQUILL-2001.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT-ARVOQUILL-2001.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Part Ref": "FICT-ARVOQUILL-2001",
+        "Meridian Summary": "ARVO QUILL",
+        "MeridianRev": "A"
+      },
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": {
+        "mass_kg": 0.35,
+        "volume_m3": 0.00012962962963,
+        "center_of_mass": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "configuration": "Default"
+      },
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0003",
+      "kind": "part",
+      "file_name": "FICT-PIN-3X12-2002.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT-PIN-3X12-2002.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "Meridian Part Ref": "FICT-PIN-3X12-2002",
+        "Meridian Summary": "PIN ARVO 2002",
+        "MeridianRev": "A"
+      },
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": {
+        "mass_kg": 0.0111,
+        "volume_m3": 1.414012739e-6,
+        "center_of_mass": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "configuration": "Default"
+      },
+      "material_configuration": "Default"
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-ARVOQUILL-2001-1",
+      "document_id": "doc:0002",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-ARVOQUILL-2001-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-PIN-3X12-2002-1",
+      "document_id": "doc:0003",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.04
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-PIN-3X12-2002-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-PIN-3X12-2002-2",
+      "document_id": "doc:0003",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.06
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-PIN-3X12-2002-2",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "Y21wOjAwMDQ=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-PIN-3X12-2002-3",
+      "document_id": "doc:0003",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "suppressed",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-PIN-3X12-2002-3",
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [],
+  "holes": [
+    {
+      "id": "hol:0001",
+      "persist_ref": "aG9sOjAwMDE=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0001",
+      "feature_name": "FICT-HOLE-0001",
+      "hole_type": "tapped",
+      "standard": "ISO",
+      "size": "M5x0.8",
+      "thread_designation": "M5x0.8",
+      "thread_depth": {
+        "value": 6.0,
+        "unit": "mm"
+      },
+      "hole_depth": {
+        "value": 8.0,
+        "unit": "mm"
+      },
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0001",
+        "fac:0002",
+        "fac:0003",
+        "fac:0004"
+      ]
+    },
+    {
+      "id": "hol:0002",
+      "persist_ref": "aG9sOjAwMDI=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0001",
+      "feature_name": "FICT-HOLE-0002",
+      "hole_type": "clearance",
+      "standard": "ISO",
+      "size": "M5",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.02,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0005",
+        "fac:0006",
+        "fac:0007",
+        "fac:0008"
+      ]
+    },
+    {
+      "id": "hol:0003",
+      "persist_ref": "aG9sOjAwMDM=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0001",
+      "feature_name": "FICT-HOLE-0003",
+      "hole_type": "clearance",
+      "standard": "ISO",
+      "size": "Ø3.0",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0009",
+        "fac:0010",
+        "fac:0011",
+        "fac:0012"
+      ]
+    },
+    {
+      "id": "hol:0004",
+      "persist_ref": "aG9sOjAwMDQ=",
+      "persist_ref_scope": "doc:0002",
+      "component_id": "cmp:0001",
+      "feature_name": "FICT-HOLE-0004",
+      "hole_type": "clearance",
+      "standard": "ISO",
+      "size": "Ø3.0",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.0,
+          "y": 0.06,
+          "z": 0.0
+        },
+        "direction": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        }
+      },
+      "face_ids": [
+        "fac:0013",
+        "fac:0014",
+        "fac:0015",
+        "fac:0016"
+      ]
+    }
+  ],
+  "threads": [],
+  "fasteners": [],
+  "faces": [
+    {
+      "id": "fac:0001",
+      "persist_ref": "ZmFjOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0021000000000000003
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0021000000000000003,
+          "y": -0.0021000000000000003,
+          "z": 0.002
+        },
+        "max": {
+          "x": 0.0021000000000000003,
+          "y": 0.0021000000000000003,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.00010555751316061707
+    },
+    {
+      "id": "fac:0002",
+      "persist_ref": "ZmFjOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0021000000000000003
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0179,
+          "y": -0.0021000000000000003,
+          "z": 0.002
+        },
+        "max": {
+          "x": 0.0221,
+          "y": 0.0021000000000000003,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.00010555751316061707
+    },
+    {
+      "id": "fac:0003",
+      "persist_ref": "ZmFjOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.04,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0021000000000000003
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0379,
+          "y": -0.0021000000000000003,
+          "z": 0.002
+        },
+        "max": {
+          "x": 0.0421,
+          "y": 0.0021000000000000003,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.00010555751316061707
+    },
+    {
+      "id": "fac:0004",
+      "persist_ref": "ZmFjOjAwMDQ=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.06,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0021000000000000003
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0579,
+          "y": -0.0021000000000000003,
+          "z": 0.002
+        },
+        "max": {
+          "x": 0.062099999999999995,
+          "y": 0.0021000000000000003,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.00010555751316061707
+    },
+    {
+      "id": "fac:0005",
+      "persist_ref": "ZmFjOjAwMDU=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.02,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.00275
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.00275,
+          "y": 0.01725,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.00275,
+          "y": 0.02275,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0001727875959474386
+    },
+    {
+      "id": "fac:0006",
+      "persist_ref": "ZmFjOjAwMDY=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.02,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.00275
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.01725,
+          "y": 0.01725,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.02275,
+          "y": 0.02275,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0001727875959474386
+    },
+    {
+      "id": "fac:0007",
+      "persist_ref": "ZmFjOjAwMDc=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.04,
+          "y": 0.02,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.00275
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.03725,
+          "y": 0.01725,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.04275,
+          "y": 0.02275,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0001727875959474386
+    },
+    {
+      "id": "fac:0008",
+      "persist_ref": "ZmFjOjAwMDg=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.06,
+          "y": 0.02,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.00275
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.057249999999999995,
+          "y": 0.01725,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.06275,
+          "y": 0.02275,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0001727875959474386
+    },
+    {
+      "id": "fac:0009",
+      "persist_ref": "ZmFjOjAwMDk=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0015,
+          "y": 0.0385,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.0015,
+          "y": 0.0415,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0000942477796076938
+    },
+    {
+      "id": "fac:0010",
+      "persist_ref": "ZmFjOjAwMTA=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0185,
+          "y": 0.0385,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.021500000000000002,
+          "y": 0.0415,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0000942477796076938
+    },
+    {
+      "id": "fac:0011",
+      "persist_ref": "ZmFjOjAwMTE=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.04,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0385,
+          "y": 0.0385,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.0415,
+          "y": 0.0415,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0000942477796076938
+    },
+    {
+      "id": "fac:0012",
+      "persist_ref": "ZmFjOjAwMTI=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.06,
+          "y": 0.04,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.058499999999999996,
+          "y": 0.0385,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.0615,
+          "y": 0.0415,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0000942477796076938
+    },
+    {
+      "id": "fac:0013",
+      "persist_ref": "ZmFjOjAwMTM=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.06,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0015,
+          "y": 0.058499999999999996,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.0015,
+          "y": 0.0615,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0000942477796076938
+    },
+    {
+      "id": "fac:0014",
+      "persist_ref": "ZmFjOjAwMTQ=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.02,
+          "y": 0.06,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0185,
+          "y": 0.058499999999999996,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.021500000000000002,
+          "y": 0.0615,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0000942477796076938
+    },
+    {
+      "id": "fac:0015",
+      "persist_ref": "ZmFjOjAwMTU=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.04,
+          "y": 0.06,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0385,
+          "y": 0.058499999999999996,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.0415,
+          "y": 0.0615,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0000942477796076938
+    },
+    {
+      "id": "fac:0016",
+      "persist_ref": "ZmFjOjAwMTY=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "body_id": "bod:0001",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.06,
+          "y": 0.06,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.058499999999999996,
+          "y": 0.058499999999999996,
+          "z": 0.0
+        },
+        "max": {
+          "x": 0.0615,
+          "y": 0.0615,
+          "z": 0.01
+        }
+      },
+      "area_m2": 0.0000942477796076938
+    },
+    {
+      "id": "fac:0017",
+      "persist_ref": "ZmFjOjAwMTc=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0003",
+      "body_id": "bod:0002",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.0,
+          "y": 0.06,
+          "z": 0.0
+        },
+        "axis_dir": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 1.0
+        },
+        "radius_m": 0.0015
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0015,
+          "y": 0.058499999999999996,
+          "z": 0.0015249999999999999
+        },
+        "max": {
+          "x": 0.0015,
+          "y": 0.0615,
+          "z": 0.012
+        }
+      },
+      "area_m2": 0.00009872454913905926
+    }
+  ],
+  "bodies": [
+    {
+      "id": "bod:0001",
+      "persist_ref": "Ym9kOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0001",
+      "mesh_file": "meshes/bod-0001.glb",
+      "triangle_count": 768,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0002",
+      "persist_ref": "Ym9kOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0003",
+      "mesh_file": "meshes/bod-0002.glb",
+      "triangle_count": 48,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0003",
+      "persist_ref": "Ym9kOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "component_id": "cmp:0002",
+      "mesh_file": "meshes/bod-0003.glb",
+      "triangle_count": 48,
+      "is_solid": true
+    }
+  ],
+  "interferences": [
+    {
+      "id": "int:0001",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0003"
+      ],
+      "volume": {
+        "value": 0.0,
+        "unit": "mm3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": true,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0001|cmp:0003",
+      "is_fastener": false,
+      "is_possible": false
+    },
+    {
+      "id": "int:0002",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0001",
+        "cmp:0003"
+      ],
+      "volume": {
+        "value": 0.0,
+        "unit": "mm3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": true,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": false,
+        "ignore_hidden": true,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0001|cmp:0003",
+      "is_fastener": false,
+      "is_possible": false
+    }
+  ],
+  "captures": [],
+  "drawings": [],
+  "features": [],
+  "equations": [],
+  "rms_suppress_test": null,
+  "gaps": [
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0001",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0002",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0003",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "body",
+      "entity_id": "cmp:0004",
+      "reason": "the component is suppressed; its bodies were not read",
+      "error": null
+    }
+  ]
+}

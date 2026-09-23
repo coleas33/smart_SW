@@ -390,6 +390,10 @@ placeholder example in `config/standards.example.yaml` uses fictional values in 
 | `revision.cell` | last row, column 0 | C33 | In the profile a **row selector counted from the end** and a **column index**, so a different drawing template does not silently read the wrong cell (FR-001) |
 | `material.configuration` | the SOLIDWORKS default configuration name | C28 | The configuration whose material is inspected |
 | `export_control.phrase` | one hyphenated two-word export-control phrase | C30 | Presence is the defect; matched case-insensitively as a substring |
+| `general_tolerance.linear` | not carried by the macro | none | Profile version 2 (feature 010 research R2.19): the title block's general tolerance by decimal places, owner answer 2026-09-23; the owner supplies the bands with the regenerated profile |
+| `general_tolerance.angular_deg` | not carried by the macro | none | Profile version 2: the title block's general angular tolerance, or null when the company declares none |
+| `hygiene.part_number_property` | not carried by the macro | none | Profile version 2: the property feature 010's hygiene checks compare with the file name |
+| `hygiene.description_property` | not carried by the macro | none | Profile version 2: the property two documents must not share, read by feature 010's hygiene checks |
 **Not company-specific, and therefore not in the profile**: the configuration-independent
 property tab (C27, the empty configuration name), the cut-list item name prefix (C34 -
 replaced by structural identification, difference bb), the document-kind extensions (C35 -

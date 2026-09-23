@@ -54,17 +54,20 @@ version: 2
 # ... every version 1 section, unchanged ...
 general_tolerance:
   linear:
-    - {over_mm: 0.5, up_to_mm: 6.0, plus_minus_mm: 0.15}
-    - {over_mm: 6.0, up_to_mm: 30.0, plus_minus_mm: 0.25}
+    - {decimal_places: 1, plus_minus_mm: 0.3}
+    - {decimal_places: 2, plus_minus_mm: 0.13}
+    - {decimal_places: 3, plus_minus_mm: 0.05}
   angular_deg: 0.75
 hygiene:
   part_number_property: "Fictional Number"
   description_property: "Fictional Summary"
 ```
 
-Values are placeholders; the company's block is the owner's to write. Bands are contiguous and
-ordered, `over < nominal <= up_to` selects one, and a nominal outside every band has no general
-tolerance. The loader refuses overlapping or unordered bands naming them.
+Values are placeholders; the company's block is the owner's to write. The owner's general
+tolerance is **by decimal places** (research R5, 2026-09-23): a band is selected by how many
+decimals a dimension is written to (`.XX` is 2), and a dimension whose precision matches no band
+has no general tolerance. Bands ascend by `decimal_places`; the loader refuses unordered or
+repeated bands naming them (T016).
 
 ## 4. The resolver (`checks/tolerances.py`)
 
@@ -77,7 +80,7 @@ sources walked in precedence and the first that binds returned:
 | 2 | `annotation` | a `ModelAnnotation` of kind `gtol` whose `attached_persist_refs` include one of the subject's face persist refs; a position or concentricity symbol for `hole_position`, a size frame otherwise | zone value as a `limits`-free `Dimension`, read through `permitted_radial_offset_mm` |
 | 3 | `model_dimension` | a `ModelDimension` in the subject's document, `diameter` or `radius`, nominal equal to the subject's size within 1e-6 mm, unique in the document | its `tolerance`, `source.persist_ref` the dimension's |
 | 4 | `hole_wizard` | `Hole.wizard.fit_class_raw` names an ISO 286 class `checks/iso286.yaml` carries (`H6` to `H11`, `h6` to `h11`) for the subject's nominal | `limits` from the table, `source` citing the hole and the class |
-| 5 | `general` | a `hole_size` or `pin_size` subject, no source 1 to 4, a version 2 profile with a band containing the nominal | `symmetric`, `upper = plus_minus`, `source` citing `general_tolerance` in the profile identity |
+| 5 | `general` | a `hole_size` or `pin_size` subject, no source 1 to 4, a version 2 profile with a band for the decimal places the subject's dimension is written to (a subject whose precision is not recorded binds nothing) | `symmetric`, `upper = plus_minus`, `source` citing `general_tolerance` in the profile identity |
 
 `hole_position` is never bound by source 5. A lower source that also binds is listed in
 `also_found`; an `also_found` whose limits differ from the chosen one's sets `conflict`, which the

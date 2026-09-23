@@ -1,0 +1,53 @@
+# The thresholds the joint map is judged on (feature 010, contracts/joint-map.md section 8).
+#
+# Every joint, candidate and cylinder member the map records cites the values it was
+# judged on, so an engineer who disagrees with a gate changes a line here and the next
+# review says so. Each value carries its source. Lengths in millimetres, angles in degrees;
+# every value is non-negative and every angle below 90 degrees, or the loader refuses the
+# file naming the key.
+
+version: 1
+
+parallel_deg:
+  value: 1.0
+  source: >-
+    spec Assumptions: two hole axes are one joint's when they are parallel within 1 degree
+adjacency_gap_mm:
+  value: 1.0
+  source: >-
+    spec Assumptions: the axial gap between the two holes' faces is under 1 mm, so the
+    parts touch or nearly touch along the joint
+member_coaxial_mm:
+  value: 0.2
+  source: >-
+    research R2.3: a screw or pin face sits in a hole when its axis is within 0.2 mm of the
+    hole's, which admits modelling slop and never the next hole of a pattern
+member_diameter_allowance_mm:
+  value: 0.05
+  source: >-
+    research R2.3: a member face is no larger than the bore, or a tapped hole's nominal
+    major diameter, plus 0.05 mm of modelling allowance; not a tolerance
+origin_on_axis_mm:
+  value: 0.2
+  source: >-
+    research R2.3: a recognised fastener with no face is placed on a hole when its
+    component origin lies within 0.2 mm of the hole axis
+axis_aligned_deg:
+  value: 0.1
+  source: >-
+    research R2.1: within 0.1 degree of a coordinate axis a face's bounding-box extent along
+    the axis is exact to r sin(0.1 degree), which each calculation records
+candidate_margin:
+  angle_deg:
+    value: 1.0
+    source: >-
+      research R2.2: a pair failing only the parallel gate by up to 1 degree more is listed
+      for the engineer as a candidate, never a finding
+  overlap_mm:
+    value: 1.0
+    source: >-
+      research R2.2: a pair failing only the overlap gate by up to 1 mm is a candidate
+  gap_mm:
+    value: 1.0
+    source: >-
+      research R2.2: a pair failing only the adjacency gate by up to 1 mm is a candidate

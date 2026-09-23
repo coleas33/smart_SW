@@ -27,19 +27,33 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import Any, ClassVar
 
 import yaml
-from pydantic import BaseModel, ConfigDict, NonNegativeInt, PrivateAttr, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    NonNegativeInt,
+    PositiveFloat,
+    PrivateAttr,
+    ValidationError,
+    model_validator,
+)
 
 __all__ = [
     "DEFAULT_PATH",
+    "KNOWN_VERSIONS",
     "PROFILE_VERSION",
     "SETTING_NAME",
+    "VERSION_2_SECTIONS",
     "DataCardSection",
     "ExportControlSection",
+    "GeneralToleranceSection",
+    "HygieneSection",
     "LibrarySection",
+    "LinearBand",
     "MaterialSection",
     "PartNumberSection",
     "ProfileError",
@@ -52,9 +66,19 @@ __all__ = [
     "load_profile",
 ]
 
-PROFILE_VERSION = 1
-"""The one schema version this build knows. A profile carrying another is refused naming
-both, rather than loaded while its unrecognised fields are ignored."""
+PROFILE_VERSION = 2
+"""The newest schema version this build writes into its examples. A profile carrying a
+version outside `KNOWN_VERSIONS` is refused naming it and the known ones, rather than loaded
+while its unrecognised fields are ignored."""
+
+KNOWN_VERSIONS: tuple[int, ...] = (1, 2)
+"""Version 1 is feature 006's schema; version 2 adds `general_tolerance` and `hygiene`
+(feature 010 research R2.19). Both load: the owner's real profile stays version 1 until the
+owner rewrites it, and the new sources are simply absent until then (plan RK-7)."""
+
+VERSION_2_SECTIONS: tuple[str, ...] = ("general_tolerance", "hygiene")
+"""Required on version 2, absent on version 1: every key is required, so adding them to
+version 1 would have refused every version 1 file."""
 
 SETTING_NAME = "StandardsProfilePath"
 """The add-in setting that names the file, quoted in the refusal so a reader knows where to
@@ -140,8 +164,49 @@ class ExportControlSection(_Section):
     phrase: str
 
 
+class LinearBand(_Section):
+    """One band of a general tolerance block: the dimensions written to `decimal_places`
+    decimals take `plus_minus_mm` (`.XX` is 2). Owner answer 2026-09-23: by decimal places."""
+
+    decimal_places: NonNegativeInt
+    plus_minus_mm: PositiveFloat
+
+
+class GeneralToleranceSection(_Section):
+    """The company's general tolerance block, applied only to a dimension with no tolerance
+    of its own (feature 010 FR-023). An empty `linear` and a null `angular_deg` are the
+    statement "the company declares none"; nothing defaults to a standard class."""
+
+    linear: list[LinearBand]
+    angular_deg: PositiveFloat | None
+
+    @model_validator(mode="after")
+    def _bands_ascend(self) -> GeneralToleranceSection:
+        """Each band names more decimal places than the one before: no band is read twice."""
+        for earlier, later in pairwise(self.linear):
+            if later.decimal_places <= earlier.decimal_places:
+                raise ValueError(
+                    f"the linear bands must ascend by decimal places: decimal places "
+                    f"{later.decimal_places} follows {earlier.decimal_places}"
+                )
+        return self
+
+
+class HygieneSection(_Section):
+    """Which properties the hygiene checks read (feature 010 US7); an empty name skips the
+    checks that need it."""
+
+    part_number_property: str
+    description_property: str
+
+
 class StandardsProfile(_Section):
-    """The whole schema. Built by `load_profile`, which is what gives it its identity."""
+    """The whole schema. Built by `load_profile`, which is what gives it its identity.
+
+    The two version 2 sections are required fields that may only be null on version 1: a
+    version 1 file carries neither and reads as both absent, a version 2 file must carry
+    both, and neither has a default (FR-002).
+    """
 
     version: int
     vault_root: str
@@ -151,8 +216,31 @@ class StandardsProfile(_Section):
     revision: RevisionSection
     material: MaterialSection
     export_control: ExportControlSection
+    general_tolerance: GeneralToleranceSection | None
+    hygiene: HygieneSection | None
 
     _identity: ProfileIdentity | None = PrivateAttr(default=None)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _version_1_has_no_version_2_sections(cls, data: Any) -> Any:
+        if not isinstance(data, dict) or data.get("version") != 1:
+            return data
+        carried = [name for name in VERSION_2_SECTIONS if name in data]
+        if carried:
+            raise ValueError(
+                f"a version 1 profile carries no {' or '.join(carried)}; "
+                "those are version 2 sections"
+            )
+        return {**data, **dict.fromkeys(VERSION_2_SECTIONS)}
+
+    @model_validator(mode="after")
+    def _version_2_carries_both_sections(self) -> StandardsProfile:
+        if self.version == 2:
+            missing = [name for name in VERSION_2_SECTIONS if getattr(self, name) is None]
+            if missing:
+                raise ValueError(f"a version 2 profile needs {' and '.join(missing)}")
+        return self
 
     @property
     def identity(self) -> ProfileIdentity:
@@ -233,10 +321,11 @@ def _check_version(path: Path, data: dict[str, Any]) -> None:
     if "version" not in data:
         return
     version = data["version"]
-    if isinstance(version, bool) or version != PROFILE_VERSION:
+    if isinstance(version, bool) or not isinstance(version, int) or version not in KNOWN_VERSIONS:
+        known = " and ".join(str(item) for item in KNOWN_VERSIONS)
         raise ProfileInvalid(
-            f"{path} is a version {version!r} standards profile; this build knows version "
-            f"{PROFILE_VERSION}"
+            f"{path} is a version {version!r} standards profile; this build knows versions "
+            f"{known}"
         )
 
 

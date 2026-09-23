@@ -241,7 +241,7 @@ whichever answered is kept, verbatim; parsing is Python's.
 
 | Section | Fields | Rules |
 |---|---|---|
-| `general_tolerance` | `linear: list[LinearBand]`, `angular_deg: float \| None` | `LinearBand(over_mm, up_to_mm, plus_minus_mm)`, bands contiguous and non-overlapping, `over < up_to`, `plus_minus > 0`; an empty list means the company declares none |
+| `general_tolerance` | `linear: list[LinearBand]`, `angular_deg: float \| None` | `LinearBand(decimal_places, plus_minus_mm)`: the owner's general tolerance is by decimal places (research R5, 2026-09-23), so a band is selected by how many decimals a dimension is written to, not by its size; bands ascend by `decimal_places` (a whole number from 0) with no repeat, `plus_minus > 0`, `angular_deg > 0` or null; an empty list means the company declares none (as landed by T016) |
 | `hygiene` | `part_number_property: str`, `description_property: str` | an empty string skips the checks that need it |
 
 `PROFILE_VERSION = 2`; version 1 loads with both sections absent (research R2.19). No value of

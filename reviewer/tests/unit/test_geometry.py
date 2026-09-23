@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 import trimesh
 
-from swreview.geometry.axis import axis_distance, face_gap
+from swreview.geometry.axis import axial_extent, axis_distance, face_gap, is_axis_aligned
 from swreview.geometry.envelope import envelope_raycast
 from swreview.geometry.mesh import load_mesh
 from swreview.ir.models import (
@@ -408,3 +408,81 @@ def test_envelope_raycast_falls_back_when_embree_is_unavailable(
     result = envelope_raycast(TOOL_AXIS, 0.005, 0.050, [("cmp:0003", obstruction(-0.010))])
 
     assert result.hits[0].first_hit_distance_m == pytest.approx(0.010, abs=1e-9)
+
+
+# --- axial_extent and is_axis_aligned (feature 010 T006) ----------------------------------
+
+
+def box(low: tuple[float, float, float], high: tuple[float, float, float]) -> BBox3D:
+    return BBox3D(
+        min=Vec3(x=low[0], y=low[1], z=low[2]), max=Vec3(x=high[0], y=high[1], z=high[2])
+    )
+
+
+def test_axial_extent_of_an_axis_aligned_box_is_exact_and_relative_to_the_origin() -> None:
+    extent = axial_extent(
+        [box((-0.01, -0.01, 0.002), (0.01, 0.01, 0.010))],
+        axis((0.0, 0.0, 0.004), (0.0, 0.0, 1.0)),
+    )
+
+    assert extent == pytest.approx((-0.002, 0.006))
+
+
+def test_axial_extent_spans_every_box_and_reads_a_reversed_axis_backwards() -> None:
+    boxes = [
+        box((0.0, 0.0, 0.0), (0.001, 0.001, 0.003)),
+        box((0.0, 0.0, 0.007), (0.001, 0.001, 0.009)),
+    ]
+
+    assert axial_extent(boxes, axis((0.0, 0.0, 0.0), (0.0, 0.0, 2.0))) == pytest.approx(
+        (0.0, 0.009)
+    )
+    assert axial_extent(boxes, axis((0.0, 0.0, 0.0), (0.0, 0.0, -1.0))) == pytest.approx(
+        (-0.009, 0.0)
+    )
+
+
+def test_axial_extent_projects_all_eight_corners_on_an_oblique_axis() -> None:
+    """On an oblique axis the corners reach past the true extent - which is why a check that
+    needs an exact length asks `is_axis_aligned` first (contracts/joint-map.md section 2)."""
+    extent = axial_extent(
+        [box((0.0, 0.0, 0.0), (0.001, 0.001, 0.001))], axis((0.0, 0.0, 0.0), (1.0, 1.0, 0.0))
+    )
+
+    assert extent == pytest.approx((0.0, math.sqrt(2.0) * 0.001))
+
+
+def test_axial_extent_refuses_a_zero_length_direction_naming_it() -> None:
+    with pytest.raises(ValueError, match="the probe axis"):
+        axial_extent(
+            [box((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))],
+            axis((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
+            what="the probe axis",
+        )
+
+
+def test_axial_extent_of_no_box_is_refused() -> None:
+    with pytest.raises(ValueError, match="no box"):
+        axial_extent([], axis((0.0, 0.0, 0.0), (0.0, 0.0, 1.0)))
+
+
+@pytest.mark.parametrize(
+    ("direction", "aligned"),
+    [
+        ((0.0, 0.0, 1.0), True),
+        ((0.0, 0.0, -3.0), True),
+        ((1.0, 0.0, 0.0), True),
+        ((math.sin(math.radians(0.05)), 0.0, math.cos(math.radians(0.05))), True),
+        ((math.sin(math.radians(0.5)), 0.0, math.cos(math.radians(0.5))), False),
+        ((math.sin(math.radians(30.0)), 0.0, math.cos(math.radians(30.0))), False),
+    ],
+)
+def test_is_axis_aligned_within_the_angle_of_a_coordinate_axis(
+    direction: tuple[float, float, float], aligned: bool
+) -> None:
+    assert is_axis_aligned(Vec3(x=direction[0], y=direction[1], z=direction[2]), 0.1) is aligned
+
+
+def test_is_axis_aligned_refuses_a_zero_length_direction() -> None:
+    with pytest.raises(ValueError, match="zero-length"):
+        is_axis_aligned(Vec3(x=0.0, y=0.0, z=0.0), 0.1)
