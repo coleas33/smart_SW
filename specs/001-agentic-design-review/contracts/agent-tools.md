@@ -132,6 +132,19 @@ call. A call the pre-run did not make, or made and failed, runs as it always did
 | `request_evidence` | `what: str`, `why: str`, `entity_ids: list[str]`, `question: str \| None = None`, `options: list[str] \| None = None`, `blocks: str \| None = None` | Adds an open `EvidenceRequest`; returns its id. The three optional arguments are feature 009's short form (`specs/009-engineer-workspace/contracts/questions.md` section 1): one question of at most 140 characters, at most 5 distinct offered answers of at most 60 characters, and the checklist item id it blocks; each is refused by name, in that order after the entity ids, and a refusal records nothing. |
 | `mark_coverage` | `check: str`, `bucket: "checked" \| "skipped" \| "unresolved" \| "out_of_scope"`, `scope: CoverageScope`, `reason: str` | Adds a `CoverageItem`. The `failed` bucket is written only by the tool layer itself. |
 | `request_capture` | `entity_id: str`, `view: str` | Returns an existing `Capture` or, when the live SolidWorks bridge is enabled, requests one through the bridge and returns its file. Otherwise `unresolved`. |
+
+### Reading one finding in full: `get_finding` (feature 008, conditional)
+
+When the review runs with payload slimming on (`ModelViewSettings.payload_slimming`, the pane
+default), the registry additionally offers `get_finding`, appended like `compact_query`; the
+default tool set and every existing schema remain unchanged, so it is deliberately not a row of
+the tables above. It takes `finding_id` (a finding id a check result's digest listed) and
+returns `{"finding": <the finding exactly as the session records it>}`, read-only; its view is
+stripped of persistent references like every result's. An unknown id is an error result naming
+it, and `failed` coverage as every tool error is. A slimmed check result lists its findings as a
+digest (counts, at most 25 rows and 200 ids, `detail: "get_finding(finding_id) returns one
+finding in full"`), and this is how one is read in full. It is never in MCP or the terminal
+profile: general chat has no session.
 | `get_review_checklist` | none | The mandatory checklist items and their current bucket. |
 
 `CoverageScope` is an explicit model, not a free-form map: `component_ids: list[str]`,

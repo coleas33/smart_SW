@@ -51,7 +51,7 @@ from pydantic_core import to_jsonable_python
 
 from swreview.agent.providers import ToolCallResult, summarize_result
 from swreview.agent.providers.schema import ToolSpec, tool_spec
-from swreview.agent.settings import EfficiencySettings
+from swreview.agent.settings import EfficiencySettings, ModelViewSettings
 from swreview.report.session import (
     CoverageItem,
     CoverageScope,
@@ -243,6 +243,13 @@ knows it happened - rather than at each of the three adapters.
 
 COMPACT_QUERY_TOOL_FUNCTIONS: tuple[Callable[..., Any], ...] = compact_query_tools()
 """Tools exposed only when `EfficiencySettings.compact_queries` is explicitly on."""
+
+FINDING_DETAIL_TOOL_FUNCTIONS: tuple[Callable[..., Any], ...] = (session.get_finding,)
+"""Offered only with payload slimming on (feature 008, research R2.26): a slimmed check result
+lists its findings as a digest, and this is how the model reads one in full. With slimming
+off every check result already carries its findings whole, so the tool array stays
+`TOOL_FUNCTIONS` byte for byte. Never in MCP or the terminal profile - general chat has no
+session to read a finding from."""
 
 
 def error_payload(message: str) -> dict[str, Any]:
@@ -749,6 +756,7 @@ class ToolRegistry:
         context: ToolContext,
         *,
         efficiency: EfficiencySettings | None = None,
+        model_view: ModelViewSettings | None = None,
     ) -> tuple[Callable[..., Any], ...]:
         """The tools this run gets: the curated list, less any tier it withholds, plus the
         bridge when one is wired and the remodel tools when a plan is being judged."""
@@ -756,23 +764,32 @@ class ToolRegistry:
             context,
             withheld_tier(context, efficiency),
             compact_queries=efficiency is not None and efficiency.compact_queries,
+            finding_detail=model_view is not None and model_view.payload_slimming,
         )
 
     def _offered(
-        self, context: ToolContext, tier: ToolTier | None, *, compact_queries: bool = False
+        self,
+        context: ToolContext,
+        tier: ToolTier | None,
+        *,
+        compact_queries: bool = False,
+        finding_detail: bool = False,
     ) -> tuple[Callable[..., Any], ...]:
         """`functions_for` with the tier already decided, so `dispatch` decides it once.
 
-        The three conditional groups are appended in the order they were added to the
-        product and none is subject to a tier: a tier withholds a *review* tool on the
-        evidence the package carries, and a bridge call, a proposal into a plan and a
-        standards check over an already-decided graded set are none of them.
+        The conditional groups are appended in the order they were added to the product and
+        none is subject to a tier: a tier withholds a *review* tool on the evidence the
+        package carries, and a bridge call, a proposal into a plan and a standards check
+        over an already-decided graded set are none of them. `get_finding` comes with
+        payload slimming (feature 008), beside `compact_query`.
         """
         functions = self.functions
         if tier is not None:
             functions = tuple(fn for fn in functions if fn.__name__ not in tier.tools)
         if compact_queries:
             functions = (*functions, *COMPACT_QUERY_TOOL_FUNCTIONS)
+        if finding_detail:
+            functions = (*functions, *FINDING_DETAIL_TOOL_FUNCTIONS)
         if context.bridge is not None:
             functions = (*functions, *self.bridge_functions)
         if context.remodel is not None:
@@ -788,6 +805,7 @@ class ToolRegistry:
         *,
         sink: RecordingSink | None = None,
         efficiency: EfficiencySettings | None = None,
+        model_view: ModelViewSettings | None = None,
     ) -> ToolDispatch:
         """The built tools plus the name lookup, bound to `context` and `sink`.
 
@@ -809,6 +827,10 @@ class ToolRegistry:
         hands every turn of the session. Nothing downstream can change the tool array
         mid-session, which is what makes "no `tools_changed` cache miss" true by
         construction rather than by discipline.
+
+        `model_view` is what the model reads of each result (feature 008). `None` - every
+        caller that predates it - and `MODEL_VIEW_OFF` give today's tools and today's
+        results; payload slimming adds `get_finding`.
         """
         recorder = self._sink_for(context, sink)
         tier = withheld_tier(context, efficiency)
@@ -816,6 +838,7 @@ class ToolRegistry:
             context,
             tier,
             compact_queries=efficiency is not None and efficiency.compact_queries,
+            finding_detail=model_view is not None and model_view.payload_slimming,
         )
         names = [function.__name__ for function in functions]
         forced = set(fail_tool)
@@ -856,9 +879,14 @@ class ToolRegistry:
         *,
         sink: RecordingSink | None = None,
         efficiency: EfficiencySettings | None = None,
+        model_view: ModelViewSettings | None = None,
     ) -> list[RecordedTool]:
         """The provider-ready tools bound to `context`, in registration order."""
-        return list(self.dispatch(context, fail_tool, sink=sink, efficiency=efficiency).tools)
+        return list(
+            self.dispatch(
+                context, fail_tool, sink=sink, efficiency=efficiency, model_view=model_view
+            ).tools
+        )
 
     @staticmethod
     def _sink_for(context: ToolContext, sink: RecordingSink | None) -> RecordingSink:

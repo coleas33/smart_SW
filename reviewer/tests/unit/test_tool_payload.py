@@ -35,7 +35,12 @@ from google.genai import types
 from swreview.agent.providers.openai_provider import tool_param
 from swreview.agent.providers.schema import ToolSpec, gemini_adapt, tool_spec
 from swreview.mcp.server import MCP_BRIDGE_TOOL_FUNCTIONS, MCP_TOOL_FUNCTIONS
-from swreview.tools.registry import BRIDGE_TOOL_FUNCTIONS, RMS_TIER_TOOLS, TOOL_FUNCTIONS
+from swreview.tools.registry import (
+    BRIDGE_TOOL_FUNCTIONS,
+    FINDING_DETAIL_TOOL_FUNCTIONS,
+    RMS_TIER_TOOLS,
+    TOOL_FUNCTIONS,
+)
 
 ToolFunction = Callable[..., Any]
 
@@ -156,10 +161,12 @@ def measure(
 TOOLSETS: dict[str, tuple[ToolFunction, ...]] = {
     "review": TOOL_FUNCTIONS,
     "review+bridge": (*TOOL_FUNCTIONS, *BRIDGE_TOOL_FUNCTIONS),
+    "review+slim": (*TOOL_FUNCTIONS, *FINDING_DETAIL_TOOL_FUNCTIONS),
     "mcp": MCP_TOOL_FUNCTIONS,
     "mcp+bridge": (*MCP_TOOL_FUNCTIONS, *MCP_BRIDGE_TOOL_FUNCTIONS),
 }
-"""The four arrays that actually get sent. The Ask tab's is not the review's (FR-039b)."""
+"""The five arrays that actually get sent. The Ask tab's is not the review's (FR-039b), and a
+review with payload slimming on (the pane since feature 008) also offers `get_finding`."""
 
 
 def baseline_rows() -> list[PayloadRow]:
@@ -327,6 +334,13 @@ RMS_TIER_DELTA_BYTES = 8_093
 RMS_TIER_DELTA_PERCENT = 22.6
 STRUCTURAL_FLOOR_BYTES = 16_042
 
+SLIM_REVIEW_TOOL_COUNT = 34
+SLIM_OPENAI_ARRAY_BYTES = 0
+SLIM_GEMINI_ARRAY_BYTES = 0
+"""The review array with payload slimming on (feature 008 T062): `TOOL_FUNCTIONS` plus
+`get_finding`, which only a slimmed review offers. **Regenerated, never transcribed** -
+`--write` prints them in its `review+slim` rows."""
+
 TOOL_OBJECT_CEILING = {"openai": 3_000, "gemini": 3_500}
 """No single tool may weigh more than this. Headroom, not a target."""
 
@@ -371,6 +385,21 @@ def test_the_bridge_array_is_pinned_in_both_arms() -> None:
         measure("review+bridge", bridged, "openai", trim=True).total_bytes
         == TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES
     )
+
+
+@pytest.mark.parametrize(
+    ("encoding", "expected"),
+    [("openai", SLIM_OPENAI_ARRAY_BYTES), ("gemini", SLIM_GEMINI_ARRAY_BYTES)],
+)
+def test_the_slimmed_review_array_is_pinned(encoding: str, expected: int) -> None:
+    """Feature 008 T062: the array a pane review sends - one tool more than the review's,
+    `get_finding`, and still under the ceiling."""
+    slim = TOOLSETS["review+slim"]
+    total = measure("review+slim", slim, encoding).total_bytes
+
+    assert len(slim) == SLIM_REVIEW_TOOL_COUNT == REVIEW_TOOL_COUNT + 1
+    assert total == expected
+    assert total < ARRAY_CEILING
 
 
 @pytest.mark.parametrize("encoding", sorted(ENCODINGS))
