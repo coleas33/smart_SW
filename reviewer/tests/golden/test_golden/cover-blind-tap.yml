@@ -65,6 +65,23 @@ result:
       it. Closed by a standards finding, or by the family's summary coverage item.
     id: standards.release
     title: Release standards
+  - bucket: open
+    check_prefix: mass.
+    description: Every part carries a material or a deliberate mass override, its
+      density fits the material's class, and assembly mass overrides are flagged.
+      Parts and bodies that were not read are counted in coverage, never assumed.
+      Closed by a mass finding, or by the family's summary coverage item.
+    id: mass.material
+    title: Mass and material
+  - bucket: open
+    check_prefix: hygiene.
+    description: Part numbers match file names, no two documents share a description
+      or a part number, every model carries a revision, and suppressed or lightweight
+      components are findings. The property names come from the standards profile;
+      without one those checks are skipped, naming the setting. Closed by a hygiene
+      finding, or by the family's summary coverage item.
+    id: hygiene
+    title: Model hygiene
   drawing_finding:
     finding:
       calculation: null

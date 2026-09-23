@@ -1,10 +1,16 @@
 """The US3 backend acceptance (feature 009 T022): the big-assembly summary, re-derived by hand.
 
 Feature 008's committed `big-assembly` replay fixture is shaped like the big recorded review
-(99 findings over 89 component instances, fictional names). Every number and word below was
+(96 findings over 89 component instances, fictional names). Every number and word below was
 read off the fixture's own findings and coverage with `contracts/review-summary.md` sections 2
 to 4 in hand, and written in literally; the comment on each goal names the rows that decide
 it. Written after the implementation and passing with no further production code.
+
+Re-derived 2026-09-23, when the replay fixtures began to follow the code (feature 008, owner
+decision 3A): the fixture then records the recording's three touching interference groups as
+the contacts feature 010 judges them (99 findings in 18 issues before, Interference 6), and
+feature 010's two checklist items (T098-T099), which the recorded review never ran, end as
+unresolved close-out rows - the mass-and-material goal now names its own.
 """
 
 from __future__ import annotations
@@ -59,11 +65,14 @@ def goal(summary: ReviewSummary, goal_id: str) -> GoalLine:
 
 
 def test_the_headline(summary: ReviewSummary) -> None:
-    assert summary.headline == "99 findings in 18 issues"
+    # The three touching groups are contacts, counted in no group, goal or headline.
+    assert summary.headline == "96 findings in 15 issues"
+    assert summary.contacts is not None
+    assert summary.contacts.count == 3
 
 
 def test_the_three_groups_with_their_goals(summary: ReviewSummary) -> None:
-    # Decide: 6 interference.static (demonstrated) and 3 hole.coaxiality (unresolved), both
+    # Decide: 3 interference.static (demonstrated) and 3 hole.coaxiality (unresolved), both
     # needs-judgement families. Fix: 51 demonstrated rms.* and 5 demonstrated
     # standards.part.* (1 cut_list_excluded, 4 sketches_fully_defined). Verify: 20
     # rms.folders.present and 14 rms.params.dimensions_driven_by_equations, all suspected.
@@ -72,7 +81,7 @@ def test_the_three_groups_with_their_goals(summary: ReviewSummary) -> None:
         (group.label, group.text, [(one.title, one.count) for one in group.by_goal])
         for group in summary.groups
     ] == [
-        ("Decide", "9 need your decision", [("Interference", 6), ("Hole alignment", 3)]),
+        ("Decide", "6 need your decision", [("Interference", 3), ("Hole alignment", 3)]),
         ("Fix", "56 to fix", [("Hygiene", 5), ("Modelling practice", 51)]),
         ("Verify", "34 to verify", [("Modelling practice", 34)]),
     ]
@@ -97,6 +106,9 @@ def test_every_goal_line(summary: ReviewSummary, session: ReviewSession) -> None
         for item in session.coverage.unresolved
         if item.check == "standards.part.material_assigned"
     )
+    mass_closeout = next(
+        item.reason for item in session.coverage.unresolved if item.check == "mass.material"
+    )
 
     assert list(lines) == [
         "interference",
@@ -109,9 +121,9 @@ def test_every_goal_line(summary: ReviewSummary, session: ReviewSession) -> None
         "drawings",
         "modelling_practice",
     ]
-    # Interference: 6 interference.static findings are demonstrated; issues outrank the
-    # `interference` checked row.
-    assert lines["interference"] == ("issues found", 6, None, None)
+    # Interference: 3 interference.static findings are demonstrated; issues outrank the
+    # `interference` checked row. The other three groups the review judged are contacts.
+    assert lines["interference"] == ("issues found", 3, None, None)
     # Fasteners: no fastener.* finding; the `fasteners` close-out row is unresolved.
     assert lines["fasteners"] == ("not reached", 0, "evidence missing", FASTENERS_CLOSEOUT)
     # Hole alignment: 3 hole.coaxiality findings are unresolved - a status other than within
@@ -122,10 +134,15 @@ def test_every_goal_line(summary: ReviewSummary, session: ReviewSession) -> None
     assert lines["fits_and_stacks"] == ("not reached", 0, "evidence missing", FIT_CLOSEOUT)
     # Tool access: no finding and no row under fastener.head_clearance or fastener.head_fit.
     assert lines["tool_access"] == ("not reached", 0, "no check ran", None)
-    # Mass and material: only standards.part.material_assigned rows, one unresolved and one
-    # out of scope, no checklist item - the case section 3's last row closes: not reached,
-    # from the unresolved rule row. The out-of-scope row does not make it "not applicable".
-    assert lines["mass_and_material"] == ("not reached", 0, "evidence missing", material_row)
+    # Mass and material: no mass.* finding - the recorded review never ran the family - so the
+    # goal's own item, `mass.material` (010 T099), ends as an unresolved close-out row, and
+    # section 3's row 2 answers from it: not reached, evidence missing, its reason the detail.
+    # Before T099 the goal had no item and row 5 answered from the unresolved
+    # standards.part.material_assigned rule row, which is still there.
+    assert lines["mass_and_material"] == ("not reached", 0, "evidence missing", mass_closeout)
+    assert mass_closeout == (
+        "Mass and material: the review ended without a finding or a coverage entry for it"
+    )
     assert material_row.startswith(MATERIAL_ROW_HEAD)
     # Hygiene: 5 standards.part.* findings are demonstrated (material_assigned is mass and
     # material by its longer prefix, and has no finding).

@@ -42,11 +42,12 @@ uv run swreview benchmark replay "$fx/big-assembly" --no-pane-defaults --standar
 ```
 
 Expected: one line per round with the recorded, as-recorded and requested input; every
-as-recorded figure within 1% of the recorded one; four estimated rounds (`bridge_interference`,
-and since feature 010 the three touching groups judged after it) and one carried presentation
-round; a recorded total of about 12.4M; `tokens counted with o200k_base`; the finding set exact -
-99 recorded, 96 replayed and 3 reclassified as contacts; exit 0. The JSON validates against `ReplayReport`. The fixture
-folder's files are unchanged (`Get-FileHash` before and after).
+as-recorded figure within 1% of the recorded one; one estimated round (`bridge_interference`)
+and one carried presentation round; a recorded total of about 12.4M; `tokens counted with
+o200k_base`; the finding set exact - 96 recorded, 96 replayed, none reclassified (since the
+fixtures follow the code, decision 3A, the recording's three touching groups are contacts in the
+fixture itself); exit 0. The JSON validates against `ReplayReport`. The fixture folder's files
+are unchanged (`Get-FileHash` before and after).
 
 ## Scenario 2 (US1): what the replay refuses
 
@@ -66,9 +67,12 @@ Expected: each exits 1 with one sentence naming what is missing - no `session.js
 uv run pytest tests/integration/test_replay_recorded_runs.py -q
 ```
 
-Expected on the development machine: every round of the three recorded reviews within 1% (at
-most about 0.03%); on 830, 88 findings replayed and 11 not replayable offline (six interference,
-five standards without a profile). Skipped with a reason anywhere the dumps are absent.
+Expected on the development machine: every round of the three recorded reviews drifts from its
+bill by exactly the size change of the results it carries - a zero residual on every round,
+none outside the rule (`contracts/replay.md` section 10; since feature 010's checklist items the
+drift reaches 1.55%, 1.75% and 1.75%, which the old 1% bar would have failed for good); on 830,
+88 findings replayed and 11 not replayable offline (six interference, five standards without a
+profile). Skipped with a reason anywhere the dumps are absent.
 
 ## Scenario 4 (US2): checks first on the fixtures
 
@@ -79,8 +83,8 @@ uv run pytest tests/unit/test_prerun_digest.py tests/unit/test_prerun_repeat_gua
 
 Expected: no recorded finding lost; the requested total far below the as-recorded one; the
 recorded RMS and assembly calls classed `answered from checks`; every one of the 113 groups judged,
-one interference finding or (since feature 010) one contact each, with 3 recorded findings
-reclassified as contacts; 62 findings added by feature 010's checks in the pre-run; the opening message carries the family counts line and no RMS id; a
+one interference finding or (since feature 010) one contact each, the fixture's 3 recorded
+contacts among them and none reclassified; 62 findings added by feature 010's checks in the pre-run; the opening message carries the family counts line and no RMS id; a
 repeated check answers `already_run` with no new finding; the report holds one collapsed
 "Modelling practice: 85 findings across 7 rules" subsection and the ranking one family row.
 

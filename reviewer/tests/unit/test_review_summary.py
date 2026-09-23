@@ -290,9 +290,11 @@ def test_no_findings_is_said_in_words() -> None:
 
 
 def test_the_big_assembly_headline() -> None:
+    """96 and 15, not 99 and 18, since the replay fixtures follow the code (008 decision 3A,
+    2026-09-23): the recording's three touching groups are contacts, in no count here."""
     session = load_session(BIG_ASSEMBLY / "session.json")
 
-    assert summary_of(session).headline == "99 findings in 18 issues"
+    assert summary_of(session).headline == "96 findings in 15 issues"
 
 
 # --- 4. the questions ----------------------------------------------------------------------

@@ -31,7 +31,8 @@ public sealed class ReviewPageSummaryAcceptanceTests
         Assert.Equal(
             new[] { "summary-headline", "summary-groups", "summary-questions", "summary-not-loaded", "summary-goals" },
             ReviewPageDriver.Strings(read, "children"));
-        Assert.Equal("99 findings in 18 issues", read.GetProperty("headline").GetString());
+        // 96 and 15 since the fixture follows the code: three touching groups are contacts (ReviewFixture).
+        Assert.Equal("96 findings in 15 issues", read.GetProperty("headline").GetString());
         Assert.Equal("4 questions for you", read.GetProperty("questions").GetString());
         Assert.Equal("3 of 89 parts not loaded", read.GetProperty("notLoaded").GetString());
         Assert.True(read.GetProperty("beforePanel").GetBoolean(), "the summary must come before Start here.");
@@ -43,11 +44,12 @@ public sealed class ReviewPageSummaryAcceptanceTests
         JsonElement read = Scripted.Value;
 
         Assert.Equal(new[] { "Decide", "Fix", "Verify" }, ReviewPageDriver.Strings(read, "groupLabels"));
+        // Interference 3, not 6, since the fixture follows the code: three touching groups are contacts (ReviewFixture).
         Assert.Equal(
-            new[] { "9 need your decision", "56 to fix", "34 to verify" },
+            new[] { "6 need your decision", "56 to fix", "34 to verify" },
             ReviewPageDriver.Strings(read, "groupTexts"));
         Assert.Equal(
-            new[] { "Interference 6|Hole alignment 3", "Hygiene 5|Modelling practice 51", "Modelling practice 34" },
+            new[] { "Interference 3|Hole alignment 3", "Hygiene 5|Modelling practice 51", "Modelling practice 34" },
             ReviewPageDriver.Strings(read, "groupGoals"));
     }
 

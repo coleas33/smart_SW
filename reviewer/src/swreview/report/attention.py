@@ -152,6 +152,8 @@ CHECKLIST_ITEM_IDS: tuple[str, ...] = (
     "modeling.resilience",
     "coverage.closeout",
     "standards.release",
+    "mass.material",
+    "hygiene",
 )
 """The ids of `agent/checklist_v1.yaml`, in its order.
 

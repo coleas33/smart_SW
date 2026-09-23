@@ -16,8 +16,8 @@ scripted call. A flat list of canned responses would return the same rounds in b
 and the test would pass with no lever at all; `Service` below is the smallest thing that
 makes the two arms actually differ.
 
-**One script, two arms.** Ten `mark_coverage(bucket="checked")` rounds close the ten
-checklist items, and the script then holds one more call. Flag off, that call runs and
+**One script, two arms.** One `mark_coverage(bucket="checked")` round per checklist item
+closes every item, and the script then holds one more call. Flag off, that call runs and
 there is a step for it. Flag on, the round that would have carried it goes out with the
 tools withdrawn, the model writes its closing message, and the turn ends `end` through the
 existing path.
@@ -61,6 +61,10 @@ from tests.unit.test_openai_provider import (
 from tests.unit.test_stop_predicate import closed_by_coverage
 
 CHECKLIST = load_checklist()
+ITEMS = len(CHECKLIST.items)
+"""How many rounds close the checklist, one `mark_coverage` each, and so where every later
+call of a script sits. Derived rather than typed: feature 010 added two items (T098), and an
+item added later moves no round count or call index here."""
 
 CLOSING_TEXT = "Every checklist item is closed; here is the summary."
 SPARE_TOOL = "list_gaps"
@@ -132,7 +136,7 @@ def coverage_arguments(check: str) -> dict[str, Any]:
 
 
 def closing_rounds(*, start: int = 1) -> list[dict[str, Any]]:
-    """Ten rounds, one `mark_coverage` each: the checklist closed the honest way."""
+    """`ITEMS` rounds, one `mark_coverage` each: the checklist closed the honest way."""
     return [
         call_round(start + offset, "mark_coverage", coverage_arguments(item.id))
         for offset, item in enumerate(CHECKLIST.items)
@@ -147,7 +151,7 @@ def script_with_one_call_to_spare() -> list[dict[str, Any]]:
     """
     return [
         *closing_rounds(),
-        call_round(11, SPARE_TOOL, {}),
+        call_round(ITEMS + 1, SPARE_TOOL, {}),
         completed(message_item(CLOSING_TEXT)),
     ]
 
@@ -220,7 +224,7 @@ def test_the_stop_withdraws_the_tools_for_the_next_round(
     run = start(tmp_package_dir, tmp_path / "on", service, efficiency=ON)
     run.start()
 
-    assert service.tool_choices == [*[None] * 10, "none"]
+    assert service.tool_choices == [*[None] * ITEMS, "none"]
 
 
 @respx.mock
@@ -276,7 +280,7 @@ def test_the_stop_sentence_rides_with_the_final_call_s_result(
     """Mechanism B's sentence as C's accompanying text: the model is told why it stopped.
 
     It is in the session's own history, on the result of the call that closed the last
-    item, and nowhere else - not on the eight calls before it.
+    item, and nowhere else - not on the calls before it.
     """
     service = Service(script_with_one_call_to_spare())
 
@@ -295,14 +299,14 @@ def test_the_stop_sentence_rides_with_the_final_call_s_result(
 def test_with_the_flag_off_the_same_script_makes_the_call(
     tmp_package_dir: Path, tmp_path: Path
 ) -> None:
-    """The off arm of the A/B: the same ten rounds, and then the eleventh call runs."""
+    """The off arm of the A/B: the same closing rounds, and then the spare call runs."""
     service = Service(script_with_one_call_to_spare())
 
     run = start(tmp_package_dir, tmp_path / "off", service, efficiency=OFF)
     run.start()
 
     assert tools_called(run) == ["mark_coverage"] * len(CHECKLIST.items) + [SPARE_TOOL]
-    assert service.tool_choices == [None] * 12
+    assert service.tool_choices == [None] * (ITEMS + 2)
     assert turn_reasons(run) == ["end"]
 
 
@@ -394,7 +398,7 @@ def test_an_open_evidence_request_keeps_the_turn_alive(
                 },
             ),
             *closing_rounds(start=2),
-            call_round(12, SPARE_TOOL, {}),
+            call_round(ITEMS + 2, SPARE_TOOL, {}),
             completed(message_item(CLOSING_TEXT)),
         ]
     )
@@ -404,7 +408,7 @@ def test_an_open_evidence_request_keeps_the_turn_alive(
 
     assert [request.status for request in run.session.evidence_requests] == ["open"]
     assert tools_called(run)[-1] == SPARE_TOOL
-    assert service.tool_choices == [None] * 13
+    assert service.tool_choices == [None] * (ITEMS + 3)
 
 
 @respx.mock
@@ -431,7 +435,7 @@ def test_answering_the_request_resumes_the_review_and_then_stops(
             ),
             *closing_rounds(start=2),
             completed(message_item("waiting on the thread depth")),
-            call_round(12, SPARE_TOOL, {}),
+            call_round(ITEMS + 2, SPARE_TOOL, {}),
         ]
     )
 
@@ -465,7 +469,7 @@ def test_a_continued_session_gets_its_tools_back_for_the_new_turn(
     run.continue_session("what about the gaps?")
 
     assert tools_called(run)[-1] == SPARE_TOOL
-    assert service.tool_choices == [*[None] * 10, "none", None, "none"]
+    assert service.tool_choices == [*[None] * ITEMS, "none", None, "none"]
     assert turn_reasons(run) == ["end", "end"]
 
 
@@ -529,9 +533,9 @@ def test_the_rest_of_the_round_that_closed_the_checklist_still_runs(
         [
             *closing_rounds()[:-1],
             one_round_of(
-                (10, "mark_coverage", coverage_arguments(CHECKLIST.items[-1].id)),
-                (11, SPARE_TOOL, {}),
-                (12, "get_package_summary", {}),
+                (ITEMS, "mark_coverage", coverage_arguments(CHECKLIST.items[-1].id)),
+                (ITEMS + 1, SPARE_TOOL, {}),
+                (ITEMS + 2, "get_package_summary", {}),
             ),
         ]
     )
@@ -550,5 +554,5 @@ def test_the_rest_of_the_round_that_closed_the_checklist_still_runs(
     run.start()
 
     assert tools_called(run)[-3:] == ["mark_coverage", SPARE_TOOL, "get_package_summary"]
-    assert service.tool_choices == [*[None] * 10, "none"]
+    assert service.tool_choices == [*[None] * ITEMS, "none"]
     assert outputs_in(service.bodies[-1]).count(runner.COVERAGE_STOP_SENTENCE) == 1

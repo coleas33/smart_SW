@@ -72,7 +72,10 @@ def test_it_is_the_snapshot_plus_the_labels(fixture: dict[str, Any]) -> None:
     }
     assert fixture["labels"] == load_words().labels.model_dump(mode="json")
     assert (fixture["read_only"], fixture["chat_state"]) == (False, "ended")
-    assert fixture["ranking"]["summary"]["headline"] == "99 findings in 18 issues"
+    # 96 and 15, not 99 and 18, since the replay fixtures follow the code (008 decision 3A,
+    # 2026-09-23): the three touching groups are the contacts feature 010 records them as.
+    assert fixture["ranking"]["summary"]["headline"] == "96 findings in 15 issues"
+    assert fixture["ranking"]["summary"]["contacts"]["count"] == 3
 
 
 def test_its_titles_are_the_ones_a_person_reads(
