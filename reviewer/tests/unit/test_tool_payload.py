@@ -313,7 +313,7 @@ Six files of the spec package still quote 34,248 (and 37,709 for the bridge, mea
 37,712); probe-log.md lists them by line for the change that is allowed to edit them."""
 TRIMMED_OPENAI_ARRAY_BYTES = 22_850
 TRIMMED_GEMINI_ARRAY_BYTES = 22_921
-TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES = 25_362
+TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES = 25_413
 """Lever 2 on: the same 32 tools carrying the first paragraph of each docstring instead of
 the whole body. **Regenerated, never transcribed** - `--write` prints them.
 
@@ -334,9 +334,9 @@ RMS_TIER_DELTA_BYTES = 8_093
 RMS_TIER_DELTA_PERCENT = 22.6
 STRUCTURAL_FLOOR_BYTES = 16_042
 
-SLIM_REVIEW_TOOL_COUNT = 34
-SLIM_OPENAI_ARRAY_BYTES = 35_499
-SLIM_GEMINI_ARRAY_BYTES = 35_549
+SLIM_REVIEW_TOOL_COUNT = 36
+SLIM_OPENAI_ARRAY_BYTES = 36_200
+SLIM_GEMINI_ARRAY_BYTES = 36_220
 """The review array with payload slimming on (feature 008 T062): `TOOL_FUNCTIONS` plus
 `get_finding`, which only a slimmed review offers. **Regenerated, never transcribed** -
 `--write` prints them in its `review+slim` rows."""
@@ -344,8 +344,13 @@ SLIM_GEMINI_ARRAY_BYTES = 35_549
 TOOL_OBJECT_CEILING = {"openai": 3_000, "gemini": 3_500}
 """No single tool may weigh more than this. Headroom, not a target."""
 
-ARRAY_CEILING = 36_000
-"""The curated array's ceiling in either encoding: roughly 5 percent above today."""
+ARRAY_CEILING = 38_000
+"""The ceiling for every array a review sends, in either encoding: headroom, not a target.
+
+Raised from 36,000 (feature 005, "roughly 5 percent above today") on 2026-09-23 by the
+owner, when feature 010's check tools and feature 008's `get_finding` took the slimmed pane
+array to 36,220 bytes: about 5 percent above that. The tools the pre-run has already run
+are the next thing to leave the array (about 6,700 bytes), not a higher ceiling."""
 
 
 # --- the tests ---------------------------------------------------------------------------
@@ -380,7 +385,7 @@ def test_trimmed_array_bytes_per_encoding(encoding: str, expected: int) -> None:
 def test_the_bridge_array_is_pinned_in_both_arms() -> None:
     """The 35-tool array a bridged run sends, so a US3 session is measured too."""
     bridged = TOOLSETS["review+bridge"]
-    assert measure("review+bridge", bridged, "openai").total_bytes == 39_491
+    assert measure("review+bridge", bridged, "openai").total_bytes == 39_542
     assert (
         measure("review+bridge", bridged, "openai", trim=True).total_bytes
         == TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES
