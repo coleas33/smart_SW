@@ -8,9 +8,10 @@ package, in words read from `review_words_v1.yaml` (research R2.5).
 
 It is pure: it reads its arguments and the words file, imports no provider and no
 settings, and writes nothing. `report/attention.py` does not import it, so the ranking,
-`attention.json` and both check bodies are exactly what they were before this feature
-(research R2.2). For that reason the session, the ledger and the coverage bucket names are
-not imported at run time: `report/session.py` pulls the provider port in, so the bucket
+`attention.json` and both check bodies carry no summary (research R2.2); the rows of the
+ranking the Review tab prints carry display titles (`review_ranking`, decision 2A). For
+that reason the session, the ledger and the coverage bucket names are not imported at run
+time: `report/session.py` pulls the provider port in, so the bucket
 names are copied below and asserted against the session's own in the tests, the way
 `attention.CHECKLIST_ITEM_IDS` is.
 
@@ -51,6 +52,7 @@ from swreview.report.attention import (
 )
 from swreview.report.names import and_list
 from swreview.report.names import component_names as all_component_names
+from swreview.report.titles import with_display_titles
 from swreview.report.unexamined import not_examined
 
 if TYPE_CHECKING:  # pragma: no cover - imported for annotations only, never at run time
@@ -341,8 +343,14 @@ def review_ranking(
     *,
     usage: UsageLedger | None = None,
 ) -> ReviewRanking:
-    """`rank(session)` with its summary: what the attention, snapshot and disk routes answer."""
-    ranking = rank(session)
+    """`rank(session)` with its summary: what the attention, snapshot and disk routes answer.
+
+    The rows carry the titles a person reads (`report/titles.with_display_titles`, feature 009
+    decision 2A): the Review tab prints them. Order, keys and reasons are `rank`'s own, and
+    `attention.json` keeps the recorded titles.
+    """
+    names = all_component_names(package) if package is not None else {}
+    ranking = with_display_titles(rank(session), session.findings, names)
     return ReviewRanking.of(ranking, review_summary(ranking, session, package, usage=usage))
 
 

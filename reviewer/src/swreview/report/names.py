@@ -6,8 +6,8 @@ building its own would be three chances to disagree about a blank name:
 - `report/explanations.py`, which sends the names beside the ids to the explanation pass;
 - `report/summary.py`, which carries the non-blank names to the Review tab for its
   Start-here meta, its question "about" lines and its contacts list;
-- `tools/recording.title_from`, which names the parts in a finding's title while
-  `observed` keeps its ids.
+- `report/titles.display_title`, which names the parts in the title a person reads while
+  `observed`, and the recorded title the model reads, keep their ids (decision 2A).
 
 `and_list` writes several names the way a sentence does; the not-loaded headline and the
 contacts list both use it.

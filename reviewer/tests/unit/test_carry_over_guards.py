@@ -48,6 +48,7 @@ from swreview.findings import Disposition, Finding
 from swreview.ir.loader import LoadedPackage, save_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.markdown import render_report
+from swreview.report.names import component_names
 from swreview.report.session import (
     MAX_STEPS_CLOSEOUT,
     TRUNCATED_CLOSEOUT,
@@ -550,11 +551,14 @@ def carried_report(tmp_path: Any) -> str:
 
 
 def test_the_finding_heading_names_the_originating_run(tmp_path: Any) -> None:
+    """The heading's title is the one a person reads, so the part is named rather than
+    numbered (feature 009 decision 2A, research R2.28); the run it came from follows it."""
     report = carried_report(tmp_path)
+    part = component_names(carry_package())[COMPONENT]
+    assert part.strip() and part != COMPONENT
 
     heading = (
-        f"#### F-001: {RMS_CHECK} on {COMPONENT} "
-        f"(carried over from session {PREVIOUS_SESSION_ID})"
+        f"#### F-001: {RMS_CHECK} on {part} (carried over from session {PREVIOUS_SESSION_ID})"
     )
     assert heading in report
 

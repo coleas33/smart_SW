@@ -16,7 +16,11 @@ from typing import Any
 
 import pytest
 
+from swreview.ir.loader import load_package
+from swreview.report.names import component_names
+from swreview.report.session import load_session
 from swreview.report.summary import load_words
+from swreview.report.titles import TITLE_LENGTH, display_title
 from tests.support.mechanical import load_generator
 from tests.support.scramble import FICTIONAL_ROOT, strings_of
 from tests.unit.test_replay_fixture_hygiene import RECORDED_DESIGN_IDS
@@ -71,6 +75,23 @@ def test_it_is_the_snapshot_plus_the_labels(fixture: dict[str, Any]) -> None:
     assert fixture["labels"] == load_words().labels.model_dump(mode="json")
     assert (fixture["read_only"], fixture["chat_state"]) == (False, "ended")
     assert fixture["ranking"]["summary"]["headline"] == "99 findings in 18 issues"
+
+
+def test_its_titles_are_the_ones_a_person_reads(
+    generator: ModuleType, fixture: dict[str, Any]
+) -> None:
+    """Decision 2A (research R2.28): the page prints `title` verbatim, so the fixture carries the
+    display titles - whole and named - on its findings and its unfolded ranking rows, of the
+    titles this build records (the generator's `with_current_titles`)."""
+    session = generator.with_current_titles(load_session(BIG_ASSEMBLY / "session.json"))
+    names = component_names(load_package(BIG_ASSEMBLY).package)
+    shown = {finding.id: display_title(finding, names) for finding in session.findings}
+    rows = [row for row in fixture["ranking"]["rows"] if "family" not in row]
+
+    assert [finding["title"] for finding in fixture["findings"]] == list(shown.values())
+    assert [row["title"] for row in rows] == [shown[row["finding_id"]] for row in rows]
+    assert [title for title in shown.values() if "…" in title] == []
+    assert max(len(title) for title in shown.values()) > TITLE_LENGTH
 
 
 def test_every_path_sits_under_the_fictional_root(fixture: dict[str, Any]) -> None:

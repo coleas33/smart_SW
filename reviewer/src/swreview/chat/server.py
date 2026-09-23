@@ -138,9 +138,11 @@ from swreview.report.attention import rank
 from swreview.report.attention_record import ATTENTION_FILE_NAME, write_attention_record
 from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
 from swreview.report.markdown import render_report
-from swreview.report.session import load_session
+from swreview.report.names import component_names
+from swreview.report.session import ReviewSession, load_session
 from swreview.report.snapshot import review_snapshot
 from swreview.report.summary import load_words, review_ranking
+from swreview.report.titles import with_display_titles
 from swreview.report.unexamined import not_examined
 from swreview.tools.registry import TOOL_RESULTS_DIR_NAME
 
@@ -778,8 +780,9 @@ def check_result(check_dir: Path, run: RmsCheckRun) -> dict[str, Any]:
     cheaper half of that trade.
 
     `attention` is `rank()` over the run's own session, minus `session_id` - the body
-    already names the check - which is the block `attention.json` holds and the block the
-    Standards body carries, unchanged (`contracts/attention.md` section 5, FR-022). It is
+    already names the check - which is the block `attention.json` holds, with the titles a
+    person reads (`check_attention`), and the block the Standards body carries
+    (`contracts/attention.md` section 5, FR-022). It is
     built **here**, on the one function that serves the POST, the `GET` re-read and the
     Accept re-render, so those three can never disagree; the `GET` recomputes it in memory
     and writes nothing, because a read must not refresh the record of the order the
@@ -804,10 +807,22 @@ def check_result(check_dir: Path, run: RmsCheckRun) -> dict[str, Any]:
             "count": carried.count,
             "reason": carried.reason,
         },
-        "attention": to_jsonable_python(rank(run.session)),
+        "attention": check_attention(run.session, package),
         "not_examined": to_jsonable_python(not_examined(package)),
         "rule_statements": rule_statements(run.findings, run.coverage),
     }
+
+
+def check_attention(session: ReviewSession, package: EvidencePackage) -> dict[str, Any]:
+    """The `attention` block both check bodies carry (`contracts/attention.md` section 5).
+
+    `rank()` over the run's own session, with each row's title the one a person reads
+    (`report/titles.with_display_titles`, feature 009 decision 2A): the check tabs print it
+    under Start here. `attention.json` beside it keeps the recorded titles; the order, keys
+    and reasons are the same in both.
+    """
+    ranking = with_display_titles(rank(session), session.findings, component_names(package))
+    return to_jsonable_python(ranking)
 
 
 def rule_statements(
@@ -980,7 +995,7 @@ def standards_result(check_dir: Path, run: StandardsCheckRun) -> dict[str, Any]:
             "reason": carried.reason,
         },
         "rebuilt": False,
-        "attention": to_jsonable_python(rank(run.session)),
+        "attention": check_attention(run.session, package),
         "not_examined": to_jsonable_python(not_examined(package)),
     }
 

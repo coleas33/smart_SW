@@ -11,14 +11,22 @@ pin the forwarding, and pin that the rule underneath it still bites when no id i
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
 import pytest
 
 from swreview.checks.result import CheckResult
 from swreview.findings import Calculation
-from swreview.ir.models import EvidencePackage, Quantity
-from swreview.tools.context import context_for
-from swreview.tools.recording import record_result, record_results, result_to_finding
+from swreview.ir.models import EvidencePackage, Quantity, SourceRef
+from swreview.tools import session as session_tools
+from swreview.tools.context import context_for, use_context
+from swreview.tools.recording import (
+    TITLE_LENGTH,
+    record_result,
+    record_results,
+    result_to_finding,
+    title_from,
+)
 
 MakePackage = Callable[..., EvidencePackage]
 
@@ -186,3 +194,48 @@ def test_record_results_without_a_step_id_is_an_error_and_writes_nothing(
 
     assert "requires a calculation or at least one tool_result_id" in str(recorded["error"])
     assert session.findings == []
+
+
+# --- the recorded title: what the model reads, unchanged (feature 009 decision 2A) ---------
+
+LONG_OBSERVED = (
+    "The bore of cmp:0001 and the shaft of cmp:0002 interfere by 0.01 mm at the tight limit of "
+    "the fit. The second sentence is never the title."
+)
+"""A first sentence past 80 characters naming both parts of the package by id."""
+
+
+def test_a_recorded_finding_keeps_the_cut_title_with_its_ids(make_package: MakePackage) -> None:
+    """The whole, named title is built where a person reads it (research R2.28), never here:
+    `Finding.title` is in the tool result, so it is exactly `title_from(observed)`."""
+    result = replace(calculated_result(), observed=LONG_OBSERVED)
+    context = context_for(make_package())
+
+    finding = result_to_finding(context, result, component_ids=[COMPONENT])
+
+    assert finding.title == title_from(LONG_OBSERVED)
+    assert finding.title.endswith("…") and len(finding.title) <= TITLE_LENGTH
+    assert finding.title.startswith("The bore of cmp:0001 and the shaft of cmp:0002")
+    assert finding.observed == LONG_OBSERVED
+
+
+def test_a_drawing_finding_keeps_the_cut_title_with_its_ids(make_package: MakePackage) -> None:
+    observed = (
+        "The drawing of cmp:0001 calls out the tapped hole without the usable thread depth, so "
+        "the engagement cannot be judged. Nothing else is missing."
+    )
+    context = context_for(make_package())
+    with use_context(context):
+        result = session_tools.record_drawing_finding(
+            document_id="doc:2",
+            sheet="Sheet1",
+            observed=observed,
+            requirement="A tapped hole callout states the usable thread depth",
+            source_refs=[SourceRef(document_id="doc:2", sheet="Sheet1")],
+            status="suspected",
+            recommended_action="Add the tapped depth to the hole callout",
+        )
+
+    assert result["finding"]["title"] == title_from(observed)
+    assert result["finding"]["title"].startswith("The drawing of cmp:0001")
+    assert result["finding"]["observed"] == observed

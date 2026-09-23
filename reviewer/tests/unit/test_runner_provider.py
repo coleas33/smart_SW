@@ -38,7 +38,9 @@ from swreview.agent.providers import (
     TurnResult,
 )
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.report.names import component_names
 from swreview.report.session import ReviewSession
+from swreview.report.titles import display_title, pane_finding, title_from
 from tests.support.contracts import contract_validator
 
 MODEL = "fake-1"
@@ -455,6 +457,48 @@ def test_a_rerun_folded_onto_an_earlier_finding_is_reannounced_under_that_id(
     assert [body["id"] for body in announced] == ["F-001", "F-002", "F-001"]
     assert [body["status"] for body in announced] == ["unresolved", "suspected", "suspected"]
     assert announced[-1] == run.session.findings[0].model_dump(mode="json")
+
+
+LONG_DRAWING_OBSERVED = (
+    "The drawing of cmp:0001 calls out the tapped hole without the usable thread depth, so the "
+    "engagement of the screw cannot be judged from the sheet. Nothing else is missing."
+)
+"""A first sentence past 80 characters that names `housing-1` by its id (feature 009 T061)."""
+
+
+def long_drawing_finding(status: str) -> ScriptedToolCall:
+    arguments = {**DRAWING_FINDING_ARGUMENTS, "observed": LONG_DRAWING_OBSERVED, "status": status}
+    return ScriptedToolCall(name="record_drawing_finding", arguments=arguments)
+
+
+def test_every_finding_announcement_carries_the_title_a_person_reads(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """Decision 2A (feature 009 research R2.28): the stream is what the pane prints, so both
+    announcements - the tool's and the runner's re-announcement of a fold - carry the whole,
+    named title, while `session.json` keeps the recorded one the model read."""
+    run = review(
+        [
+            turn(
+                "blocked",
+                long_drawing_finding("unresolved"),
+                call("request_evidence", **EVIDENCE_ARGUMENTS),
+            ),
+            turn("resolved", long_drawing_finding("suspected")),
+        ]
+    )
+
+    run.answer_evidence("ER-001", "The usable thread depth is 12 mm.")
+
+    announced = bodies_of(run, "finding")
+    names = component_names(run.context.ir)
+    [recorded] = run.session.findings
+    assert [body["id"] for body in announced] == ["F-001", "F-002", "F-001"]
+    assert {body["title"] for body in announced} == {display_title(recorded, names)}
+    assert announced[-1] == pane_finding(recorded, names)
+    assert recorded.title == title_from(LONG_DRAWING_OBSERVED)
+    assert written_session(run)["findings"][0]["title"] == title_from(LONG_DRAWING_OBSERVED)
+    assert "housing-1" in announced[-1]["title"] and "…" not in announced[-1]["title"]
 
 
 # --- multi-turn ------------------------------------------------------------------------------

@@ -13,6 +13,7 @@ always), timing, tokens (only when the session carries usage), investigation tra
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 
 from swreview.agent.providers import CACHED_SHARE_PUBLISHABLE, TokenUsage
@@ -34,6 +35,7 @@ from swreview.report.attention import (
     family_title,
     start_here_lines,
 )
+from swreview.report.names import component_names
 from swreview.report.session import (
     CoverageItem,
     CoverageScope,
@@ -41,6 +43,7 @@ from swreview.report.session import (
     SessionUsage,
 )
 from swreview.report.text import markdown_text
+from swreview.report.titles import display_title, with_display_titles
 from swreview.report.unexamined import not_examined
 
 _SEVERITY_ORDER = ("high", "medium", "low", "info")
@@ -74,8 +77,15 @@ def render_report(
     `ranking` is keyword-only and comes after `package`, which six of the eight call sites
     pass positionally (research R2.6). With no ranking the output is what this renderer
     produced before "Start here" existed, byte for byte.
+
+    Every finding title here is the one a person reads (`report/titles.display_title`,
+    feature 009 decision 2A): whole, with the parts named from `package`. The ranking's rows
+    are titled the same way here, so every caller passes `rank(session)` as it always did.
     """
     components_by_id = _components_by_id(package)
+    names = component_names(package) if package is not None else {}
+    if ranking is not None:
+        ranking = with_display_titles(ranking, session.findings, names)
     lines: list[str] = []
 
     lines.extend(_render_title(session))
@@ -97,7 +107,7 @@ def render_report(
         if ranking is not None
         else {}
     )
-    lines.extend(_render_findings(session, package, components_by_id, explanations))
+    lines.extend(_render_findings(session, package, components_by_id, names, explanations))
     lines.append("")
     if session.contacts:
         lines.extend(_render_contacts(session, package))
@@ -383,9 +393,10 @@ def _render_finding(
     finding: Finding,
     package: EvidencePackage | None,
     components_by_id: dict[str, ComponentInstance],
+    names: Mapping[str, str],
     explanations: dict[str, str] | None = None,
 ) -> list[str]:
-    heading = f"#### {finding.id}: {finding.title}"
+    heading = f"#### {finding.id}: {display_title(finding, names)}"
     if finding.carried_over_from is not None:
         # The originating run in the heading, so an engineer scanning the report sees
         # which verdicts were not computed today before reading a word of them (FR-102).
@@ -456,6 +467,7 @@ def _render_findings(
     session: ReviewSession,
     package: EvidencePackage | None,
     components_by_id: dict[str, ComponentInstance],
+    names: Mapping[str, str],
     explanations: dict[str, str] | None = None,
 ) -> list[str]:
     lines = ["## Findings", ""]
@@ -480,13 +492,13 @@ def _render_findings(
         lines.append(f"### {_SEVERITY_HEADINGS[severity]}")
         lines.append("")
         for finding in findings:
-            lines.extend(_render_finding(finding, package, components_by_id, explanations))
+            lines.extend(_render_finding(finding, package, components_by_id, names, explanations))
             lines.append("")
 
     for family, findings in by_family.items():
         if findings:
             lines.extend(
-                _render_family(family, findings, package, components_by_id, explanations)
+                _render_family(family, findings, package, components_by_id, names, explanations)
             )
 
     return lines
@@ -497,6 +509,7 @@ def _render_family(
     findings: list[Finding],
     package: EvidencePackage | None,
     components_by_id: dict[str, ComponentInstance],
+    names: Mapping[str, str],
     explanations: dict[str, str] | None,
 ) -> list[str]:
     """One folded family, collapsed, with every finding in full (feature 008, FR-014).
@@ -519,7 +532,7 @@ def _render_family(
         "",
     ]
     for finding in findings:
-        lines.extend(_render_finding(finding, package, components_by_id, explanations))
+        lines.extend(_render_finding(finding, package, components_by_id, names, explanations))
         lines.append("")
     lines.extend(["</details>", ""])
     return lines

@@ -44,7 +44,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic_core import to_jsonable_python
 from starlette.testclient import TestClient
 
 from swreview.agent import providers
@@ -60,6 +59,7 @@ from swreview.report.attention import rank
 from swreview.report.attention_record import read_attention_record
 from swreview.report.dispositions import apply_disposition, find_finding
 from swreview.report.session import load_session
+from tests.support.attention import ranking_as_shown
 from tests.support.features import AssemblySpec, PartSpec, equation, feature, folder, rms_package
 from tests.support.packages import CREATED_AT
 
@@ -447,14 +447,17 @@ class TestRunCheck:
         """FR-022: the tab renders the ranking from the body it already holds.
 
         The value is `rank()` over the session the run just wrote, minus `session_id` -
-        the body already names the check - which is the same block `attention.json` holds
+        the body already names the check - which is the block `attention.json` holds, with
+        each row's title the one a person reads (feature 009 decision 2A, research R2.28),
         and the same block the Standards body carries (`contracts/attention.md` section 5).
         """
         result = start_check(client, check_dir)
+        session = load_session(check_dir / SESSION_FILE)
 
-        assert result["attention"] == to_jsonable_python(
-            rank(load_session(check_dir / SESSION_FILE))
-        )
+        assert result["attention"] == ranking_as_shown(check_dir)
+        assert [row.title for row in read_attention_record(check_dir).rows] == [
+            row.title for row in rank(session).rows
+        ], "the record keeps the recorded titles"
         assert result["attention"]["policy_version"] == "attention_policy_v1"
         assert "session_id" not in result["attention"]
         assert [row["finding_id"] for row in result["attention"]["rows"]] == [
@@ -922,7 +925,7 @@ class TestAcceptException:
         accept(client, CHECK_ID, finding_id)
 
         after = client.get(f"/checks/{CHECK_ID}").json()["attention"]
-        assert after == to_jsonable_python(rank(load_session(check_dir / SESSION_FILE)))
+        assert after == ranking_as_shown(check_dir)
         assert after != before["attention"]
         waived = next(row for row in after["rows"] if row["check"] == FAIL_RULE)
         assert waived["status"] == "checked_within_scope"

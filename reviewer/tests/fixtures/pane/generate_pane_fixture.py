@@ -9,10 +9,12 @@ It writes `report/snapshot.review_snapshot` of feature 008's committed, fictiona
 finished chat: its last seq the event log's last, and its usage ledger the event log replayed
 into one, so the summary's resume cost is the figure the run measured - plus the words file's
 `labels` block, to
-`extractor/SwReview.AddIn.Tests/Fixtures/review-big-assembly.json`. Every finding's title is
-recomputed first by the current `tools/recording.title_from` from its `observed`, so the
-fixture shows what a review recorded by this build shows, not what the recording's build
-wrote. The WebView2 acceptance tests of User Stories 3 to 7 load that file, so the page is
+`extractor/SwReview.AddIn.Tests/Fixtures/review-big-assembly.json`. Every finding's recorded
+title is recomputed first by the current `title_from` from its `observed`, so the fixture
+shows what a review recorded by this build shows, not what the recording's build wrote; the
+titles the page prints are then the snapshot's own display titles
+(`report/titles.display_title`, feature 009 decision 2A) - this script builds no title of its
+own. The WebView2 acceptance tests of User Stories 3 to 7 load that file, so the page is
 tested against exactly what the backend produces (research R2.24).
 
 `tests/unit/test_pane_fixture.py` fails when the committed file differs from a fresh
@@ -35,7 +37,7 @@ from swreview.ir.loader import load_package
 from swreview.report.session import ReviewSession, load_session
 from swreview.report.snapshot import review_snapshot
 from swreview.report.summary import load_words
-from swreview.tools.recording import title_from
+from swreview.report.titles import title_from
 
 FIXTURE_ROOT = Path(__file__).resolve().parent
 REVIEWER = FIXTURE_ROOT.parents[2]
@@ -50,7 +52,8 @@ WRITE_COMMAND = "uv run python tests/fixtures/pane/generate_pane_fixture.py --wr
 
 
 def with_current_titles(session: ReviewSession) -> ReviewSession:
-    """`session` with every finding's title as this build's `title_from` would write it."""
+    """`session` with every finding's recorded title as this build's `title_from` would write
+    it: the title the model reads, from which `review_snapshot` builds the one a person reads."""
     findings = [
         finding.model_copy(update={"title": title_from(finding.observed)})
         for finding in session.findings
