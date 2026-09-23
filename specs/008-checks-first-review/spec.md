@@ -6,7 +6,7 @@
 
 **Status**: Draft
 
-**Amended**: 2026-09-23, by the planning pass; every change is listed with its reason in [research.md](research.md) R4.
+**Amended**: 2026-09-23, by the planning pass; every change is listed with its reason in [research.md](research.md) R4. Amended again 2026-09-23 by the owner: the tools checks first already ran leave the tool array (FR-030, research R2.53).
 
 **Input**: Owner direction of 2026-09-22 after the pilot workstation's evening packet (`docs/pane-findings-2026-09-20-review-gui.md`) and the analysis recorded in `docs/roadmap-2026-09-22.md`: "Token usage is way too high, we gotta get more efficient." Decided the same day: model-facing payload slimming, checks first, history pruning and parallel tool calls all become pane defaults, gated by an offline replay of the recorded runs; modelling-practice findings appear in Review as one folded group.
 
@@ -100,6 +100,7 @@ The engineer and the owner see what a review cost in terms they can act on: how 
 
 - **A recorded run from older code.** Tool names or arguments in the recording that the current code does not know are replayed as estimated rounds from their recorded size and named in the output; the replay never fails silently on them.
 - **Checks-first and a model that asks anyway.** A model that calls a check the pre-run already ran gets the recorded digest, never a second run, so findings are not duplicated.
+- **A model that calls a withheld tool anyway** (FR-030). Only the tool's schema leaves the request; the tool stays in the dispatch, so the call is answered by the re-call guard, never with "no tool named".
 - **Thousands of interference groups.** Live detection on a large assembly can return many groups; every group is judged in code, and the digest states the count by outcome rather than listing them.
 - **Live detection fails.** Any failure the connection to SOLIDWORKS reports becomes a failed coverage row naming the reason, the review starts, and the model is told interference was not evaluated. A detection that never answers cannot be told apart from a slow one by the connection, which has no read timeout; the plan records it as an open item.
 - **A pruned result the model needs again.** The stub names how to fetch it; a re-fetch is an ordinary recorded step. Findings are never re-derived from a stub.
@@ -135,6 +136,7 @@ The engineer and the owner see what a review cost in terms they can act on: how 
 - **FR-012**: A model call to a check family the pre-run already ran MUST be answered with the recorded digest and MUST NOT produce findings again.
 - **FR-013**: Checks first MUST be the pane default; the former separate pre-run settings are folded into it. On the command line it stays off unless turned on explicitly or by one switch that applies every pane default, so the two can be compared.
 - **FR-014**: Modelling-practice findings MUST appear in the ranking and the report as one group per rule family with the counts of findings and rules, collapsed, with every finding still present; the model MUST be told only the counts.
+- **FR-030** *(amendment 2026-09-23)*: When checks first ran and `withhold_prerun_tools` is on - the pane default for both providers; on the command line off unless named or turned on by `--pane-defaults` - a check tool the pre-run ran to completion MUST leave the tool array for the rest of the session. Completed means every one of its pre-run calls completed; `check_interference_group` also needs every detected group judged and live detection not offered to the model; the three RMS tools leave together, and only when all three ran package-wide; `check_standards` only when a standards run was attached and it ran. A tool the pre-run did not call, withheld by tier, did not reach or saw fail stays offered, and `get_finding` always stays. A call to a withheld tool MUST be answered by the re-call guard (FR-012), never as an unknown tool, in both adapters. Nothing the model is sent may tell it to call a withheld tool, and the opening digest names the tools withheld.
 
 **The model's view**
 

@@ -40,6 +40,17 @@ checks that take no arguments. Five pieces, in the order they ship:
 The pane is the only surface whose defaults change. No thirteenth lever, no new event type, no IR
 schema change, no new agent stage, no change to a finding's content.
 
+**Amendment 2026-09-23** (owner; FR-030, research R2.53, `contracts/checks-first.md` section 7,
+tasks Phase 9). Lever 13, `withhold_prerun_tools`, on in the pane for both providers: once checks
+first has run a check tool to completion, the tool leaves the array for the rest of the session.
+`PrerunGuard`, which already answers those tools' repeats, leaves them out of the array it hands the
+adapters; three sentences of the system prompt and the checklist that tell the model to call them
+change only when they are withheld (`agent/withheld_wording.py`); a stub never tells the model to
+call a tool it is not offered. Files: `agent/settings.py`, `prerun.py`, `agent/runner.py`,
+`agent/withheld_wording.py` (new), `agent/providers/pruning.py` and both adapters,
+`benchmark/replay.py`, `benchmark/compare.py`, `cli.py`, the session schema; the lever-count pins
+move to thirteen by design.
+
 ## Technical Context
 
 **Language/Version**: Python 3.11+ for everything but one page function; plain vendored JavaScript for
