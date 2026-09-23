@@ -533,20 +533,20 @@ are the next thing to leave the array (about 6,700 bytes), not a higher ceiling 
 did, with feature 008's lever 13 (`PRERUN_SAVED_BYTES`)."""
 
 DRAWING_ARM_TOOL_COUNTS: dict[str, int] = {
-    "review+drawings": 0,
-    "review+slim+drawings": 0,
-    "review+slim+drawings-prerun": 0,
-    "review+slim+bridge+drawings-prerun": 0,
-    "review+bridge+drawings": 0,
-    "review+slim+bridge+drawings": 0,
+    "review+drawings": 37,
+    "review+slim+drawings": 38,
+    "review+slim+drawings-prerun": 30,
+    "review+slim+bridge+drawings-prerun": 34,
+    "review+bridge+drawings": 40,
+    "review+slim+bridge+drawings": 41,
 }
 DRAWING_ARM_BYTES: dict[str, dict[str, int]] = {
-    "review+drawings": {"openai": 0, "gemini": 0},
-    "review+slim+drawings": {"openai": 0, "gemini": 0},
-    "review+slim+drawings-prerun": {"openai": 0, "gemini": 0},
-    "review+slim+bridge+drawings-prerun": {"openai": 0, "gemini": 0},
-    "review+bridge+drawings": {"openai": 0, "gemini": 0},
-    "review+slim+bridge+drawings": {"openai": 0, "gemini": 0},
+    "review+drawings": {"openai": 36_570, "gemini": 36_539},
+    "review+slim+drawings": {"openai": 36_926, "gemini": 36_844},
+    "review+slim+drawings-prerun": {"openai": 29_651, "gemini": 29_935},
+    "review+slim+bridge+drawings-prerun": {"openai": 34_579, "gemini": 34_630},
+    "review+bridge+drawings": {"openai": 40_268, "gemini": 40_055},
+    "review+slim+bridge+drawings": {"openai": 40_624, "gemini": 40_360},
 }
 """The drawing arm (feature 011 FR-050): every `DRAWING_ARMS` array per encoding, lever 2 off.
 **Regenerated, never transcribed** - `--write` prints them in its Drawing arm table, in a commit
