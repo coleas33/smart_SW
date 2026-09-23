@@ -186,15 +186,20 @@ its own bytes.
 
 | Field | Type | Interop read (seat-validated) |
 |---|---|---|
-| `fit_class_raw` | str \| None | `IWizardHoleFeatureData2.HoleFit`, verbatim |
-| `thread_class_raw` | str \| None | `.ThreadClass`, verbatim |
-| `thru_hole_diameter`, `tap_drill_diameter` | Quantity \| None | `.ThruHoleDiameter`, `.TapDrillDiameter` |
-| `counterbore_diameter`, `counterbore_depth` | Quantity \| None | `.CounterBoreDiameter`, `.CounterBoreDepth` |
-| `countersink_diameter` | Quantity \| None | `.CounterSinkDiameter` |
-| `countersink_angle` | Angle \| None | `.CounterSinkAngle` |
-| `head_clearance` | Quantity \| None | `.HeadClearance` |
+| `fit_class_raw` | str \| None | `IWizardHoleFeatureData2.HoleFit`, an `int` in `swWzdHoleScrewClearanceTypes_e` (reflected), written as the member's name (`swScrewClearanceClose`, `...Normal`, `...Loose`) or the integer's text; counterbore and countersink holes only, the types the API documents it for |
+| `thread_class_raw` | str \| None | `.ThreadClass`, verbatim (1B, 2B, 3B); tapped holes only |
+| `thru_hole_diameter`, `tap_drill_diameter` | Quantity \| None | `.ThruHoleDiameter`, `.TapDrillDiameter`, metres |
+| `counterbore_diameter`, `counterbore_depth` | Quantity \| None | `.CounterBoreDiameter`, `.CounterBoreDepth`, metres |
+| `countersink_diameter` | Quantity \| None | `.CounterSinkDiameter`, metres |
+| `countersink_angle` | Angle \| None | `.CounterSinkAngle`, radians |
+| `head_clearance` | Quantity \| None | `.HeadClearance`, metres |
 
-Each field is null plus a `hole_wizard` gap naming it when the read fails. Nothing is derived.
+Each field is null plus a `hole_wizard` gap naming it when the read fails, and null with no gap
+when SOLIDWORKS answers zero or a blank (the field does not apply to this hole type); a null is
+omitted, so `"wizard": {}` means "read, and nothing applied". Nothing is derived. **`HoleFit` is a
+screw clearance fit, never an ISO 286 class**: a hole's ISO class (`H7`) arrives on its dimension,
+`ModelDimension.fit_hole_class`, so the resolver's Hole Wizard source (research R2.18 row 4) binds
+only if a seat run shows a Hole Wizard hole carrying an ISO class somewhere this record reads (T104).
 
 ### `ModelDimension` (`EvidencePackage.model_dimensions`, omitted when empty)
 
@@ -202,10 +207,12 @@ Each field is null plus a `hole_wizard` gap naming it when the read fails. Nothi
 |---|---|---|
 | `id` | str | `^mdm:[0-9]{4,}$` |
 | `document_id`, `feature_name`, `name` | str | `name` as `IDimension.FullName` reads |
-| `dimension_type` | Literal["linear", "diameter", "radius", "angular", "other"] | |
-| `nominal` | Quantity \| Angle | |
-| `tolerance` | `Tolerance` | `kind` from `GetToleranceType`, limits from `GetToleranceValues`; `source.document_id` the part and `source.persist_ref` the dimension's |
-| `fit_hole_class`, `fit_shaft_class` | str \| None | `GetToleranceFitValues` |
+| `dimension_type` | Literal["linear", "diameter", "radius", "angular", "other"] | named from `IDisplayDimension.Type2`: diameter 6, radial 5, angular 3 and 16, linear and ordinate 1, 2, 7, 8, 9, 11, 12, anything else `other` |
+| `dimension_type_raw` | int \| None | `IDisplayDimension.Type2` verbatim |
+| `nominal` | Quantity \| Angle | `IDimension.GetSystemValue3`, metres or radians |
+| `tolerance` | `Tolerance` \| None | from `IDimension.Tolerance` (`IDimensionTolerance`; `IDimension.GetToleranceType/Values/FitValues` are obsolete in the 2024 API): `Type` NONE is kind `none`, BASIC `basic`, SYMMETRIC `symmetric`, BILAT, LIMIT, FITWITHTOL and FITTOLONLY `bilateral` with the signed deviations `GetMinValue2`/`GetMaxValue2` report; **null** for MIN, MAX, FIT, BLOCK and GENERAL, which the IR's kinds cannot express, and when the read failed; `source.document_id` the part, `source.annotation` the name, `source.persist_ref` the dimension's |
+| `tolerance_type_raw` | int \| None | `IDimensionTolerance.Type` verbatim (`swTolType_e`) |
+| `fit_hole_class`, `fit_shaft_class` | str \| None | `GetHoleFitValue`, `GetShaftFitValue`, for the three fit types |
 | `persist_ref`, `persist_ref_scope` | PersistRef \| None, str \| None | |
 
 ### `ModelAnnotation` (`EvidencePackage.model_annotations`, omitted when empty)
@@ -214,11 +221,19 @@ Each field is null plus a `hole_wizard` gap naming it when the read fails. Nothi
 |---|---|---|
 | `id` | str | `^man:[0-9]{4,}$` |
 | `document_id` | str | |
-| `kind` | Literal["gtol", "datum"] | `IGtol` or `IDatumTag` |
-| `symbol_raw`, `values_raw`, `datums_raw` | list[str] | `GetFrameSymbols3`, `GetFrameValues`, `GetDatumIdentifier`, verbatim |
+| `kind` | Literal["gtol", "datum"] | `IAnnotation.GetType` is a GTol or a datum tag |
+| `frames` | list[`GtolFrame`] | a GTol's frames 1 to `IGtol.GetFrameCount()`; empty for a datum tag |
+| `datum_identifier_raw` | str \| None | `IGtol.GetDatumIdentifier`, verbatim, when not blank |
 | `label` | str \| None | `IDatumTag.GetLabel` |
-| `attached_persist_refs` | list[PersistRef] | the faces the annotation is attached to, the binding key (research R2.18) |
+| `is_dimxpert` | bool \| None | `IAnnotation.IsDimXpert()`, which answers T105's "DimXpert or MBD" |
+| `attached_persist_refs` | list[PersistRef] | the faces `IAnnotation.GetAttachedEntities3` returns, the binding key (research R2.18); edges, vertices and dangling attachments are left out |
 | `persist_ref`, `persist_ref_scope` | PersistRef \| None, str \| None | |
+
+`GtolFrame`: `number` (one-based), `symbols_raw` (`GetFrameSymbols3`, six strings), `values_raw`
+(`GetFrameValues`: tolerance 1, tolerance 2, datums 1 to 3) and `symbol_xml_raw`
+(`IGtol.GetFrame(n).GetSymbolXml()`). The API answers the first two only for a GTol created
+before SOLIDWORKS 2022 and the third only for one in the 2022 format, so both are asked and
+whichever answered is kept, verbatim; parsing is Python's.
 
 `SCHEMA_VERSION = "1.5.0"`; a 1.4.0 package loads and serializes to its own bytes.
 

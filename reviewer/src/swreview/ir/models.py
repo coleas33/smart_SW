@@ -35,7 +35,7 @@ from pydantic import (
     model_validator,
 )
 
-SCHEMA_VERSION = "1.4.0"
+SCHEMA_VERSION = "1.5.0"
 SUPPORTED_SCHEMA_MAJOR = 1
 SCHEMA_VERSION_PATTERN = r"^1\.[0-9]+\.[0-9]+$"
 
@@ -332,9 +332,11 @@ class Document(IRModel):
     mass_overridden: bool | None = Field(
         default=None,
         description=(
-            "IMassProperty.OverrideMass, read before the volume gates so a surface-only part "
-            "still answers (schema 1.4.0); null plus a mass_override gap when the object, the "
-            "cast or the read fails."
+            "Whether the mass is overridden, read before the volume gates so a surface-only "
+            "part still answers (schema 1.4.0). From feature 010 through the interface that "
+            "has it: IModelDocExtension.CreateMassProperty()'s IMassProperty.OverrideMass, "
+            "else IMassProperty2.GetOverrideOptions()'s OverrideMass; null plus one "
+            "mass_override gap naming both paths when neither answers."
         ),
     )
     material_configuration: str | None = Field(
@@ -570,6 +572,79 @@ class Mate(IRModel):
     angle: Angle | None
 
 
+class HoleWizardData(IRModel):
+    """What a Hole Wizard feature says beyond its size, depths and axis (schema 1.5.0,
+    feature 010 US8): the fit and thread classes and the drill, counterbore and countersink
+    sizes (FR-021).
+
+    Every field is read verbatim from `IWizardHoleFeatureData2` in the units SOLIDWORKS
+    reports - metres and radians - and nothing is derived. A read that failed is null plus a
+    `hole_wizard` gap naming the field; a read that answered zero or a blank (the field does
+    not apply to this hole type) is null with no gap. Absent keys and nulls are the same
+    fact, so the record carries only what was read, and an empty record says the wizard data
+    was read and nothing applied.
+    """
+
+    fit_class_raw: str | None = Field(
+        default=None,
+        description=(
+            "IWizardHoleFeatureData2.HoleFit as the name of its swWzdHoleScrewClearanceTypes_e "
+            "member (swScrewClearanceClose, ...Normal, ...Loose), or the integer's text for a "
+            "value the enumeration does not name. A screw clearance fit, never an ISO 286 "
+            "tolerance class: a hole's ISO class arrives on its dimension "
+            "(ModelDimension.fit_hole_class). Read for counterbore and countersink holes only, "
+            "the two types the API documents it for."
+        ),
+    )
+    thread_class_raw: str | None = Field(
+        default=None,
+        description=(
+            "IWizardHoleFeatureData2.ThreadClass verbatim (1B, 2B, 3B for ANSI inch); read for "
+            "a tapped hole only, because only a tapped hole has a thread."
+        ),
+    )
+    thru_hole_diameter: Quantity | None = Field(
+        default=None, description="IWizardHoleFeatureData2.ThruHoleDiameter, metres"
+    )
+    tap_drill_diameter: Quantity | None = Field(
+        default=None, description="IWizardHoleFeatureData2.TapDrillDiameter, metres"
+    )
+    counterbore_diameter: Quantity | None = Field(
+        default=None, description="IWizardHoleFeatureData2.CounterBoreDiameter, metres"
+    )
+    counterbore_depth: Quantity | None = Field(
+        default=None, description="IWizardHoleFeatureData2.CounterBoreDepth, metres"
+    )
+    countersink_diameter: Quantity | None = Field(
+        default=None, description="IWizardHoleFeatureData2.CounterSinkDiameter, metres"
+    )
+    countersink_angle: Angle | None = Field(
+        default=None,
+        description="IWizardHoleFeatureData2.CounterSinkAngle, radians (the API's system unit)",
+    )
+    head_clearance: Quantity | None = Field(
+        default=None, description="IWizardHoleFeatureData2.HeadClearance, metres"
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler,
+            self,
+            nulls=(
+                "fit_class_raw",
+                "thread_class_raw",
+                "thru_hole_diameter",
+                "tap_drill_diameter",
+                "counterbore_diameter",
+                "counterbore_depth",
+                "countersink_diameter",
+                "countersink_angle",
+                "head_clearance",
+            ),
+        )
+
+
 class Hole(IRModel):
     id: str
     persist_ref: PersistRef
@@ -591,6 +666,20 @@ class Hole(IRModel):
     diameter: Quantity | None
     axis: Axis
     face_ids: list[str]
+    wizard: HoleWizardData | None = Field(
+        default=None,
+        description=(
+            "The Hole Wizard data beyond size, depths and axis (schema 1.5.0, feature 010). "
+            "Omitted when null: a package written before 1.5.0, or a hole whose definition "
+            "was not read."
+        ),
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_null_1_5_0_fields(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Leave `wizard` out when it is null, so a 1.4.0 hole round-trips to the bytes a
+        1.4.0 build wrote (`omit_additive`)."""
+        return omit_additive(handler, self, nulls=("wizard",))
 
 
 class CosmeticThread(IRModel):
@@ -1176,6 +1265,165 @@ class CutListItem(IRModel):
         )
 
 
+class ModelDimension(IRModel):
+    """One dimension of a part document's features and its tolerance (schema 1.5.0,
+    feature 010 US8, FR-022).
+
+    Read from `IFeature.GetFirstDisplayDimension`/`GetNextDisplayDimension`,
+    `IDisplayDimension.GetDimension2(0)` and `IDimension.Tolerance` (`IDimensionTolerance`),
+    once per part document. Every dimension is recorded, toleranced or not, because a
+    tolerance binds to a hole only through a dimension that is the unique one of its value in
+    the document (research R2.18). Values are in SOLIDWORKS' system units, metres and radians.
+    """
+
+    id: Annotated[str, StringConstraints(pattern=r"^mdm:[0-9]{4,}$")]
+    document_id: str
+    feature_name: str = Field(description="IFeature.Name of the feature that owns the dimension")
+    name: str = Field(description="IDimension.FullName, e.g. D1@Sketch1@part.SLDPRT")
+    dimension_type: Literal["linear", "diameter", "radius", "angular", "other"] = Field(
+        description=(
+            "Named from IDisplayDimension.Type2 (swDimensionType_e): diameter 6, radial 5, "
+            "angular 3 and 16, linear and ordinate 1, 2, 7, 8, 9, 11, 12; anything else is "
+            "'other' and dimension_type_raw keeps the number"
+        )
+    )
+    dimension_type_raw: int | None = Field(
+        default=None, description="IDisplayDimension.Type2 verbatim"
+    )
+    nominal: Quantity | Angle = Field(
+        description="IDimension.GetSystemValue3 in this configuration: metres or radians"
+    )
+    tolerance: Tolerance | None = Field(
+        default=None,
+        description=(
+            "IDimensionTolerance read into the IR's Tolerance, the limits as the signed "
+            "deviations GetMinValue2/GetMaxValue2 report: swTolNONE is kind 'none', BASIC "
+            "'basic', SYMMETRIC 'symmetric', BILAT, LIMIT, FITWITHTOL and FITTOLONLY "
+            "'bilateral'. Null when the type has no IR kind (MIN, MAX, FIT, BLOCK, GENERAL - "
+            "tolerance_type_raw says which, and a fit's classes are below) or when the read "
+            "failed (a model_dimension gap). Null is never 'none'."
+        ),
+    )
+    tolerance_type_raw: int | None = Field(
+        default=None, description="IDimensionTolerance.Type verbatim (swTolType_e)"
+    )
+    fit_hole_class: str | None = Field(
+        default=None,
+        description="IDimensionTolerance.GetHoleFitValue verbatim (e.g. H7), for a fit type",
+    )
+    fit_shaft_class: str | None = Field(
+        default=None,
+        description="IDimensionTolerance.GetShaftFitValue verbatim (e.g. g6), for a fit type",
+    )
+    persist_ref: PersistRef | None = None
+    persist_ref_scope: str | None = Field(
+        default=None,
+        description="document_id whose IModelDocExtension produced persist_ref; null when "
+        "SOLIDWORKS gave none, and `id` and `name` are then the identity",
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler,
+            self,
+            nulls=(
+                "dimension_type_raw",
+                "tolerance",
+                "tolerance_type_raw",
+                "fit_hole_class",
+                "fit_shaft_class",
+                "persist_ref",
+                "persist_ref_scope",
+            ),
+        )
+
+
+class GtolFrame(IRModel):
+    """One frame of a geometric tolerance, as SOLIDWORKS answered it (schema 1.5.0).
+
+    A GTol created before SOLIDWORKS 2022 answers the frame calls `GetFrameSymbols3` and
+    `GetFrameValues`; one in the 2022 format answers `IGtol.GetFrame(n).GetSymbolXml()`
+    instead. Both are asked and each answer is recorded verbatim; parsing is Python's.
+    """
+
+    number: int = Field(ge=1, description="The one-based frame number the calls were asked for")
+    symbols_raw: list[str] = Field(
+        default_factory=list,
+        description=(
+            "IGtol.GetFrameSymbols3 verbatim: the geometric characteristic symbol, then the "
+            "material condition symbols of tolerance 1, tolerance 2 and datums 1 to 3"
+        ),
+    )
+    values_raw: list[str] = Field(
+        default_factory=list,
+        description="IGtol.GetFrameValues verbatim: tolerance 1, tolerance 2, datums 1 to 3",
+    )
+    symbol_xml_raw: str | None = Field(
+        default=None, description="IGtolFrame.GetSymbolXml verbatim, for the 2022 format"
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler, self, nulls=("symbol_xml_raw",), empties=("symbols_raw", "values_raw")
+        )
+
+
+class ModelAnnotation(IRModel):
+    """One geometric tolerance or datum tag of a part document, DimXpert or MBD (schema
+    1.5.0, feature 010 US8, FR-022).
+
+    Read from `IModelDocExtension.GetAnnotations`, kept when `IAnnotation.GetType` is a GTol
+    or a datum tag. It binds to a hole only through `attached_persist_refs`, the faces the
+    annotation is attached to (research R2.18).
+    """
+
+    id: Annotated[str, StringConstraints(pattern=r"^man:[0-9]{4,}$")]
+    document_id: str
+    kind: Literal["gtol", "datum"]
+    frames: list[GtolFrame] = Field(
+        default_factory=list,
+        description="A GTol's frames, 1 to IGtol.GetFrameCount(); empty for a datum tag",
+    )
+    datum_identifier_raw: str | None = Field(
+        default=None, description="IGtol.GetDatumIdentifier verbatim, when not blank"
+    )
+    label: str | None = Field(default=None, description="IDatumTag.GetLabel, for a datum tag")
+    is_dimxpert: bool | None = Field(
+        default=None,
+        description="IAnnotation.IsDimXpert(); null plus a model_annotation gap when unreadable",
+    )
+    attached_persist_refs: list[PersistRef] = Field(
+        default_factory=list,
+        description=(
+            "The persistent references of the faces IAnnotation.GetAttachedEntities3 returns; "
+            "edges, vertices and dangling attachments carry no face reference and are left out"
+        ),
+    )
+    persist_ref: PersistRef | None = None
+    persist_ref_scope: str | None = Field(
+        default=None,
+        description="document_id whose IModelDocExtension produced persist_ref; null when "
+        "SOLIDWORKS gave none, and `id` is then the identity",
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_additive(
+            handler,
+            self,
+            nulls=(
+                "datum_identifier_raw",
+                "label",
+                "is_dimxpert",
+                "persist_ref",
+                "persist_ref_scope",
+            ),
+            empties=("frames", "attached_persist_refs"),
+        )
+
+
 class Gap(IRModel):
     kind: Literal["not_extracted", "unsupported", "tool_error", "no_text"]
     entity_kind: str
@@ -1345,22 +1593,38 @@ class EvidencePackage(IRModel):
             "`cutlist` phase. Omitted when empty."
         ),
     )
+    model_dimensions: list[ModelDimension] = Field(
+        default_factory=list,
+        description=(
+            "The part documents' feature dimensions and their tolerances (schema 1.5.0, "
+            "feature 010), written by the `tolerance` phase. Omitted when empty."
+        ),
+    )
+    model_annotations: list[ModelAnnotation] = Field(
+        default_factory=list,
+        description=(
+            "The part documents' geometric tolerances and datum tags, DimXpert or MBD "
+            "(schema 1.5.0, feature 010), written by the `tolerance` phase. Omitted when empty."
+        ),
+    )
     rms_suppress_test: SuppressTestRun | None = None
     gaps: list[Gap]
 
     @model_serializer(mode="wrap")
-    def _omit_empty_1_4_0_arrays(
+    def _omit_empty_additive_arrays(
         self, handler: SerializerFunctionWrapHandler
     ) -> dict[str, Any]:
-        """Leave the two 1.4.0 arrays out when they carry no rows, so a package that ran
-        neither new phase round-trips to the bytes the 1.3.0 build wrote and the feature
-        001, 002 and 003 goldens stay byte-identical (SC-004).
+        """Leave the 1.4.0 and 1.5.0 arrays out when they carry no rows, so a package that
+        ran none of their phases round-trips to the bytes the 1.3.0 build wrote and the
+        feature 001, 002 and 003 goldens stay byte-identical (SC-004, feature 010 FR-028).
 
-        Only these two are dropped: every array feature 001 shipped keeps its `[]`, because
+        Only these four are dropped: every array feature 001 shipped keeps its `[]`, because
         dropping those would change the shape its readers were written against.
         """
         return omit_additive(
-            handler, self, empties=("drawing_records", "cut_list_items")
+            handler,
+            self,
+            empties=("drawing_records", "cut_list_items", "model_dimensions", "model_annotations"),
         )
 
     # The three entry points below gate the schema major before pydantic runs, so an

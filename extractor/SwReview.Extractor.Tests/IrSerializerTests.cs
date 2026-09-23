@@ -148,7 +148,7 @@ public class IrSerializerTests
         string json = PackageSerializer.Serialize(original);
         EvidencePackage restored = PackageSerializer.Deserialize(json);
 
-        Assert.Equal("1.4.0", restored.SchemaVersion);
+        Assert.Equal("1.5.0", restored.SchemaVersion);
         Assert.Equal(SampleReuseKey, restored.ReuseKey);
         Assert.Equal(
             new DateTimeOffset(2026, 9, 10, 8, 30, 0, TimeSpan.Zero),
@@ -215,7 +215,7 @@ public class IrSerializerTests
 
         EvidencePackage restored = PackageSerializer.Deserialize(PackageSerializer.Serialize(original));
 
-        Assert.Equal("1.4.0", restored.SchemaVersion);
+        Assert.Equal("1.5.0", restored.SchemaVersion);
         Assert.Equal(EvidencePackage.CurrentSchemaVersion, restored.SchemaVersion);
 
         Assert.Equal(6, restored.Features.Count);
@@ -323,7 +323,7 @@ public class IrSerializerTests
     {
         string json = PackageSerializer.Serialize(BuildSamplePackage());
 
-        Assert.Contains("\"schema_version\": \"1.4.0\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"schema_version\": \"1.5.0\"", json, StringComparison.Ordinal);
         Assert.Contains("\"folder_id\": null", json, StringComparison.Ordinal);
         Assert.Contains("\"raw_status\": null", json, StringComparison.Ordinal);
         Assert.Contains("\"consumer_ids\": null", json, StringComparison.Ordinal);
@@ -550,7 +550,7 @@ public class IrSerializerTests
         EvidencePackage restored =
             PackageSerializer.Deserialize(PackageSerializer.Serialize(BuildStandardsPackage()));
 
-        Assert.Equal("1.4.0", restored.SchemaVersion);
+        Assert.Equal("1.5.0", restored.SchemaVersion);
         Assert.Equal(DumpProfile.Standards, restored.Extractor.Profile);
 
         Document assembly = restored.Documents[0];
@@ -757,9 +757,12 @@ public class IrSerializerTests
     [Fact]
     public void PackageWithNoneOfTheStandardsEvidence_SerializesToTheBytesThe130BuildWrote()
     {
+        // The version string is the current build's: 1.4.0 when this was written, 1.5.0 from
+        // feature 010, whose tolerance members are omitted when empty in the same way.
         string baseline = ReadPre140Baseline();
         string expected = baseline.Replace(
-            "\"schema_version\": \"1.3.0\"", "\"schema_version\": \"1.4.0\"");
+            "\"schema_version\": \"1.3.0\"",
+            "\"schema_version\": \"" + EvidencePackage.CurrentSchemaVersion + "\"");
 
         Assert.NotEqual(baseline, expected);
 
@@ -1580,4 +1583,325 @@ public class IrSerializerTests
             Sketch = sketch,
             Fillet = fillet,
         };
+
+    // ---- schema 1.5.0: the tolerance evidence (feature 010 T078) ------------------
+    //
+    // Hole.wizard, EvidencePackage.model_dimensions and model_annotations, with the names
+    // the Python models write (specs/010-mechanical-checks/data-model.md section 10). Each is
+    // omitted when null or empty, so a package carrying none of it serializes exactly as a
+    // 1.4.0 build wrote it apart from the version string (FR-028).
+
+    [Fact]
+    public void CurrentSchemaVersion_IsOneFiveZero()
+    {
+        Assert.Equal("1.5.0", EvidencePackage.CurrentSchemaVersion);
+    }
+
+    [Fact]
+    public void TolerancePackage_SerializesToJsonThatValidatesAgainstTheContract()
+    {
+        string json = PackageSerializer.Serialize(BuildTolerancePackage());
+
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+    }
+
+    [Fact]
+    public void TolerancePackage_WritesTheMembersWithThePythonNames()
+    {
+        // Every optional member set, so each name must appear: no real hole carries all of
+        // them at once, and the point here is the spelling, not the combination.
+        EvidencePackage package = BuildTolerancePackage();
+        package.Holes[0].Wizard!.ThreadClassRaw = "2B";
+        package.Holes[0].Wizard!.TapDrillDiameter = new Quantity(0.0042, LengthUnit.M);
+        package.Holes[0].Wizard!.CountersinkDiameter = new Quantity(0.0104, LengthUnit.M);
+        package.ModelDimensions![0].FitShaftClass = "g6";
+        package.ModelAnnotations![0].Frames[0].SymbolXmlRaw = "<GTolFrame/>";
+        package.ModelAnnotations[0].DatumIdentifierRaw = "C";
+
+        string json = PackageSerializer.Serialize(package);
+
+        foreach (string name in new[]
+        {
+            "wizard", "fit_class_raw", "thread_class_raw", "thru_hole_diameter",
+            "tap_drill_diameter", "counterbore_diameter", "counterbore_depth",
+            "countersink_diameter", "countersink_angle", "head_clearance",
+            "model_dimensions", "feature_name", "dimension_type", "dimension_type_raw",
+            "nominal", "tolerance_type_raw", "fit_hole_class", "fit_shaft_class",
+            "model_annotations", "frames", "number", "symbols_raw", "values_raw",
+            "symbol_xml_raw", "datum_identifier_raw", "label", "is_dimxpert",
+            "attached_persist_refs",
+        })
+        {
+            Assert.Contains("\"" + name + "\":", json, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("\"dimension_type\": \"diameter\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"kind\": \"gtol\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"kind\": \"datum\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TolerancePackage_RoundTripsEveryMember()
+    {
+        EvidencePackage restored =
+            PackageSerializer.Deserialize(PackageSerializer.Serialize(BuildTolerancePackage()));
+
+        HoleWizardData wizard = restored.Holes[0].Wizard!;
+        Assert.Equal("swScrewClearanceNormal", wizard.FitClassRaw);
+        Assert.Null(wizard.ThreadClassRaw);
+        Assert.Equal(0.0066, wizard.ThruHoleDiameter!.Value);
+        Assert.Equal(LengthUnit.M, wizard.ThruHoleDiameter.Unit);
+        Assert.Equal(0.011, wizard.CounterboreDiameter!.Value);
+        Assert.Equal(0.0064, wizard.CounterboreDepth!.Value);
+        Assert.Equal(1.5707963267948966, wizard.CountersinkAngle!.Value);
+        Assert.Equal(AngleUnit.Rad, wizard.CountersinkAngle.Unit);
+        Assert.Equal(0.0005, wizard.HeadClearance!.Value);
+
+        ModelDimension dimension = Assert.Single(restored.ModelDimensions!);
+        Assert.Equal("mdm:0001", dimension.Id);
+        Assert.Equal("doc:housing", dimension.DocumentId);
+        Assert.Equal("Sketch1", dimension.FeatureName);
+        Assert.Equal("D1@Sketch1@housing.SLDPRT", dimension.Name);
+        Assert.Equal(ModelDimensionType.Diameter, dimension.DimensionType);
+        Assert.Equal(6, dimension.DimensionTypeRaw);
+        Assert.Equal(0.01, dimension.Nominal.Value);
+        Assert.Equal("m", dimension.Nominal.Unit);
+        Assert.Equal(ToleranceKind.Bilateral, dimension.Tolerance!.Kind);
+        Assert.Equal(0.000015, dimension.Tolerance.Upper!.Value);
+        Assert.Equal(0.0, dimension.Tolerance.Lower!.Value);
+        Assert.Equal(8, dimension.ToleranceTypeRaw);
+        Assert.Equal("H7", dimension.FitHoleClass);
+        Assert.Null(dimension.FitShaftClass);
+
+        Assert.Equal(2, restored.ModelAnnotations!.Count);
+        ModelAnnotation gtol = restored.ModelAnnotations[0];
+        Assert.Equal(ModelAnnotationKind.Gtol, gtol.Kind);
+        GtolFrame frame = Assert.Single(gtol.Frames);
+        Assert.Equal(1, frame.Number);
+        Assert.Equal(new[] { "<GTOL-POSI>", "<MOD-MMC>", "", "", "", "" }, frame.SymbolsRaw);
+        Assert.Equal(new[] { "0.05", "", "A", "B", "" }, frame.ValuesRaw);
+        Assert.Null(frame.SymbolXmlRaw);
+        Assert.False(gtol.IsDimXpert);
+        Assert.Single(gtol.AttachedPersistRefs);
+
+        ModelAnnotation datum = restored.ModelAnnotations[1];
+        Assert.Equal(ModelAnnotationKind.Datum, datum.Kind);
+        Assert.Equal("A", datum.Label);
+        Assert.Empty(datum.Frames);
+    }
+
+    [Fact]
+    public void TolerancePackage_OmitsEveryUnreadMemberRatherThanWritingItsNull()
+    {
+        EvidencePackage package = BuildTolerancePackage();
+        package.Holes[0].Wizard = new HoleWizardData();
+        package.ModelDimensions![0].DimensionTypeRaw = null;
+        package.ModelDimensions[0].Tolerance = null;
+        package.ModelDimensions[0].ToleranceTypeRaw = null;
+        package.ModelDimensions[0].FitHoleClass = null;
+        package.ModelDimensions[0].PersistRef = null;
+        package.ModelDimensions[0].PersistRefScope = null;
+
+        string json = PackageSerializer.Serialize(package);
+
+        // Read, and nothing applied: an empty object, which is not the same fact as a hole
+        // whose wizard data was never read.
+        Assert.Contains("\"wizard\": {}", json, StringComparison.Ordinal);
+        foreach (string name in new[]
+        {
+            "fit_class_raw", "thread_class_raw", "thru_hole_diameter", "tap_drill_diameter",
+            "counterbore_diameter", "counterbore_depth", "countersink_diameter",
+            "countersink_angle", "head_clearance", "dimension_type_raw", "tolerance",
+            "tolerance_type_raw", "fit_hole_class", "fit_shaft_class",
+            "symbol_xml_raw", "datum_identifier_raw", "is_dimxpert",
+        })
+        {
+            Assert.DoesNotContain("\"" + name + "\": null", json, StringComparison.Ordinal);
+        }
+
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+    }
+
+    [Fact]
+    public void PackageWithNoneOfTheToleranceEvidence_NamesNoneOfTheNewMembers()
+    {
+        string json = PackageSerializer.Serialize(BuildSamplePackage());
+
+        foreach (string name in new[] { "wizard", "model_dimensions", "model_annotations" })
+        {
+            Assert.DoesNotContain("\"" + name + "\"", json, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void EmptyToleranceArrays_AreOmittedLikeTheOtherAdditiveArrays()
+    {
+        // A caller that assigned an empty list must not write "model_dimensions": [] - it is
+        // contract-valid and still moves every package on disk (the 1.4.0 rule, extended).
+        EvidencePackage package = BuildSamplePackage();
+        package.ModelDimensions = new List<ModelDimension>();
+        package.ModelAnnotations = new List<ModelAnnotation>();
+
+        string json = PackageSerializer.Serialize(package);
+
+        Assert.DoesNotContain("\"model_dimensions\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"model_annotations\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void APackageWrittenAt140_RoundTripsToItsOwnText()
+    {
+        // A 1.4.0 package re-serialized by this build keeps its version and gains nothing.
+        EvidencePackage package = BuildStandardsPackage();
+        package.SchemaVersion = "1.4.0";
+        string written = PackageSerializer.Serialize(package);
+
+        string again = PackageSerializer.Serialize(PackageSerializer.Deserialize(written));
+
+        Assert.Equal(written, again);
+        Assert.Contains("\"schema_version\": \"1.4.0\"", again, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void APackageThePythonModelsWrote_Deserializes()
+    {
+        // Authored as text, in the shape the Python models serialize: what is under test is
+        // that this assembly reads what the other side writes, omitted members included.
+        string json = PackageSerializer.Serialize(BuildSamplePackage()).Replace(
+            "\"gaps\": [",
+            "\"model_dimensions\": [{\"id\": \"mdm:0007\", \"document_id\": \"doc:housing\", "
+            + "\"feature_name\": \"Cut-Extrude1\", \"name\": \"D2@Cut-Extrude1@housing.SLDPRT\", "
+            + "\"dimension_type\": \"radius\", \"nominal\": {\"value\": 0.002, \"unit\": \"m\"}}], "
+            + "\"model_annotations\": [{\"id\": \"man:0003\", \"document_id\": \"doc:housing\", "
+            + "\"kind\": \"gtol\", \"frames\": [{\"number\": 2, \"symbol_xml_raw\": \"<f/>\"}]}], "
+            + "\"gaps\": [");
+
+        EvidencePackage package = PackageSerializer.Deserialize(json);
+
+        ModelDimension dimension = Assert.Single(package.ModelDimensions!);
+        Assert.Equal(ModelDimensionType.Radius, dimension.DimensionType);
+        Assert.Null(dimension.Tolerance);
+        Assert.Null(dimension.PersistRef);
+
+        GtolFrame frame = Assert.Single(Assert.Single(package.ModelAnnotations!).Frames);
+        Assert.Equal(2, frame.Number);
+        Assert.Equal("<f/>", frame.SymbolXmlRaw);
+        Assert.Empty(frame.SymbolsRaw);
+
+        EvaluationResults results = Evaluate(json);
+        Assert.True(results.IsValid, DescribeFailures(results, json));
+    }
+
+    [Fact]
+    public void AModelDimensionIdOutsideItsPattern_IsRefusedByTheContract()
+    {
+        EvidencePackage package = BuildTolerancePackage();
+        package.ModelDimensions![0].Id = "dim:1";
+
+        EvaluationResults results = Evaluate(PackageSerializer.Serialize(package));
+
+        Assert.False(results.IsValid);
+    }
+
+    [Fact]
+    public void EnumToJsonName_MatchesTheSchemaSpellingForTheToleranceEnums()
+    {
+        Assert.Equal("linear", PackageSerializer.EnumToJsonName(ModelDimensionType.Linear));
+        Assert.Equal("diameter", PackageSerializer.EnumToJsonName(ModelDimensionType.Diameter));
+        Assert.Equal("radius", PackageSerializer.EnumToJsonName(ModelDimensionType.Radius));
+        Assert.Equal("angular", PackageSerializer.EnumToJsonName(ModelDimensionType.Angular));
+        Assert.Equal("other", PackageSerializer.EnumToJsonName(ModelDimensionType.Other));
+        Assert.Equal("gtol", PackageSerializer.EnumToJsonName(ModelAnnotationKind.Gtol));
+        Assert.Equal("datum", PackageSerializer.EnumToJsonName(ModelAnnotationKind.Datum));
+    }
+
+    /// <summary>
+    /// <see cref="BuildSamplePackage"/> plus every schema 1.5.0 addition: wizard data on its
+    /// hole, one toleranced diameter dimension and one GTol and one datum tag. Kept out of
+    /// <see cref="BuildSamplePackage"/> for the reason <see cref="BuildStandardsPackage"/> is:
+    /// that package is what the byte-identity test measures.
+    /// </summary>
+    internal static EvidencePackage BuildTolerancePackage()
+    {
+        EvidencePackage package = BuildSamplePackage();
+        string dimensionRef = Convert.ToBase64String(new byte[] { 0x41, 0x42, 0x43 });
+        string gtolRef = Convert.ToBase64String(new byte[] { 0x51, 0x52, 0x53 });
+        string faceRef = Convert.ToBase64String(new byte[] { 0x61, 0x62, 0x63 });
+
+        package.Holes[0].Wizard = new HoleWizardData
+        {
+            FitClassRaw = "swScrewClearanceNormal",
+            ThruHoleDiameter = new Quantity(0.0066, LengthUnit.M),
+            CounterboreDiameter = new Quantity(0.011, LengthUnit.M),
+            CounterboreDepth = new Quantity(0.0064, LengthUnit.M),
+            CountersinkAngle = new Angle(1.5707963267948966, AngleUnit.Rad),
+            HeadClearance = new Quantity(0.0005, LengthUnit.M),
+        };
+
+        package.ModelDimensions = new List<ModelDimension>
+        {
+            new ModelDimension
+            {
+                Id = "mdm:0001",
+                DocumentId = "doc:housing",
+                FeatureName = "Sketch1",
+                Name = "D1@Sketch1@housing.SLDPRT",
+                DimensionType = ModelDimensionType.Diameter,
+                DimensionTypeRaw = 6,
+                Nominal = new IrMeasure(0.01, "m"),
+                Tolerance = new Tolerance
+                {
+                    Kind = ToleranceKind.Bilateral,
+                    Upper = new IrMeasure(0.000015, "m"),
+                    Lower = new IrMeasure(0.0, "m"),
+                    Source = new SourceRef
+                    {
+                        DocumentId = "doc:housing",
+                        Annotation = "D1@Sketch1@housing.SLDPRT",
+                        PersistRef = dimensionRef,
+                    },
+                },
+                ToleranceTypeRaw = 8,
+                FitHoleClass = "H7",
+                PersistRef = dimensionRef,
+                PersistRefScope = "doc:housing",
+            },
+        };
+
+        package.ModelAnnotations = new List<ModelAnnotation>
+        {
+            new ModelAnnotation
+            {
+                Id = "man:0001",
+                DocumentId = "doc:housing",
+                Kind = ModelAnnotationKind.Gtol,
+                Frames =
+                {
+                    new GtolFrame
+                    {
+                        Number = 1,
+                        SymbolsRaw = { "<GTOL-POSI>", "<MOD-MMC>", "", "", "", "" },
+                        ValuesRaw = { "0.05", "", "A", "B", "" },
+                    },
+                },
+                IsDimXpert = false,
+                AttachedPersistRefs = { faceRef },
+                PersistRef = gtolRef,
+                PersistRefScope = "doc:housing",
+            },
+            new ModelAnnotation
+            {
+                Id = "man:0002",
+                DocumentId = "doc:housing",
+                Kind = ModelAnnotationKind.Datum,
+                DatumIdentifierRaw = null,
+                Label = "A",
+                AttachedPersistRefs = { faceRef },
+            },
+        };
+
+        return package;
+    }
 }

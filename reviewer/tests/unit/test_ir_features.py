@@ -519,10 +519,10 @@ def test_the_fixture_builder_emits_only_documented_gap_entity_kinds() -> None:
 
 
 def test_the_current_schema_version_is_readable_here() -> None:
-    # Bumped to 1.2.0 by T065 (extractor.profile), to 1.3.0 by T089 (the reuse fields)
-    # and to 1.4.0 by 006 T013 (the standards evidence); the 1.1.0 members below are
-    # unchanged by all three.
-    assert SCHEMA_VERSION == "1.4.0"
+    # Bumped to 1.2.0 by T065 (extractor.profile), to 1.3.0 by T089 (the reuse fields),
+    # to 1.4.0 by 006 T013 (the standards evidence) and to 1.5.0 by 010 T077 (the tolerance
+    # evidence); the 1.1.0 members below are unchanged by all four.
+    assert SCHEMA_VERSION == "1.5.0"
 
 
 def test_the_new_package_members_default_to_empty() -> None:

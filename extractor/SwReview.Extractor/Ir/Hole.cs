@@ -65,6 +65,15 @@ public sealed class Hole
     /// <summary>Ids of the cylindrical faces belonging to this hole.</summary>
     [JsonPropertyName("face_ids")]
     public List<string> FaceIds { get; set; } = new List<string>();
+
+    /// <summary>
+    /// The Hole Wizard data beyond size, depths and axis (schema 1.5.0, feature 010). Null
+    /// and omitted when the definition was not read, so a hole written before 1.5.0
+    /// serializes exactly as it did.
+    /// </summary>
+    [JsonPropertyName("wizard")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public HoleWizardData? Wizard { get; set; }
 }
 
 /// <summary>contracts/ir.schema.json #/$defs/CosmeticThread.</summary>

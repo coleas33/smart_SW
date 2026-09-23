@@ -880,7 +880,7 @@
             }
           ],
           "default": null,
-          "description": "IMassProperty.OverrideMass, read before the volume gates so a surface-only part still answers (schema 1.4.0); null plus a mass_override gap when the object, the cast or the read fails.",
+          "description": "Whether the mass is overridden, read before the volume gates so a surface-only part still answers (schema 1.4.0). From feature 010 through the interface that has it: IModelDocExtension.CreateMassProperty()'s IMassProperty.OverrideMass, else IMassProperty2.GetOverrideOptions()'s OverrideMass; null plus one mass_override gap naming both paths when neither answers.",
           "title": "Mass Overridden"
         },
         "material_configuration": {
@@ -2065,6 +2065,52 @@
       "title": "Gap",
       "type": "object"
     },
+    "GtolFrame": {
+      "additionalProperties": false,
+      "description": "One frame of a geometric tolerance, as SOLIDWORKS answered it (schema 1.5.0).\n\nA GTol created before SOLIDWORKS 2022 answers the frame calls `GetFrameSymbols3` and\n`GetFrameValues`; one in the 2022 format answers `IGtol.GetFrame(n).GetSymbolXml()`\ninstead. Both are asked and each answer is recorded verbatim; parsing is Python's.",
+      "properties": {
+        "number": {
+          "description": "The one-based frame number the calls were asked for",
+          "minimum": 1,
+          "title": "Number",
+          "type": "integer"
+        },
+        "symbols_raw": {
+          "description": "IGtol.GetFrameSymbols3 verbatim: the geometric characteristic symbol, then the material condition symbols of tolerance 1, tolerance 2 and datums 1 to 3",
+          "items": {
+            "type": "string"
+          },
+          "title": "Symbols Raw",
+          "type": "array"
+        },
+        "values_raw": {
+          "description": "IGtol.GetFrameValues verbatim: tolerance 1, tolerance 2, datums 1 to 3",
+          "items": {
+            "type": "string"
+          },
+          "title": "Values Raw",
+          "type": "array"
+        },
+        "symbol_xml_raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IGtolFrame.GetSymbolXml verbatim, for the 2022 format",
+          "title": "Symbol Xml Raw"
+        }
+      },
+      "required": [
+        "number"
+      ],
+      "title": "GtolFrame",
+      "type": "object"
+    },
     "Hole": {
       "additionalProperties": false,
       "properties": {
@@ -2186,6 +2232,18 @@
           },
           "title": "Face Ids",
           "type": "array"
+        },
+        "wizard": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HoleWizardData"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The Hole Wizard data beyond size, depths and axis (schema 1.5.0, feature 010). Omitted when null: a package written before 1.5.0, or a hole whose definition was not read."
         }
       },
       "required": [
@@ -2206,6 +2264,124 @@
         "face_ids"
       ],
       "title": "Hole",
+      "type": "object"
+    },
+    "HoleWizardData": {
+      "additionalProperties": false,
+      "description": "What a Hole Wizard feature says beyond its size, depths and axis (schema 1.5.0,\nfeature 010 US8): the fit and thread classes and the drill, counterbore and countersink\nsizes (FR-021).\n\nEvery field is read verbatim from `IWizardHoleFeatureData2` in the units SOLIDWORKS\nreports - metres and radians - and nothing is derived. A read that failed is null plus a\n`hole_wizard` gap naming the field; a read that answered zero or a blank (the field does\nnot apply to this hole type) is null with no gap. Absent keys and nulls are the same\nfact, so the record carries only what was read, and an empty record says the wizard data\nwas read and nothing applied.",
+      "properties": {
+        "fit_class_raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IWizardHoleFeatureData2.HoleFit as the name of its swWzdHoleScrewClearanceTypes_e member (swScrewClearanceClose, ...Normal, ...Loose), or the integer's text for a value the enumeration does not name. A screw clearance fit, never an ISO 286 tolerance class: a hole's ISO class arrives on its dimension (ModelDimension.fit_hole_class). Read for counterbore and countersink holes only, the two types the API documents it for.",
+          "title": "Fit Class Raw"
+        },
+        "thread_class_raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IWizardHoleFeatureData2.ThreadClass verbatim (1B, 2B, 3B for ANSI inch); read for a tapped hole only, because only a tapped hole has a thread.",
+          "title": "Thread Class Raw"
+        },
+        "thru_hole_diameter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IWizardHoleFeatureData2.ThruHoleDiameter, metres"
+        },
+        "tap_drill_diameter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IWizardHoleFeatureData2.TapDrillDiameter, metres"
+        },
+        "counterbore_diameter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IWizardHoleFeatureData2.CounterBoreDiameter, metres"
+        },
+        "counterbore_depth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IWizardHoleFeatureData2.CounterBoreDepth, metres"
+        },
+        "countersink_diameter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IWizardHoleFeatureData2.CounterSinkDiameter, metres"
+        },
+        "countersink_angle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Angle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IWizardHoleFeatureData2.CounterSinkAngle, radians (the API's system unit)"
+        },
+        "head_clearance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IWizardHoleFeatureData2.HeadClearance, metres"
+        }
+      },
+      "title": "HoleWizardData",
       "type": "object"
     },
     "Interference": {
@@ -2612,6 +2788,273 @@
         "entity_kind"
       ],
       "title": "MateEntity",
+      "type": "object"
+    },
+    "ModelAnnotation": {
+      "additionalProperties": false,
+      "description": "One geometric tolerance or datum tag of a part document, DimXpert or MBD (schema\n1.5.0, feature 010 US8, FR-022).\n\nRead from `IModelDocExtension.GetAnnotations`, kept when `IAnnotation.GetType` is a GTol\nor a datum tag. It binds to a hole only through `attached_persist_refs`, the faces the\nannotation is attached to (research R2.18).",
+      "properties": {
+        "id": {
+          "pattern": "^man:[0-9]{4,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "gtol",
+            "datum"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "frames": {
+          "description": "A GTol's frames, 1 to IGtol.GetFrameCount(); empty for a datum tag",
+          "items": {
+            "$ref": "#/$defs/GtolFrame"
+          },
+          "title": "Frames",
+          "type": "array"
+        },
+        "datum_identifier_raw": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IGtol.GetDatumIdentifier verbatim, when not blank",
+          "title": "Datum Identifier Raw"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDatumTag.GetLabel, for a datum tag",
+          "title": "Label"
+        },
+        "is_dimxpert": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IAnnotation.IsDimXpert(); null plus a model_annotation gap when unreadable",
+          "title": "Is Dimxpert"
+        },
+        "attached_persist_refs": {
+          "description": "The persistent references of the faces IAnnotation.GetAttachedEntities3 returns; edges, vertices and dangling attachments carry no face reference and are left out",
+          "items": {
+            "contentEncoding": "base64",
+            "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Attached Persist Refs",
+          "type": "array"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "persist_ref_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "document_id whose IModelDocExtension produced persist_ref; null when SOLIDWORKS gave none, and `id` is then the identity",
+          "title": "Persist Ref Scope"
+        }
+      },
+      "required": [
+        "id",
+        "document_id",
+        "kind"
+      ],
+      "title": "ModelAnnotation",
+      "type": "object"
+    },
+    "ModelDimension": {
+      "additionalProperties": false,
+      "description": "One dimension of a part document's features and its tolerance (schema 1.5.0,\nfeature 010 US8, FR-022).\n\nRead from `IFeature.GetFirstDisplayDimension`/`GetNextDisplayDimension`,\n`IDisplayDimension.GetDimension2(0)` and `IDimension.Tolerance` (`IDimensionTolerance`),\nonce per part document. Every dimension is recorded, toleranced or not, because a\ntolerance binds to a hole only through a dimension that is the unique one of its value in\nthe document (research R2.18). Values are in SOLIDWORKS' system units, metres and radians.",
+      "properties": {
+        "id": {
+          "pattern": "^mdm:[0-9]{4,}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "document_id": {
+          "title": "Document Id",
+          "type": "string"
+        },
+        "feature_name": {
+          "description": "IFeature.Name of the feature that owns the dimension",
+          "title": "Feature Name",
+          "type": "string"
+        },
+        "name": {
+          "description": "IDimension.FullName, e.g. D1@Sketch1@part.SLDPRT",
+          "title": "Name",
+          "type": "string"
+        },
+        "dimension_type": {
+          "description": "Named from IDisplayDimension.Type2 (swDimensionType_e): diameter 6, radial 5, angular 3 and 16, linear and ordinate 1, 2, 7, 8, 9, 11, 12; anything else is 'other' and dimension_type_raw keeps the number",
+          "enum": [
+            "linear",
+            "diameter",
+            "radius",
+            "angular",
+            "other"
+          ],
+          "title": "Dimension Type",
+          "type": "string"
+        },
+        "dimension_type_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDisplayDimension.Type2 verbatim",
+          "title": "Dimension Type Raw"
+        },
+        "nominal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Quantity"
+            },
+            {
+              "$ref": "#/$defs/Angle"
+            }
+          ],
+          "description": "IDimension.GetSystemValue3 in this configuration: metres or radians",
+          "title": "Nominal"
+        },
+        "tolerance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tolerance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDimensionTolerance read into the IR's Tolerance, the limits as the signed deviations GetMinValue2/GetMaxValue2 report: swTolNONE is kind 'none', BASIC 'basic', SYMMETRIC 'symmetric', BILAT, LIMIT, FITWITHTOL and FITTOLONLY 'bilateral'. Null when the type has no IR kind (MIN, MAX, FIT, BLOCK, GENERAL - tolerance_type_raw says which, and a fit's classes are below) or when the read failed (a model_dimension gap). Null is never 'none'."
+        },
+        "tolerance_type_raw": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDimensionTolerance.Type verbatim (swTolType_e)",
+          "title": "Tolerance Type Raw"
+        },
+        "fit_hole_class": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDimensionTolerance.GetHoleFitValue verbatim (e.g. H7), for a fit type",
+          "title": "Fit Hole Class"
+        },
+        "fit_shaft_class": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "IDimensionTolerance.GetShaftFitValue verbatim (e.g. g6), for a fit type",
+          "title": "Fit Shaft Class"
+        },
+        "persist_ref": {
+          "anyOf": [
+            {
+              "contentEncoding": "base64",
+              "description": "IModelDocExtension.GetPersistReference3 bytes, base64",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persist Ref"
+        },
+        "persist_ref_scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "document_id whose IModelDocExtension produced persist_ref; null when SOLIDWORKS gave none, and `id` and `name` are then the identity",
+          "title": "Persist Ref Scope"
+        }
+      },
+      "required": [
+        "id",
+        "document_id",
+        "feature_name",
+        "name",
+        "dimension_type",
+        "nominal"
+      ],
+      "title": "ModelDimension",
       "type": "object"
     },
     "Note": {
@@ -3495,6 +3938,22 @@
         "$ref": "#/$defs/CutListItem"
       },
       "title": "Cut List Items",
+      "type": "array"
+    },
+    "model_dimensions": {
+      "description": "The part documents' feature dimensions and their tolerances (schema 1.5.0, feature 010), written by the `tolerance` phase. Omitted when empty.",
+      "items": {
+        "$ref": "#/$defs/ModelDimension"
+      },
+      "title": "Model Dimensions",
+      "type": "array"
+    },
+    "model_annotations": {
+      "description": "The part documents' geometric tolerances and datum tags, DimXpert or MBD (schema 1.5.0, feature 010), written by the `tolerance` phase. Omitted when empty.",
+      "items": {
+        "$ref": "#/$defs/ModelAnnotation"
+      },
+      "title": "Model Annotations",
       "type": "array"
     },
     "rms_suppress_test": {
