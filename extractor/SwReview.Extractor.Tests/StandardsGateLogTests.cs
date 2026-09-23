@@ -114,6 +114,35 @@ public class StandardsGateLogTests : IDisposable
             MembersEachRunningPhaseGates.Concat(MembersTheDrawingPhaseGates).ToArray());
     }
 
+    /// <summary>
+    /// Feature 011 T015 (FR-001, FR-007, SC-001 at the desk): a drawing on its own, attached
+    /// with no configuration, is extracted under the Standards profile and the whole dump's log
+    /// holds no member the guard denies - the feature 011 drawing families included, since
+    /// <see cref="ReadOnlyGuard.Assert"/> reads the generated table - and no member that opens
+    /// or activates a document: the drawing was already open, and the extraction opens nothing.
+    /// Here rather than in <see cref="PackageWriterTests"/> because this file already drives
+    /// the shipped <see cref="DrawingDumper"/> through <see cref="PackageWriter"/> on one gate,
+    /// and a third fake drawing reader would be a copy of this one.
+    /// </summary>
+    [Fact]
+    public void StandardsDumpOverADrawingRootWithNoConfiguration_LogsNoDenialAndOpensNothing()
+    {
+        EvidencePackage package = Dump(DocumentKind.Drawing);
+
+        Assert.Equal(string.Empty, package.Design.ActiveConfiguration);
+        Assert.NotNull(package.DrawingRecords);
+        AssertTheLogIsReadOnly();
+
+        Assert.DoesNotContain(
+            _observer.Members,
+            member => member.StartsWith("OpenDoc", StringComparison.OrdinalIgnoreCase)
+                || member.StartsWith("ActivateDoc", StringComparison.OrdinalIgnoreCase));
+        foreach (string member in Program.StandardsProbeDocumentOpeningMembers)
+        {
+            Assert.DoesNotContain(member, _observer.Members, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
     [Fact]
     public void StandardsDumpOverADrawingRoot_ReadsEverySheetWithoutActivatingOne()
     {
@@ -227,7 +256,10 @@ public class StandardsGateLogTests : IDisposable
                 RootDocumentPath = drawing ? DrawingPath : AssemblyPath,
                 RootDocumentKind = _rootKind,
                 DesignName = "bracket-assy",
-                ActiveConfiguration = "Default",
+
+                // What the traversal records (feature 011, attach.md section 2): a drawing
+                // session has no configuration, so a drawing root's is "".
+                ActiveConfiguration = drawing ? string.Empty : "Default",
 
                 // Feature 011 T009: the drawing phase reads each drawing through its own
                 // document handle, and the traversal hands over the root's.

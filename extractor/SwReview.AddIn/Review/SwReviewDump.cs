@@ -63,17 +63,24 @@ public sealed class SwReviewDump : IReviewDump
 
             // documentPath and configurationName are null on purpose: whatever is active is
             // what is reviewed, and activating another configuration would rebuild the model
-            // (constitution, read-only rule).
-            SwSession session = SwSession.Attach(_swApp, documentPath: null, configurationName: null);
+            // (constitution, read-only rule). The extraction's attach (feature 011): the
+            // Standards tab passes a drawing, which is read with no configuration; the Review
+            // and Model check tabs refuse one before they get here (contracts/attach.md
+            // section 3).
+            ISwSession session = SwSession.AttachForDump(_swApp, documentPath: null, configurationName: null);
+            string? configuration = session.ConfigurationName();
 
             progress(
-                $"Extracting {Path.GetFileName(session.DocumentPath)} "
-                + $"[{session.Configuration.Name}]...");
+                $"Extracting {Path.GetFileName(session.Document.GetPathName())}"
+                + (configuration == null ? "" : $" [{configuration}]")
+                + "...");
 
             var options = new DumpOptions
             {
                 OutputDirectory = outputDirectory,
-                Configuration = session.Configuration.Name,
+
+                // Null for a drawing, which has no configuration (attach.md section 2).
+                Configuration = configuration,
                 Meshes = MeshFormat.Glb,
                 Faces = FaceScope.Needed,
 

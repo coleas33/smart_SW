@@ -69,7 +69,7 @@ public sealed class SwScope
         // Traversal only; nothing is written. The gaps it records are about components the
         // dump would also have skipped, and the commands below report them if they matter.
         ComponentTreeResult tree = new ComponentTreeDumper(session, refs)
-            .Traverse(gaps, new DumpOptions { OutputDirectory = ".", Configuration = session.Configuration.Name });
+            .Traverse(gaps, new DumpOptions { OutputDirectory = ".", Configuration = session.ConfigurationName() });
 
         return new SwScope(swApp, session, new ComponentIndex(tree), tree);
     }
@@ -100,7 +100,7 @@ public sealed class SwScope
             new DumpOptions
             {
                 OutputDirectory = ".",
-                Configuration = Session.Configuration.Name,
+                Configuration = Session.ConfigurationName(),
                 Meshes = MeshFormat.Glb,
             },
             Tree));

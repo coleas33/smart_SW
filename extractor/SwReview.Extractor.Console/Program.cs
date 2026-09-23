@@ -629,9 +629,12 @@ public static class Program
 
                 ISldWorks swApp = Connect(allowStart, log);
 
-                SwSession session = SwSession.Attach(swApp, documentPath, options.Configuration);
-                log.Write($"Document: {session.DocumentPath}");
-                log.Write($"Configuration: {session.Configuration.Name}");
+                // The extraction's attach (feature 011, contracts/attach.md section 3): a drawing
+                // is read with no configuration, and one that is not open is refused, not opened.
+                ISwSession session = SwSession.AttachForDump(swApp, documentPath, options.Configuration);
+                log.Write($"Document: {session.Document.GetPathName()}");
+                log.Write("Configuration: "
+                    + (session.ConfigurationName() ?? "none (a drawing has no configuration)"));
 
                 PackageWriter writer = SwDump.CreateWriter(swApp, session);
                 string? runRoot = RunRootOf(options.OutputDirectory);
@@ -673,7 +676,7 @@ public static class Program
     private static DumpResult Extract(
         PackageWriter writer,
         DumpOptions options,
-        SwSession session,
+        ISwSession session,
         string? runRoot,
         bool reuse,
         ExtractLog log)
@@ -705,7 +708,7 @@ public static class Program
     /// none.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static bool? SaveFlag(SwSession session, ExtractLog log)
+    private static bool? SaveFlag(ISwSession session, ExtractLog log)
     {
         try
         {
@@ -1789,17 +1792,24 @@ public static class Program
                         StandardsProbeDocumentNotOpenMessage(documentPath!));
                 }
 
-                SwSession session = SwSession.Attach(swApp, documentPath, null, gate);
+                // The extraction's attach (feature 011, contracts/attach.md section 3), so the
+                // probe runs on a drawing too, with no configuration; the check above has already
+                // refused a document that is not open, so nothing is opened either way.
+                ISwSession session = SwSession.AttachForDump(swApp, documentPath, null, gate);
                 var refs = new PersistRefService(gate);
                 DocumentKind kind = SwSession.KindOf(session.Document, gate);
                 var samples = new PersistRefSamples();
 
                 Out.WriteLine("probe: standards - the ten workstation probes of research.md R4");
                 Out.WriteLine("document: " + Gated(
-                    gate, StandardsProbeMember.PathName, () => Quote(session.DocumentPath)));
+                    gate, StandardsProbeMember.PathName, () => Quote(session.Document.GetPathName())));
                 Out.WriteLine("kind: " + PackageSerializer.EnumToJsonName(kind));
-                Out.WriteLine("configuration: " + Gated(
-                    gate, StandardsProbeMember.ConfigurationName, () => Quote(session.Configuration.Name)));
+
+                // ConfigurationName gates StandardsProbeMember.ConfigurationName itself, so it is
+                // described here rather than gated a second time.
+                Out.WriteLine("configuration: " + (session.Configuration == null
+                    ? "(none: a drawing has no configuration)"
+                    : Describe(() => Quote(session.ConfigurationName()))));
 
                 DumpScope scope = StandardsProbeComponents(session, refs);
 
@@ -1890,7 +1900,7 @@ public static class Program
     /// skipping it in silence.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static DumpScope StandardsProbeComponents(SwSession session, PersistRefService refs)
+    private static DumpScope StandardsProbeComponents(ISwSession session, PersistRefService refs)
     {
         var gaps = new GapCollector();
         var options = new DumpOptions { Meshes = MeshFormat.None, Features = FeatureScope.None };
@@ -1917,7 +1927,7 @@ public static class Program
     /// answers for every one, and reading the two together is what settles the question.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void ProbeExplodedState(SwSession session, SwGate gate, DumpScope scope)
+    private static void ProbeExplodedState(ISwSession session, SwGate gate, DumpScope scope)
     {
         Out.WriteLine("probe-1 exploded_state:");
         Out.WriteLine("  open document: " + DescribeExploded(gate, session.Document));
@@ -2163,7 +2173,7 @@ public static class Program
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ProbeDrawing(
-        SwSession session,
+        ISwSession session,
         SwGate gate,
         PersistRefService refs,
         DocumentKind kind,
@@ -2758,7 +2768,7 @@ public static class Program
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ProbeCutListWalk(
-        SwSession session,
+        ISwSession session,
         SwGate gate,
         PersistRefService refs,
         DocumentKind kind,
@@ -2859,7 +2869,7 @@ public static class Program
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ProbeSketchTextSegments(
-        SwSession session, SwGate gate, PersistRefService refs, DocumentKind kind)
+        ISwSession session, SwGate gate, PersistRefService refs, DocumentKind kind)
     {
         Out.WriteLine("probe-9 sketch_text_segments:");
         if (kind == DocumentKind.Drawing)
@@ -2948,7 +2958,7 @@ public static class Program
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ProbePersistentReferences(
-        SwSession session, SwGate gate, PersistRefService refs, PersistRefSamples samples)
+        ISwSession session, SwGate gate, PersistRefService refs, PersistRefSamples samples)
     {
         Out.WriteLine("probe-10 persistent_references:");
         ProbePersistentReference(session, gate, refs, "sheet", samples.Sheet);
@@ -2961,7 +2971,7 @@ public static class Program
     }
 
     private static void ProbePersistentReference(
-        SwSession session, SwGate gate, PersistRefService refs, string kind, object? entity)
+        ISwSession session, SwGate gate, PersistRefService refs, string kind, object? entity)
     {
         if (entity == null)
         {

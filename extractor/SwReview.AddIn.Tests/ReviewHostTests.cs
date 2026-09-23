@@ -95,6 +95,77 @@ public sealed class ReviewHostTests
         Assert.Equal("PreparationExpired", world.Reply("error", "r2").GetProperty("error_class").GetString());
     }
 
+    // ---- a drawing (feature 011 T015, contracts/attach.md section 5) --------------------------
+
+    /// <summary>
+    /// The clause the Review tab's refusal of a drawing gains: the drawing is not reviewed on its
+    /// own, and it is read with the part or assembly it documents while it stays open (feature
+    /// 011's open-drawing discovery).
+    /// </summary>
+    private const string DrawingClause =
+        "; open the part or assembly it documents - this drawing is read with it while it stays open.";
+
+    private const string DrawingPath = @"C:\Fictional\plate\plate.SLDDRW";
+
+    [Fact]
+    public void PreparationOfADrawingIsRefusedWithTheClauseThatItIsReadWithItsModel()
+    {
+        using var world = new ReviewWorld();
+        world.Document = new PageDocument(DrawingPath, null);
+        int reads = 0;
+        world.Prepare = () => { reads++; return Preparation(world.Document); };
+        world.Open();
+
+        world.Receive("review.prepare", "p1", new { });
+
+        JsonElement error = world.Reply("error", "p1");
+        string message = error.GetProperty("message").GetString()!;
+        Assert.Equal("NoDocument", error.GetProperty("error_class").GetString());
+        Assert.EndsWith(DrawingClause, message, StringComparison.Ordinal);
+        Assert.Contains("plate.SLDDRW", message, StringComparison.Ordinal);
+        Assert.Equal(0, reads);
+        Assert.Equal(0, world.Dump.Runs);
+    }
+
+    [Fact]
+    public void ReviewStartOfADrawingIsRefusedWithTheSameSentenceBeforeAnyExtraction()
+    {
+        // The extraction's attach reads a drawing now (feature 011 T014), so the Review tab must
+        // refuse one itself, before the dump: a host with no preparation wired would otherwise
+        // extract the drawing as if it were the design under review.
+        using var world = new ReviewWorld();
+        world.Document = new PageDocument(DrawingPath, null);
+        world.Open();
+
+        world.Receive("review.start", "r1", new { });
+
+        JsonElement error = world.Reply("error", "r1");
+        Assert.Equal("NoDocument", error.GetProperty("error_class").GetString());
+        Assert.EndsWith(DrawingClause, error.GetProperty("message").GetString()!, StringComparison.Ordinal);
+        Assert.Equal(0, world.Dump.Runs);
+        Assert.Empty(world.Backend.Created);
+        Assert.Empty(world.Host.Sessions);
+        Assert.Empty(world.RunFolders());
+    }
+
+    [Fact]
+    public void PreparationOfADocumentWithNoKnownKindKeepsTheSentenceWithNoDrawingClause()
+    {
+        // The clause is a drawing's; a document whose kind the extension does not say is refused
+        // as before, without a claim about a model it documents.
+        using var world = new ReviewWorld();
+        world.Document = new PageDocument(@"C:\Fictional\plate\plate.step", null);
+        world.Open();
+
+        world.Receive("review.prepare", "p1", new { });
+
+        JsonElement error = world.Reply("error", "p1");
+        Assert.Equal("NoDocument", error.GetProperty("error_class").GetString());
+        Assert.Equal(
+            "Open a saved part or assembly to prepare a review.",
+            error.GetProperty("message").GetString());
+    }
+
     private static ReviewPreparation Preparation(PageDocument document)
     {
         var tree = new ComponentTreeResult

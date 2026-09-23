@@ -67,7 +67,11 @@ public static class SwDump
                 new SwModelAnnotationReader(session.Gate, refs)));
     }
 
-    /// <summary>Attaches to a document and dumps it in one call.</summary>
+    /// <summary>
+    /// Attaches to a document and dumps it in one call. The extraction's attach
+    /// (<see cref="SwSession.AttachForDump"/>, feature 011): a drawing is read with no
+    /// configuration, and one that is not open is refused rather than opened.
+    /// </summary>
     public static DumpResult Run(ISldWorks swApp, string? documentPath, DumpOptions options)
     {
         if (options == null)
@@ -75,7 +79,7 @@ public static class SwDump
             throw new ArgumentNullException(nameof(options));
         }
 
-        SwSession session = SwSession.Attach(swApp, documentPath, options.Configuration);
+        ISwSession session = SwSession.AttachForDump(swApp, documentPath, options.Configuration);
         return CreateWriter(swApp, session).Write(options);
     }
 }

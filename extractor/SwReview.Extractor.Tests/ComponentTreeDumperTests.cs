@@ -294,6 +294,52 @@ public class ComponentTreeDumperTests
 
     // ---- the drawing-rooted forest (T063, FR-025) -----------------------------------
 
+    // ---- a drawing session has no configuration (feature 011 T015, attach.md section 2) ----
+
+    [Fact]
+    public void ActiveConfigurationOf_ADrawingRootIsTheEmptyStringAndItsConfigurationIsNeverAsked()
+    {
+        // The kind is read first and decides: a drawing session has no configuration, so asking
+        // it for one would be a null dereference on the seat, and the design block records ""
+        // ("empty for a drawing root, which has none").
+        var asked = new List<string>();
+
+        string configuration = ComponentTreeDumper.ActiveConfigurationOf(
+            DocumentKind.Drawing, () => { asked.Add("configuration"); return "Default"; });
+
+        Assert.Equal(string.Empty, configuration);
+        Assert.Empty(asked);
+    }
+
+    [Theory]
+    [InlineData(DocumentKind.Part)]
+    [InlineData(DocumentKind.Assembly)]
+    public void ActiveConfigurationOf_AModelRootIsTheSessionsBoundConfiguration(DocumentKind kind)
+    {
+        Assert.Equal("Machined", ComponentTreeDumper.ActiveConfigurationOf(kind, () => "Machined"));
+    }
+
+    [Fact]
+    public void ActiveConfigurationOf_AnUnreadKindStillRecordsTheBoundConfiguration()
+    {
+        // As before feature 011: an unread kind is its own gap and traverses nothing, and the
+        // configuration the session is bound to is still what the design block names.
+        Assert.Equal("Default", ComponentTreeDumper.ActiveConfigurationOf(null, () => "Default"));
+    }
+
+    [Theory]
+    [InlineData(DocumentKind.Part)]
+    [InlineData(DocumentKind.Assembly)]
+    [InlineData(null)]
+    public void ActiveConfigurationOf_ASessionWithNoConfigurationNameIsTheEmptyStringNeverNull(
+        DocumentKind? kind)
+    {
+        // ConfigurationName is null for a session with no configuration; the design block's
+        // active_configuration is a required string, so null is written as "" rather than
+        // leaking into the IR.
+        Assert.Equal(string.Empty, ComponentTreeDumper.ActiveConfigurationOf(kind, () => null));
+    }
+
     /// <summary>
     /// The forest root a drawing root is traversed under: the drawing document itself, with
     /// no parent, so the subtrees its views reference hang somewhere (research R9).
