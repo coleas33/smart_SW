@@ -63,6 +63,13 @@ check failed`), `out of scope` for `not_applicable`, `no check ran` when nothing
 the first matching rule row in that order. `detail`: that row's `reason`, verbatim, or `None` - for
 `not_applicable`, the first out-of-scope row's `reason`.
 
+*Note (2026-09-23, feature 010 T108 as amended):* the mass and hygiene families' summary rows,
+`mass.material` and `hygiene`, are `items` rows of their goals, so their bucket decides between
+rows 2 and 3. Each is `checked` only when its call wrote a `checked` per-check row or recorded a
+finding, `skipped` otherwise and `failed` on a refused finding, so a family run that checked
+nothing (no standards profile, every part lightweight) reads `not_reached` by row 2 - reason
+`skipped`, the row's counts as the detail - never `checked` by row 3.
+
 ## 4. The other lines
 
 | Key | Rule |
