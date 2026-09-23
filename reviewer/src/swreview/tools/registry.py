@@ -50,7 +50,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 from pydantic import validate_call
 from pydantic_core import to_jsonable_python
 
-from swreview.agent.providers import ToolCallResult, summarize_result
+from swreview.agent.providers import ToolCallResult, summarize_result, tool_result_text
 from swreview.agent.providers.schema import ToolSpec, tool_spec
 from swreview.agent.settings import EfficiencySettings, ModelViewSettings
 from swreview.report.session import (
@@ -59,6 +59,7 @@ from swreview.report.session import (
     InvestigationStep,
     ReviewSession,
 )
+from swreview.tokens import TokenizerUnavailable, count_tokens
 from swreview.tools import (
     bridge,
     checks_fastener,
@@ -295,6 +296,11 @@ class ToolCallRecord:
     """The call's full result, for the stored copy `SessionSink` writes (feature 008,
     FR-021). Not a field of the trace line - the chat log never writes it - and left out of
     equality, so two records of one call compare as they always did."""
+    result_bytes: int | None = None
+    """The full result's UTF-8 length in the one serialization (feature 008, FR-026);
+    `SessionSink` copies it onto the step, and the chat log's explicit fields leave it out."""
+    result_tokens: int | None = None
+    """The same text in tokens (o200k_base), or `None` when the tokenizer is unavailable."""
 
 
 @runtime_checkable
@@ -338,6 +344,8 @@ class SessionSink:
             status=record.status,
             elapsed_s=record.elapsed_s,
             error=record.error,
+            result_bytes=record.result_bytes,
+            result_tokens=record.result_tokens,
         )
         session.steps.append(step)
         self._store(session, step, record)
@@ -588,7 +596,12 @@ def record_call(
 
     `withheld` says this call was refused because the tool was not offered this run, which
     is the one error a session sink must not turn into `failed` coverage.
+
+    The result's size is measured here, the one funnel every recorded step passes through
+    (feature 008 research R2.44): the full payload in the pre-008 serialization, never the
+    model's view, so a step's size means the same whatever the settings.
     """
+    result_bytes, result_tokens = result_size(payload)
     sink.record(
         ToolCallRecord(
             tool=tool,
@@ -599,8 +612,24 @@ def record_call(
             error=error,
             withheld=withheld,
             payload=payload,
+            result_bytes=result_bytes,
+            result_tokens=result_tokens,
         )
     )
+
+
+def result_size(payload: Mapping[str, Any]) -> tuple[int, int | None]:
+    """`(bytes, tokens)` of `tool_result_text(payload)`; tokens `None` without a tokenizer.
+
+    An unavailable vocabulary is not a reason for a tool call to fail - a tool call must
+    never raise - so it leaves the count unknown, never zero (`contracts/cost.md` section 1).
+    """
+    text = tool_result_text(payload)
+    try:
+        tokens: int | None = count_tokens(text)
+    except TokenizerUnavailable:
+        tokens = None
+    return len(text.encode("utf-8")), tokens
 
 
 # --- the package-decidable tool tiers (lever 4) ----------------------------------------

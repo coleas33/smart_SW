@@ -18,6 +18,11 @@ sessions and every committed fixture keep their bytes. The chat log's lines do n
 fields are explicit). The review-session contract lists both in `InvestigationStep.properties`,
 never in `required`, landed before the model writes them.
 
+*Landed as (T088 to T090).* `registry.result_size(payload)` returns the pair, catching only
+`TokenizerUnavailable` (the text is `json.dumps` of the payload, ASCII-escaped, so encoding it
+cannot fail otherwise). `ToolCallRecord` carries both; `InvestigationStep` declares both with
+`ge=0` and drops them from its dump through `omit_when_null` when null.
+
 ## 2. The report's Tokens section
 
 Unchanged, byte for byte, when the provider reported cached input: the existing `Cached input
