@@ -394,6 +394,12 @@ placeholder example in `config/standards.example.yaml` uses fictional values in 
 | `general_tolerance.angular_deg` | not carried by the macro | none | Profile version 2: the title block's general angular tolerance, or null when the company declares none |
 | `hygiene.part_number_property` | not carried by the macro | none | Profile version 2: the property feature 010's hygiene checks compare with the file name |
 | `hygiene.description_property` | not carried by the macro | none | Profile version 2: the property two documents must not share, read by feature 010's hygiene checks |
+| `drawing.sheet_formats` | not carried by the macro | none | Profile version 3 (feature 011, 2026-09-23): the sheet format names a drawing's sheets may use, compared by feature 011's conformance finding; the owner supplies them with the version 3 profile |
+| `drawing.drafting_standard` | not carried by the macro | none | Profile version 3: the drawing's dimensioning standard name, compared ignoring case and surrounding spaces |
+| `drawing.projection` | not carried by the macro | none | Profile version 3: an enumeration (`first_angle`, `third_angle` or empty), not a secret; every shipped profile carries a different member |
+| `drawing.dimension_unit` | not carried by the macro | none | Profile version 3: an enumeration (`mm`, `in` or empty), not a secret; the unit `general_tolerance`'s decimal places are counted in, and every shipped profile carries a different member |
+| `drawing.drawing_template` | not carried by the macro | none | Profile version 3: recorded for drawing creation (feature 012) and not compared |
+| `drawing.bom_template` | not carried by the macro | none | Profile version 3: recorded for drawing creation (feature 012) and not compared |
 **Not company-specific, and therefore not in the profile**: the configuration-independent
 property tab (C27, the empty configuration name), the cut-list item name prefix (C34 -
 replaced by structural identification, difference bb), the document-kind extensions (C35 -

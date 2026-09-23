@@ -1,7 +1,8 @@
 # standards.yaml - the company's release checklist configuration.
 # Every value below is FICTIONAL placeholder data. Replace all of it.
-# Version 2 adds general_tolerance and hygiene; a version 1 file still loads without them.
-version: 2
+# Version 2 adds general_tolerance and hygiene; version 3 adds drawing. A version 1 or 2
+# file still loads without the sections it predates.
+version: 3
 
 # Absolute path to the vault or project root. Library prefixes below may be written
 # relative to it; an absolute prefix is matched as written. A root that does not exist
@@ -98,3 +99,25 @@ hygiene:
   # name, and the description two documents must not share. Empty skips those checks.
   part_number_property: "Fictional Number"
   description_property: "Fictional Summary"
+
+drawing:
+  # The company's drawing standard (profile version 3), compared with every drawing a
+  # review reads; one review finding per drawing names each setting it differs in, never a
+  # release-verdict failure. An empty value skips its comparison - it is never a pass.
+  #
+  # The sheet format names a drawing's sheets may use (ISheet.GetSheetFormatName).
+  sheet_formats:
+    - "EXAMPLE-FORMAT-1"
+    - "EXAMPLE-FORMAT-2"
+  # The drawing's dimensioning standard, compared ignoring case and surrounding spaces.
+  drafting_standard: "EXAMPLE-STANDARD"
+  # first_angle, third_angle, or empty.
+  projection: "first_angle"
+  # mm, in, or empty: the unit general_tolerance's decimal places are counted in. The
+  # general tolerance binds a drawing dimension by its decimals only when the drawing
+  # writes it in this unit; the general tolerance itself is not restated here.
+  dimension_unit: "in"
+  # Recorded for drawing creation (feature 012); a finished drawing does not record the
+  # template it was made from, so neither is compared.
+  drawing_template: "example-template.drwdot"
+  bom_template: "example-bom.sldbomtbt"

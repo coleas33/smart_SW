@@ -39,16 +39,22 @@ from pydantic import (
     PositiveFloat,
     PrivateAttr,
     ValidationError,
+    field_validator,
     model_validator,
 )
 
 __all__ = [
     "DEFAULT_PATH",
+    "DIMENSION_UNITS",
     "KNOWN_VERSIONS",
     "PROFILE_VERSION",
+    "PROJECTIONS",
+    "SECTIONS_BY_VERSION",
     "SETTING_NAME",
     "VERSION_2_SECTIONS",
+    "VERSION_3_SECTIONS",
     "DataCardSection",
+    "DrawingSection",
     "ExportControlSection",
     "GeneralToleranceSection",
     "HygieneSection",
@@ -66,19 +72,39 @@ __all__ = [
     "load_profile",
 ]
 
-PROFILE_VERSION = 2
+PROFILE_VERSION = 3
 """The newest schema version this build writes into its examples. A profile carrying a
 version outside `KNOWN_VERSIONS` is refused naming it and the known ones, rather than loaded
 while its unrecognised fields are ignored."""
 
-KNOWN_VERSIONS: tuple[int, ...] = (1, 2)
+KNOWN_VERSIONS: tuple[int, ...] = (1, 2, 3)
 """Version 1 is feature 006's schema; version 2 adds `general_tolerance` and `hygiene`
-(feature 010 research R2.19). Both load: the owner's real profile stays version 1 until the
-owner rewrites it, and the new sources are simply absent until then (plan RK-7)."""
+(feature 010 research R2.19); version 3 adds `drawing` (feature 011 `contracts/profile.md`
+section 1). All three load: the owner's real profile stays at its version until the owner
+rewrites it, and the newer sources are simply absent until then (plan RK-7, 011 RK-9)."""
 
 VERSION_2_SECTIONS: tuple[str, ...] = ("general_tolerance", "hygiene")
-"""Required on version 2, absent on version 1: every key is required, so adding them to
+"""Required on versions 2 and 3, absent on version 1: every key is required, so adding them to
 version 1 would have refused every version 1 file."""
+
+VERSION_3_SECTIONS: tuple[str, ...] = ("drawing",)
+"""Required on version 3, absent on versions 1 and 2, for the same reason."""
+
+SECTIONS_BY_VERSION: dict[int, tuple[str, ...]] = {
+    1: (),
+    2: VERSION_2_SECTIONS,
+    3: (*VERSION_2_SECTIONS, *VERSION_3_SECTIONS),
+}
+"""The optional-by-version sections each known version must carry; every other one it must
+not. One table, so "version 3 also requires everything version 2 requires" is a row, not a
+second validator."""
+
+PROJECTIONS: tuple[str, ...] = ("first_angle", "third_angle", "")
+"""`drawing.projection`: first-angle or third-angle projection, or empty to skip it."""
+
+DIMENSION_UNITS: tuple[str, ...] = ("mm", "in", "")
+"""`drawing.dimension_unit`: the unit `general_tolerance`'s decimal places are counted in, or
+empty, which leaves the general tolerance binding nothing by decimals (011 FR-022)."""
 
 SETTING_NAME = "StandardsProfilePath"
 """The add-in setting that names the file, quoted in the refusal so a reader knows where to
@@ -200,12 +226,68 @@ class HygieneSection(_Section):
     description_property: str
 
 
+class DrawingSection(_Section):
+    """The company's drawing standard (profile version 3, feature 011 `contracts/profile.md`
+    section 1), compared with every drawing a review reads by `drawing_profile.conformance`.
+
+    Every key is required and every value may be empty, which skips that comparison.
+    `general_tolerance` is **not** restated here: `dimension_unit` names the unit its
+    decimal places are counted in (011 FR-045), and a `general_tolerance` key here is an
+    unknown key like any other. The two templates are recorded for drawing creation (feature
+    012); a finished drawing does not record the template it was made from, so neither is
+    compared.
+    """
+
+    sheet_formats: list[str]
+    drafting_standard: str
+    projection: str
+    dimension_unit: str
+    drawing_template: str
+    bom_template: str
+
+    @field_validator("sheet_formats")
+    @classmethod
+    def _each_format_once(cls, value: list[str]) -> list[str]:
+        repeated = next((name for index, name in enumerate(value) if name in value[:index]), None)
+        if repeated is not None:
+            raise ValueError(f"sheet format {repeated!r} is listed twice; list each name once")
+        return value
+
+    @field_validator("projection")
+    @classmethod
+    def _a_known_projection(cls, value: str) -> str:
+        return _one_of(value, PROJECTIONS, "projection")
+
+    @field_validator("dimension_unit")
+    @classmethod
+    def _a_known_unit(cls, value: str) -> str:
+        return _one_of(value, DIMENSION_UNITS, "unit")
+
+
+def _one_of(value: str, allowed: tuple[str, ...], what: str) -> str:
+    """`value` when it is one of `allowed`, matched exactly; otherwise the refusal naming both."""
+    if value in allowed:
+        return value
+    named = [item or "''" for item in allowed]
+    raise ValueError(
+        f"{value!r} is not a {what} this profile knows; use {', '.join(named[:-1])} or "
+        f"{named[-1]} (empty skips the comparison)"
+    )
+
+
+def _introduced_in(section: str) -> int:
+    """The first version that carries `section`."""
+    return min(version for version, names in SECTIONS_BY_VERSION.items() if section in names)
+
+
 class StandardsProfile(_Section):
     """The whole schema. Built by `load_profile`, which is what gives it its identity.
 
-    The two version 2 sections are required fields that may only be null on version 1: a
-    version 1 file carries neither and reads as both absent, a version 2 file must carry
-    both, and neither has a default (FR-002).
+    The version 2 and version 3 sections are required fields that may only be null on a
+    version that predates them: a version 1 file carries none of the three and reads as all
+    absent, a version 2 file carries `general_tolerance` and `hygiene` and no `drawing`, a
+    version 3 file carries all three, and none has a default (FR-002). `SECTIONS_BY_VERSION`
+    is the one table both validators read.
     """
 
     version: int
@@ -218,28 +300,39 @@ class StandardsProfile(_Section):
     export_control: ExportControlSection
     general_tolerance: GeneralToleranceSection | None
     hygiene: HygieneSection | None
+    drawing: DrawingSection | None
 
     _identity: ProfileIdentity | None = PrivateAttr(default=None)
 
     @model_validator(mode="before")
     @classmethod
-    def _version_1_has_no_version_2_sections(cls, data: Any) -> Any:
-        if not isinstance(data, dict) or data.get("version") != 1:
+    def _no_section_of_a_later_version(cls, data: Any) -> Any:
+        """A section the declared version predates is refused naming it; the rest read as
+        absent. An unknown version is `load_profile`'s refusal and is left alone here."""
+        if not isinstance(data, dict):
             return data
-        carried = [name for name in VERSION_2_SECTIONS if name in data]
+        version = data.get("version")
+        if isinstance(version, bool) or version not in SECTIONS_BY_VERSION:
+            return data
+        later = [
+            name
+            for name in (*VERSION_2_SECTIONS, *VERSION_3_SECTIONS)
+            if name not in SECTIONS_BY_VERSION[version]
+        ]
+        carried = [name for name in later if name in data]
         if carried:
-            raise ValueError(
-                f"a version 1 profile carries no {' or '.join(carried)}; "
-                "those are version 2 sections"
+            named = ", ".join(
+                f"{name} (a version {_introduced_in(name)} section)" for name in carried
             )
-        return {**data, **dict.fromkeys(VERSION_2_SECTIONS)}
+            raise ValueError(f"a version {version} profile carries no {named}")
+        return {**data, **dict.fromkeys(later)}
 
     @model_validator(mode="after")
-    def _version_2_carries_both_sections(self) -> StandardsProfile:
-        if self.version == 2:
-            missing = [name for name in VERSION_2_SECTIONS if getattr(self, name) is None]
-            if missing:
-                raise ValueError(f"a version 2 profile needs {' and '.join(missing)}")
+    def _the_version_carries_its_sections(self) -> StandardsProfile:
+        required = SECTIONS_BY_VERSION.get(self.version, ())
+        missing = [name for name in required if getattr(self, name) is None]
+        if missing:
+            raise ValueError(f"a version {self.version} profile needs {' and '.join(missing)}")
         return self
 
     @property
@@ -322,7 +415,8 @@ def _check_version(path: Path, data: dict[str, Any]) -> None:
         return
     version = data["version"]
     if isinstance(version, bool) or not isinstance(version, int) or version not in KNOWN_VERSIONS:
-        known = " and ".join(str(item) for item in KNOWN_VERSIONS)
+        numbers = [str(item) for item in KNOWN_VERSIONS]
+        known = f"{', '.join(numbers[:-1])} and {numbers[-1]}"
         raise ProfileInvalid(
             f"{path} is a version {version!r} standards profile; this build knows versions "
             f"{known}"

@@ -24,8 +24,9 @@ clean result, which is the worst failure a release gate has.
 ```yaml
 # standards.yaml - the company's release checklist configuration.
 # Every value below is FICTIONAL placeholder data. Replace all of it.
-# Version 2 adds general_tolerance and hygiene; a version 1 file still loads without them.
-version: 2
+# Version 2 adds general_tolerance and hygiene; version 3 adds drawing. A version 1 or 2
+# file still loads without the sections it predates.
+version: 3
 
 # Absolute path to the vault or project root. Library prefixes below may be written
 # relative to it; an absolute prefix is matched as written. A root that does not exist
@@ -118,6 +119,28 @@ hygiene:
   # name, and the description two documents must not share. Empty skips those checks.
   part_number_property: "Fictional Number"
   description_property: "Fictional Summary"
+
+drawing:
+  # The company's drawing standard (profile version 3), compared with every drawing a
+  # review reads; one review finding per drawing names each setting it differs in, never a
+  # release-verdict failure. An empty value skips its comparison - it is never a pass.
+  #
+  # The sheet format names a drawing's sheets may use (ISheet.GetSheetFormatName).
+  sheet_formats:
+    - "EXAMPLE-FORMAT-1"
+    - "EXAMPLE-FORMAT-2"
+  # The drawing's dimensioning standard, compared ignoring case and surrounding spaces.
+  drafting_standard: "EXAMPLE-STANDARD"
+  # first_angle, third_angle, or empty.
+  projection: "first_angle"
+  # mm, in, or empty: the unit general_tolerance's decimal places are counted in. The
+  # general tolerance binds a drawing dimension by its decimals only when the drawing
+  # writes it in this unit; the general tolerance itself is not restated here.
+  dimension_unit: "in"
+  # Recorded for drawing creation (feature 012); a finished drawing does not record the
+  # template it was made from, so neither is compared.
+  drawing_template: "example-template.drwdot"
+  bom_template: "example-bom.sldbomtbt"
 ```
 
 **This block is itself an example profile, and SC-005 scans it.** The YAML above is what the
@@ -134,7 +157,8 @@ both fixture profiles.
 
 | Field | Type | Required | Rules |
 |---|---|---|---|
-| `version` | int | yes | `1` or `2`. A profile whose version this build does not know **refuses the run naming it and the known versions**, rather than ignoring the fields it does not recognize. Version 2 (feature 010 research R2.19) requires the two sections below and version 1 must carry neither, so the owner's version 1 file keeps loading until it is rewritten |
+| `version` | int | yes | `1`, `2` or `3`. A profile whose version this build does not know **refuses the run naming it and the known versions**, rather than ignoring the fields it does not recognize. Version 2 (feature 010 research R2.19) requires the two sections below and version 1 must carry neither, so the owner's version 1 file keeps loading until it is rewritten. Version 3 (feature 011, *amended 2026-09-23*) requires everything version 2 requires and the `drawing` section, which versions 1 and 2 must not carry |
+| `drawing` | mapping | version 3 | Feature 011 `contracts/profile.md` section 1: `sheet_formats` (list of accepted sheet format names, no name twice), `drafting_standard` (str), `projection` (`first_angle`, `third_angle` or empty), `dimension_unit` (`mm`, `in` or empty - the unit `general_tolerance`'s decimal places are counted in), `drawing_template` and `bom_template` (str, recorded for feature 012 and not compared). Every key required, every value may be empty, which skips that comparison. `general_tolerance` is not restated here; a `drawing.general_tolerance` key is an unknown key |
 | `general_tolerance` | mapping | version 2 | `linear`: a list of `{decimal_places, plus_minus_mm}` bands, ascending by decimal places (owner answer 2026-09-23: the general tolerance is by decimal places), `decimal_places` a whole number from 0, `plus_minus_mm` above 0; `angular_deg` above 0 or null. An empty list and a null angle mean the company declares none. Read by feature 010's tolerance resolver only for a dimension with no tolerance of its own |
 | `hygiene` | mapping | version 2 | `part_number_property` and `description_property`, the property names feature 010's hygiene checks read; either may be empty, which skips the checks that need it |
 | `vault_root` | str | yes | An absolute path. May name a directory that does not exist on this machine. Trailing separators are normalized away |
@@ -189,7 +213,7 @@ silently disable a skip list.
 ## Validation rules
 
 A profile is **valid** when it parses as YAML, is a mapping, carries every required key with
-the right type, carries no unknown key, and has `version` 1 or 2 with exactly that version's
+the right type, carries no unknown key, and has `version` 1, 2 or 3 with exactly that version's
 sections. Anything else is a refusal
 whose message names:
 
