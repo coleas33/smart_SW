@@ -39,7 +39,7 @@ injectable for the same reason: `--bridge` needs a workstation, a unit test does
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -74,6 +74,11 @@ from swreview.agent.settings import (
     ExtractionSettings,
     ModelViewSettings,
     checks_first,
+)
+from swreview.agent.withheld_wording import (
+    SYSTEM_PROMPT_REWORDINGS,
+    reworded,
+    reworded_checklist,
 )
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient
 from swreview.carry_over import carry_over_findings, stamp_carry_over_keys
@@ -244,6 +249,7 @@ def build_system_prompt(
     tools: Iterable[ToolSpec] = (),
     *,
     efficiency: EfficiencySettings | None = None,
+    withheld: Collection[str] = (),
 ) -> str:
     """The versioned prompt, the checklist, the package census, and the tool notes.
 
@@ -261,9 +267,17 @@ def build_system_prompt(
             hand over fewer; the block must shrink with them.
         efficiency: The run's lever flags. `None` - every caller that predates the lever -
             is read as every lever off.
+        withheld: The tools lever 13 took off the array (feature 008 FR-030): the steps of
+            the prompt that ask for them are reworded (`agent/withheld_wording.py`). Empty,
+            the default, leaves the prompt byte for byte as it was. The checklist is the
+            caller's, already reworded.
     """
     sections = [
-        SYSTEM_PROMPT_FILE.read_text(encoding="utf-8").strip(),
+        reworded(
+            SYSTEM_PROMPT_FILE.read_text(encoding="utf-8").strip(),
+            withheld,
+            SYSTEM_PROMPT_REWORDINGS,
+        ),
         "## Review checklist\n\n" + checklist.render(),
         "## This package\n\n```json\n" + json.dumps(package_summary(package), indent=2) + "\n```",
     ]
@@ -1228,8 +1242,12 @@ def start_review(
         if prerun is not None:
             offered = PrerunGuard(tools, prerun, folded=session.folded_families)
         # Lever 13 (feature 008 FR-030): the tools the pre-run ran to completion, which the
-        # guard leaves off the array; empty with the lever or checks first off.
+        # guard leaves off the array; empty with the lever or checks first off. The checklist
+        # the model reads - in the system prompt and from `get_review_checklist` - stops
+        # asking for them (`agent/withheld_wording.py`); ids and prefixes never change.
         withheld = prerun.withheld if prerun is not None else ()
+        checklist = reworded_checklist(checklist, withheld)
+        context.checklist = checklist
         # Lever 7, and the last decision setup makes: after the pre-run, because the
         # pre-run is not a turn and has no next round to withdraw anything from. With the
         # flag off nothing in this module or in either adapter takes a different path
@@ -1250,6 +1268,7 @@ def start_review(
             loaded.package,
             [tool.spec for tool in tools if tool.name not in withheld],
             efficiency=session.efficiency,
+            withheld=withheld,
         ),
         sink=sink,
         out_dir=out,
