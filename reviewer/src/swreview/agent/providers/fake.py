@@ -43,6 +43,7 @@ from swreview.agent.providers import (
     TurnEndReason,
     TurnResult,
     call_tool,
+    model_payload,
     register,
     usage_body,
 )
@@ -189,7 +190,7 @@ def _tool_message(request: ToolCallRequest, result: ToolCallResult) -> dict[str,
         "role": "tool",
         "call_id": result.call_id,
         "name": request.name,
-        "content": result.payload,
+        "content": model_payload(result),
         "is_error": result.is_error,
     }
 

@@ -73,6 +73,7 @@ __all__ = [
     "call_tool",
     "error_body",
     "get",
+    "model_payload",
     "register",
     "summarize_result",
     "tool_result_text",
@@ -263,6 +264,21 @@ class ToolCallResult(ProviderModel):
     call_id: str
     payload: dict[str, Any]
     is_error: bool
+    view: dict[str, Any] | None = None
+    """What the model reads of the result when payload slimming is on (feature 008), set
+    once at `RecordedTool._finish`; `None` otherwise. `payload` is always the tool's full
+    return - the step summary, the `tool.finished` event, MCP and the goldens read it - and
+    `model_payload` is the only thing an adapter puts into its history."""
+
+
+def model_payload(result: ToolCallResult) -> dict[str, Any]:
+    """What the model is sent for one tool result: the view when there is one, else the payload.
+
+    The one reading of `ToolCallResult` every adapter's history is built from (research
+    R2.24), so no adapter can send the full payload where the view was meant, or the other
+    way round.
+    """
+    return result.view if result.view is not None else result.payload
 
 
 class AgentEvent(ProviderModel):

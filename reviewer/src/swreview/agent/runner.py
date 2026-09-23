@@ -108,7 +108,7 @@ from swreview.report.session import (
 )
 from swreview.tools.context import ToolContext, build_context
 from swreview.tools.query import package_summary
-from swreview.tools.registry import ToolRegistry
+from swreview.tools.registry import TOOL_RESULTS_DIR_NAME, ToolRegistry
 
 SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_v1.md"
 SESSION_FILE_NAME = "session.json"
@@ -552,10 +552,15 @@ class CoverageStopTools:
         # The sentence is this lever's annotation on the result, not the tool's own
         # output, so the `InvestigationStep` the tool layer already recorded keeps saying
         # what the tool returned. What the model was handed is on the stream, in this
-        # call's `tool.finished`, and in the session history the next request echoes.
-        return result.model_copy(
-            update={"payload": {**result.payload, COVERAGE_STOP_KEY: COVERAGE_STOP_SENTENCE}}
-        )
+        # call's `tool.finished`, and in the session history the next request echoes. With
+        # payload slimming on the model reads the view, so the sentence rides there too
+        # (feature 008, research R2.35), or it would silently stop reaching the model.
+        update: dict[str, Any] = {
+            "payload": {**result.payload, COVERAGE_STOP_KEY: COVERAGE_STOP_SENTENCE}
+        }
+        if result.view is not None:
+            update["view"] = {**result.view, COVERAGE_STOP_KEY: COVERAGE_STOP_SENTENCE}
+        return result.model_copy(update=update)
 
 
 # --- one verdict per check --------------------------------------------------------------
@@ -1018,6 +1023,10 @@ def start_review(
         session = context.session
         if session is None:  # pragma: no cover - build_context always makes one
             raise ValueError("build_context returned a context without a review session")
+        # Feature 008 (FR-021): every recorded step of this review - the pre-run's included -
+        # keeps its full result in the run folder. Only a review sets this, so a check run
+        # and MCP general chat write none.
+        context.tool_results_dir = out / TOOL_RESULTS_DIR_NAME
         session.provider_info = ProviderInfo(
             provider=str(provider.name),
             model=chosen_model,
