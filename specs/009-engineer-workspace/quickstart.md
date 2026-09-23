@@ -41,8 +41,8 @@ uv run pytest tests/unit/test_review_summary.py tests/unit/test_review_goals.py 
 ```
 
 Expected: "99 findings in 18 issues"; Decide 9 (Interference 6, Hole alignment 3), Fix 56, Verify 34;
-"4 questions for you"; "3 of 89 parts not loaded"; eight goal lines, each with its state, the ones
-not reached with a few words; the tests green, including the owner's three labels pinned.
+"4 questions for you"; "3 of 89 parts not loaded"; nine goal lines (modelling practice is the ninth,
+research R2.4), each with its state, the ones not reached with a few words; the tests green, including the owner's three labels pinned.
 
 ## Scenario 2 (US3): the summary in the pane
 
@@ -67,7 +67,7 @@ dotnet test SwReview.sln -c Release --filter "FullyQualifiedName~ReviewPageQuest
 
 Expected: `request_evidence` records the short form and refuses each over-long, blank, repeated or
 unknown value naming it; old sessions re-dump byte-identically; the tool array pins regenerated once
-with 32 tools; the panel asks "Question 1 of 3", sends two answers and skips one in one `POST`, shows
+for the short form (32 tools then, 35 since feature 010's three checks); the panel asks "Question 1 of 3", sends two answers and skips one in one `POST`, shows
 the resume sentence before sending, and names the question a refusal was about.
 
 ## Scenario 4 (US5): Results or Transcript
