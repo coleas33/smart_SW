@@ -63,7 +63,7 @@ issued, and the host resolves it against its own run record.
 | `RunNotFound` | `run_dir` is not a run this host created |
 | `CopyDiscarded` | The run's copy was discarded; the artifacts remain readable |
 | `ResumeRefused` | A run interrupted by a crash or an open circuit is never auto-resumed |
-| `RemodelUnavailable` | The attached bridge has no remodel seat, or seat availability is still being checked; `message` tells the engineer to run the standalone remodel probe or wait for attachment |
+| `RemodelUnavailable` | The attached bridge has no remodel seat, or seat availability is still being checked; `message` says in plain words that Remodel is not in this build yet and that the tab will not change the open part, or asks the engineer to wait for attachment. It names no console command: the standalone probe belongs in the workstation handover, not the Task Pane (U13, 2026-09-22) |
 
 A refusal costs nothing. A half-rebuilt sheet-metal part costs the engineer their afternoon. Per
 Principle VI every refusal is recorded as a reported coverage gap, never a silent skip.
