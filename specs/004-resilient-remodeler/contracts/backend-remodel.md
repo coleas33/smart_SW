@@ -42,9 +42,10 @@ bypass it by skipping the pane's start-state checks.
 `provider`, `model` and `effort` on `POST /remodel/runs` are optional and are resolved exactly as
 `POST /sessions` resolves them (`ProviderSettings.from_env`), so a remodel run and a review run
 cannot disagree about what "the default provider" means. **No route constructs a provider.** The
-judgement phase is the one construction site (`remodel/runner.py::build_provider`), it is reached
-only from `POST /remodel/runs`, and a run whose adapter cannot be built records the absence and
-applies the plan anyway (FR-045).
+judgement phase is the one entry point (`remodel/runner.py::build_provider`, which delegates to
+`cli.provider_factory` since the owner's decision 4A of 2026-09-23, `contracts/tools.md`), it is
+reached only from `POST /remodel/runs`, and a run whose adapter cannot be built records the absence
+and applies the plan anyway (FR-045).
 
 ### `POST /remodel/open` and `open.json`
 

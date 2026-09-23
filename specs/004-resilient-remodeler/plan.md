@@ -144,7 +144,8 @@ reviewer/src/swreview/
 ├── remodel/plan.py            # RemodelPlan (pydantic, plan_schema 1.0); plan_reorganize()
 ├── remodel/apply_log.py       # ChangeRecord + derive_undo(change), one pure inverse per kind
 ├── remodel/apply.py           # the deterministic executor: change -> bridge -> rebuild -> verify -> inverse
-├── remodel/runner.py          # phases A to D; the only place a provider is constructed
+├── remodel/runner.py          # phases A to D; the one provider entry point (delegates to
+│                              #   cli.provider_factory: owner decision 4A, 2026-09-23)
 ├── remodel/report.py          # report.md, grades.json, geometry.json, source-attestation.json
 ├── tools/remodel_plan.py      # propose_description, propose_global, decide_fillet, classify_unknown,
 │                              #   get_remodel_plan; registered only when ToolContext.remodel is set
