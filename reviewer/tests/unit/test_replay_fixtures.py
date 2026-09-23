@@ -464,23 +464,40 @@ def with_openai_pane(name: str, prune_after: int = 2) -> ReplayReport:
     )
 
 
+def without_lever_13(requested: Requested) -> Requested:
+    """`requested` with lever 13 off: the pane as it was before the amendment of 2026-09-23."""
+    efficiency, view = requested
+    return efficiency.model_copy(update={"withhold_prerun_tools": False}), view
+
+
 REQUESTED_SETTINGS: dict[str, Callable[[str], Requested]] = {
     "checks_first": lambda name: (CHECKS_FIRST, MODEL_VIEW_OFF),
     "pane_defaults": pane_request,
+    "pane_defaults_prune_1": lambda name: pane_request(name, 1),
+    "pane_without_lever_13": lambda name: without_lever_13(pane_request(name)),
+    "pane_without_lever_13_prune_1": lambda name: without_lever_13(pane_request(name, 1)),
     "openai_pane": lambda name: openai_pane_request(),
+    "openai_pane_prune_1": lambda name: openai_pane_request(1),
+    "openai_pane_without_lever_13": lambda name: without_lever_13(openai_pane_request()),
+    "openai_pane_without_lever_13_prune_1": lambda name: without_lever_13(openai_pane_request(1)),
 }
-"""Every requested setting US2 to US4 are accepted under (`contracts/replay.md` section 9)."""
+"""Every requested setting US2 to US4 are accepted under, and every one section 9's re-measured
+row prices (`contracts/replay.md` section 9): its "every run" is these and the recording's own
+settings (`test_the_finding_set_is_exact`). The view and the stubs without lever 13 are the
+fixtures' pane with lever 13 off (`--no-pane-defaults --lever prerun_checks --payload-slimming
+--history-pruning`)."""
 
 
 @pytest.mark.parametrize("setting", REQUESTED_SETTINGS)
 @pytest.mark.parametrize("name", NAMES)
-def test_every_requested_setting_records_every_recorded_contact_among_theirs(
+def test_every_requested_setting_loses_no_recorded_finding_and_holds_every_recorded_contact(
     name: str, setting: str, tmp_path: Path
 ) -> None:
-    """The recorded contacts (3, 2 and 0 groups) are where the replay reclassified 3, 2 and 0
-    before decision 3A, so every requested pass must hold them. Checks first judges every
-    group, so it records more contacts than the recording (every fictional row of the big
-    fixture touches); never fewer."""
+    """Section 9's absolute rule in every run it prices: no recorded finding lost, none not
+    replayable, and none reclassified. The recorded contacts (3, 2 and 0 groups) are where the
+    replay reclassified 3, 2 and 0 before decision 3A, so every requested pass must hold them.
+    Checks first judges every group, so it records more contacts than the recording (every
+    fictional row of the big fixture touches); never fewer."""
     passes = replay_passes(
         read_recording(FIXTURES / name),
         tmp_path,
@@ -488,6 +505,7 @@ def test_every_requested_setting_records_every_recorded_contact_among_theirs(
         standards_profile=EXAMPLE_PROFILE,
     )
 
+    no_recorded_finding_lost(report_of(passes).findings)
     recorded, requested = contact_groups(passes.recording.session), contact_groups(
         passes.second.session
     )
@@ -555,7 +573,7 @@ def test_both_prune_ages_are_priced_for_the_owner() -> None:
     assert one.settings.requested.model_view.prune_after_rounds == 1
     assert two.settings.requested.model_view.prune_after_rounds == 2
     assert one.totals.requested <= two.totals.requested < MILLION
-    assert one.findings.lost == []
+    no_recorded_finding_lost(one.findings)
     assert any(
         line.endswith("history pruning after 1 round") for line in render_replay_lines(one)
     )
@@ -605,10 +623,9 @@ fixture holds none, so the pre-run never called it and it stays."""
 @cache
 def with_lever_13_off(name: str) -> ReplayReport:
     """The pane defaults with lever 13 off: the pane as it was before the amendment."""
-    efficiency, view = pane_request(name)
     return replay(
         FIXTURES / name,
-        requested=(efficiency.model_copy(update={"withhold_prerun_tools": False}), view),
+        requested=without_lever_13(pane_request(name)),
         standards_profile=EXAMPLE_PROFILE,
     )
 
@@ -626,6 +643,7 @@ def test_lever_13_cuts_every_round_of_every_fixture_and_loses_no_finding(name: s
         else:
             assert with_it.requested_input == without_it.requested_input
     no_recorded_finding_lost(on.findings)
+    no_recorded_finding_lost(off.findings)
     assert on.totals.as_recorded == off.totals.as_recorded, "pass A does not move"
 
 
