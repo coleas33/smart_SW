@@ -302,13 +302,21 @@ body.results-stale .card.evidence {
   only an engineer can settle this row. The class names are the two check tabs' - see
   web/shared/check-page.css - so the same block reads the same way on all three tabs.
 */
+/*
+  The rank counter belongs to the whole panel rather than to the Start-here list, so the rows
+  behind "Show all" go on counting from where the five stopped (U12) - numbered by the
+  stylesheet, in the order they arrived, with no number computed by the page.
+*/
+#attention-panel .attention {
+  counter-reset: rank;
+}
+
 .attention-rows {
   display: grid;
   gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
-  counter-reset: rank;
 }
 
 /* Five ranked cards must not consume the whole docked pane. The panel gets its own scroll
@@ -403,20 +411,116 @@ body.results-stale .card.evidence {
   color: var(--muted);
 }
 
-.attention-row.stripe-judge {
+.attention-row.stripe-judge,
+.attention-line.stripe-judge {
   border-left-color: var(--judge);
 }
 
-.attention-row.stripe-critical {
+.attention-row.stripe-critical,
+.attention-line.stripe-critical {
   border-left-color: var(--critical);
 }
 
-.attention-row.stripe-warn {
+.attention-row.stripe-warn,
+.attention-line.stripe-warn {
   border-left-color: var(--warn);
 }
 
-.attention-row.stripe-quiet {
+.attention-row.stripe-quiet,
+.attention-line.stripe-quiet {
   border-left-color: var(--quiet);
+}
+
+/* ---- every other row, behind Show all (U12) --------------------------------------------- */
+
+/* The backend's numbers, each with its unit, under the heading. */
+.attention-count {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: var(--text-small);
+}
+
+.attention-more {
+  margin-top: 8px;
+}
+
+.attention-more > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--accent);
+  font-size: var(--text-small);
+  list-style: none;
+  cursor: pointer;
+}
+
+.attention-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.attention-more > summary::after {
+  content: "\25b8";
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.attention-more[open] > summary::after {
+  content: "\25be";
+}
+
+.attention-index {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One line per row: the number, the id and the title, which gives way first when it is long. */
+.attention-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 6px;
+  border-left: 3px solid var(--quiet);
+  font-size: var(--text-small);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.attention-line:hover {
+  background: var(--accent-bg);
+}
+
+.attention-line::before {
+  flex: 0 0 auto;
+  counter-increment: rank;
+  content: counter(rank);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: var(--text-label);
+}
+
+.line-id {
+  flex: 0 0 auto;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: var(--text-label);
+}
+
+.line-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+}
+
+.line-members,
+.line-reach {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: var(--text-label);
 }
 
 /* The reason chip restates the stripe rather than adding a second colour beside it. */

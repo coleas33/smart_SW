@@ -388,6 +388,136 @@ public sealed class ReviewPageInjectionTests
             Strings(Shapes.Value.GetProperty("start"), "rowClasses"));
     }
 
+    // ---- every row, behind Show all (U12) ------------------------------------------------------
+
+    /// <summary>
+    /// The panel with every row of <see cref="AttentionSample"/> - the sixth row's title made
+    /// hostile - and four variations on the numbers the backend sends, rendered once in one page.
+    /// </summary>
+    private static readonly Lazy<JsonElement> Index = new Lazy<JsonElement>(() => OffscreenReviewPage.Evaluate(
+        ShapeHelpers
+        + IndexHelpers
+        + "var sample = " + AttentionSample.Json().Replace(
+            "\"title\":\"" + AttentionSample.BeyondTopNTitle + "\"",
+            "\"title\":" + JsonSerializer.Serialize(HostileTitle)) + ";"
+        + "return JSON.stringify({ok: true,"
+        + "full: indexShape(mutate(sample, function (r) {})),"
+        + "fits: indexShape(mutate(sample, function (r) { r.rows = r.rows.slice(0, 3); r.not_amplified.beyond_top_n = 0; })),"
+        + "one: indexShape(mutate(sample, function (r) { r.rows = r.rows.slice(0, 1); r.not_amplified.beyond_top_n = 1; })),"
+        + "noCounts: indexShape(mutate(sample, function (r) { delete r.not_amplified; })),"
+        + "noTopN: indexShape(mutate(sample, function (r) { delete r.top_n; }))"
+        + "});"));
+
+    /// <summary>
+    /// The rows beyond `top_n` are one line each: which finding, its title, how many findings
+    /// the row folds when it folds more than one, and how many components it reaches - with
+    /// the stripe of its consequence class, from the same shared map as Start here. Under
+    /// Start here, in the order supplied, behind one control that names both units.
+    /// </summary>
+    [Fact]
+    public void ARowBeyondTopNIsOneLineBehindAControlAfterTheFive()
+    {
+        JsonElement full = Index.Value.GetProperty("full");
+
+        Assert.Equal(AttentionSample.ShownFindingIds, Strings(full, "startIds"));
+        Assert.Equal(new[] { AttentionSample.BeyondTopN }, Strings(full, "indexIds"));
+        Assert.Equal("Show all 6 issues (8 findings)", full.GetProperty("more").GetString());
+        Assert.Equal("attention-line stripe-quiet", full.GetProperty("lineClass").GetString());
+        Assert.Equal(
+            new[] { "line-id", "line-title", "line-members", "line-reach" },
+            Strings(full, "lineChildren"));
+        Assert.Equal(
+            new[] { AttentionSample.BeyondTopN, HostileTitle, "×3", "1 component" },
+            Strings(full, "lineTexts"));
+        Assert.False(full.GetProperty("moreOpen").GetBoolean(), "Show all arrived open.");
+    }
+
+    /// <summary>A title that carries markup is characters on a one-line row too (FR-029).</summary>
+    [Fact]
+    public void AHostileTitleOnARowBeyondTopNRendersAsLiteralText()
+    {
+        JsonElement full = Index.Value.GetProperty("full");
+
+        Assert.Contains(HostileTitle, full.GetProperty("text").GetString()!);
+        Assert.Equal(0, full.GetProperty("injected").GetInt32());
+        Assert.Equal(0, full.GetProperty("handlers").GetInt32());
+    }
+
+    /// <summary>
+    /// The count line prints the backend's numbers and says what each counts, in the singular
+    /// when it is one, and a ranking whose rows all fit under Start here offers no control.
+    /// </summary>
+    [Fact]
+    public void TheCountLinePrintsTheBackendsNumbersAndAFittingRankingOffersNoControl()
+    {
+        JsonElement full = Index.Value.GetProperty("full");
+        JsonElement fits = Index.Value.GetProperty("fits");
+        JsonElement one = Index.Value.GetProperty("one");
+
+        Assert.Equal("Start here: 5 of 6 issues · 3 findings not in Start here", full.GetProperty("count").GetString());
+        Assert.Equal("Start here: 3 of 3 issues · 0 findings not in Start here", fits.GetProperty("count").GetString());
+        Assert.Equal("Start here: 1 of 1 issue · 1 finding not in Start here", one.GetProperty("count").GetString());
+
+        Assert.Equal(JsonValueKind.Null, fits.GetProperty("more").ValueKind);
+        Assert.Empty(Strings(fits, "indexIds"));
+        Assert.Equal(JsonValueKind.Null, one.GetProperty("more").ValueKind);
+    }
+
+    /// <summary>
+    /// A ranking without `not_amplified` prints the issues and no findings figure rather than a
+    /// made-up one; a ranking without a usable `top_n` shows every row under Start here, as
+    /// `amplified` always has, and so has nothing to put behind a control.
+    /// </summary>
+    [Fact]
+    public void AMissingCountIsLeftOutAndAMissingTopNShowsEveryRowUnderStartHere()
+    {
+        JsonElement noCounts = Index.Value.GetProperty("noCounts");
+        JsonElement noTopN = Index.Value.GetProperty("noTopN");
+
+        Assert.Equal("Start here: 5 of 6 issues", noCounts.GetProperty("count").GetString());
+        Assert.Equal("Show all 6 issues (8 findings)", noCounts.GetProperty("more").GetString());
+
+        Assert.Equal("Start here: 6 of 6 issues · 3 findings not in Start here", noTopN.GetProperty("count").GetString());
+        Assert.Equal(6, Strings(noTopN, "startIds").Length);
+        Assert.Equal(JsonValueKind.Null, noTopN.GetProperty("more").ValueKind);
+    }
+
+    private const string IndexHelpers = @"
+var attrsOf = function (root, selector, name) {
+  var found = root.querySelectorAll(selector);
+  var out = [];
+  for (var i = 0; i < found.length; i++) { out.push(found[i].getAttribute(name)); }
+  return out;
+};
+
+var mutate = function (ranking, change) {
+  var copy = JSON.parse(JSON.stringify(ranking));
+  change(copy);
+  return copy;
+};
+
+var indexShape = function (value) {
+  var got = one('attentionPanel', value, 'section.attention');
+  var panel = got.node;
+  var seen = describe(got.host);
+  var line = panel.querySelector('.attention-index .attention-line');
+  var more = panel.querySelector('.attention-more');
+  return {
+    count: textOf(panel, '.attention-count'),
+    more: more ? textOf(more, 'summary') : null,
+    moreOpen: more ? !!more.open : false,
+    startIds: attrsOf(panel, '.attention-rows .attention-row', 'data-finding-id'),
+    indexIds: attrsOf(panel, '.attention-index [data-finding-id]', 'data-finding-id'),
+    lineClass: line ? line.className : '',
+    lineChildren: childClasses(line),
+    lineTexts: line ? textsOf(line, 'span') : [],
+    text: seen.text,
+    injected: seen.injected,
+    handlers: seen.handlers
+  };
+};
+";
+
     /// <summary>
     /// The coverage panel is a fold that is shut when it arrives, and its one line says how much
     /// is inside. A real run produced 62 of these rows, listed flat and uncollapsed, under a

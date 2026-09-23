@@ -347,14 +347,16 @@ public sealed class ModelCheckPageTests
         Assert.Equal(AttentionSample.ShownTitles, Strings(rendered, "titles"));
 
         // Status and severity as plain words, in the order the contract states them. They are
-        // read and printed; nothing on this page compares either of them.
+        // read and printed; nothing on this page compares either of them. The components close
+        // the same line since the renderer became one shared script (feature 009 increment 3):
+        // the Review tab always put them there, and one row shape is the point of sharing it.
         foreach (string meta in Strings(rendered, "metas"))
         {
-            Assert.StartsWith("demonstrated", meta, StringComparison.Ordinal);
-            Assert.EndsWith("medium", meta, StringComparison.Ordinal);
+            Assert.StartsWith("demonstrated · medium", meta, StringComparison.Ordinal);
         }
 
         Assert.Equal("cmp:0002, cmp:0003", Strings(rendered, "components")[0]);
+        Assert.EndsWith("cmp:0002, cmp:0003", Strings(rendered, "metas")[0], StringComparison.Ordinal);
 
         string[] classes = Strings(rendered, "classes");
         Assert.Equal(5, classes.Length);

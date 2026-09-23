@@ -1144,12 +1144,14 @@
    * inert, so an engineer read "F-007, interference.static, needs your judgement" and then went
    * looking for F-007 by eye through a whole review's transcript. One listener on the panel,
    * matching `render.js`'s one listener on the transcript, so a rebuilt panel keeps working.
+   * A Start-here card and a one-line row behind "Show all" are both a finding id to follow
+   * (U12); the "Show all" control itself carries none, and folds natively.
    *
    * Nothing here ranks, filters or reorders: it scrolls to a card that is already on screen.
    */
   function onAttentionClick(event) {
     var target = event.target;
-    var row = (target && target.closest) ? target.closest('.attention-row') : null;
+    var row = (target && target.closest) ? target.closest('[data-finding-id]') : null;
     if (!row) {
       return;
     }
