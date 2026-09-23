@@ -20,11 +20,15 @@ moves; no event type is added.
 
 - **The ranking.** `report/attention.py`, its keys, its fold and `TOP_N` are untouched; the summary
   reads the ranking and never reorders it. `attention.json` and both check bodies keep their shape
-  and bytes (`AttentionRecord.of` copies field by field).
+  and bytes (`AttentionRecord.of` copies field by field) - apart, since decision 2A, from the
+  check bodies' row titles, which are display titles (`plain-words.md` section 2).
 - **A finding's evidence.** `observed`, `component_ids`, inputs, calculations and statuses do not
-  change. The title changes (whole first sentence, part names), and only the ten golden baselines
-  holding a cut title move, once. *Not landed yet*: T062 is open (`plain-words.md` section 2).
-- **`report.md`.** No new section; its goldens hold apart from titles.
+  change. *Amended 2026-09-23 (owner, decision 2A):* nor does `Finding.title`, the recorded title
+  the model reads; the whole, named title is the display title, built only where a person reads
+  it - on the pane's bodies, both check bodies' `attention` rows and in `report.md` - and no golden
+  baseline moves (`plain-words.md` section 2, landed with T061, T062 and T065).
+- **`report.md`.** No new section; its goldens hold (their titles are hand-written, and shown as
+  written).
 - **`chat-events.schema.json`, `ir.schema.json`, `settings.schema.json`, `UserSettings.cs`.**
 - **Feature 008's code.** Its batch route is called as specified; this feature adds one field
   (`request_id`) to two error bodies after 008 T085 lands, and never edits `usageLine`'s body
