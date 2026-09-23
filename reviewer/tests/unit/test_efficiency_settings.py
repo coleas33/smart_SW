@@ -657,6 +657,11 @@ def test_the_pane_runs_checks_first_on_every_provider(provider: ProviderName) ->
     assert checks_first(pane) is True
 
 
+PANE_LEVERS = ("prerun_checks", "parallel_tool_calls")
+"""The levers the pane decides per provider: checks first (User Story 2) and, for OpenAI,
+parallel tool calls (User Story 4, T080). Every other lever is the class default."""
+
+
 @pytest.mark.parametrize("provider", list(ProviderName))
 def test_every_other_pane_lever_is_the_class_default(provider: ProviderName) -> None:
     """Checks first is the one lever User Story 2 turns on in the pane; US4 widens this by
@@ -664,9 +669,42 @@ def test_every_other_pane_lever_is_the_class_default(provider: ProviderName) -> 
     pane = pane_efficiency(provider).model_dump()
     default = EfficiencySettings().model_dump()
 
-    assert {name: value for name, value in pane.items() if name != "prerun_checks"} == {
-        name: value for name, value in default.items() if name != "prerun_checks"
+    assert {name: value for name, value in pane.items() if name not in PANE_LEVERS} == {
+        name: value for name, value in default.items() if name not in PANE_LEVERS
     }
+
+
+PARALLEL_BY_PROVIDER: tuple[tuple[ProviderName, bool], ...] = (
+    (ProviderName.OPENAI, True),
+    (ProviderName.GEMINI, False),
+    (ProviderName.FAKE, False),
+)
+"""Lever 6 in the pane, per provider (feature 008 FR-024, research R2.40): on for OpenAI,
+whose request pins it off otherwise; off for Gemini, which has no switch and already makes
+parallel calls; off for the scripted provider, which reads no request field."""
+
+
+def test_the_parallel_table_names_every_provider() -> None:
+    assert {provider for provider, _ in PARALLEL_BY_PROVIDER} == set(ProviderName)
+
+
+@pytest.mark.parametrize(("provider", "expected"), PARALLEL_BY_PROVIDER)
+def test_the_pane_asks_for_parallel_tool_calls_on_openai_only(
+    provider: ProviderName, expected: bool
+) -> None:
+    assert pane_efficiency(provider).parallel_tool_calls is expected
+
+
+@pytest.mark.parametrize("provider", list(ProviderName))
+def test_the_panes_levers_pass_the_lever_resolver_for_their_provider(
+    provider: ProviderName,
+) -> None:
+    """`--pane-defaults` feeds the pane's levers back through `efficiency_from_levers`, so no
+    provider's pane may carry a lever that resolver refuses - Gemini's parallel arm above all."""
+    pane = pane_efficiency(provider)
+    named = [name for name, on in pane.model_dump().items() if on]
+
+    assert efficiency_from_levers(named, provider=provider) == pane
 
 
 def test_the_pane_default_does_not_loosen_the_gated_alone_rule() -> None:

@@ -81,8 +81,13 @@ from swreview.agent.providers import (
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import (
     EVENTS_FILE_NAME,
+    REPEATED_ANSWER,
     SESSION_FILE_NAME,
+    EvidenceAlreadyAnsweredError,
     ReviewRun,
+    UnknownEvidenceRequestError,
+    answerable,
+    repeated_request_id,
     start_review,
 )
 from swreview.agent.settings import (
@@ -90,6 +95,7 @@ from swreview.agent.settings import (
     ProviderSettings,
     default_model,
     pane_defaults,
+    pane_efficiency,
     redact,
 )
 from swreview.benchmark.timing import TIMING_INPUTS
@@ -616,13 +622,17 @@ def build_provider(settings: ProviderSettings, *, fail_bridge: int = 0) -> Agent
     module scope so `chat.server` stays importable (and testable) without pulling in the
     command line. The scripted provider is built here instead of there because a chat
     needs a script that survives a conversation - see `fake_chat_script`.
+
+    The pane's levers go to the factory because lever 6 is decided at construction:
+    `pane_efficiency` is the same function `_start_review` records on the session, so the
+    session says what the adapter was built with (feature 008 research R2.40).
     """
     if settings.provider is ProviderName.FAKE:
         calls = fail_bridge + 1 if fail_bridge else 0
         return FakeProvider(script=fake_chat_script(bridge_calls=calls), model=settings.model)
     from swreview.cli import provider_factory
 
-    return provider_factory(settings)
+    return provider_factory(settings, pane_efficiency(settings.provider))
 
 
 def list_provider_models(
@@ -1346,21 +1356,70 @@ class ChatServer:
         self._require_idle(chat)
         run = self._run_of(chat)
         request_id = request.path_params["request_id"]
-        found = next(
-            (item for item in run.session.evidence_requests if item.id == request_id), None
-        )
-        if found is None:
-            raise UnknownEvidenceRequest(
-                f"no evidence request {request_id!r} in this session; open: {chat.open_requests}",
-                request_id=request_id,
-            )
-        if found.status != "open":
-            raise AlreadyAnswered(
-                f"evidence request {request_id} is already answered", request_id=request_id
-            )
+        self._require_answerable(run, [request_id])
         chat.to(ChatState.RUNNING)
         self._submit(chat, partial(run.answer_evidence, request_id, answer))
         return JSONResponse(chat.public(), status_code=202)
+
+    async def answer_evidence_batch(self, request: Request) -> Response:
+        """`POST /sessions/{chat_id}/evidence`: several answers, one resumed turn (FR-025).
+
+        Checked in the order of feature 008's `contracts/answer-batch.md` section 2 - the
+        chat, the shape, a running turn, then every id - and a refusal changes nothing: the
+        runner validates the same way again before it marks anything, but by then this
+        route has already said why it would refuse.
+        """
+        chat = self._chat(request)
+        answers = self._answer_batch(await self._json(request))
+        self._require_idle(chat)
+        run = self._run_of(chat)
+        self._require_answerable(run, [request_id for request_id, _ in answers])
+        chat.to(ChatState.RUNNING)
+        self._submit(chat, partial(run.answer_evidence_batch, answers))
+        return JSONResponse(chat.public(), status_code=202)
+
+    @staticmethod
+    def _answer_batch(body: Mapping[str, Any]) -> list[tuple[str, str]]:
+        """`{"answers": [{"request_id", "answer"}, ...]}` as pairs, or a 400 naming the fault.
+
+        Each item needs a non-empty string `request_id` and a non-empty string `answer`,
+        the single route's rule for an answer; no id may be named twice.
+        """
+        items = body.get("answers")
+        if not isinstance(items, list):
+            raise ChatError("an answer batch needs 'answers', a list of {request_id, answer}")
+        if not items:
+            raise ChatError("an answer batch needs at least one answer in 'answers'")
+        answers: list[tuple[str, str]] = []
+        for index, item in enumerate(items):
+            request_id = item.get("request_id") if isinstance(item, dict) else None
+            answer = item.get("answer") if isinstance(item, dict) else None
+            if (
+                not isinstance(request_id, str)
+                or not request_id.strip()
+                or not isinstance(answer, str)
+                or not answer.strip()
+            ):
+                raise ChatError(
+                    f"answers[{index}] needs a non-empty string 'request_id' and a non-empty "
+                    "string 'answer'"
+                )
+            answers.append((request_id, answer))
+        repeated = repeated_request_id(answers)
+        if repeated is not None:
+            raise ChatError(REPEATED_ANSWER.format(request_id=repeated))
+        return answers
+
+    @staticmethod
+    def _require_answerable(run: ReviewRun, request_ids: Sequence[str]) -> None:
+        """Refuse the first id the runner's own validator refuses, with the contract's error."""
+        for request_id in request_ids:
+            try:
+                answerable(run.session, request_id)
+            except UnknownEvidenceRequestError as exc:
+                raise UnknownEvidenceRequest(str(exc), request_id=exc.request_id) from exc
+            except EvidenceAlreadyAnsweredError as exc:
+                raise AlreadyAnswered(str(exc), request_id=exc.request_id) from exc
 
     async def disposition(self, request: Request) -> Response:
         chat = self._chat(request)
@@ -2336,6 +2395,10 @@ def create_app(
             server.answer_evidence,
             methods=["POST"],
         ),
+        # Several answers, one resumed turn (feature 008, contracts/answer-batch.md). A
+        # literal last segment, so it and the single-answer route above never shadow each
+        # other.
+        Route("/sessions/{chat_id}/evidence", server.answer_evidence_batch, methods=["POST"]),
         Route(
             "/sessions/{chat_id}/findings/{finding_id}/disposition",
             server.disposition,

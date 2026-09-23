@@ -471,6 +471,19 @@ adapter construction, in `cli.provider_factory`, where `max_output_tokens` alrea
 a new argument on `AgentProvider.run`: that signature is the port contract and changing it touches
 three adapters and every test that implements it.
 
+**Adopted as the pane default for OpenAI on 2026-09-22 (feature 008, User Story 4).** By the
+owner's decision, on the evidence of the one-design study under "Measurements outside the ledger"
+(`docs/llm-efficiency-options.md`), superseding the held-out rule for this lever. `pane_efficiency
+(provider)` sets `parallel_tool_calls = provider is OPENAI`; `chat.server.build_provider` passes it
+to `cli.provider_factory` at construction and `ChatServer._start_review` records the same settings
+on `session.efficiency`, so the session says what the adapter was built with. A Gemini or scripted
+pane review records it off (Gemini has no switch and already makes parallel calls; the scripted
+provider reads no request field). Local dispatch stays serial in response order, so SOLIDWORKS
+calls still reach the one STA thread one at a time. `EfficiencySettings.parallel_tool_calls`
+itself still defaults off, and so do `swreview review` and `swreview benchmark run`; `--lever
+parallel_tool_calls` (or 008's `--pane-defaults` with `--provider openai`) turns it on there.
+`GATED_ALONE` and every lever-count pin are unchanged; no pane control exists.
+
 **The two adapters do not behave the same today, and the source document is wrong about one of
 them.** OpenAI sends `"parallel_tool_calls": False` on every request (VERIFIED,
 `openai_provider.py:308`). Gemini sends no such setting: `_config` (`gemini_provider.py:444-466`)

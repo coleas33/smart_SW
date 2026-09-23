@@ -445,7 +445,9 @@ class EfficiencySettings(BaseModel):
     `pane_efficiency`, and `checks_first` is what every reader asks."""
 
     parallel_tool_calls: bool = False
-    """Lever 6, OpenAI: the request stops pinning `parallel_tool_calls: False`."""
+    """Lever 6, OpenAI: the request stops pinning `parallel_tool_calls: False`. Pane default
+    for OpenAI since 2026-09-22 (feature 008); off here, and the pane turns it on through
+    `pane_efficiency`."""
 
     coverage_stop: bool = False
     """Lever 7: the stop predicate issues the next round with tool calls disabled."""
@@ -485,13 +487,15 @@ def checks_first(efficiency: EfficiencySettings | None) -> bool:
 def pane_efficiency(provider: ProviderName) -> EfficiencySettings:
     """The levers every pane review runs with: the one place the pane's defaults are decided.
 
-    Checks first, since the owner's decision of 2026-09-22 (feature 008 User Story 2). A
-    function of the provider rather than a constant, because User Story 4 adds parallel
-    tool calls for OpenAI only (research R2.14). The command line and `benchmark run` stay
-    all off; `swreview review --pane-defaults` reproduces this. `provider` is not read yet:
-    User Story 4 reads it.
+    Checks first on every provider, and parallel tool calls on OpenAI only, since the
+    owner's decision of 2026-09-22 (feature 008 User Stories 2 and 4, research R2.14,
+    R2.40): Gemini has no switch and already makes parallel calls, and the scripted provider
+    reads no request field, so both record the lever off. The command line and `benchmark
+    run` stay all off; `swreview review --pane-defaults` reproduces this.
     """
-    return EfficiencySettings(prerun_checks=True)
+    return EfficiencySettings(
+        prerun_checks=True, parallel_tool_calls=provider is ProviderName.OPENAI
+    )
 
 
 class ModelViewSettings(BaseModel):

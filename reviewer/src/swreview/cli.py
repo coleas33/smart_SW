@@ -291,7 +291,8 @@ def provider_factory(
 
     `efficiency` is here for the one lever that is decided at construction rather than at
     `start_review`: lever 6's `parallel_tool_calls`, which is an OpenAI request field.
-    Omitted, every lever is off, which is what the pane and every library caller get.
+    Omitted, every lever is off, which is what every library caller gets; the pane passes
+    `pane_efficiency(provider)` (feature 008, `chat.server.build_provider`).
     """
     levers = efficiency if efficiency is not None else EfficiencySettings()
     adapter = providers.get(settings.provider)

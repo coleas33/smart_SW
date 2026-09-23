@@ -245,12 +245,14 @@ class OpenAIProvider:
                 from it too. Omitted, it is `agent/settings.py`'s ceiling for this provider
                 and model, which is the one authority for it - never the `16000` feature
                 001's runner carried for a non-streaming provider.
-            parallel_tool_calls: Feature 005's lever 6, off by default and read here
+            parallel_tool_calls: Feature 005's lever 6, off by default here and read here
                 rather than on `run`, whose signature is the port contract. Off, the
                 request pins `parallel_tool_calls: False` and the model asks for one call
                 per round trip, which is what feature 001 sent. On, several calls may
                 arrive in one response; this adapter still runs them serially, in request
-                order, because the win is the round trip and not the threads.
+                order, because the win is the round trip and not the threads. The pane
+                turns it on for every OpenAI review (feature 008): `pane_efficiency`
+                decides it and `chat.server.build_provider` passes it in.
             api_key: The key, when this adapter builds its own client.
             base_url: An alternate endpoint (`OPENAI_BASE_URL`), when one is configured.
             client: A ready-made client, which is how the tests inject a recorded one.
@@ -268,8 +270,9 @@ class OpenAIProvider:
         self.model = model
         self.max_output_tokens = ceiling
         self.parallel_tool_calls = parallel_tool_calls
-        """Lever 6. `False` is the default and stays the default; `cli.provider_factory`
-        is the one place that reads `EfficiencySettings` and passes it in."""
+        """Lever 6. `False` is this class's default and stays its default;
+        `cli.provider_factory` is the one place that reads `EfficiencySettings` and passes
+        it in - the pane's from `pane_efficiency`, True for OpenAI since feature 008."""
         self._client = client if client is not None else OpenAI(api_key=api_key, base_url=base_url)
         self._api_key = api_key if api_key else str(getattr(self._client, "api_key", "") or "")
         self._clock = clock
