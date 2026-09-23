@@ -23,6 +23,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
+from swreview.drawings.native import native_sheet_count
 from swreview.exceptions import ExceptionStore
 from swreview.ir.models import (
     BBox2D,
@@ -63,7 +64,12 @@ def as_json(model: Any) -> dict[str, Any]:
 
 
 def package_summary(package: EvidencePackage) -> dict[str, Any]:
-    """The census `get_package_summary` returns, also used to open the system prompt."""
+    """The census `get_package_summary` returns, also used to open the system prompt.
+
+    `native_drawing_sheet_count` (feature 011) sits beside the ingested count only when the
+    drawing phase read a sheet, so a package without one is summarized to its old bytes.
+    """
+    native = native_sheet_count(package)
     return {
         "design_id": package.design.design_id,
         "design_name": package.design.name,
@@ -77,6 +83,7 @@ def package_summary(package: EvidencePackage) -> dict[str, Any]:
         "fastener_count": len(package.fasteners),
         "interference_count": len(package.interferences),
         "drawing_sheet_count": len(package.drawings),
+        **({"native_drawing_sheet_count": native} if native else {}),
         "capture_count": len(package.captures),
         "gap_count": len(package.gaps),
         "manifest_discrepancies": [as_json(item) for item in package.manifest.discrepancies],
