@@ -98,7 +98,13 @@ def reuse_manifest(entries: list[ManifestEntry] | None = None) -> Manifest:
 
 
 def reuse_package(**overrides: Any) -> EvidencePackage:
-    """`build_package` with a 1.3.0 manifest; `overrides` replace top-level fields."""
-    fields: dict[str, Any] = {"manifest": reuse_manifest()}
+    """`build_package` with a 1.3.0 manifest; `overrides` replace top-level fields.
+
+    The schema version is pinned to the one `ReuseFixture.cs` writes, `1.4.0`, rather than
+    following `SCHEMA_VERSION`: the key hashes the package's own version, and the
+    cross-language pin in `test_reuse_key.py` is one fixed package hashed by both
+    languages, so a schema bump (1.5.0, feature 010) must not move one side of it.
+    """
+    fields: dict[str, Any] = {"manifest": reuse_manifest(), "schema_version": "1.4.0"}
     fields.update(overrides)
     return build_package(**fields)

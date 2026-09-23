@@ -12,7 +12,7 @@ namespace SwReview.Extractor.Ir;
 public sealed class EvidencePackage
 {
     /// <summary>The schema version this package was written against.</summary>
-    public const string CurrentSchemaVersion = "1.4.0";
+    public const string CurrentSchemaVersion = "1.5.0";
 
     /// <summary>Semver; consumers reject any major other than 1 (FR-016).</summary>
     [JsonPropertyName("schema_version")]
@@ -129,6 +129,24 @@ public sealed class EvidencePackage
     public List<CutListItem>? CutListItems { get; set; }
 
     /// <summary>
+    /// The part documents' feature dimensions and their tolerances (schema 1.5.0, feature
+    /// 010), written by the <c>tolerance</c> phase. Null and omitted when the phase recorded
+    /// none, for the reason <see cref="DrawingRecords"/> gives.
+    /// </summary>
+    [JsonPropertyName("model_dimensions")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ModelDimension>? ModelDimensions { get; set; }
+
+    /// <summary>
+    /// The part documents' geometric tolerances and datum tags, DimXpert or MBD (schema 1.5.0,
+    /// feature 010), written by the <c>tolerance</c> phase. Null and omitted when the phase
+    /// recorded none.
+    /// </summary>
+    [JsonPropertyName("model_annotations")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ModelAnnotation>? ModelAnnotations { get; set; }
+
+    /// <summary>
     /// The last suppress-test run appended to this package, or null. A dump overwrites the
     /// package and drops it, exactly as it drops interference results.
     /// </summary>
@@ -140,13 +158,14 @@ public sealed class EvidencePackage
     public List<Gap> Gaps { get; set; } = new List<Gap>();
 
     /// <summary>
-    /// Nulls the two schema 1.4.0 arrays when they carry no rows, so they are omitted rather
-    /// than written as <c>[]</c> (contracts/ir-additions.md, additivity rule point 3).
+    /// Nulls the schema 1.4.0 and 1.5.0 arrays when they carry no rows, so they are omitted
+    /// rather than written as <c>[]</c> (contracts/ir-additions.md, additivity rule point 3;
+    /// feature 010 FR-028).
     ///
     /// Done here, once, on the way into <see cref="PackageSerializer.Serialize"/>, rather
     /// than in every caller that builds a package: a caller that forgot would write an empty
     /// array that is contract-valid, passes every schema check, and still moves every golden
-    /// package on disk. Only these two are touched; every array feature 001 shipped keeps
+    /// package on disk. Only these four are touched; every array feature 001 shipped keeps
     /// its <c>[]</c>.
     /// </summary>
     internal void OmitEmptyAdditiveArrays()
@@ -159,6 +178,16 @@ public sealed class EvidencePackage
         if (CutListItems != null && CutListItems.Count == 0)
         {
             CutListItems = null;
+        }
+
+        if (ModelDimensions != null && ModelDimensions.Count == 0)
+        {
+            ModelDimensions = null;
+        }
+
+        if (ModelAnnotations != null && ModelAnnotations.Count == 0)
+        {
+            ModelAnnotations = null;
         }
     }
 }

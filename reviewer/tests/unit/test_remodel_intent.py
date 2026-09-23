@@ -21,6 +21,9 @@ specification, and it is three claims:
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import swreview.remodel as remodel_module
 from swreview.checks.rms_types import load_table
 from swreview.ir.models import EvidencePackage, Feature
 from swreview.remodel.intent import (
@@ -263,7 +266,23 @@ def test_every_candidate_names_an_admissible_parameter() -> None:
 
 
 def test_the_ir_carries_no_dimension_for_a_proposal_to_name() -> None:
-    """The structural reason a hard-coded sketch value can never be proposed (FR-030)."""
+    """The structural reason a hard-coded sketch value can never be proposed (FR-030).
+
+    Feature 010 put `model_dimensions` on the package (schema 1.5.0): the part documents'
+    dimensions and their tolerances, read-only evidence for the tolerance resolver. A
+    feature still carries no dimension, and no module of the re-modeler reads that member,
+    so the planner still has no dimension it could name.
+    """
     assert not [name for name in Feature.model_fields if "dimension" in name]
-    assert not [name for name in EvidencePackage.model_fields if "dimension" in name]
+    assert [name for name in EvidencePackage.model_fields if "dimension" in name] == [
+        "model_dimensions"
+    ]
+    remodel_sources = sorted(Path(remodel_module.__file__).parent.rglob("*.py"))
+    assert remodel_sources, "the scan found no re-modeler source and would pass vacuously"
+    readers = [
+        path.name
+        for path in remodel_sources
+        if "model_dimensions" in path.read_text(encoding="utf-8")
+    ]
+    assert readers == []
     assert "equations" in EvidencePackage.model_fields

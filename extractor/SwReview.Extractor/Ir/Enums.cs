@@ -264,3 +264,25 @@ public enum SuppressTestOutcome
     /// <summary>The run stopped before this feature finished.</summary>
     Aborted,
 }
+
+/// <summary>ModelDimension.dimension_type (schema 1.5.0, feature 010).</summary>
+public enum ModelDimensionType
+{
+    Linear,
+    Diameter,
+    Radius,
+    Angular,
+
+    /// <summary>A type none of the four names; <c>dimension_type_raw</c> keeps the number.</summary>
+    Other,
+}
+
+/// <summary>ModelAnnotation.kind (schema 1.5.0, feature 010).</summary>
+public enum ModelAnnotationKind
+{
+    /// <summary>An IGtol: a geometric tolerance frame.</summary>
+    Gtol,
+
+    /// <summary>An IDatumTag.</summary>
+    Datum,
+}
