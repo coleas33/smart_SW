@@ -46,7 +46,7 @@ An engineer reviews an assembly with the drawings of two of its parts open in ot
 
 ### User Story 3 - The Drawing's Dimensions, Tolerances and Written Precision Reach the Checks (Priority: P1)
 
-The fit, stack-up and alignment checks of feature 010 read the drawing as their first tolerance source. A diameter with a tolerance on the drawing, attached to a hole that forms a joint, is the tolerance that joint's stack-up uses, cited by drawing, sheet, view and dimension. A dimension written without its own tolerance takes the general tolerance by the number of decimals it is written to, as the owner's convention says. A drawing view that shows another configuration, or that is out of date with the model, is not used for the reviewed configuration, and the review says so. The fit and stack tools the model can call find native drawing dimensions exactly as they find dimensions read from a PDF.
+The fit, stack-up and alignment checks of feature 010 read the drawing as their first tolerance source. A diameter with a tolerance on the drawing, attached to a hole that forms a joint, is the tolerance that joint's stack-up uses, cited by drawing, sheet, view and dimension. A dimension written without its own tolerance takes the general tolerance by the number of decimals it is written to, as the owner's convention says. A drawing view that shows another configuration, or that is out of date with the model, is not used for the reviewed configuration, and the review says so. The fit and stack tools the model can call find native drawing dimensions exactly as they find dimensions read from a PDF, and compute with them only once the seat has validated the drawing reading.
 
 **Why this priority**: fits, stacks and alignment were unresolved in every recorded review for want of a tolerance; the general tolerance was declared by the owner and can bind nothing until a written precision is known.
 
@@ -58,7 +58,7 @@ The fit, stack-up and alignment checks of feature 010 read the drawing as their 
 2. **Given** an untoleranced drawing dimension of a subject with a known written precision, **When** no other source binds, **Then** the general tolerance band for that number of decimals applies, cited as general, and only if the drawing is dimensioned in the unit the company's bands are counted in.
 3. **Given** a drawing dimension in a view of another configuration, or in a view that is out of date, **When** a tolerance is resolved, **Then** it binds nothing and the reason names the view.
 4. **Given** two drawings, or two dimensions, that disagree about one subject, **When** it is resolved, **Then** the first in a fixed order is used and the disagreement is reported.
-5. **Given** the model asks for dimensions or a sheet of a drawing that was read natively, **When** the tool answers, **Then** it returns the native dimensions with their text parts and tolerances, and a fit or stack check can name one of them.
+5. **Given** the model asks for dimensions or a sheet of a drawing that was read natively, **When** the tool answers, **Then** it returns the native dimensions with their text parts and tolerances; a fit or stack check that names one of them computes with it once the seat has validated the drawing reading, and until then declines it, naming that validation (FR-024).
 
 ---
 
@@ -135,6 +135,7 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 - **A drawing shows the reviewed part and also parts outside the review**: it is read; views of outside documents are recorded with the path they reference and add nothing to the review's evidence about those documents.
 - **One part used in two configurations** in the assembly: a drawing view binds only to the instances whose configuration it shows.
 - **Two drawings, or two views, carry different tolerances** for one subject: the first in a fixed order is used and the conflict is reported; with different written precisions, the general tolerance binds nothing and says why.
+- **A fit, stack or alignment check handed a native drawing dimension before the seat has validated the drawing reading**: the reference is declined with the reason naming the seat validation and no verdict is computed; a dimension read from a PDF is taken as today.
 - **A drawing dimension whose displayed value is overridden** (the defect the Standards tab reports): it is never used as a tolerance or a precision for the model, because the number shown is not the model's.
 - **A dimension uses the document's default precision**: the precision is the drawing's default, recorded as such; if the default could not be read, the precision is unknown.
 - **A dimension written in inches on a drawing whose company bands are counted in millimetres**, or the reverse: the general tolerance binds nothing and names both units.
@@ -186,8 +187,8 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 - **FR-021**: A toleranced drawing dimension that binds MUST supply its limits; an untoleranced or block-toleranced one MUST supply its written precision and unit to the general tolerance; one governed by SOLIDWORKS' general tolerance table MUST supply neither and say why.
 - **FR-022**: The general tolerance MUST bind by decimal places only when the dimension's unit is the unit the profile declares the bands are counted in.
 - **FR-023**: Disagreeing drawing evidence for one subject MUST resolve to the first in a fixed order - drawing, sheet, view, dimension - with the conflict reported as a coverage limit; disagreeing precisions MUST bind no general tolerance.
-- **FR-024**: No drawing value MUST enter a calculation until a seat probe has confirmed, on a drawing whose callouts are known, that the binding attaches each callout to the right hole; until then the drawing source MUST bind nothing and say so.
-- **FR-025**: The dimension and sheet tools the model already has, and the reference a fit or stack check takes, MUST read native drawing sheets as well as PDF-ingested ones, through one conversion.
+- **FR-024**: No drawing value MUST enter a calculation until the seat probes have confirmed, on a drawing whose callouts are known, that each dimension's value, tolerance and unit are read as written and that the binding attaches each callout to the right hole; until then the drawing source MUST bind nothing and say so, and a native drawing dimension named to a fit, stack or alignment check MUST be declined, naming the seat validation, with no verdict computed. One switch governs both. *(Corrected 2026-09-23 on review, research R2.11: the native references of FR-025 were first left ungated.)*
+- **FR-025**: The dimension and sheet tools the model already has, and the reference a fit or stack check takes, MUST read native drawing sheets as well as PDF-ingested ones, through one conversion; a check computes with a native dimension only as FR-024 allows.
 - **FR-026**: Every value the extraction could not read MUST be a named gap, never an omitted or empty value.
 
 **Callouts, symbols, notes and tables (US4)**
@@ -227,7 +228,7 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 
 - **FR-048**: Every new evidence field MUST be additive (evidence schema 1.6.0); packages written before it MUST load and serialize to their own bytes, and every check MUST treat an absent field as unknown.
 - **FR-049**: Every new finding MUST carry the evidence the existing findings carry and be classed in the attention policy in the change that emits it.
-- **FR-050**: The model-facing tool array with the drawing tools offered MUST stay under the existing ceiling in both provider encodings.
+- **FR-050**: Every tool array the existing ceiling is asserted on today - the review array, the slimmed review array and the two pre-run arrays, with and without a bridge - MUST stay under it in both provider encodings with the drawing tools offered. The bridged review arrays of a review whose pre-run has not completed were over the ceiling before this feature and are not asserted on; with the drawing tools offered they MUST be measured and pinned so any growth shows, and whether the ceiling holds them is the owner's question (research R2.20, R5 Q9). *(Scoped 2026-09-23 on review: as first written, "the model-facing tool array" took in arrays the ceiling has never held.)*
 - **FR-051**: A replay of every recorded review MUST lose no finding, keep every finding replayable, and keep the contact reclassifications as they are.
 - **FR-052**: This feature MUST NOT create, modify or save any drawing or model; it needs no constitution exception.
 
@@ -259,7 +260,7 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 
 ## Assumptions
 
-- **The drawing source binds nothing until the seat confirms it** (FR-024): the binding by attached face and by model dimension is built and tested with fakes, and enabled by one recorded change after the seat probe passes on a known drawing - the same pattern as feature 006's transparency polarity.
+- **The drawing source binds nothing until the seat confirms it** (FR-024): the binding by attached face and by model dimension is built and tested with fakes, and enabled by one recorded change after the seat probe passes on a known drawing - the same pattern as feature 006's transparency polarity. The same switch keeps native dimensions out of the fit, stack and alignment checks: the model can find them and name them, and the checks decline them with the seat's reason until the switch is set.
 - **Only open drawings are read.** The product never opens a drawing, a candidate or otherwise; the engineer opens it and extracts again. Whether the product should open a candidate read-only when the engineer answers "yes" is an owner question; the default is no.
 - **The Standards tab's graded set does not change**: a review's standards run does not grade attached drawings, and the Standards extraction attaches none (006 FR-025 amended for the review extraction only). Grading attached drawings is an owner question; the default is no.
 - **A review of a drawing root in the Review tab stays out of scope**: the engineer opens the part or assembly and its open drawing is read with it; the refusal says so.

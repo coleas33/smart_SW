@@ -99,7 +99,7 @@ table).*
 |---|---|---|---|
 | I. Evidence before conclusions | Unknown stays unknown | A drawing binds a subject only through a usable view (its configuration the reviewed one, read as up to date, its model loaded) and an attached face or the one model dimension that sizes it (R2.8); an unread flag, precision, unit or configuration is a reason, never a default; the general tolerance binds only with a written precision in the profile's declared unit (R2.9); a `GENERAL`-table dimension binds nothing; disagreeing drawings are a conflict, disagreeing precisions bind nothing; a candidate drawing is named, never opened; every unreadable value is a gap. | PASS |
 | II. Deterministic numerics, agentic investigation | The model computes no verdict | Every limit, precision and conformance result comes from `checks/` and `drawings/`; the new check takes no argument; the brief is built by code from feature 010's functions; the model reads counts and the brief and asks nothing it could compute. | PASS |
-| III. Test-first with golden fixtures | Tests precede code; no unverified tool output in a calculation | Every task pair is test then implementation; three synthetic fixtures reproduced byte for byte; every read tested with fakes first; the drawing source ships behind `DRAWING_BINDING_VALIDATED = False` and is enabled only after probes D6 and D8 pass on a known drawing (T066), exactly the rule "MUST NOT enter a calculation until a test against a known case passes". | PASS |
+| III. Test-first with golden fixtures | Tests precede code; no unverified tool output in a calculation | Every task pair is test then implementation; three synthetic fixtures reproduced byte for byte; every read tested with fakes first; the drawing source ships behind `DRAWING_BINDING_VALIDATED = False`, and the same switch makes `resolve_dimension` refuse a native dimension, so no fit, stack or alignment check computes with one (R2.11, corrected 2026-09-23); it is enabled only after probes D6 and D8 pass on a known drawing and D4 and D5 agree with the conversion (T066), exactly the rule "MUST NOT enter a calculation until a test against a known case passes". | PASS |
 | IV. Semantic fidelity and traceability | Persistent refs; versioned schema; native over exported | Every new record carries its persistent reference when SOLIDWORKS gives one, scoped to its own drawing; attachments carry the model face's reference scoped to its part; IR 1.6.0 is additive and versioned; tolerances come from native drawing data, never from a PDF where a native sheet exists (a native sheet wins over an ingested one of the same name). | PASS |
 | V. Engineered enough | DRY; explicit; no speculation | One tolerance mapping for model and drawing dimensions; one table walk for every table; one annotation record enriched by type; one conversion for three tools; one evidence-request writer for the model and the check; the brief reuses 010's joint map, callout and resolver; the guard table generated, not typed; two named attach entry points instead of a flag. No new transport, provider or agent stage. The templates in the profile are data for 012 and are named as such. | PASS |
 | VI. Findings inspectable, coverage tracked | Reproducible findings; coverage visible | Drawing coverage per reviewed document (read, unusable and why, candidate); the limit gap names every unread drawing; the brief counts every omission; the one new finding names each difference with the drawing's value; nothing is a blanket exclusion. | PASS |
@@ -146,7 +146,7 @@ reviewer/src/swreview/
 ├── tools/session.py                    # CHANGED: record_evidence_request, the writer request_evidence delegates to
 ├── tools/query.py                      # CHANGED: get_drawing_sheet, find_dimensions read native sheets;
 │                                       #          get_package_summary's native count only when non-zero
-├── tools/refs.py                       # CHANGED: resolve_dimension reads native sheets
+├── tools/refs.py                       # CHANGED: resolve_dimension reads native sheets, refusing them until T066
 ├── agent/package_brief.py              # CHANGED: native sheet counts only when non-zero
 ├── prerun.py                           # CHANGED: planned_calls' drawing branch; repeat_key for check_drawings
 ├── report/attention_policy_v1.yaml     # CHANGED: drawing_profile.conformance -> manufacturing
@@ -234,7 +234,8 @@ Research in [research.md](research.md) (R1 to R6). Design in [data-model.md](dat
 5. **Ids are the package's**, not the drawing's; a root drawing numbers as before (R2.5).
 6. **Usable views only**: the reviewed configuration, up to date, model loaded, not detailing (R2.6).
 7. **One tolerance mapping, one table walk, one annotation record** (R2.7, R2.12).
-8. **The binding ships disabled** and is enabled by one edit after probes D6 and D8 pass (R2.8).
+8. **The binding ships disabled** and is enabled by one edit after probes D6 and D8 pass (R2.8); the
+   same switch keeps native dimensions out of the calculating tools until then (R2.11).
 9. **The general tolerance needs a written precision and the profile's unit**; profile version 3's
    section lands with US3 for that reason; `GENERAL`-table dimensions bind nothing (R2.9, R2.17).
 10. **Feature 010 changes in its slot and nowhere else**; with no drawing record, every answer is
@@ -288,7 +289,7 @@ location of the owner's drawing-creation base repository for T061.
 | RK-4 | The generated denylist refuses a read the extractor needs. | The read audit test over every gated literal; the probe gate logs at the seat. |
 | RK-5 | Thirty open drawings make a review slow to start. | The ten-drawing bound, root drawings first, the rest named; D2 times discovery. |
 | RK-6 | The candidate existence check fetches a vault file or stalls. | D13; a rule that skips candidates under a vault view if it does, one gap saying so. |
-| RK-7 | The drawing tools push the array over the ceiling or move the recorded figures. | The family is conditional; its arm is pinned separately under 38,000 with per-tool budgets; the replay proof (T049). |
+| RK-7 | The drawing tools push the array over the ceiling or move the recorded figures. | The family is conditional; its arm is pinned separately under 38,000 with per-tool budgets; the replay proof (T049). The bridged arrays were over the ceiling before this feature and stay unasserted; their drawing arm is pinned so growth shows (R2.20, R5 Q9). |
 | RK-8 | A document-precision dimension's precision is misread and the wrong general band binds. | Both defaults recorded; D4 decides; disagreeing precisions bind nothing; the switch off until T066. |
 | RK-9 | Profile version 3 breaks the owner's real profile. | The loader keeps reading versions 1 and 2; the drawing sources stay absent until the owner writes version 3. |
 | RK-10 | The questions flood the pane on a large assembly. | One aggregated candidate question; at most three governing questions; coverage for the rest. |

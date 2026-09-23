@@ -183,7 +183,7 @@ existence check failed), `drawing_document_settings`, `drawing_view_state`, `dim
 
 | Type | Fields | Rules |
 |---|---|---|
-| `DRAWING_BINDING_VALIDATED` | bool | `False` until the seat task T066; while false nothing binds |
+| `DRAWING_BINDING_VALIDATED` | bool | `False` until the seat task T066; while false nothing binds and `refs.resolve_dimension` refuses a native dimension (R2.11) |
 | `DrawingBinding` | `subject`, `record_id`, `view: ViewEvidence`, `route: Literal["attached_face", "model_dimension"]`, `via_edge: bool` | one piece of drawing evidence tied to one subject |
 | `bindings_for(index, package, subject)` | tuple[`DrawingBinding`, ...] | every dimension or annotation that satisfies R2.8, in the fixed order |
 

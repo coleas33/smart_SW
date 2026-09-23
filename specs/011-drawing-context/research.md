@@ -275,7 +275,8 @@ spell the document differently (probe D8).
 
 **The binding ships disabled.** `drawings/binding.py` holds one constant,
 `DRAWING_BINDING_VALIDATED = False`; while it is false the resolver's drawing source binds nothing
-and supplies no precision, with the reason "drawing callouts are read but not yet validated on a
+and supplies no precision, and `resolve_dimension` refuses a native reference (R2.11), with the
+reason "drawing callouts are read but not yet validated on a
 seat against a drawing whose callouts are known (feature 011 research R2.8)". Every test of the
 binding sets it; the seat task that records probe D6's and D8's pass on a known drawing (T066)
 flips it, one constant and one edit, as feature 006's `TRANSPARENCY_POLARITY` is flipped after
@@ -357,6 +358,21 @@ tools' docstrings do not change; their payloads change only for a package that h
 `check_axial_stack`, whose references are resolved by `resolve_dimension`. The docstrings stay
 because each is pinned to the byte in the tool array (`test_tool_payload.py`), and a package with
 no native sheet must replay byte-identically (FR-037).
+
+**Corrected 2026-09-23 on review: a native dimension enters no calculation before T066.** As first
+written, `resolve_dimension` resolved a native `ddm:` reference with no gate, so `check_fit`,
+`check_axial_stack` and `check_hole_alignment`'s `tolerance` would have computed with a drawing's
+value, tolerance and unit before probes D4, D5 and D7 confirmed them - while FR-024, the plan's
+constraints, the tasks' Notes and Principle III ("a drawing reader with known unit bugs") forbid
+exactly that. So `resolve_dimension` reads R2.8's `DRAWING_BINDING_VALIDATED`: while it is false, a
+reference that resolves to a native dimension is refused with a `LookupError` carrying R2.8's
+reason, and each check returns the error result it already returns for an unresolvable reference,
+recording no finding. `find_dimensions` and `get_drawing_sheet` still return native records -
+showing a value is not computing with one - and a PDF-ingested dimension resolves as today. One
+switch rather than two, because T066 already waits on T064 and T065, which record D4, D5 and D7;
+T066 now also confirms those answers against `native_dimension` before it sets the switch. No owner
+decision was needed: FR-024 and Principle III had already decided it, and the correction brings US3
+acceptance 5, FR-025, T036 and T037 into line with them.
 
 ### R2.12 Annotations and tables: enrich the records feature 006 already writes
 
@@ -525,15 +541,29 @@ with none of the new members is byte-identical to a 1.5.0 build's output except 
 **Decision**: the drawing family is outside `REGISTRATIONS`, so `TOOL_FUNCTIONS` and every pin of
 `test_tool_payload.py` stay; the file gains a **drawing arm** - the slim and pre-run arrays with the
 family offered - pinned by `--write` in a commit of its own and asserted under `ARRAY_CEILING`
-(38,000, unchanged). Budget: `check_drawings` at most 450 bytes and `get_drawing_brief` at most 650
+(38,000, unchanged); the bridged slim array with the family is pinned in the same rows and not
+asserted, because it is over the ceiling already without the family (below). Budget: `check_drawings` at most 450 bytes and `get_drawing_brief` at most 650
 bytes per encoding; the slim Gemini array with both is then at most about 37,320 bytes.
 
 **Why**: FR-050. VERIFIED on 2026-09-23 with the payload module's own measure: the review array is
 35,844 bytes (OpenAI) and 35,915 (Gemini), the slim array 36,200 and 36,220, the ceiling 38,000
 (`test_tool_payload.py:381-441`); the argument-free `check_hygiene`, `check_mass_material` and
 `check_joints` objects are 414, 376 and 429 bytes and the one-argument `get_drawing_sheet` 627 bytes
-with lever 2 off. The headroom is 1,780 bytes on the tightest array; two tools of the sizes above fit
-with about 680 to spare, and a longer docstring would not.
+with lever 2 off. The headroom is 1,780 bytes on the tightest array the ceiling is asserted on (the
+slim Gemini array); two tools of the sizes above fit with about 680 to spare, and a longer docstring
+would not.
+
+**Corrected 2026-09-23 on review: the bridged arrays are already over the ceiling.** Measured the
+same day with the same `measure`: `review+bridge` is 39,542 bytes (OpenAI) and 39,431 (Gemini), and
+the slimmed review with a bridge - what a bridged pane review offers before its pre-run completes,
+or with checks first off - 39,898 and 39,736. `test_tool_payload.py` asserts the ceiling on the
+review, slim and two pre-run arrays only (`test_the_bridge_array_is_pinned_in_both_arms` pins
+39,542 and asserts no ceiling), so "the tightest array" was the tightest *asserted* array, and a
+bridged review of a package with drawing evidence whose pre-run has not completed would offer about
+1,100 bytes more again. This feature neither causes that nor can fix it within its budget, and
+`ARRAY_CEILING` stays 38,000: FR-050 is scoped to the arrays the ceiling is asserted on, the bridged
+slim arm is pinned without the assertion so its growth shows, and whether the ceiling is meant to
+hold the bridged arrays is the owner's question (R5 Q9).
 
 ### R2.21 Fixtures: synthetic, built by code, fictional
 
@@ -586,7 +616,8 @@ model dimensions the resolver needs already exist with known answers.
   (`agent/package_brief.py:256`, `:291-292`).
 - **The checklist's drawing item closes on the prefix `drawing.`** (`agent/checklist_v1.yaml:13-19`),
   and the model's drawing finding is `drawing.manufacturing_inputs` (`tools/session.py:52`).
-- **The tool array's headroom is 1,780 bytes** on the slim Gemini array (R2.20).
+- **The tool array's headroom is 1,780 bytes** on the slim Gemini array, the tightest the ceiling
+  is asserted on; the bridged arrays are over it already, unasserted (R2.20).
 - **The interop members this feature reads exist on 32.5.0.48** (reflection, 2026-09-23):
   `ISldWorks.GetDocuments`, `GetDocumentCount`; `IDrawingDoc.GetViews`, `GetSheetNames`,
   `GetCurrentSheet`, `IsDetailingMode`; `ISheet.GetTemplateName`, `GetProperties2`,
@@ -666,6 +697,7 @@ of them; the general tolerance goes by decimal places (2026-09-23, 010 R5); feat
 | Q6 | A geometric tolerance value written on a drawing with no unit: read in the drawing's unit? | Yes, cited "read in the drawing's unit" | the position source on real runs |
 | Q7 | Does the company use SOLIDWORKS' general tolerance table (an ISO 2768 class), or only the decimal-place convention? | Decimal places only; a table-governed dimension is recorded and binds nothing | nothing |
 | Q8 | Should `rms.drawing.model_items_preferred` be evaluated now that the extraction records model items? | No: it stays out of scope "advisory by decision" | nothing |
+| Q9 | Does `ARRAY_CEILING` hold the bridged review arrays, which were over it before this feature (39,542 and 39,898 bytes on OpenAI)? Added 2026-09-23 on review (R2.20) | No, as today: they are pinned and not asserted, and the drawing arm pins the bridged slim array with the family the same way | nothing in this feature; a lever that trims the bridged arrays if the answer is yes |
 
 ## R6. Relation to the features around it
 
