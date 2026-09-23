@@ -25,7 +25,15 @@ from pydantic import ValidationError
 
 from swreview.findings import build_finding
 from swreview.ir.models import DrawingSheet, SourceRef
-from swreview.report.session import CoverageItem, CoverageScope, EvidenceRequest
+from swreview.report.attention import CHECKLIST_ITEM_IDS
+from swreview.report.session import (
+    MAX_OPTIONS,
+    OPTION_MAX_LENGTH,
+    QUESTION_MAX_LENGTH,
+    CoverageItem,
+    CoverageScope,
+    EvidenceRequest,
+)
 from swreview.tools.context import (
     current_context,
     error_result,
@@ -47,24 +55,46 @@ DRAWING_FINDING_SEVERITY: dict[str, str] = {"suspected": "medium", "unresolved":
 CaptureView = Literal["iso", "front", "back", "left", "right", "top", "bottom", "current"]
 CAPTURE_VIEWS: tuple[str, ...] = get_args(CaptureView)
 
-def request_evidence(what: str, why: str, entity_ids: list[str]) -> ToolResult:
+
+def request_evidence(
+    what: str,
+    why: str,
+    entity_ids: list[str],
+    question: str | None = None,
+    options: list[str] | None = None,
+    blocks: str | None = None,
+) -> ToolResult:
     """Record something you need and the package does not have. Returns its id.
 
     Args:
         what: The evidence you need, in the engineer's terms.
         why: Which check it unblocks and what you would conclude with it.
         entity_ids: Component, hole, fastener or document ids the request is about.
+        question: One decision, at most 140 characters; never guess a fit class, tolerance
+            or thread depth.
+        options: Answers to offer, only when the answers are a closed set: at most 5, each
+            60 characters.
+        blocks: The checklist item id this request blocks, such as fasteners.
 
     Notes:
         Use this instead of assuming a missing value. The request stays open in the report
         until an engineer answers it, and the check it blocks stays unresolved.
     """
+    # The guidance of feature 009's contracts/questions.md section 1 - one decision per
+    # request, options only for a closed set, never guess a fit class, a tolerance or a
+    # thread depth - is in the argument descriptions and not in the Notes above: the Notes
+    # are pinned byte-equal to the pre-split text by `test_docstring_split.py` (005 FR-039),
+    # and an argument's description reaches the model with every lever on or off.
+    #
+    # Checked in the order of that section, each refusal naming its argument, so the model
+    # can answer the one it got wrong; nothing is recorded until every check has passed.
     context = current_context()
-    unknown = [
-        entity_id for entity_id in entity_ids if context.entity_kind(entity_id) is None
-    ]
+    unknown = [entity_id for entity_id in entity_ids if context.entity_kind(entity_id) is None]
     if unknown:
         return error_result(f"entity_ids not in this package: {unknown}")
+    refusal = _short_form_refusal(question, options or [], blocks)
+    if refusal is not None:
+        return error_result(refusal)
     request = EvidenceRequest(
         id=next(context.evidence_request_ids),
         what=what,
@@ -73,9 +103,45 @@ def request_evidence(what: str, why: str, entity_ids: list[str]) -> ToolResult:
         status="open",
         answer=None,
         answered_at=None,
+        question=question,
+        options=list(options or []),
+        blocks=blocks,
     )
     context.record_evidence_request(request)
     return {"status": "open", "evidence_request": as_json(request)}
+
+
+def _short_form_refusal(question: str | None, options: list[str], blocks: str | None) -> str | None:
+    """Why the short form of a request is refused, or `None` when it is not.
+
+    The limits are `EvidenceRequest`'s own; they are checked here first so the model gets
+    one sentence naming the argument rather than a validation error.
+    """
+    if question is not None and (not question.strip() or len(question) > QUESTION_MAX_LENGTH):
+        return (
+            f"question must be one short question of at most {QUESTION_MAX_LENGTH} characters, "
+            f"not blank (got {len(question)})"
+        )
+    if len(options) > MAX_OPTIONS:
+        return f"options may offer at most {MAX_OPTIONS} answers (got {len(options)})"
+    for index, option in enumerate(options):
+        if not option.strip():
+            return f"options[{index}] must not be blank"
+        if len(option) > OPTION_MAX_LENGTH:
+            return (
+                f"options[{index}] must be at most {OPTION_MAX_LENGTH} characters "
+                f"(got {len(option)})"
+            )
+    repeated = next(
+        (option for index, option in enumerate(options) if option in options[:index]), None
+    )
+    if repeated is not None:
+        return f"options offers {repeated!r} twice; each answer once"
+    if blocks is not None and blocks not in CHECKLIST_ITEM_IDS:
+        return (
+            f"blocks {blocks!r} is not a checklist item id; use one of {list(CHECKLIST_ITEM_IDS)}"
+        )
+    return None
 
 
 def mark_coverage(
@@ -205,8 +271,7 @@ def _ingested_sheets(document_id: str, sheet: str | None) -> list[DrawingSheet]:
     return [
         extracted
         for extracted in context.ir.drawings
-        if extracted.document_id == document_id
-        and (sheet is None or extracted.sheet_name == sheet)
+        if extracted.document_id == document_id and (sheet is None or extracted.sheet_name == sheet)
     ]
 
 
@@ -398,9 +463,7 @@ def request_capture(entity_id: str, view: CaptureView) -> ToolResult:
         return unknown_id("entity", entity_id)
     if view not in CAPTURE_VIEWS:
         return not_one_of("view", str(view), CAPTURE_VIEWS)
-    captures = [
-        capture for capture in context.ir.captures if entity_id in capture.component_ids
-    ]
+    captures = [capture for capture in context.ir.captures if entity_id in capture.component_ids]
     for capture in captures:
         if capture.view == view:
             return {"status": "found", "capture": as_json(capture)}
@@ -417,9 +480,7 @@ def request_capture(entity_id: str, view: CaptureView) -> ToolResult:
     from swreview.bridge.client import BRIDGE_VIEWS
     from swreview.tools.bridge import capture_through_bridge
 
-    entity = (
-        context.component(entity_id) or context.hole(entity_id) or context.fastener(entity_id)
-    )
+    entity = context.component(entity_id) or context.hole(entity_id) or context.fastener(entity_id)
     if entity is None:
         return {
             "status": "unresolved",

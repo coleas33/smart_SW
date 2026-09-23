@@ -6,7 +6,9 @@ Run from `reviewer/` and commit what it writes:
 
 It writes `report/snapshot.review_snapshot` of feature 008's committed, fictional
 `tests/fixtures/replay/big-assembly/` - as the live snapshot route would answer it for a
-finished chat, its last seq the event log's last - plus the words file's `labels` block, to
+finished chat: its last seq the event log's last, and its usage ledger the event log replayed
+into one, so the summary's resume cost is the figure the run measured - plus the words file's
+`labels` block, to
 `extractor/SwReview.AddIn.Tests/Fixtures/review-big-assembly.json`. Every finding's title is
 recomputed first by the current `tools/recording.title_from` from its `observed`, so the
 fixture shows what a review recorded by this build shows, not what the recording's build
@@ -27,6 +29,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from swreview.agent.events import UsageLedger
+from swreview.agent.providers import AgentEvent
 from swreview.ir.loader import load_package
 from swreview.report.session import ReviewSession, load_session
 from swreview.report.snapshot import review_snapshot
@@ -54,10 +58,21 @@ def with_current_titles(session: ReviewSession) -> ReviewSession:
     return session.model_copy(update={"findings": findings})
 
 
+def event_lines(events: Path) -> list[str]:
+    return [line for line in events.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
 def last_seq(events: Path) -> int:
     """The `seq` of the event log's last event: where a live snapshot's stream stands."""
-    lines = [line for line in events.read_text(encoding="utf-8").splitlines() if line.strip()]
-    return int(json.loads(lines[-1])["seq"])
+    return int(json.loads(event_lines(events)[-1])["seq"])
+
+
+def ledger_of(events: Path) -> UsageLedger:
+    """The event log replayed into the ledger the live run held beside its sink."""
+    ledger = UsageLedger()
+    for line in event_lines(events):
+        ledger(AgentEvent.model_validate_json(line))
+    return ledger
 
 
 def pane_fixture() -> dict[str, Any]:
@@ -68,6 +83,7 @@ def pane_fixture() -> dict[str, Any]:
         session,
         package,
         run_id=RUN_ID,
+        usage=ledger_of(SOURCE / "events.jsonl"),
         chat_state=CHAT_STATE,
         last_seq=last_seq(SOURCE / "events.jsonl"),
     )

@@ -320,3 +320,112 @@ def test_provider_info_rejects_an_unknown_key_source() -> None:
             ),
             key_source="hard-coded",  # type: ignore[arg-type]
         )
+
+
+# --- the short form of an evidence request (feature 009 T033, contracts/questions.md 2) -------
+
+REVIEW_FIXTURE = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "attention"
+    / ("session-20260918-review.json")
+)
+
+
+def short_request(**fields: object) -> EvidenceRequest:
+    values: dict[str, object] = {
+        "id": "ER-001",
+        "what": "The usable thread depth of the tapped hole in the housing",
+        "why": "fastener.engagement cannot be computed without it",
+        "entity_ids": ["hole:1"],
+        "status": "open",
+        "answer": None,
+        "answered_at": None,
+    }
+    values.update(fields)
+    return EvidenceRequest(**values)  # type: ignore[arg-type]
+
+
+def test_the_short_form_defaults_to_nothing_and_is_absent_from_the_dump() -> None:
+    request = short_request()
+
+    assert (request.question, request.options, request.blocks) == (None, [], None)
+    dumped = request.model_dump(mode="json")
+    assert {"question", "options", "blocks"}.isdisjoint(dumped)
+
+
+def test_the_short_form_is_dumped_when_given() -> None:
+    request = short_request(
+        question="What is the usable thread depth?",
+        options=["6 mm", "8 mm", "Through"],
+        blocks="fasteners",
+    )
+
+    dumped = request.model_dump(mode="json")
+
+    assert (dumped["question"], dumped["options"], dumped["blocks"]) == (
+        "What is the usable thread depth?",
+        ["6 mm", "8 mm", "Through"],
+        "fasteners",
+    )
+    assert session_validator().is_valid(
+        build_session(evidence_requests=[request]).model_dump(mode="json")
+    )
+
+
+def test_a_question_without_options_or_blocks_keeps_only_the_question() -> None:
+    dumped = short_request(question="Which drawing governs the housing?").model_dump(mode="json")
+
+    assert dumped["question"] == "Which drawing governs the housing?"
+    assert "options" not in dumped and "blocks" not in dumped
+
+
+def test_a_session_written_before_the_short_form_round_trips_to_its_own_bytes(
+    tmp_path: Path,
+) -> None:
+    session = load_session(REVIEW_FIXTURE)
+    target = tmp_path / "session.json"
+
+    save_session(session, target)
+
+    assert target.read_text(encoding="utf-8") == REVIEW_FIXTURE.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"question": "x" * 141},
+        {"question": ""},
+        {"question": "   "},
+        {"options": ["a", "b", "c", "d", "e", "f"]},
+        {"options": ["y" * 61]},
+        {"options": ["a", " "]},
+        {"options": ["Press fit", "Press fit"]},
+    ],
+    ids=[
+        "question-141",
+        "question-empty",
+        "question-blank",
+        "six-options",
+        "option-61",
+        "option-blank",
+        "option-repeated",
+    ],
+)
+def test_the_model_refuses_a_short_form_past_its_limits(fields: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        short_request(**fields)
+
+
+def test_the_limits_themselves_are_accepted() -> None:
+    request = short_request(question="q" * 140, options=["o" * 60, "a", "b", "c", "d"])
+
+    assert len(request.question or "") == 140
+    assert len(request.options) == 5
+
+
+def test_the_contract_names_exactly_the_models_evidence_request_fields() -> None:
+    definition = load_contract("review-session.schema.json")["$defs"]["EvidenceRequest"]
+
+    assert set(definition["properties"]) == set(EvidenceRequest.model_fields)
+    assert {"question", "options", "blocks"}.isdisjoint(definition["required"])

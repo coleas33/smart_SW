@@ -1312,6 +1312,56 @@ def test_answering_twice_is_refused(client: TestClient, waiting_chat: str) -> No
     assert response.json()["error_class"] == "AlreadyAnswered"
 
 
+# The two refusals name the request they refused (feature 009 T041's single-route half,
+# data-model section 9), so the page can say which question without parsing English. The
+# batch route's half waits for feature 008 T084-T085.
+
+
+def test_an_unknown_evidence_request_names_its_request_id(
+    client: TestClient, waiting_chat: str
+) -> None:
+    body = client.post(
+        f"/sessions/{waiting_chat}/evidence/ER-404", json={"answer": "anything"}
+    ).json()
+
+    assert body["request_id"] == "ER-404"
+    assert set(body) == {"error_class", "message", "retryable", "request_id"}
+
+
+def test_answering_twice_names_the_request_id(client: TestClient, waiting_chat: str) -> None:
+    client.post(f"/sessions/{waiting_chat}/evidence/ER-001", json={"answer": "12 mm"})
+    settle(client, waiting_chat)
+
+    body = client.post(
+        f"/sessions/{waiting_chat}/evidence/ER-001", json={"answer": "12 mm again"}
+    ).json()
+
+    assert (body["error_class"], body["request_id"]) == ("AlreadyAnswered", "ER-001")
+    assert set(body) == {"error_class", "message", "retryable", "request_id"}
+
+
+def test_every_other_refusal_carries_no_request_id(client: TestClient, waiting_chat: str) -> None:
+    empty_answer = client.post(f"/sessions/{waiting_chat}/evidence/ER-001", json={}).json()
+    unknown_chat = client.post(
+        f"/sessions/{uuid4()}/evidence/ER-001", json={"answer": "12 mm"}
+    ).json()
+
+    assert (empty_answer["error_class"], unknown_chat["error_class"]) == (
+        "InvalidRequest",
+        "UnknownChat",
+    )
+    assert "request_id" not in empty_answer
+    assert "request_id" not in unknown_chat
+
+
+def test_a_chat_error_body_adds_the_request_id_only_when_set() -> None:
+    from swreview.chat.server import AlreadyAnswered, TurnRunning, UnknownEvidenceRequest
+
+    assert UnknownEvidenceRequest("no ER-9", request_id="ER-009").body()["request_id"] == "ER-009"
+    assert AlreadyAnswered("done", request_id="ER-001").body()["request_id"] == "ER-001"
+    assert "request_id" not in TurnRunning("busy").body()
+
+
 def test_an_answer_is_refused_while_a_turn_is_running(
     client: TestClient, run_dir: Path, provider_control: ProviderControl, waiting_chat: str
 ) -> None:

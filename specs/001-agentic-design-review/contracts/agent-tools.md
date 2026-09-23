@@ -107,7 +107,7 @@ typed by the model.
 
 | Tool | Arguments | Effect |
 |------|-----------|--------|
-| `request_evidence` | `what: str`, `why: str`, `entity_ids: list[str]` | Adds an open `EvidenceRequest`; returns its id. |
+| `request_evidence` | `what: str`, `why: str`, `entity_ids: list[str]`, `question: str \| None = None`, `options: list[str] \| None = None`, `blocks: str \| None = None` | Adds an open `EvidenceRequest`; returns its id. The three optional arguments are feature 009's short form (`specs/009-engineer-workspace/contracts/questions.md` section 1): one question of at most 140 characters, at most 5 distinct offered answers of at most 60 characters, and the checklist item id it blocks; each is refused by name, in that order after the entity ids, and a refusal records nothing. |
 | `mark_coverage` | `check: str`, `bucket: "checked" \| "skipped" \| "unresolved" \| "out_of_scope"`, `scope: CoverageScope`, `reason: str` | Adds a `CoverageItem`. The `failed` bucket is written only by the tool layer itself. |
 | `request_capture` | `entity_id: str`, `view: str` | Returns an existing `Capture` or, when the live SolidWorks bridge is enabled, requests one through the bridge and returns its file. Otherwise `unresolved`. |
 | `get_review_checklist` | none | The mandatory checklist items and their current bucket. |

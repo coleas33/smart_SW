@@ -194,9 +194,16 @@ class ChatError(Exception):
     status = 400
     error_class = "InvalidRequest"
     retryable = False
+    request_id: str | None = None
+    """The evidence request a refusal is about, when it is about one (feature 009
+    data-model section 9); added to the body only when set, so every other body is as it
+    was."""
 
     def body(self) -> dict[str, Any]:
-        return error_body(error_class=self.error_class, message=str(self), retryable=self.retryable)
+        body = error_body(error_class=self.error_class, message=str(self), retryable=self.retryable)
+        if self.request_id is not None:
+            body["request_id"] = self.request_id
+        return body
 
 
 class InvalidRunDir(ChatError):
@@ -235,7 +242,19 @@ class UnknownChat(ChatError):
     error_class = "UnknownChat"
 
 
-class UnknownEvidenceRequest(ChatError):
+class EvidenceRefusal(ChatError):
+    """A refusal about one evidence request, which its body names as `request_id`.
+
+    So the page can say which question was refused without parsing the message
+    (feature 009 contracts/questions.md section 6).
+    """
+
+    def __init__(self, message: str, *, request_id: str) -> None:
+        super().__init__(message)
+        self.request_id = request_id
+
+
+class UnknownEvidenceRequest(EvidenceRefusal):
     status = 404
     error_class = "UnknownEvidenceRequest"
 
@@ -264,7 +283,7 @@ class RunDirInUse(ChatError):
     error_class = "RunDirInUse"
 
 
-class AlreadyAnswered(ChatError):
+class AlreadyAnswered(EvidenceRefusal):
     status = 409
     error_class = "AlreadyAnswered"
 
@@ -1171,7 +1190,9 @@ class ChatServer:
         nor either check body carries the summary.
         """
         run = self._run_of(self._chat(request))
-        return JSONResponse(to_jsonable_python(review_ranking(run.session, run.context.ir)))
+        return JSONResponse(
+            to_jsonable_python(review_ranking(run.session, run.context.ir, usage=run.usage_ledger))
+        )
 
     async def events(self, request: Request) -> Response:
         """Replay `events.jsonl` after `Last-Event-ID`, then stream what happens next.
@@ -1225,10 +1246,13 @@ class ChatServer:
         )
         if found is None:
             raise UnknownEvidenceRequest(
-                f"no evidence request {request_id!r} in this session; open: {chat.open_requests}"
+                f"no evidence request {request_id!r} in this session; open: {chat.open_requests}",
+                request_id=request_id,
             )
         if found.status != "open":
-            raise AlreadyAnswered(f"evidence request {request_id} is already answered")
+            raise AlreadyAnswered(
+                f"evidence request {request_id} is already answered", request_id=request_id
+            )
         chat.to(ChatState.RUNNING)
         self._submit(chat, partial(run.answer_evidence, request_id, answer))
         return JSONResponse(chat.public(), status_code=202)

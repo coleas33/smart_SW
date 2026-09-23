@@ -394,3 +394,55 @@ def test_a_body_the_contract_forbids_fails_validation(full_run: runner.ReviewRun
         validator.validate(tampered)
     with pytest.raises(SchemaValidationError):
         validator.validate({**started, "seq": 0})
+
+
+# --- the short form rides on evidence.requested (feature 009 T033) --------------------------
+
+
+def evidence_event(**short_form: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "id": "ER-001",
+        "what": "The usable thread depth of hole:1",
+        "why": "fastener.engagement needs it",
+        "entity_ids": ["hole:1"],
+        "status": "open",
+        "answer": None,
+        "answered_at": None,
+        **short_form,
+    }
+    return {"seq": 1, "at": "2026-09-23T10:00:00+00:00", "type": "evidence.requested", "body": body}
+
+
+def test_an_evidence_request_with_the_short_form_validates() -> None:
+    event = evidence_event(
+        question="What is the usable thread depth?", options=["6 mm", "8 mm"], blocks="fasteners"
+    )
+
+    contract_validator(EVENTS_CONTRACT).validate(event)
+
+
+def test_an_evidence_request_without_the_short_form_still_validates() -> None:
+    contract_validator(EVENTS_CONTRACT).validate(evidence_event())
+
+
+@pytest.mark.parametrize(
+    "short_form",
+    [
+        {"question": "x" * 141},
+        {"question": " "},
+        {"options": ["a", "b", "c", "d", "e", "f"]},
+        {"options": ["y" * 61]},
+        {"options": ["same", "same"]},
+        {"blocks": 7},
+    ],
+    ids=[
+        "question-141",
+        "question-blank",
+        "six-options",
+        "option-61",
+        "option-repeated",
+        "blocks-not-a-string",
+    ],
+)
+def test_a_short_form_past_its_limits_fails_the_contract(short_form: dict[str, Any]) -> None:
+    assert not contract_validator(EVENTS_CONTRACT).is_valid(evidence_event(**short_form))

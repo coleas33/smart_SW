@@ -18831,8 +18831,8 @@
         "cmp:0088": "VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-4",
         "cmp:0089": "GEM_M3-0.5X8_PE8_NA-15"
       },
-      "resume_input_tokens": null,
-      "resume_text": "Sending resumes the review once."
+      "resume_input_tokens": 407399,
+      "resume_text": "Sending resumes the review once. Its last round sent 407,399 input tokens."
     }
   },
   "not_examined": {

@@ -29,6 +29,14 @@ The docstring's `Args` describe the three; its `Notes` add: ask one decision per
 depth - ask for it. Every description stays under `MAX_DESCRIPTION_LENGTH` and
 `MAX_PARAMETER_DESCRIPTION_LENGTH` (`test_docstring_split.py` unedited).
 
+*Landed as* (T036): the guidance is in the new arguments' descriptions, not the `Notes` -
+`question`: "One decision, at most 140 characters; never guess a fit class, tolerance or thread
+depth."; `options`: "Answers to offer, only when the answers are a closed set: at most 5, each 60
+characters." The `Notes` are pinned byte-equal to the pre-split docstring by
+`test_docstring_split.py` (feature 005 FR-039), which must pass unedited, and an argument
+description reaches the model with every lever on or off. The limits are `EvidenceRequest`'s own
+constants (`QUESTION_MAX_LENGTH`, `MAX_OPTIONS`, `OPTION_MAX_LENGTH`), which the tool reuses.
+
 ## 2. The session and its contract
 
 `EvidenceRequest` gains `question`, `options` and `blocks` (data-model section 4), omitted from the
