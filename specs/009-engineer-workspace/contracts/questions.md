@@ -52,7 +52,9 @@ session order, each a `QuestionView` (data-model section 2): the short `question
   and the ids behind a shut fold;
 - the options as buttons, one selectable at a time (`aria-pressed`), the answer being the option's
   text verbatim; or, with no options, one text box;
-- "Skip for now": marks the question skipped in page memory and moves on; sends nothing;
+- "Skip for now": marks the question skipped in page memory, drops any draft answer for it and
+  moves on (on the last question it stays, reading "Skipped for now."); sends nothing; choosing
+  an option or typing an answer un-skips it;
 - "Send answers": enabled when at least one question has a non-blank answer; beside it
   `summary.resume_text`;
 - disabled while a turn runs, while a start is in flight, and for a read-only review.

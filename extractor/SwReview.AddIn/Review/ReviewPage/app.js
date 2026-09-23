@@ -130,6 +130,14 @@
     // User Story 3), or null: from a backend that sends none, or before the first ranking. Every
     // number and word in it is the backend's; the page prints it and slices it.
     summary: null,
+
+    // Questions for you (feature 009 User Story 4): what the engineer has typed, chosen and
+    // skipped, per chat id - `{answers: {request id: text}, skipped: {request id: true}}` - kept in
+    // page memory while the page lives, so choosing another review and coming back keeps them;
+    // the question on screen; and the sentence the last send left, if any.
+    drafts: Object.create(null),
+    questionIndex: 0,
+    questionNote: null,
     textBlock: null,
     stream: null,
     reconnectTimer: null,
@@ -294,10 +302,16 @@
         }
 
         if (!response.ok) {
-          throw backendError(
+          var refusal = backendError(
             (parsed && parsed.error_class) || 'HttpError',
             (parsed && parsed.message) || ('the backend answered ' + response.status),
             !!(parsed && parsed.retryable));
+          // The two evidence refusals name the request they are about (feature 009 T042), so
+          // the questions panel can say which question without reading the English message.
+          if (parsed && typeof parsed.request_id === 'string') {
+            refusal.requestId = parsed.request_id;
+          }
+          throw refusal;
         }
 
         return parsed;
@@ -777,6 +791,7 @@
 
         state.summary = ranking.summary || null;
         renderSummary();
+        renderQuestions();
         groupModellingPractice(state.summary && state.summary.modelling_practice);
         renderContacts();
       },
@@ -1020,6 +1035,7 @@
     ui.followupText.disabled = followupDisabled;
     ui.followupSend.disabled = followupDisabled;
     ui.clearReview.disabled = !canClearReview();
+    syncQuestionControls();
   }
 
   /**
@@ -1093,7 +1109,10 @@
     render.clear(ui.attention);
     ui.attention.hidden = true;
     state.summary = null;
+    state.questionIndex = 0;
+    state.questionNote = null;
     renderSummary();
+    renderQuestions();
     renderContacts();
     state.events = [];
     state.unreadable = Object.create(null);
@@ -1212,9 +1231,6 @@
         return;
       case 'defer':
         decide(card, 'deferred');
-        return;
-      case 'answer':
-        answer(card);
         return;
       case 'retry':
         prepareReview(state.chatId);
@@ -1404,31 +1420,235 @@
     });
   }
 
-  function answer(card) {
-    var requestId = card ? card.getAttribute('data-request-id') : null;
-    var box = card ? card.querySelector('.answer') : null;
-    if (!requestId || !box || !state.chatId) {
+  // ---- questions for you (feature 009 User Story 4) -------------------------------------------
+
+  /**
+   * The questions panel, rebuilt from the summary's open questions and this chat's draft
+   * (contracts/questions.md section 4). Shown when the summary counts at least one open
+   * question; hidden - and empty - otherwise, including for a backend that sends no summary.
+   */
+  function renderQuestions() {
+    var items = currentQuestions();
+    var questions = state.summary ? state.summary.questions : null;
+    render.clear(ui.questions);
+    if (!questions || !(questions.count > 0) || !items.length) {
+      ui.questions.hidden = true;
       return;
     }
 
-    var text = box.value.trim();
-    if (!text) {
-      cardStatus(card, 'Type an answer first.', true);
+    state.questionIndex = Math.max(0, Math.min(state.questionIndex, items.length - 1));
+    ui.questions.appendChild(render.questionsPanel(
+      questions,
+      draftOf(state.chatId),
+      state.questionIndex,
+      { resumeText: state.summary.resume_text, note: state.questionNote }));
+    ui.questions.hidden = false;
+    syncQuestionControls();
+  }
+
+  /** The open questions in the backend's order: the summary's list, never a filter of our own. */
+  function currentQuestions() {
+    var questions = state.summary ? state.summary.questions : null;
+    return (questions && questions.items) || [];
+  }
+
+  /** This chat's draft, made on first use: what was typed or chosen, and what was skipped. */
+  function draftOf(chatId) {
+    var key = String(chatId || '');
+    if (!state.drafts[key]) {
+      state.drafts[key] = { answers: Object.create(null), skipped: Object.create(null) };
+    }
+    return state.drafts[key];
+  }
+
+  /**
+   * The answers one Send carries: every question with a non-blank answer that was not skipped,
+   * in the order the summary supplied them, trimmed. A skipped or unanswered question is absent,
+   * so nothing is ever filled in for it (FR-015).
+   */
+  function answersToSend() {
+    var items = currentQuestions();
+    var draft = draftOf(state.chatId);
+    var answers = [];
+    for (var index = 0; index < items.length; index++) {
+      var id = String((items[index] || {}).id || '');
+      var text = draft.answers[id];
+      if (typeof text === 'string' && text.trim() && draft.skipped[id] !== true) {
+        answers.push({ request_id: id, answer: text.trim() });
+      }
+    }
+    return answers;
+  }
+
+  /** The panel is locked while a turn runs or a start is in flight, and for a hidden review. */
+  function questionsLocked() {
+    return state.turnRunning || state.startPending || state.resultsStale || !state.chatId;
+  }
+
+  /**
+   * Which of the panel's controls may be pressed, set on the panel as it stands rather than by
+   * rebuilding it, so a turn starting or ending never takes the text box out from under the
+   * engineer's cursor.
+   */
+  function syncQuestionControls() {
+    if (!ui.questions) {
+      return;
+    }
+    var locked = questionsLocked();
+    var controls = ui.questions.querySelectorAll('button, input');
+    for (var index = 0; index < controls.length; index++) {
+      controls[index].disabled = locked;
+    }
+    if (locked) {
       return;
     }
 
-    cardStatus(card, 'Sending...', false);
-    setTurnRunning(true);
-    call(sessionPath('/evidence/' + encodeURIComponent(requestId)), 'POST', { answer: text })
-      .then(function () {
-        if (!state.stream) {
-          openStream();
+    var last = currentQuestions().length - 1;
+    setActionDisabled('question-previous', state.questionIndex <= 0);
+    setActionDisabled('question-next', state.questionIndex >= last);
+    setActionDisabled('question-send', !answersToSend().length);
+  }
+
+  function setActionDisabled(action, disabled) {
+    var control = ui.questions.querySelector('[data-action="' + action + '"]');
+    if (control) {
+      control.disabled = disabled;
+    }
+  }
+
+  /** One listener for the panel, reading what each button declares (`render.questionsPanel`). */
+  function onQuestionsClick(event) {
+    var target = event.target;
+    var action = (target && target.getAttribute) ? target.getAttribute('data-action') : null;
+    if (!action || target.disabled || questionsLocked()) {
+      return;
+    }
+
+    var items = currentQuestions();
+    var item = items[state.questionIndex] || {};
+    var id = String(item.id || '');
+    var draft = draftOf(state.chatId);
+
+    switch (action) {
+      case 'question-previous':
+        state.questionIndex -= 1;
+        renderQuestions();
+        return;
+      case 'question-next':
+        state.questionIndex += 1;
+        renderQuestions();
+        return;
+      case 'question-option':
+        // The answer is the offered text verbatim; one option at a time.
+        draft.answers[id] = String((item.options || [])[parseInt(target.getAttribute('data-option-index'), 10)]);
+        delete draft.skipped[id];
+        renderQuestions();
+        return;
+      case 'question-skip':
+        // Skipped stays open and unresolved in the backend: nothing is sent for it, and
+        // nothing is filled in (FR-015).
+        delete draft.answers[id];
+        draft.skipped[id] = true;
+        if (state.questionIndex < items.length - 1) {
+          state.questionIndex += 1;
         }
-      })
-      .catch(function (error) {
-        setTurnRunning(false);
-        cardStatus(card, error.errorClass + ': ' + error.message, true);
-      });
+        renderQuestions();
+        return;
+      case 'question-send':
+        sendAnswers();
+        return;
+      default:
+        return;
+    }
+  }
+
+  /** Typing into a free-text answer: the draft follows the box, and a typed answer un-skips. */
+  function onQuestionsInput(event) {
+    var box = event.target;
+    if (!box || !box.classList || !box.classList.contains('question-answer')) {
+      return;
+    }
+    var id = String(box.getAttribute('data-request-id') || '');
+    var draft = draftOf(state.chatId);
+    draft.answers[id] = box.value;
+    if (box.value.trim() && draft.skipped[id] === true) {
+      delete draft.skipped[id];
+      var note = ui.questions.querySelector('.question-skipped');
+      if (note) {
+        note.parentNode.removeChild(note);
+      }
+    }
+    syncQuestionControls();
+  }
+
+  /**
+   * Send answers: one `POST /sessions/{chat_id}/evidence` carrying every answered question
+   * (feature 008's batch route, contracts/questions.md section 4), which records them and
+   * resumes the review once. The turn runs and the stream reopens as a follow-up's does.
+   *
+   * A refusal records nothing - the batch is validated whole before anything is written - so
+   * the drafts stay. When it names the request it is about (`request_id`, on the two evidence
+   * refusals), the pane says which question by its number and its words and reads the summary
+   * again, because that question is no longer open.
+   */
+  function sendAnswers() {
+    var answers = answersToSend();
+    if (!answers.length || questionsLocked()) {
+      return;
+    }
+
+    var chatId = state.chatId;
+    var items = currentQuestions();
+    state.questionNote = { text: 'Sending your answers...', bad: false };
+    setTurnRunning(true);
+    renderQuestions();
+
+    call(sessionPath('/evidence'), 'POST', { answers: answers }).then(function () {
+      var draft = draftOf(chatId);
+      for (var index = 0; index < answers.length; index++) {
+        delete draft.answers[answers[index].request_id];
+      }
+      if (state.chatId !== chatId) {
+        return;
+      }
+      state.questionNote = null;
+      renderQuestions();
+      if (!state.stream) {
+        openStream();
+      }
+    }).catch(function (error) {
+      setTurnRunning(false);
+      if (state.chatId !== chatId) {
+        return;
+      }
+      var answered = questionNumbered(items, error.requestId);
+      if (answered) {
+        delete draftOf(chatId).answers[error.requestId];
+        state.questionNote = {
+          text: 'Question ' + answered.number + ' (' + answered.question + ') was answered elsewhere, so nothing was sent.',
+          bad: true
+        };
+        renderQuestions();
+        loadAttention();
+        return;
+      }
+      state.questionNote = { text: error.message, bad: true };
+      renderQuestions();
+    });
+  }
+
+  /** The question a refusal names, with its number on screen, or null when it names none. */
+  function questionNumbered(items, requestId) {
+    if (typeof requestId !== 'string') {
+      return null;
+    }
+    for (var index = 0; index < items.length; index++) {
+      var item = items[index] || {};
+      if (String(item.id) === requestId) {
+        return { number: index + 1, question: item.question };
+      }
+    }
+    return null;
   }
 
   // ---- settings rendering ---------------------------------------------------------------------
@@ -1728,6 +1948,7 @@
     ui.usage = document.getElementById('usage-line');
     ui.attention = document.getElementById('attention-panel');
     ui.summary = document.getElementById('summary');
+    ui.questions = document.getElementById('questions');
     ui.contacts = document.getElementById('contacts');
     ui.notExamined = document.getElementById('not-examined');
     ui.preparation = document.getElementById('review-preparation');
@@ -1799,6 +2020,8 @@
     });
     ui.collapseFindings.addEventListener('click', collapseFindings);
     ui.attention.addEventListener('click', onAttentionClick);
+    ui.questions.addEventListener('click', onQuestionsClick);
+    ui.questions.addEventListener('input', onQuestionsInput);
 
     // The header states its counts before a single event has arrived, so a pane that has just
     // opened says "0 tool calls" rather than showing a control with no label on it.

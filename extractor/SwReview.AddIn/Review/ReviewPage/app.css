@@ -287,6 +287,7 @@ fieldset.field {
   every one of them comes back when the reviewed document does.
 */
 body.results-stale #summary,
+body.results-stale #questions,
 body.results-stale #attention-panel,
 body.results-stale #not-examined,
 body.results-stale #coverage-panel,
@@ -492,6 +493,113 @@ body.results-stale .card.evidence {
   font-size: var(--text-small);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* ---- tier 1: questions for you (feature 009 User Story 4) ------------------------------------ */
+
+/*
+  One short question at a time, in the judgement hue: only the engineer can answer it. The
+  offered answers are buttons that stay pressed; Send carries every answer at once, with the
+  backend's sentence about what resuming costs beside it.
+*/
+.questions-panel {
+  border-left: 3px solid var(--judge);
+}
+
+.questions {
+  display: grid;
+  gap: 6px;
+}
+
+.question-pager {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.question-position {
+  flex: 1 1 auto;
+  color: var(--judge);
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.question-pager button {
+  padding: 2px 8px;
+  font-size: var(--text-label);
+}
+
+.question-text {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: var(--text-lead);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.question-blocks,
+.question-about,
+.question-skipped {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-small);
+  overflow-wrap: anywhere;
+}
+
+.question-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.question-options button[aria-pressed="true"] {
+  border-color: var(--judge);
+  background: var(--judge-bg);
+  color: var(--judge);
+  font-weight: 600;
+}
+
+.question-answer {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  background: var(--pane);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-small);
+}
+
+.question-fold > summary {
+  color: var(--accent);
+  font-size: var(--text-small);
+  cursor: pointer;
+}
+
+.question-actions {
+  flex-wrap: wrap;
+}
+
+.question-resume {
+  flex: 1 1 100%;
+  color: var(--muted);
+  font-size: var(--text-small);
+}
+
+.question-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.question-status.bad {
+  color: var(--critical);
 }
 
 /* ---- tier 1: what to start with ---------------------------------------------------------- */
@@ -1120,8 +1228,7 @@ body.results-stale .card.evidence {
   border-right: 0;
 }
 
-.card .note,
-.card .answer {
+.card .note {
   flex: 1 1 120px;
   min-width: 0;
   padding: 4px 6px;
