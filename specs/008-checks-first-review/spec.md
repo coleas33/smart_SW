@@ -6,7 +6,7 @@
 
 **Status**: Draft
 
-**Amended**: 2026-09-23, by the planning pass; every change is listed with its reason in [research.md](research.md) R4. Amended again 2026-09-23 by the owner: the tools checks first already ran leave the tool array (FR-030, research R2.53).
+**Amended**: 2026-09-23, by the planning pass; every change is listed with its reason in [research.md](research.md) R4. Amended again 2026-09-23 by the owner: the tools checks first already ran leave the tool array (FR-030, research R2.53). Amended again 2026-09-23 by the owner (decision 3A): the replay fixtures follow the code (SC-001, research R2.54 to R2.56).
 
 **Input**: Owner direction of 2026-09-22 after the pilot workstation's evening packet (`docs/pane-findings-2026-09-20-review-gui.md`) and the analysis recorded in `docs/roadmap-2026-09-22.md`: "Token usage is way too high, we gotta get more efficient." Decided the same day: model-facing payload slimming, checks first, history pruning and parallel tool calls all become pane defaults, gated by an offline replay of the recorded runs; modelling-practice findings appear in Review as one folded group.
 
@@ -178,7 +178,7 @@ The engineer and the owner see what a review cost in terms they can act on: how 
 
 ### Measurable Outcomes
 
-- **SC-001**: With every change off, the replay of the fixtures shaped like the recorded runs reproduces the recorded per-round input tokens within 1% and the recorded finding set exactly.
+- **SC-001**: With every change off, the replay of the fixtures shaped like the recorded runs reproduces the recorded per-round input tokens within 1% and the recorded finding set exactly. *Amended 2026-09-23 (owner decision 3A): the fixtures follow the code.* When a change to what a tool returns, or to the system prompt or the checklist, is deliberate, the three fixtures are regenerated from the recordings on the machine that holds them, as part of that change and never by hand, and the 1% bar is kept against the regenerated fixtures, so growth nobody intended still fails it. The real recordings, which can never be regenerated, are held instead to their drift: each round's difference from the bill equals the size change of the results that round carries, within framing noise (`contracts/replay.md` section 10).
 - **SC-002**: With the pane defaults on, the replay of the 830-02342-shaped fixture sends under 1.0M input tokens in total, against 12.4M recorded, and loses no recorded finding.
 - **SC-003**: With the pane defaults on, the replay's labelled regrouped estimate for each of the 810-11249-shaped fixtures is under 0.3M input tokens, against about 1.5M recorded, its strict figure over the recorded rounds is below the recorded total, and it loses no recorded finding; the 0.3M on a real review is measured by SC-010.
 - **SC-004**: A follow-up question after the 830-02342-shaped review costs under 30k input tokens, against 405k recorded.

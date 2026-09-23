@@ -328,6 +328,10 @@ without a profile - equals 99). The fixture tests are regression locks that alwa
 **Why**: only the real recordings measure fidelity independently; the fixtures' usage is derived
 by the same method. FR-007 forbids committing the recordings.
 
+*Superseded in part 2026-09-23 (owner decision 3A, R2.55):* the recordings' rounds are no longer
+held to 1% of the bill but to their drift - every token by which pass A differs from the bill is
+the size change of a result the round carries. The finding checks are unchanged.
+
 ### Checks first (User Story 2)
 
 #### R2.13 Checks first is lever 5; both lever fields stay; one helper decides
@@ -1180,6 +1184,102 @@ recording was made. On the replay of the three fixtures with the pane defaults, 
 loses no finding and keeps reclassified at 3, 2 and 0; the figures are in tasks.md's Phase 9
 note.
 
+### Amendment 2026-09-23 (owner decision 3A): the replay fixtures follow the code
+
+#### R2.54 A deliberate change regenerates the fixtures; the 1% bar stays
+
+**Decision** (owner, 2026-09-23, decision 3A; SC-001, `contracts/replay.md` section 8). When a
+change to what a tool returns, or to the system prompt or the checklist, is deliberate, the three
+replay fixtures are regenerated with `reviewer/tests/fixtures/replay/generate_fixtures.py` from
+the recordings on the development machine, as part of the change that moves them, and never
+edited by hand. SC-001 keeps its 1% bar against the regenerated fixtures, so growth nobody
+intended - a result that moved without a change saying so - still fails
+`test_replay_fixtures.py`. Every figure the acceptance pins (`contracts/replay.md` section 9) is
+re-measured on the regenerated fixtures, and each pin that moves says why in its test. What the
+fixtures derive from (the pane fixture of feature 009, `tests/fixtures/pane/`) is regenerated
+with its own `--write` in the same change.
+
+**Why.** A fixture's usage is the recording's usage plus the size difference its fictional
+results make, measured by the code that generated it (R2.10). A deliberate change to a result
+makes pass A differ from the fixture by exactly that change - neither a replay defect nor a
+fixture defect - yet it fails the 1% bar, and until this decision the only answers were to loosen
+the bar or not make the change. Feature 010's two checklist items (010 T098-T099) are the first
+such change: `get_review_checklist`, called two or three times in every fixture, returns them
+from its call on, and every later round carries them.
+
+**Alternatives.**
+
+| Option | Why not |
+|---|---|
+| Loosen the bar | Accidental growth would pass too; the bar is the alarm plan.md RK-10 names. |
+| A per-fixture drift allowance | Every deliberate change hand-edits a number, and a replay defect's drift hides inside it. |
+| Keep the fixtures on the code that generated them | The replay prices the current code; a fixture of code that no longer exists prices nothing. |
+
+#### R2.55 The real recordings are held to their drift, not to 1%
+
+**Decision** (follows from decision 3A; `contracts/replay.md` section 10). The recordings cannot
+be regenerated, so `tests/integration/test_replay_recorded_runs.py` stops holding their rounds to
+1% of the bill and proves instead that each round's drift - pass A's input minus the recorded
+input - equals the size change of the results that round's recorded request carried: per carried
+round, what pass A sends of its results with their framing, minus the recorded growth. The
+identity is exact in the accounting, so its residual is pinned at zero; the size change it equals
+is measured against a bill that framed each result in 11 to 14 tokens rather than the replay's 12
+(R2.5), so it is the code's own size change within framing noise, at most `FRAMING_NOISE` (3)
+tokens a result. The finding checks stay as they were (88 replayed and 11 not replayable on the
+big run).
+
+**Why.** What made the recordings valuable was never the 1% itself but the independence: only a
+real bill says whether the replay rebuilds each request right (R2.12). The 1% bar mixed two
+things - the replay's accounting and the current code's results - and a deliberate change to a
+result, which the recordings can never absorb, would fail it for good on the small runs, whose
+rounds are about 11,000 to 60,000 tokens. The rule separates them: a deliberate change moves
+the size change and never the residual; a replay defect - a result carried that the request did
+not carry, a stopped turn's results kept, an output counted twice, an estimate misplaced, a
+framing constant drifting - moves the residual and nothing else. VERIFIED at `d47a91f` on the
+three recordings: residual zero on every round - 40, 38 and 36 main rounds across 2, 2 and 4
+turns, and each recording's one presentation round - none flagged lower bound; each carried
+round's size change between -2 and +1 (the current code's results unchanged); drift at most 8
+tokens.
+
+**Alternatives.**
+
+| Option | Why not |
+|---|---|
+| Keep the 1% bar | The first deliberate change larger than 1% of a small round fails it for good. |
+| A recorded size per call | The recordings keep no result, only a 200-character summary; a round's growth is the only recorded size, so the rule is per round. |
+| A tolerance on the residual | The identity is exact; any tolerance is room for a defect. The framing noise belongs to the size change, not to the residual. |
+| Drop the test | Only the recordings measure the replay against a real bill. |
+
+#### R2.56 The generator accepts a touching group recorded as a contact, by the replay's own rule
+
+**Decision** (follows from decision 3A; `contracts/replay.md` section 8). Feature 010 records a
+touching group as a contact, not an `interference.static` finding (010 `contracts/contacts.md`),
+so the generator's finding check refused the big recording (3 recorded keys missing) and
+`small-assembly-a`'s (2). It now takes out each recorded finding that a contact of the fixture
+reclassifies, by the rule the replay's reclassified list uses (section 5) - one function,
+`benchmark/replay.reclassifying_contacts`, for both, with `judged_group` reading a finding's
+group - after carrying the recorded group key and configuration into the fixture's names through
+the same map the rows were built with. Every other check stays as strict as it was: a missing or
+a new finding key still refuses, and so do a result of 5,000 tokens or more beyond 5%, a leaked
+token, a surviving property word and a recorded folder name. It prints how many it reclassified.
+
+**Consequence.** A fixture records what the current code records: the three touching groups of
+`big-assembly` and the two of `small-assembly-a` are contacts in its session. The generator
+reclassifies 3, 2 and 0; a replay of a regenerated fixture reclassifies none, because its
+recorded findings are already the current code's, and every pass with the recorded settings
+records the same 3, 2 and 0 contacts again. The three group calls after the live call are then
+reproduced rather than estimated, so `big-assembly` has one estimated round again, the live
+call. The replay's reclassification stays pinned where a recording made before feature 010 is
+built on purpose: `test_replay_findings.py` (010 T094), on scripted recordings.
+
+**Alternatives.**
+
+| Option | Why not |
+|---|---|
+| Keep the recorded findings in the fixture's session beside the contacts | The session would hold what no build records, and its event log would disagree with it. |
+| A hand-kept list of keys the check may miss | The replay's rule already says which recorded findings became contacts; a list beside it drifts. |
+| Copy the matching into the generator | Two copies of one rule; the task that owns the replay's would not know the other exists. |
+
 ## R3. Verified facts the plan relies on
 
 Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the design passes'):
@@ -1239,6 +1339,8 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 | FR-007 | fictional fixtures (the replay pass added a fictional profile) | the replay grades standards with `config/standards.example.yaml`, the profile the pilot ran; no new profile file | R2.10 |
 | FR-014 example (roadmap) | "85 findings across 12 rules" | 7 rules on the recording | R2.21 |
 | FR-030 (new, owner 2026-09-23) | every tool stayed in the array after checks first ran it | a tool the pre-run ran to completion leaves the array (lever 13, pane default) | R2.53 |
+| SC-001 (owner 2026-09-23, decision 3A) | the fixtures within 1% of their recorded input; the recordings within 1% too (R2.12) | the fixtures regenerated when a change is deliberate and still within 1%; the recordings' drift equal to the size change of the results each round carries | R2.54, R2.55 |
+| `contracts/replay.md` sections 8 and 9 (decision 3A) | the generator refuses a recorded finding it cannot reproduce; the fixtures' replay reclassifies 3, 2 and 0 | the generator reclassifies a touching group recorded as a contact, by the replay's rule; the regenerated fixtures record 3, 2 and 0 contacts and their replay reclassifies none | R2.56 |
 
 ## R5. Open items that stay open
 
