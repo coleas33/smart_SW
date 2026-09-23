@@ -446,6 +446,26 @@ def get_review_checklist() -> list[dict[str, str]]:
     return context.checklist.buckets(context.session)
 
 
+def get_finding(finding_id: str) -> ToolResult:
+    """One finding in full, exactly as the session records it.
+
+    Args:
+        finding_id: A finding id a check result's digest listed, such as F-001.
+
+    Notes:
+        A check tool's result lists its findings by id and counts; this returns one of
+        them with everything it carries - inputs, calculation, provenance, coverage limits.
+        It reads the session and changes nothing.
+    """
+    context = current_context()
+    if context.session is None:
+        return error_result("get_finding reads a review session, and this context has none")
+    finding = next((row for row in context.session.findings if row.id == finding_id), None)
+    if finding is None:
+        return unknown_id("finding", finding_id)
+    return {"finding": as_json(finding)}
+
+
 def request_capture(entity_id: str, view: CaptureView) -> ToolResult:
     """A rendered view of one entity, when the package already holds one.
 

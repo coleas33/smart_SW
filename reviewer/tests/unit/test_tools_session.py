@@ -8,16 +8,29 @@ able to talk its way around: `mark_coverage` cannot claim the `failed` bucket,
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterator
+from dataclasses import replace
+from typing import Any
 
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from swreview.agent.providers.schema import (
+    MAX_DESCRIPTION_LENGTH,
+    MAX_PARAMETER_DESCRIPTION_LENGTH,
+    tool_spec,
+)
+from swreview.agent.settings import MODEL_VIEW_OFF, MODEL_VIEW_PANE
 from swreview.ir.models import Capture, EvidencePackage, SourceRef
 from swreview.report.session import CoverageScope
 from swreview.tools import session
 from swreview.tools.context import ToolContext, context_for, use_context
+from swreview.tools.model_view import model_view
+from swreview.tools.query import as_json
+from swreview.tools.registry import ToolRegistry
 from tests.support.packages import persist_ref
+from tests.support.prerun import prerun_package
 
 MakePackage = Callable[..., EvidencePackage]
 
@@ -487,3 +500,85 @@ def test_request_capture_rejects_an_unknown_entity_and_view(context: ToolContext
     }
     result = session.request_capture(entity_id="cmp:0001", view="exploded")  # type: ignore[arg-type]
     assert result["error"].startswith("view 'exploded' is not one of")
+
+
+# --- get_finding (feature 008 T062) ------------------------------------------------------
+
+
+def slim_dispatch(tool_context: ToolContext) -> Any:
+    return ToolRegistry().dispatch(tool_context, model_view=MODEL_VIEW_PANE)
+
+
+def rms_finding_context() -> ToolContext:
+    """A context whose session holds RMS findings, whose inputs carry inline references."""
+    tool_context = context_for(prerun_package())
+    ToolRegistry().dispatch(tool_context).call("check_rms_part", {})
+    assert tool_context.session is not None and tool_context.session.findings
+    return tool_context
+
+
+def test_get_finding_returns_the_finding_exactly_as_the_session_records_it() -> None:
+    tool_context = rms_finding_context()
+    finding = tool_context.session.findings[0]  # type: ignore[union-attr]
+
+    with use_context(tool_context):
+        result = session.get_finding(finding.id)
+
+    assert result == {"finding": as_json(finding)}
+
+
+def test_through_a_slim_dispatch_the_view_has_no_reference_and_the_payload_does() -> None:
+    tool_context = rms_finding_context()
+    finding = next(
+        f
+        for f in tool_context.session.findings  # type: ignore[union-attr]
+        if any("persist_ref=" in str(value) for value in f.inputs)
+    )
+    refs = {feature.persist_ref for feature in tool_context.ir.features}
+
+    payload = slim_dispatch(tool_context).call("get_finding", {"finding_id": finding.id}).payload
+    view = json.dumps(model_view("get_finding", payload))
+
+    assert any(ref in json.dumps(payload) for ref in refs)
+    assert not [ref for ref in refs if ref in view]
+
+
+def test_an_unknown_finding_id_is_an_error_naming_it_and_failed_coverage() -> None:
+    tool_context = rms_finding_context()
+
+    result = slim_dispatch(tool_context).call("get_finding", {"finding_id": "F-999"})
+
+    assert result.is_error is True
+    assert "F-999" in result.payload["error"]
+    assert [item.check for item in tool_context.session.coverage.failed] == [  # type: ignore[union-attr]
+        "tool.get_finding"
+    ]
+
+
+def test_a_sessionless_context_gets_an_error_result_never_a_raise(
+    make_package: MakePackage,
+) -> None:
+    general_chat = replace(context_for(make_package()), session=None)
+
+    with use_context(general_chat):
+        result = session.get_finding("F-001")
+
+    assert "error" in result
+
+
+def test_get_finding_describes_itself_within_the_caps() -> None:
+    spec = tool_spec(session.get_finding)
+
+    assert len(spec.description) <= MAX_DESCRIPTION_LENGTH
+    for described in spec.schema["properties"].values():
+        assert len(described.get("description", "")) <= MAX_PARAMETER_DESCRIPTION_LENGTH
+
+
+def test_get_finding_is_offered_only_with_payload_slimming(make_package: MakePackage) -> None:
+    tool_context = context_for(make_package())
+
+    assert "get_finding" not in ToolRegistry().dispatch(tool_context).by_name
+    assert "get_finding" not in ToolRegistry().dispatch(
+        tool_context, model_view=MODEL_VIEW_OFF
+    ).by_name
+    assert "get_finding" in slim_dispatch(tool_context).by_name

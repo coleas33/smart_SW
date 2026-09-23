@@ -22,16 +22,28 @@ from typing import Any
 import pytest
 
 from swreview.ir.loader import load_package, save_package
+from swreview.prerun import attach_standards
+from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import build_context
 from swreview.tools.model_view import (
+    FINDING_DETAIL,
     ID_CAP,
+    MODEL_VIEWS,
     ROW_CAP,
     FindingCounts,
     check_digest,
     count_findings,
+    grouped_gaps,
+    model_view,
+    strip_references,
 )
-from swreview.tools.registry import ToolRegistry
-from tests.support.prerun import GROUP_KEY, prerun_package
+from swreview.tools.registry import TOOL_FUNCTIONS, ToolRegistry, check_tools, standards_tools
+from tests.support.prerun import (
+    GROUP_KEY,
+    STANDARDS_PROFILE,
+    prerun_package,
+    standards_prerun_package,
+)
 
 REVIEWER = Path(__file__).resolve().parents[2]
 
@@ -287,3 +299,268 @@ def test_count_findings_of_nothing_is_zeros() -> None:
     assert count_findings([]) == FindingCounts(
         findings=0, rules=0, by_status={}, by_severity={}
     )
+
+
+# --- User Story 3: stripping, grouped gaps, the view table (feature 008 T060) ---------------
+
+REF = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo="
+"""A base64 persistent reference, as the package records one."""
+
+
+def test_strip_references_removes_the_four_keys_at_any_depth() -> None:
+    payload = {
+        "persist_ref": REF,
+        "id": "cmp:0001",
+        "nested": [
+            {"persist_ref_scope": "doc:1", "persist_ref_scopes": ["doc:1"], "name": "boss"},
+            {"component_persist_refs": [REF], "kept": {"persist_ref": REF, "value": 3}},
+        ],
+    }
+
+    assert strip_references(payload) == {
+        "id": "cmp:0001",
+        "nested": [{"name": "boss"}, {"kept": {"value": 3}}],
+    }
+
+
+def test_strip_references_removes_the_inline_token_and_keeps_the_scope() -> None:
+    inputs = [
+        f"feature feat:0001 Boss-Extrude1 persist_ref={REF} scope=doc:3",
+        "sketch feat:0002 Sketch1 persist_ref=none scope=doc:3",
+        "a plain sentence with no reference",
+    ]
+
+    assert strip_references({"inputs": inputs}) == {
+        "inputs": [
+            "feature feat:0001 Boss-Extrude1 scope=doc:3",
+            "sketch feat:0002 Sketch1 scope=doc:3",
+            "a plain sentence with no reference",
+        ]
+    }
+
+
+def test_strip_references_never_mutates_its_input() -> None:
+    payload = {
+        "persist_ref": REF,
+        "rows": [{"persist_ref": REF, "inputs": [f"x persist_ref={REF}"]}],
+    }
+    before = copy.deepcopy(payload)
+
+    strip_references(payload)
+
+    assert payload == before
+
+
+def gap(kind: str, entity_kind: str, entity_id: str | None, reason: str) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "entity_kind": entity_kind,
+        "entity_id": entity_id,
+        "reason": reason,
+        "error": None,
+    }
+
+
+def test_grouped_gaps_groups_by_reason_template_in_first_appearance_order() -> None:
+    gaps = [
+        gap("not_extracted", "component", "cmp:0001", "'bolt A' has no loaded model document"),
+        gap("tool_error", "mass_override", "doc:1", "read OverrideMass for 'a.SLDPRT'"),
+        gap("not_extracted", "component", "cmp:0002", "'bolt B' has no loaded model document"),
+        gap("tool_error", "mass_override", None, "read OverrideMass for 'b.SLDPRT'"),
+    ]
+
+    grouped = grouped_gaps(gaps)
+
+    assert grouped["rows"] == 4
+    assert [(g["kind"], g["entity_kind"], g["rows"]) for g in grouped["groups"]] == [
+        ("not_extracted", "component", 2),
+        ("tool_error", "mass_override", 2),
+    ]
+    first = grouped["groups"][0]
+    assert first["reason"] == "'bolt A' has no loaded model document", "the first row, in full"
+    assert first["entity_ids"] == ["cmp:0001", "cmp:0002"]
+    assert first["entity_ids_omitted"] == 0
+    second = grouped["groups"][1]
+    assert second["entity_ids"] == ["doc:1"], "a None entity id is counted, not listed"
+    assert second["entity_ids_omitted"] == 0
+
+
+def test_grouped_gaps_keeps_five_ids_and_counts_the_rest() -> None:
+    gaps = [
+        gap("not_extracted", "face", f"fac:{n:04d}", f"'face {n}' was not read")
+        for n in range(1, 9)
+    ]
+
+    [group] = grouped_gaps(gaps)["groups"]
+
+    assert group["rows"] == 8
+    assert group["entity_ids"] == [f"fac:{n:04d}" for n in range(1, 6)]
+    assert group["entity_ids_omitted"] == 3
+
+
+def test_grouped_gaps_of_nothing() -> None:
+    assert grouped_gaps([]) == {"groups": [], "rows": 0}
+
+
+def test_the_view_of_an_unlisted_tool_is_its_payload_stripped() -> None:
+    payload = {"result": [{"id": "cmp:0001", "persist_ref": REF}]}
+
+    assert model_view("list_components", payload) == strip_references(payload)
+    assert "list_components" not in MODEL_VIEWS
+
+
+def test_the_view_of_list_gaps_is_the_grouped_gaps() -> None:
+    rows = [gap("not_extracted", "face", "fac:0001", "'f' was not read")]
+
+    assert model_view("list_gaps", {"result": rows}) == grouped_gaps(rows)
+
+
+def test_every_check_tool_is_in_the_view_table_with_the_detail_sentence(
+    real_payloads: dict[str, dict[str, Any]],
+) -> None:
+    names = {f.__name__ for f in (*check_tools(), *standards_tools())}
+
+    assert names <= set(MODEL_VIEWS)
+    for name, payload in real_payloads.items():
+        view = model_view(name, payload)
+        assert view["detail"] == FINDING_DETAIL
+        assert view == strip_references({**check_digest(payload), "detail": FINDING_DETAIL})
+
+
+def test_an_error_from_a_check_tool_passes_through_stripped_with_no_detail() -> None:
+    payload = {"error": "no interference group 'x' in this package"}
+
+    assert model_view("check_interference_group", payload) == payload
+
+
+# --- the value sweep: no reference value of the package reaches any view -------------------
+
+SWEEP_PACKAGE = REVIEWER / "tests" / "fixtures" / "replay" / "big-assembly"
+
+
+def package_refs(folder: Path) -> set[str]:
+    """Every persistent-reference value the package carries, read from its raw JSON."""
+    refs: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key == "persist_ref" and isinstance(item, str) and item:
+                    refs.add(item)
+                elif key == "component_persist_refs" and isinstance(item, list):
+                    refs.update(ref for ref in item if isinstance(ref, str) and ref)
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(json.loads((folder / "package.json").read_text(encoding="utf-8")))
+    return refs
+
+
+def sweep_arguments(package: Any) -> dict[str, dict[str, Any]]:
+    """One call per tool, with ids from the package. A call that errors is still swept:
+    an error message must not quote a reference either."""
+    part_doc = next(d.document_id for d in package.documents if d.kind == "part")
+    component = next(c.id for c in package.components if c.document_id == part_doc)
+    hole_a, hole_b = package.holes[0].id, package.holes[1].id
+    face_a, face_b = package.faces[0].id, package.faces[1].id
+    group_key = groups_of(package)[0].group_key
+    dimension = {"document_id": part_doc, "sheet": "Sheet1", "annotation": "D1"}
+    return {
+        "get_package_summary": {},
+        "list_components": {"parent_id": None, "include_suppressed": True},
+        "get_component": {"component_id": component},
+        "find_components": {"name_pattern": ".", "document_id": None},
+        "list_mates": {"component_id": None},
+        "list_holes": {"component_id": None, "hole_type": None},
+        "list_fasteners": {"component_id": None, "kind": None},
+        "list_interferences": {"configuration": None, "component_id": None},
+        "get_drawing_sheet": {"document_id": part_doc, "sheet_name": None},
+        "find_dimensions": {"document_id": None, "text_regex": None, "near_view": None},
+        "list_gaps": {},
+        "get_exceptions": {"check": None},
+        "list_features": {"document_id": part_doc, "folder": None, "include_suppressed": True},
+        "get_feature": {"feature_id": package.features[0].id},
+        "list_equations": {"document_id": part_doc},
+        "measure_axis_distance": {"hole_id_a": hole_a, "hole_id_b": hole_b},
+        "measure_face_gap": {"face_id_a": face_a, "face_id_b": face_b},
+        "check_tool_envelope": {
+            "fastener_id": "fst:0001",
+            "tool": "hex_key",
+            "length": {"value": 100.0, "unit": "mm"},
+        },
+        "bounding_box": {"component_id": component},
+        "check_fit": {"bore_dimension_ref": dimension, "shaft_dimension_ref": dimension},
+        "check_axial_stack": {"dimension_refs": [dimension], "signs": [1], "target_gap": None},
+        "check_fastener_joint": {
+            "fastener_id": "fst:0001",
+            "hole_id": hole_a,
+            "clamped_component_ids": [component],
+        },
+        "check_hole_alignment": {"hole_id_a": hole_a, "hole_id_b": hole_b, "tolerance": None},
+        "check_interference_group": {"group_key": group_key},
+        "check_rms_part": {"document_id": None},
+        "check_rms_assembly": {},
+        "check_rms_equations": {"document_id": None},
+        "check_joints": {},
+        "request_evidence": {
+            "what": "the tapped depth of the first hole",
+            "why": "fastener.engagement",
+            "entity_ids": [hole_a],
+        },
+        "mark_coverage": {
+            "check": "interfaces.fit",
+            "bucket": "skipped",
+            "scope": {"component_ids": [component]},
+            "reason": "no drawing dimensions were extracted",
+        },
+        "record_drawing_finding": {
+            "document_id": part_doc,
+            "sheet": "Sheet1",
+            "observed": "the callout has no thread depth",
+            "requirement": "the callout states the thread depth",
+            "source_refs": [dimension],
+            "status": "suspected",
+            "recommended_action": "add the thread depth",
+        },
+        "get_review_checklist": {},
+        "request_capture": {"entity_id": component, "view": "iso"},
+    }
+
+
+def test_no_reference_value_of_the_package_reaches_the_view_of_any_tool() -> None:
+    loaded = load_package(SWEEP_PACKAGE)
+    refs = package_refs(SWEEP_PACKAGE)
+    context = build_context(loaded)
+    dispatch = ToolRegistry().dispatch(context)
+    arguments = sweep_arguments(loaded.package)
+    assert refs
+    assert {f.__name__ for f in TOOL_FUNCTIONS} == set(arguments), "a new tool needs a sweep row"
+
+    leaks: dict[str, int] = {}
+    for name, call_arguments in arguments.items():
+        payload = dispatch.call(name, call_arguments).payload
+        text = json.dumps(model_view(name, payload))
+        found = sum(1 for ref in refs if ref in text)
+        if found:
+            leaks[name] = found
+    assert leaks == {}
+
+
+def test_check_standards_views_carry_no_reference_either(tmp_path: Path) -> None:
+    folder = tmp_path / "package"
+    save_package(standards_prerun_package(), folder)
+    loaded = load_package(folder)
+    context = build_context(loaded)
+    assert attach_standards(context, STANDARDS_PROFILE) is None
+    dispatch = ToolRegistry().dispatch(context)
+
+    payload = dispatch.call("check_standards", {}).payload
+    view = json.dumps(model_view("check_standards", payload))
+
+    refs = package_refs(folder)
+    assert payload["findings"], "the standards run graded something"
+    assert refs
+    assert not [ref for ref in refs if ref in view]
+    assert json.loads(view)["detail"] == FINDING_DETAIL
