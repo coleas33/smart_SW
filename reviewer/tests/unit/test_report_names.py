@@ -22,7 +22,7 @@ import pytest
 from swreview.ir.loader import load_package
 from swreview.report.attention import rank
 from swreview.report.explanations import _prompt
-from swreview.report.names import component_names, with_component_names
+from swreview.report.names import and_list, component_names, with_component_names
 from swreview.report.session import load_session
 from tests.support.attention import REVIEW_FOLDER, attention_package
 
@@ -100,6 +100,21 @@ def test_the_inputs_are_not_mutated() -> None:
 
     assert names == NAMES
     assert text == "cmp:0003 and cmp:0001"
+
+
+# --- and_list: names in prose -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("names", "text"),
+    [
+        (["Pin-A-1"], "Pin-A-1"),
+        (["Pin-A-1", "Plate-1"], "Pin-A-1 and Plate-1"),
+        (["a-1", "b-1", "c-1"], "a-1, b-1 and c-1"),
+    ],
+)
+def test_and_list_joins_names_as_a_sentence_does(names: list[str], text: str) -> None:
+    assert and_list(names) == text
 
 
 # --- the characterization: the explanations request did not move -------------------------

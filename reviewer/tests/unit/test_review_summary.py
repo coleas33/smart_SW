@@ -23,7 +23,7 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 from uuid import UUID, uuid5
 
 import pytest
@@ -33,6 +33,7 @@ from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import rank
 from swreview.report.session import (
+    Contact,
     Coverage,
     CoverageBucket,
     EvidenceRequest,
@@ -53,6 +54,7 @@ from tests.support.attention import (
     PART_COMPONENT,
     PIN_ONE,
     PIN_TWO,
+    REVIEW_FOLDER,
     ROOT_COMPONENT,
     CoverageSpec,
     FindingSpec,
@@ -377,13 +379,140 @@ def test_component_names_hold_the_non_blank_names_only() -> None:
     assert summary_of(session_of("names", []), None).component_names == {}
 
 
-def test_the_folded_family_and_the_contacts_are_absent_until_their_features_land() -> None:
+def test_the_folded_family_is_absent_until_its_feature_lands() -> None:
     session = session_of("absent", [spec("rms.folders.present")])
     summary = summary_of(session, attention_package())
 
     assert summary.modelling_practice is None
-    assert summary.contacts is None
-    assert contacts_of(session) is None
+
+
+# --- 6. the size-for-size contacts (T018, feature 010's `ReviewSession.contacts`) ----------
+
+
+def contact(number: int, components: Sequence[str], **fields: Any) -> Contact:
+    values: dict[str, Any] = {
+        "id": f"C-{number:03d}",
+        "kind": "zero_volume",
+        "group_key": f"group-{number}",
+        "configuration": "Default",
+        "interference_ids": [f"I-{number:03d}"],
+        "component_ids": list(components),
+        "volume_mm3": 0.0,
+        "joint_id": None,
+        "reason": "the two parts touch at nominal size.",
+        "tool_result_ids": [0],
+    }
+    values.update(fields)
+    return Contact(**values)
+
+
+def with_contacts(session: ReviewSession, *contacts: Contact) -> ReviewSession:
+    return session.model_copy(update={"contacts": list(contacts)})
+
+
+def test_each_contact_is_a_view_in_session_order_with_the_packages_names() -> None:
+    package = attention_package()
+    session = with_contacts(
+        session_of("contacts", []),
+        contact(1, (PIN_ONE, PART_COMPONENT)),
+        contact(
+            2,
+            (PIN_TWO, PART_COMPONENT),
+            kind="possible_only",
+            volume_mm3=None,
+            configuration="Machined",
+        ),
+    )
+
+    contacts = summary_of(session, package).contacts
+
+    assert contacts is not None
+    assert (contacts.count, contacts.text) == (2, "2 size-for-size contacts")
+    assert [item.model_dump() for item in contacts.items] == [
+        {
+            "id": "C-001",
+            "component_ids": [PIN_ONE, PART_COMPONENT],
+            "names": ["dowel-pin-1", "housing-1"],
+            "configuration": "Default",
+            "kind": "zero_volume",
+            "kind_label": "touching",
+            "volume_mm3": 0.0,
+            "text": "dowel-pin-1 and housing-1",
+        },
+        {
+            "id": "C-002",
+            "component_ids": [PIN_TWO, PART_COMPONENT],
+            "names": ["dowel-pin-2", "housing-1"],
+            "configuration": "Machined",
+            "kind": "possible_only",
+            "kind_label": "possible only",
+            "volume_mm3": None,
+            "text": "dowel-pin-2 and housing-1",
+        },
+    ]
+
+
+def test_a_part_with_no_name_is_named_by_its_id() -> None:
+    package = attention_package()
+    blank = package.components[1].model_copy(update={"name": " "})
+    package = package.model_copy(
+        update={"components": [package.components[0], blank, *package.components[2:]]}
+    )
+    session = with_contacts(session_of("contact-blank", []), contact(1, (PIN_ONE, PART_COMPONENT)))
+
+    contacts = summary_of(session, package).contacts
+
+    assert contacts is not None
+    assert (contacts.text, contacts.items[0].names, contacts.items[0].text) == (
+        "1 size-for-size contact",
+        [None, "housing-1"],
+        f"{PIN_ONE} and housing-1",
+    )
+
+
+def test_three_parts_in_one_contact_are_listed_with_a_final_and() -> None:
+    session = with_contacts(
+        session_of("contact-three", []), contact(1, (PIN_ONE, PART_COMPONENT, PIN_TWO))
+    )
+
+    contacts = summary_of(session, attention_package()).contacts
+
+    assert contacts is not None
+    assert contacts.items[0].text == "dowel-pin-1, housing-1 and dowel-pin-2"
+
+
+def test_the_thread_model_kind_has_its_label() -> None:
+    session = with_contacts(
+        session_of("contact-thread", []), contact(1, (PIN_ONE, PART_COMPONENT), kind="thread_model")
+    )
+
+    contacts = summary_of(session, attention_package()).contacts
+
+    assert contacts is not None
+    assert contacts.items[0].kind_label == "thread model"
+
+
+def test_no_contact_or_a_session_before_contacts_has_no_list() -> None:
+    session = session_of("no-contacts", [])
+    older = load_session(REVIEW_FOLDER / "session.json")
+
+    assert "contacts" not in older.model_dump(mode="json"), "written before feature 010"
+    assert contacts_of(session, {}) is None
+    assert contacts_of(older, {}) is None
+    assert summary_of(older, attention_package()).contacts is None
+
+
+def test_a_contact_is_counted_in_no_group_and_no_goal() -> None:
+    specs = [spec("interference.static"), spec("rms.folders.present")]
+    plain = session_of("contacts-uncounted", specs)
+    touching = with_contacts(plain, contact(1, (PIN_ONE, PART_COMPONENT)))
+
+    without = summary_of(plain, attention_package())
+    with_list = summary_of(touching, attention_package())
+
+    assert with_list.groups == without.groups
+    assert with_list.goals == without.goals
+    assert (with_list.headline, with_list.findings) == (without.headline, without.findings)
 
 
 def test_without_a_ledger_the_resume_cost_is_unknown() -> None:

@@ -68,7 +68,7 @@ the first matching rule row in that order. `detail`: that row's `reason`, verbat
 | `headline` | "{n} findings in {m} issues" from `findings_*` and `issues_*`; "No findings were recorded" at zero |
 | `questions` | open evidence requests in session order (`questions.md` section 3); `text` `None` at zero |
 | `not_loaded` | `not_examined(package)`: `{count, total, text}`; `None` when every instance was read or no package |
-| `contacts` | `contacts_of(session)`: feature 010's `ReviewSession.contacts` in its order; `None` when absent or empty |
+| `contacts` | `contacts_of(session, names)`: feature 010's `ReviewSession.contacts` in its order, each part named from the summary's `component_names` (its id in `text` and `None` in `names` where it has none), `kind_label` from `labels.contact_kind`, ids `C-001` as 010 allocates them; `None` when absent or empty. Counted in no group, goal or headline |
 | `component_names` | non-blank names of every package component |
 | `resume_input_tokens`, `resume_text` | `questions.md` section 5 |
 
