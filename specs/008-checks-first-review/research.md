@@ -181,34 +181,39 @@ bounds for recordings made after this feature (R2.39).
 **Alternatives**: the summary size always (rejected: understates up to 200 times); refusing the
 replay (rejected: the spec says estimate and label).
 
-#### R2.7 One tokenizer, vendored, no network
+#### R2.7 One tokenizer, fetched once into a per-user cache, no network at run time
 
-**Decision**: `tiktoken>=0.9,<1` becomes a runtime dependency. The `o200k_base` vocabulary file
-is vendored under its tiktoken cache-key name at
-`reviewer/src/swreview/tokenizer/fb374d419588a4632f3f557e76b4b70aebbca790` and marked `-text` in
-`.gitattributes` beside the existing vendored-artifact rule. A new `reviewer/src/swreview/tokens.py`
-checks the file's sha256 itself, then calls `tiktoken.get_encoding` with `TIKTOKEN_CACHE_DIR`
-set to that folder and restored afterwards; it exposes `TOKENIZER_NAME = "o200k_base"`,
-`count_tokens(text)` and `TokenizerUnavailable`. The replay and the step recorder both use it.
+**Decision** (amended 2026-09-23; the design pass had proposed vendoring): `tiktoken>=0.9,<1`
+becomes a runtime dependency. The `o200k_base` vocabulary file is **not** committed. It lives in a
+per-user cache (`SWREVIEW_TOKENIZER_DIR`, else `%LOCALAPPDATA%\SwReview\tokenizer` on Windows,
+else `$XDG_CACHE_HOME/swreview/tokenizer` or `~/.cache/swreview/tokenizer`) under its tiktoken
+cache-key name, put there once by `swreview tokenizer fetch` (tiktoken's own loader into a
+temporary folder, then our own sha256 check, then a copy; `--from <file>` for a machine without
+network). A new `reviewer/src/swreview/tokens.py` checks the file's sha256 itself, then calls
+`tiktoken.get_encoding` with `TIKTOKEN_CACHE_DIR` set to that folder and restored afterwards; it
+exposes `TOKENIZER_NAME = "o200k_base"`, `tokenizer_dir()`, `count_tokens(text)` and
+`TokenizerUnavailable`, whose message names the fetch command. `update-workstation.ps1` and the
+reviewer CI workflow run the fetch; tests needing exact counts skip with the fetch command in the
+reason unless `SWREVIEW_REQUIRE_TOKENIZER=1`, which CI and the update script set, so a missing file
+fails there instead of passing silently.
 
-**Why**: FR-026 needs token counts at run time, in the pane process, and FR-002/FR-003 need one
-named tokenizer with no network. VERIFIED: tiktoken is not a dependency today
-(`reviewer/pyproject.toml:8-24`); the vocabulary was downloaded once to
-`%TEMP%\data-gym-cache\fb374d419588a4632f3f557e76b4b70aebbca790` (3,613,922 bytes; its sha256
-equals the `expected_hash` in `tiktoken_ext.openai_public.o200k_base`); with
-`TIKTOKEN_CACHE_DIR` pointing at a folder holding it and `requests.get` patched to raise, the
-encoding loads in 0.13 s and "hello world" encodes to `[24912, 2375]`; `* text=auto` with this
-machine's `core.autocrlf=true` would convert an unmarked vocabulary file to CRLF on checkout and
-break its hash; the workstation installs every dependency (`update-workstation.ps1:117-120`), so
-an optional extra would be installed there anyway. Hatchling packages every file under
-`src/swreview` (`pyproject.toml:44-45`), so the vocabulary ships with the wheel.
+**Why**: FR-026 needs token counts at run time and FR-002/FR-003 need one named tokenizer with no
+network during a replay. The vocabulary is published by OpenAI with no stated redistribution
+terms and this repository is public, so vendoring it was the one licensing question the design
+left open; a per-user cache removes it at the cost of one fetch per machine, and the loader is the
+same either way. VERIFIED: tiktoken is not a dependency today (`reviewer/pyproject.toml:8-24`); the
+vocabulary was downloaded once to `%TEMP%\data-gym-cache\fb374d419588a4632f3f557e76b4b70aebbca790`
+(3,613,922 bytes; its sha256 equals the `expected_hash` in `tiktoken_ext.openai_public.o200k_base`);
+with `TIKTOKEN_CACHE_DIR` pointing at a folder holding it and `requests.get` patched to raise, the
+encoding loads in 0.13 s and "hello world" encodes to `[24912, 2375]`; the workstation installs
+every dependency and runs the update script (`update-workstation.ps1:117-120`), which is where the
+one fetch goes.
 
-**Alternatives**: a dev-only or optional extra (rejected: product code importing an optional
-dependency is fragile, and step sizes would depend on the environment); download on first use
-(rejected: breaks FR-002, and the workstation filters web traffic); bytes divided by 2.6
-(rejected: measured 2.0 to 3.4 bytes per token, about 30% either way); a gzip copy with our own
-loader (rejected: copies tiktoken's regex); caching under `%LOCALAPPDATA%` (rejected: needs the
-network once per machine). The vocabulary file's redistribution terms are an owner item (R5).
+**Alternatives**: vendor the file with a `-text` attribute (the design pass's proposal; rejected
+for the redistribution question and 3.6 MB in every clone); let tiktoken download on first use in
+the pane process (rejected: a replay must make no network call, and the pane would reach the
+internet from inside SOLIDWORKS); count bytes instead of tokens (rejected: the recorded bills are
+tokens, and SC-001's 1% agreement needs the same tokenizer).
 
 #### R2.8 The finding subject key
 
@@ -1153,7 +1158,7 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 
 | Item | Owner | Blocks |
 |---|---|---|
-| The o200k_base vocabulary file has no stated redistribution terms; vendoring it into this public AGPL repository follows the replay pass's recommendation (R2.7). Reversible: a first-use download to `%LOCALAPPDATA%` gives up FR-002 on a fresh machine | owner | nothing; T002 proceeds |
+| Settled 2026-09-23: the o200k_base vocabulary has no stated redistribution terms, so it is not vendored; each machine fetches it once into a per-user cache (R2.7) | owner | nothing; T002 proceeds as amended |
 | Zero-volume contacts are judged `demonstrated` until feature 010's contact rule; with all groups judged, many more appear (R2.17). The owner's 2026-09-23 decision (contacts as a separate folded list, not findings) is delivered by features 010 and 009, not here | feature 010 | the reading of SC-006 results at the sitting |
 | Prune age one or two rounds; the replay prints both (R2.37) | owner | nothing |
 | A hung live detection blocks session creation; no read timeout without a new transport; moving the pre-run into `ReviewRun.start()` is the alternative (R2.23) | owner | nothing in 008; latency measured at the sitting (T104) |
