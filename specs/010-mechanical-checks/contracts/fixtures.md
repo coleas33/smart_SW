@@ -14,7 +14,7 @@ reviewer/tests/fixtures/mechanical/
 ├── generate_fixtures.py                          # run from reviewer/; reads nothing but the builders
 ├── big-assembly/package.json, meshes/*.stl       # shaped like 830-02342
 ├── small-assembly/package.json, meshes/*.stl     # shaped like 810-11249
-└── tolerances/package.json                       # IR 1.5.0 (lands with US8, T084)
+└── tolerances/package.json, meshes/*.glb         # IR 1.5.0 (US8, T084)
 specs/010-mechanical-checks/contracts/fastener-name-vectors.json   # the parser vectors (T039)
 ```
 
@@ -27,7 +27,14 @@ it, so a drifted fixture is a failure and not a rewrite.
 |---|---|---|
 | big-assembly | 26 documents (23 parts, 3 assemblies), 89 components (86 resolved, 2 lightweight, 1 suppressed), 27 hole rows with 132 instances (two rows with no cylinder face), 68 screws over 9 documents in the vendor naming shape (32 `SHC`, 35 `FHT`, 1 `BHT`), 2 pin components with no face, 113 interference groups | the joint numbers of `joint-map.md` section 9; the fastener cases of `fasteners.md` section 6 (both M4-in-M5 screws, the M10, M2 and M3 engagements, the passes, one screw named M5 with a 3.3 mm shank); an overhanging part over one screw head and a clear head; a 12.0 mm counterbore under an M8 socket head; parts at 2700, 7850 and 1000 kg/m3; a 2.000 kg sub-assembly with unread children; one surface-only part; one document whose part-number property differs from its stem; two documents sharing a description; one model with no revision; 8 positive-volume groups (one mixed with a zero-volume member) and 105 zero-volume or possible-only groups |
 | small-assembly | 3 documents, 4 components, 4 hole rows with 16 instances, no hole pair | a 3.0 mm pin in a 3.0 mm hole at 0.000 mm with 8.475 mm of overlap; two zero-volume interference rows between the pin and the plate; an assembly whose mass is its part plus two pins |
-| tolerances | IR 1.5.0, a small screw and dowel assembly | `wizard` data with fit class `H7` on one dowel hole and an unknown class on another; one model diameter dimension with a tolerance bound by value, one ambiguous pair of equal dimensions; one position `gtol` annotation bound by face persist ref; used with a version 2 profile carrying a general block and a version 1 profile without one |
+| tolerances | IR 1.5.0, a small screw and dowel assembly: a plate and a block pinned by a 3.0 mm dowel (3 documents, 4 components with the screw), one M4 socket head through the plate's counterbore into the block's tapped hole | the dowel joint's three sizes each bound by a model dimension: the plate hole's by a class-only `H7` fit on its diameter dimension, the block hole's and the pin's by bilateral limits (a size-only stack, least clearance 0.001 mm); the counterbore's `wizard` data with the clearance fit `swScrewClearanceNormal` and its sizes; one ambiguous pair of equal 4.5 mm dimensions (the screw joint's stack unresolved, naming every source); one position `gtol` on the plate's dowel face bound by face persist ref, whose value states no unit and so binds nothing; used with a version 2 profile carrying a general block, a version 1 profile without one, and no profile |
+
+**Where a hole's ISO class arrives (T084, from the C# lane's finding).** The table above first
+put the dowel hole's `H7` on its Hole Wizard data. The Hole Wizard's own fit (`HoleFit`) is a
+screw clearance fit - close, normal or loose - and never an ISO 286 class, so a hole's `H7`
+arrives on its model dimension as a fit tolerance (`fit_hole_class`); the fixture carries it
+there, and the counterbore's Hole Wizard fit is the clearance fit the resolver reads and
+declines.
 
 ## 3. Fictional strings only
 

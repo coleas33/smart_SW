@@ -24,7 +24,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable, Sequence
 from itertools import combinations
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from swreview.checks.fastener import HeadSweep
 from swreview.checks.fastener_identity import (
@@ -46,12 +46,16 @@ from swreview.checks.joints import (
 )
 from swreview.checks.mass import run_mass_checks
 from swreview.checks.result import CheckResult, DocumentResult
+from swreview.checks.tolerances import ResolverLookup
 from swreview.checks.tool_access import recess_group, run_head_fit, sweep_head
 from swreview.report.session import CoverageBucket, CoverageItem, CoverageScope
 from swreview.tools.context import ToolContext, current_context
 from swreview.tools.joint_context import BodyMeshes, joint_analysis
 from swreview.tools.query import ToolResult
 from swreview.tools.recording import record_result
+
+if TYPE_CHECKING:  # the standards package reaches the runner; only the type is needed here
+    from swreview.checks.standards.profile import StandardsProfile
 
 __all__ = [
     "CODE_FIRST_CHECKS",
@@ -161,6 +165,20 @@ def record_joint_map(context: ToolContext, joint_map: JointMap) -> Counter[Cover
     return written
 
 
+def _attached_profile(context: ToolContext) -> StandardsProfile | None:
+    """The profile of the standards run attached to the review, or `None`: the joint and
+    hygiene checks read it, and never load one themselves.
+
+    Imported here, as prerun and the registry import every standards module: a module under
+    `checks/standards/` reaches `checks/rules/` and the runner, which import the pre-run,
+    which imports this module (`prerun._deferred` says it once).
+    """
+    from swreview.tools.standards_checks import standards_run
+
+    run = standards_run(context)
+    return None if run is None else run.profile
+
+
 def _head_sweeper(
     context: ToolContext, meshes: BodyMeshes
 ) -> tuple[EnvelopeOf | None, str]:
@@ -255,7 +273,8 @@ def check_joints() -> ToolResult:
     analysis = joint_analysis(context)
     joint_map = analysis.joint_map
     written = record_joint_map(context, joint_map)
-    checks = run_joint_checks(context.ir, joint_map)
+    lookup = ResolverLookup(context.ir, _attached_profile(context))
+    checks = run_joint_checks(context.ir, joint_map, lookup)
     refused = _record_folded(context, checks.results)
     if refused is not None:
         return refused
@@ -361,17 +380,14 @@ def check_hygiene() -> ToolResult:
         Takes no argument. The property names come from the attached standards profile;
         without one the property checks are skipped, saying which setting is missing.
     """
-    # Imported here, as prerun and the registry import every standards module: a module under
-    # `checks/standards/` reaches `checks/rules/` and the runner, which import the pre-run,
-    # which imports this module (`prerun._deferred` says it once).
+    # Deferred for the reason `_attached_profile` gives: hygiene reads a standards module.
     from swreview.checks.hygiene import run_hygiene_checks
-    from swreview.tools.standards_checks import standards_run
 
     context = current_context()
     session = context.require_session()
     findings_before = len(session.findings)
-    run = standards_run(context)
-    checks = run_hygiene_checks(context.ir, None if run is None else run.profile)
+    profile = _attached_profile(context)
+    checks = run_hygiene_checks(context.ir, profile)
     written: Counter[CoverageBucket] = Counter()
     refused = _record_documents(context, checks.findings)
     if refused is not None:
@@ -383,7 +399,10 @@ def check_hygiene() -> ToolResult:
         findings=[finding.id for finding in findings],
         statuses=Counter(finding.status for finding in findings),
         written=written,
-        extra={"documents": checks.documents, "profile": "absent" if run is None else "attached"},
+        extra={
+            "documents": checks.documents,
+            "profile": "absent" if profile is None else "attached",
+        },
     )
 
 

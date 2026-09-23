@@ -1,4 +1,4 @@
-"""Generate the two synthetic packages feature 010's acceptance tests read (T003).
+"""Generate the synthetic packages feature 010's acceptance tests read (T003).
 
 Run from `reviewer/` and commit what it writes:
 
@@ -7,7 +7,7 @@ Run from `reviewer/` and commit what it writes:
 `tests/unit/test_support_mechanical.py` re-runs `render_all()` and compares every byte with
 the tree, so a fixture is changed here, regenerated and committed - never edited by hand.
 
-**Nothing here comes from a recorded package.** Both fixtures are built from
+**Nothing here comes from a recorded package.** Every fixture is built from
 `tests/support/mechanical.py` and fictional strings; what they reproduce are the *counts*
 and the *geometry cases* research R3 verified on the recorded runs, and the numbers the
 contracts pin (`contracts/fixtures.md` section 2, `joint-map.md` section 9, `fasteners.md`
@@ -70,6 +70,17 @@ and one model without a revision, in profile A's fictional property names.
 3 documents, 4 components, 4 hole rows with 16 instances on one plate, a 3.0 mm pin face in
 a 3.0 mm hole at 0.000 mm overlapping it by 8.475 mm, two zero-volume interference rows
 between that pin and the plate, and an assembly weighing its plate plus two pins.
+
+## tolerances (IR 1.5.0, feature 010 T084)
+
+A plate and a block pinned by a 3.0 mm dowel and screwed by one M4 through a counterbore:
+the dowel joint's two hole sizes and its pin size each bound by a model dimension - the
+plate's by a class-only H7 fit (where a hole's ISO class arrives, the C# lane found: the Hole
+Wizard's own fit is a screw clearance fit), the block's and the pin's by bilateral limits - so
+its stack resolves to a size-only worst case; a position GTol on the plate's dowel face whose
+value states no unit, so it binds nothing; the counterbore's Hole Wizard data (a clearance fit,
+its sizes) and an ambiguous pair of equal 4.5 mm dimensions that leave the screw joint's stack
+unresolved, naming every source searched.
 """
 
 from __future__ import annotations
@@ -91,6 +102,8 @@ from tests.support.mechanical import (  # noqa: E402
     cylinder_mesh,
     transform,
 )
+
+from swreview.ir.models import HoleWizardData, Quantity  # noqa: E402
 
 Z = (0.0, 0.0, 1.0)
 X = (1.0, 0.0, 0.0)
@@ -789,9 +802,114 @@ def build_small_assembly() -> Built:
     return builder.build()
 
 
+# --- the tolerances assembly (IR 1.5.0) ---------------------------------------------------
+
+
+def build_tolerances_assembly() -> Built:
+    builder = PackageBuilder(
+        design_stem="FICT-TULMVEN-0000",
+        root_properties=house("FICT-TULMVEN-0000", "TULM VEN"),
+        schema_version="1.5.0",
+    )
+    plate = builder.document(
+        "FICT-TULMKALO-3001",
+        "part",
+        material="6061-T6",
+        properties=house("FICT-TULMKALO-3001", "TULM KALO"),
+    )
+    block = builder.document(
+        "FICT-TULMSORN-3002",
+        "part",
+        material="Alloy Steel",
+        properties=house("FICT-TULMSORN-3002", "TULM SORN"),
+    )
+    pin = builder.document(
+        "FICT-PIN-3X12-3003",
+        "part",
+        material="Alloy Steel",
+        properties=house("FICT-PIN-3X12-3003", "PIN TULM 3003"),
+    )
+    screw_document = builder.screw_document(
+        "SHC", "M4-0.7", 8.0, serial=3004, properties=house("SHC_M4-0.7X8_FICT-3004", "SCREW TULM")
+    )
+    # Components at pinned ids; the screw follows as cmp:0004.
+    builder.component(plate, component_id="cmp:0001")
+    builder.component(block, component_id="cmp:0002")
+    builder.component(pin, component_id="cmp:0003")
+
+    builder.hole(
+        "cmp:0001",
+        hole_type="clearance",
+        size="Ø3.0",
+        end_condition="through",  # hol:0001
+        instances=[at((0.0, 0.0), Face(3.0, 0.0, 6.0))],
+        wizard=HoleWizardData(),
+    )
+    builder.hole(
+        "cmp:0001",
+        hole_type="counterbore",
+        size="M4",
+        end_condition="through",  # hol:0002
+        instances=[at((20.0, 0.0), Face(4.5, 0.0, 1.6), Face(8.0, 1.6, 6.0))],
+        wizard=HoleWizardData(
+            fit_class_raw="swScrewClearanceNormal",
+            thru_hole_diameter=Quantity(value=0.0045, unit="m"),
+            counterbore_diameter=Quantity(value=0.008, unit="m"),
+            counterbore_depth=Quantity(value=0.0044, unit="m"),
+        ),
+    )
+    builder.hole(
+        "cmp:0002",
+        hole_type="clearance",
+        size="Ø3.0",
+        end_condition="through",  # hol:0003
+        instances=[at((0.0, 0.0), Face(3.0, -6.0, 0.0))],
+        wizard=HoleWizardData(),
+    )
+    builder.hole(
+        "cmp:0002",
+        hole_type="tapped",
+        size="M4x0.7",
+        thread="M4x0.7",  # hol:0004
+        thread_depth_mm=8.0,
+        hole_depth_mm=10.0,
+        end_condition="blind",
+        instances=[at((20.0, 0.0), Face(3.3, -10.0, 0.0))],
+        wizard=HoleWizardData(tap_drill_diameter=Quantity(value=0.0033, unit="m")),
+    )
+    builder.cylinder_face(
+        "cmp:0003", origin_mm=(0.0, 0.0, 0.0), direction=Z, diameter_mm=3.0, lo_mm=-5.0, hi_mm=5.0
+    )
+    builder.mesh("cmp:0003", cylinder_mesh((0.0, 0.0, 0.0), Z, 3.0, -5.0, 5.0))
+    builder.screw(
+        screw_document,
+        bearing_mm=(20.0, 0.0, 1.6),
+        direction=Z,
+        component_id="cmp:0004",
+        shank_face_mm=4.0,
+    )
+
+    # The plate's dowel hole: a class-only H7 fit on its diameter dimension.
+    builder.model_dimension(
+        plate, nominal_mm=3.0, tolerance=None, tolerance_type_raw=8, fit_hole_class="H7"
+    )
+    # Two equal 4.5 mm diameters in the plate: neither binds the counterbore's bore alone.
+    builder.model_dimension(plate, nominal_mm=4.5, tolerance=("bilateral", 0.1, 0.0))
+    builder.model_dimension(plate, nominal_mm=4.5, tolerance=("bilateral", 0.2, 0.0))
+    # The block's dowel hole and the pin: explicit bilateral limits.
+    builder.model_dimension(block, nominal_mm=3.0, tolerance=("bilateral", 0.012, 0.002))
+    builder.model_dimension(pin, nominal_mm=3.0, tolerance=("bilateral", 0.0, -0.006))
+    # A position GTol on the plate's dowel face (the first face made) whose value states no unit.
+    builder.model_annotation(
+        plate, face_ids=["fac:0001"], symbols=["<IGTOL-POSI>", "<MOD-DIAM>"], values=["0.02"]
+    )
+    return builder.build()
+
+
 FIXTURES = {
     "big-assembly": build_big_assembly,
     "small-assembly": build_small_assembly,
+    "tolerances": build_tolerances_assembly,
 }
 
 
