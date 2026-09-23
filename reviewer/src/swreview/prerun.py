@@ -1340,7 +1340,11 @@ class PrerunGuard:
         key = repeat_key(name, arguments) if isinstance(arguments, Mapping) else None
         recorded = self._ledger.get(key) if key is not None else None
         if recorded is None:
-            return self.tools.call(name, arguments, call_id)
+            # An unknown name's error lists this array, not the dispatch's: a tool lever 13
+            # withheld is "not offered to you this session", and is never named as available.
+            return self.tools.call(
+                name, arguments, call_id, offered=[tool.name for tool in self]
+            )
         payload = {
             "status": ALREADY_RUN,
             "ran_at_step": recorded.step_index,
