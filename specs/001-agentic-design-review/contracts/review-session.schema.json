@@ -125,7 +125,9 @@
         "index": { "type": "integer", "minimum": 0 }, "tool": { "type": "string" },
         "arguments": { "type": "object" }, "result_summary": { "type": "string" },
         "status": { "enum": ["ok", "error"] }, "error": { "type": ["string", "null"] },
-        "elapsed_s": { "type": "number", "minimum": 0 }
+        "elapsed_s": { "type": "number", "minimum": 0 },
+        "result_bytes": { "type": "integer", "minimum": 0 },
+        "result_tokens": { "type": "integer", "minimum": 0, "description": "estimated with o200k_base" }
       }
     },
     "EvidenceRequest": {

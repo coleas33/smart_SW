@@ -31,6 +31,7 @@ from swreview.agent.providers import EffortMapping, TokenUsage, TurnEndReason
 from swreview.agent.settings import EfficiencySettings, ModelViewSettings
 from swreview.findings import Finding, ReviewModel
 from swreview.ids import SequentialIdAllocator
+from swreview.ir.models import omit_when_null
 
 KeySource = Literal["settings", "env", "none"]
 """Where the API key for this run came from, or `none` when the run needed no key."""
@@ -61,6 +62,17 @@ class InvestigationStep(ReviewModel):
     status: Literal["ok", "error"]
     error: str | None
     elapsed_s: float = Field(ge=0)
+    result_bytes: int | None = Field(default=None, ge=0)
+    """The UTF-8 length of the call's full result in the one serialization (feature 008,
+    FR-026): the payload, never the model's view, so sizes compare across settings."""
+    result_tokens: int | None = Field(default=None, ge=0)
+    """The same text in tokens, estimated with o200k_base; `None` when the tokenizer was
+    unavailable. Both sizes are left out of `session.json` when null, so a session written
+    before feature 008 keeps its bytes (`contracts/cost.md` section 1)."""
+
+    @model_serializer(mode="wrap")
+    def _omit_unmeasured_sizes(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        return omit_when_null(handler, self, "result_bytes", "result_tokens")
 
 
 QUESTION_MAX_LENGTH = 140
