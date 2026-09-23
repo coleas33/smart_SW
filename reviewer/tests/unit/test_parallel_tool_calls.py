@@ -271,7 +271,7 @@ def refuse_the_network(*args: Any, **kwargs: Any) -> None:
 def test_the_pane_builds_its_openai_adapter_asking_for_parallel_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`chat.server.build_provider` - the pane's one construction site - passes the pane's
+    """`chat.server.build_provider` - the pane's one entry point - passes the pane's
     levers, so the request an OpenAI pane review sends carries `parallel_tool_calls: true`.
 
     The adapter builds its own client from the key, as in the pane; the SDK's default HTTP

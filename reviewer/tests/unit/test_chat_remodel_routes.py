@@ -25,7 +25,7 @@ What the contract makes this module responsible for:
 - **the secret never comes back.** It reaches the client factory and nothing else: no
   reply, no artifact, no error body carries it.
 - **no provider on any route but `POST /remodel/runs`**, and there only through
-  `remodel/runner.py`, which is the one construction site (FR-045, SC-009). The application
+  `remodel/runner.py`, which is the one entry point (FR-045, SC-009). The application
   is built with a provider factory that raises, and `TestNoLanguageModel` additionally makes
   the registry and the command line's factory raise while driving the other eight.
 - **the source is named in no bridge call after `remodel.open`.** Asserted over a whole
@@ -1434,7 +1434,7 @@ class TestNoLanguageModel:
         source: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """`remodel/runner.py::build_provider` is the one construction site, and a run
+        """`remodel/runner.py::build_provider` is the one entry point, and a run
         whose adapter cannot be built records the absence and applies the plan anyway."""
         import swreview.cli as cli_module
 

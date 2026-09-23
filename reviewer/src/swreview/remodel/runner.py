@@ -853,8 +853,9 @@ def run_remodel(
             it and writes the completed record.
         settings: Which provider the judgement phase would use. `None` skips the phase.
         provider_factory: Builds the adapter from those settings, and defaults to
-            `build_provider`, the one construction site. Injected by tests so no unit test
-            needs a key or a network.
+            `build_provider`, the run's one entry point, which delegates to
+            `cli.provider_factory` (decision 4A). Injected by tests so no unit test needs a
+            key or a network.
         document_length_unit: `remodel.open`'s reading of the copy (FR-027).
         which_configs: `swInConfigurationOpts_e` as `remodel.open` recorded it.
         tolerances: The profile the gate decides under. `IDENTITY`, and it must be
