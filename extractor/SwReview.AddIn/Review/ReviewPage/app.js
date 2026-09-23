@@ -125,6 +125,11 @@
     transcriptFolded: true,
     followUpPending: false,
     notExamined: null,
+
+    // The summary the backend sent beside the last ranking for the chat on screen (feature 009
+    // User Story 3), or null: from a backend that sends none, or before the first ranking. Every
+    // number and word in it is the backend's; the page prints it and slices it.
+    summary: null,
     textBlock: null,
     stream: null,
     reconnectTimer: null,
@@ -769,11 +774,99 @@
         ui.attention.appendChild(render.attentionPanel(ranking));
         syncFindingExplanations(ranking);
         ui.attention.hidden = false;
+
+        state.summary = ranking.summary || null;
+        renderSummary();
+        groupModellingPractice(state.summary && state.summary.modelling_practice);
+        renderContacts();
       },
       function () {
         // Nothing new: the panel stays as it is, which for a review that has just ended is
         // hidden.
       });
+  }
+
+  /**
+   * The summary block, rebuilt whole from `state.summary` (contracts/review-summary.md section
+   * 5). Rebuilt rather than appended to, like Start here, so a second ranking - the end of a
+   * follow-up turn - replaces the block. No summary, no block: a backend that sends none leaves
+   * the section hidden and empty (FR-030).
+   */
+  function renderSummary() {
+    render.clear(ui.summary);
+    if (state.summary) {
+      ui.summary.appendChild(render.summaryBlock(state.summary));
+    }
+    ui.summary.hidden = !state.summary;
+  }
+
+  /**
+   * The modelling-practice findings as one collapsed group (FR-010, contracts/review-summary.md
+   * section 5): the cards the summary names move, in the order they arrived, into one shut fold
+   * placed where the first of them was.
+   *
+   * Which cards is the backend's answer (`modelling_practice.finding_ids`, from feature 008's
+   * family row), read as a set; their order is the order they already stand in, which is the
+   * order they arrived. Nothing here decides membership or order. Any group a previous ranking
+   * made is taken apart first, so the end of a follow-up turn regroups rather than nesting or
+   * duplicating a card - and a ranking with no family leaves every card where it arrived.
+   */
+  function groupModellingPractice(practice) {
+    ungroupFindings();
+    var ids = (practice && practice.finding_ids) || [];
+    if (!ids.length) {
+      return;
+    }
+
+    var named = Object.create(null);
+    for (var index = 0; index < ids.length; index++) {
+      named[String(ids[index])] = true;
+    }
+
+    var members = [];
+    var cards = ui.transcript.querySelectorAll('.card.finding');
+    for (var card = 0; card < cards.length; card++) {
+      if (named[cards[card].getAttribute('data-finding-id')] === true) {
+        members.push(cards[card]);
+      }
+    }
+    if (!members.length) {
+      return;
+    }
+
+    var group = render.findingGroup(practice.title);
+    members[0].parentNode.insertBefore(group, members[0]);
+    var body = group.querySelector('.finding-group-body');
+    for (var member = 0; member < members.length; member++) {
+      body.appendChild(members[member]);
+    }
+  }
+
+  /**
+   * The size-for-size contacts, one shut fold after the findings (FR-011), from the summary's
+   * `contacts`: rebuilt whole with the summary, and nothing at all when there are none - every
+   * review before feature 010 records them.
+   */
+  function renderContacts() {
+    var contacts = state.summary ? state.summary.contacts : null;
+    render.clear(ui.contacts);
+    if (contacts) {
+      ui.contacts.appendChild(render.contactList(contacts));
+    }
+    ui.contacts.hidden = !contacts;
+  }
+
+  /** Every group back to loose cards, in their order, where the group stood. */
+  function ungroupFindings() {
+    var groups = ui.transcript.querySelectorAll('.finding-group');
+    for (var index = 0; index < groups.length; index++) {
+      var group = groups[index];
+      var cards = group.querySelectorAll('.card.finding');
+      for (var card = 0; card < cards.length; card++) {
+        group.parentNode.insertBefore(cards[card], group);
+      }
+      group.parentNode.removeChild(group);
+    }
   }
 
   // ---- the review ----------------------------------------------------------------------------
@@ -999,6 +1092,9 @@
     ui.coverage.hidden = true;
     render.clear(ui.attention);
     ui.attention.hidden = true;
+    state.summary = null;
+    renderSummary();
+    renderContacts();
     state.events = [];
     state.unreadable = Object.create(null);
     state.coverage = [];
@@ -1177,6 +1273,13 @@
       return;
     }
 
+    // A card inside the modelling-practice group is behind that group's fold: open it first,
+    // or the scroll lands on a card with no box (FR-010).
+    var group = card.closest('.finding-group');
+    if (group) {
+      group.open = true;
+    }
+
     card.querySelector('.card-head').scrollIntoView({ block: 'start' });
     flash(card);
   }
@@ -1346,11 +1449,22 @@
     ui.streamState.textContent = text || '';
   }
 
+  /**
+   * The not-loaded warning. The backend's names-only headline when it sent one, with the
+   * instances' ids in a fold beneath it (feature 009 FR-012); the sentence otherwise, exactly as
+   * every backend before this feature had it printed (FR-030).
+   */
   function renderNotExamined() {
     var warning = state.notExamined;
+    var headline = warning && warning.headline ? warning.headline : '';
     var sentence = warning && warning.sentence ? warning.sentence : '';
-    ui.notExamined.textContent = sentence;
-    ui.notExamined.hidden = !sentence;
+    render.clear(ui.notExamined);
+    if (headline) {
+      ui.notExamined.appendChild(render.notExaminedHeadline(warning));
+    } else {
+      render.write(ui.notExamined, sentence);
+    }
+    ui.notExamined.hidden = !(headline || sentence);
   }
 
   function showStatus(payload) {
@@ -1613,6 +1727,8 @@
     ui.streamState = document.getElementById('stream-state');
     ui.usage = document.getElementById('usage-line');
     ui.attention = document.getElementById('attention-panel');
+    ui.summary = document.getElementById('summary');
+    ui.contacts = document.getElementById('contacts');
     ui.notExamined = document.getElementById('not-examined');
     ui.preparation = document.getElementById('review-preparation');
     ui.preparationSummary = document.getElementById('preparation-summary');

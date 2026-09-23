@@ -75,11 +75,15 @@
       : rows;
   }
 
-  /** The rows as the numbered list both kinds of tab show under Start here, in the order given. */
-  function rowList(rows) {
+  /**
+   * The rows as the numbered list both kinds of tab show under Start here, in the order given.
+   * `options` is handed to every row's meta line unchanged (see `attentionMeta`); the check tabs
+   * pass none.
+   */
+  function rowList(rows, options) {
     var list = dom.el('ol', 'attention-rows');
     for (var index = 0; index < rows.length; index++) {
-      list.appendChild(attentionRow(rows[index] || {}));
+      list.appendChild(attentionRow(rows[index] || {}, options));
     }
     return list;
   }
@@ -93,7 +97,7 @@
    * judgement of its own: `consequence_class` through a map, or the judgement key when the
    * policy marked the row as one only an engineer can settle.
    */
-  function attentionRow(row) {
+  function attentionRow(row, options) {
     var item = dom.el('li', 'attention-row ' + stripeOf(row));
     item.setAttribute('data-finding-id', String(row.finding_id || ''));
     dom.append(item, [
@@ -101,7 +105,7 @@
       dom.el('span', 'attention-reason', row.reason || ''),
       dom.el('span', 'attention-title', row.title || ''),
       dom.el('span', 'attention-check', row.check || ''),
-      attentionMeta(row)
+      attentionMeta(row, options)
     ]);
     if (typeof row.explanation === 'string' && row.explanation) {
       item.appendChild(dom.el('p', 'finding-explanation', row.explanation));
@@ -111,10 +115,17 @@
 
   /**
    * The state a ranked row is in, as the backend already reported it: the status and the
-   * severity as words, then the components the row reaches in the face an id is read in. Read,
-   * never compared - the words are printed as they arrived.
+   * severity as words, then the components the row reaches. Read, never compared - the words
+   * are printed as they arrived.
+   *
+   * `options.names`, when the caller passes it, is the backend's `{component id: name}` map
+   * (the Review tab's `summary.component_names`, feature 009 FR-012): each component is printed
+   * by its name where it has one and by its id where it has none, and the ids stay in the
+   * finding card's fold. Without it - the check tabs, which pass nothing - the components are
+   * ids in the face an id is read in, exactly as before. The lookup is guarded as `stripeOf`'s
+   * is, so an id that names something on `Object.prototype` prints as itself.
    */
-  function attentionMeta(row) {
+  function attentionMeta(row, options) {
     var words = [];
     if (row.status) {
       words.push(String(row.status));
@@ -123,15 +134,28 @@
       words.push(String(row.severity));
     }
 
+    var names = (options && options.names) || null;
     var meta = dom.el('span', 'attention-meta', words.join(DOT));
-    var components = dom.list(row.component_ids);
+    var components = dom.list(names ? namedComponents(row.component_ids, names) : row.component_ids);
     if (components) {
       if (meta.firstChild) {
         dom.write(meta, DOT);
       }
-      meta.appendChild(dom.el('span', 'attention-components mono', components));
+      meta.appendChild(dom.el('span', names ? 'attention-components' : 'attention-components mono', components));
     }
     return meta;
+  }
+
+  /** Each component id replaced by its name when the map gives it a non-blank string. */
+  function namedComponents(ids, names) {
+    var out = [];
+    var list = ids || [];
+    for (var index = 0; index < list.length; index++) {
+      var id = String(list[index]);
+      var name = Object.prototype.hasOwnProperty.call(names, id) ? names[id] : null;
+      out.push((typeof name === 'string' && name) ? name : id);
+    }
+    return out;
   }
 
   /**
