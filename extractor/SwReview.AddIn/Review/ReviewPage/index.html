@@ -99,6 +99,15 @@
 </section>
 
 <!--
+  The kept reviews (feature 009 User Story 6, contracts/sessions.md section 5): one chip per review
+  the host recorded this SOLIDWORKS session - its file, configuration and time - in the host's
+  order. Choosing one brings that review back without a new review and without a token: one GET
+  from the backend's live chat, or read-only from its run folder when the chat is gone. Hidden
+  while there is none.
+-->
+<nav id="review-chips" class="review-chips" aria-label="Kept reviews" hidden></nav>
+
+<!--
   Results or Transcript (feature 009 User Story 5, contracts/views.md section 1): two buttons, and
   whichever is pressed owns the pane - a class on the body, `view-results` on every load. Results
   answers "what is wrong"; Transcript answers "how the reviewer got there". Neither label carries a
@@ -149,6 +158,9 @@
 <section id="results" class="view results" aria-label="Results">
 
 <p id="results-state" class="results-state" role="status" hidden></p>
+
+<!-- Why a restored review is read-only, in the backend's words, while it is (FR-021). -->
+<p id="read-only" class="read-only" role="status" hidden></p>
 
 <!--
   The review in ten seconds (feature 009 User Story 3): the headline, Decide / Fix / Verify, the

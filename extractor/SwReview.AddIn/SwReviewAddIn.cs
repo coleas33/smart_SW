@@ -104,6 +104,12 @@ public class SwReviewAddIn : ISwAddin
 
     private SldWorks? _events;
 
+    /// <summary>
+    /// The active document's configuration switches, told to every tab as a document change
+    /// (feature 009 FR-022). Follows the active document on every `ActiveDocChangeNotify`.
+    /// </summary>
+    private ActiveConfigurationWatch? _configurationWatch;
+
     private JobObject? _job;
     private BackendSupervisor? _supervisor;
     private BackendClient? _backend;
@@ -268,6 +274,9 @@ public class SwReviewAddIn : ISwAddin
             _events.ActiveDocChangeNotify -= OnActiveDocumentChanged;
             _events = null;
         }
+
+        _configurationWatch?.Dispose();
+        _configurationWatch = null;
 
         StopPageMessagePump();
         StopModelCheckPump();
@@ -435,8 +444,10 @@ public class SwReviewAddIn : ISwAddin
         _backend = new BackendClient(_supervisor, ReviewHostOptions.DefaultLogFolder(), _job);
 
         // The ids on a finding card belong to the run's own package.json, which `review.start`
-        // has just written; the resolver is handed lookups over whichever run the pane is
-        // currently showing. The two lookups are independent of the tool service.
+        // has just written. The resolver is handed `(id, folder)` lookups: the folder of the run
+        // the page named when it named one - the Review tab always names its chat (feature 009
+        // FR-023) - and the pane's latest run otherwise, which is what the check tabs' Show reads.
+        // The two lookups are independent of the tool service.
         var packages = new RunPackageIndex(() => _reviewHost?.LatestSession?.RunDirectory);
 
         var reviewDump = new SwReviewDump(_swApp, _applicationThread);
@@ -498,11 +509,17 @@ public class SwReviewAddIn : ISwAddin
             _events.ActiveDocChangeNotify += OnActiveDocumentChanged;
         }
 
+        // ...and a configuration switch inside the active document is a document change too
+        // (feature 009 FR-022): the watch follows the active document and runs the same fan-out.
+        _configurationWatch = ActiveConfigurationWatch.ForSolidWorks(OnActiveConfigurationChanged);
+
         // SOLIDWORKS usually loads with nothing open, in which case this is a no-op and the
         // document-changed event below starts the tool service instead. It is asked here too
         // because the add-in can be enabled from Tools > Add-ins with an assembly already open,
-        // where no ActiveDocChangeNotify is ever raised.
+        // where no ActiveDocChangeNotify is ever raised - which is also why the configuration
+        // watch follows the active document here.
         _toolService.EnsureStarted();
+        FollowActiveConfiguration();
 
         UserSettings settings = _reviewHost.Settings;
         ResolvedApiKey key = settings.ResolveApiKey();
@@ -1013,6 +1030,42 @@ public class SwReviewAddIn : ISwAddin
     /// </summary>
     private int OnActiveDocumentChanged()
     {
+        FollowActiveConfiguration();
+        TellEveryTabTheDocumentChanged("The pane could not be told the active document changed.");
+        return 0;
+    }
+
+    /// <summary>
+    /// The active document switched configuration (feature 009 FR-022): the same fan-out as a
+    /// document change, because to every tab it is one - a review of Default is not a review of
+    /// Machined. Raised through <see cref="ActiveConfigurationWatch"/>, which answers the COM sink.
+    /// </summary>
+    private void OnActiveConfigurationChanged() =>
+        TellEveryTabTheDocumentChanged("The pane could not be told the active configuration changed.");
+
+    /// <summary>
+    /// Moves the configuration watch to whatever document is active now. On the application
+    /// thread, like both callers; never throws out of an event sink.
+    /// </summary>
+    private void FollowActiveConfiguration()
+    {
+        try
+        {
+            _configurationWatch?.Follow(_swApp?.ActiveDoc);
+        }
+        catch (Exception failure)
+        {
+            Report("The pane could not follow the active document's configuration.", failure);
+        }
+    }
+
+    /// <summary>
+    /// The one fan-out a document change runs - every host's `document.changed`, the step strip,
+    /// the tool service - for a new active document and for a new active configuration alike.
+    /// Nothing here may throw: both callers are COM event sinks on the application thread.
+    /// </summary>
+    private void TellEveryTabTheDocumentChanged(string failureMessage)
+    {
         try
         {
             _reviewHost?.DocumentChanged();
@@ -1046,10 +1099,8 @@ public class SwReviewAddIn : ISwAddin
         }
         catch (Exception failure)
         {
-            Report("The pane could not be told the active document changed.", failure);
+            Report(failureMessage, failure);
         }
-
-        return 0;
     }
 
     private void OnPageMessage(object sender, string json)

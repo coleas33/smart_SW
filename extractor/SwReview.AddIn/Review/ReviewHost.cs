@@ -83,15 +83,26 @@ public sealed class PageDocument
 /// </summary>
 public sealed class SessionRecord
 {
-    private SessionRecord(string? chatId, string runDirectory, bool isCheck)
+    private SessionRecord(
+        string? chatId, string runDirectory, bool isCheck, PageDocument? document, DateTimeOffset? startedAt)
     {
         ChatId = chatId;
         RunDirectory = runDirectory ?? throw new ArgumentNullException(nameof(runDirectory));
         IsCheck = isCheck;
+        Document = document;
+        StartedAt = startedAt;
     }
 
     public SessionRecord(string chatId, string runDirectory)
-        : this(chatId ?? throw new ArgumentNullException(nameof(chatId)), runDirectory, false)
+        : this(chatId, runDirectory, null, null)
+    {
+    }
+
+    /// <param name="document">The document `review.started` named - the one captured before
+    /// the dump - or null when the caller does not know it.</param>
+    /// <param name="startedAt">When the review was tracked, or null.</param>
+    public SessionRecord(string chatId, string runDirectory, PageDocument? document, DateTimeOffset? startedAt)
+        : this(chatId ?? throw new ArgumentNullException(nameof(chatId)), runDirectory, false, document, startedAt)
     {
     }
 
@@ -99,6 +110,21 @@ public sealed class SessionRecord
     public string? ChatId { get; }
 
     public string RunDirectory { get; }
+
+    /// <summary>
+    /// The run folder's own name - what `GET /reviews/{run_id}` is asked for when the backend no
+    /// longer holds the chat (feature 009, contracts/sessions.md section 4).
+    /// </summary>
+    public string RunId => System.IO.Path.GetFileName(RunDirectory.TrimEnd('\\', '/'));
+
+    /// <summary>
+    /// The document the review is of, as `review.started` named it; null for a check or remodel
+    /// record, and for a chat tracked without one. What a review chip names (feature 009 FR-020).
+    /// </summary>
+    public PageDocument? Document { get; }
+
+    /// <summary>When the review was tracked (`ReviewHostOptions.Now`); null for a check.</summary>
+    public DateTimeOffset? StartedAt { get; }
 
     /// <summary>
     /// Whether this run is a Model check.
@@ -112,7 +138,7 @@ public sealed class SessionRecord
 
     /// <summary>A Model check's run folder: no chat id, because a check has no chat.</summary>
     public static SessionRecord ForCheck(string runDirectory) =>
-        new SessionRecord(null, runDirectory, true);
+        new SessionRecord(null, runDirectory, true, null, null);
 }
 
 /// <summary>Everything <see cref="ReviewHost"/> is given; injected so it is testable headless.</summary>
@@ -244,6 +270,12 @@ public sealed class ReviewHost : IDisposable
     private readonly PaneActions _actions;
 
     /// <summary>
+    /// How this host's page names a run - by `chat_id` - and how an unknown one is refused. Kept
+    /// so `session.forget` refuses exactly as `report.open` does (contracts/sessions.md section 2).
+    /// </summary>
+    private readonly PaneRunLookup _runs;
+
+    /// <summary>
     /// The one event-stream reader this host owns. One per host rather than one per chat: the
     /// page shows one chat at a time, and a reader for a chat nobody is looking at would be a
     /// socket and a thread kept open for a transcript that has been replaced.
@@ -260,15 +292,14 @@ public sealed class ReviewHost : IDisposable
         _settings = loaded.Settings;
         _settingsError = loaded.Error;
 
-        _actions = new PaneActions(new PaneActionsOptions(
-            options.Channel,
-            () => _settings.RunRoot,
-            new PaneRunLookup(
-                "chat_id",
-                "UnknownChat",
-                chatId => $"this pane did not start a chat called '{chatId}', so it does not "
-                    + "know which folder to open.",
-                chatId => FindSession(chatId)?.RunDirectory))
+        _runs = new PaneRunLookup(
+            "chat_id",
+            "UnknownChat",
+            chatId => $"this pane did not start a chat called '{chatId}', so it does not "
+                + "know which folder to open.",
+            chatId => FindSession(chatId)?.RunDirectory);
+
+        _actions = new PaneActions(new PaneActionsOptions(options.Channel, () => _settings.RunRoot, _runs)
         {
             LogFolder = () => _options.LogFolder,
             EntityResolver = () => _options.EntityResolver,
@@ -326,14 +357,23 @@ public sealed class ReviewHost : IDisposable
     public SessionRecord? LatestSession { get; private set; }
 
     /// <summary>Records a chat so the host - and never the page - owns its run folder path.</summary>
-    public void TrackSession(string chatId, string runDirectory)
+    public void TrackSession(string chatId, string runDirectory) =>
+        TrackSession(chatId, runDirectory, null, null);
+
+    /// <summary>
+    /// Records a review with what its chip names: the document `review.started` named and when
+    /// it was tracked (feature 009 FR-020, contracts/sessions.md section 1). The record lives for
+    /// the SOLIDWORKS session, not the backend process: a settings save restarts the backend and
+    /// keeps every record.
+    /// </summary>
+    public void TrackSession(string chatId, string runDirectory, PageDocument? document, DateTimeOffset? startedAt)
     {
         if (chatId == null)
         {
             throw new ArgumentNullException(nameof(chatId));
         }
 
-        var record = new SessionRecord(chatId, runDirectory);
+        var record = new SessionRecord(chatId, runDirectory, document, startedAt);
         lock (_sessionsLock)
         {
             _sessions.RemoveAll(session => session.ChatId == chatId);
@@ -341,6 +381,46 @@ public sealed class ReviewHost : IDisposable
         }
 
         LatestSession = record;
+    }
+
+    /// <summary>
+    /// The reviews this host started, in the order it tracked them - chats only, never a check
+    /// or remodel record. A snapshot taken under the lock, for the same reason as
+    /// <see cref="Sessions"/>.
+    /// </summary>
+    public IReadOnlyList<SessionRecord> Reviews()
+    {
+        lock (_sessionsLock)
+        {
+            return _sessions.Where(session => !session.IsCheck && session.ChatId != null).ToArray();
+        }
+    }
+
+    /// <summary>
+    /// Forgets one review's record - the chip's Remove, for a review that can no longer be
+    /// restored. `LatestSession` is cleared when it was that record, so nothing resolves against
+    /// a record that is gone. Answers whether there was such a review.
+    /// </summary>
+    public bool ForgetSession(string chatId)
+    {
+        SessionRecord? record;
+        lock (_sessionsLock)
+        {
+            record = _sessions.FirstOrDefault(session => session.ChatId != null && session.ChatId == chatId);
+            if (record == null)
+            {
+                return false;
+            }
+
+            _sessions.Remove(record);
+        }
+
+        if (ReferenceEquals(LatestSession, record))
+        {
+            LatestSession = null;
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -521,6 +601,14 @@ public sealed class ReviewHost : IDisposable
 
             case "review.start":
                 StartReview(id, payload);
+                return;
+
+            case "sessions.list":
+                SendReviews(id);
+                return;
+
+            case "session.forget":
+                Forget(id, payload);
                 return;
 
             default:
@@ -869,6 +957,59 @@ public sealed class ReviewHost : IDisposable
         };
     }
 
+    // ---- the review list (feature 009 User Story 6) -------------------------------------
+
+    /// <summary>
+    /// `sessions.list`: every review this host started, in the order tracked, with what its chip
+    /// names - `{chat_id, run_id, run_dir, path, configuration, started_at}` - and no check or
+    /// remodel record (contracts/sessions.md section 2). `started_at` is ISO 8601 with its offset;
+    /// what the host does not know is null rather than invented.
+    /// </summary>
+    private void SendReviews(string? id)
+    {
+        Send("sessions", id, new Dictionary<string, object?>
+        {
+            { "items", Reviews().Select(ReviewItem).ToArray() },
+        });
+    }
+
+    private static Dictionary<string, object?> ReviewItem(SessionRecord record) =>
+        new Dictionary<string, object?>
+        {
+            { "chat_id", record.ChatId },
+            { "run_id", record.RunId },
+            { "run_dir", record.RunDirectory },
+            { "path", record.Document?.Path },
+            { "configuration", record.Document?.Configuration },
+            {
+                "started_at",
+                record.StartedAt?.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture)
+            },
+        };
+
+    /// <summary>
+    /// `session.forget {chat_id}`: removes that review's record and answers the list without it.
+    /// An id this host never recorded - a check record has none - is refused exactly as
+    /// `report.open` refuses one, and nothing is removed.
+    /// </summary>
+    private void Forget(string? id, JsonElement payload)
+    {
+        string? chatId = Blank(Text(payload, _runs.IdField));
+        if (chatId == null)
+        {
+            SendError(id, "InvalidRequest", $"the message needs a {_runs.IdField}.", retryable: false);
+            return;
+        }
+
+        if (!ForgetSession(chatId))
+        {
+            SendError(id, _runs.UnknownErrorClass, _runs.UnknownMessage(chatId), retryable: false);
+            return;
+        }
+
+        SendReviews(id);
+    }
+
     // ---- review preparation and start ---------------------------------------------------
 
     private void PrepareReview(string? id)
@@ -1028,7 +1169,9 @@ public sealed class ReviewHost : IDisposable
             throw;
         }
 
-        TrackSession(handle.ChatId, runDirectory);
+        // The document captured before the dump, and the moment the review was tracked: what its
+        // chip in the pane names (feature 009 FR-020).
+        TrackSession(handle.ChatId, runDirectory, document, new DateTimeOffset(_options.Now()));
 
         PostStatus("ready", ReadyMessage(summary.Components, summary.Gaps, summary.Unexamined));
 

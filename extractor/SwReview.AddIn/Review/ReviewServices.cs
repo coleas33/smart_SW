@@ -133,10 +133,19 @@ public interface IReviewDump
 public sealed class EntityShowRequest
 {
     public EntityShowRequest(string persistRef, string? persistRefScope, string? componentId)
+        : this(persistRef, persistRefScope, componentId, null)
+    {
+    }
+
+    /// <param name="runDirectory">The run folder whose package the ids belong to, from the
+    /// host's own record of the run the page named (feature 009 FR-023); null to read the pane's
+    /// latest run, as every Show before that feature did.</param>
+    public EntityShowRequest(string persistRef, string? persistRefScope, string? componentId, string? runDirectory)
     {
         PersistRef = persistRef ?? throw new ArgumentNullException(nameof(persistRef));
         PersistRefScope = persistRefScope;
         ComponentId = componentId;
+        RunDirectory = runDirectory;
     }
 
     /// <summary>The base64 persistent reference carried by the finding.</summary>
@@ -147,6 +156,12 @@ public sealed class EntityShowRequest
 
     /// <summary>The package component id the finding names; may be null.</summary>
     public string? ComponentId { get; }
+
+    /// <summary>
+    /// The run folder the ids are looked up in, set by <see cref="PaneActions"/> from the host's
+    /// record when the page named a run - never from the page. Null means the pane's latest run.
+    /// </summary>
+    public string? RunDirectory { get; }
 }
 
 /// <summary>
