@@ -1143,16 +1143,22 @@
   // ---- the running usage line (feature 005 T016a) --------------------------------------
 
   /**
-   * What this review has cost so far: the tokens, the cached share, the round trips and the
-   * latency of the last round, from the `usage` events the page has already received
-   * (specs/005-llm-efficiency/contracts/usage.md section 5).
+   * What this review has cost so far: the uncached and cached input, the tokens in all, the
+   * round trips and the latency of the last round, from the `usage` events the page has already
+   * received (specs/005-llm-efficiency/contracts/usage.md section 5).
    *
    * Pure, and it does the summing as well as the rendering, so the one rule that matters here
    * is testable inside the real page: **any null in a field makes that total null**, never a
    * partial sum, which is the arithmetic `SessionUsage.summed` defines rather than a second
    * rule (section 1). A field the endpoint omitted is unknown, not zero: "0 cached tokens" and
-   * "the endpoint did not say" send an engineer to different places, and the cached share is
-   * the second of those until the provider reports one (FR-047).
+   * "the endpoint did not say" send an engineer to different places.
+   *
+   * The input is two numbers in the report's words (feature 008, contracts/cost.md section 4):
+   * uncached is summed input minus summed cached - the rule `TokenUsage.uncached_input_tokens`
+   * applies, over the totals - and only when every round reported both and the cached sum is
+   * contained in the input sum; otherwise the line states the input it knows and says the cache
+   * split was not reported. No percentage: the report prints no cached share while probe L1 is
+   * unrecorded, and a share here would be a second, contradicting number.
    *
    * It is fed the event bodies as they arrive rather than the session's own total, so the line
    * moves while the turn is still running - which is the whole point of it - and
@@ -1173,8 +1179,12 @@
     var round = list[list.length - 1] || {};
     var latency = seconds(round.latency_s);
 
-    write(line, tokens === null ? 'tokens unknown' : tokens + ' tokens');
-    write(line, ' - cached ' + (share(cached, input) === null ? 'unknown' : share(cached, input) + '%'));
+    if (input !== null && cached !== null && cached <= input) {
+      write(line, (input - cached) + ' uncached + ' + cached + ' cached input');
+    } else {
+      write(line, (input === null ? 'input unknown' : input + ' input') + ' (cache split not reported)');
+    }
+    write(line, ' - ' + (tokens === null ? 'tokens unknown' : tokens + ' tokens in all'));
     write(line, ' - ' + list.length + ' round trip' + (list.length === 1 ? '' : 's'));
     write(line, ' - last round ' + (latency === '' ? 'unknown' : latency));
     return line;
@@ -1191,14 +1201,6 @@
       sum += value;
     }
     return sum;
-  }
-
-  /** The cached percentage, or null when either side is unknown or there is nothing to divide. */
-  function share(cached, input) {
-    if (cached === null || input === null || input <= 0) {
-      return null;
-    }
-    return Math.round((cached / input) * 100);
   }
 
   window.SwReviewRender = {

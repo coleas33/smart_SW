@@ -8,9 +8,10 @@ using Xunit;
 namespace SwReview.AddIn.Tests;
 
 /// <summary>
-/// Feature 005 T016a: the running usage line on the Review page - tokens so far, the cached
-/// share, the round trips and the last round's latency - accumulated in the pane from the
-/// `usage` events it is already streaming, and updating while the turn is still running.
+/// Feature 005 T016a: the running usage line on the Review page - tokens so far, the uncached
+/// and cached input (feature 008 T094, in the report's words, where a cached share used to be),
+/// the round trips and the last round's latency - accumulated in the pane from the `usage`
+/// events it is already streaming, and updating while the turn is still running.
 ///
 /// Three rules are asserted here because nowhere else can:
 ///
@@ -23,9 +24,9 @@ namespace SwReview.AddIn.Tests;
 /// <b>Unknown stays unknown.</b> Every token field is `int | None` because a field the endpoint
 /// omitted is `None`, not zero (`contracts/usage.md` section 1), and a sum over rounds where any
 /// round reported `None` is `None` rather than a partial sum. So a null renders as "unknown",
-/// and the cached share renders as unknown until the provider reports one (FR-047). A line that
-/// showed "0 cached" for "the endpoint did not say" is the Principle I violation that contract
-/// exists to prevent.
+/// and the line says the cache split was not reported until the provider reports one. A line
+/// that showed "0 cached" for "the endpoint did not say" is the Principle I violation that
+/// contract exists to prevent.
 ///
 /// <b>It reaches the screen as text.</b> The line is built through `web/shared/dom.js` like
 /// every other node on the page, and it is rendered here <i>inside the real page</i>, under the
@@ -122,12 +123,13 @@ public sealed class ReviewPageUsageLineTests
     // ---- the rendered line ------------------------------------------------------------------
 
     /// <summary>
-    /// Two rounds, every field reported: the line states the total, the cached share, the round
-    /// trips and the latency of the <b>last</b> round, which is the one an engineer watching a
-    /// running turn is waiting on.
+    /// Two rounds, every field reported: the line states the total, the uncached and cached
+    /// input as two numbers in the report's words (feature 008 T094, `contracts/cost.md` section
+    /// 4), the round trips and the latency of the <b>last</b> round, which is the one an engineer
+    /// watching a running turn is waiting on.
     /// </summary>
     [Fact]
-    public void TheLineStatesTheTotalTheCachedShareTheRoundTripsAndTheLastLatency()
+    public void TheLineStatesTheTotalTheUncachedAndCachedInputTheRoundTripsAndTheLastLatency()
     {
         JsonElement rendered = Render(new object[]
         {
@@ -136,8 +138,9 @@ public sealed class ReviewPageUsageLineTests
         });
 
         string text = TextOf(rendered);
+        Assert.Contains("1800 uncached", text);
+        Assert.Contains("10200 cached", text);
         Assert.Contains("12555", text);
-        Assert.Contains("85%", text);
         Assert.Contains("2 round trips", text);
         Assert.Contains("1.50 s", text);
         Assert.DoesNotContain("unknown", text);
@@ -167,12 +170,12 @@ public sealed class ReviewPageUsageLineTests
     }
 
     /// <summary>
-    /// The cached share is unknown until the provider reports one (FR-047), which is the state
-    /// every round is in before probe L1 is recorded. Zero cached tokens and "the endpoint did
-    /// not say" are different answers and the line says which.
+    /// Until the provider reports a cached count the line says the split was not reported, in
+    /// the report's words (feature 008 T094). Zero cached tokens and "the endpoint did not say"
+    /// are different answers and the line says which.
     /// </summary>
     [Fact]
-    public void TheCachedShareIsUnknownUntilTheProviderReportsIt()
+    public void TheLineSaysTheCacheSplitIsNotReportedUntilTheProviderReportsIt()
     {
         JsonElement rendered = Render(new object[]
         {
@@ -180,9 +183,108 @@ public sealed class ReviewPageUsageLineTests
         });
 
         string text = TextOf(rendered);
-        Assert.Contains("cached unknown", text);
+        Assert.Contains("cache split not reported", text);
         Assert.DoesNotContain("0%", text);
         Assert.Contains("12000", text);
+    }
+
+    // ---- uncached and cached input (feature 008 T094, `contracts/cost.md` section 4) --------
+
+    /// <summary>
+    /// Uncached input is summed input minus summed cached - the rule
+    /// `TokenUsage.uncached_input_tokens` applies, over the totals - so two rounds of
+    /// 10000/9000 and 2000/1200 are 1800 uncached (12000 - 10200) and 10200 cached.
+    /// </summary>
+    [Fact]
+    public void UncachedInputIsTheSummedInputLessTheSummedCachedInput()
+    {
+        string text = TextOf(Render(new object[]
+        {
+            Round(inputTokens: 10000, cachedInputTokens: 9000, totalTokens: 12000, latency: 4.31),
+            Round(inputTokens: 2000, cachedInputTokens: 1200, totalTokens: 555, latency: 1.5),
+        }));
+
+        Assert.StartsWith("1800 uncached + 10200 cached input - 12555 tokens in all", text);
+        Assert.DoesNotContain("cache split not reported", text);
+    }
+
+    /// <summary>
+    /// One round without a cached count makes the split unknown for the whole line, never a
+    /// partial sum and never "0 uncached": the line states the input it does know.
+    /// </summary>
+    [Fact]
+    public void ARoundWithoutACachedCountSaysTheSplitIsNotReportedAndNeverZeroUncached()
+    {
+        string text = TextOf(Render(new object[]
+        {
+            Round(inputTokens: 10000, cachedInputTokens: 9000, totalTokens: 12000, latency: 4.31),
+            Round(inputTokens: 2000, cachedInputTokens: null, totalTokens: 555, latency: 1.5),
+        }));
+
+        Assert.StartsWith("12000 input (cache split not reported)", text);
+        Assert.DoesNotContain("0 uncached", text);
+        Assert.DoesNotContain("9000", text);
+    }
+
+    /// <summary>
+    /// Cached input above input cannot be a split of it, so no uncached number is invented
+    /// from it (the containment `TokenUsage.uncached_input_tokens` requires).
+    /// </summary>
+    [Fact]
+    public void SummedCachedInputAboveSummedInputSaysTheSplitIsNotReported()
+    {
+        string text = TextOf(Render(new object[]
+        {
+            Round(inputTokens: 1000, cachedInputTokens: 900, totalTokens: 1100, latency: 0.5),
+            Round(inputTokens: 1000, cachedInputTokens: 1500, totalTokens: 1100, latency: 0.5),
+        }));
+
+        Assert.StartsWith("2000 input (cache split not reported)", text);
+        Assert.DoesNotContain("uncached", text);
+    }
+
+    /// <summary>A round that reported no input count leaves the input itself unknown.</summary>
+    [Fact]
+    public void ARoundWithoutAnInputCountSaysTheInputIsUnknown()
+    {
+        string text = TextOf(Render(new object[]
+        {
+            Round(inputTokens: 10000, cachedInputTokens: 9000, totalTokens: 12000, latency: 4.31),
+            Round(inputTokens: null, cachedInputTokens: 1200, totalTokens: 555, latency: 1.5),
+        }));
+
+        Assert.StartsWith("input unknown (cache split not reported)", text);
+        Assert.DoesNotContain("uncached", text);
+        Assert.Contains("12555 tokens in all", text);
+    }
+
+    /// <summary>
+    /// No percentage anywhere: the report prints no cached share while probe L1 is unrecorded,
+    /// and a share in the pane beside it would be a second, contradicting number.
+    /// </summary>
+    [Fact]
+    public void TheLinePrintsNoPercentageInAnyCase()
+    {
+        object[][] cases =
+        {
+            new object[]
+            {
+                Round(inputTokens: 10000, cachedInputTokens: 9000, totalTokens: 12000, latency: 4.31),
+            },
+            new object[]
+            {
+                Round(inputTokens: 10000, cachedInputTokens: null, totalTokens: 12000, latency: 4.31),
+            },
+            new object[]
+            {
+                Round(inputTokens: 100, cachedInputTokens: 900, totalTokens: null, latency: 4.31),
+            },
+        };
+
+        foreach (object[] rounds in cases)
+        {
+            Assert.DoesNotContain("%", TextOf(Render(rounds)));
+        }
     }
 
     [Fact]
