@@ -168,8 +168,10 @@ precedes "checked" so a run whose own close-out says an item was not closed neve
 because one rule row was (Principle I). Tool access and mass and material have no checklist item
 today, so they read "not reached - no check ran" until feature 010's checks write coverage under
 their ids (010 data model section 14: `fastener.head_fit`, `mass.*`, `hygiene.*`, read while 010
-was being planned). Rule rows (`rms.*`) match hygiene by prefix; whether modelling practice belongs
-under hygiene or is a ninth goal is left to the owner (R5).
+was being planned). Modelling practice is a **ninth goal line** of its own, matched by the `rms.` prefix and the
+`modeling.resilience` checklist item (settled 2026-09-23 in the owner's session: the owner made it
+one folded group of its own on 2026-09-22, and filing 85 modelling findings under hygiene would
+bury the house-rule findings the hygiene goal is for).
 
 A test asserts the table is complete: every checklist item except `coverage.closeout` is in exactly
 one goal, and every check id in `attention_policy_v1.yaml` `classes` maps to exactly one goal. Feature
