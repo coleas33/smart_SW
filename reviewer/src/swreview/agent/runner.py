@@ -75,7 +75,13 @@ from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.findings import Finding
 from swreview.ir.loader import LoadedPackage, load_package
 from swreview.ir.models import EvidencePackage
-from swreview.prerun import PrerunResult, attach_standards, gate_brief, prerun_checks
+from swreview.prerun import (
+    PrerunGuard,
+    PrerunResult,
+    attach_standards,
+    gate_brief,
+    prerun_checks,
+)
 from swreview.report.attention import rank
 from swreview.report.attention_record import write_attention_record
 from swreview.report.explanations import (
@@ -757,6 +763,10 @@ class ReviewRun:
         """
         session = self.session
         ranking = rank(session)
+        # Feature 008: a folded family's row never reaches the presentation pass - the
+        # model is told only the family's counts (FR-014), and the pass sends each row's
+        # finding evidence - so neither the request nor the fallbacks see it (R2.22).
+        explained = [row for row in ranking.rows[: ranking.top_n] if row.family is None]
         if session.explanations_enabled and ranking.rows and ranking.empty_reason is None:
             signature = explanation_signature(session, self.context.ir)
             if signature != session.finding_explanation_fingerprint:
@@ -772,7 +782,7 @@ class ReviewRun:
 
                     generated = generate_explanations(
                         self.provider,
-                        ranking.rows[: ranking.top_n],
+                        explained,
                         effort="low",
                         on_usage=presentation_usage,
                         session=session,
@@ -783,7 +793,7 @@ class ReviewRun:
                     # never attempted presentation may try on a later successful turn.
                     session.finding_explanation_fingerprint = signature
                 session.finding_explanations.update(generated)
-            fill_fallbacks(session, ranking.rows[: ranking.top_n])
+            fill_fallbacks(session, explained)
         elif not ranking.rows or ranking.empty_reason is not None:
             session.finding_explanations.clear()
             session.finding_explanation_fingerprint = None
@@ -1086,13 +1096,18 @@ def start_review(
             # `Finding.tool_result_ids` is joined to; a counter that restarted would point
             # the model's first call at the pre-run's card.
             provider.start_steps_at(len(session.steps))
+        # Feature 008: a pre-run that ran answers its own repeats. Innermost, so every
+        # wrapper outside it sees a guarded answer like any other result; with checks first
+        # off there is no pre-run and the adapter is handed the dispatch itself.
+        offered: ToolSet = tools
+        if prerun is not None:
+            offered = PrerunGuard(tools, prerun, folded=session.folded_families)
         # Lever 7, and the last decision setup makes: after the pre-run, because the
         # pre-run is not a turn and has no next round to withdraw anything from. With the
-        # flag off the adapter is handed the dispatch itself, so nothing in this module or
-        # in either adapter takes a different path (FR-039).
-        offered: ToolSet = tools
+        # flag off nothing in this module or in either adapter takes a different path
+        # (FR-039).
         if session.efficiency.coverage_stop:
-            offered = CoverageStopTools(tools, checklist, session)
+            offered = CoverageStopTools(offered, checklist, session)
     except Exception:
         if bridge_client is not None:
             bridge_client.close()

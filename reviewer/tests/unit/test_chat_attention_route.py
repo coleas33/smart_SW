@@ -34,10 +34,14 @@ import pytest
 from pydantic_core import to_jsonable_python
 from starlette.testclient import TestClient
 
+from swreview.ir.loader import save_package
+from swreview.ir.models import EvidencePackage
+from swreview.prerun import RMS_PRERUN_TOOLS
 from swreview.report.attention import rank
 from swreview.report.attention_record import read_attention_record
 from swreview.report.session import load_session
 from swreview.report.summary import load_words, review_summary
+from tests.support.packages import build_package
 from tests.unit import test_chat_server as chat
 from tests.unit.test_chat_server import (
     DRAWING_FINDING_ARGUMENTS,
@@ -78,13 +82,39 @@ def reviewed_chat(client: TestClient, run_dir: Path, provider_control: ProviderC
     return chat_id
 
 
+def nothing_to_find_package() -> EvidencePackage:
+    """The fixture package with its one part document dumped as a sub-assembly.
+
+    Feature 008 T047: the pane runs checks first, and on the ordinary fixture package the
+    RMS rules record three findings before the model speaks (missing folders, no global
+    variables, no equation-driven dimensions). A package with no part document gives every
+    pre-run check - part and equation rules, the assembly rules (no mates, so none to
+    faces), the joint map - nothing to report, which is the FR-024 case this module needs.
+    """
+    package = build_package()
+    return package.model_copy(
+        update={
+            "documents": [
+                document.model_copy(update={"kind": "assembly"})
+                if document.kind == "part"
+                else document
+                for document in package.documents
+            ]
+        }
+    )
+
+
 @pytest.fixture
-def empty_chat(client: TestClient, run_dir: Path, provider_control: ProviderControl) -> str:
+def empty_chat(
+    client: TestClient, run_root: Path, provider_control: ProviderControl
+) -> tuple[str, Path]:
     """A settled review that recorded nothing: the FR-024 case the panel has to say."""
+    folder = run_root / "20260913-130000-nothing"
+    save_package(nothing_to_find_package(), folder)
     provider_control.script = text_turns(3)
-    chat_id = start_session(client, run_dir)["chat_id"]
+    chat_id = start_session(client, folder)["chat_id"]
     settle(client, chat_id)
-    return chat_id
+    return chat_id, folder
 
 
 def get(client: TestClient, chat_id: str) -> Any:
@@ -216,23 +246,30 @@ def test_it_answers_the_live_session_after_a_disposition(
 
 
 def test_a_review_that_found_nothing_answers_no_rows_and_a_reason(
-    client: TestClient, empty_chat: str
+    client: TestClient, empty_chat: tuple[str, Path]
 ) -> None:
-    """FR-024: the panel says there is nothing to start with, and why."""
-    response = get(client, empty_chat)
+    """FR-024: the panel says there is nothing to start with, and why.
+
+    Feature 008 T047, edited deliberately: the chat is started on a package in which the
+    checks find nothing, and the pre-run's steps are asserted to exist, so "nothing found"
+    is a statement about a review whose checks ran, not one that never ran them."""
+    chat_id, folder = empty_chat
+    response = get(client, chat_id)
 
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["rows"] == []
     assert body["empty_reason"] == NOTHING_FOUND
     assert body["not_amplified"]["total"] == 0
+    steps = [step.tool for step in load_session(folder / "session.json").steps]
+    assert steps[: len(RMS_PRERUN_TOOLS)] == list(RMS_PRERUN_TOOLS)
 
 
 def test_the_empty_answer_still_carries_the_coverage_block(
-    client: TestClient, empty_chat: str
+    client: TestClient, empty_chat: tuple[str, Path]
 ) -> None:
     """What the run could not reach is the useful half of an empty panel."""
-    coverage = get(client, empty_chat).json()["coverage"]
+    coverage = get(client, empty_chat[0]).json()["coverage"]
 
     assert set(coverage) >= {
         "checked",

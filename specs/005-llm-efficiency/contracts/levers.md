@@ -362,6 +362,21 @@ table's sake:
 **Flag**: `prerun_checks`. **Default**: off. **Scope**: provider-neutral; runs in `start_review`
 before the first turn. **Read**: once at `start_review`.
 
+**Adopted as the pane default on 2026-09-22 (feature 008, "checks first").** By the owner's
+decision, gated by the offline replay of the recorded runs rather than by the ledger
+(`specs/008-checks-first-review/contracts/checks-first.md`). `ChatServer._start_review` passes
+`pane_efficiency(provider)` - the one function that decides the pane's levers - and every pane
+review records it on `session.efficiency`. `EfficiencySettings.prerun_checks` itself still
+defaults off, and so do `swreview review` and `swreview benchmark run`; `--lever prerun_checks`
+(or 008's `--pane-defaults`) turns it on there. As adopted, lever 5 now also includes: live
+interference detection first when SOLIDWORKS is attached (every detected group judged, the rows
+persisted into the run folder's `package.json`), the re-call guard that answers a repeated check
+with `already_run` instead of duplicating findings, the standards family's line when no profile
+is configured, and the fold marker (`session.folded_families = ["rms"]`) that ranks and renders
+the modelling-practice findings as one group. `checks_first(efficiency)` is lever 5 **or** lever
+11; lever 11 stays a command-line study variant; `GATED_ALONE` and every lever-count pin are
+unchanged; no pane control exists (`test_no_lever_in_pane_settings.py` unedited).
+
 **The scope is smaller than the source document states, and saying so is the point.** Which checks
 can be enumerated without a model (VERIFIED):
 

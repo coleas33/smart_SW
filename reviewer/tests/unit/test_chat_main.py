@@ -38,6 +38,7 @@ import httpx
 import pytest
 
 from swreview.chat.__main__ import stderr_log_config
+from swreview.prerun import PRERUN_TOOLS, RMS_PRERUN_TOOLS
 
 ORIGIN = "https://swreview.invalid"
 MODEL = "fake-scripted"
@@ -309,7 +310,14 @@ def test_no_log_handler_writes_to_stdout() -> None:
 
 
 def test_fail_bridge_makes_the_fourth_bridge_call_the_circuit_open_one(run_dir: Path) -> None:
-    """`--fail-bridge 3`: three forced failures, then the breaker refuses the fourth."""
+    """`--fail-bridge 3`: three forced failures, then the breaker refuses the fourth.
+
+    Feature 008 T047, re-derived deliberately from the breaker rule: the pane runs checks
+    first, and on this assembly its live `bridge_interference` is the first bridge call of
+    the session, so it takes the first forced failure. The rule is unchanged - three
+    `--fail-bridge` failures counted over every bridge call, then `BridgeOpenError` - so the
+    fourth bridge call is the scripted model's third probe, and its fourth probe is refused
+    by the open circuit too."""
     with backend(
         LAUNCHERS["console-script"], "--run-root", str(run_dir.parent), "--fail-bridge", "3"
     ) as started:
@@ -324,26 +332,34 @@ def test_fail_bridge_makes_the_fourth_bridge_call_the_circuit_open_one(run_dir: 
                 "the opening turn to end",
             )
 
-    finished = [
-        event["body"]
-        for event in events_of(run_dir)
+    events = events_of(run_dir)
+    tool_of = {
+        event["body"]["step_index"]: event["body"]["tool"]
+        for event in events
+        if event["type"] == "tool.started"
+    }
+    bridge_results = [
+        (tool_of[event["body"]["step_index"]], event["body"])
+        for event in events
         if event["type"] == "tool.finished"
+        and tool_of[event["body"]["step_index"]] in ("bridge_interference", "bridge_measure")
     ]
-    started_calls = [
-        event["body"]["tool"] for event in events_of(run_dir) if event["type"] == "tool.started"
-    ]
-    assert started_calls.count("bridge_measure") == 4
-    bridge_results = [body for body in finished if body["status"] == "error"]
-    assert len(bridge_results) == 4
-    for body in bridge_results[:3]:
+    assert [tool for tool, _ in bridge_results] == ["bridge_interference", *["bridge_measure"] * 4]
+    assert all(body["status"] == "error" for _, body in bridge_results)
+    for _, body in bridge_results[:3]:
         assert "--fail-bridge" in str(body["error"])
         assert "circuit" not in str(body["error"])
-    assert "BridgeOpenError" in str(bridge_results[3]["error"])
-    assert "circuit is open" in str(bridge_results[3]["error"])
+    for _, body in bridge_results[3:]:
+        assert "BridgeOpenError" in str(body["error"])
+        assert "circuit is open" in str(body["error"])
 
 
 def test_without_the_hook_no_bridge_call_is_forced_to_fail(run_dir: Path) -> None:
-    """The hook is off by default: an ordinary session makes no bridge call at all."""
+    """The hook is off by default: an ordinary session makes no bridge call at all.
+
+    Feature 008 T047, edited deliberately: the pane runs checks first, so the pre-run's
+    calls come first and then the scripted model's one read - and still no bridge call of
+    any kind, because this session asked for no bridge."""
     with backend(LAUNCHERS["console-script"], "--run-root", str(run_dir.parent)) as started:
         with started.client() as client:
             chat = start_session(client, run_dir)
@@ -356,4 +372,7 @@ def test_without_the_hook_no_bridge_call_is_forced_to_fail(run_dir: Path) -> Non
         event["body"]["tool"] for event in events_of(run_dir) if event["type"] == "tool.started"
     ]
     assert "bridge_measure" not in tools
-    assert tools == ["get_package_summary"]
+    assert "bridge_interference" not in tools
+    assert tools[: len(RMS_PRERUN_TOOLS)] == list(RMS_PRERUN_TOOLS)
+    assert set(tools[:-1]) <= set(PRERUN_TOOLS)
+    assert tools[-1] == "get_package_summary"
