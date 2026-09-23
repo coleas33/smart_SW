@@ -87,7 +87,6 @@ from swreview.agent.settings import (
     ProviderSettings,
     output_ceiling,
 )
-from swreview.agent.settings import redact as redact_secrets
 from swreview.bridge.remodel_client import RemodelClient
 from swreview.checks.rms_types import load_table
 from swreview.ir.loader import LoadedPackage
@@ -326,7 +325,7 @@ def build_provider(settings: ProviderSettings) -> AgentProvider:
         return adapter(
             client=genai.Client(**settings.client_kwargs()),
             model=settings.model,
-            redact=lambda text: redact_secrets(text, settings.secrets),
+            secrets=settings.secrets,
             max_output_tokens=output_ceiling(settings.provider, settings.model),
         )
     return adapter(model=settings.model, **settings.client_kwargs())

@@ -302,7 +302,7 @@ def provider_factory(
         return adapter(
             client=genai.Client(**settings.client_kwargs()),
             model=settings.model,
-            redact=lambda text: redact(text, settings.secrets),
+            secrets=settings.secrets,
             max_output_tokens=output_ceiling(settings.provider, settings.model),
         )
     if settings.provider is ProviderName.FAKE:
