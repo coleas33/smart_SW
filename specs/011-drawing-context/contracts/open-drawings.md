@@ -97,3 +97,41 @@ and 11, ordering with shuffled input, case and `..` normalisation, the file-name
 across two drawings, phase list unchanged); section 6's sentences (the `full` part-root assertion
 edited deliberately); section 7 (keys differ with and without an attached drawing; the probe and the
 full build agree).
+
+## 9. Landed as (T018 to T021, 2026-09-23)
+
+- **The seam.** `IOpenDrawingSource` is `OpenDocuments()` and `FileExists(path)`; each
+  `OpenDocument` carries three lazy reads (`ReadKind`, `ReadPath`, `ReadReferencedPaths`) and the
+  handle, so discovery reads the kind of every document and the path and views of a drawing only,
+  and a read that throws costs one gap. `Discover(tree, source, options, gaps)` records its gaps in
+  the dump's `GapCollector`, as `Traverse` does; `AttachedDrawings` carries `Listed`, `Drawings`,
+  `NotRead` and `Candidates`.
+- **Matching (section 3)**, as written, plus: a path that is not rooted (a file name alone, a
+  relative path) matches nothing whatever the current directory is; a path `GetFullPath` refuses is
+  compared as written; a drawing listed twice is examined once; an unsaved open drawing that shows
+  the design is one `drawing_discovery` gap ("... has never been saved, so it has no path to
+  identify it by and was not read ...") and one that shows none of it is ignored.
+- **The outside-document gap** is written by the `drawing` phase, not by discovery: it belongs to
+  the view that shows the path, whose `dvw:` id exists only once the phase numbers the view - the
+  shape the `assembly-drawings` fixture records. An attached drawing is read with
+  `ScopedDrawing.ReviewedDocumentId` (`OpenDrawingDiscovery.DocumentResolver` over the documents the
+  traversal reached): a view of a reviewed document names the package's own id however its path is
+  spelled; a view of any other path keeps `referenced_model_path`, has a null
+  `referenced_document_id` (the IR's "resolved to a Document in this package"), is not asked for
+  its document, and the first view per outside path per drawing carries the gap "references
+  '{path}', which is not part of this review". A drawing root has no resolver and is read as
+  feature 006 reads it. The confirmed read (`confirmed-open.md` section 2) uses the same resolver
+  over the package's `documents[]`.
+- **Candidates (section 5)**, as written, plus: a same-name path that is open and shows the design
+  (attached, or beyond the bound and named in the limit gap) is no candidate and raises no gap; one
+  whose views could not be read is no candidate (its `drawing_discovery` gap names it). When the
+  listing itself fails, the files beside the design are still asked about, since nothing is
+  attached.
+- **The phase row (section 4)** is `failed` when fewer records come back than drawings were handed
+  over, through a `RunPhase` overload whose phase answers whether it read everything; the phase's
+  own gaps say which drawing. A drawing root whose one drawing cannot be read is `failed` too.
+- **Section 6 gains a row**: `Full`, part or assembly root, nothing attached because the open
+  documents could not be listed: "The drawings open in SOLIDWORKS could not be listed, so no
+  drawing was read natively. Extract again to include them." - "no open drawing shows this design"
+  would be a claim nobody checked. A `Full` build with no open-drawing source wired keeps the
+  profile sentence.

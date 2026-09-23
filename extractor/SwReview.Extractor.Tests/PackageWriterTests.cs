@@ -6,6 +6,7 @@ using SwReview.Extractor.Dump;
 using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ids;
 using SwReview.Extractor.Ir;
+using SwReview.Extractor.PersistRefs;
 using IrMeasure = SwReview.Extractor.Ir.Measure;
 using Xunit;
 
@@ -18,6 +19,14 @@ namespace SwReview.Extractor.Tests;
 /// </summary>
 public class PackageWriterTests : IDisposable
 {
+    private const string AssemblyPath = @"C:\vault\bracket-assy\bracket-assy.SLDASM";
+    private const string HousingPath = @"C:\vault\bracket-assy\housing.SLDPRT";
+    private const string ScrewPath = @"C:\vault\toolbox\hex-cap-screw.SLDPRT";
+
+    /// <summary>The two open drawings the discovery tests attach (feature 011 T020).</summary>
+    private const string AssemblyDrawingPath = @"C:\vault\bracket-assy\bracket-assy.SLDDRW";
+    private const string HousingDrawingPath = @"C:\vault\bracket-assy\housing.SLDDRW";
+
     private readonly string _outputDirectory;
 
     public PackageWriterTests()
@@ -827,8 +836,15 @@ public class PackageWriterTests : IDisposable
     /// entity kind and the gap kind and never the message string, and which keeps passing
     /// unedited - though its name is now stale.
     /// </summary>
+    /// <remarks>
+    /// Feature 011 T020 edits this deliberately: the <c>full</c> row is gone, because a full dump
+    /// of a part or assembly now looks for the open drawings of its design, and when none shows
+    /// it the gap says that instead (contracts/open-drawings.md section 6,
+    /// <see cref="Build_FullPartRootWithNothingAttached_SaysNoOpenDrawingShowsTheDesign"/>). The
+    /// profile sentence stays for the two profiles that skip the phase, and for a full dump built
+    /// with no open-drawing source wired (<see cref="Build_FullWithNoOpenDrawingSource_KeepsTheProfileSentence"/>).
+    /// </remarks>
     [Theory]
-    [InlineData(DumpProfile.Full, "full")]
     [InlineData(DumpProfile.ModelCheck, "model_check")]
     [InlineData(DumpProfile.Standards, "standards")]
     public void Build_DrawingPhaseThatDidNotRun_IsAGapNamingTheProfileThatSkippedIt(
@@ -1079,6 +1095,379 @@ public class PackageWriterTests : IDisposable
             Assert.Single(package.Extractor.Phases, phase => phase.Name == "drawing").Status);
         Assert.DoesNotContain(package.Gaps, gap => gap.EntityKind == "drawing");
         IrContract.AssertValid(PackageSerializer.Serialize(package));
+    }
+
+    // ---- the open drawings of a reviewed part or assembly (feature 011 T020) ----------------
+    //
+    // contracts/open-drawings.md sections 1, 4, 6 and 7, over the fake open-drawing source; the
+    // rules of discovery itself are OpenDrawingDiscoveryTests'.
+
+    /// <summary>Two open drawings: one of the assembly (the root) and one of the housing.</summary>
+    private static FakeSources WithTwoOpenDrawings()
+    {
+        var sources = new FakeSources();
+        sources.OpenDrawing(HousingDrawingPath, HousingPath);
+        sources.OpenDrawing(AssemblyDrawingPath, AssemblyPath);
+        return sources;
+    }
+
+    [Fact]
+    public void Build_FullAssemblyRootWithTwoOpenDrawings_WritesARecordPerDrawingWithDisjointIds()
+    {
+        FakeSources sources = WithTwoOpenDrawings();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        // The root's drawing first, then by traversal index (section 3).
+        Assert.Equal(
+            new[] { DocumentIds.For(AssemblyDrawingPath), DocumentIds.For(HousingDrawingPath) },
+            package.DrawingRecords!.Select(record => record.DocumentId));
+        Assert.Equal(
+            new[] { "dsh:0001", "dsh:0002" },
+            package.DrawingRecords!.Select(record => Assert.Single(record.Sheets).Id));
+        Assert.Equal(
+            new[] { AssemblyDrawingPath, HousingDrawingPath },
+            sources.SeenDrawings.Select(drawing => drawing.DocumentPath));
+        Assert.All(sources.SeenDrawings, drawing => Assert.NotNull(drawing.Document));
+        Assert.Equal(
+            DumpPhaseStatus.Ok,
+            Assert.Single(package.Extractor.Phases, phase => phase.Name == "drawing").Status);
+    }
+
+    [Fact]
+    public void Build_AttachedDrawings_HandTheDrawingPhaseTheReviewsDocumentsToTieViewsTo()
+    {
+        // Each attached drawing is read with the rule that ties a view's path to a document of
+        // this package (DrawingDumper names an outside path in a gap on its view).
+        FakeSources sources = WithTwoOpenDrawings();
+
+        NewWriter(sources).Build(Options());
+
+        ScopedDrawing drawing = sources.SeenDrawings[0];
+        Assert.NotNull(drawing.ReviewedDocumentId);
+        Assert.Equal(DocumentIds.For(HousingPath), drawing.ReviewedDocumentId!.Invoke(HousingPath.ToUpperInvariant()));
+        Assert.Null(drawing.ReviewedDocumentId!.Invoke(@"C:\vault\other\unrelated.SLDPRT"));
+        Assert.Null(drawing.ReviewedDocumentId!.Invoke(AssemblyDrawingPath));
+    }
+
+    [Fact]
+    public void Build_AttachedDrawings_EachGetADocumentsRowAndAManifestEntryWithNoConfiguration()
+    {
+        EvidencePackage package = NewWriter(WithTwoOpenDrawings()).Build(Options());
+
+        foreach (string path in new[] { AssemblyDrawingPath, HousingDrawingPath })
+        {
+            string id = DocumentIds.For(path);
+            Document document = Assert.Single(package.Documents, row => row.DocumentId == id);
+            Assert.Equal(DocumentKind.Drawing, document.Kind);
+            Assert.Equal(path, document.Path);
+
+            ManifestEntry entry = Assert.Single(package.Manifest.Entries, row => row.DocumentId == id);
+            Assert.Equal(string.Empty, entry.Configuration);
+        }
+
+        // After the traversal's documents, in the drawings' order (section 4).
+        Assert.Equal(
+            new[] { AssemblyPath, HousingPath, ScrewPath, AssemblyDrawingPath, HousingDrawingPath },
+            package.Documents.Select(document => document.Path));
+    }
+
+    [Fact]
+    public void Build_AttachedDrawings_AreListedInTheDesignsDrawingDocumentIdsInOrder()
+    {
+        EvidencePackage package = NewWriter(WithTwoOpenDrawings()).Build(Options());
+
+        Assert.Equal(
+            new[] { DocumentIds.For(AssemblyDrawingPath), DocumentIds.For(HousingDrawingPath) },
+            package.Design.DrawingDocumentIds);
+
+        // The root stays the root: a drawing attached to a review is not the design's document.
+        Assert.Equal(DocumentIds.For(AssemblyPath), package.Design.RootAssemblyDocumentId);
+    }
+
+    [Fact]
+    public void Build_AttachedDrawings_AreNotComponents()
+    {
+        EvidencePackage package = NewWriter(WithTwoOpenDrawings()).Build(Options());
+
+        Assert.Equal(3, package.Components.Count);
+        Assert.DoesNotContain(
+            package.Components,
+            component => component.DocumentId == DocumentIds.For(AssemblyDrawingPath)
+                || component.DocumentId == DocumentIds.For(HousingDrawingPath));
+    }
+
+    [Fact]
+    public void Build_WithAttachedDrawings_KeepsTheSameTwelvePhaseNames()
+    {
+        EvidencePackage package = NewWriter(WithTwoOpenDrawings()).Build(Options());
+
+        Assert.Equal(
+            new[]
+            {
+                "document", "manifest", "mate", "feature", "equation", "cutlist", "drawing",
+                "hole", "tolerance", "fastener", "face", "body",
+            },
+            package.Extractor.Phases.Select(phase => phase.Name));
+    }
+
+    [Theory]
+    [InlineData(DumpProfile.Standards)]
+    [InlineData(DumpProfile.ModelCheck)]
+    public void Build_TheStandardsAndModelCheckExtractionsOfTheSameRootAttachNothing(DumpProfile profile)
+    {
+        FakeSources sources = WithTwoOpenDrawings();
+        sources.ExistingFiles.Add(@"C:\vault\toolbox\hex-cap-screw.SLDDRW");
+        DumpOptions options = Options();
+        options.Profile = profile;
+
+        EvidencePackage package = NewWriter(sources).Build(options);
+
+        Assert.Equal(0, sources.OpenDocumentsListed);
+        Assert.False(sources.DrawingsWereDumped);
+        Assert.Null(package.DrawingRecords);
+        Assert.Null(package.DrawingCandidates);
+        Assert.Empty(package.Design.DrawingDocumentIds);
+        Assert.DoesNotContain(package.Documents, document => document.Kind == DocumentKind.Drawing);
+    }
+
+    [Fact]
+    public void Build_FullOfADrawingRoot_DiscoversNothing()
+    {
+        FakeSources sources = WithTwoOpenDrawings();
+        sources.UseDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.Equal(0, sources.OpenDocumentsListed);
+        Assert.Equal(new[] { "doc:drawing" }, package.DrawingRecords!.Select(record => record.DocumentId));
+    }
+
+    [Fact]
+    public void Build_WritesTheCandidatesInTraversalOrder()
+    {
+        var sources = new FakeSources();
+        sources.ExistingFiles.Add(@"C:\vault\toolbox\hex-cap-screw.SLDDRW");
+        sources.ExistingFiles.Add(AssemblyDrawingPath);
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.Equal(
+            new[] { DocumentIds.For(AssemblyPath), DocumentIds.For(ScrewPath) },
+            package.DrawingCandidates!.Select(candidate => candidate.DocumentId));
+        Assert.Equal(
+            new[] { AssemblyDrawingPath, @"C:\vault\toolbox\hex-cap-screw.SLDDRW" },
+            package.DrawingCandidates!.Select(candidate => candidate.Path));
+        IrContract.AssertValid(PackageSerializer.Serialize(package));
+    }
+
+    [Fact]
+    public void Build_WithNoCandidate_WritesNoCandidateMember()
+    {
+        EvidencePackage package = NewWriter().Build(Options());
+
+        Assert.Null(package.DrawingCandidates);
+        Assert.DoesNotContain("drawing_candidates", PackageSerializer.Serialize(package), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_ADiscoveryGap_ReachesThePackage()
+    {
+        FakeSources sources = WithTwoOpenDrawings();
+        sources.OpenDocumentsFailure = new InvalidOperationException("no answer");
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.Contains(package.Gaps, gap => gap.EntityKind == "drawing_discovery");
+        Assert.Null(package.DrawingRecords);
+    }
+
+    [Fact]
+    public void Build_TheReuseKeyDiffersWithAndWithoutAnAttachedDrawing()
+    {
+        string without = NewWriter().Build(Options()).ReuseKey!;
+        string with = NewWriter(WithTwoOpenDrawings()).Build(Options()).ReuseKey!;
+
+        Assert.NotEqual(without, with);
+    }
+
+    [Fact]
+    public void BuildReuseProbe_WithAttachedDrawings_AgreesWithTheFullBuild()
+    {
+        // Discovery runs in the probe too (section 1), because the drawings enter the manifest the
+        // key is taken over; a probe that skipped it would never match a package with a drawing.
+        FakeSources sources = WithTwoOpenDrawings();
+
+        string probe = NewWriter(sources).BuildReuseProbe(Options()).ReuseKey!;
+        string full = NewWriter(WithTwoOpenDrawings()).Build(Options()).ReuseKey!;
+
+        Assert.Equal(full, probe);
+        Assert.Equal(1, sources.OpenDocumentsListed);
+        Assert.False(sources.DrawingsWereDumped);
+    }
+
+    // ---- section 6: the drawing gap by case -------------------------------------------------
+
+    [Fact]
+    public void Build_AttachedDrawingsRead_RaiseNoDrawingGap()
+    {
+        EvidencePackage package = NewWriter(WithTwoOpenDrawings()).Build(Options());
+
+        Assert.DoesNotContain(package.Gaps, gap => gap.EntityKind == "drawing");
+    }
+
+    [Fact]
+    public void Build_FullPartRootWithNothingAttached_SaysNoOpenDrawingShowsTheDesign()
+    {
+        var sources = new FakeSources();
+        sources.UsePartRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Gap gap = Assert.Single(package.Gaps, g => g.EntityKind == "drawing");
+        Assert.Equal(GapKind.Unsupported, gap.Kind);
+        Assert.Equal(
+            "No open drawing shows this design, so no drawing was read natively. Open its drawing "
+            + "in SOLIDWORKS and extract again to include it.",
+            gap.Reason);
+        Assert.Equal(
+            DumpPhaseStatus.Skipped,
+            Assert.Single(package.Extractor.Phases, phase => phase.Name == "drawing").Status);
+    }
+
+    [Fact]
+    public void Build_FullAssemblyRootWithNothingAttached_SaysNoOpenDrawingShowsTheDesign()
+    {
+        var sources = new FakeSources();
+        sources.OpenDrawing(@"C:\vault\other\unrelated.SLDDRW", @"C:\vault\other\unrelated.SLDPRT");
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Gap gap = Assert.Single(package.Gaps, g => g.EntityKind == "drawing");
+        Assert.StartsWith("No open drawing shows this design", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_FullWhoseOpenDocumentsCouldNotBeListed_SaysSoRatherThanThatNoneShowsIt()
+    {
+        // "No open drawing shows this design" would be a claim nobody checked.
+        FakeSources sources = WithTwoOpenDrawings();
+        sources.OpenDocumentsFailure = new InvalidOperationException("no answer");
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Gap gap = Assert.Single(package.Gaps, g => g.EntityKind == "drawing");
+        Assert.Equal(
+            "The drawings open in SOLIDWORKS could not be listed, so no drawing was read natively. "
+            + "Extract again to include them.",
+            gap.Reason);
+    }
+
+    [Fact]
+    public void Build_FullWithNoOpenDrawingSource_KeepsTheProfileSentence()
+    {
+        // A build with no source wired never looked, so it says which phase did not run rather
+        // than what SOLIDWORKS had open.
+        var sources = new FakeSources();
+        var writer = new PackageWriter(
+            sources, sources, sources, sources, sources, sources, sources, sources, sources,
+            sources, sources, sources, "2024 SP5", "TEST-WORKSTATION", tolerances: sources);
+
+        EvidencePackage package = writer.Build(Options());
+
+        Gap gap = Assert.Single(package.Gaps, g => g.EntityKind == "drawing");
+        Assert.Contains("'full'", gap.Reason, StringComparison.Ordinal);
+        Assert.Contains("PDF ingest", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_AnAttachedDrawingThatCouldNotBeRead_RecordsTheDrawingPhaseFailed()
+    {
+        // Section 4: the row is ok when every drawing was read and failed otherwise, with the
+        // drawing phase's own gaps saying which.
+        var sources = new FakeSources();
+        sources.OpenDrawing(HousingDrawingPath, HousingPath);
+        var drawings = new DrawingDumper(new Sw.SwGate(), new UnreadableDrawings());
+        var writer = new PackageWriter(
+            sources, sources, sources, sources, sources, sources, sources, drawings, sources,
+            sources, sources, sources, "2024 SP5", "TEST-WORKSTATION", tolerances: sources,
+            openDrawings: sources);
+
+        EvidencePackage package = writer.Build(Options());
+
+        Assert.Equal(
+            DumpPhaseStatus.Failed,
+            Assert.Single(package.Extractor.Phases, phase => phase.Name == "drawing").Status);
+        Assert.Contains(
+            package.Gaps,
+            gap => gap.EntityKind == "drawing_sheet" && gap.EntityId == DocumentIds.For(HousingDrawingPath));
+        Assert.DoesNotContain(package.Gaps, gap => gap.EntityKind == "drawing");
+    }
+
+    /// <summary>A drawing reader every document answers "not a drawing" to.</summary>
+    private sealed class UnreadableDrawings : IDrawingReader
+    {
+        public object? Drawing(object document) => null;
+
+        public string? ActiveSheetName(object drawing) => throw new NotSupportedException();
+
+        public IReadOnlyList<string> SheetNames(object drawing) => throw new NotSupportedException();
+
+        public object? Sheet(object drawing, string name) => throw new NotSupportedException();
+
+        public string? SheetName(object sheet) => throw new NotSupportedException();
+
+        public string? SheetFormatName(object sheet) => throw new NotSupportedException();
+
+        public IReadOnlyList<object> Views(object sheet) => throw new NotSupportedException();
+
+        public object? SheetRevisionTable(object sheet) => throw new NotSupportedException();
+
+        public string? ViewName(object view) => throw new NotSupportedException();
+
+        public int ViewType(object view) => throw new NotSupportedException();
+
+        public string? ReferencedModelPath(object view) => throw new NotSupportedException();
+
+        public object? ReferencedDocument(object view) => throw new NotSupportedException();
+
+        public string? DocumentPath(object document) => throw new NotSupportedException();
+
+        public IReadOnlyList<object> DisplayDimensions(object view) => throw new NotSupportedException();
+
+        public IReadOnlyList<object> Annotations(object view) => throw new NotSupportedException();
+
+        public IReadOnlyList<object> Notes(object view) => throw new NotSupportedException();
+
+        public IReadOnlyList<object> TableAnnotations(object view) => throw new NotSupportedException();
+
+        public int TableAnnotationType(object table) => throw new NotSupportedException();
+
+        public string? DimensionName(object dimension) => throw new NotSupportedException();
+
+        public int DimensionType(object dimension) => throw new NotSupportedException();
+
+        public bool IsOverridden(object dimension) => throw new NotSupportedException();
+
+        public double OverrideValue(object dimension) => throw new NotSupportedException();
+
+        public double DimensionValue(object dimension) => throw new NotSupportedException();
+
+        public string? AnnotationName(object annotation) => throw new NotSupportedException();
+
+        public int AnnotationType(object annotation) => throw new NotSupportedException();
+
+        public bool IsDangling(object annotation) => throw new NotSupportedException();
+
+        public string? NoteText(object note) => throw new NotSupportedException();
+
+        public string? CurrentRevision(object table) => throw new NotSupportedException();
+
+        public RevisionTableShape TableShape(object table) => throw new NotSupportedException();
+
+        public string? Cell(object table, int row, int column) => throw new NotSupportedException();
+
+        public ScopedPersistRef? PersistRef(object document, object entity) => throw new NotSupportedException();
     }
 
     // ---- dump phase timing (feature 005, T033) -----------------------------------
@@ -1495,7 +1884,8 @@ public class PackageWriterTests : IDisposable
     {
         FakeSources s = sources ?? new FakeSources();
         return new PackageWriter(
-            s, s, s, s, s, s, s, s, s, s, s, s, "2024 SP5", "TEST-WORKSTATION", tolerances: s);
+            s, s, s, s, s, s, s, s, s, s, s, s, "2024 SP5", "TEST-WORKSTATION", tolerances: s,
+            openDrawings: s);
     }
 
     /// <summary>
@@ -1505,11 +1895,8 @@ public class PackageWriterTests : IDisposable
     private sealed class FakeSources
         : IComponentTreeSource, IDocumentSource, IManifestSource, IMateSource, IFeatureSource,
           IEquationSource, ICutListSource, IDrawingSource, IHoleSource, IFastenerSource,
-          IFaceSource, IMeshSource, IToleranceSource
+          IFaceSource, IMeshSource, IToleranceSource, IOpenDrawingSource
     {
-        private const string AssemblyPath = @"C:\vault\bracket-assy\bracket-assy.SLDASM";
-        private const string HousingPath = @"C:\vault\bracket-assy\housing.SLDPRT";
-        private const string ScrewPath = @"C:\vault\toolbox\hex-cap-screw.SLDPRT";
         private const string DrawingPath = @"C:\vault\bracket-assy\bracket-assy.SLDDRW";
         private const string NamesakeDrawingPath = @"C:\vault\bracket-assy\housing.SLDDRW";
 
@@ -1575,6 +1962,37 @@ public class PackageWriterTests : IDisposable
         public string? MeshDirectory { get; private set; }
 
         public DumpOptions? SeenOptions { get; private set; }
+
+        /// <summary>The documents the fake SOLIDWORKS has open (feature 011 discovery).</summary>
+        public List<OpenDocument> OpenDocumentList { get; } = new List<OpenDocument>();
+
+        /// <summary>Files the existence check answers true for.</summary>
+        public HashSet<string> ExistingFiles { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>What listing the open documents throws, or null.</summary>
+        public Exception? OpenDocumentsFailure { get; set; }
+
+        public int OpenDocumentsListed { get; private set; }
+
+        /// <summary>The drawings the drawing phase was handed, in order.</summary>
+        public List<ScopedDrawing> SeenDrawings { get; } = new List<ScopedDrawing>();
+
+        /// <summary>An open drawing whose views show <paramref name="references"/>.</summary>
+        public object OpenDrawing(string path, params string[] references)
+        {
+            var handle = new object();
+            OpenDocumentList.Add(new OpenDocument(
+                handle, () => DocumentKind.Drawing, () => path, () => references));
+            return handle;
+        }
+
+        IReadOnlyList<OpenDocument> IOpenDrawingSource.OpenDocuments()
+        {
+            OpenDocumentsListed++;
+            return OpenDocumentsFailure == null ? OpenDocumentList : throw OpenDocumentsFailure;
+        }
+
+        bool IOpenDrawingSource.FileExists(string path) => ExistingFiles.Contains(path);
 
         /// <summary>
         /// The tree <see cref="ComponentTreeDumper"/> synthesizes for a part opened alone
@@ -1866,6 +2284,28 @@ public class PackageWriterTests : IDisposable
         IReadOnlyList<DrawingRecord> IDrawingSource.Dump(DumpScope scope)
         {
             DrawingsWereDumped = true;
+            SeenDrawings.AddRange(scope.Drawings);
+
+            // A review's attached drawings (feature 011): one record per drawing the scope hands
+            // over, each numbered from the package's allocators, as DrawingDumper numbers them.
+            if (RootDocumentKind != DocumentKind.Drawing)
+            {
+                return scope.Drawings.Select(drawing => new DrawingRecord
+                {
+                    DocumentId = scope.DocumentId(drawing.DocumentPath),
+                    ActiveSheetName = "Sheet1",
+                    Sheets =
+                    {
+                        new DrawingSheetRecord
+                        {
+                            Id = scope.DrawingIds.Sheets.Next(),
+                            Name = "Sheet1",
+                            Index = 0,
+                            WasActive = true,
+                        },
+                    },
+                }).ToList();
+            }
 
             return new List<DrawingRecord>
             {

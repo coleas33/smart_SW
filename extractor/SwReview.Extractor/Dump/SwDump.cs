@@ -64,7 +64,12 @@ public static class SwDump
             tolerances: new ToleranceDumper(
                 session.Gate,
                 new SwDimensionToleranceReader(session.Gate, refs),
-                new SwModelAnnotationReader(session.Gate, refs)));
+                new SwModelAnnotationReader(session.Gate, refs)),
+
+            // The open drawings a review reads with its design (feature 011): listed and read
+            // where they stand, never opened. Discovery runs under the Full profile of a part or
+            // assembly root only, which PackageWriter decides.
+            openDrawings: new SwOpenDrawingReader(swApp, session.Gate));
     }
 
     /// <summary>
