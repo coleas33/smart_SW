@@ -14,11 +14,12 @@
 
   THREE TIERS OF INK, and the whole layout is that idea:
 
-    tier 1  the Start here panel - numbered cards, a bold headline, and a stripe that restates
-            a field the backend already sent (the consequence class, or the judgement key).
+    tier 1  the summary, the questions and the Start here panel - numbered cards, a bold
+            headline, and a stripe that restates a field the backend already sent (the
+            consequence class, or the judgement key).
     tier 2  every finding as one line and a fold.
-    tier 3  what folds to a count until it is wanted: the transcript's tool calls and prose,
-            and the coverage list.
+    tier 3  what is there when it is wanted: the coverage list, the contacts, and the whole
+            Transcript view - the tool calls, the prose and the counts (feature 009 User Story 5).
 */
 
 * {
@@ -286,8 +287,11 @@ fieldset.field {
   body rather than a property on each, so a card that streams in meanwhile is hidden too and
   every one of them comes back when the reviewed document does.
 */
+body.results-stale #results-state,
 body.results-stale #summary,
 body.results-stale #questions,
+body.results-stale #findings-head,
+body.results-stale #answers,
 body.results-stale #attention-panel,
 body.results-stale #not-examined,
 body.results-stale #coverage-panel,
@@ -627,14 +631,6 @@ body.results-stale .card.evidence {
   list-style: none;
 }
 
-/* Five ranked cards must not consume the whole docked pane. The panel gets its own scroll
-   viewport so the transcript below it keeps enough room for a finding's details. */
-#attention-panel {
-  max-height: 14rem;
-  overflow-y: auto;
-  min-height: 0;
-}
-
 /* The warning is deliberately outside the status badge. It is a full sentence and must wrap
    at the narrowest supported Task Pane width. */
 .not-examined {
@@ -928,66 +924,130 @@ body.results-stale .card.evidence {
   color: var(--critical);
 }
 
-/* ---- tier 3: the transcript, folded to a count ------------------------------------------- */
+/* ---- Results or Transcript (feature 009 User Story 5) ------------------------------------- */
 
-/* The transcript's toggle takes the line; Collapse all sits at its end (U10). */
-.transcript-head {
+/*
+  Two buttons, one pressed: whichever view is chosen owns the pane, and the other is not
+  displayed. The choice is a class on the body (contracts/views.md section 1).
+*/
+.view-switch {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 10px 12px 6px;
+  padding: 0 12px 8px;
+}
+
+.view-switch button {
+  flex: 1 1 0;
+  border-radius: 0;
+}
+
+.view-switch button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.view-switch button:last-child {
+  border-left: 0;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.view-switch button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+body.view-results #transcript-view,
+body.view-transcript #results {
+  display: none;
+}
+
+/*
+  Each view takes what the strip leaves and scrolls on its own, so a long review never pushes
+  the follow-up box off the bottom of a docked 300 px pane. Results scrolls as one; only the
+  Transcript follows its newest record.
+*/
+.results,
+.transcript-view {
+  flex: 1 1 0;
+  min-height: 8rem;
+  min-width: 0;
+}
+
+.results {
+  overflow-y: auto;
+}
+
+.transcript-view {
+  display: flex;
+  flex-direction: column;
   border-top: 1px solid var(--hair-2);
 }
 
-.fold-toggle {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  text-align: left;
+/* Where the review stands, in page words, at the top of Results. */
+.results-state {
+  margin: 8px 12px 0;
+  color: var(--muted);
+  font-size: var(--text-small);
 }
 
-.fold-toggle .fold-count {
+/* Collapse all sits over the findings it shuts (U10). */
+.findings-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px 4px;
+  border-top: 1px solid var(--hair-2);
+}
+
+.findings-head .eyebrow {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.findings,
+.errors,
+.answers {
+  padding: 0 12px;
+}
+
+.answers {
+  padding-bottom: 8px;
+}
+
+/* ---- tier 3: the Transcript -------------------------------------------------------------- */
+
+/* The Transcript's head: its counts, then the run folder, the stream state and the cost. */
+.transcript-head {
+  padding: 10px 12px 4px;
+}
+
+.transcript-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.transcript-title .eyebrow {
+  margin: 0;
+}
+
+.transcript-title .fold-count {
   margin-left: auto;
   color: var(--muted);
   font-size: var(--text-small);
   font-variant-numeric: tabular-nums;
 }
 
-.fold-toggle::after {
-  content: "\25b8";
-  color: var(--muted);
-  font-size: var(--text-label);
-}
-
-.fold-toggle[aria-expanded="true"]::after {
-  content: "\25be";
-}
-
-.fold-toggle .eyebrow {
-  margin: 0;
+.transcript-head .meta {
+  padding: 2px 0 0;
 }
 
 .transcript {
   flex: 1 1 0;
-  min-height: 8rem;
+  min-height: 0;
   min-width: 0;
   overflow-y: auto;
   padding: 4px 12px 12px;
-}
-
-/*
-  Folded, the transcript is the findings ledger: the model's prose and its tool calls go, and
-  the findings, the evidence requests and the error cards stay. A class rather than the `hidden`
-  property, because nothing here is hidden from the tests that read the transcript's text.
-*/
-.transcript.folded .block,
-.transcript.folded .card.tool {
-  display: none;
 }
 
 /* ---- text blocks --------------------------------------------------------------------------- */
@@ -1019,6 +1079,49 @@ body.results-stale .card.evidence {
   border-left: 3px solid var(--accent);
   background: var(--accent-bg);
   color: var(--ink-2);
+}
+
+/* Where a finding was recorded: its card is in Results; the chronology keeps one line. */
+.block.marker .text {
+  font-style: normal;
+}
+
+/* An error in the Transcript names its class; the card with what to do next is in Results. */
+.block.error .text {
+  color: var(--critical);
+  font-family: var(--mono);
+  font-size: var(--text-label);
+}
+
+/* ---- follow-up answers, pinned in Results (FR-019) --------------------------------------------- */
+
+.pinned {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-bg);
+}
+
+.pinned-question {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  font-weight: 600;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pinned-answer {
+  margin: 4px 0 0;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pinned-answer.waiting {
+  color: var(--muted);
+  font-style: italic;
 }
 
 /* ---- tier 2: one line and a fold ------------------------------------------------------------ */

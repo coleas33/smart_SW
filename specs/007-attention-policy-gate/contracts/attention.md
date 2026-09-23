@@ -193,8 +193,11 @@ the no-percent-label rule above still applies to the deterministic attention wor
   `top_n` yet.
 - The Review page fetches the route in `endSession`, drops the response if `state.chatId` has
   moved on, renders through `render.attentionPanel(ranking)` into `<section
-  id="attention-panel">` above the transcript, shows `empty_reason` in words when there are no
-  rows, and clears the panel in `resetTranscript`. Under the heading it prints one count line,
+  id="attention-panel">`, shows `empty_reason` in words when there are no rows, and clears the
+  panel in `resetTranscript`. Since feature 009 User Story 5 (2026-09-23) the panel lives in the
+  Review tab's Results view, after the summary and the questions and before the findings; the
+  Transcript view holds the prose, the tool calls and the counts
+  (`specs/009-engineer-workspace/contracts/views.md` section 2). Under the heading it prints one count line,
   `Start here: <shown> of <rows.length> issues · <not_amplified.beyond_top_n> findings not in
   Start here`, then the `top_n` rows as the check pages render them (the same
   `web/shared/attention.js` row), then - when there are more - every remaining row, one line

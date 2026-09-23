@@ -113,17 +113,22 @@
     evidence: Object.create(null),
     tools: Object.create(null),
 
-    // What the transcript's own header says about itself: how many calls have finished, and
-    // which one is running right now. The rounds are `state.usage.length` and are not counted
-    // twice here.
+    // What the Transcript's own head says about it: how many calls have finished, and which one
+    // is running right now. The rounds are `state.usage.length` and are not counted twice here.
     toolsFinished: 0,
     runningTool: '',
 
-    // Whether the transcript is folded to its header. It starts folded - index.html says so -
-    // because the tool calls and the model's prose are the record of how the review reached
-    // its findings rather than the findings themselves.
-    transcriptFolded: true,
+    // Which view owns the pane (feature 009 User Story 5): 'results', on every load, or
+    // 'transcript'. One class on the body says which; index.html starts it on Results.
+    view: 'results',
+
+    // Whether the last follow-up is still waiting for its `text.done`, which fills its pin.
     followUpPending: false,
+
+    // The follow-ups and their answers pinned in Results, per chat id: `[{question, answer}]`,
+    // `answer` null while it is on its way. Page memory only - the answers themselves stay in
+    // the transcript and events.jsonl (contracts/views.md section 4).
+    pinned: Object.create(null),
     notExamined: null,
 
     // The summary the backend sent beside the last ranking for the chat on screen (feature 009
@@ -351,6 +356,7 @@
       chat_id: state.chatId,
       last_event_id: state.lastSeq > 0 ? String(state.lastSeq) : null
     });
+    renderResultsState();
   }
 
   /** One SSE frame: `id:`, `data:` (possibly several lines), and comments to ignore. */
@@ -438,6 +444,7 @@
       state.reconnectTimer = null;
       openStream();
     }, delay);
+    renderResultsState();
   }
 
   function closeStream() {
@@ -449,6 +456,7 @@
       state.stream = null;
       post('events.close', {});
     }
+    renderResultsState();
   }
 
   // ---- the transcript ----------------------------------------------------------------------
@@ -499,7 +507,8 @@
         return;
       case 'error':
         setTurnRunning(false);
-        appendCard(render.errorCard(body));
+        unansweredFollowUp('failed');
+        showError(body);
         return;
       default:
         reportUnreadable('an event of type "' + (event.type || '') + '"');
@@ -532,6 +541,11 @@
     return line;
   }
 
+  /**
+   * Appends one record to the Transcript and keeps the Transcript at its end. The one scroll on
+   * the page that follows new content, and it is the Transcript's alone: Results never moves
+   * under the reader (contracts/views.md section 5).
+   */
   function appendCard(node) {
     ui.transcript.appendChild(node);
     scrollToEnd();
@@ -540,6 +554,18 @@
 
   function scrollToEnd() {
     ui.transcript.scrollTop = ui.transcript.scrollHeight;
+  }
+
+  /**
+   * A failure, in both views (contracts/views.md section 5): the card in Results, where the
+   * engineer acts on it, and one line in the Transcript naming its class and its message, where
+   * the chronology keeps it. Every error the page shows comes through here - an `error` event, a
+   * refused start or preparation, a refused follow-up or Stop.
+   */
+  function showError(error) {
+    var body = error || {};
+    ui.errors.appendChild(render.errorCard(body));
+    appendCard(render.textBlock('error', String(body.error_class || 'Error') + ': ' + String(body.message || '')));
   }
 
   /** The assistant's text, streamed. One block per turn, filled in delta by delta. */
@@ -568,8 +594,56 @@
     state.textBlock = null;
     scrollToEnd();
     if (state.followUpPending) {
-      state.followUpPending = false;
-      completed.parentNode.scrollIntoView({ block: 'nearest' });
+      answerFollowUp(text || '');
+    }
+  }
+
+  // ---- follow-ups pinned in Results (FR-019) --------------------------------------------------
+
+  /** This chat's pins, made on first use. */
+  function pinsOf(chatId) {
+    var key = String(chatId || '');
+    if (!state.pinned[key]) {
+      state.pinned[key] = [];
+    }
+    return state.pinned[key];
+  }
+
+  /**
+   * The pinned answers of the chat on screen, rebuilt from page memory - so a chat shown again
+   * shows its pins again (contracts/views.md section 4).
+   */
+  function renderAnswers() {
+    render.clear(ui.answers);
+    var pins = state.chatId ? pinsOf(state.chatId) : [];
+    for (var index = 0; index < pins.length; index++) {
+      ui.answers.appendChild(render.pinnedAnswer(pins[index]));
+    }
+  }
+
+  /**
+   * The answer to the follow-up that is waiting: into its pin, which is then brought into view
+   * inside Results. The view is not changed - the answer comes to the engineer, not the other
+   * way round.
+   */
+  function answerFollowUp(text) {
+    state.followUpPending = false;
+    var pins = pinsOf(state.chatId);
+    if (!pins.length) {
+      return;
+    }
+    pins[pins.length - 1].answer = text;
+    renderAnswers();
+    var last = ui.answers.lastChild;
+    if (last) {
+      last.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  /** A follow-up turn that ended without a `text.done` says so in its pin, and why. */
+  function unansweredFollowUp(reason) {
+    if (state.followUpPending) {
+      answerFollowUp('No answer: the turn ended (' + reason + ').');
     }
   }
 
@@ -609,6 +683,11 @@
     entry.body = merged;
   }
 
+  /**
+   * A finding: its card into Results' list (feature 009 User Story 5), and a one-line marker
+   * into the Transcript where it was recorded. Results is not scrolled: a card arriving never
+   * moves what the engineer is reading.
+   */
   function showFinding(body) {
     var existing = state.findings[body.id];
     var card = render.findingCard(body);
@@ -616,9 +695,11 @@
       // A re-run replaces its verdict rather than showing two (data-model, resume semantics).
       existing.card.parentNode.replaceChild(card, existing.card);
     } else {
-      appendCard(card);
+      ui.findings.appendChild(card);
+      ui.findingsHead.hidden = false;
     }
     state.findings[body.id] = { body: body, card: card };
+    appendCard(render.findingMarker(body));
   }
 
   function showEvidence(body) {
@@ -686,16 +767,15 @@
     renderTranscriptHead();
   }
 
-  // ---- the transcript's header (the fold) ----------------------------------------------------
+  // ---- the Transcript's head, and the two views ----------------------------------------------
 
   /**
-   * What the folded transcript says about itself: how many tool calls have finished, how many
-   * model round trips there have been, and - while one is in flight - which tool is running.
+   * What the Transcript's head says about it: how many tool calls have finished, how many model
+   * round trips there have been, and - while one is in flight - which tool is running.
    *
-   * The count is the whole point of the fold. A transcript folded to nothing would be a
-   * transcript an engineer could not tell from an empty one, and "a hung review looks exactly
-   * like a finished one" is the complaint this page already has on record
-   * (docs/pane-findings-2026-09-18.md).
+   * "A hung review looks exactly like a finished one" is the complaint this page already has on
+   * record (docs/pane-findings-2026-09-18.md), and these counts are the answer to it. They are
+   * transcript vocabulary, so they live in the Transcript's head and nowhere in Results (FR-018).
    */
   function renderTranscriptHead() {
     var tools = state.toolsFinished;
@@ -707,23 +787,50 @@
       counted += DOT + state.runningTool;
     }
 
-    render.clear(ui.transcriptToggle);
-    ui.transcriptToggle.appendChild(render.el('span', 'eyebrow', 'Transcript'));
-    ui.transcriptToggle.appendChild(render.el('span', 'fold-count', counted));
+    ui.transcriptCounts.textContent = counted;
   }
 
   /**
-   * Folds or unfolds the transcript. A class rather than the `hidden` property, because the
-   * findings, the evidence requests and the error cards stay on screen inside a folded
-   * transcript - what folds is the model's prose and its tool calls.
+   * Results or Transcript (contracts/views.md section 1): one class on the body, `aria-pressed`
+   * on the chosen button, and the other view not displayed. Choosing the Transcript brings it to
+   * its end, where its newest record is.
    */
-  function foldTranscript(folded) {
-    state.transcriptFolded = folded;
-    ui.transcript.className = folded ? 'transcript folded' : 'transcript';
-    ui.transcriptToggle.setAttribute('aria-expanded', folded ? 'false' : 'true');
-    if (!folded) {
+  function setView(view) {
+    state.view = view === 'transcript' ? 'transcript' : 'results';
+    var transcript = state.view === 'transcript';
+    document.body.classList.toggle('view-transcript', transcript);
+    document.body.classList.toggle('view-results', !transcript);
+    ui.viewTranscript.setAttribute('aria-pressed', transcript ? 'true' : 'false');
+    ui.viewResults.setAttribute('aria-pressed', transcript ? 'false' : 'true');
+    if (transcript) {
       scrollToEnd();
     }
+  }
+
+  /**
+   * Where the review stands, in one line of page words at the top of Results (contracts/views.md
+   * section 3), read from page state alone: reconnecting, running, waiting for the engineer's
+   * answers, or finished - and nothing at all when no chat is shown.
+   */
+  function renderResultsState() {
+    if (!ui.resultsState) {
+      return;
+    }
+    var questions = state.summary ? state.summary.questions : null;
+    var sentence = '';
+    if (!state.chatId) {
+      sentence = '';
+    } else if (state.reconnectTimer !== null) {
+      sentence = 'Reconnecting to the review.';
+    } else if (state.turnRunning) {
+      sentence = 'The review is running.';
+    } else if (questions && questions.count > 0) {
+      sentence = 'Waiting for your answers.';
+    } else {
+      sentence = 'The review has finished.';
+    }
+    ui.resultsState.textContent = sentence;
+    ui.resultsState.hidden = !sentence;
   }
 
   function endTurn(body) {
@@ -731,6 +838,7 @@
     state.textBlock = null;
     state.runningTool = '';
     renderTranscriptHead();
+    unansweredFollowUp(body.reason || 'ended');
     if (body.reason && body.reason !== 'end') {
       appendCard(render.textBlock('system', 'The turn ended: ' + body.reason + '.'));
     }
@@ -794,6 +902,7 @@
         renderQuestions();
         groupModellingPractice(state.summary && state.summary.modelling_practice);
         renderContacts();
+        renderResultsState();
       },
       function () {
         // Nothing new: the panel stays as it is, which for a review that has just ended is
@@ -839,7 +948,7 @@
     }
 
     var members = [];
-    var cards = ui.transcript.querySelectorAll('.card.finding');
+    var cards = ui.findings.querySelectorAll('.card.finding');
     for (var card = 0; card < cards.length; card++) {
       if (named[cards[card].getAttribute('data-finding-id')] === true) {
         members.push(cards[card]);
@@ -873,7 +982,7 @@
 
   /** Every group back to loose cards, in their order, where the group stood. */
   function ungroupFindings() {
-    var groups = ui.transcript.querySelectorAll('.finding-group');
+    var groups = ui.findings.querySelectorAll('.finding-group');
     for (var index = 0; index < groups.length; index++) {
       var group = groups[index];
       var cards = group.querySelectorAll('.card.finding');
@@ -902,7 +1011,7 @@
     // an explanation, a verdict, or an order from the finding on the page. On the card it is
     // the first line inside the fold (U10): the headline stays one line, and the sentence that
     // explains the finding reads before the evidence it explains.
-    var previous = ui.transcript.querySelectorAll('.finding-explanation');
+    var previous = ui.findings.querySelectorAll('.finding-explanation');
     for (var index = 0; index < previous.length; index++) {
       previous[index].parentNode.removeChild(previous[index]);
     }
@@ -968,9 +1077,7 @@
       state.startPending = false;
       renderStartReview();
       if (state.preparationEpoch === epoch) {
-        appendCard(render.errorCard({
-          error_class: error.errorClass, message: error.message, retryable: error.retryable
-        }));
+        showError(errorBody(error));
       }
     });
   }
@@ -1006,14 +1113,11 @@
       renderNotExamined();
       renderSession();
       renderBinding();
+      renderAnswers();
       setTurnRunning(true);
       openStream();
     }).catch(function (error) {
-      appendCard(render.errorCard({
-        error_class: error.errorClass,
-        message: error.message,
-        retryable: error.retryable
-      }));
+      showError(errorBody(error));
     }).then(function () {
       state.startPending = false;
       renderStartReview();
@@ -1092,6 +1196,7 @@
 
     renderSession();
     renderStartReview();
+    renderResultsState();
   }
 
   /** The one line a hidden review leaves: whose review it is, and what to press instead. */
@@ -1104,6 +1209,10 @@
 
   function resetTranscript() {
     render.clear(ui.transcript);
+    render.clear(ui.findings);
+    ui.findingsHead.hidden = true;
+    render.clear(ui.errors);
+    render.clear(ui.answers);
     render.clear(ui.coverage);
     ui.coverage.hidden = true;
     render.clear(ui.attention);
@@ -1145,8 +1254,15 @@
     state.turnRunning = running;
     renderStartReview();
     ui.stop.disabled = !running || !state.chatId;
+    renderResultsState();
   }
 
+  /**
+   * A follow-up: pinned in Results at once, waiting for its answer, and written into the
+   * Transcript as the engineer's prose (FR-019, contracts/views.md section 4). The view is left
+   * alone - until feature 009 this unfolded the whole transcript so the answer would not be
+   * hidden behind tool chrome; the pin is where the answer lands now.
+   */
   function sendFollowUp() {
     var text = ui.followupText.value.trim();
     if (!text || !state.chatId || state.turnRunning || state.startPending || state.preparation
@@ -1154,11 +1270,9 @@
       return;
     }
 
-    // Follow-up prose is useful output, not part of the collapsed tool trace. Open the
-    // transcript before posting so both the question and the answer are visible even when the
-    // engineer never opened Transcript manually.
-    foldTranscript(false);
     state.followUpPending = true;
+    pinsOf(state.chatId).push({ question: text, answer: null });
+    renderAnswers();
     setTurnRunning(true);
     appendCard(render.textBlock('engineer', text));
     ui.followupText.value = '';
@@ -1169,14 +1283,15 @@
         openStream();
       }
     }).catch(function (error) {
-      state.followUpPending = false;
       setTurnRunning(false);
-      appendCard(render.errorCard({
-        error_class: error.errorClass,
-        message: error.message,
-        retryable: error.retryable
-      }));
+      unansweredFollowUp('refused');
+      showError(errorBody(error));
     });
+  }
+
+  /** The `{error_class, message, retryable}` an error card is built from, for an error the page caught. */
+  function errorBody(error) {
+    return { error_class: error.errorClass, message: error.message, retryable: error.retryable };
   }
 
   /** FR-030: a running turn is interruptible from the pane. */
@@ -1189,22 +1304,20 @@
       showStreamState('Stop requested; the turn ends at the next tool boundary.');
     }).catch(function (error) {
       ui.stop.disabled = !state.turnRunning;
-      appendCard(render.errorCard({
-        error_class: error.errorClass,
-        message: error.message,
-        retryable: error.retryable
-      }));
+      showError(errorBody(error));
     });
   }
 
   // ---- card actions ---------------------------------------------------------------------------
 
   /**
-   * One listener for the whole transcript. `render.js` declares what a button does with
-   * `data-action` and this decides what that means, so no card carries a handler of its own and
-   * a card rebuilt after an update keeps working.
+   * One listener for every card in Results - the finding cards and the error cards. `render.js`
+   * declares what a button does with `data-action` and this decides what that means, so no card
+   * carries a handler of its own and a card rebuilt after an update keeps working. (Until feature
+   * 009 the cards lived in the transcript and this listened there; the Transcript's records carry
+   * no button now.)
    */
-  function onTranscriptClick(event) {
+  function onCardClick(event) {
     var target = event.target;
     if (!target || !target.getAttribute) {
       return;
@@ -1954,7 +2067,15 @@
     ui.preparation = document.getElementById('review-preparation');
     ui.preparationSummary = document.getElementById('preparation-summary');
     ui.preparationInstances = document.getElementById('preparation-instances');
-    ui.transcriptToggle = document.getElementById('transcript-toggle');
+    ui.viewResults = document.getElementById('view-results');
+    ui.viewTranscript = document.getElementById('view-transcript');
+    ui.results = document.getElementById('results');
+    ui.resultsState = document.getElementById('results-state');
+    ui.findingsHead = document.getElementById('findings-head');
+    ui.findings = document.getElementById('findings');
+    ui.errors = document.getElementById('errors');
+    ui.answers = document.getElementById('answers');
+    ui.transcriptCounts = document.getElementById('transcript-counts');
     ui.collapseFindings = document.getElementById('collapse-findings');
     ui.transcript = document.getElementById('transcript');
     ui.coverage = document.getElementById('coverage-panel');
@@ -2014,19 +2135,22 @@
       event.preventDefault();
       sendFollowUp();
     });
-    ui.transcript.addEventListener('click', onTranscriptClick);
-    ui.transcriptToggle.addEventListener('click', function () {
-      foldTranscript(!state.transcriptFolded);
+    ui.results.addEventListener('click', onCardClick);
+    ui.viewResults.addEventListener('click', function () {
+      setView('results');
+    });
+    ui.viewTranscript.addEventListener('click', function () {
+      setView('transcript');
     });
     ui.collapseFindings.addEventListener('click', collapseFindings);
     ui.attention.addEventListener('click', onAttentionClick);
     ui.questions.addEventListener('click', onQuestionsClick);
     ui.questions.addEventListener('input', onQuestionsInput);
 
-    // The header states its counts before a single event has arrived, so a pane that has just
-    // opened says "0 tool calls" rather than showing a control with no label on it.
+    // The head states its counts before a single event has arrived, so a pane that has just
+    // opened says "0 tool calls" rather than a head with nothing in it.
     renderTranscriptHead();
-    foldTranscript(state.transcriptFolded);
+    setView(state.view);
 
     if (bridge) {
       bridge.addEventListener('message', onHostMessage);

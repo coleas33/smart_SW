@@ -152,7 +152,8 @@ public sealed class ReviewPageDocumentBindingTests
     /// <summary>
     /// Clear review empties the pane without opening another document and without spending a
     /// token: the transcript, Start here, the warning and the coverage go, the chat and its run
-    /// folder are forgotten, and every control that acted on them is disabled.
+    /// folder are forgotten, and every control that acted on them is disabled. Since feature 009
+    /// the findings are in Results' own list, so "the transcript" is both of them.
     /// </summary>
     [Fact]
     public void ClearReviewEmptiesThePaneAndForgetsTheChat()
@@ -541,9 +542,14 @@ public sealed class ReviewPageDocumentBindingTests
 
   try {
     var line = byId('stale-review');
-    var cards = document.querySelectorAll('#transcript .card.finding');
+    // The findings live in Results and the evidence record in the Transcript since feature 009
+    // (User Story 5): the record is read in the Transcript view, which is where it is seen.
+    var cards = document.querySelectorAll('#findings .card.finding');
     var shown = 0;
     for (var i = 0; i < cards.length; i++) { if (rendered(cards[i])) { shown++; } }
+    byId('view-transcript').click();
+    var evidence = rendered(document.querySelector('#transcript .card.evidence'));
+    byId('view-results').click();
 
     return JSON.stringify({
       ok: true,
@@ -554,7 +560,7 @@ public sealed class ReviewPageDocumentBindingTests
       attention: rendered(byId('attention-panel')),
       notExamined: rendered(byId('not-examined')),
       coverage: rendered(byId('coverage-panel')),
-      evidence: rendered(document.querySelector('#transcript .card.evidence')),
+      evidence: evidence,
       findingCards: cards.length,
       renderedFindings: shown,
       reviewDisabled: disabled('start-review'),
@@ -564,7 +570,7 @@ public sealed class ReviewPageDocumentBindingTests
       followupDisabled: disabled('followup-text') && disabled('followup-send'),
       clearDisabled: disabled('clear-review'),
       runDir: byId('run-dir').textContent,
-      transcriptChildren: byId('transcript').children.length,
+      transcriptChildren: byId('transcript').children.length + byId('findings').children.length,
       attentionChildren: byId('attention-panel').children.length
     });
   } catch (error) {

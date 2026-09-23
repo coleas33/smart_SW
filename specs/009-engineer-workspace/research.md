@@ -621,6 +621,18 @@ recorded here before the task closes.
 and today's per-card scroll forced a layout (R2.12), which US5 removes; whether 1,000 cards then fit
 the budget is a measurement, not a guess.
 
+**Measured (T049, 2026-09-23, development machine, offscreen WebView2 at 420 by 800)**: 1,000
+`finding` events and a 1,000-row ranking, posted as one burst through the live stream and the
+ranking route, were rendered into Results - 1,000 cards in `#findings`, 995 lines behind "Show
+all" - in 162 to 417 ms over nine runs (`ReviewPageScaleTests`), an order of magnitude inside the
+3 s bound. **No paging**: `#findings` renders every card in the supplied order and "Show 100
+more" is not built. "The first card in view" is read as the first card of Results - Start
+here's first row - on screen with Results at its top, and the first finding's card rendered (not
+paged away) below it: at a docked pane's size Start here's five cards fill the first screen, so
+no finding card can be above the fold and a test that demanded one would be a test of the pane's
+height. The bound is driven through the live stream rather than a snapshot because the snapshot
+render is US6's (T057), which reuses the same renderers.
+
 #### R2.26 The tests that go red by design, by story
 
 | Story | Tests | Why |

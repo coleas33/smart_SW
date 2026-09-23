@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="../../shared/tokens.css">
 <link rel="stylesheet" href="app.css">
 </head>
-<body>
+<body class="view-results">
 <!--
   The Review tab. Served by the host itself on https://swreview.invalid, so the CSP above is
   what the page actually runs under: no inline script, no inline style, no remote anything,
@@ -98,6 +98,17 @@
   </div>
 </section>
 
+<!--
+  Results or Transcript (feature 009 User Story 5, contracts/views.md section 1): two buttons, and
+  whichever is pressed owns the pane - a class on the body, `view-results` on every load. Results
+  answers "what is wrong"; Transcript answers "how the reviewer got there". Neither label carries a
+  count: the counts are the Transcript's own business.
+-->
+<nav id="view-switch" class="view-switch" aria-label="Review view">
+  <button type="button" id="view-results" aria-pressed="true">Results</button>
+  <button type="button" id="view-transcript" aria-pressed="false">Transcript</button>
+</nav>
+
 <section id="session" class="session">
   <div class="row">
     <button type="button" id="start-review" class="primary" disabled>Review</button>
@@ -107,22 +118,6 @@
     <button type="button" id="open-folder" disabled>Open run folder</button>
     <button type="button" id="open-log">View log</button>
   </div>
-  <!--
-    One meta line rather than three stacked grey sentences. The run folder, the stream state and
-    the running cost said the same kind of thing in three identical surfaces, which is how the
-    pane came to show four simultaneous status lines that were all false
-    (docs/pane-findings-2026-09-18.md). Their ids and their wording are unchanged - only the
-    surface is one.
-
-    The usage line is what this review has cost so far, summed in the page from the `usage`
-    events on the stream (feature 005 T016a). It moves while the turn is still running, which is
-    why it is here and not in the report.
-  -->
-  <div class="meta">
-    <span id="run-dir" class="mono"></span>
-    <span id="stream-state" role="status"></span>
-    <span id="usage-line" role="status"></span>
-  </div>
 </section>
 
 <!--
@@ -131,6 +126,29 @@
   class on the body and writes this line; it is hidden while the two documents agree.
 -->
 <p id="stale-review" class="stale-review" role="status" hidden></p>
+
+<section id="review-preparation" class="panel" aria-labelledby="preparation-heading" hidden>
+  <h2 id="preparation-heading">Before this review</h2>
+  <p id="preparation-summary"></p>
+  <ul id="preparation-instances"></ul>
+  <p class="note">Resolve the components you need in SOLIDWORKS, then check again. Continuing reviews the available evidence and records what could not be examined.</p>
+  <div class="row">
+    <button type="button" id="preparation-check">Check again</button>
+    <button type="button" id="preparation-continue">Review available evidence</button>
+    <button type="button" id="preparation-cancel">Cancel</button>
+  </div>
+</section>
+
+<!--
+  Results: what is wrong, in the order an engineer reads it - one line of where the review stands,
+  the summary, the questions, the parts not loaded, Start here, the findings (with the
+  modelling-practice group and the contacts after them), what was not reached, the error cards in
+  plain words, and the follow-up answers pinned under their questions. No tool call, no argument,
+  no token count (FR-018). It scrolls as one, and nothing arriving on the stream ever moves it.
+-->
+<section id="results" class="view results" aria-label="Results">
+
+<p id="results-state" class="results-state" role="status" hidden></p>
 
 <!--
   The review in ten seconds (feature 009 User Story 3): the headline, Decide / Fix / Verify, the
@@ -151,50 +169,30 @@
 -->
 <section id="questions" class="panel questions-panel" aria-label="Questions for you" hidden></section>
 
-<!--
-  What to start with: the rows the backend ranked, read from `GET /sessions/{chat_id}/attention`
-  when the session ends and pinned above the transcript, because a panel under a transcript that
-  has just grown by a whole review is a panel nobody scrolls to (contracts/attention.md
-  section 6). Hidden until there is something to show.
--->
 <!-- The extractor's coverage warning is a separate, wrapping surface so a long sentence is
      readable in the narrow pane instead of being squeezed into the header status badge. A div
      rather than a paragraph since feature 009: with the backend's names-only headline it holds
      a fold of the instances' ids beneath the headline, and a fold is not phrasing content. -->
 <div id="not-examined" class="not-examined" hidden></div>
 
-<section id="review-preparation" class="panel" aria-labelledby="preparation-heading" hidden>
-  <h2 id="preparation-heading">Before this review</h2>
-  <p id="preparation-summary"></p>
-  <ul id="preparation-instances"></ul>
-  <p class="note">Resolve the components you need in SOLIDWORKS, then check again. Continuing reviews the available evidence and records what could not be examined.</p>
-  <div class="row">
-    <button type="button" id="preparation-check">Check again</button>
-    <button type="button" id="preparation-continue">Review available evidence</button>
-    <button type="button" id="preparation-cancel">Cancel</button>
-  </div>
-</section>
-
+<!--
+  What to start with: the rows the backend ranked, read from `GET /sessions/{chat_id}/attention`
+  when the session ends and shown above the findings, because a panel under a list that has just
+  grown by a whole review is a panel nobody scrolls to (contracts/attention.md section 6). Hidden
+  until there is something to show.
+-->
 <section id="attention-panel" class="panel" hidden></section>
 
 <!--
-  The transcript's own header, and the only control that folds it. The transcript is tier three:
-  the tool calls and the model's prose are the record of how the review reached its findings,
-  not the findings themselves, so they fold to a count until an engineer wants them. The fold is
-  a class on #transcript rather than the `hidden` property because the findings, the evidence
-  requests and the error cards stay visible inside it - folded, the transcript reads as the
-  findings ledger. app.js writes the button's label and its counts.
-
-  Collapse all sits beside it (U10): it shuts every finding's own fold, so the ledger goes back
-  to one headline per finding however many of them an engineer opened.
+  The findings, one headline card each, in the order they arrived; a re-run replaces its card in
+  place. Collapse all sits over them (U10): it shuts every finding's own fold, so the list goes
+  back to one headline per finding however many of them an engineer opened.
 -->
-<div class="transcript-head">
-  <button type="button" id="transcript-toggle" class="fold-toggle"
-          aria-controls="transcript" aria-expanded="false"></button>
+<div id="findings-head" class="findings-head" hidden>
+  <h3 class="eyebrow">Findings</h3>
   <button type="button" id="collapse-findings" class="link">Collapse all</button>
 </div>
-
-<main id="transcript" class="transcript folded" aria-live="polite"></main>
+<div id="findings" class="findings"></div>
 
 <!--
   The size-for-size contacts (feature 009 FR-011, the owner's decision of 2026-09-23): one shut
@@ -205,6 +203,37 @@
 <section id="contacts" class="panel" aria-label="Size-for-size contacts" hidden></section>
 
 <section id="coverage-panel" class="panel" hidden></section>
+
+<!-- What stopped, in plain words, with what to do next. The class is the Transcript's. -->
+<div id="errors" class="errors"></div>
+
+<!-- Follow-up answers, pinned under their questions, so nobody has to switch to read one (FR-019). -->
+<div id="answers" class="answers"></div>
+
+</section>
+
+<!--
+  Transcript: how the reviewer got there, in the order it happened - the reviewer's prose and the
+  engineer's, every tool call with its detail, the evidence records, a one-line marker where each
+  finding was recorded, and error lines that name their class. Its head counts the calls and the
+  rounds and names the running tool, and carries the run folder, the stream state and the usage
+  line (feature 005 T016a) - the developer vocabulary lives here, out of Results. Only this view
+  scrolls itself as it grows.
+-->
+<section id="transcript-view" class="view transcript-view" aria-label="Transcript">
+  <div id="transcript-head" class="transcript-head">
+    <div class="transcript-title">
+      <span class="eyebrow">Transcript</span>
+      <span id="transcript-counts" class="fold-count"></span>
+    </div>
+    <div class="meta">
+      <span id="run-dir" class="mono"></span>
+      <span id="stream-state" role="status"></span>
+      <span id="usage-line" role="status"></span>
+    </div>
+  </div>
+  <main id="transcript" class="transcript" aria-live="polite"></main>
+</section>
 
 <!--
   A form so Enter sends the follow-up. It never submits: the handler cancels it, and the CSP's

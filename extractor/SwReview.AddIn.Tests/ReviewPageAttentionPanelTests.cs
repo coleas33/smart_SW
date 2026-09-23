@@ -135,15 +135,25 @@ public sealed class ReviewPageAttentionPanelTests
     }
 
     /// <summary>
-    /// Pinned above the transcript, which is where it has to be: a panel under a transcript
-    /// that has just grown by a whole review is a panel nobody scrolls to (FR-023).
+    /// In Results, after the summary and the questions and before the findings, which is where
+    /// it has to be: a panel under a list that has just grown by a whole review is a panel
+    /// nobody scrolls to (FR-023).
+    ///
+    /// Until feature 009 this pinned the panel above the one container that interleaved the
+    /// findings with the transcript (`ThePanelIsAboveTheTranscript`). Results and Transcript are
+    /// two views now (User Story 5, contracts/views.md section 2), and Start here belongs to
+    /// Results: after the summary and the questions (User Stories 3 and 4), before the findings.
     /// </summary>
     [Fact]
-    public void ThePanelIsAboveTheTranscript()
+    public void ThePanelIsInResultsAfterTheSummaryAndTheQuestions()
     {
-        Assert.True(
-            Scripted.Value.FirstEnd.GetProperty("aboveTranscript").GetBoolean(),
-            "#attention-panel must come before #transcript in the document.");
+        JsonElement panel = Scripted.Value.FirstEnd;
+
+        Assert.True(panel.GetProperty("inResults").GetBoolean(), "#attention-panel is not in #results.");
+        Assert.True(panel.GetProperty("afterSummary").GetBoolean(), "#attention-panel must come after #summary.");
+        Assert.True(panel.GetProperty("afterQuestions").GetBoolean(), "#attention-panel must come after #questions.");
+        Assert.True(panel.GetProperty("beforeFindings").GetBoolean(), "#attention-panel must come before #findings.");
+        Assert.False(panel.GetProperty("inTranscript").GetBoolean(), "#attention-panel is in the Transcript view.");
     }
 
     /// <summary>
@@ -264,9 +274,13 @@ public sealed class ReviewPageAttentionPanelTests
             collapsed.GetProperty("labels").EnumerateArray().Select(label => label.GetString()),
             label => Assert.Equal("Details", label));
         Assert.Equal("Collapse all", collapsed.GetProperty("buttonText").GetString());
+
+        // Until feature 009 Collapse all sat in the transcript's head beside the fold's toggle.
+        // The toggle is gone - Results and Transcript are two views - and Collapse all sits in
+        // Results over the findings it shuts (contracts/views.md section 2).
         Assert.True(
-            collapsed.GetProperty("besideTheToggle").GetBoolean(),
-            "Collapse all is not in the transcript's head beside its toggle.");
+            collapsed.GetProperty("overTheFindings").GetBoolean(),
+            "Collapse all is not in Results over the findings.");
     }
 
     /// <summary>
@@ -631,7 +645,13 @@ public sealed class ReviewPageAttentionPanelTests
       lists: panel.querySelectorAll('ol').length,
       injected: panel.querySelectorAll('img,script,iframe,svg,object,embed,link,style').length,
       handlers: handlers,
-      aboveTranscript: !!(panel.compareDocumentPosition(transcript)
+      inResults: document.getElementById('results').contains(panel),
+      inTranscript: document.getElementById('transcript-view').contains(panel),
+      afterSummary: !!(document.getElementById('summary').compareDocumentPosition(panel)
+        & Node.DOCUMENT_POSITION_FOLLOWING),
+      afterQuestions: !!(document.getElementById('questions').compareDocumentPosition(panel)
+        & Node.DOCUMENT_POSITION_FOLLOWING),
+      beforeFindings: !!(panel.compareDocumentPosition(document.getElementById('findings'))
         & Node.DOCUMENT_POSITION_FOLLOWING),
       transcript: transcript.textContent,
       streamState: document.getElementById('stream-state').textContent,
@@ -665,20 +685,21 @@ public sealed class ReviewPageAttentionPanelTests
     if (!missing) { return JSON.stringify({ ok: false, error: 'no ranked row for @@MISSING@@' }); }
 
     var card = document.querySelector(
-      '#transcript .card.finding[data-finding-id=""@@FOUND@@""]');
+      '#findings .card.finding[data-finding-id=""@@FOUND@@""]');
     if (!card) { return JSON.stringify({ ok: false, error: 'no finding card for @@FOUND@@' }); }
-    if (document.querySelector('#transcript .card.finding[data-finding-id=""@@MISSING@@""]')) {
-      return JSON.stringify({ ok: false, error: '@@MISSING@@ was in the transcript after all' });
+    if (document.querySelector('#findings .card.finding[data-finding-id=""@@MISSING@@""]')) {
+      return JSON.stringify({ ok: false, error: '@@MISSING@@ was in the findings after all' });
     }
 
-    var transcript = document.getElementById('transcript');
+    // Results is the scroller the findings live in since feature 009 (User Story 5).
+    var results = document.getElementById('results');
     var headInView = function () {
       var head = card.querySelector('.card-head').getBoundingClientRect();
-      var view = transcript.getBoundingClientRect();
+      var view = results.getBoundingClientRect();
       return head.top >= view.top && head.bottom <= view.bottom;
     };
 
-    transcript.scrollTop = 0;
+    results.scrollTop = 0;
     var headInViewBefore = headInView();
     found.click();
     var headInViewAfter = headInView();
@@ -694,7 +715,7 @@ public sealed class ReviewPageAttentionPanelTests
       afterHidden: card.querySelector('.details').hidden,
       toggleLabel: toggle ? toggle.textContent : '',
       flashed: /(^|\s)flash(\s|$)/.test(card.className),
-      flashedCards: document.querySelectorAll('#transcript .card.flash').length,
+      flashedCards: document.querySelectorAll('#findings .card.flash').length,
       strayRowSurvived: strayRowSurvived
     });
   } catch (error) {
@@ -716,17 +737,17 @@ public sealed class ReviewPageAttentionPanelTests
 
     var line = document.querySelector('#attention-panel .attention-index [data-finding-id=""@@FOUND@@""]');
     if (!line) { return JSON.stringify({ ok: false, error: 'no line for @@FOUND@@' }); }
-    var card = document.querySelector('#transcript .card.finding[data-finding-id=""@@FOUND@@""]');
+    var card = document.querySelector('#findings .card.finding[data-finding-id=""@@FOUND@@""]');
     if (!card) { return JSON.stringify({ ok: false, error: 'no finding card for @@FOUND@@' }); }
 
-    var transcript = document.getElementById('transcript');
+    var results = document.getElementById('results');
     var headInView = function () {
       var head = card.querySelector('.card-head').getBoundingClientRect();
-      var view = transcript.getBoundingClientRect();
+      var view = results.getBoundingClientRect();
       return head.top >= view.top && head.bottom <= view.bottom;
     };
 
-    transcript.scrollTop = 0;
+    results.scrollTop = 0;
     var headInViewBefore = headInView();
     line.click();
 
@@ -750,13 +771,13 @@ public sealed class ReviewPageAttentionPanelTests
     private const string CollapseAll = @"
 (function () {
   try {
-    var cards = document.querySelectorAll('#transcript .card.finding');
+    var cards = document.querySelectorAll('#findings .card.finding');
     if (cards.length < 3) { return JSON.stringify({ ok: false, error: 'too few finding cards' }); }
     cards[0].querySelector('[data-action=""expand""]').click();
     cards[cards.length - 1].querySelector('[data-action=""expand""]').click();
 
     var open = function () {
-      return document.querySelectorAll('#transcript .card.finding .details:not([hidden])').length;
+      return document.querySelectorAll('#findings .card.finding .details:not([hidden])').length;
     };
     var openBefore = open();
 
@@ -764,10 +785,10 @@ public sealed class ReviewPageAttentionPanelTests
     button.click();
 
     var labels = [];
-    var toggles = document.querySelectorAll('#transcript .card.finding [data-action=""expand""]');
+    var toggles = document.querySelectorAll('#findings .card.finding [data-action=""expand""]');
     for (var i = 0; i < toggles.length; i++) { labels.push(toggles[i].textContent); }
 
-    var head = document.querySelector('.transcript-head');
+    var findings = document.getElementById('findings');
     return JSON.stringify({
       ok: true,
       openBefore: openBefore,
@@ -775,8 +796,8 @@ public sealed class ReviewPageAttentionPanelTests
       cards: cards.length,
       labels: labels,
       buttonText: button.textContent,
-      besideTheToggle: !!(head && head.contains(button)
-        && head.contains(document.getElementById('transcript-toggle')))
+      overTheFindings: document.getElementById('results').contains(button)
+        && !!(button.compareDocumentPosition(findings) & Node.DOCUMENT_POSITION_FOLLOWING)
     });
   } catch (error) {
     return JSON.stringify({ ok: false, error: '' + ((error && error.message) || error) });
