@@ -427,7 +427,7 @@ order and returning the first that binds, with every other source that also carr
 
 | # | Source | Binds a subject when | Available |
 |---|---|---|---|
-| 1 | drawing callout (feature 011) | 011's native dimension or hole callout references one of the subject's faces | after 011; until then listed as "not available (feature 011)" |
+| 1 | drawing callout (feature 011) | 011's native dimension or hole callout references one of the subject's faces | after 011; until then listed as "not available (feature 011)". *Note 2026-09-23 (feature 011): filled as `drawing_answer(package, subject) -> DrawingAnswer` - limits, or a written precision and unit handed to source 5 - per `specs/011-drawing-context/contracts/drawing-source.md` section 4, behind `DRAWING_BINDING_VALIDATED`; nothing else in this precedence changes* |
 | 2 | model annotation (DimXpert or MBD) | an attached face's persist ref equals one of the subject's face persist refs | after the US8 reads, seat-validated |
 | 3 | model dimension | same document, a diameter or radius dimension, its nominal equal to the subject's size within 1e-6 mm, and the only such dimension in the document | after the US8 reads, seat-validated |
 | 4 | Hole Wizard class | the subject's hole carries a fit class that names an ISO 286 tolerance class in `checks/iso286.yaml` | after the US8 reads, seat-validated |

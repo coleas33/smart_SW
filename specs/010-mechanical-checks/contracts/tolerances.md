@@ -132,3 +132,9 @@ Source 1 is a function slot, `drawing_tolerance(package, subject) -> Dimension |
 `None` with the reason "not available before feature 011" until 011 lands native drawing
 dimensions; 011 fills it and the stack-up and `refs.resolve_dimension` (for `check_fit` and
 `check_axial_stack`) read the same records under the same citation rules.
+
+**Note dated 2026-09-23 (feature 011).** Feature 011 fills source 1 as
+`drawing_answer(package, subject) -> DrawingAnswer` - limits, or a written precision and unit handed
+to the general source - per `specs/011-drawing-context/contracts/drawing-source.md` section 4,
+shipped behind `DRAWING_BINDING_VALIDATED` (false until 011's seat task T066). Nothing else in this
+feature's precedence, conflict or citation rules changes.
