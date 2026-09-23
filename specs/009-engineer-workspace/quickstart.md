@@ -105,8 +105,9 @@ cd ..\extractor
 dotnet test SwReview.sln -c Release --filter "FullyQualifiedName~ReviewPageDefaultViewScan|FullyQualifiedName~ReviewPageLabels|FullyQualifiedName~ReviewPageErrors|FullyQualifiedName~ErrorLabelsCoverTheHost|FullyQualifiedName~ReviewPageInjection"
 ```
 
-Expected: titles whole and named; the regenerated goldens differ from before in `title:` values
-only; the default view holds no named component id, no raw status token, no check id outside a fold
+Expected: titles whole and named (not yet: T061's title half, T062 and T065's fourth check are
+open, so titles are still cut at 80 characters and keep component ids); the regenerated goldens
+differ from before in `title:` values only; the default view holds no named component id, no raw status token, no check id outside a fold
 and no error class name (SC-003); every error says what to do next.
 
 ## Scenario 7 (US7): Model check

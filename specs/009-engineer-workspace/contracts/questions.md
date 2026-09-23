@@ -20,7 +20,7 @@ Checked in this order; each refusal is one `error_result` naming the argument an
 | # | Check | Refusal |
 |---|---|---|
 | 1 | every `entity_ids` entry is in the package (today's check) | "entity_ids not in this package: [...]" |
-| 2 | `question`, when given, is not blank and at most 140 characters | "question must be one short question of at most 140 characters (got N)" |
+| 2 | `question`, when given, is not blank and at most 140 characters | "question must be one short question of at most 140 characters, not blank (got N)" (*landed as*, T036: "not blank" added, since a blank question is refused by the same row) |
 | 3 | `options`, when given: at most 5, each not blank, at most 60 characters, no two equal | names the index or the repeated option |
 | 4 | `blocks`, when given, is a checklist item id | names the id and lists the valid ones |
 

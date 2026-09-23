@@ -23,7 +23,7 @@ moves; no event type is added.
   and bytes (`AttentionRecord.of` copies field by field).
 - **A finding's evidence.** `observed`, `component_ids`, inputs, calculations and statuses do not
   change. The title changes (whole first sentence, part names), and only the ten golden baselines
-  holding a cut title move, once.
+  holding a cut title move, once. *Not landed yet*: T062 is open (`plain-words.md` section 2).
 - **`report.md`.** No new section; its goldens hold apart from titles.
 - **`chat-events.schema.json`, `ir.schema.json`, `settings.schema.json`, `UserSettings.cs`.**
 - **Feature 008's code.** Its batch route is called as specified; this feature adds one field
