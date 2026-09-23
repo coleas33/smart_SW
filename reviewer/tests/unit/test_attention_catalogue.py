@@ -26,8 +26,9 @@ Five sources, which is every place a `Finding.check` value can come from:
    `CHECK_STACK`, `fastener_identity.CHECK_IDENTITY` and `tool_access.CHECK_HEAD_FIT`;
 4. `tools/session.py` `DRAWING_FINDING_CHECK` - the one id `record_drawing_finding`
    accepts, which is fixed rather than caller-supplied;
-5. nothing else: `build_finding` is the one finding constructor, and every caller of it
-   passes a `check` from one of the four sources above.
+5. feature 010's document rules, each a module constant: the three `mass.CHECK_*`;
+6. nothing else: `build_finding` is the one finding constructor, and every caller of it
+   passes a `check` from one of the five sources above.
 
 This test lands **after** the read-through (T022): the table it checks is one the owner
 has argued over folder by folder, not one a test invented.
@@ -42,6 +43,7 @@ from swreview.checks import (
     hole_alignment,
     interference,
     joint_alignment,
+    mass,
     stack,
     tool_access,
 )
@@ -78,9 +80,22 @@ NUMERIC_CHECKS: frozenset[str] = frozenset(
 )
 
 
+RULE_CHECKS: frozenset[str] = frozenset(
+    {
+        mass.CHECK_MATERIAL_ASSIGNED,
+        mass.CHECK_DENSITY,
+        mass.CHECK_ASSEMBLY_OVERRIDE,
+    }
+)
+"""Feature 010's document rules, each a module constant: the three `mass.` ids. None is a
+judgement family - a material either is assigned or is not."""
+
+
 def emittable() -> frozenset[str]:
     """Every `Finding.check` value this build can write, from the five sources."""
-    return frozenset({*RMS_RULES, *STANDARDS_RULES, *NUMERIC_CHECKS, DRAWING_FINDING_CHECK})
+    return frozenset(
+        {*RMS_RULES, *STANDARDS_RULES, *NUMERIC_CHECKS, *RULE_CHECKS, DRAWING_FINDING_CHECK}
+    )
 
 
 def test_the_five_sources_between_them_name_every_emittable_check() -> None:
@@ -90,8 +105,9 @@ def test_the_five_sources_between_them_name_every_emittable_check() -> None:
     assert len(RMS_RULES) == 34
     assert len(STANDARDS_RULES) == 16
     assert len(NUMERIC_CHECKS) == 13, "9 until feature 010 T036, 11 until T046, 12 until T060"
+    assert len(RULE_CHECKS) == 3, "feature 010's mass rules (T066)"
     assert DRAWING_FINDING_CHECK == "drawing.manufacturing_inputs"
-    assert len(emittable()) == 64, "the five sources share no id (60 before feature 010)"
+    assert len(emittable()) == 67, "the sources share no id (60 before feature 010)"
 
 
 def test_every_emittable_check_id_has_a_consequence_class() -> None:

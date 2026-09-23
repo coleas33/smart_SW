@@ -103,11 +103,32 @@ def test_the_file_header_records_how_the_owner_answer_was_read() -> None:
 def test_every_class_in_the_table_is_reachable_by_at_least_one_of_its_own_tokens(
     rules: EngagementRules,
 ) -> None:
-    for name, rule in rules.material_classes.items():
+    """Edited deliberately by feature 010 T062: the tokens moved to `material_classes.yaml`,
+    the one classifier for engagement and density; this table keeps a ratio per class name."""
+    for name in rules.material_classes:
         if name == rules.default_material_class:
             continue
-        assert rule.matches, f"{name} has no match tokens and can never be selected"
-        assert rules.for_material(rule.matches[0]).name == name
+        tokens = rules.classes.classes[name].matches
+        assert tokens, f"{name} has no match tokens and can never be selected"
+        assert rules.for_material(tokens[0]).name == name
+
+
+def test_a_class_with_no_engagement_row_has_no_rule(rules: EngagementRules) -> None:
+    """A class may be added to the classifier (brass, titanium) with no engagement rule; its
+    engagement then stays unresolved rather than borrowing a neighbour's ratio."""
+    from dataclasses import replace
+
+    trimmed = replace(
+        rules,
+        material_classes={
+            name: rule for name, rule in rules.material_classes.items() if name != "plastic"
+        },
+    )
+
+    rule = trimmed.for_material("Nylon 6/6")
+
+    assert (rule.name, rule.min_engagement_ratio) == ("plastic", None)
+    assert rule.source == "No engagement rule for material class plastic"
 
 
 def test_matching_is_case_insensitive(rules: EngagementRules) -> None:
@@ -135,37 +156,49 @@ def test_a_material_naming_two_classes_takes_the_first_listed(rules: EngagementR
 
 
 def test_load_rules_reads_an_explicit_path(tmp_path: Path) -> None:
+    """Edited deliberately by feature 010 T062: the rows are ratios by class name."""
     path = tmp_path / "rules.yaml"
     path.write_text(
         "version: 9\n"
-        "default_material_class: unknown\n"
         "material_classes:\n"
-        "  titanium:\n"
+        "  steel:\n"
         "    min_engagement_ratio: 1.25\n"
-        '    matches: ["ti-6al-4v"]\n'
-        '    source: "made up for this test"\n'
-        "  unknown:\n"
-        "    min_engagement_ratio: null\n"
-        "    matches: []\n"
-        '    source: "no rule"\n',
+        '    source: "made up for this test"\n',
         encoding="utf-8",
     )
 
     rules = load_rules(path)
 
     assert rules.version == 9
-    assert rules.for_material("Ti-6Al-4V").min_engagement_ratio == pytest.approx(1.25)
+    assert rules.for_material("AISI 1018 Steel").min_engagement_ratio == pytest.approx(1.25)
+    assert rules.for_material("6061-T6").min_engagement_ratio is None
 
 
-def test_a_table_without_its_default_class_is_rejected(tmp_path: Path) -> None:
+def test_a_row_for_a_class_the_classifier_lacks_is_rejected(tmp_path: Path) -> None:
+    """Edited deliberately by feature 010 T062 (was: a table without its default class): the
+    classes are `material_classes.yaml`'s, so a ratio for a class it does not know is a typo
+    that would silently never apply."""
     path = tmp_path / "rules.yaml"
     path.write_text(
         "version: 1\n"
-        "default_material_class: unknown\n"
         "material_classes:\n"
-        "  steel:\n"
+        "  titanium:\n"
         "    min_engagement_ratio: 1.0\n"
-        '    matches: ["steel"]\n'
+        '    source: "s"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="titanium"):
+        load_rules(path)
+
+
+def test_a_ratio_on_the_default_class_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "rules.yaml"
+    path.write_text(
+        "version: 1\n"
+        "material_classes:\n"
+        "  unknown:\n"
+        "    min_engagement_ratio: 1.0\n"
         '    source: "s"\n',
         encoding="utf-8",
     )

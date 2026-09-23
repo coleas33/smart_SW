@@ -1,6 +1,12 @@
 # Minimum usable thread engagement, expressed as a multiple of the nominal thread
-# diameter, by the material of the tapped part. The rule that applied is cited in every
+# diameter, by the material class of the tapped part. The rule that applied is cited in every
 # finding so an engineer can override it per project.
+#
+# Which class a material name belongs to is material_classes.yaml's to say (feature 010
+# research R2.16): one classifier serves engagement and the density checks, so the match
+# tokens moved there on 2026-09-23 and this file keeps one ratio per class name. A class with
+# no row here has no engagement rule, and the check stays unresolved for it; the default
+# class (unknown) must carry none.
 #
 # Source notes:
 #   steel        1.5 x d   owner decision 2026-09-23 (feature 010 research R2.14)
@@ -15,25 +21,19 @@
 # wrong one is visible in three places. Until 2026-09-23 steel was 1.0 x d (Machinery's
 # Handbook, length of engagement for steel into steel).
 version: 1
-default_material_class: unknown
 material_classes:
   steel:
     min_engagement_ratio: 1.5
-    matches: ["steel", "stainless", "aisi", "sae 10", "4140", "4340", "a36", "s355", "17-4"]
     source: "Owner decision 2026-09-23: at least 1.5 x d into steel and aluminium alike"
   cast_iron:
     min_engagement_ratio: 1.5
-    matches: ["cast iron", "gray iron", "ductile", "gg", "ggg", "astm a48"]
     source: "Common guidance for ferrous castings"
   aluminum:
     min_engagement_ratio: 1.5
-    matches: ["aluminum", "aluminium", "6061", "7075", "5052", "2024", "al "]
     source: "Owner decision 2026-09-23: at least 1.5 x d into steel and aluminium alike"
   plastic:
     min_engagement_ratio: 2.5
-    matches: ["abs", "nylon", "pa6", "pa66", "delrin", "acetal", "pom", "peek", "polycarbonate", "pc", "pla", "petg"]
     source: "Common guidance for thermoplastics without inserts"
   unknown:
     min_engagement_ratio: null
-    matches: []
     source: "No rule; material not recognized"

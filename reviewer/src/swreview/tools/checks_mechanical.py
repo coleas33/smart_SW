@@ -48,6 +48,7 @@ from swreview.checks.joints import (
     joint_label,
     pattern_group,
 )
+from swreview.checks.mass import DocumentResult, run_mass_checks
 from swreview.checks.result import CheckResult
 from swreview.checks.tool_access import recess_group, run_head_fit, sweep_head
 from swreview.report.session import CoverageBucket, CoverageItem, CoverageScope
@@ -62,6 +63,7 @@ __all__ = [
     "BodyMeshes",
     "JointAnalysis",
     "check_joints",
+    "check_mass_material",
     "joint_analysis",
     "record_joint_map",
 ]
@@ -332,9 +334,7 @@ def check_joints() -> ToolResult:
     )
     if refused is not None:
         return refused
-    for item in (*checks.skipped, *fasteners.skipped):
-        context.record_coverage("skipped", item)
-        written["skipped"] += 1
+    _record_coverage(context, written, "skipped", (*checks.skipped, *fasteners.skipped))
 
     findings = session.findings[findings_before:]
     return _summary(
@@ -351,6 +351,62 @@ def check_joints() -> ToolResult:
             "recognised_fasteners": len(analysis.recognised),
             "unplaced_fasteners": len(joint_map.unplaced),
         },
+    )
+
+
+def _record_documents(
+    context: ToolContext, results: Sequence[DocumentResult]
+) -> ToolResult | None:
+    """Record document-scope results, each bound to its instances or, for the root, to its
+    document; the error result if one is refused."""
+    for item in results:
+        recorded = record_result(
+            context,
+            item.result,
+            component_ids=list(item.component_ids),
+            document_ids=list(item.document_ids),
+            tool_result_ids=[context.current_step_id],
+        )
+        if "error" in recorded:
+            return recorded
+    return None
+
+
+def _record_coverage(
+    context: ToolContext,
+    written: Counter[CoverageBucket],
+    bucket: CoverageBucket,
+    items: Sequence[CoverageItem],
+) -> None:
+    for item in items:
+        context.record_coverage(bucket, item)
+        written[bucket] += 1
+
+
+def check_mass_material() -> ToolResult:
+    """Check every part has a material or a deliberate mass override, that its density fits
+    its material, and flag assembly mass overrides.
+
+    Notes:
+        Takes no argument. Parts that pass the material rule are counted; unread parts and
+        bodies are counted too, never assumed.
+    """
+    context = current_context()
+    session = context.require_session()
+    findings_before = len(session.findings)
+    checks = run_mass_checks(context.ir)
+    written: Counter[CoverageBucket] = Counter()
+    refused = _record_documents(context, checks.findings)
+    if refused is not None:
+        return refused
+    _record_coverage(context, written, "checked", checks.checked)
+    _record_coverage(context, written, "skipped", checks.skipped)
+    findings = session.findings[findings_before:]
+    return _summary(
+        findings=[finding.id for finding in findings],
+        statuses=Counter(finding.status for finding in findings),
+        written=written,
+        extra={"documents": checks.documents},
     )
 
 
