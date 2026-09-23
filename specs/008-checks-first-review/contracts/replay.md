@@ -121,6 +121,15 @@ pre-run's, or one no event bracket holds - is compared as a reproduced step's is
 changes no exit code. The human output names every lost and every added finding by check and
 subject.
 
+*Added by feature 010 (T095):* a recorded `interference.static` finding whose group key (read
+from its calculation's inputs) and configuration equal a contact the requested pass recorded
+is **reclassified as contact**, listed with its step, the group key and the contact's id, and
+never counted lost or not replayable: since feature 010 a touching group is a contact by design
+(010 `contracts/contacts.md` section 6). This is decided before the step's class, because the
+contact says what became of the finding even when its step was estimated. Each contact
+reclassifies one recorded finding, so the comparison stays a multiset, and a reclassified
+finding changes no exit code.
+
 ## 6. The regrouped estimate (from User Story 4)
 
 Printed beside the strict figure whenever a rule applies, with its assumption: "the model does
@@ -140,7 +149,8 @@ comparison kind; the two settings; one line per round (`turn`, `round`, `recorde
 `as recorded`, `requested`, and `estimated`/`lower bound`/`carried`/`stored`/`answered from
 checks` flags); the three totals and the difference; the count of estimated, lower-bound and
 carried rounds; the regrouped estimate with its assumption, when present; then the findings -
-recorded and replayed counts, every lost, added and not-replayable finding by check and subject.
+recorded and replayed counts, every lost, added and not-replayable finding by check and subject
+(and, from feature 010, the count of reclassified findings and each one with its contact).
 *Landed as (T023):* after the round counts, one line per call that was not `reproduced`
 (`step N tool: class - reason`), so every estimate and every change is named where it is
 priced; `settings.*.model_view` is `null` until User Story 3 and `regrouped` `null` until User
@@ -164,7 +174,9 @@ Story 4. Before User Story 3 the command takes `RUN_DIR`, `--lever`, `--standard
              "estimated_rounds": 0, "lower_bound_rounds": 0, "carried_rounds": 0},
   "regrouped": {"assumption": "…", "rules": ["R", "M"], "rounds": 0, "total": 0},
   "findings": {"recorded": 99, "replayed": 88, "lost": [], "added": [],
-               "not_replayable": [{"check": "…", "subject": "…", "step": 12, "reason": "…"}]}
+               "not_replayable": [{"check": "…", "subject": "…", "step": 12, "reason": "…"}],
+               "reclassified": [{"check": "interference.static", "subject": "…", "step": 15,
+                                 "group_key": "…", "contact_id": "C-001"}]}
 }
 ```
 
@@ -215,7 +227,7 @@ test says why it skipped that part when the file is absent).
 
 | Story | Acceptance on the fixtures |
 |---|---|
-| US1 | Pass A within 1% of the recorded input on every round of every fixture; the finding set exact; the big fixture: one estimated round (`bridge_interference`) and one carried round; its recorded total 12.4M within 1% (SC-001) |
+| US1 | Pass A within 1% of the recorded input on every round of every fixture; the finding set exact - since feature 010, recorded = replayed + reclassified, with 3, 2 and 0 touching groups reclassified as contacts on `big-assembly`, `small-assembly-a` and `small-assembly-b`; the big fixture: four estimated rounds - `bridge_interference`, and since feature 010 the three touching groups judged after it, whose contact results a replay cannot separate from the live call's effect - and one carried round; its recorded total 12.4M within 1% (SC-001) |
 | US2 | Checks first alone (requested efficiency `prerun_checks=True`, model view off; on the command line `--lever prerun_checks`, or `--no-pane-defaults --lever prerun_checks` once US3 has landed): no recorded finding lost on any fixture; on the big fixture the requested total below pass A's, every one of the 113 groups judged, one interference finding per group (SC-006 offline); the recorded RMS and assembly calls classed `answered_from_checks` |
 | US3 | `--pane-defaults` on the big fixture under 1,000,000 requested input tokens with no loss (SC-002); the session's findings identical with the model-view settings on and off (SC-007); every step of the requested pass stored under `tool-results/` (SC-008); every result older than the prune age a stub in every reconstructed request |
 | US4 | The regrouped estimate under 300,000 for each small fixture, with the strict figure below the recorded total (SC-003, amended); the big fixture's follow-up round under 30,000 (SC-004); three answers in one batch replay as one resumed turn (SC-005, scripted) |

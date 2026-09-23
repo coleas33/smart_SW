@@ -58,9 +58,10 @@ from swreview.benchmark.recording import (
     Recording,
     read_recording,
 )
-from swreview.findings import SubjectKey, finding_subject_key
+from swreview.checks.interference import CHECK as INTERFERENCE_CHECK
+from swreview.findings import Finding, SubjectKey, finding_subject_key
 from swreview.ir.loader import PACKAGE_FILE_NAME
-from swreview.report.session import ReviewSession
+from swreview.report.session import Contact, ReviewSession
 from swreview.tokens import TOKENIZER_NAME, count_tokens, encoding
 from swreview.tools.registry import (
     BRIDGE_TOOL_FUNCTIONS,
@@ -77,6 +78,7 @@ __all__ = [
     "PlayedCall",
     "PlayedReview",
     "PlayedRound",
+    "ReclassifiedFinding",
     "ReplayCall",
     "ReplayFinding",
     "ReplayFindings",
@@ -542,12 +544,25 @@ class NotReplayableFinding(ReplayFinding):
     reason: str
 
 
+class ReclassifiedFinding(ReplayFinding):
+    """A recorded finding the requested pass judged a contact (feature 010 T095)."""
+
+    step: int | None
+    group_key: str
+    contact_id: str
+    """The requested pass's contact whose group key and configuration matched."""
+
+
 class ReplayFindings(ReplayModel):
     recorded: int
     replayed: int
     lost: list[ReplayFinding]
     added: list[ReplayFinding]
     not_replayable: list[NotReplayableFinding]
+    reclassified: list[ReclassifiedFinding] = Field(default_factory=list)
+    """Recorded `interference.static` findings whose group key and configuration equal a
+    contact the requested pass recorded: touching groups, contacts by design since feature
+    010 (its `contracts/contacts.md` section 6). Neither lost nor not replayable."""
 
 
 class ReplayReport(ReplayModel):
@@ -890,17 +905,61 @@ def subject_of(key: SubjectKey) -> str:
     return "; ".join(parts)
 
 
+def _judged_group(finding: Finding) -> tuple[str, str] | None:
+    """`(group key, configuration)` of a recorded interference finding, or `None`.
+
+    The group key is read from the recorded calculation's inputs, where the interference
+    check writes it; a finding of another check, or one that carries no group key, names no
+    group and can never be matched to a contact.
+    """
+    if finding.check != INTERFERENCE_CHECK or finding.calculation is None:
+        return None
+    group_key = finding.calculation.inputs.get("group_key")
+    if not isinstance(group_key, str):
+        return None
+    return group_key, finding.configuration
+
+
+def _contacts_by_group(session: ReviewSession) -> dict[tuple[str, str], list[Contact]]:
+    """The requested pass's contacts by `(group key, configuration)`, in the order recorded."""
+    contacts: dict[tuple[str, str], list[Contact]] = {}
+    for contact in session.contacts:
+        contacts.setdefault((contact.group_key, contact.configuration), []).append(contact)
+    return contacts
+
+
 def _findings(
     recording: Recording, classes: Sequence[_Classified], second: PlayedReview
 ) -> ReplayFindings:
-    """Compare the recorded and requested findings as multisets (contracts/replay.md §5)."""
+    """Compare the recorded and requested findings as multisets (contracts/replay.md §5).
+
+    A recorded interference finding whose group the requested pass judged a contact is
+    reclassified first, whatever its step's class: the contact says what became of it, which
+    is more than "not replayable" can. Each contact reclassifies one recorded finding, so the
+    comparison stays a multiset.
+    """
     by_step = {item.recorded.step: item for item in classes}
+    unmatched_contacts = _contacts_by_group(second.session)
+    reclassified: list[ReclassifiedFinding] = []
     not_replayable: list[NotReplayableFinding] = []
     replayable: Counter[SubjectKey] = Counter()
     recorded_all: Counter[SubjectKey] = Counter()
     for item in recording.findings:
         key = finding_subject_key(item.finding)
         recorded_all[key] += 1
+        group = _judged_group(item.finding)
+        if group is not None and unmatched_contacts.get(group):
+            contact = unmatched_contacts[group].pop(0)
+            reclassified.append(
+                ReclassifiedFinding(
+                    check=item.finding.check,
+                    subject=subject_of(key),
+                    step=item.step,
+                    group_key=contact.group_key,
+                    contact_id=contact.id,
+                )
+            )
+            continue
         step_class = by_step.get(item.step) if item.step is not None else None
         if step_class is not None and step_class.class_ == "estimated":
             not_replayable.append(
@@ -920,6 +979,7 @@ def _findings(
         lost=_listed(replayable - replayed),
         added=_listed(replayed - recorded_all),
         not_replayable=not_replayable,
+        reclassified=reclassified,
     )
 
 
@@ -975,12 +1035,17 @@ def render_replay_lines(report: ReplayReport) -> list[str]:
     lines.append(
         f"findings: {findings.recorded} recorded, {findings.replayed} replayed, "
         f"{len(findings.lost)} lost, {len(findings.added)} added, "
-        f"{len(findings.not_replayable)} not replayable offline"
+        f"{len(findings.not_replayable)} not replayable offline, "
+        f"{len(findings.reclassified)} reclassified as contacts"
     )
     lines += [f"  lost: {item.check} - {item.subject}" for item in findings.lost]
     lines += [f"  added: {item.check} - {item.subject}" for item in findings.added]
     lines += [
         f"  not replayable: {item.check} - {item.subject} (step {item.step}: {item.reason})"
         for item in findings.not_replayable
+    ]
+    lines += [
+        f"  reclassified: {item.check} - {item.subject} (contact {item.contact_id})"
+        for item in findings.reclassified
     ]
     return lines
