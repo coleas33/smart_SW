@@ -53,7 +53,7 @@ Every surface a person reads calls `display_title`, through one of two helpers o
 | the snapshot's `findings` (`report/snapshot.review_snapshot`: both restore routes and the pane fixture) | `pane_finding` |
 | the Review tab's ranking rows (`review_ranking`: the attention route, the snapshot, the disk route), which Start here and "Show all" print | `with_display_titles(ranking, findings, names)` |
 | both check bodies' `attention` rows (`check_result`, `standards_result`), which the check tabs' Start here prints | `with_display_titles` |
-| `report.md`: each finding's heading and Start here's titled rows (`render_report`, every caller) | `display_title`, and `with_display_titles` on the ranking it is given |
+| `report.md`: each finding's heading and Start here's titled rows (`render_report`, every caller; `swreview report` passes the package beside the session through `report/rerender.render_folder_report`, corrected 2026-09-23 on review) | `display_title`, and `with_display_titles` on the ranking it is given |
 
 `with_display_titles` replaces the title of every row with its survivor's (`row.finding_id`)
 display title; a folded family's row keeps its family title, and a row whose finding is not among

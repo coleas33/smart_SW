@@ -350,7 +350,12 @@ The eight production `render_report` call expressions: `cli.py:563`, `cli.py:607
 `cli.py:1303`, `chat/server.py:1860` (reached after every turn at `:1803` and after a stop at
 `:1883`), `chat/sessions.py:348`, `checks/rules/run.py:231`, `checks/standards/run.py:418`,
 `report/dispositions.py:111`. The pane's waiver-accept path re-runs the check and lands on
-`checks/rules/run.py:231` or `checks/standards/run.py:418`; it is not a ninth.
+`checks/rules/run.py:231` or `checks/standards/run.py:418`; it is not a ninth. *Since
+2026-09-23 (on review of feature 009's decision 2A):* `swreview report` renders with the package
+and verdict header its session's folder holds, through `report/rerender.render_folder_report`,
+the half of the one folder re-render that reads and renders; the eight paths now reach the
+renderer through seven call expressions (`test_report_start_here.py`, `RENDER_SITES` and
+`FOLDER_RENDER_SITES`).
 
 The result bodies: `check_result` (`chat/server.py:655`, ten keys, `attention` goes after
 `exceptions_carried_forward`) and `standards_result` (`:785`, fifteen keys asserted set-equal at
