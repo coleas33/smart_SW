@@ -61,6 +61,17 @@ display title; a folded family's row keeps its family title, and a row whose fin
 applying it twice changes nothing. The page prints `title` verbatim wherever it arrives; it builds
 no title. `observed` keeps its ids everywhere. No golden baseline moves: they pin recorded titles.
 
+**One model-facing surface carries display titles, deliberately** (recorded 2026-09-23 on review;
+no behaviour changed). The MCP resource `swreview://report` (`mcp/server.py`, `_read_resource`)
+serves `report.md` as written (`test_mcp_server.py` pins it verbatim), so the terminal's model -
+the Codex or Gemini command line through MCP - reads each finding's heading with its display title
+there, and the recorded title in every tool result it fetches. The report is the engineer's
+document, read only when the model asks for it; a second, model-facing copy would be a second
+report to keep in step. Every heading starts with the finding's id (`#### F-nnn: ...`), and the id
+is how a heading and a tool result's finding are matched, never the title. The resource is priced
+nowhere (it is not a tool payload and feature 008's replay does not read it). Serving recorded
+titles there instead would be an owner decision; the default is the report as written.
+
 ## 3. Names instead of ids
 
 | Surface | Name | Id |

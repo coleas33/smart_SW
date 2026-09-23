@@ -17,8 +17,9 @@ namespace SwReview.AddIn.Tests;
 ///
 /// The fourth check reads the titles a person reads (the owner's decision 2A of 2026-09-23,
 /// research R2.28): the backend sends each finding's display title - whole, the parts named -
-/// while the recorded title the model read named six of the fixture's parts by id. The page
-/// builds no title: every title it prints is the fixture's string, verbatim.
+/// while the recorded title the model read named parts by id in six of the fixture's titles
+/// (eight parts). The page builds no title: every title it prints is the fixture's string,
+/// verbatim.
 /// </summary>
 public sealed class ReviewPageDefaultViewScanTests
 {
