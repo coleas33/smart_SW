@@ -45,6 +45,7 @@ from swreview.ir.models import (
 __all__ = [
     "LENGTH_UNITS",
     "NO_OWN_TOLERANCE_TYPES",
+    "TABLE_KINDS",
     "NativeSheet",
     "every_native_sheet",
     "ingested_source",
@@ -55,6 +56,7 @@ __all__ = [
     "shadowed_sheets",
     "sheet_payload",
     "sheet_reason",
+    "table_kind",
     "written_precision",
     "written_tolerance_precision",
     "written_unit",
@@ -332,11 +334,32 @@ def sheet_reason(package: EvidencePackage, sheet: DrawingSheetRecord) -> str | N
     return next((gap.reason for gap in package.gaps if gap.entity_id == sheet.id), None)
 
 
+TABLE_KINDS: dict[int, str] = {
+    0: "General",
+    1: "HoleChart",
+    2: "BillOfMaterials",
+    5: "TitleBlock",
+    9: "GeneralTolerance",
+}
+"""`swTableAnnotationType_e` members the sheet tool names (research R2.12); every other table
+is named by its number, and a revision table (3) is in `revision_tables`, never here."""
+
+
+def table_kind(table_type_raw: int | None) -> str:
+    """What the sheet tool calls a table: its kind, or its number when it has no name here."""
+    if table_type_raw is None:
+        return "table type not read"
+    return TABLE_KINDS.get(table_type_raw, f"table type {table_type_raw}")
+
+
 def sheet_payload(package: EvidencePackage, item: NativeSheet) -> dict[str, Any]:
     """What `get_drawing_sheet` returns for a native sheet: the sheet record with its views,
-    dimensions, annotations, notes and tables, its drawing and why anything is missing.
-    Persistent references are feature 008's view to remove, not this payload's."""
+    dimensions, annotations, notes and tables - each table's kind named - its drawing and why
+    anything is missing. Persistent references are feature 008's view to remove, not this
+    payload's."""
     payload = item.sheet.model_dump(mode="json")
+    for table, record in zip(payload.get("tables", []), item.sheet.tables, strict=True):
+        table["kind"] = table_kind(record.table_type_raw)
     payload["document_id"] = item.drawing.document_id
     payload["reason"] = sheet_reason(package, item.sheet)
     return payload

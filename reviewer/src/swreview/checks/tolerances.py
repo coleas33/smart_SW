@@ -25,7 +25,7 @@ unit the profile's bands are counted in. The binding ships disabled until the se
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from functools import cached_property, lru_cache
 from pathlib import Path
@@ -38,9 +38,9 @@ from swreview.checks.result import limits_mm, round_length
 from swreview.ir.models import (
     Dimension,
     DisplayDimensionRecord,
+    DrawingAnnotation,
     EvidencePackage,
     GtolFrame,
-    ModelAnnotation,
     ModelDimension,
     Quantity,
     SourceRef,
@@ -72,6 +72,7 @@ __all__ = [
     "ToleranceSubject",
     "UnresolvedTolerance",
     "drawing_answer",
+    "frame_zone",
     "general_tolerance_dimension",
     "is_position_frame",
     "iso_dimension",
@@ -452,6 +453,93 @@ def _stated_limits(
     )
 
 
+def _first_bound(
+    bound: list[tuple[Dimension, str, str]], subject: ToleranceSubject
+) -> DrawingAnswer:
+    """The first of `(dimension, cited, record id)` in the fixed order, with the first later one
+    whose limits differ as the drawing source's own conflict (FR-023)."""
+    (dimension, cited, record_id), *rest = bound
+    chosen = _limits(dimension, subject)
+    other = next(
+        (
+            other_cited
+            for other_dimension, other_cited, _ in rest
+            if any(
+                abs(a - b) > LENGTH_EQUAL_MM
+                for a, b in zip(chosen, _limits(other_dimension, subject), strict=True)
+            )
+        ),
+        None,
+    )
+    conflict = (
+        None
+        if other is None
+        else f"{cited} and {other} give {subject.label} different tolerances; {cited} is used"
+    )
+    return DrawingAnswer(dimension=dimension, cited=cited, conflict=conflict, record_id=record_id)
+
+
+def _drawing_position(
+    bindings: tuple[DrawingBinding, ...], subject: ToleranceSubject
+) -> DrawingAnswer:
+    """Step 3 of section 4: the first bound frame's zone, a unitless value read in the drawing's
+    recorded length unit and cited so (owner, 2026-09-23, research R5 Q6); an unread or unknown
+    drawing unit binds nothing (FR-029)."""
+    from swreview.drawings.native import LENGTH_UNITS
+
+    zoned: list[tuple[Dimension, str, str]] = []
+    reasons: list[str] = []
+    for binding in bindings:
+        record = binding.record
+        assert isinstance(record, DrawingAnnotation)
+        view = binding.view
+        zone = frame_zone(record.gtol_frames)
+        if zone is None:
+            reasons.append(f"{record.id} states no position zone the review can read")
+            continue
+        value, stated, number = zone
+        cited = f"{_drawing_cited(binding)} (frame {number})"
+        unit: str | None = stated
+        if stated is None:
+            raw = view.record.length_unit_raw
+            unitless = f"{record.id} states a position zone of {value!r} with no unit, and"
+            if raw is None:
+                reasons.append(
+                    f"{unitless} the unit drawing {view.drawing_id} is dimensioned in was not read"
+                )
+                continue
+            unit = LENGTH_UNITS.get(raw)
+            if unit is None:
+                reasons.append(
+                    f"{unitless} drawing {view.drawing_id} is dimensioned in unit {raw} "
+                    "(swLengthUnit_e), which is neither mm nor in"
+                )
+                continue
+            cited = f"{cited}, read in the drawing's unit, {unit}"
+        source = SourceRef(
+            document_id=view.drawing_id,
+            sheet=view.sheet.name,
+            view=view.view.name,
+            annotation=record.id,
+            persist_ref=record.persist_ref,
+        )
+        zoned.append(
+            (
+                Dimension(
+                    nominal=Quantity(value=value, unit=unit),  # type: ignore[arg-type]
+                    tolerance=Tolerance(kind="basic", upper=None, lower=None, source=source),
+                    source=source,
+                    text_as_read=f"position {value!r} {unit}",
+                ),
+                cited,
+                record.id,
+            )
+        )
+    if not zoned:
+        return DrawingAnswer(why="; ".join(reasons))
+    return _first_bound(zoned, subject)
+
+
 def _drawing_size(
     bindings: tuple[DrawingBinding, ...], subject: ToleranceSubject, iso: Iso286
 ) -> DrawingAnswer:
@@ -471,27 +559,7 @@ def _drawing_size(
         elif isinstance(stated, str):
             reasons.append(stated)
     if limited:
-        (dimension, cited, record_id), *rest = limited
-        chosen = _limits(dimension, subject)
-        other = next(
-            (
-                other_cited
-                for other_dimension, other_cited, _ in rest
-                if any(
-                    abs(a - b) > LENGTH_EQUAL_MM
-                    for a, b in zip(chosen, _limits(other_dimension, subject), strict=True)
-                )
-            ),
-            None,
-        )
-        conflict = (
-            None
-            if other is None
-            else f"{cited} and {other} give {subject.label} different tolerances; {cited} is used"
-        )
-        return DrawingAnswer(
-            dimension=dimension, cited=cited, conflict=conflict, record_id=record_id
-        )
+        return _first_bound(limited, subject)
 
     written: list[tuple[str, int, Literal["mm", "in"]]] = []
     for binding in bindings:
@@ -564,9 +632,7 @@ def drawing_answer(
     if not search.bindings:
         return DrawingAnswer(why=search.why)
     if subject.kind == "hole_position":
-        return DrawingAnswer(
-            why="a drawing's position tolerance is converted by feature 011 User Story 4"
-        )
+        return _drawing_position(search.bindings, subject)
     return _drawing_size(search.bindings, subject, iso or load_iso286())
 
 
@@ -582,9 +648,11 @@ def is_position_frame(frame: GtolFrame) -> bool:
     return any(word in words for word in _POSITION_WORDS)
 
 
-def _frame_zone(annotation: ModelAnnotation) -> tuple[float, str | None, int] | None:
-    """The first position or coaxiality frame's zone value and the unit its text states."""
-    for frame in annotation.frames:
+def frame_zone(frames: Sequence[GtolFrame]) -> tuple[float, str | None, int] | None:
+    """The first position or coaxiality frame's zone value, the unit its text states and the
+    frame's number. Generalised to a list of frames by feature 011 (a drawing annotation's
+    `gtol_frames` as well as a model annotation's `frames`); one reading for both."""
+    for frame in frames:
         if not is_position_frame(frame) or not frame.values_raw:
             continue
         match = _ZONE.search(frame.values_raw[0])
@@ -609,7 +677,7 @@ def _by_annotation(package: EvidencePackage, subject: ToleranceSubject) -> _Answ
     if subject.kind != "hole_position":
         return f"the geometric tolerances attached to {whom} state no size tolerance"
     for annotation in sorted(attached, key=lambda item: item.id):
-        zone = _frame_zone(annotation)
+        zone = frame_zone(annotation.frames)
         if zone is None:
             continue
         value, unit, number = zone
@@ -898,7 +966,7 @@ class ResolverLookup:
         return (
             any(_dimension_could_bind(item) for item in package.model_dimensions)
             or any(
-                (zone := _frame_zone(item)) is not None and zone[1] is not None
+                (zone := frame_zone(item.frames)) is not None and zone[1] is not None
                 for item in package.model_annotations
                 if item.kind == "gtol"
             )
@@ -913,10 +981,11 @@ class ResolverLookup:
 
     def _drawing_could_bind(self) -> bool:
         """A usable view carries a size dimension that states limits (or a carried fit class),
-        or an untoleranced one written to a known precision in the unit a version 3 profile's
-        bands are counted in - and `DRAWING_BINDING_VALIDATED` is set."""
+        an untoleranced one written to a known precision in the unit a version 3 profile's
+        bands are counted in, or a position frame whose zone is read in a known unit - and
+        `DRAWING_BINDING_VALIDATED` is set."""
         from swreview.drawings import binding
-        from swreview.drawings.native import written_precision, written_unit
+        from swreview.drawings.native import LENGTH_UNITS, written_precision, written_unit
 
         if not binding.DRAWING_BINDING_VALIDATED:
             return False
@@ -931,6 +1000,14 @@ class ResolverLookup:
         for view in self.index.views:
             if not view.usable:
                 continue
+            raw_unit = view.record.length_unit_raw
+            drawing_unit = None if raw_unit is None else LENGTH_UNITS.get(raw_unit)
+            for annotation in view.view.annotations:
+                if annotation.type_raw != binding.GTOL_ANNOTATION_TYPE:
+                    continue
+                zone = frame_zone(annotation.gtol_frames)
+                if zone is not None and (zone[1] is not None or drawing_unit is not None):
+                    return True
             for record in view.view.display_dimensions:
                 if (
                     record.dimension_type_raw not in binding.SIZE_DIMENSION_TYPES
