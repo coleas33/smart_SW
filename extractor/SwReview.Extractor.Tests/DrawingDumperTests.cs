@@ -1829,6 +1829,395 @@ public class DrawingDumperTests
             || member.StartsWith("OpenDoc", StringComparison.Ordinal));
     }
 
+    // ---- callouts and tables (feature 011 T039, contracts/native-evidence.md section 3) ------
+
+    // -- typed annotations: 010's frame and datum reads, the surface finish, the attachments --
+
+    [Fact]
+    public void Dump_AGtolRecordsItsFramesAndDatumIdentifierThroughFeature010sReads()
+    {
+        var gtol = new Fakes.FakeAnnotation { DatumIdentifier = "C" };
+        gtol.Frames.Add(new Fakes.FakeFrame
+        {
+            Values = new List<string> { "0.05", "", "A", "B", "" },
+            Symbols = new List<string> { "<GTOL-POSI>", "<MOD-DIAM>", "", "", "", "" },
+        });
+        gtol.Frames.Add(new Fakes.FakeFrame { Xml = "<frame/>" });
+        _reader.AddSheet("Sheet1").AddView("Drawing View1").AddAnnotation("GTOL1", 5, false).Specific = gtol;
+
+        DrawingAnnotation record = Assert.Single(Single(Dump()).Annotations);
+
+        Assert.Equal(2, record.GtolFrames!.Count);
+        GtolFrame first = record.GtolFrames[0];
+        Assert.Equal(1, first.Number);
+        Assert.Equal(new[] { "0.05", "", "A", "B", "" }, first.ValuesRaw);
+        Assert.Equal(new[] { "<GTOL-POSI>", "<MOD-DIAM>", "", "", "", "" }, first.SymbolsRaw);
+        Assert.Null(first.SymbolXmlRaw);
+        Assert.Equal("<frame/>", record.GtolFrames[1].SymbolXmlRaw);
+        Assert.Equal("C", record.DatumIdentifierRaw);
+        Assert.Null(record.DatumLabel);
+        Assert.Null(record.SurfaceFinishSymbolRaw);
+        Assert.Empty(_scope.Gaps.Gaps);
+        foreach (string member in new[] { "GetSpecificAnnotation", "GetFrameCount", "GetFrameValues", "GetFrameSymbols3", "GetDatumIdentifier" })
+        {
+            Assert.Contains(member, _observer.Members, StringComparer.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Dump_ADatumTagRecordsItsLabel()
+    {
+        _reader.AddSheet("Sheet1").AddView("Drawing View1").AddAnnotation("DATUMTAG1", 2, false).Specific =
+            new Fakes.FakeAnnotation { Type = 2, Label = "A" };
+
+        DrawingAnnotation record = Assert.Single(Single(Dump()).Annotations);
+
+        Assert.Equal("A", record.DatumLabel);
+        Assert.Null(record.GtolFrames);
+        Assert.Contains("GetLabel", _observer.Members, StringComparer.Ordinal);
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Fact]
+    public void Dump_ASurfaceFinishSymbolRecordsItsSymbolAndTextsVerbatim()
+    {
+        _reader.AddSheet("Sheet1").AddView("Drawing View1").AddAnnotation("SFSYMBOL1", 7, false).Specific =
+            new FakeSurfaceFinish { Symbol = 1, Texts = { "1.6", "" } };
+
+        DrawingAnnotation record = Assert.Single(Single(Dump()).Annotations);
+
+        Assert.Equal(1, record.SurfaceFinishSymbolRaw);
+        Assert.Equal(new[] { "1.6", "" }, record.SurfaceFinishTextsRaw);
+        foreach (string member in new[] { "GetSymbol", "GetTextCount", "GetTextAtIndex" })
+        {
+            Assert.Contains(member, _observer.Members, StringComparer.Ordinal);
+        }
+
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(6)]
+    [InlineData(9)]
+    public void Dump_AnAnnotationOfAnotherTypeGainsNothingAndIsAskedNothingMore(int type)
+    {
+        _reader.AddSheet("Sheet1").AddView("Drawing View1").AddAnnotation("NOTE1", type, false);
+
+        DrawingAnnotation record = Assert.Single(Single(Dump()).Annotations);
+
+        Assert.Null(record.GtolFrames);
+        Assert.Null(record.DatumLabel);
+        Assert.Null(record.SurfaceFinishSymbolRaw);
+        Assert.Null(record.AttachedFaces);
+        Assert.DoesNotContain("GetSpecificAnnotation", _observer.Members, StringComparer.Ordinal);
+        Assert.DoesNotContain("GetAttachedEntities3", _observer.Members, StringComparer.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(5, "GetSpecificAnnotation")]
+    [InlineData(5, "FrameCount")]
+    [InlineData(5, "DatumIdentifier")]
+    [InlineData(2, "GetSpecificAnnotation")]
+    [InlineData(2, "DatumLabel")]
+    [InlineData(7, "GetSpecificAnnotation")]
+    [InlineData(7, "GetSymbol")]
+    [InlineData(7, "GetTextCount")]
+    [InlineData(7, "GetTextAtIndex")]
+    public void Dump_ATypedReadThatThrows_IsADrawingSymbolReadGapOnTheAnnotation(int type, string member)
+    {
+        FakeAnnotation annotation = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddAnnotation("A1", type, false);
+        if (type == 7)
+        {
+            var symbol = new FakeSurfaceFinish { Symbol = 1, Texts = { "1.6" } };
+            symbol.Throwing.Add(member);
+            annotation.Specific = symbol;
+        }
+        else
+        {
+            var specific = new Fakes.FakeAnnotation { Type = type, DatumIdentifier = "C", Label = "A" };
+            specific.Frames.Add(new Fakes.FakeFrame { Values = new List<string> { "0.1" } });
+            specific.Throwing.Add(member);
+            annotation.Specific = specific;
+        }
+
+        if (member == "GetSpecificAnnotation")
+        {
+            annotation.Throwing.Add(member);
+        }
+
+        DrawingAnnotation record = Assert.Single(Single(Dump()).Annotations);
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_symbol_read", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+        Assert.Equal(GapKind.ToolError, gap.Kind);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(7)]
+    public void Dump_ATypedAnnotationWithNoSpecificAnnotation_IsADrawingSymbolReadGap(int type)
+    {
+        _reader.AddSheet("Sheet1").AddView("Drawing View1").AddAnnotation("A1", type, false).Specific = null;
+
+        DrawingAnnotation record = Assert.Single(Single(Dump()).Annotations);
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_symbol_read", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+        Assert.Equal(GapKind.NotExtracted, gap.Kind);
+    }
+
+    [Fact]
+    public void Dump_AGtolFrameNoCallAnswered_IsLeftOutWithOneGapNamingEveryError()
+    {
+        var gtol = new Fakes.FakeAnnotation();
+        var frame = new Fakes.FakeFrame();
+        frame.Throwing.Add("FrameValues");
+        frame.Throwing.Add("FrameSymbols");
+        gtol.Frames.Add(frame);
+        gtol.Frames.Add(new Fakes.FakeFrame { Values = new List<string> { "0.1" } });
+        _reader.AddSheet("Sheet1").AddView("Drawing View1").AddAnnotation("GTOL1", 5, false).Specific = gtol;
+
+        DrawingAnnotation record = Assert.Single(Single(Dump()).Annotations);
+
+        Assert.Equal(new[] { 2 }, record.GtolFrames!.Select(f => f.Number));
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_symbol_read", gap.EntityKind);
+        Assert.Contains("frame 1", gap.Reason, StringComparison.Ordinal);
+        Assert.Contains("FrameValues", gap.Error, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(7)]
+    public void Dump_ATypedAnnotationRecordsTheFacesItIsAttachedTo(int type)
+    {
+        FakeAnnotation annotation = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddAnnotation("A1", type, false);
+        annotation.Specific = type == 7
+            ? new FakeSurfaceFinish { Symbol = 1 }
+            : (object)new Fakes.FakeAnnotation { Type = type, Label = "A" };
+        annotation.Attach(new FakeModelFace(PartModelPath, "RmFjZTE="));
+
+        DrawingAnnotation record = Assert.Single(Single(Dump()).Annotations);
+
+        AttachedFace face = Assert.Single(record.AttachedFaces!);
+        Assert.Equal("RmFjZTE=", face.PersistRef);
+        Assert.Equal(DocumentIds.For(PartModelPath), face.Scope);
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Fact]
+    public void Dump_ATypedAnnotationWhoseAttachmentsAreNotTied_IsOneDrawingAttachmentGapOnIt()
+    {
+        FakeAnnotation annotation = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddAnnotation("A1", 5, false);
+        annotation.Specific = new Fakes.FakeAnnotation();
+        annotation.AttachUnmapped();
+
+        DrawingAnnotation record = Assert.Single(Single(Dump()).Annotations);
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_attachment", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+        Assert.Contains("1 of 1 attached entities", gap.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_AViewWithNoModel_CountsItsTypedAnnotationsWithItsDimensionsInOneGap()
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        view.Loaded = false;
+        view.AddDimension("D1@Sketch1").Type2 = 6;
+        view.AddAnnotation("A1", 5, false).Specific = new Fakes.FakeAnnotation();
+        view.AddAnnotation("NOTE1", 6, false);
+
+        DrawingView record = Single(Dump());
+
+        Gap gap = Assert.Single(_scope.Gaps.Gaps, g => g.EntityKind == "drawing_attachment");
+        Assert.Equal(record.Id, gap.EntityId);
+        Assert.StartsWith("What 2 dimensions and annotations", gap.Reason, StringComparison.Ordinal);
+
+        // The typed read still happens: it needs no model.
+        Assert.Contains("GetSpecificAnnotation", _observer.Members, StringComparer.Ordinal);
+    }
+
+    // -- tables --
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(9)]
+    public void Dump_ATableThatIsNoRevisionTableIsRecordedOnTheSheetCellByCell(int type)
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Drawing View1");
+        FakeTable table = view.AddTable(type, currentRevision: null);
+        table.Title = "FICTIONAL TABLE";
+        table.Rows = new[] { new string?[] { "ITEM", "QTY" }, new string?[] { "1", "" } };
+
+        DrawingSheetRecord sheet = Assert.Single(Dump()).Sheets[0];
+
+        Assert.Empty(sheet.RevisionTables);
+        DrawingTable record = Assert.Single(sheet.Tables!);
+        Assert.Equal("dtb:0001", record.Id);
+        Assert.Equal(sheet.Id, record.SheetId);
+        Assert.Equal(sheet.Views[0].Id, record.OwnerViewId);
+        Assert.Equal(type, record.TableTypeRaw);
+        Assert.Equal("FICTIONAL TABLE", record.Title);
+        Assert.Equal(2, record.RowCount);
+        Assert.Equal(2, record.ColumnCount);
+        Assert.Equal(new[] { 0, 1 }, record.Rows.Select(row => row.Index));
+        Assert.Equal(new string?[] { "1", "" }, record.Rows[1].Cells);
+        Assert.All(record.Rows, row => Assert.Null(row.IsHeader));
+        Assert.Contains("Title", _observer.Members, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_ARevisionTableStaysARevisionTableAndIsNoSheetTable()
+    {
+        FakeView view = _reader.AddSheet("Sheet1").AddView("Sheet Format1");
+        view.AddTable(type: 3, currentRevision: "B").Rows = new[] { new string?[] { "B" } };
+        view.AddTable(type: 5, currentRevision: null).Rows = new[] { new string?[] { "FICTIONAL TITLE" } };
+
+        DrawingSheetRecord sheet = Assert.Single(Dump()).Sheets[0];
+
+        Assert.Equal("drv:0001", Assert.Single(sheet.RevisionTables).Id);
+        DrawingTable table = Assert.Single(sheet.Tables!);
+        Assert.Equal(5, table.TableTypeRaw);
+        Assert.Equal("dtb:0001", table.Id);
+    }
+
+    [Fact]
+    public void Dump_ASheetWithNoOtherTable_HasNoTablesMember()
+    {
+        _reader.AddSheet("Sheet1").AddView("Sheet Format1").AddTable(type: 3, currentRevision: "A");
+
+        Assert.Null(Assert.Single(Dump()).Sheets[0].Tables);
+    }
+
+    [Fact]
+    public void Dump_ATableCellThatCannotBeRead_IsNullPlusADrawingTableReadGap()
+    {
+        FakeTable table = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddTable(0, null);
+        table.Rows = new[] { new string?[] { "A", "B" } };
+        table.CellFailures.Add((0, 1));
+
+        DrawingTable record = Assert.Single(Assert.Single(Dump()).Sheets[0].Tables!);
+
+        Assert.Equal(new string?[] { "A", null }, record.Rows[0].Cells);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_table_read", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Dump_ATableTitleThatThrowsOrAnswersNull_IsNullPlusADrawingTableReadGap(bool throws)
+    {
+        FakeTable table = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddTable(0, null);
+        if (throws)
+        {
+            table.Throwing.Add("Title");
+        }
+        else
+        {
+            table.Title = null;
+        }
+
+        DrawingTable record = Assert.Single(Assert.Single(Dump()).Sheets[0].Tables!);
+
+        Assert.Null(record.Title);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_table_read", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    [Fact]
+    public void Dump_ATableWhoseShapeCannotBeRead_HasNoRowsAndAGap()
+    {
+        FakeTable table = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddTable(1, null);
+        table.ShapeFailure = new InvalidCastException("not an ITableAnnotation");
+
+        DrawingTable record = Assert.Single(Assert.Single(Dump()).Sheets[0].Tables!);
+
+        Assert.Empty(record.Rows);
+        Assert.Null(record.RowCount);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_table_read", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    [Fact]
+    public void Dump_ABillOfMaterialsResolvesItsRowsToPackageDocumentsAndKeepsAnUnresolvedPath()
+    {
+        const string LibraryPath = @"C:\vault\library\missing.SLDPRT";
+        FakeTable table = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddTable(2, null);
+        table.Rows = new[] { new string?[] { "ITEM" }, new string?[] { "1" }, new string?[] { "2" }, new string?[] { "3" } };
+        table.ModelPaths[1] = new List<string> { HousingPath.ToUpperInvariant() };
+        table.ModelPaths[2] = new List<string> { LibraryPath };
+        table.ModelPaths[3] = new List<string> { HousingPath, LibraryPath };
+
+        DrawingTable record = Assert.Single(Assert.Single(Dump()).Sheets[0].Tables!);
+
+        List<BomRow> rows = record.BomRows!;
+        Assert.Equal(new[] { 1, 2, 3 }, rows.Select(row => row.Index));
+        Assert.Equal(new[] { DocumentIds.For(HousingPath) }, rows[0].DocumentIds);
+        Assert.Null(rows[0].UnresolvedPaths);
+        Assert.Null(rows[1].DocumentIds);
+        Assert.Equal(new[] { LibraryPath }, rows[1].UnresolvedPaths);
+        Assert.Equal(new[] { DocumentIds.For(HousingPath) }, rows[2].DocumentIds);
+        Assert.Equal(new[] { LibraryPath }, rows[2].UnresolvedPaths);
+        Assert.Contains("GetModelPathNames", _observer.Members, StringComparer.Ordinal);
+        Assert.Empty(_scope.Gaps.Gaps);
+    }
+
+    [Fact]
+    public void Dump_OnlyABillOfMaterialsIsAskedForItsRowsModels()
+    {
+        FakeTable table = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddTable(0, null);
+        table.Rows = new[] { new string?[] { "1" } };
+        table.ModelPaths[0] = new List<string> { HousingPath };
+
+        DrawingTable record = Assert.Single(Assert.Single(Dump()).Sheets[0].Tables!);
+
+        Assert.Null(record.BomRows);
+        Assert.DoesNotContain("GetModelPathNames", _observer.Members, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void Dump_ABillOfMaterialsRowThatCannotBeResolved_IsADrawingTableReadGapAndTheOtherRowsAreKept()
+    {
+        FakeTable table = _reader.AddSheet("Sheet1").AddView("Drawing View1").AddTable(2, null);
+        table.Rows = new[] { new string?[] { "1" }, new string?[] { "2" } };
+        table.ModelPaths[1] = new List<string> { HousingPath };
+        table.ModelPathFailures.Add(0);
+
+        DrawingTable record = Assert.Single(Assert.Single(Dump()).Sheets[0].Tables!);
+
+        Assert.Equal(new[] { 1 }, record.BomRows!.Select(row => row.Index));
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_table_read", gap.EntityKind);
+        Assert.Equal(record.Id, gap.EntityId);
+    }
+
+    [Fact]
+    public void Dump_ATableTwoViewsReturnIsRecordedOnce()
+    {
+        FakeSheet sheet = _reader.AddSheet("Sheet1");
+        FakeTable shared = sheet.AddView("Sheet Format1").AddTable(5, null);
+        sheet.AddView("Drawing View1").Tables.Add(shared);
+
+        DrawingSheetRecord record = Assert.Single(Dump()).Sheets[0];
+
+        DrawingTable table = Assert.Single(record.Tables!);
+        Assert.Equal(record.Views[0].Id, table.OwnerViewId);
+    }
+
     // ---- helpers -------------------------------------------------------------------
 
     private IReadOnlyList<DrawingRecord> Dump()
@@ -1906,6 +2295,35 @@ public class DrawingDumperTests
 
         /// <summary>Cells whose Text[row, col] read throws.</summary>
         public List<(int Row, int Column)> CellFailures { get; } = new List<(int, int)>();
+
+        // Feature 011 (native-evidence.md section 3, "Tables").
+        public string? Title { get; set; } = "FICTIONAL TABLE";
+
+        /// <summary>GetModelPathNames per row, for a bill of materials; a row not here answers nothing.</summary>
+        public Dictionary<int, List<string>?> ModelPaths { get; } = new Dictionary<int, List<string>?>();
+
+        /// <summary>Rows whose GetModelPathNames throws.</summary>
+        public HashSet<int> ModelPathFailures { get; } = new HashSet<int>();
+
+        public HashSet<string> Throwing { get; } = new HashSet<string>(StringComparer.Ordinal);
+    }
+
+    /// <summary>What GetAttachedEntities3 answers for a dimension or a typed annotation.</summary>
+    private interface IFakeAttachable
+    {
+        List<FakeDrawingEntity?> Entities { get; }
+
+        HashSet<string> Throwing { get; }
+    }
+
+    /// <summary>An ISFSymbol: its symbol and its texts.</summary>
+    private sealed class FakeSurfaceFinish
+    {
+        public int Symbol { get; set; }
+
+        public List<string?> Texts { get; } = new List<string?>();
+
+        public HashSet<string> Throwing { get; } = new HashSet<string>(StringComparer.Ordinal);
     }
 
     private sealed class FakeNote
@@ -1913,7 +2331,7 @@ public class DrawingDumperTests
         public string? Text { get; set; }
     }
 
-    private sealed class FakeAnnotation
+    private sealed class FakeAnnotation : IFakeAttachable
     {
         public string? Name { get; set; }
 
@@ -1922,9 +2340,21 @@ public class DrawingDumperTests
         public bool Dangling { get; set; }
 
         public Exception? DanglingFailure { get; set; }
+
+        // Feature 011: the typed annotation behind it (feature 010's fake GTol or datum tag, or a
+        // surface finish symbol), and what it is attached to.
+        public object? Specific { get; set; }
+
+        public List<FakeDrawingEntity?> Entities { get; } = new List<FakeDrawingEntity?>();
+
+        public HashSet<string> Throwing { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+        public void Attach(object model) => Entities.Add(new FakeDrawingEntity(model));
+
+        public void AttachUnmapped() => Entities.Add(new FakeDrawingEntity(null));
     }
 
-    private sealed class FakeDimension
+    private sealed class FakeDimension : IFakeAttachable
     {
         public string? Name { get; set; }
 
@@ -2196,6 +2626,9 @@ public class DrawingDumperTests
 
         /// <summary>Feature 010's tolerance fake answers the tolerance reads, shared rather than copied.</summary>
         private readonly Fakes.FakeDimensionToleranceReader _tolerances = new Fakes.FakeDimensionToleranceReader();
+
+        /// <summary>Feature 010's annotation fake answers the frame and datum reads, shared rather than copied.</summary>
+        private readonly Fakes.FakeModelAnnotationReader _annotationReads = new Fakes.FakeModelAnnotationReader();
 
         /// <summary>
         /// What <see cref="IDrawingReader.Drawing"/> answers for the root document; null makes
@@ -2476,11 +2909,51 @@ public class DrawingDumperTests
         object? IDrawingReader.DimensionAnnotation(object dimension) =>
             Answer<object?>(Dimension(dimension).Throwing, "GetAnnotation", dimension);
 
-        IReadOnlyList<object?> IDrawingReader.AttachedEntities(object annotation) =>
-            Answer<IReadOnlyList<object?>>(
-                Dimension(annotation).Throwing,
-                "GetAttachedEntities3",
-                Dimension(annotation).Entities.Cast<object?>().ToList());
+        IReadOnlyList<object?> IDrawingReader.AttachedEntities(object annotation)
+        {
+            var attachable = (IFakeAttachable)annotation;
+            return Answer<IReadOnlyList<object?>>(
+                attachable.Throwing, "GetAttachedEntities3", attachable.Entities.Cast<object?>().ToList());
+        }
+
+        object? IAnnotationSymbolReads.Specific(object annotation) =>
+            Answer(Annotation(annotation).Throwing, "GetSpecificAnnotation", Annotation(annotation).Specific);
+
+        int IAnnotationSymbolReads.FrameCount(object gtol) => _annotationReads.FrameCount(gtol);
+
+        IReadOnlyList<string>? IAnnotationSymbolReads.FrameValues(object gtol, int frame) =>
+            _annotationReads.FrameValues(gtol, frame);
+
+        IReadOnlyList<string>? IAnnotationSymbolReads.FrameSymbols(object gtol, int frame) =>
+            _annotationReads.FrameSymbols(gtol, frame);
+
+        string? IAnnotationSymbolReads.FrameXml(object gtol, int frame) => _annotationReads.FrameXml(gtol, frame);
+
+        string? IAnnotationSymbolReads.DatumIdentifier(object gtol) => _annotationReads.DatumIdentifier(gtol);
+
+        string? IAnnotationSymbolReads.DatumLabel(object datumTag) => _annotationReads.DatumLabel(datumTag);
+
+        int IDrawingReader.SurfaceFinishSymbol(object symbol) =>
+            Answer(((FakeSurfaceFinish)symbol).Throwing, "GetSymbol", ((FakeSurfaceFinish)symbol).Symbol);
+
+        int IDrawingReader.SurfaceFinishTextCount(object symbol) =>
+            Answer(((FakeSurfaceFinish)symbol).Throwing, "GetTextCount", ((FakeSurfaceFinish)symbol).Texts.Count);
+
+        string? IDrawingReader.SurfaceFinishText(object symbol, int index) =>
+            Answer(((FakeSurfaceFinish)symbol).Throwing, "GetTextAtIndex", ((FakeSurfaceFinish)symbol).Texts[index]);
+
+        string? IDrawingReader.TableTitle(object table) => Answer(Table(table).Throwing, "Title", Table(table).Title);
+
+        IReadOnlyList<string>? IDrawingReader.BomModelPaths(object table, int row)
+        {
+            FakeTable found = Table(table);
+            if (found.ModelPathFailures.Contains(row))
+            {
+                throw new InvalidOperationException($"GetModelPathNames of row {row} did not answer");
+            }
+
+            return found.ModelPaths.TryGetValue(row, out List<string>? paths) ? paths : null;
+        }
 
         object? IDrawingReader.CorrespondingEntity(object view, object entity) =>
             ((FakeDrawingEntity)entity).Corresponding;

@@ -561,6 +561,30 @@ public class StandardsGateLogTests : IDisposable
 
         public string? ShaftFitValue(object tolerance) => null;
 
+        public object? Specific(object annotation) => null;
+
+        public int FrameCount(object gtol) => 0;
+
+        public IReadOnlyList<string>? FrameValues(object gtol, int frame) => null;
+
+        public IReadOnlyList<string>? FrameSymbols(object gtol, int frame) => null;
+
+        public string? FrameXml(object gtol, int frame) => null;
+
+        public string? DatumIdentifier(object gtol) => null;
+
+        public string? DatumLabel(object datumTag) => null;
+
+        public int SurfaceFinishSymbol(object symbol) => 0;
+
+        public int SurfaceFinishTextCount(object symbol) => 0;
+
+        public string? SurfaceFinishText(object symbol, int index) => null;
+
+        public string? TableTitle(object table) => "FICTIONAL TABLE";
+
+        public IReadOnlyList<string>? BomModelPaths(object table, int row) => null;
+
         private readonly object _face = new object();
 
         private readonly object _tolerance = new object();

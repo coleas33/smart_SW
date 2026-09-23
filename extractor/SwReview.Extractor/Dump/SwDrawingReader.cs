@@ -40,11 +40,18 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
     /// </summary>
     private readonly SwDimensionToleranceReader _tolerances;
 
+    /// <summary>
+    /// Feature 010's GTol and datum reads, which a drawing's typed annotations are read through
+    /// too (feature 011): one reading of one interop answer, not a copy.
+    /// </summary>
+    private readonly SwModelAnnotationReader _annotations;
+
     public SwDrawingReader(ISwSession session, PersistRefService refs)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _refs = refs ?? throw new ArgumentNullException(nameof(refs));
         _tolerances = new SwDimensionToleranceReader(session.Gate, refs);
+        _annotations = new SwModelAnnotationReader(session.Gate, refs);
     }
 
     private SwGate Gate => _session.Gate;
@@ -349,6 +356,45 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
     public string? HoleFitValue(object tolerance) => _tolerances.HoleFitValue(tolerance);
 
     public string? ShaftFitValue(object tolerance) => _tolerances.ShaftFitValue(tolerance);
+
+    public object? Specific(object annotation) => _annotations.Specific(annotation);
+
+    public int FrameCount(object gtol) => _annotations.FrameCount(gtol);
+
+    public IReadOnlyList<string>? FrameValues(object gtol, int frame) => _annotations.FrameValues(gtol, frame);
+
+    public IReadOnlyList<string>? FrameSymbols(object gtol, int frame) => _annotations.FrameSymbols(gtol, frame);
+
+    /// <summary>Gates <c>GetFrame</c> and <c>GetSymbolXml</c> itself, as feature 010's reader does.</summary>
+    public string? FrameXml(object gtol, int frame) => _annotations.FrameXml(gtol, frame);
+
+    public string? DatumIdentifier(object gtol) => _annotations.DatumIdentifier(gtol);
+
+    public string? DatumLabel(object datumTag) => _annotations.DatumLabel(datumTag);
+
+    public int SurfaceFinishSymbol(object symbol) => ((ISFSymbol)symbol).GetSymbol();
+
+    public int SurfaceFinishTextCount(object symbol) => ((ISFSymbol)symbol).GetTextCount();
+
+    public string? SurfaceFinishText(object symbol, int index) => ((ISFSymbol)symbol).GetTextAtIndex(index);
+
+    public string? TableTitle(object table) => AsTable(table).Title;
+
+    /// <summary>
+    /// The cast to <c>IBomTableAnnotation</c> (a COM cast, not a call), then
+    /// <c>GetModelPathNames(row, out itemNumber, out partNumber)</c>; the two numbers are not
+    /// recorded here, since the row's cells already carry what the table shows.
+    /// </summary>
+    public IReadOnlyList<string>? BomModelPaths(object table, int row)
+    {
+        object? paths = ((IBomTableAnnotation)table).GetModelPathNames(row, out string _, out string _);
+        return paths switch
+        {
+            string[] strings => strings,
+            object[] items => items.Select(item => item as string ?? string.Empty).ToList(),
+            _ => null,
+        };
+    }
 
     /// <summary>
     /// Every model a view on any sheet references, in sheet and view order, with duplicates

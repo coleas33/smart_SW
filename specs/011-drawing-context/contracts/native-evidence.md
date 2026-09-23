@@ -162,3 +162,28 @@ new member omitted when null or empty and present when set, and a 1.5.0 fixture 
   entities could not be tied to a model face ({what})", its `error` listing any step that threw;
   a record that could not list its attachments is one `drawing_attachment` gap. An edge counts as
   tied when at least one adjacent face is; faces are deduplicated by scope and reference.
+
+## 6. Landed as (T039, T040, 2026-09-23)
+
+- **One annotation record.** Feature 010's GTol and datum reads are `IAnnotationSymbolReads`
+  (`Dump/AnnotationSymbols.cs`: `Specific`, `FrameCount`, `FrameValues`, `FrameSymbols`,
+  `FrameXml`, `DatumIdentifier`, `DatumLabel`), which `IModelAnnotationReader` and `IDrawingReader`
+  both extend, and a frame is read by `GtolFrames.Read` - both generations asked, under 010's gated
+  names - in both dumpers. `SwDrawingReader` answers them through a `SwModelAnnotationReader`. A
+  typed annotation (2, 5, 7) whose specific annotation answers null is one `drawing_symbol_read`
+  gap; a blank datum identifier or label is null and no gap, as in feature 010; a frame no call
+  answered is one `drawing_symbol_read` gap naming every error; a surface finish's texts are read
+  as one list (`GetTextCount`, `GetTextAtIndex`), a null text kept as the empty string. The typed
+  annotation's attachments are read from the annotation itself (no `GetAnnotation`), and a view
+  whose model is unavailable counts them with its dimensions in its one gap.
+- **One table walk.** `ReadCells` is feature 006's revision-table loop, unchanged, shared by both
+  lists; the enumeration and the type read keep feature 006's `revision_table_read` gaps. A table
+  of any type but 3 goes to the sheet's `tables` (`DrawingTraversal.AddTable`, `dtb:` from the
+  package's allocator, owned by the first view that returned it); a revision table is recorded
+  exactly as before, with no de-duplication added to it. A table two views return is recorded
+  once: by the annotation's identity before anything is read, then by persistent reference.
+- **Bill of materials.** Every row is asked (`GetModelPathNames` through the COM cast to
+  `IBomTableAnnotation`), since whether the header sits inside `RowCount` is PROBE-4's; a row that
+  answers no path adds no `BomRow`. A path is tied to a package document by discovery's matching -
+  the reviewed documents for an attached or confirmed drawing, the traversal's components for a
+  drawing root - and kept verbatim in `unresolved_paths` otherwise.

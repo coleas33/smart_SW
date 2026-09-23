@@ -192,6 +192,33 @@ public sealed class DrawingTraversal
     /// of them carries two records - which is the whole reason the single-valued
     /// <c>ISheet.RevisionTable</c> is not the enumeration.
     /// </summary>
+    /// <summary>
+    /// A table on <paramref name="sheet"/> that is not a revision table (feature 011), owned by the
+    /// view whose table walk returned it, numbered <c>dtb:NNNN</c> from the package's allocator.
+    /// </summary>
+    public DrawingTable AddTable(DrawingSheetRecord sheet, DrawingView owner)
+    {
+        if (sheet == null)
+        {
+            throw new ArgumentNullException(nameof(sheet));
+        }
+
+        if (owner == null)
+        {
+            throw new ArgumentNullException(nameof(owner));
+        }
+
+        var table = new DrawingTable
+        {
+            Id = _ids.Tables.Next(),
+            SheetId = sheet.Id,
+            OwnerViewId = owner.Id,
+        };
+
+        (sheet.Tables ??= new List<DrawingTable>()).Add(table);
+        return table;
+    }
+
     public RevisionTable AddRevisionTable(DrawingSheetRecord sheet)
     {
         if (sheet == null)

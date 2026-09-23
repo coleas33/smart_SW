@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.PersistRefs;
@@ -53,7 +54,7 @@ public enum AttachedEntityKind
 /// them inside the implementation. The dumper does not gate those a second time: one read
 /// reported twice is a gate log that counts calls nobody made.
 /// </summary>
-public interface IDrawingReader : IDimensionToleranceReads
+public interface IDrawingReader : IDimensionToleranceReads, IAnnotationSymbolReads
 {
     /// <summary>
     /// <paramref name="document"/> as an <c>IDrawingDoc</c>, or null when it is not a drawing:
@@ -295,6 +296,25 @@ public interface IDrawingReader : IDimensionToleranceReads
     /// when no document answers. Nothing is opened or resolved.
     /// </summary>
     object? FaceDocument(object view, object face);
+
+    /// <summary><c>ISFSymbol.GetSymbol()</c>, verbatim.</summary>
+    int SurfaceFinishSymbol(object symbol);
+
+    /// <summary><c>ISFSymbol.GetTextCount()</c>.</summary>
+    int SurfaceFinishTextCount(object symbol);
+
+    /// <summary><c>ISFSymbol.GetTextAtIndex(index)</c>.</summary>
+    string? SurfaceFinishText(object symbol, int index);
+
+    /// <summary><c>ITableAnnotation.Title</c>.</summary>
+    string? TableTitle(object table);
+
+    /// <summary>
+    /// <c>IBomTableAnnotation.GetModelPathNames(row, out, out)</c>: the model paths a bill of
+    /// materials row stands for; null when it answers none. The cast to the bill-of-materials
+    /// interface is a COM cast, not a call.
+    /// </summary>
+    IReadOnlyList<string>? BomModelPaths(object table, int row);
 }
 
 /// <summary>
@@ -332,6 +352,19 @@ public sealed class DrawingDumper : IDrawingSource
     /// or a hole chart on the same sheet is a table annotation too.
     /// </summary>
     private const int RevisionBlockTableType = 3;
+
+    /// <summary><c>swTableAnnotationType_e.swTableAnnotation_BillOfMaterials</c> (feature 011).</summary>
+    private const int BillOfMaterialsTableType = 2;
+
+    /// <summary>
+    /// <c>swAnnotationType_e</c> (reflected on 2024 SP5): the typed annotations a drawing record
+    /// gains fields for (feature 011) - datum tag 2, geometric tolerance 5, surface finish 7.
+    /// </summary>
+    private const int DatumTagAnnotation = 2;
+
+    private const int GtolAnnotation = 5;
+
+    private const int SurfaceFinishAnnotation = 7;
 
     /// <summary>
     /// swDimensionType_e values whose dimension is an <b>angle</b> on the pilot interop
@@ -581,6 +614,36 @@ public sealed class DrawingDumper : IDrawingSource
         /// <summary>The drawing's detailing mode as read; null when it could not be.</summary>
         public bool? DetailingMode { get; set; }
 
+        private readonly List<object> _tableHandles = new List<object>();
+        private readonly HashSet<string> _tableReferences = new HashSet<string>(StringComparer.Ordinal);
+        private Func<string, string?>? _packageDocumentId;
+
+        /// <summary>Whether this very annotation was recorded already in this drawing's table walk.</summary>
+        public bool TableHandleSeen(object table) => _tableHandles.Any(seen => ReferenceEquals(seen, table));
+
+        /// <summary>
+        /// Whether a table was recorded already in this drawing - by persistent reference when there
+        /// is one, else by the annotation's identity - recording it as seen when it was not.
+        /// </summary>
+        public bool TableSeen(object table, string? persistRef)
+        {
+            if (TableHandleSeen(table) || (persistRef != null && !_tableReferences.Add(persistRef)))
+            {
+                return true;
+            }
+
+            _tableHandles.Add(table);
+            return false;
+        }
+
+        /// <summary>
+        /// The rule that ties a path to a document of this package: the reviewed documents' rule for
+        /// an attached or confirmed drawing, and the traversal's components for a drawing root.
+        /// </summary>
+        public Func<string, string?> PackageDocumentId(DumpScope scope) =>
+            ReviewedDocumentId ?? (_packageDocumentId ??= OpenDrawingDiscovery.DocumentResolver(
+                scope.Components.Select(component => component.Node.DocumentPath)));
+
         /// <summary>
         /// True the first time an outside path is named in this drawing, so its gap is written
         /// once per path, on the first view that shows it (contracts/open-drawings.md section 3).
@@ -765,9 +828,9 @@ public sealed class DrawingDumper : IDrawingSource
 
         var context = new ViewContext(record, view, sheetName, AttachmentsUnavailable(pass, record));
         ReadDimensions(scope, pass, context, where);
-        ReadAnnotations(scope, pass, record, view, where);
+        ReadAnnotations(scope, pass, context, where);
         ReadNotes(scope, pass, record, view, where);
-        ReadRevisionTables(scope, pass, sheet, view, where);
+        ReadTables(scope, pass, sheet, record, view, where);
         NameSkippedAttachments(scope, context);
     }
 
@@ -1406,18 +1469,17 @@ public sealed class DrawingDumper : IDrawingSource
         return true;
     }
 
-    private void ReadAnnotations(
-        DumpScope scope, DrawingPass pass, DrawingView view, object handle, string where)
+    private void ReadAnnotations(DumpScope scope, DrawingPass pass, ViewContext view, string where)
     {
         IReadOnlyList<object>? annotations = scope.Gaps.TryStep(
             "annotation_identity",
-            view.Id,
+            view.View.Id,
             $"enumerate the annotations of {where}",
-            () => _gate.Call("GetAnnotations", () => _reader.Annotations(handle)));
+            () => _gate.Call("GetAnnotations", () => _reader.Annotations(view.Handle)));
 
         foreach (object annotation in annotations ?? new List<object>())
         {
-            DrawingAnnotation record = pass.Traversal.AddAnnotation(view);
+            DrawingAnnotation record = pass.Traversal.AddAnnotation(view.View);
 
             record.Name = ReadText(
                 scope, "annotation_identity", record.Id,
@@ -1448,7 +1510,133 @@ public sealed class DrawingDumper : IDrawingSource
 
             record.PersistRef = reference?.Base64;
             record.PersistRefScope = reference?.ScopeDocumentId;
+
+            ReadTypedAnnotation(scope, view, record, annotation, where);
         }
+    }
+
+    /// <summary>
+    /// A geometric tolerance's frames and datum identifier, a datum tag's label, a surface finish
+    /// symbol and its texts (feature 011), each through feature 010's reads where 010 has them
+    /// (<see cref="IAnnotationSymbolReads"/>, <see cref="GtolFrames.Read"/>) and each a
+    /// <c>drawing_symbol_read</c> gap on the annotation when it cannot be read; then the model faces
+    /// it is attached to. An annotation of any other type gains nothing.
+    /// </summary>
+    private void ReadTypedAnnotation(
+        DumpScope scope, ViewContext view, DrawingAnnotation record, object annotation, string where)
+    {
+        int? type = record.TypeRaw;
+        if (type != GtolAnnotation && type != DatumTagAnnotation && type != SurfaceFinishAnnotation)
+        {
+            return;
+        }
+
+        const string Symbol = "drawing_symbol_read";
+        string of = $"annotation {record.Id} on {where}";
+        string kind = type == GtolAnnotation
+            ? "geometric tolerance"
+            : type == DatumTagAnnotation ? "datum tag" : "surface finish symbol";
+
+        object? specific = null;
+        bool answered = scope.Gaps.TryStep(
+            Symbol, record.Id, $"read the {kind} of {of}",
+            () => { specific = _gate.Call("GetSpecificAnnotation", () => _reader.Specific(annotation)); });
+
+        if (answered && specific == null)
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                Symbol,
+                record.Id,
+                $"Annotation {record.Id} on {where} is of type "
+                + $"{type!.Value.ToString(CultureInfo.InvariantCulture)} and gave no {kind}, so what it says was not read.",
+                null);
+        }
+
+        if (specific != null)
+        {
+            switch (type)
+            {
+                case GtolAnnotation:
+                    ReadGtol(scope, record, specific, of);
+                    break;
+                case DatumTagAnnotation:
+                    scope.Gaps.TryStep(
+                        Symbol, record.Id, $"read the label of {of}",
+                        () => { record.DatumLabel = HoleDumper.Blank(_gate.Call("GetLabel", () => _reader.DatumLabel(specific!))); });
+                    break;
+                default:
+                    ReadSurfaceFinish(scope, record, specific, of);
+                    break;
+            }
+        }
+
+        record.AttachedFaces = ReadAttachments(scope, view, record.Id, of, () => annotation);
+    }
+
+    /// <summary>The frames, each asked both ways, and the datum identifier of a GTol.</summary>
+    private void ReadGtol(DumpScope scope, DrawingAnnotation record, object gtol, string of)
+    {
+        const string Symbol = "drawing_symbol_read";
+
+        int? count = Read(
+            scope, Symbol, record.Id, $"read the frame count of {of}",
+            "GetFrameCount", () => _reader.FrameCount(gtol));
+
+        var frames = new List<GtolFrame>();
+        for (int frame = 1; frame <= (count ?? 0); frame++)
+        {
+            var errors = new List<string>();
+            GtolFrame? read = GtolFrames.Read(_gate, _reader, gtol, frame, errors);
+            if (read != null)
+            {
+                frames.Add(read);
+            }
+            else if (errors.Count > 0)
+            {
+                scope.Gaps.Add(
+                    GapKind.ToolError,
+                    Symbol,
+                    record.Id,
+                    $"No call answered for frame {frame.ToString(CultureInfo.InvariantCulture)} of {of} "
+                    + "(GetFrameValues, GetFrameSymbols3, GetFrame and GetSymbolXml), so the frame was not "
+                    + "recorded.",
+                    string.Join("; ", errors));
+            }
+        }
+
+        record.GtolFrames = frames.Count == 0 ? null : frames;
+
+        scope.Gaps.TryStep(
+            Symbol, record.Id, $"read the datum identifier of {of}",
+            () => { record.DatumIdentifierRaw = HoleDumper.Blank(_gate.Call("GetDatumIdentifier", () => _reader.DatumIdentifier(gtol))); });
+    }
+
+    /// <summary>A surface finish symbol and every text of it, verbatim.</summary>
+    private void ReadSurfaceFinish(DumpScope scope, DrawingAnnotation record, object symbol, string of)
+    {
+        const string Symbol = "drawing_symbol_read";
+
+        record.SurfaceFinishSymbolRaw = Read(
+            scope, Symbol, record.Id, $"read the symbol of {of}",
+            "GetSymbol", () => _reader.SurfaceFinishSymbol(symbol));
+
+        List<string>? texts = scope.Gaps.TryStep(
+            Symbol, record.Id, $"read the texts of {of}",
+            () =>
+            {
+                int count = _gate.Call("GetTextCount", () => _reader.SurfaceFinishTextCount(symbol));
+                var read = new List<string>(count);
+                for (int index = 0; index < count; index++)
+                {
+                    int at = index;
+                    read.Add(_gate.Call("GetTextAtIndex", () => _reader.SurfaceFinishText(symbol, at)) ?? string.Empty);
+                }
+
+                return read;
+            });
+
+        record.SurfaceFinishTextsRaw = texts == null || texts.Count == 0 ? null : texts;
     }
 
     private void ReadNotes(
@@ -1481,14 +1669,17 @@ public sealed class DrawingDumper : IDrawingSource
     }
 
     /// <summary>
-    /// The revision tables of one view, filtered on the revision type and recorded on the
-    /// sheet. The enumeration is per view because that is the only walk that finds every
-    /// table: <c>ISheet.RevisionTable</c> is single-valued and would lose the second one.
+    /// The tables of one view, recorded on the sheet: a revision table in
+    /// <c>revision_tables</c> exactly as feature 006 records it, and every other type in
+    /// <c>tables</c> (feature 011). The enumeration is per view because that is the only walk that
+    /// finds every table: <c>ISheet.RevisionTable</c> is single-valued and would lose the second
+    /// one.
     /// </summary>
-    private void ReadRevisionTables(
+    private void ReadTables(
         DumpScope scope,
         DrawingPass pass,
         DrawingSheetRecord sheet,
+        DrawingView owner,
         object view,
         string where)
     {
@@ -1512,11 +1703,177 @@ public sealed class DrawingDumper : IDrawingSource
 
             if (type != RevisionBlockTableType)
             {
+                ReadDrawingTable(scope, pass, sheet, owner, table, type!.Value, where);
                 continue;
             }
 
             ReadRevisionTable(scope, pass, sheet, table, where);
         }
+    }
+
+    /// <summary>
+    /// One table that is not a revision table (feature 011, contracts/native-evidence.md section
+    /// 3, "Tables"): its title, its shape and every cell through the walk revision tables use, and
+    /// for a bill of materials the documents each row stands for. A table two views return is
+    /// recorded once - by persistent reference, else by the annotation's identity - under the first
+    /// view that returned it. Every failed read is a <c>drawing_table_read</c> gap.
+    /// </summary>
+    private void ReadDrawingTable(
+        DumpScope scope,
+        DrawingPass pass,
+        DrawingSheetRecord sheet,
+        DrawingView owner,
+        object table,
+        int type,
+        string where)
+    {
+        const string TableGap = "drawing_table_read";
+
+        if (pass.TableHandleSeen(table))
+        {
+            return;
+        }
+
+        ScopedPersistRef? reference = scope.Gaps.TryStep(
+            TableGap,
+            sheet.Id,
+            $"read a persistent reference for a table of type {type.ToString(CultureInfo.InvariantCulture)} on {where}",
+            () => _reader.PersistRef(pass.Document, table));
+
+        if (pass.TableSeen(table, reference?.Base64))
+        {
+            return;
+        }
+
+        DrawingTable record = pass.Traversal.AddTable(sheet, owner);
+        record.TableTypeRaw = type;
+        record.PersistRef = reference?.Base64;
+        record.PersistRefScope = reference?.ScopeDocumentId;
+
+        record.Title = ReadText(
+            scope, TableGap, record.Id, $"read the title of table {record.Id} on {where}",
+            "Title", () => _reader.TableTitle(table));
+
+        RevisionTableShape? shape = null;
+        if (!scope.Gaps.TryStep(
+            TableGap,
+            record.Id,
+            $"read the row and column counts of table {record.Id} on {where}",
+            () => { shape = _reader.TableShape(table); }))
+        {
+            return;
+        }
+
+        record.RowCount = shape!.Value.RowCount;
+        record.ColumnCount = shape!.Value.ColumnCount;
+        record.Rows.AddRange(ReadCells(scope, TableGap, record.Id, table, shape!.Value, where));
+
+        if (type == BillOfMaterialsTableType)
+        {
+            record.BomRows = ReadBomRows(scope, pass, record, table, where);
+        }
+    }
+
+    /// <summary>
+    /// The documents each row of a bill of materials stands for: every row is asked, since
+    /// whether the header sits inside <c>RowCount</c> is PROBE-4's; a row that answers no path adds
+    /// nothing. Each path is a package document when discovery's matching ties it to one, and is
+    /// kept verbatim otherwise. Null when no row answered.
+    /// </summary>
+    private List<BomRow>? ReadBomRows(
+        DumpScope scope, DrawingPass pass, DrawingTable record, object table, string where)
+    {
+        Func<string, string?> documentOf = pass.PackageDocumentId(scope);
+        var rows = new List<BomRow>();
+
+        for (int row = 0; row < (record.RowCount ?? 0); row++)
+        {
+            int r = row;
+            IReadOnlyList<string>? paths = scope.Gaps.TryStep(
+                "drawing_table_read",
+                record.Id,
+                $"read the models of row {r.ToString(CultureInfo.InvariantCulture)} of bill of materials {record.Id} on {where}",
+                () => _gate.Call("GetModelPathNames", () => _reader.BomModelPaths(table, r)));
+
+            var documents = new List<string>();
+            var unresolved = new List<string>();
+            foreach (string path in paths ?? Array.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                string? documentId = documentOf(path);
+                if (documentId == null)
+                {
+                    unresolved.Add(path);
+                }
+                else if (!documents.Contains(documentId))
+                {
+                    documents.Add(documentId);
+                }
+            }
+
+            if (documents.Count > 0 || unresolved.Count > 0)
+            {
+                rows.Add(new BomRow
+                {
+                    Index = r,
+                    DocumentIds = documents.Count == 0 ? null : documents,
+                    UnresolvedPaths = unresolved.Count == 0 ? null : unresolved,
+                });
+            }
+        }
+
+        return rows.Count == 0 ? null : rows;
+    }
+
+    /// <summary>
+    /// Every cell of a table, row by row: the walk a revision table and every other table share
+    /// (feature 011, extracted from feature 006's revision-table loop, unchanged). An empty cell is
+    /// the empty string; a null is one that could not be read, with a gap of
+    /// <paramref name="entityKind"/>. Which row is a header is not decided here.
+    /// </summary>
+    private List<RevisionTableRow> ReadCells(
+        DumpScope scope, string entityKind, string recordId, object table, RevisionTableShape shape, string where)
+    {
+        var rows = new List<RevisionTableRow>(shape.RowCount);
+        for (int row = 0; row < shape.RowCount; row++)
+        {
+            var cells = new RevisionTableRow
+            {
+                Index = row,
+
+                // Which row is the revision row, and which is the header, are profile
+                // questions answered in Python from the profile's revision cell and its
+                // header row. PROBE-4 has not settled whether the header sits inside
+                // RowCount or outside it, so the extractor classifies nothing rather than
+                // guessing.
+                IsHeader = null,
+            };
+
+            for (int column = 0; column < shape.ColumnCount; column++)
+            {
+                int r = row;
+                int c = column;
+
+                string? text = null;
+                bool read = scope.Gaps.TryStep(
+                    entityKind,
+                    recordId,
+                    $"read cell [{r}, {c}] of table {recordId} on {where}",
+                    () => { text = _gate.Call("Text", () => _reader.Cell(table, r, c)); });
+
+                // An empty cell is the empty string; a null is one that could not be read.
+                // Confusing the two would turn a real revision mismatch into a pass.
+                cells.Cells.Add(read ? text : null);
+            }
+
+            rows.Add(cells);
+        }
+
+        return rows;
     }
 
     /// <summary>One revision table: both revision readings, and every cell.</summary>
@@ -1553,40 +1910,7 @@ public sealed class DrawingDumper : IDrawingSource
 
         record.RowCount = shape!.Value.RowCount;
         record.ColumnCount = shape!.Value.ColumnCount;
-
-        for (int row = 0; row < shape!.Value.RowCount; row++)
-        {
-            var cells = new RevisionTableRow
-            {
-                Index = row,
-
-                // Which row is the revision row, and which is the header, are profile
-                // questions answered in Python from the profile's revision cell and its
-                // header row. PROBE-4 has not settled whether the header sits inside
-                // RowCount or outside it, so the extractor classifies nothing rather than
-                // guessing.
-                IsHeader = null,
-            };
-
-            for (int column = 0; column < shape!.Value.ColumnCount; column++)
-            {
-                int r = row;
-                int c = column;
-
-                string? text = null;
-                bool read = scope.Gaps.TryStep(
-                    "revision_table_read",
-                    record.Id,
-                    $"read cell [{r}, {c}] of table {record.Id} on {where}",
-                    () => { text = _gate.Call("Text", () => _reader.Cell(table, r, c)); });
-
-                // An empty cell is the empty string; a null is one that could not be read.
-                // Confusing the two would turn a real revision mismatch into a pass.
-                cells.Cells.Add(read ? text : null);
-            }
-
-            record.Rows.Add(cells);
-        }
+        record.Rows.AddRange(ReadCells(scope, "revision_table_read", record.Id, table, shape!.Value, where));
 
         ScopedPersistRef? reference = scope.Gaps.TryStep(
             "revision_table_read",
