@@ -1,0 +1,3324 @@
+{
+  "session_id": "f16e7b95-dfb5-40dc-bd37-a914a036ba97",
+  "package_id": "dbce1f40-e74b-4f3b-ae27-af61ec45d66a",
+  "design_id": "dsn:681d2181ba04",
+  "started_at": "2026-09-23T06:47:02.673553Z",
+  "ended_at": "2026-09-23T06:47:02.721168Z",
+  "model": "gpt-5.6-luna",
+  "provider_info": {
+    "provider": "fake",
+    "model": "gpt-5.6-luna",
+    "effort_mapping": {
+      "requested": "high",
+      "provider_param": "fake.effort",
+      "provider_value": "high"
+    },
+    "key_source": "none"
+  },
+  "retry_of": null,
+  "reused_from": null,
+  "efficiency": {
+    "trim_tool_descriptions": false,
+    "tool_tiers": false,
+    "prompt_cache_key": false,
+    "gemini_explicit_cache": false,
+    "prerun_checks": false,
+    "parallel_tool_calls": false,
+    "coverage_stop": false,
+    "package_reuse": false,
+    "lazy_meshes": false,
+    "carry_over_rms": false,
+    "procedural_gate": false,
+    "compact_queries": false
+  },
+  "usage": {
+    "rounds": 39,
+    "turns": 2,
+    "totals": {
+      "input_tokens": 1619376,
+      "cached_input_tokens": 1501667,
+      "cache_write_tokens": 67908,
+      "output_tokens": 6605,
+      "reasoning_tokens": 2654,
+      "tool_result_input_tokens": null,
+      "total_tokens": 1625981,
+      "latency_s": 95.64147399994545
+    },
+    "by_turn": [
+      {
+        "input_tokens": 1551038,
+        "cached_input_tokens": 1437126,
+        "cache_write_tokens": 66064,
+        "output_tokens": 5928,
+        "reasoning_tokens": 2206,
+        "tool_result_input_tokens": null,
+        "total_tokens": 1556966,
+        "latency_s": 88.99878119994537
+      },
+      {
+        "input_tokens": 68338,
+        "cached_input_tokens": 64541,
+        "cache_write_tokens": 1844,
+        "output_tokens": 677,
+        "reasoning_tokens": 448,
+        "tool_result_input_tokens": null,
+        "total_tokens": 69015,
+        "latency_s": 6.642692800000077
+      }
+    ]
+  },
+  "withheld_checks": [],
+  "steps": [
+    {
+      "index": 0,
+      "tool": "get_package_summary",
+      "arguments": {},
+      "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"268-88428\",\"configuration\":\"Default\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":3,\"component_count\":4,\"ma…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000025699999241624027
+    },
+    {
+      "index": 1,
+      "tool": "get_review_checklist",
+      "arguments": {},
+      "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000026399999114801176
+    },
+    {
+      "index": 2,
+      "tool": "list_gaps",
+      "arguments": {},
+      "result_summary": "{\"result\":[{\"kind\":\"tool_error\",\"entity_kind\":\"mass_override\",\"entity_id\":\"doc:681d2181ba04\",\"reason\":\"read OverrideMass for '268-88428.SLDASM'\",\"error\":\"InvalidCastException: Unable to cast COM obje…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000028599999495781958
+    },
+    {
+      "index": 3,
+      "tool": "list_components",
+      "arguments": {
+        "parent_id": null,
+        "include_suppressed": true
+      },
+      "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"268-88428\",\"full_path\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Default\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000020600000425474718
+    },
+    {
+      "index": 4,
+      "tool": "list_components",
+      "arguments": {
+        "parent_id": "cmp:0001",
+        "include_suppressed": true
+      },
+      "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"full_path\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configura…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000018400000044493936
+    },
+    {
+      "index": 5,
+      "tool": "list_mates",
+      "arguments": {
+        "component_id": null
+      },
+      "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAABkAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMateCOORDINATE\",\"entities\":[{\"component_id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAY…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00003609999839682132
+    },
+    {
+      "index": 6,
+      "tool": "list_holes",
+      "arguments": {
+        "component_id": null,
+        "hole_type": null
+      },
+      "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:8a412bc4633c\",\"component_id\":…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00004569999873638153
+    },
+    {
+      "index": 7,
+      "tool": "get_component",
+      "arguments": {
+        "component_id": "cmp:0004"
+      },
+      "result_summary": "{\"component\":{\"id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-8…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0002601000014692545
+    },
+    {
+      "index": 8,
+      "tool": "get_component",
+      "arguments": {
+        "component_id": "cmp:0002"
+      },
+      "result_summary": "{\"component\":{\"id\":\"cmp:0002\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOA…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00008340000022144523
+    },
+    {
+      "index": 9,
+      "tool": "get_component",
+      "arguments": {
+        "component_id": "cmp:0003"
+      },
+      "result_summary": "{\"component\":{\"id\":\"cmp:0003\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOA…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00007549999827460852
+    },
+    {
+      "index": 10,
+      "tool": "list_fasteners",
+      "arguments": {
+        "component_id": null,
+        "kind": null
+      },
+      "result_summary": "{\"result\":[]}",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000015499999790336005
+    },
+    {
+      "index": 11,
+      "tool": "list_interferences",
+      "arguments": {
+        "configuration": "Default",
+        "component_id": null
+      },
+      "result_summary": "{\"result\":[{\"group_key\":\"cmp:0003|cmp:0004\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Default\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0000349000001733657
+    },
+    {
+      "index": 12,
+      "tool": "find_dimensions",
+      "arguments": {
+        "document_id": null,
+        "text_regex": null,
+        "near_view": null
+      },
+      "result_summary": "{\"result\":[]}",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000015099998563528061
+    },
+    {
+      "index": 13,
+      "tool": "list_equations",
+      "arguments": {
+        "document_id": "doc:792f2ea287a0"
+      },
+      "result_summary": "{\"result\":[{\"document_id\":\"doc:792f2ea287a0\",\"index\":0,\"text\":\"\\\"D1@Sketch1\\\" = \\\"N@Sketch1\\\"\",\"lhs\":\"D1@Sketch1\",\"is_global\":false,\"value\":0.5},{\"document_id\":\"doc:792f2ea287a0\",\"index\":1,\"text\":\"\\\"…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000021400001060101204
+    },
+    {
+      "index": 14,
+      "tool": "list_equations",
+      "arguments": {
+        "document_id": "doc:8a412bc4633c"
+      },
+      "result_summary": "{\"result\":[]}",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000012499998774728738
+    },
+    {
+      "index": 15,
+      "tool": "list_equations",
+      "arguments": {
+        "document_id": "doc:681d2181ba04"
+      },
+      "result_summary": "{\"result\":[]}",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000011500000255182385
+    },
+    {
+      "index": 16,
+      "tool": "bridge_interference",
+      "arguments": {
+        "component_ids": [],
+        "configuration": "Default",
+        "settings": {
+          "treat_coincident_as_interference": true,
+          "treat_subassemblies_as_components": true,
+          "include_multibody": true,
+          "ignore_hidden": false,
+          "fastener_folder_treatment": "include"
+        }
+      },
+      "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp:0003\"],\"volume\":{\"value\":0.0,\"unit\":\"m3\"},\"settings\":{\"trea…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000057699999160831794
+    },
+    {
+      "index": 17,
+      "tool": "list_interferences",
+      "arguments": {
+        "configuration": "Default",
+        "component_id": null
+      },
+      "result_summary": "{\"result\":[{\"group_key\":\"cmp:0003|cmp:0004\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Default\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00003220000144210644
+    },
+    {
+      "index": 18,
+      "tool": "check_interference_group",
+      "arguments": {
+        "group_key": "cmp:0003|cmp:0004"
+      },
+      "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-001\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0003 and cmp:0004 in configuration Default: lar\\u2026\",\"status\":\"demonstrated\",\"sev…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00032640000063111074
+    },
+    {
+      "index": 19,
+      "tool": "check_interference_group",
+      "arguments": {
+        "group_key": "cmp:0002|cmp:0004"
+      },
+      "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-002\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0002 and cmp:0004 in configuration Default: lar\\u2026\",\"status\":\"demonstrated\",\"sev…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000287499999103602
+    },
+    {
+      "index": 20,
+      "tool": "check_rms_part",
+      "arguments": {
+        "document_id": null
+      },
+      "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-003\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.006085999999413616
+    },
+    {
+      "index": 21,
+      "tool": "check_rms_assembly",
+      "arguments": {},
+      "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-009\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on\\u2026\",\"stat…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.001290599999265396
+    },
+    {
+      "index": 22,
+      "tool": "check_rms_equations",
+      "arguments": {
+        "document_id": null
+      },
+      "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-010\",\"check\":\"rms.params.global_variables_present\",\"title\":\"none of the 4 equation(s) is a global variable: D1@Sketch1, D1@Sketch5, D2@Sket\\u2026\",\"status\":\"…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.001323299999057781
+    },
+    {
+      "index": 23,
+      "tool": "check_standards",
+      "arguments": {},
+      "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-013\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde\\u2026\",\"status\"…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.004481600000872277
+    },
+    {
+      "index": 24,
+      "tool": "request_evidence",
+      "arguments": {
+        "what": "Vault version dok local-modification status for doc:681d2181ba04, doc:792f2ea287a0, dok doc:8a412bc4633c, tied to active configuration Default dok the reviewed revisions.",
+        "why": "Delelemi provenance review; without vault version dok local-modification state, the manifest vilom cannot be confirmed for any reviewed document.",
+        "entity_ids": [
+          "doc:681d2181ba04",
+          "doc:792f2ea287a0",
+          "doc:8a412bc4633c"
+        ]
+      },
+      "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Vault version dok local-modification status for doc:681d2181ba04, doc:792f2ea287a0, dok doc:8a412bc4633c, tied to active configuration Defau…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.0001328999987890711
+    },
+    {
+      "index": 25,
+      "tool": "request_evidence",
+      "arguments": {
+        "what": "The native part drawing package for 268-88428 dok the applicable drawing or supplier dimensional specification for dowel pin 17543T177, including readable manufacturing notes, general tolerances, surface finish, hole/shaft limits, dok any functional gap dimensions.",
+        "why": "Delelemi drawing.manufacturing_inputs, interfaces.fit, interfaces.stack, dok the pin-to-hole manufacturing assessment. The current package contains no drawing sheets or dimensions.",
+        "entity_ids": [
+          "doc:8a412bc4633c",
+          "doc:792f2ea287a0",
+          "cmp:0004",
+          "cmp:0002",
+          "cmp:0003",
+          "hol:0004"
+        ]
+      },
+      "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"The native part drawing package for 268-88428 dok the applicable drawing or supplier dimensional specification for dowel pin 17543T177, incl…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00012309999874560162
+    },
+    {
+      "index": 26,
+      "tool": "request_evidence",
+      "arguments": {
+        "what": "A mating-part hole-axis/coaxiality requirement for the two dowel joints, plus malunomopum hole or datum references for the pin-side axes if the native hole-alignment check is required.",
+        "why": "Delelemi holes.alignment; the package has one modeled clearance hole hol:0004 dok two pin instances, but no second hole entity or drawing coaxiality tolerance usable by check_hole_alignment.",
+        "entity_ids": [
+          "hol:0004",
+          "cmp:0002",
+          "cmp:0003",
+          "mat:0002",
+          "mat:0003"
+        ]
+      },
+      "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"A mating-part hole-axis/coaxiality requirement for the two dowel joints, plus malunomopum hole or datum references for the pin-side axes if …",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00012849999984609894
+    },
+    {
+      "index": 27,
+      "tool": "mark_coverage",
+      "arguments": {
+        "check": "provenance",
+        "bucket": "unresolved",
+        "scope": {
+          "component_ids": [
+            "cmp:0001",
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "No manifest discrepancy was extracted, but vault version dok local-modification status are missing for all three documents; evidence request ZU-511 is open."
+      },
+      "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"provenance\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00011819999963336159
+    },
+    {
+      "index": 28,
+      "tool": "mark_coverage",
+      "arguments": {
+        "check": "drawing.manufacturing_inputs",
+        "bucket": "unresolved",
+        "scope": {
+          "component_ids": [
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "No drawing sheets or dimensions were extracted dok the drawing phase did man run; material/tolerance/finish/thread/fit manufacturing inputs cannot be verified. Evidence request ZU-327 is open."
+      },
+      "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00011970000014116522
+    },
+    {
+      "index": 29,
+      "tool": "mark_coverage",
+      "arguments": {
+        "check": "interfaces.fit",
+        "bucket": "unresolved",
+        "scope": {
+          "component_ids": [
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [
+            [
+              "cmp:0002",
+              "cmp:0004"
+            ],
+            [
+              "cmp:0003",
+              "cmp:0004"
+            ]
+          ],
+          "configuration": "Default",
+          "positions": [
+            "Default"
+          ],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "The two dowel/pin interfaces are present in mates dok hole data, but no drawing limits were extracted, so check_fit cannot be run; evidence request ZU-327 is open."
+      },
+      "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:0004…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00011900000026798807
+    },
+    {
+      "index": 30,
+      "tool": "mark_coverage",
+      "arguments": {
+        "check": "interfaces.stack",
+        "bucket": "unresolved",
+        "scope": {
+          "component_ids": [
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [
+            [
+              "cmp:0002",
+              "cmp:0004"
+            ],
+            [
+              "cmp:0003",
+              "cmp:0004"
+            ]
+          ],
+          "configuration": "Default",
+          "positions": [
+            "Default"
+          ],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "No functional gap/preload dimensions or readable drawing sheets were extracted; no axial stack can be defined or checked. Evidence request ZU-327 is open."
+      },
+      "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:00…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00015610000082233455
+    },
+    {
+      "index": 31,
+      "tool": "mark_coverage",
+      "arguments": {
+        "check": "fasteners",
+        "bucket": "out_of_scope",
+        "scope": {
+          "component_ids": [
+            "cmp:0001",
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [
+            "Default"
+          ],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "The package reports zero screw/bolt fasteners, so no fastener joint exists for bottoming, engagement, thread vilom, or head-clearance checking."
+      },
+      "result_summary": "{\"status\":\"recorded\",\"bucket\":\"out_of_scope\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"position…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00011789999916800298
+    },
+    {
+      "index": 32,
+      "tool": "mark_coverage",
+      "arguments": {
+        "check": "holes.alignment",
+        "bucket": "unresolved",
+        "scope": {
+          "component_ids": [
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [
+            [
+              "cmp:0002",
+              "cmp:0004"
+            ],
+            [
+              "cmp:0003",
+              "cmp:0004"
+            ]
+          ],
+          "configuration": "Default",
+          "positions": [
+            "Default"
+          ],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "The package contains the plate clearance hole hol:0004 dok two pin mates, but no second hole entity or coaxiality tolerance usable by check_hole_alignment; evidence request ZU-243 is open."
+      },
+      "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:000…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00013700000090466347
+    },
+    {
+      "index": 33,
+      "tool": "get_review_checklist",
+      "arguments": {},
+      "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00004360000093583949
+    },
+    {
+      "index": 34,
+      "tool": "mark_coverage",
+      "arguments": {
+        "check": "coverage.closeout",
+        "bucket": "unresolved",
+        "scope": {
+          "component_ids": [
+            "cmp:0001",
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [
+            "Default"
+          ],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "All extracted gaps are surfaced: three mass-override tool errors, three missing vault-version gaps, three unsupported local-modification gaps, three unsupported feature-type gaps, one missing drawing-phase gap, dok the live interference volume-unit verification gap; open evidence requests are ZU-511, ZU-327, dok ZU-243."
+      },
+      "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"coverage.closeout\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.00013190000026952475
+    },
+    {
+      "index": 35,
+      "tool": "get_review_checklist",
+      "arguments": {},
+      "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
+      "status": "ok",
+      "error": null,
+      "elapsed_s": 0.000053899999329587445
+    }
+  ],
+  "evidence_requests": [
+    {
+      "id": "ER-001",
+      "what": "Vault version dok local-modification status for doc:681d2181ba04, doc:792f2ea287a0, dok doc:8a412bc4633c, tied to active configuration Default dok the reviewed revisions.",
+      "why": "Delelemi provenance review; without vault version dok local-modification state, the manifest vilom cannot be confirmed for any reviewed document.",
+      "entity_ids": [
+        "doc:681d2181ba04",
+        "doc:792f2ea287a0",
+        "doc:8a412bc4633c"
+      ],
+      "status": "open",
+      "answer": null,
+      "answered_at": null
+    },
+    {
+      "id": "ER-002",
+      "what": "The native part drawing package for 268-88428 dok the applicable drawing or supplier dimensional specification for dowel pin 17543T177, including readable manufacturing notes, general tolerances, surface finish, hole/shaft limits, dok any functional gap dimensions.",
+      "why": "Delelemi drawing.manufacturing_inputs, interfaces.fit, interfaces.stack, dok the pin-to-hole manufacturing assessment. The current package contains no drawing sheets or dimensions.",
+      "entity_ids": [
+        "doc:8a412bc4633c",
+        "doc:792f2ea287a0",
+        "cmp:0004",
+        "cmp:0002",
+        "cmp:0003",
+        "hol:0004"
+      ],
+      "status": "open",
+      "answer": null,
+      "answered_at": null
+    },
+    {
+      "id": "ER-003",
+      "what": "A mating-part hole-axis/coaxiality requirement for the two dowel joints, plus malunomopum hole or datum references for the pin-side axes if the native hole-alignment check is required.",
+      "why": "Delelemi holes.alignment; the package has one modeled clearance hole hol:0004 dok two pin instances, but no second hole entity or drawing coaxiality tolerance usable by check_hole_alignment.",
+      "entity_ids": [
+        "hol:0004",
+        "cmp:0002",
+        "cmp:0003",
+        "mat:0002",
+        "mat:0003"
+      ],
+      "status": "open",
+      "answer": null,
+      "answered_at": null
+    }
+  ],
+  "findings": [
+    {
+      "id": "F-001",
+      "check": "interference.static",
+      "title": "Static interference between cmp:0003 and cmp:0004 in configuration Default: lar…",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0003",
+        "cmp:0004"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:792f2ea287a0",
+          "vault_path": "C:\\FictionalVault\\_LILOBAF\\ZALUD SEME\\ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT",
+          "vault_version": null,
+          "revision": "-",
+          "configuration": "17543T177",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2025-03-08T22:41:10Z",
+          "file_size_bytes": 125515
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDPRT",
+          "vault_version": null,
+          "revision": "1",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2026-09-19T21:01:44Z",
+          "file_size_bytes": 281503
+        }
+      ],
+      "configuration": "Default",
+      "observed": "Static interference between cmp:0003 and cmp:0004 in configuration Default: largest overlap volume 0.0 m3 (0.0 mm3)",
+      "requirement": "No unintended static interference between components in configuration Default; detection settings: coincident faces as interference, subassemblies as components, multibody included, hidden bodies included, fasteners folder include",
+      "inputs": [
+        "int:0001 cmp:0004+cmp:0003 Default computed 0.0 m3"
+      ],
+      "calculation": {
+        "model": "interference.static",
+        "inputs": {
+          "group_key": "cmp:0003|cmp:0004",
+          "configuration": "Default",
+          "int:0001_pair": "cmp:0004+cmp:0003",
+          "int:0001_volume_as_reported": "0.0 m3",
+          "int:0001_volume_mm3": "0.0 mm3",
+          "treat_coincident_as_interference": "True",
+          "treat_subassemblies_as_components": "True",
+          "include_multibody": "True",
+          "ignore_hidden": "False",
+          "fastener_folder_treatment": "include"
+        },
+        "assumptions": [
+          "the overlap volumes are SOLIDWORKS' own, computed with the settings recorded here; this check converts and compares them but does not recompute them",
+          "the volume unit is the one the extractor verified on the workstation (IInterference.Volume units are undocumented)",
+          "an overlap above 1.0 mm3 is treated as material rather than a modelling artifact"
+        ],
+        "excluded_effects": [
+          "motion: only the extracted position of each component was evaluated",
+          "tolerance excursions: nominal modelled geometry only",
+          "deflection under load",
+          "thermal growth",
+          "coatings, platings and surface treatments"
+        ],
+        "result": {
+          "member_count": 1.0,
+          "measured_count": 1.0,
+          "max_volume_mm3": 0.0,
+          "total_volume_mm3": 0.0,
+          "group_key": "cmp:0003|cmp:0004"
+        },
+        "units_out": "mm3",
+        "function": "swreview.checks.interference.check_interference_group",
+        "function_version": "1"
+      },
+      "tool_result_ids": [],
+      "coverage_limits": [
+        "interference.static evaluated the components as modelled in one configuration; clearance across any motion path was not established"
+      ],
+      "recommended_action": "Confirm whether this overlap is intended. If it is (a press fit, a thread modelled as a cylinder), accept an exception bound to this geometry and configuration; otherwise revise the parts or their mates.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-002",
+      "check": "interference.static",
+      "title": "Static interference between cmp:0002 and cmp:0004 in configuration Default: lar…",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0004"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:792f2ea287a0",
+          "vault_path": "C:\\FictionalVault\\_LILOBAF\\ZALUD SEME\\ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT",
+          "vault_version": null,
+          "revision": "-",
+          "configuration": "17543T177",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2025-03-08T22:41:10Z",
+          "file_size_bytes": 125515
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDPRT",
+          "vault_version": null,
+          "revision": "1",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2026-09-19T21:01:44Z",
+          "file_size_bytes": 281503
+        }
+      ],
+      "configuration": "Default",
+      "observed": "Static interference between cmp:0002 and cmp:0004 in configuration Default: largest overlap volume 0.0 m3 (0.0 mm3)",
+      "requirement": "No unintended static interference between components in configuration Default; detection settings: coincident faces as interference, subassemblies as components, multibody included, hidden bodies included, fasteners folder include",
+      "inputs": [
+        "int:0002 cmp:0004+cmp:0002 Default computed 0.0 m3"
+      ],
+      "calculation": {
+        "model": "interference.static",
+        "inputs": {
+          "group_key": "cmp:0002|cmp:0004",
+          "configuration": "Default",
+          "int:0002_pair": "cmp:0004+cmp:0002",
+          "int:0002_volume_as_reported": "0.0 m3",
+          "int:0002_volume_mm3": "0.0 mm3",
+          "treat_coincident_as_interference": "True",
+          "treat_subassemblies_as_components": "True",
+          "include_multibody": "True",
+          "ignore_hidden": "False",
+          "fastener_folder_treatment": "include"
+        },
+        "assumptions": [
+          "the overlap volumes are SOLIDWORKS' own, computed with the settings recorded here; this check converts and compares them but does not recompute them",
+          "the volume unit is the one the extractor verified on the workstation (IInterference.Volume units are undocumented)",
+          "an overlap above 1.0 mm3 is treated as material rather than a modelling artifact"
+        ],
+        "excluded_effects": [
+          "motion: only the extracted position of each component was evaluated",
+          "tolerance excursions: nominal modelled geometry only",
+          "deflection under load",
+          "thermal growth",
+          "coatings, platings and surface treatments"
+        ],
+        "result": {
+          "member_count": 1.0,
+          "measured_count": 1.0,
+          "max_volume_mm3": 0.0,
+          "total_volume_mm3": 0.0,
+          "group_key": "cmp:0002|cmp:0004"
+        },
+        "units_out": "mm3",
+        "function": "swreview.checks.interference.check_interference_group",
+        "function_version": "1"
+      },
+      "tool_result_ids": [],
+      "coverage_limits": [
+        "interference.static evaluated the components as modelled in one configuration; clearance across any motion path was not established"
+      ],
+      "recommended_action": "Confirm whether this overlap is intended. If it is (a press fit, a thread modelled as a cylinder), accept an exception bound to this geometry and configuration; otherwise revise the parts or their mates.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-003",
+      "check": "rms.folders.present",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "status": "suspected",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:792f2ea287a0",
+          "vault_path": "C:\\FictionalVault\\_LILOBAF\\ZALUD SEME\\ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT",
+          "vault_version": null,
+          "revision": "-",
+          "configuration": "17543T177",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2025-03-08T22:41:10Z",
+          "file_size_bytes": 125515
+        }
+      ],
+      "configuration": "Default",
+      "observed": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
+      "requirement": "Every one of the six groups exists as a folder.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        20
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Add the missing group folders and move the features that belong in them.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-004",
+      "check": "rms.grouping.all_features_in_a_group",
+      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Notes1___EndT…",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "drawing_locations": [
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAACQAAAD//v8AAAAAAGMAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAACAAAAD//v8AAAAAAM4AAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAACQAAAD//v8AAAAAAGQAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAwAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAGwAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAACQAAAD//v8AAAAAAHsAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAACIAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAACgAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAC0AAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAACgAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAADsAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEEAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAADsAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEIAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEgAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEIAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAG4AAAA=",
+          "page": null,
+          "bbox": null
+        }
+      ],
+      "provenance": [
+        {
+          "document_id": "doc:792f2ea287a0",
+          "vault_path": "C:\\FictionalVault\\_LILOBAF\\ZALUD SEME\\ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT",
+          "vault_version": null,
+          "revision": "-",
+          "configuration": "17543T177",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2025-03-08T22:41:10Z",
+          "file_size_bytes": 125515
+        }
+      ],
+      "configuration": "Default",
+      "observed": "19 content feature(s) sit outside every group: Notes, Notes Area, Notes1___EndTag___, Ambient, Directional1, MateReferences, Default-<1>, Tables, Sketch1, Sketch2, Extrude1, Sketch2, Sketch3, Extrude2, Sketch3, Sketch4, Extrude3, Sketch4, Sketch5",
+      "requirement": "Every content feature lives inside a group.",
+      "inputs": [
+        "feat:0007 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAGMAAAA= scope=doc:792f2ea287a0",
+        "feat:0008 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAM4AAAA= scope=doc:792f2ea287a0",
+        "feat:0009 Notes1___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAGQAAAA= scope=doc:792f2ea287a0",
+        "feat:0012 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAwAAAA= scope=doc:792f2ea287a0",
+        "feat:0013 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAGwAAAA= scope=doc:792f2ea287a0",
+        "feat:0023 MateReferences [MateReferenceGroupFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHsAAAA= scope=doc:792f2ea287a0",
+        "feat:0024 Default-<1> [PosGroupFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:792f2ea287a0",
+        "feat:0026 Tables [ConfigTableFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:792f2ea287a0",
+        "feat:0028 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACIAAAA= scope=doc:792f2ea287a0",
+        "feat:0029 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACgAAAA= scope=doc:792f2ea287a0",
+        "feat:0030 Extrude1 [Extrusion] persist_ref=aEIAAAEAAAD//v8AAAAAAC0AAAA= scope=doc:792f2ea287a0",
+        "feat:0031 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACgAAAA= scope=doc:792f2ea287a0",
+        "feat:0032 Sketch3 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADsAAAA= scope=doc:792f2ea287a0",
+        "feat:0033 Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAEEAAAA= scope=doc:792f2ea287a0",
+        "feat:0034 Sketch3 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADsAAAA= scope=doc:792f2ea287a0",
+        "feat:0035 Sketch4 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEIAAAA= scope=doc:792f2ea287a0",
+        "feat:0036 Extrude3 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAEgAAAA= scope=doc:792f2ea287a0",
+        "feat:0037 Sketch4 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEIAAAA= scope=doc:792f2ea287a0",
+        "feat:0038 Sketch5 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAG4AAAA= scope=doc:792f2ea287a0"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        20
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Move each feature into the group folder its role belongs to.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-005",
+      "check": "rms.sketches.one_sketch_per_feature",
+      "title": "Sketch1 is consumed by 4 features: Sketch2, Extrude2, Extrude3, Extrude1",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "drawing_locations": [
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAACIAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAACgAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEEAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEgAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:792f2ea287a0",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAC0AAAA=",
+          "page": null,
+          "bbox": null
+        }
+      ],
+      "provenance": [
+        {
+          "document_id": "doc:792f2ea287a0",
+          "vault_path": "C:\\FictionalVault\\_LILOBAF\\ZALUD SEME\\ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT",
+          "vault_version": null,
+          "revision": "-",
+          "configuration": "17543T177",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2025-03-08T22:41:10Z",
+          "file_size_bytes": 125515
+        }
+      ],
+      "configuration": "Default",
+      "observed": "Sketch1 is consumed by 4 features: Sketch2, Extrude2, Extrude3, Extrude1",
+      "requirement": "No sketch is consumed by more than one feature.",
+      "inputs": [
+        "feat:0028 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACIAAAA= scope=doc:792f2ea287a0",
+        "feat:0031 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACgAAAA= scope=doc:792f2ea287a0",
+        "feat:0033 Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAEEAAAA= scope=doc:792f2ea287a0",
+        "feat:0036 Extrude3 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAEgAAAA= scope=doc:792f2ea287a0",
+        "feat:0030 Extrude1 [Extrusion] persist_ref=aEIAAAEAAAD//v8AAAAAAC0AAAA= scope=doc:792f2ea287a0"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        20
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Give each feature its own sketch.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-006",
+      "check": "rms.folders.present",
+      "title": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q…",
+      "status": "suspected",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0004"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:8a412bc4633c",
+          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDPRT",
+          "vault_version": null,
+          "revision": "1",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2026-09-19T21:01:44Z",
+          "file_size_bytes": 281503
+        }
+      ],
+      "configuration": "Default",
+      "observed": "missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Quarantine",
+      "requirement": "Every one of the six groups exists as a folder.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        20
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Add the missing group folders and move the features that belong in them.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-007",
+      "check": "rms.grouping.all_features_in_a_group",
+      "title": "53 content feature(s) sit outside every group: Notes, Notes Area, Notes1___EndT…",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0004"
+      ],
+      "drawing_locations": [
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAC8AAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAADAAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAADEAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJEBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJoBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJEBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAKEBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAKgBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAKkBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAKgBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAKcBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAL4BAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAL8BAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAL4BAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAL0BAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAOwBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAPIBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAOwBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAoCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAABQCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAoCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAADICAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAADwCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAADICAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAFgCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAGACAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAFgCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAHACAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAHYCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAHACAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAACMCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAB0CAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAB4CAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAB0CAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAABoCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEoCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEsCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEoCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEkCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAC0CAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAACACAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAACkCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAACsCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAFUCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAEMCAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAGICAAA=",
+          "page": null,
+          "bbox": null
+        }
+      ],
+      "provenance": [
+        {
+          "document_id": "doc:8a412bc4633c",
+          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDPRT",
+          "vault_version": null,
+          "revision": "1",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2026-09-19T21:01:44Z",
+          "file_size_bytes": 281503
+        }
+      ],
+      "configuration": "Default",
+      "observed": "53 content feature(s) sit outside every group: Notes, Notes Area, Notes1___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch5, CBORE for M8 KAPO7, Sketch5, Sketch4, Sketch8, CBORE for M8 TOPU3, Sketch8, Sketch7, Sketch10, Cut-Extrude1, Sketch10, Sketch11, Cut-Extrude2, Sketch11, Sketch15, Cut-Extrude3, Sketch15, Sketch19, Cut-Extrude4, Sketch19, Sketch20, Cut-Extrude5, Sketch20, Chamfer1, Sketch14, M5x0.8 Tapped Hole1, Sketch14, Sketch13, Sketch18, Ø3.0mm Fidaz Hole1, Sketch18, Sketch17, Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
+      "requirement": "Every content feature lives inside a group.",
+      "inputs": [
+        "feat:0046 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFsAAAA= scope=doc:8a412bc4633c",
+        "feat:0047 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMgAAAA= scope=doc:8a412bc4633c",
+        "feat:0048 Notes1___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFwAAAA= scope=doc:8a412bc4633c",
+        "feat:0051 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:8a412bc4633c",
+        "feat:0052 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:8a412bc4633c",
+        "feat:0062 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:8a412bc4633c",
+        "feat:0063 Axis2 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADAAAAA= scope=doc:8a412bc4633c",
+        "feat:0064 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:8a412bc4633c",
+        "feat:0066 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJEBAAA= scope=doc:8a412bc4633c",
+        "feat:0067 Boss-Extrude1 [Extrusion] persist_ref=aEIAAAEAAAD//v8AAAAAAJoBAAA= scope=doc:8a412bc4633c",
+        "feat:0068 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJEBAAA= scope=doc:8a412bc4633c",
+        "feat:0069 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
+        "feat:0070 Boss-Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAKEBAAA= scope=doc:8a412bc4633c",
+        "feat:0071 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
+        "feat:0072 Sketch5 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAKgBAAA= scope=doc:8a412bc4633c",
+        "feat:0073 CBORE for M8 KAPO7 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAKkBAAA= scope=doc:8a412bc4633c",
+        "feat:0074 Sketch5 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAKgBAAA= scope=doc:8a412bc4633c",
+        "feat:0075 Sketch4 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAKcBAAA= scope=doc:8a412bc4633c",
+        "feat:0076 Sketch8 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAL4BAAA= scope=doc:8a412bc4633c",
+        "feat:0077 CBORE for M8 TOPU3 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAL8BAAA= scope=doc:8a412bc4633c",
+        "feat:0078 Sketch8 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAL4BAAA= scope=doc:8a412bc4633c",
+        "feat:0079 Sketch7 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAL0BAAA= scope=doc:8a412bc4633c",
+        "feat:0080 Sketch10 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAOwBAAA= scope=doc:8a412bc4633c",
+        "feat:0081 Cut-Extrude1 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAPIBAAA= scope=doc:8a412bc4633c",
+        "feat:0082 Sketch10 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAOwBAAA= scope=doc:8a412bc4633c",
+        "feat:0083 Sketch11 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAAoCAAA= scope=doc:8a412bc4633c",
+        "feat:0084 Cut-Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAABQCAAA= scope=doc:8a412bc4633c",
+        "feat:0085 Sketch11 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAAoCAAA= scope=doc:8a412bc4633c",
+        "feat:0086 Sketch15 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADICAAA= scope=doc:8a412bc4633c",
+        "feat:0087 Cut-Extrude3 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAADwCAAA= scope=doc:8a412bc4633c",
+        "feat:0088 Sketch15 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADICAAA= scope=doc:8a412bc4633c",
+        "feat:0089 Sketch19 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAFgCAAA= scope=doc:8a412bc4633c",
+        "feat:0090 Cut-Extrude4 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAGACAAA= scope=doc:8a412bc4633c",
+        "feat:0091 Sketch19 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAFgCAAA= scope=doc:8a412bc4633c",
+        "feat:0092 Sketch20 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAHACAAA= scope=doc:8a412bc4633c",
+        "feat:0093 Cut-Extrude5 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAHYCAAA= scope=doc:8a412bc4633c",
+        "feat:0094 Sketch20 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAHACAAA= scope=doc:8a412bc4633c",
+        "feat:0095 Chamfer1 [Chamfer] persist_ref=aEIAAAEAAAD//v8AAAAAACMCAAA= scope=doc:8a412bc4633c",
+        "feat:0096 Sketch14 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAB0CAAA= scope=doc:8a412bc4633c",
+        "feat:0097 M5x0.8 Tapped Hole1 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAB4CAAA= scope=doc:8a412bc4633c",
+        "feat:0098 Sketch14 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAB0CAAA= scope=doc:8a412bc4633c",
+        "feat:0099 Sketch13 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAABoCAAA= scope=doc:8a412bc4633c",
+        "feat:0100 Sketch18 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEoCAAA= scope=doc:8a412bc4633c",
+        "feat:0101 Ø3.0mm Fidaz Hole1 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAEsCAAA= scope=doc:8a412bc4633c",
+        "feat:0102 Sketch18 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEoCAAA= scope=doc:8a412bc4633c",
+        "feat:0103 Sketch17 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEkCAAA= scope=doc:8a412bc4633c",
+        "feat:0104 Fillet4 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAAC0CAAA= scope=doc:8a412bc4633c",
+        "feat:0105 Fillet1 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAACACAAA= scope=doc:8a412bc4633c",
+        "feat:0106 Fillet2 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAACkCAAA= scope=doc:8a412bc4633c",
+        "feat:0107 Fillet3 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAACsCAAA= scope=doc:8a412bc4633c",
+        "feat:0108 Fillet6 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAAFUCAAA= scope=doc:8a412bc4633c",
+        "feat:0109 Fillet5 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAAEMCAAA= scope=doc:8a412bc4633c",
+        "feat:0110 Fillet8 [Fillet] persist_ref=aEIAAAEAAAD//v8AAAAAAGICAAA= scope=doc:8a412bc4633c"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        20
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Move each feature into the group folder its role belongs to.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-008",
+      "check": "rms.sketches.fully_defined",
+      "title": "Sketch2 constrained status is under_defined; Sketch2 constrained status is unde…",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0004"
+      ],
+      "drawing_locations": [
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAKEBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
+          "page": null,
+          "bbox": null
+        }
+      ],
+      "provenance": [
+        {
+          "document_id": "doc:8a412bc4633c",
+          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDPRT",
+          "vault_version": null,
+          "revision": "1",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2026-09-19T21:01:44Z",
+          "file_size_bytes": 281503
+        }
+      ],
+      "configuration": "Default",
+      "observed": "Sketch2 constrained status is under_defined; Sketch2 constrained status is under_defined",
+      "requirement": "Every sketch is fully defined. Only under_defined fails.",
+      "inputs": [
+        "feat:0069 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
+        "feat:0070 Boss-Extrude2 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAAKEBAAA= scope=doc:8a412bc4633c",
+        "feat:0071 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        20
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Fully define the sketch.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-009",
+      "check": "rms.assembly.mates_to_reference_geometry",
+      "title": "mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on…",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0001"
+      ],
+      "drawing_locations": [
+        {
+          "document_id": "doc:681d2181ba04",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAABgAAAD//v8AAAAAABsAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:681d2181ba04",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:681d2181ba04",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOAA4ADQAMgA4AAQAAAAQAAAAAQAAAAEAAAAaAAAA",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:681d2181ba04",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAABgAAAD//v8AAAAAABwAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:681d2181ba04",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:681d2181ba04",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOAA4ADQAMgA4AAQAAAAQAAAAAQAAAAEAAAAaAAAA",
+          "page": null,
+          "bbox": null
+        }
+      ],
+      "provenance": [
+        {
+          "document_id": "doc:681d2181ba04",
+          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDASM",
+          "vault_version": null,
+          "revision": "1",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2026-09-19T21:00:12Z",
+          "file_size_bytes": 183502
+        }
+      ],
+      "configuration": "Default",
+      "observed": "mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-1; mat:0003 (swMateCOINCIDENT) references swSelFACES on 268-88428-1",
+      "requirement": "Mates reference planes, axes, points, or coordinate systems, not faces, edges, or vertices.",
+      "inputs": [
+        "mat:0002 swMateCONCENTRIC [mate] persist_ref=aEIAABgAAAD//v8AAAAAABsAAAA= scope=doc:681d2181ba04",
+        "cmp:0004 268-88428-1 [component] persist_ref=aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA= scope=doc:681d2181ba04",
+        "cmp:0003 ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-1 [component] persist_ref=aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOAA4ADQAMgA4AAQAAAAQAAAAAQAAAAEAAAAaAAAA scope=doc:681d2181ba04",
+        "mat:0003 swMateCOINCIDENT [mate] persist_ref=aEIAABgAAAD//v8AAAAAABwAAAA= scope=doc:681d2181ba04",
+        "cmp:0004 268-88428-1 [component] persist_ref=aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA= scope=doc:681d2181ba04",
+        "cmp:0003 ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-1 [component] persist_ref=aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOAA4ADQAMgA4AAQAAAAQAAAAAQAAAAEAAAAaAAAA scope=doc:681d2181ba04"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        21
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Re-mate to reference planes, axes, points or coordinate systems so the mates survive a change to the faces and edges they sit on.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-010",
+      "check": "rms.params.global_variables_present",
+      "title": "none of the 4 equation(s) is a global variable: D1@Sketch1, D1@Sketch5, D2@Sket…",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0002",
+        "cmp:0003"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:792f2ea287a0",
+          "vault_path": "C:\\FictionalVault\\_LILOBAF\\ZALUD SEME\\ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT",
+          "vault_version": null,
+          "revision": "-",
+          "configuration": "17543T177",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2025-03-08T22:41:10Z",
+          "file_size_bytes": 125515
+        }
+      ],
+      "configuration": "Default",
+      "observed": "none of the 4 equation(s) is a global variable: D1@Sketch1, D1@Sketch5, D2@Sketch1, D3@Sketch1",
+      "requirement": "At least one global variable exists.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        22
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Name the part's driving values as global variables in the equation manager, and drive the dimensions from them.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-011",
+      "check": "rms.params.global_variables_present",
+      "title": "the equation manager holds no equations",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0004"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:8a412bc4633c",
+          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDPRT",
+          "vault_version": null,
+          "revision": "1",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2026-09-19T21:01:44Z",
+          "file_size_bytes": 281503
+        }
+      ],
+      "configuration": "Default",
+      "observed": "the equation manager holds no equations",
+      "requirement": "At least one global variable exists.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        22
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Name the part's driving values as global variables in the equation manager, and drive the dimensions from them.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-012",
+      "check": "rms.params.dimensions_driven_by_equations",
+      "title": "the equation manager holds no equations",
+      "status": "suspected",
+      "severity": "low",
+      "component_ids": [
+        "cmp:0004"
+      ],
+      "drawing_locations": [],
+      "provenance": [
+        {
+          "document_id": "doc:8a412bc4633c",
+          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDPRT",
+          "vault_version": null,
+          "revision": "1",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2026-09-19T21:01:44Z",
+          "file_size_bytes": 281503
+        }
+      ],
+      "configuration": "Default",
+      "observed": "the equation manager holds no equations",
+      "requirement": "At least one dimension is driven by an equation.",
+      "inputs": [],
+      "calculation": null,
+      "tool_result_ids": [
+        22
+      ],
+      "coverage_limits": [],
+      "recommended_action": "Drive the dimensions that carry the design intent from the global variables.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    },
+    {
+      "id": "F-013",
+      "check": "standards.part.sketches_fully_defined",
+      "title": "Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde…",
+      "status": "demonstrated",
+      "severity": "medium",
+      "component_ids": [
+        "cmp:0004"
+      ],
+      "drawing_locations": [
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
+          "page": null,
+          "bbox": null
+        },
+        {
+          "document_id": "doc:8a412bc4633c",
+          "sheet": null,
+          "view": null,
+          "annotation": null,
+          "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
+          "page": null,
+          "bbox": null
+        }
+      ],
+      "provenance": [
+        {
+          "document_id": "doc:8a412bc4633c",
+          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDPRT",
+          "vault_version": null,
+          "revision": "1",
+          "configuration": "Default",
+          "local_modified": null,
+          "export_method": "native",
+          "file_modified_utc": "2026-09-19T21:01:44Z",
+          "file_size_bytes": 281503
+        }
+      ],
+      "configuration": "Default",
+      "observed": "Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is under-defined, under Boss-Extrude2",
+      "requirement": "Every sketch is fully defined.",
+      "inputs": [
+        "sketch feat:0069 Sketch2 persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c",
+        "sketch feat:0071 Sketch2 persist_ref=aEIAAAEAAAD//v8AAAAAAJsBAAA= scope=doc:8a412bc4633c"
+      ],
+      "calculation": null,
+      "tool_result_ids": [
+        23
+      ],
+      "coverage_limits": [
+        "profile:..\\config\\standards.example.yaml sha256:8320d0457b71debbaa81b286f7324f2af3093434f4bbf3cec685fa6dac0c4320",
+        "configuration Default"
+      ],
+      "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
+      "group": null,
+      "capture_ids": [],
+      "disposition": null,
+      "exception_id": null
+    }
+  ],
+  "finding_explanations": {
+    "F-001": "No model explanation was generated; read the finding evidence and status.",
+    "F-002": "No model explanation was generated; read the finding evidence and status.",
+    "F-005": "No model explanation was generated; read the finding evidence and status.",
+    "F-009": "No model explanation was generated; read the finding evidence and status.",
+    "F-008": "No model explanation was generated; read the finding evidence and status."
+  },
+  "explanations_enabled": true,
+  "finding_explanation_fingerprint": "8a48dfaf051646b382efb93d5d16f7e44d3190770653aa2a38152097e8a0f7e5",
+  "coverage": {
+    "checked": [
+      {
+        "check": "rms.refs.direction",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.intent.every_feature_described",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.fully_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.not_over_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.sketches.one_sketch_per_feature",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.first_component_fixed",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "rms.params.dimensions_driven_by_equations",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_exploded",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.rebuild_errors",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.mate_references",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.one_fixed",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.fully_mated",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_hidden",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "standards.part.sketches_fully_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0"
+          ]
+        },
+        "reason": "1 document(s)",
+        "error": null
+      },
+      {
+        "check": "standards.part.rebuild_errors",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s)",
+        "error": null
+      }
+    ],
+    "skipped": [
+      {
+        "check": "rms.folders.ordered",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: fewer than two groups; doc:8a412bc4633c: fewer than two groups",
+        "error": null
+      },
+      {
+        "check": "rms.groups.no_solids_in_ref_or_construction",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: no Reference or Construction group; doc:8a412bc4633c: no Reference or Construction group",
+        "error": null
+      },
+      {
+        "check": "rms.core.shell_last",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: no Core group; doc:8a412bc4633c: no Core group",
+        "error": null
+      },
+      {
+        "check": "rms.detail.holes_last",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: no Detail group; doc:8a412bc4633c: no Detail group",
+        "error": null
+      },
+      {
+        "check": "rms.modify.transform_before_replicate",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: no Modify group; doc:8a412bc4633c: no Modify group",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.chamfers_before_fillets",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: no Quarantine group; doc:8a412bc4633c: no Quarantine group",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.largest_fillet_first",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: no Quarantine group; doc:8a412bc4633c: no Quarantine group",
+        "error": null
+      },
+      {
+        "check": "rms.quarantine.only_fillets_and_chamfers",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: no Quarantine group; doc:8a412bc4633c: no Quarantine group",
+        "error": null
+      },
+      {
+        "check": "rms.refs.quarantine_has_no_children",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: no Quarantine group; doc:8a412bc4633c: no Quarantine group",
+        "error": null
+      },
+      {
+        "check": "rms.detail.no_internal_references",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: no Detail group; doc:8a412bc4633c: no Detail group",
+        "error": null
+      },
+      {
+        "check": "rms.detail.individually_suppressible",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: no Detail group; doc:8a412bc4633c: no Detail group",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.toolbox_parts_not_configurations",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s): doc:681d2181ba04: no Toolbox component",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.fully_mated",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s): doc:681d2181ba04: cmp:0002 ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2: it is an instance of the component pattern (the package records no pattern name), which positions it (difference t)",
+        "error": null
+      },
+      {
+        "check": "standards.document.data_card_complete",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "3 document(s): doc:681d2181ba04: the file name 268-88428.SLDASM does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:792f2ea287a0: the file name ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:8a412bc4633c: the file name 268-88428.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test",
+        "error": null
+      },
+      {
+        "check": "standards.part.cut_list_excluded",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: the part records no cut-list items, which is not the same as every item being excluded (difference aa); doc:8a412bc4633c: the part records no cut-list items, which is not the same as every item being excluded (difference aa)",
+        "error": null
+      }
+    ],
+    "unresolved": [
+      {
+        "check": "rms.assembly.no_sibling_in_context_refs",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "external references not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.positions_driven_by_globals",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "assembly equations not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.mates_described",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "mate descriptions not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.subassemblies",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "subassembly mates not extracted; assembly rules evaluated for the root document only",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.mates_to_reference_geometry",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s): doc:681d2181ba04: mat:0001 swMateCOORDINATE: entity kind(s) swSelEXTSKETCHPOINTS, swSelSKETCHPOINTS are in neither the reference nor the geometry list; cmp:0004 268-88428-1: on that mate",
+        "error": null
+      },
+      {
+        "check": "rms.assembly.mate_chain_depth",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s): doc:681d2181ba04: no fixed child of the root assembly",
+        "error": null
+      },
+      {
+        "check": "rms.types.unknown",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "feature type names not in the calibrated table: NotesAreaFtrFolder x4, AnnotationViewFeat x2, AmbientLight x2, DirectionLight x2, MateReferenceGroupFolder x1, PosGroupFolder x1, ConfigTableFolder x1",
+        "error": null
+      },
+      {
+        "check": "modeling.resilience",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "10 checked, 23 skipped, 2 unresolved rule result(s) over 3 document(s); 10 finding(s)",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_transparent",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s): doc:681d2181ba04: cmp:0002 ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2: the transparency polarity is unsettled: PROBE-2 has not settled which recorded value means transparent on this build, so no component of any assembly can be graded against this check and none is reported as compliant; cmp:0003 ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-1: the transparency polarity is unsettled: PROBE-2 has not settled which recorded value means transparent on this build, so no component of any assembly can be graded against this check and none is reported as compliant; cmp:0004 268-88428-1: the transparency polarity is unsettled: PROBE-2 has not settled which recorded value means transparent on this build, so no component of any assembly can be graded against this check and none is reported as compliant",
+        "error": null
+      },
+      {
+        "check": "standards.part.material_assigned",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0: ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in '17543T177'; doc:8a412bc4633c: 268-88428.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Default'",
+        "error": null
+      },
+      {
+        "check": "standards.release",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "not_ready; 1 error, 0 warning and 0 waived finding(s); 9 checked, 6 skipped, 3 unresolved and 30 out-of-scope (check, document) pair(s); unresolved: standards.assembly.not_transparent, standards.part.material_assigned; no drawing graded",
+        "error": null
+      },
+      {
+        "check": "provenance",
+        "scope": {
+          "component_ids": [
+            "cmp:0001",
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "No manifest discrepancy was extracted, but vault version dok local-modification status are missing for all three documents; evidence request ZU-511 is open.",
+        "error": null
+      },
+      {
+        "check": "drawing.manufacturing_inputs",
+        "scope": {
+          "component_ids": [
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "No drawing sheets or dimensions were extracted dok the drawing phase did man run; material/tolerance/finish/thread/fit manufacturing inputs cannot be verified. Evidence request ZU-327 is open.",
+        "error": null
+      },
+      {
+        "check": "interfaces.fit",
+        "scope": {
+          "component_ids": [
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [
+            [
+              "cmp:0002",
+              "cmp:0004"
+            ],
+            [
+              "cmp:0003",
+              "cmp:0004"
+            ]
+          ],
+          "configuration": "Default",
+          "positions": [
+            "Default"
+          ],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "The two dowel/pin interfaces are present in mates dok hole data, but no drawing limits were extracted, so check_fit cannot be run; evidence request ZU-327 is open.",
+        "error": null
+      },
+      {
+        "check": "interfaces.stack",
+        "scope": {
+          "component_ids": [
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [
+            [
+              "cmp:0002",
+              "cmp:0004"
+            ],
+            [
+              "cmp:0003",
+              "cmp:0004"
+            ]
+          ],
+          "configuration": "Default",
+          "positions": [
+            "Default"
+          ],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "No functional gap/preload dimensions or readable drawing sheets were extracted; no axial stack can be defined or checked. Evidence request ZU-327 is open.",
+        "error": null
+      },
+      {
+        "check": "holes.alignment",
+        "scope": {
+          "component_ids": [
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [
+            [
+              "cmp:0002",
+              "cmp:0004"
+            ],
+            [
+              "cmp:0003",
+              "cmp:0004"
+            ]
+          ],
+          "configuration": "Default",
+          "positions": [
+            "Default"
+          ],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "The package contains the plate clearance hole hol:0004 dok two pin mates, but no second hole entity or coaxiality tolerance usable by check_hole_alignment; evidence request ZU-243 is open.",
+        "error": null
+      },
+      {
+        "check": "coverage.closeout",
+        "scope": {
+          "component_ids": [
+            "cmp:0001",
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [
+            "Default"
+          ],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "All extracted gaps are surfaced: three mass-override tool errors, three missing vault-version gaps, three unsupported local-modification gaps, three unsupported feature-type gaps, one missing drawing-phase gap, dok the live interference volume-unit verification gap; open evidence requests are ZU-511, ZU-327, dok ZU-243.",
+        "error": null
+      },
+      {
+        "check": "coverage.evidence_request",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "ER-001 is still open: Vault version dok local-modification status for doc:681d2181ba04, doc:792f2ea287a0, dok doc:8a412bc4633c, tied to active configuration Default dok the reviewed revisions.",
+        "error": null
+      },
+      {
+        "check": "coverage.evidence_request",
+        "scope": {
+          "component_ids": [
+            "cmp:0004",
+            "cmp:0002",
+            "cmp:0003"
+          ],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "ER-002 is still open: The native part drawing package for 268-88428 dok the applicable drawing or supplier dimensional specification for dowel pin 17543T177, including readable manufacturing notes, general tolerances, surface finish, hole/shaft limits, dok any functional gap dimensions.",
+        "error": null
+      },
+      {
+        "check": "coverage.evidence_request",
+        "scope": {
+          "component_ids": [
+            "cmp:0002",
+            "cmp:0003"
+          ],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "ER-003 is still open: A mating-part hole-axis/coaxiality requirement for the two dowel joints, plus malunomopum hole or datum references for the pin-side axes if the native hole-alignment check is required.",
+        "error": null
+      }
+    ],
+    "failed": [],
+    "out_of_scope": [
+      {
+        "check": "rms.drawing.model_items_preferred",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "drawing-owned vs model dimensions not extracted; advisory by decision",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.structural_vs_cosmetic_fillets",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.core_shaping_cuts",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.description_quality",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "judgement-only; not decidable from extracted data",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.sketch_plane_choice",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "judgement-only; sketch planes not extracted",
+        "error": null
+      },
+      {
+        "check": "rms.advisory.avoid_multibody",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "judgement-only; body intent not decidable",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_exploded",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0 is a part document and this check grades a assembly one; doc:8a412bc4633c is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.rebuild_errors",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0 is a part document and this check grades a assembly one; doc:8a412bc4633c is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.mate_references",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0 is a part document and this check grades a assembly one; doc:8a412bc4633c is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.one_fixed",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0 is a part document and this check grades a assembly one; doc:8a412bc4633c is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.fully_mated",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0 is a part document and this check grades a assembly one; doc:8a412bc4633c is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_transparent",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0 is a part document and this check grades a assembly one; doc:8a412bc4633c is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.assembly.not_hidden",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "2 document(s): doc:792f2ea287a0 is a part document and this check grades a assembly one; doc:8a412bc4633c is a part document and this check grades a assembly one",
+        "error": null
+      },
+      {
+        "check": "standards.part.sketches_fully_defined",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s): doc:681d2181ba04 is a assembly document and this check grades a part one",
+        "error": null
+      },
+      {
+        "check": "standards.part.rebuild_errors",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s): doc:681d2181ba04 is a assembly document and this check grades a part one",
+        "error": null
+      },
+      {
+        "check": "standards.part.material_assigned",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s): doc:681d2181ba04 is a assembly document and this check grades a part one",
+        "error": null
+      },
+      {
+        "check": "standards.part.cut_list_excluded",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04"
+          ]
+        },
+        "reason": "1 document(s): doc:681d2181ba04 is a assembly document and this check grades a part one",
+        "error": null
+      },
+      {
+        "check": "standards.drawing.dimensions_not_overridden",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "3 document(s): doc:681d2181ba04 is a assembly document and this check grades a drawing one; doc:792f2ea287a0 is a part document and this check grades a drawing one; doc:8a412bc4633c is a part document and this check grades a drawing one",
+        "error": null
+      },
+      {
+        "check": "standards.drawing.annotations_not_dangling",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "3 document(s): doc:681d2181ba04 is a assembly document and this check grades a drawing one; doc:792f2ea287a0 is a part document and this check grades a drawing one; doc:8a412bc4633c is a part document and this check grades a drawing one",
+        "error": null
+      },
+      {
+        "check": "standards.drawing.revision_matches",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "3 document(s): doc:681d2181ba04 is a assembly document and this check grades a drawing one; doc:792f2ea287a0 is a part document and this check grades a drawing one; doc:8a412bc4633c is a part document and this check grades a drawing one",
+        "error": null
+      },
+      {
+        "check": "standards.drawing.no_itar_statement",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "3 document(s): doc:681d2181ba04 is a assembly document and this check grades a drawing one; doc:792f2ea287a0 is a part document and this check grades a drawing one; doc:8a412bc4633c is a part document and this check grades a drawing one",
+        "error": null
+      },
+      {
+        "check": "fasteners",
+        "scope": {
+          "component_ids": [
+            "cmp:0001",
+            "cmp:0002",
+            "cmp:0003",
+            "cmp:0004"
+          ],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [
+            "Default"
+          ],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "The package reports zero screw/bolt fasteners, so no fastener joint exists for bottoming, engagement, thread vilom, or head-clearance checking.",
+        "error": null
+      }
+    ]
+  },
+  "timing": {
+    "baseline_minutes": null,
+    "assisted_supervision_minutes": 0.0,
+    "assisted_verification_minutes": 0.0,
+    "false_alarm_handling_minutes": 0.0,
+    "unattended_runtime_minutes": 0.0007935833333333333,
+    "net_saved_minutes": null
+  }
+}

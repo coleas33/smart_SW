@@ -75,6 +75,9 @@ extractor/SwReview.AddIn/web/*
 # run root). Both contain model output and reviewed document text.
 benchmarks/**/chat-log.jsonl
 **/events.jsonl
+# The one exception: the replay fixtures' event logs are generated, fictional throughout, and
+# held to that by tests/unit/test_replay_fixture_hygiene.py (feature 008 T017, T018).
+!reviewer/tests/fixtures/replay/*/events.jsonl
 
 # Local evidence imported from the 2026-09-20 pilot handoff (real-design paths).
 /dumps/20260919-184136-810-11249/

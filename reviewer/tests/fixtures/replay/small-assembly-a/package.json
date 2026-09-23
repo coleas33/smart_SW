@@ -1,0 +1,4750 @@
+{
+  "schema_version": "1.4.0",
+  "package_id": "dbce1f40-e74b-4f3b-ae27-af61ec45d66a",
+  "created_at": "2026-09-20T19:13:14.2735799-04:00",
+  "reuse_key": "57fc3460de7802ff8ca2083d517c442a6d05a7c7a03c32121a23031cbbc9fcc5",
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.1.0.0",
+    "sw_version": "32.5.0",
+    "machine": "SUK-KOP-DU-36",
+    "profile": "full",
+    "phases": [
+      {
+        "name": "document",
+        "elapsed_ms": 6,
+        "status": "ok"
+      },
+      {
+        "name": "manifest",
+        "elapsed_ms": 0,
+        "status": "ok"
+      },
+      {
+        "name": "mate",
+        "elapsed_ms": 15,
+        "status": "ok"
+      },
+      {
+        "name": "feature",
+        "elapsed_ms": 28,
+        "status": "ok"
+      },
+      {
+        "name": "equation",
+        "elapsed_ms": 3,
+        "status": "ok"
+      },
+      {
+        "name": "cutlist",
+        "elapsed_ms": 0,
+        "status": "ok"
+      },
+      {
+        "name": "drawing",
+        "elapsed_ms": null,
+        "status": "skipped"
+      },
+      {
+        "name": "hole",
+        "elapsed_ms": 8,
+        "status": "ok"
+      },
+      {
+        "name": "fastener",
+        "elapsed_ms": 0,
+        "status": "ok"
+      },
+      {
+        "name": "face",
+        "elapsed_ms": 8,
+        "status": "ok"
+      },
+      {
+        "name": "body",
+        "elapsed_ms": 26,
+        "status": "ok"
+      }
+    ]
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:681d2181ba04",
+        "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDASM",
+        "vault_version": null,
+        "revision": "1",
+        "configuration": "Default",
+        "local_modified": null,
+        "export_method": "native",
+        "file_modified_utc": "2026-09-19T21:00:12+00:00",
+        "file_size_bytes": 183502
+      },
+      {
+        "document_id": "doc:792f2ea287a0",
+        "vault_path": "C:\\FictionalVault\\_LILOBAF\\ZALUD SEME\\ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT",
+        "vault_version": null,
+        "revision": "-",
+        "configuration": "17543T177",
+        "local_modified": null,
+        "export_method": "native",
+        "file_modified_utc": "2025-03-08T22:41:10+00:00",
+        "file_size_bytes": 125515
+      },
+      {
+        "document_id": "doc:8a412bc4633c",
+        "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDPRT",
+        "vault_version": null,
+        "revision": "1",
+        "configuration": "Default",
+        "local_modified": null,
+        "export_method": "native",
+        "file_modified_utc": "2026-09-19T21:01:44+00:00",
+        "file_size_bytes": 281503
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:681d2181ba04",
+    "name": "268-88428",
+    "root_assembly_document_id": "doc:681d2181ba04",
+    "active_configuration": "Default",
+    "drawing_document_ids": []
+  },
+  "documents": [
+    {
+      "document_id": "doc:681d2181ba04",
+      "kind": "assembly",
+      "file_name": "268-88428.SLDASM",
+      "path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "NITO_DE_PUVIPOG": " - mefe -",
+        "ZUFotebet": "0.003",
+        "NIFuvi": "372.206",
+        "KUGezosuta": "Vigobuvu <man ginugerod>",
+        "TAPakinusInil": "34385.219",
+        "KOPilume": "137356.811",
+        "Fapu Rovo": "Nazar",
+        "BOZE Pezopedolu": "0",
+        "Vigobuvu": "LOBARIBA 6141-M1",
+        "Kekize": "TUK LILE",
+        "Fulifun Siri": "KAROLI",
+        "Disam": "RASEN FUSORAZISOB BABOSE",
+        "Revision": "1",
+        "Nobutizo Di": "Vodi Medudepu",
+        "Bafefi Tem Nobutizo Ku": "2026-08-14",
+        "Vomoma Runagoka": "GO",
+        "Bafefi Tem Nobutizo Di Runagoka": "GO",
+        "Bafefi Tem Nobutizo Di": "Vodi Medudepu",
+        "Bafefi Tem Tetemebul Di": "Vodi Medudepu",
+        "Fulifun Pitoni": "2072_PASIM",
+        "Fetu": "2026-07-29",
+        "Nobutizo Di Runagoka": "GO",
+        "Nobutizo Ku": "2026-08-14",
+        "Bafefi Tem Tetemebul Di Runagoka": "GO",
+        "Vomoma": "Vodi Medudepu",
+        "Fapu Pitoni, SUK": "268-88428",
+        "Ruverururub": "NAVOT, BUFIVEM PIFUZOPIB, G2, LOGABUMUL"
+      },
+      "config_properties": {
+        "Default": {
+          "NITO_DE_PUVIPOG": " - mefe -",
+          "Fulifun Siri": "KAROLI",
+          "Disam": "RASEN FUSORAZISOB BABOSE",
+          "Revision": "1",
+          "Nobutizo Di": "Vodi Medudepu",
+          "Bafefi Tem Nobutizo Ku": "2026-08-14",
+          "Vomoma Runagoka": "GO",
+          "Bafefi Tem Nobutizo Di Runagoka": "GO",
+          "Bafefi Tem Nobutizo Di": "Vodi Medudepu",
+          "Bafefi Tem Tetemebul Di": "Vodi Medudepu",
+          "Fulifun Pitoni": "2072_PASIM",
+          "Fetu": "2026-07-29",
+          "Nobutizo Di Runagoka": "GO",
+          "Nobutizo Ku": "2026-08-14",
+          "Bafefi Tem Tetemebul Di Runagoka": "GO",
+          "Vomoma": "Vodi Medudepu",
+          "Fapu Pitoni, SUK": "268-88428",
+          "Kekize": "TUK LILE",
+          "Ruverururub": "NAVOT, BUFIVEM PIFUZOPIB, G2, LOGABUMUL",
+          "Vigobuvu": "LOBARIBA 6141-M1"
+        }
+      },
+      "material": null,
+      "mass": {
+        "mass_kg": 0.3722055834283128,
+        "volume_m3": 0.0001373568113589511,
+        "center_of_mass": {
+          "x": 4.323817865115812e-06,
+          "y": -0.02272012401403688,
+          "z": 0.017081025110311683
+        },
+        "configuration": "Default"
+      },
+      "is_exploded": false,
+      "rebuild_error_count": 0
+    },
+    {
+      "document_id": "doc:792f2ea287a0",
+      "kind": "part",
+      "file_name": "ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT",
+      "path": "C:\\FictionalVault\\_LILOBAF\\ZALUD SEME\\ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT",
+      "configurations": [
+        "17543T177"
+      ],
+      "active_configuration": "17543T177",
+      "custom_properties": {
+        "ZigiFa": "17543T177",
+        "Ruverururub": "ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177",
+        "Vigobuvu": "18-8 Nagugegol Kikak",
+        "Vapalo": "FOT",
+        "Lopemuvor": "(c) 5313 SoRariza-Kere Dozetu Rezizap",
+        "FUZ Bebet Nubizegala dok Vukod mi Bel": "tilol://lam.vurunura.sas/gosos",
+        "Dasu7": "18-8 Nagugegol",
+        "Pote3": "Kikak Fidaz Zod",
+        "Nedu2": "(c) 5313 SoRariza-Kere Dozetu Rezizap",
+        "Revision": "-",
+        "Nobutizo Ku": " ",
+        "Fapu Rovo": "Dafagozik",
+        "Bafefi Tem Nobutizo Di Runagoka": " ",
+        "Vomoma": "Vodi Medudepu",
+        "Bafefi Tem Tetemebul Di": " ",
+        "Bafefi Tem Tetemebul Di Runagoka": " ",
+        "Kekize": "TUK LILE",
+        "BOZE Pezopedolu": "0",
+        "Bafefi Tem Nobutizo Di": " ",
+        "Fetu": "2025-02-07",
+        "Bafefi Tem Nobutizo Ku": " ",
+        "Vomoma Runagoka": "GO",
+        "Nobutizo Di": " ",
+        "Nobutizo Di Runagoka": " ",
+        "Disam": "Vefikud Fapu",
+        "Fapu Pitoni, Vapalo": "17543T177",
+        "Fapu Pitoni, SUK": "910-83614"
+      },
+      "config_properties": {
+        "17543T177": {
+          "Sunapisi Kinemepuk": "+0.007\r\n+0.018",
+          "Revision": "-",
+          "Nobutizo Ku": " ",
+          "Fapu Rovo": "Dafagozik",
+          "Bafefi Tem Nobutizo Di Runagoka": " ",
+          "Vomoma": "Vodi Medudepu",
+          "Bafefi Tem Tetemebul Di": " ",
+          "Bafefi Tem Tetemebul Di Runagoka": " ",
+          "Kekize": "TUK LILE",
+          "BOZE Pezopedolu": "0",
+          "Bafefi Tem Nobutizo Di": " ",
+          "Fetu": "2025-02-07",
+          "Bafefi Tem Nobutizo Ku": " ",
+          "Vomoma Runagoka": "GO",
+          "Nobutizo Di": " ",
+          "Nobutizo Di Runagoka": " ",
+          "Disam": "Vefikud Fapu",
+          "Fapu Pitoni, Vapalo": "17543T177",
+          "Vapalo": "FOT",
+          "Fapu Pitoni, SUK": "910-83614",
+          "Ruverururub": "ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177"
+        }
+      },
+      "material": "VENO 793",
+      "mass": {
+        "mass_kg": 0.001012975667279113,
+        "volume_m3": 1.2662195840988913e-07,
+        "center_of_mass": {
+          "x": 8.165848788597883e-19,
+          "y": 2.749869137847588e-36,
+          "z": 2.774562602863361e-20
+        },
+        "configuration": "17543T177"
+      },
+      "rebuild_error_count": 0,
+      "material_configuration": "17543T177"
+    },
+    {
+      "document_id": "doc:8a412bc4633c",
+      "kind": "part",
+      "file_name": "268-88428.SLDPRT",
+      "path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\G2 ZABORALI MODAS\\268-88428.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {
+        "NITO_DE_PUVIPOG": " - mefe -",
+        "ZUFotebet": "0.003",
+        "NIFuvi": "370.180",
+        "KUGezosuta": "6141-M1 (PU)",
+        "TAPakinusInil": "34022.684",
+        "KOPilume": "137103.567",
+        "Fapu Rovo": "Nazar",
+        "BOZE Pezopedolu": "0",
+        "Revision": "1",
+        "Nobutizo Ku": "2026-08-14",
+        "Bafefi Tem Nobutizo Di Runagoka": "GO",
+        "Vomoma": "Vodi Medudepu",
+        "Bafefi Tem Tetemebul Di": "Vodi Medudepu",
+        "Bafefi Tem Tetemebul Di Runagoka": "GO",
+        "Kekize": "TUK LILE",
+        "Bafefi Tem Nobutizo Di": "Vodi Medudepu",
+        "Fetu": "2026-05-11",
+        "Fulifun Pitoni": "2072_PASIM",
+        "Fulifun Siri": "KAROLI",
+        "Bafefi Tem Nobutizo Ku": "2026-08-14",
+        "Vomoma Runagoka": "GO",
+        "Nobutizo Di": "Vodi Medudepu",
+        "Nobutizo Di Runagoka": "GO",
+        "Disam": "RASEN FUSORAZISOB BABOSE",
+        "Ruverururub": "NAVOT, BUFIVEM PIFUZOPIB, G2, LOGABUMUL",
+        "Fapu Pitoni, SUK": "268-88428",
+        "Vigobuvu": "LOBARIBA 6141-M1"
+      },
+      "config_properties": {
+        "Default": {
+          "NITO_DE_PUVIPOG": " - mefe -",
+          "Revision": "1",
+          "Nobutizo Ku": "2026-08-14",
+          "Bafefi Tem Nobutizo Di Runagoka": "GO",
+          "Vomoma": "Vodi Medudepu",
+          "Bafefi Tem Tetemebul Di": "Vodi Medudepu",
+          "Bafefi Tem Tetemebul Di Runagoka": "GO",
+          "Kekize": "TUK LILE",
+          "Bafefi Tem Nobutizo Di": "Vodi Medudepu",
+          "Fetu": "2026-05-11",
+          "Fulifun Pitoni": "2072_PASIM",
+          "Fulifun Siri": "KAROLI",
+          "Bafefi Tem Nobutizo Ku": "2026-08-14",
+          "Vomoma Runagoka": "GO",
+          "Nobutizo Di": "Vodi Medudepu",
+          "Nobutizo Di Runagoka": "GO",
+          "Disam": "RASEN FUSORAZISOB BABOSE",
+          "Fapu Pitoni, SUK": "268-88428",
+          "Vigobuvu": "LOBARIBA 6141-M1"
+        }
+      },
+      "material": "6141-M1 (PU)",
+      "mass": {
+        "mass_kg": 0.3701796320937546,
+        "volume_m3": 0.00013710356744213133,
+        "center_of_mass": {
+          "x": -1.1254054716048888e-06,
+          "y": -0.02284446868774899,
+          "z": 0.017086941438696737
+        },
+        "configuration": "Default"
+      },
+      "rebuild_error_count": 0,
+      "material_configuration": "Default"
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "aEIAAAUAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:681d2181ba04",
+      "name": "268-88428",
+      "full_path": "268-88428",
+      "document_id": "doc:681d2181ba04",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": true,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOAA4ADQAMgA4AAQAAAAQAAAAAQAAAAEAAAAeAAAA",
+      "persist_ref_scope": "doc:681d2181ba04",
+      "name": "ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2",
+      "full_path": "ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2",
+      "document_id": "doc:792f2ea287a0",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "17543T177",
+      "transform": [
+        [
+          0,
+          1,
+          0,
+          -0.031
+        ],
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0.028000000000000004
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": true
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOAA4ADQAMgA4AAQAAAAQAAAAAQAAAAEAAAAaAAAA",
+      "persist_ref_scope": "doc:681d2181ba04",
+      "name": "ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-1",
+      "full_path": "ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-1",
+      "document_id": "doc:792f2ea287a0",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "17543T177",
+      "transform": [
+        [
+          0,
+          1,
+          0,
+          0.033
+        ],
+        [
+          -1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0.004
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    },
+    {
+      "id": "cmp:0004",
+      "persist_ref": "aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:681d2181ba04",
+      "name": "268-88428-1",
+      "full_path": "268-88428-1",
+      "document_id": "doc:8a412bc4633c",
+      "parent_id": "cmp:0001",
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "constrained_status_raw": 3,
+      "has_appearance_override": false,
+      "visibility_raw": 1,
+      "is_pattern_instance": false
+    }
+  ],
+  "mates": [
+    {
+      "id": "mat:0001",
+      "persist_ref": "aEIAABgAAAD//v8AAAAAABkAAAA=",
+      "persist_ref_scope": "doc:681d2181ba04",
+      "type": "swMateCOORDINATE",
+      "entities": [
+        {
+          "component_id": "cmp:0004",
+          "persist_ref": "aEIAAAYAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAAFAAAA//8BAA0AZ2VUdXJ1Z1V6ZXJhZwAA/////wAAAAA=",
+          "entity_kind": "swSelEXTSKETCHPOINTS",
+          "resolution_status": "resolved"
+        },
+        {
+          "component_id": "cmp:0001",
+          "persist_ref": "aEIAAAYAAAD//v8AAAAAAAYAAAD//wEADQBnZVR1cnVnVXplcmFnAAD/////AAAAAA==",
+          "entity_kind": "swSelSKETCHPOINTS",
+          "resolution_status": "resolved"
+        }
+      ],
+      "alignment": "closest",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    },
+    {
+      "id": "mat:0002",
+      "persist_ref": "aEIAABgAAAD//v8AAAAAABsAAAA=",
+      "persist_ref_scope": "doc:681d2181ba04",
+      "type": "swMateCONCENTRIC",
+      "entities": [
+        {
+          "component_id": "cmp:0004",
+          "persist_ref": "aEIAAAMAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAD//wEACwBzdVZldGFMdWtfcAEAAAAAAAAABQAAAAADAAAAAAAAfcOUJa1JslR9w5QlrUmyVAAA//8BABQAZHVWdXpJZm9nVWtla1VkRXJhX3AAAP//AQAGAHJpWkFfcP//AQANAG1vR2FmQXplYmF6X3D//wEAEQBiaUdJZ2V0b3BPemltYW1fcP/+/0BDADoAXABGAGkAYwB0AGkAbwBuAGEAbABWAGEAdQBsAHQAXAAzAF8ARwBFAFIAVQBcADIAMAA3ADIAXwBQAEEAUwBJAE0AXABHADIAIABaAEEAQgBPAFIAQQBMAEkAIABNAE8ARABBAFMAXAAyADYAOAAtADgAOAA0ADIAOAAuAFMATABEAFAAUgBUAAmA//7/CTIANgA4AC0AOAA4ADQAMgA4AAIAAIz1AWr//v8A//7/AP/+/wAACAAAAAAAAAAAAAAAAAAAAAD//v8HRABlAGYAYQB1AGwAdAAAAAAAAAAAAAAAAAAAAAAASwIAAIdWamoDAAAAAAAAAAOAAAAFgAgASwIAAIdWamoEAAAAAAAAAAAAA4AAAAWACABLAgAAh1ZqagIAAAAAAAAAAAAAAAAAAAAAAGhCAAAAAAAAAAAAAA==",
+          "entity_kind": "swSelFACES",
+          "resolution_status": "resolved"
+        },
+        {
+          "component_id": "cmp:0003",
+          "persist_ref": "aEIAAAMAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOAA4ADQAMgA4AAQAAAAQAAAAAQAAAAEAAAAaAAAA//8BAAsAc3VWZXRhTHVrX3ABAAAAAAAAAAUAAAAAAwAAAAAAAH3DlCWtSbJUfcOUJa1JslQAAP//AQAXAHBhR29raVNhek9yb1RldmFEaUtlcl9wAAD//wEABgByaVpBX3D//wEADQBtb0dhZkF6ZWJhel9w//8BABEAYmlHSWdldG9wT3ppbWFtX3D//v9TQwA6AFwARgBpAGMAdABpAG8AbgBhAGwAVgBhAHUAbAB0AFwAXwBMAEkATABPAEIAQQBGAFwAWgBBAEwAVQBEACAAUwBFAE0ARQBcAFoAQQBMAFUARAAgAEsAQQBNACwAIAAzAE0ATQAgAFgAIAAxADgATQBNACAAWgBJACwAIABQAFUALAAgAEYATwBUACwAIAAxADcANQA0ADMAVAAxADcANwAuAFMATABEAFAAUgBUAAmA//7/LFoAQQBMAFUARAAgAEsAQQBNACwAIAAzAE0ATQAgAFgAIAAxADgATQBNACAAWgBJACwAIABQAFUALAAgAEYATwBUACwAIAAxADcANQA0ADMAVAAxADcANwACAAC6NGNP//7/AP/+/wD//v8AAAgAAAAAAAAAAAAAAAABAAAA//7/CTEANwA1ADQAMwBUADEANwA3ALMGAAAAAAAAMHDcigAAAAAtAAAA5zdjTwEAAAD//wEAGwBsZUthbG9UdXBFcmU5Wm9zQWRpbUlzVXRvX3AAAAWACABIAAAA+p9jTwEAAAD/////AAAAAAAADIAAAAWACABBAAAA5p9jTwEAAAD/////AAAAAAAAAAAAAAAAAABoQgAAAAAAAAAAAAA=",
+          "entity_kind": "swSelFACES",
+          "resolution_status": "resolved"
+        }
+      ],
+      "alignment": "anti_aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    },
+    {
+      "id": "mat:0003",
+      "persist_ref": "aEIAABgAAAD//v8AAAAAABwAAAA=",
+      "persist_ref_scope": "doc:681d2181ba04",
+      "type": "swMateCOINCIDENT",
+      "entities": [
+        {
+          "component_id": "cmp:0004",
+          "persist_ref": "aEIAAAMAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAD//wEACwBzdVZldGFMdWtfcAEAAAAAAAAABgAAAAADAAAAAAAAfcOUJa1JslR9w5QlrUmyVAAA//8BABcAcGFHb2tpU2F6T3JvVGV2YURpS2VyX3AAAP//AQAGAHJpWkFfcP//AQANAG1vR2FmQXplYmF6X3D//wEAEQBiaUdJZ2V0b3BPemltYW1fcP/+/0BDADoAXABGAGkAYwB0AGkAbwBuAGEAbABWAGEAdQBsAHQAXAAzAF8ARwBFAFIAVQBcADIAMAA3ADIAXwBQAEEAUwBJAE0AXABHADIAIABaAEEAQgBPAFIAQQBMAEkAIABNAE8ARABBAFMAXAAyADYAOAAtADgAOAA0ADIAOAAuAFMATABEAFAAUgBUAAmA//7/CTIANgA4AC0AOAA4ADQAMgA4AAIAAIz1AWr//v8A//7/AP/+/wAACAAAAAAAAAAAAAAAAAAAAAD//v8HRABlAGYAYQB1AGwAdAAAAAAAAAAAAAAAAAAAAAAAmgEAAMQ5YmoBAAAA//8BABQAemFLZW1Vc2V6RXB1dEFkSWtvX3AAAAWACACaAQAAxDliagEAAAAAAAAA//8BABMAbW9QZXBhcG9LaWt1RmFHZXpfcAAABYAIACsCAADyx2ZqBwAAAAyAAAAFgAgAmgEAAMQ5YmoAAAAAAAAAAA+AAAAFgAgAKwIAAPLHZmoIAAAAAAAAAAAAAAAAAGhCAAAAAAAAAAAAAA==",
+          "entity_kind": "swSelFACES",
+          "resolution_status": "resolved"
+        },
+        {
+          "component_id": "cmp:0003",
+          "persist_ref": "aEIAAAEAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOAA4ADQAMgA4AAQAAAAQAAAAAQAAAAEAAAAaAAAABAAAAA==",
+          "entity_kind": "swSelDATUMPLANES",
+          "resolution_status": "resolved"
+        }
+      ],
+      "alignment": "anti_aligned",
+      "suppressed": false,
+      "distance": null,
+      "angle": null
+    }
+  ],
+  "holes": [
+    {
+      "id": "hol:0001",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "feature_name": "CBORE for M8 KAPO7",
+      "hole_type": "counterbore",
+      "standard": "swStandardAnsiMetric",
+      "size": "M8",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.026000000000000002,
+          "y": -0.06,
+          "z": 0.007333353260000001
+        },
+        "direction": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        }
+      },
+      "face_ids": [
+        "fac:0004",
+        "fac:0005",
+        "fac:0006",
+        "fac:0007",
+        "fac:0008",
+        "fac:0009",
+        "fac:0010",
+        "fac:0011"
+      ]
+    },
+    {
+      "id": "hol:0002",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "feature_name": "CBORE for M8 TOPU3",
+      "hole_type": "counterbore",
+      "standard": "swStandardAnsiMetric",
+      "size": "M8",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": null,
+      "end_condition": "through",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.04199999999999999,
+          "y": -0.008999999999999973,
+          "z": 0.035
+        },
+        "direction": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        }
+      },
+      "face_ids": [
+        "fac:0012",
+        "fac:0013",
+        "fac:0014",
+        "fac:0015",
+        "fac:0016",
+        "fac:0017",
+        "fac:0018",
+        "fac:0019",
+        "fac:0020",
+        "fac:0021",
+        "fac:0022",
+        "fac:0023"
+      ]
+    },
+    {
+      "id": "hol:0003",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "feature_name": "M5x0.8 Tapped Hole1",
+      "hole_type": "tapped",
+      "standard": "swStandardAnsiMetric",
+      "size": "M5x0.8",
+      "thread_designation": "M5x0.8",
+      "thread_depth": {
+        "value": 0.014,
+        "unit": "m"
+      },
+      "hole_depth": null,
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": -0.056,
+          "y": -0.0065,
+          "z": 0.026000000000000002
+        },
+        "direction": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        }
+      },
+      "face_ids": [
+        "fac:0024",
+        "fac:0025",
+        "fac:0026",
+        "fac:0027"
+      ]
+    },
+    {
+      "id": "hol:0004",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "feature_name": "Ø3.0mm Fidaz Hole1",
+      "hole_type": "clearance",
+      "standard": "swStandardAnsiMetric",
+      "size": "Ø3.0",
+      "thread_designation": null,
+      "thread_depth": null,
+      "hole_depth": {
+        "value": 0.01,
+        "unit": "m"
+      },
+      "end_condition": "blind",
+      "diameter": null,
+      "axis": {
+        "origin": {
+          "x": 0.033,
+          "y": 0,
+          "z": 0.004
+        },
+        "direction": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        }
+      },
+      "face_ids": [
+        "fac:0028",
+        "fac:0029"
+      ]
+    }
+  ],
+  "threads": [],
+  "fasteners": [],
+  "faces": [
+    {
+      "id": "fac:0001",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.033,
+          "y": 0,
+          "z": 0.004
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "radius_m": 0.0014999999999999979
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0315,
+          "y": -0.01,
+          "z": 0.0024999999999999988
+        },
+        "max": {
+          "x": 0.0345,
+          "y": -2.500000000000245e-05,
+          "z": 0.005500000000000001
+        }
+      },
+      "area_m2": 9.40121601586744e-05
+    },
+    {
+      "id": "fac:0002",
+      "persist_ref": "aEIAAAAAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOAA4ADQAMgA4AAQAAAAQAAAAAQAAAAEAAAAaAAAA",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "component_id": "cmp:0003",
+      "body_id": "Extrude3",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.033,
+          "y": 0.008500000000000008,
+          "z": 0.004
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "radius_m": 0.0015000000000000013
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0315,
+          "y": -0.008500000000000008,
+          "z": 0.0024999999999999988
+        },
+        "max": {
+          "x": 0.0345,
+          "y": 0.008500000000000008,
+          "z": 0.005500000000000001
+        }
+      },
+      "area_m2": 0.00016022122533307972
+    },
+    {
+      "id": "fac:0003",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "plane",
+      "cylinder": null,
+      "plane": {
+        "origin": {
+          "x": -0.0575,
+          "y": 0,
+          "z": 0.035
+        },
+        "normal": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        }
+      },
+      "bbox": {
+        "min": {
+          "x": -0.039238,
+          "y": 0,
+          "z": 0
+        },
+        "max": {
+          "x": 0.039238,
+          "y": 1.734723475976808e-18,
+          "z": 0.035
+        }
+      },
+      "area_m2": 0.0024775786622292196
+    },
+    {
+      "id": "fac:0004",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.026000000000000002,
+          "y": -0.06,
+          "z": 0.007333353260000001
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "radius_m": 0.004499999999999992
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.021500000000000005,
+          "y": -0.024999999999999994,
+          "z": 0.0028333532600000036
+        },
+        "max": {
+          "x": 0.0305,
+          "y": 0,
+          "z": 0.011833353259999999
+        }
+      },
+      "area_m2": 0.0007068583470577021
+    },
+    {
+      "id": "fac:0005",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.026000000000000002,
+          "y": -0.06,
+          "z": 0.007333353260000001
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "radius_m": 0.006999999999999996
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.019000000000000006,
+          "y": -0.054825159217875216,
+          "z": 0.0003333532600000048
+        },
+        "max": {
+          "x": 0.033,
+          "y": -0.024999999999999994,
+          "z": 0.014333353259999997
+        }
+      },
+      "area_m2": 0.0011427827308992497
+    },
+    {
+      "id": "fac:0006",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.026000000000000002,
+          "y": -0.06,
+          "z": 0.02183335326
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "radius_m": 0.004499999999999992
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.021500000000000005,
+          "y": -0.024999999999999994,
+          "z": 0.017333353260000003
+        },
+        "max": {
+          "x": 0.0305,
+          "y": 0,
+          "z": 0.026333353259999998
+        }
+      },
+      "area_m2": 0.0007068583470577021
+    },
+    {
+      "id": "fac:0007",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.026000000000000002,
+          "y": -0.06,
+          "z": 0.02183335326
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "radius_m": 0.006999999999999996
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.019000000000000006,
+          "y": -0.054825159217875216,
+          "z": 0.014833353260000005
+        },
+        "max": {
+          "x": 0.033,
+          "y": -0.024999999999999994,
+          "z": 0.028833353259999996
+        }
+      },
+      "area_m2": 0.0011427827308992488
+    },
+    {
+      "id": "fac:0008",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.026000000000000002,
+          "y": -0.06,
+          "z": 0.02183335326
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "radius_m": 0.004499999999999992
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0305,
+          "y": -0.024999999999999994,
+          "z": 0.017333353260000003
+        },
+        "max": {
+          "x": -0.021500000000000005,
+          "y": 0,
+          "z": 0.026333353259999998
+        }
+      },
+      "area_m2": 0.0007068583470577021
+    },
+    {
+      "id": "fac:0009",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.026000000000000002,
+          "y": -0.06,
+          "z": 0.02183335326
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "radius_m": 0.006999999999999994
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.032999999999999995,
+          "y": -0.05481726436130431,
+          "z": 0.014833353260000006
+        },
+        "max": {
+          "x": -0.01900000000000001,
+          "y": -0.024999999999999994,
+          "z": 0.028833353259999993
+        }
+      },
+      "area_m2": 0.0011427796229087647
+    },
+    {
+      "id": "fac:0010",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.026000000000000002,
+          "y": -0.06,
+          "z": 0.007333353260000001
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "radius_m": 0.004499999999999992
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0305,
+          "y": -0.024999999999999994,
+          "z": 0.0028333532600000036
+        },
+        "max": {
+          "x": -0.021500000000000005,
+          "y": 0,
+          "z": 0.011833353259999999
+        }
+      },
+      "area_m2": 0.0007068583470577021
+    },
+    {
+      "id": "fac:0011",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.026000000000000002,
+          "y": -0.06,
+          "z": 0.007333353260000001
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "radius_m": 0.006999999999999994
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.032999999999999995,
+          "y": -0.05481726436130431,
+          "z": 0.00033335326000000654
+        },
+        "max": {
+          "x": -0.01900000000000001,
+          "y": -0.024999999999999994,
+          "z": 0.014333353259999994
+        }
+      },
+      "area_m2": 0.001142779622908763
+    },
+    {
+      "id": "fac:0012",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.04199999999999999,
+          "y": -0.008999999999999973,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.0075
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.03449999999999999,
+          "y": -0.016499999999999973,
+          "z": 0.026500000000000003
+        },
+        "max": {
+          "x": 0.04729411764705883,
+          "y": -0.0014999999999999736,
+          "z": 0.035
+        }
+      },
+      "area_m2": 0.0003001942088240427
+    },
+    {
+      "id": "fac:0013",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.04199999999999999,
+          "y": -0.008999999999999973,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.0075
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.04729411764705883,
+          "y": -0.016499999999999973,
+          "z": 0.026500000000000003
+        },
+        "max": {
+          "x": -0.03449999999999999,
+          "y": -0.0014999999999999736,
+          "z": 0.035
+        }
+      },
+      "area_m2": 0.00030019420882404263
+    },
+    {
+      "id": "fac:0014",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.04199999999999999,
+          "y": -0.024999999999999974,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.0075
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.03449999999999999,
+          "y": -0.03249999999999997,
+          "z": 0.026500000000000003
+        },
+        "max": {
+          "x": 0.04729411764705882,
+          "y": -0.017499999999999974,
+          "z": 0.035
+        }
+      },
+      "area_m2": 0.0002831993271784723
+    },
+    {
+      "id": "fac:0015",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.04199999999999999,
+          "y": -0.024999999999999974,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.0075
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.04729411764705882,
+          "y": -0.03249999999999997,
+          "z": 0.026500000000000003
+        },
+        "max": {
+          "x": -0.03449999999999999,
+          "y": -0.017499999999999974,
+          "z": 0.035
+        }
+      },
+      "area_m2": 0.0002831993271784724
+    },
+    {
+      "id": "fac:0016",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.04199999999999999,
+          "y": -0.024999999999999974,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.004499999999999997
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.04649999999999999,
+          "y": -0.029499999999999978,
+          "z": 0
+        },
+        "max": {
+          "x": -0.037499999999999985,
+          "y": -0.02049999999999997,
+          "z": 0.026000000000000002
+        }
+      },
+      "area_m2": 0.0007351326809400112
+    },
+    {
+      "id": "fac:0017",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.04199999999999999,
+          "y": -0.024999999999999974,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.004499999999999997
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.037499999999999985,
+          "y": -0.029499999999999978,
+          "z": 0
+        },
+        "max": {
+          "x": 0.04649999999999999,
+          "y": -0.02049999999999997,
+          "z": 0.026000000000000002
+        }
+      },
+      "area_m2": 0.0007351326809400112
+    },
+    {
+      "id": "fac:0018",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.007999999999999986,
+          "y": -0.04599999999999997,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.007499999999999998
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.015499999999999986,
+          "y": -0.05349999999999997,
+          "z": 0.026000000000000002
+        },
+        "max": {
+          "x": -0.0004999999999999874,
+          "y": -0.03849999999999997,
+          "z": 0.035
+        }
+      },
+      "area_m2": 0.000424115008234622
+    },
+    {
+      "id": "fac:0019",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.007999999999999986,
+          "y": -0.04599999999999997,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.004499999999999997
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.012499999999999987,
+          "y": -0.050499999999999975,
+          "z": 0
+        },
+        "max": {
+          "x": -0.003499999999999985,
+          "y": -0.04149999999999997,
+          "z": 0.026000000000000002
+        }
+      },
+      "area_m2": 0.0007351326809400112
+    },
+    {
+      "id": "fac:0020",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.007999999999999986,
+          "y": -0.04599999999999997,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.007499999999999999
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0004999999999999866,
+          "y": -0.05349999999999997,
+          "z": 0.026000000000000002
+        },
+        "max": {
+          "x": 0.015499999999999986,
+          "y": -0.03849999999999997,
+          "z": 0.035
+        }
+      },
+      "area_m2": 0.00042411500823462205
+    },
+    {
+      "id": "fac:0021",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.007999999999999986,
+          "y": -0.04599999999999997,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.004499999999999996
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0034999999999999858,
+          "y": -0.050499999999999975,
+          "z": 0
+        },
+        "max": {
+          "x": 0.012499999999999987,
+          "y": -0.04149999999999997,
+          "z": 0.026000000000000002
+        }
+      },
+      "area_m2": 0.000735132680940011
+    },
+    {
+      "id": "fac:0022",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.04199999999999999,
+          "y": -0.008999999999999973,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.004499999999999997
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.04649999999999999,
+          "y": -0.013499999999999977,
+          "z": 0
+        },
+        "max": {
+          "x": -0.037499999999999985,
+          "y": -0.004499999999999969,
+          "z": 0.026000000000000002
+        }
+      },
+      "area_m2": 0.0007351326809400112
+    },
+    {
+      "id": "fac:0023",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.04199999999999999,
+          "y": -0.008999999999999973,
+          "z": 0.035
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.004499999999999997
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.037499999999999985,
+          "y": -0.013499999999999977,
+          "z": 0
+        },
+        "max": {
+          "x": 0.04649999999999999,
+          "y": -0.004499999999999969,
+          "z": 0.026000000000000002
+        }
+      },
+      "area_m2": 0.0007351326809400112
+    },
+    {
+      "id": "fac:0024",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.056,
+          "y": -0.0065,
+          "z": 0.026000000000000002
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.0020999999999999908
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0581,
+          "y": -0.008599999999999997,
+          "z": 0.012000000000000004
+        },
+        "max": {
+          "x": -0.0539,
+          "y": -0.004400000000000002,
+          "z": 0.025575
+        }
+      },
+      "area_m2": 0.00017911790514442123
+    },
+    {
+      "id": "fac:0025",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.056,
+          "y": -0.019500000000000003,
+          "z": 0.026000000000000002
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.0020999999999999908
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.0581,
+          "y": -0.0216,
+          "z": 0.012000000000000004
+        },
+        "max": {
+          "x": -0.0539,
+          "y": -0.017400000000000006,
+          "z": 0.025575
+        }
+      },
+      "area_m2": 0.00017911790514442123
+    },
+    {
+      "id": "fac:0026",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.056,
+          "y": -0.019500000000000003,
+          "z": 0.026000000000000002
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.0020999999999999908
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0539,
+          "y": -0.0216,
+          "z": 0.012000000000000004
+        },
+        "max": {
+          "x": 0.0581,
+          "y": -0.017400000000000006,
+          "z": 0.025575
+        }
+      },
+      "area_m2": 0.00017911790514442123
+    },
+    {
+      "id": "fac:0027",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.056,
+          "y": -0.0065,
+          "z": 0.026000000000000002
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "radius_m": 0.0020999999999999908
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0539,
+          "y": -0.008599999999999997,
+          "z": 0.012000000000000004
+        },
+        "max": {
+          "x": 0.0581,
+          "y": -0.004400000000000002,
+          "z": 0.025575
+        }
+      },
+      "area_m2": 0.00017911790514442123
+    },
+    {
+      "id": "fac:0028",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": 0.033,
+          "y": 0,
+          "z": 0.004
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "radius_m": 0.0014999999999999979
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": 0.0315,
+          "y": -0.01,
+          "z": 0.0024999999999999988
+        },
+        "max": {
+          "x": 0.0345,
+          "y": -2.500000000000245e-05,
+          "z": 0.005500000000000001
+        }
+      },
+      "area_m2": 9.40121601586744e-05
+    },
+    {
+      "id": "fac:0029",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "body_id": "Fillet8",
+      "kind": "cylinder",
+      "cylinder": {
+        "axis_origin": {
+          "x": -0.030999999999999996,
+          "y": 0,
+          "z": 0.028000000000000004
+        },
+        "axis_dir": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "radius_m": 0.0014999999999999979
+      },
+      "plane": null,
+      "bbox": {
+        "min": {
+          "x": -0.032499999999999994,
+          "y": -0.01,
+          "z": 0.026500000000000006
+        },
+        "max": {
+          "x": -0.0295,
+          "y": -2.500000000000245e-05,
+          "z": 0.029500000000000002
+        }
+      },
+      "area_m2": 9.40121601586744e-05
+    }
+  ],
+  "bodies": [
+    {
+      "id": "bod:0001",
+      "persist_ref": "aEIAAAAAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOAA4ADQAMgA4AAQAAAAQAAAAAQAAAAEAAAAeAAAA",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "component_id": "cmp:0002",
+      "mesh_file": "meshes/cmp-0002-bod-0001.glb",
+      "triangle_count": 96,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0002",
+      "persist_ref": "aEIAAAAAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOAA4ADQAMgA4AAQAAAAQAAAAAQAAAAEAAAAaAAAA",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "component_id": "cmp:0003",
+      "mesh_file": "meshes/cmp-0003-bod-0002.glb",
+      "triangle_count": 96,
+      "is_solid": true
+    },
+    {
+      "id": "bod:0003",
+      "persist_ref": "aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "component_id": "cmp:0004",
+      "mesh_file": "meshes/cmp-0004-bod-0003.glb",
+      "triangle_count": 3930,
+      "is_solid": true
+    }
+  ],
+  "interferences": [
+    {
+      "id": "int:0001",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0004",
+        "cmp:0003"
+      ],
+      "volume": {
+        "value": 0.0,
+        "unit": "m3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": true,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": true,
+        "ignore_hidden": false,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0003|cmp:0004",
+      "is_fastener": false,
+      "is_possible": false
+    },
+    {
+      "id": "int:0002",
+      "configuration": "Default",
+      "component_ids": [
+        "cmp:0004",
+        "cmp:0002"
+      ],
+      "volume": {
+        "value": 0.0,
+        "unit": "m3"
+      },
+      "settings": {
+        "treat_coincident_as_interference": true,
+        "treat_subassemblies_as_components": true,
+        "include_multibody": true,
+        "ignore_hidden": false,
+        "fastener_folder_treatment": "include"
+      },
+      "status": "computed",
+      "error": null,
+      "group_key": "cmp:0002|cmp:0004",
+      "is_fastener": false,
+      "is_possible": false
+    }
+  ],
+  "captures": [],
+  "drawings": [],
+  "features": [
+    {
+      "id": "feat:0001",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Favorites",
+      "type_name": "FavoriteFolder",
+      "description": "Favorites",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0002",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "History",
+      "type_name": "HistoryFolder",
+      "description": "History",
+      "index": 1,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0003",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Selection Sets",
+      "type_name": "SelectionSetFolder",
+      "description": "Selection Sets",
+      "index": 2,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0004",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Sensors",
+      "type_name": "SensorFolder",
+      "description": "Sensors",
+      "index": 3,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0005",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAAcAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Design Binder",
+      "type_name": "DocsFolder",
+      "description": "Design Binder",
+      "index": 4,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0006",
+      "persist_ref": "aEIAABUAAAD//v8AAAAAAAEAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Annotations",
+      "type_name": "DetailCabinet",
+      "description": "Annotations",
+      "index": 5,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0007",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAGMAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Notes",
+      "type_name": "NotesAreaFtrFolder",
+      "description": "Notes",
+      "index": 6,
+      "depth": 1,
+      "folder_id": "feat:0006",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0008",
+      "persist_ref": "aEIAACAAAAD//v8AAAAAAM4AAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Notes Area",
+      "type_name": "AnnotationViewFeat",
+      "description": "Notes Area",
+      "index": 7,
+      "depth": 1,
+      "folder_id": "feat:0006",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0009",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAGQAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Notes1___EndTag___",
+      "type_name": "NotesAreaFtrFolder",
+      "description": "Notes1___EndTag___",
+      "index": 8,
+      "depth": 1,
+      "folder_id": "feat:0006",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0010",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Markups",
+      "type_name": "InkMarkupFolder",
+      "description": "Markups",
+      "index": 9,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0011",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Lights dok Cameras",
+      "type_name": "EnvFolder",
+      "description": "Lights dok Cameras",
+      "index": 10,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0012",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAwAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Ambient",
+      "type_name": "AmbientLight",
+      "description": "Ambient",
+      "index": 11,
+      "depth": 1,
+      "folder_id": "feat:0011",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0013",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAGwAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Directional1",
+      "type_name": "DirectionLight",
+      "description": "Directional1",
+      "index": 12,
+      "depth": 1,
+      "folder_id": "feat:0011",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0014",
+      "persist_ref": "aEIAABQAAAD//v8AAAAAAAkAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Solid Bodies",
+      "type_name": "SolidBodyFolder",
+      "description": "Solid Bodies",
+      "index": 13,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0015",
+      "persist_ref": "aEIAABQAAAD//v8AAAAAAAoAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Surface Bodies",
+      "type_name": "SurfaceBodyFolder",
+      "description": "Surface Bodies",
+      "index": 14,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0016",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAAgAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Comments",
+      "type_name": "CommentsFolder",
+      "description": "Comments",
+      "index": 15,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0017",
+      "persist_ref": "aEIAABYAAAD//v8AAAAAABEAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Equations",
+      "type_name": "EqnFolder",
+      "description": "Equations",
+      "index": 16,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0018",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "VENO 793",
+      "type_name": "MaterialFolder",
+      "description": "VENO 793",
+      "index": 17,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0019",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAIAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Front Plane",
+      "type_name": "RefPlane",
+      "description": "Front Plane",
+      "index": 18,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0028",
+        "feat:0022"
+      ],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0020",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAMAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Top Plane",
+      "type_name": "RefPlane",
+      "description": "Top Plane",
+      "index": 19,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0021",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAQAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Right Plane",
+      "type_name": "RefPlane",
+      "description": "Right Plane",
+      "index": 20,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0031",
+        "feat:0030",
+        "feat:0038"
+      ],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0022",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAUAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Origin",
+      "type_name": "OriginProfileFeature",
+      "description": "Origin",
+      "index": 21,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0031",
+        "feat:0028",
+        "feat:0030",
+        "feat:0038"
+      ],
+      "parent_ids": [
+        "feat:0019"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0031",
+          "feat:0028",
+          "feat:0030",
+          "feat:0038"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0023",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAHsAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "MateReferences",
+      "type_name": "MateReferenceGroupFolder",
+      "description": "MateReferences",
+      "index": 22,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0024",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Default-<1>",
+      "type_name": "PosGroupFolder",
+      "description": "Default-<1>",
+      "index": 23,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0025",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAHwAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "MateReferences___EndTag___",
+      "type_name": "FtrFolder",
+      "description": "MateReferences___EndTag___",
+      "index": 24,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0026",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Tables",
+      "type_name": "ConfigTableFolder",
+      "description": "Tables",
+      "index": 25,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0027",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAGYAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Core Geometry",
+      "type_name": "FtrFolder",
+      "description": "Core Geometry",
+      "index": 26,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0028",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAACIAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "Sketch1",
+      "index": 27,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0031",
+        "feat:0033",
+        "feat:0036",
+        "feat:0030"
+      ],
+      "parent_ids": [
+        "feat:0019",
+        "feat:0022"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0031",
+          "feat:0033",
+          "feat:0036",
+          "feat:0030"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0029",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAACgAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Sketch2",
+      "type_name": "ProfileFeature",
+      "description": "Sketch2",
+      "index": 28,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0030"
+      ],
+      "parent_ids": [
+        "feat:0021",
+        "feat:0022",
+        "feat:0028"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0030"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0030",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAC0AAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Extrude1",
+      "type_name": "Extrusion",
+      "description": "Extrude1",
+      "index": 29,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0033",
+        "feat:0034",
+        "feat:0036",
+        "feat:0037"
+      ],
+      "parent_ids": [
+        "feat:0031",
+        "feat:0021",
+        "feat:0028",
+        "feat:0022"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0031",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAACgAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Sketch2",
+      "type_name": "ProfileFeature",
+      "description": "Sketch2",
+      "index": 30,
+      "depth": 1,
+      "folder_id": "feat:0030",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0030"
+      ],
+      "parent_ids": [
+        "feat:0021",
+        "feat:0022",
+        "feat:0028"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0030"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0032",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAADsAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Sketch3",
+      "type_name": "ProfileFeature",
+      "description": "Sketch3",
+      "index": 31,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0033"
+      ],
+      "parent_ids": [
+        "feat:0030"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0033"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0033",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAEEAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Extrude2",
+      "type_name": "ICE",
+      "description": "Extrude2",
+      "index": 32,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0034",
+        "feat:0030",
+        "feat:0028"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0034",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAADsAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Sketch3",
+      "type_name": "ProfileFeature",
+      "description": "Sketch3",
+      "index": 33,
+      "depth": 1,
+      "folder_id": "feat:0033",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0033"
+      ],
+      "parent_ids": [
+        "feat:0030"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0033"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0035",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAEIAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Sketch4",
+      "type_name": "ProfileFeature",
+      "description": "Sketch4",
+      "index": 34,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0036"
+      ],
+      "parent_ids": [
+        "feat:0030"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0036"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0036",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAEgAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Extrude3",
+      "type_name": "ICE",
+      "description": "Extrude3",
+      "index": 35,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0037",
+        "feat:0030",
+        "feat:0028"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0037",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAEIAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Sketch4",
+      "type_name": "ProfileFeature",
+      "description": "Sketch4",
+      "index": 36,
+      "depth": 1,
+      "folder_id": "feat:0036",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0036"
+      ],
+      "parent_ids": [
+        "feat:0030"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0036"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0038",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAG4AAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Sketch5",
+      "type_name": "ProfileFeature",
+      "description": "Sketch5",
+      "index": 37,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0021",
+        "feat:0022"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0039",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAGcAAAA=",
+      "persist_ref_scope": "doc:792f2ea287a0",
+      "document_id": "doc:792f2ea287a0",
+      "configuration": "17543T177",
+      "name": "Folder1___EndTag___",
+      "type_name": "FtrFolder",
+      "description": "Folder1___EndTag___",
+      "index": 38,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0040",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Favorites",
+      "type_name": "FavoriteFolder",
+      "description": "Favorites",
+      "index": 0,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0041",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "History",
+      "type_name": "HistoryFolder",
+      "description": "History",
+      "index": 1,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0042",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Selection Sets",
+      "type_name": "SelectionSetFolder",
+      "description": "Selection Sets",
+      "index": 2,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0043",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sensors",
+      "type_name": "SensorFolder",
+      "description": "Sensors",
+      "index": 3,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0044",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAEIAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Design Binder",
+      "type_name": "DocsFolder",
+      "description": "Design Binder",
+      "index": 4,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0045",
+      "persist_ref": "aEIAABUAAAD//v8AAAAAAAEAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Annotations",
+      "type_name": "DetailCabinet",
+      "description": "Annotations",
+      "index": 5,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0046",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Notes",
+      "type_name": "NotesAreaFtrFolder",
+      "description": "Notes",
+      "index": 6,
+      "depth": 1,
+      "folder_id": "feat:0045",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0047",
+      "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Notes Area",
+      "type_name": "AnnotationViewFeat",
+      "description": "Notes Area",
+      "index": 7,
+      "depth": 1,
+      "folder_id": "feat:0045",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0048",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Notes1___EndTag___",
+      "type_name": "NotesAreaFtrFolder",
+      "description": "Notes1___EndTag___",
+      "index": 8,
+      "depth": 1,
+      "folder_id": "feat:0045",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0049",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Markups",
+      "type_name": "InkMarkupFolder",
+      "description": "Markups",
+      "index": 9,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0050",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Lights dok Cameras",
+      "type_name": "EnvFolder",
+      "description": "Lights dok Cameras",
+      "index": 10,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0051",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Ambient",
+      "type_name": "AmbientLight",
+      "description": "Ambient",
+      "index": 11,
+      "depth": 1,
+      "folder_id": "feat:0050",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0052",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Directional1",
+      "type_name": "DirectionLight",
+      "description": "Directional1",
+      "index": 12,
+      "depth": 1,
+      "folder_id": "feat:0050",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0053",
+      "persist_ref": "aEIAABQAAAD//v8AAAAAACgAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Solid Bodies",
+      "type_name": "SolidBodyFolder",
+      "description": "Solid Bodies",
+      "index": 13,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0054",
+      "persist_ref": "aEIAABQAAAD//v8AAAAAACcAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Surface Bodies",
+      "type_name": "SurfaceBodyFolder",
+      "description": "Surface Bodies",
+      "index": 14,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0055",
+      "persist_ref": "aEIAACQAAAD//v8AAAAAAEMAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Comments",
+      "type_name": "CommentsFolder",
+      "description": "Comments",
+      "index": 15,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0056",
+      "persist_ref": "aEIAABYAAAD//v8AAAAAAFQAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Equations",
+      "type_name": "EqnFolder",
+      "description": "Equations",
+      "index": 16,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0057",
+      "persist_ref": "aEIAAAAAAAD//v8AAAAAAA==",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "6141-M1 (PU)",
+      "type_name": "MaterialFolder",
+      "description": "6141-M1 (PU)",
+      "index": 17,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0058",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAIAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "FRONT",
+      "type_name": "RefPlane",
+      "description": "FRONT",
+      "index": 18,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0068",
+        "feat:0067",
+        "feat:0061",
+        "feat:0062",
+        "feat:0064"
+      ],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0059",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAMAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "TOP",
+      "type_name": "RefPlane",
+      "description": "TOP",
+      "index": 19,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0077",
+        "feat:0063",
+        "feat:0062",
+        "feat:0078",
+        "feat:0065"
+      ],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0060",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAQAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "RIGHT",
+      "type_name": "RefPlane",
+      "description": "RIGHT",
+      "index": 20,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0081",
+        "feat:0071",
+        "feat:0077",
+        "feat:0063",
+        "feat:0088",
+        "feat:0078",
+        "feat:0074",
+        "feat:0082",
+        "feat:0070",
+        "feat:0064",
+        "feat:0087",
+        "feat:0090",
+        "feat:0098",
+        "feat:0091",
+        "feat:0073",
+        "feat:0097"
+      ],
+      "parent_ids": [],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0061",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAUAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Origin",
+      "type_name": "OriginProfileFeature",
+      "description": "Origin",
+      "index": 21,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0102",
+        "feat:0068",
+        "feat:0077",
+        "feat:0067",
+        "feat:0085",
+        "feat:0084",
+        "feat:0078",
+        "feat:0074",
+        "feat:0094",
+        "feat:0098",
+        "feat:0101",
+        "feat:0073",
+        "feat:0097",
+        "feat:0093"
+      ],
+      "parent_ids": [
+        "feat:0058"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0102",
+          "feat:0068",
+          "feat:0077",
+          "feat:0067",
+          "feat:0085",
+          "feat:0084",
+          "feat:0078",
+          "feat:0074",
+          "feat:0094",
+          "feat:0098",
+          "feat:0101",
+          "feat:0073",
+          "feat:0097",
+          "feat:0093"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0062",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAC8AAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Axis1",
+      "type_name": "RefAxis",
+      "description": "Axis1",
+      "index": 22,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0059",
+        "feat:0058"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0063",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAADAAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Axis2",
+      "type_name": "RefAxis",
+      "description": "Axis2",
+      "index": 23,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0060",
+        "feat:0059"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0064",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAADEAAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Axis3",
+      "type_name": "RefAxis",
+      "description": "Axis3",
+      "index": 24,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0060",
+        "feat:0058"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0065",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAKsBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Plane1",
+      "type_name": "RefPlane",
+      "description": "Plane1",
+      "index": 25,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0074",
+        "feat:0073"
+      ],
+      "parent_ids": [
+        "feat:0059"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0066",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAJEBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "Sketch1",
+      "index": 26,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0067"
+      ],
+      "parent_ids": [
+        "feat:0058",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0067"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0067",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAJoBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Boss-Extrude1",
+      "type_name": "Extrusion",
+      "description": "Boss-Extrude1",
+      "index": 27,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0102",
+        "feat:0081",
+        "feat:0071",
+        "feat:0077",
+        "feat:0095",
+        "feat:0085",
+        "feat:0088",
+        "feat:0084",
+        "feat:0078",
+        "feat:0074",
+        "feat:0106",
+        "feat:0082",
+        "feat:0070",
+        "feat:0094",
+        "feat:0087",
+        "feat:0105",
+        "feat:0090",
+        "feat:0101",
+        "feat:0091",
+        "feat:0107",
+        "feat:0073",
+        "feat:0093"
+      ],
+      "parent_ids": [
+        "feat:0068",
+        "feat:0058",
+        "feat:0061"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0068",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAJEBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch1",
+      "type_name": "ProfileFeature",
+      "description": "Sketch1",
+      "index": 28,
+      "depth": 1,
+      "folder_id": "feat:0067",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0067"
+      ],
+      "parent_ids": [
+        "feat:0058",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0067"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0069",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch2",
+      "type_name": "ProfileFeature",
+      "description": "Sketch2",
+      "index": 29,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0070"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0060"
+      ],
+      "sketch": {
+        "raw_status": 2,
+        "consumer_ids": [
+          "feat:0070"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0070",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAKEBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Boss-Extrude2",
+      "type_name": "ICE",
+      "description": "Boss-Extrude2",
+      "index": 30,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0081",
+        "feat:0095",
+        "feat:0085",
+        "feat:0104",
+        "feat:0088",
+        "feat:0084",
+        "feat:0106",
+        "feat:0082",
+        "feat:0087",
+        "feat:0105",
+        "feat:0090",
+        "feat:0098",
+        "feat:0097"
+      ],
+      "parent_ids": [
+        "feat:0071",
+        "feat:0067",
+        "feat:0060"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0071",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAJsBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch2",
+      "type_name": "ProfileFeature",
+      "description": "Sketch2",
+      "index": 31,
+      "depth": 1,
+      "folder_id": "feat:0070",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0070"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0060"
+      ],
+      "sketch": {
+        "raw_status": 2,
+        "consumer_ids": [
+          "feat:0070"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0072",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAKgBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch5",
+      "type_name": "ProfileFeature",
+      "description": "Sketch5",
+      "index": 32,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0073"
+      ],
+      "parent_ids": [
+        "feat:0065",
+        "feat:0060",
+        "feat:0067",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0073"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0073",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAKkBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "CBORE for M8 KAPO7",
+      "type_name": "HoleWzd",
+      "description": "CBORE for M8 KAPO7",
+      "index": 33,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0074",
+        "feat:0065",
+        "feat:0075",
+        "feat:0060",
+        "feat:0067",
+        "feat:0061"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0074",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAKgBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch5",
+      "type_name": "ProfileFeature",
+      "description": "Sketch5",
+      "index": 34,
+      "depth": 1,
+      "folder_id": "feat:0073",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0073"
+      ],
+      "parent_ids": [
+        "feat:0065",
+        "feat:0060",
+        "feat:0067",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0073"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0075",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAKcBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch4",
+      "type_name": "ProfileFeature",
+      "description": "Sketch4",
+      "index": 35,
+      "depth": 1,
+      "folder_id": "feat:0073",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0073"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0073"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0076",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAL4BAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch8",
+      "type_name": "ProfileFeature",
+      "description": "Sketch8",
+      "index": 36,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0077"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0060",
+        "feat:0059",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0077"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0077",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAL8BAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "CBORE for M8 TOPU3",
+      "type_name": "HoleWzd",
+      "description": "CBORE for M8 TOPU3",
+      "index": 37,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0110",
+        "feat:0108",
+        "feat:0090",
+        "feat:0091"
+      ],
+      "parent_ids": [
+        "feat:0078",
+        "feat:0067",
+        "feat:0079",
+        "feat:0060",
+        "feat:0059",
+        "feat:0061"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0078",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAL4BAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch8",
+      "type_name": "ProfileFeature",
+      "description": "Sketch8",
+      "index": 38,
+      "depth": 1,
+      "folder_id": "feat:0077",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0077"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0060",
+        "feat:0059",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0077"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0079",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAL0BAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch7",
+      "type_name": "ProfileFeature",
+      "description": "Sketch7",
+      "index": 39,
+      "depth": 1,
+      "folder_id": "feat:0077",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0077"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0077"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0080",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAOwBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch10",
+      "type_name": "ProfileFeature",
+      "description": "Sketch10",
+      "index": 40,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0081"
+      ],
+      "parent_ids": [
+        "feat:0070",
+        "feat:0067",
+        "feat:0060"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0081"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0081",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAPIBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Cut-Extrude1",
+      "type_name": "ICE",
+      "description": "Cut-Extrude1",
+      "index": 41,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0108"
+      ],
+      "parent_ids": [
+        "feat:0082",
+        "feat:0070",
+        "feat:0067",
+        "feat:0060"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0082",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAOwBAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch10",
+      "type_name": "ProfileFeature",
+      "description": "Sketch10",
+      "index": 42,
+      "depth": 1,
+      "folder_id": "feat:0081",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0081"
+      ],
+      "parent_ids": [
+        "feat:0070",
+        "feat:0067",
+        "feat:0060"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0081"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0083",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAoCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch11",
+      "type_name": "ProfileFeature",
+      "description": "Sketch11",
+      "index": 43,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0084"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0070",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0084"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0084",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAABQCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Cut-Extrude2",
+      "type_name": "ICE",
+      "description": "Cut-Extrude2",
+      "index": 44,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0106"
+      ],
+      "parent_ids": [
+        "feat:0085",
+        "feat:0067",
+        "feat:0070",
+        "feat:0061"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0085",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAAoCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch11",
+      "type_name": "ProfileFeature",
+      "description": "Sketch11",
+      "index": 45,
+      "depth": 1,
+      "folder_id": "feat:0084",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0084"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0070",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0084"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0086",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAADICAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch15",
+      "type_name": "ProfileFeature",
+      "description": "Sketch15",
+      "index": 46,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0087"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0060",
+        "feat:0070"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0087"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0087",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAADwCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Cut-Extrude3",
+      "type_name": "ICE",
+      "description": "Cut-Extrude3",
+      "index": 47,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0109",
+        "feat:0104",
+        "feat:0107"
+      ],
+      "parent_ids": [
+        "feat:0088",
+        "feat:0067",
+        "feat:0060",
+        "feat:0070"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0088",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAADICAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch15",
+      "type_name": "ProfileFeature",
+      "description": "Sketch15",
+      "index": 48,
+      "depth": 1,
+      "folder_id": "feat:0087",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0087"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0060",
+        "feat:0070"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0087"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0089",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAFgCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch19",
+      "type_name": "ProfileFeature",
+      "description": "Sketch19",
+      "index": 49,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0090"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0060",
+        "feat:0077"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0090"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0090",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAGACAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Cut-Extrude4",
+      "type_name": "ICE",
+      "description": "Cut-Extrude4",
+      "index": 50,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0106"
+      ],
+      "parent_ids": [
+        "feat:0091",
+        "feat:0067",
+        "feat:0070",
+        "feat:0060",
+        "feat:0077"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0091",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAFgCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch19",
+      "type_name": "ProfileFeature",
+      "description": "Sketch19",
+      "index": 51,
+      "depth": 1,
+      "folder_id": "feat:0090",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0090"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0060",
+        "feat:0077"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0090"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0092",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAHACAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch20",
+      "type_name": "ProfileFeature",
+      "description": "Sketch20",
+      "index": 52,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0093"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0093"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0093",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAHYCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Cut-Extrude5",
+      "type_name": "ICE",
+      "description": "Cut-Extrude5",
+      "index": 53,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0105"
+      ],
+      "parent_ids": [
+        "feat:0094",
+        "feat:0067",
+        "feat:0061"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0094",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAHACAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch20",
+      "type_name": "ProfileFeature",
+      "description": "Sketch20",
+      "index": 54,
+      "depth": 1,
+      "folder_id": "feat:0093",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0093"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0093"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0095",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAACMCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Chamfer1",
+      "type_name": "Chamfer",
+      "description": "Chamfer1",
+      "index": 55,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0105"
+      ],
+      "parent_ids": [
+        "feat:0070",
+        "feat:0067"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0096",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAB0CAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch14",
+      "type_name": "ProfileFeature",
+      "description": "Sketch14",
+      "index": 56,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0097"
+      ],
+      "parent_ids": [
+        "feat:0070",
+        "feat:0060",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0097"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0097",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAB4CAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "M5x0.8 Tapped Hole1",
+      "type_name": "HoleWzd",
+      "description": "M5x0.8 Tapped Hole1",
+      "index": 57,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0098",
+        "feat:0070",
+        "feat:0099",
+        "feat:0060",
+        "feat:0061"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0098",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAB0CAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch14",
+      "type_name": "ProfileFeature",
+      "description": "Sketch14",
+      "index": 58,
+      "depth": 1,
+      "folder_id": "feat:0097",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0097"
+      ],
+      "parent_ids": [
+        "feat:0070",
+        "feat:0060",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0097"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0099",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAABoCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch13",
+      "type_name": "ProfileFeature",
+      "description": "Sketch13",
+      "index": 59,
+      "depth": 1,
+      "folder_id": "feat:0097",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0097"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0097"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0100",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAEoCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch18",
+      "type_name": "ProfileFeature",
+      "description": "Sketch18",
+      "index": 60,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0101"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0101"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0101",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAEsCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Ø3.0mm Fidaz Hole1",
+      "type_name": "HoleWzd",
+      "description": "Ø3.0mm Fidaz Hole1",
+      "index": 61,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0102",
+        "feat:0067",
+        "feat:0103",
+        "feat:0061"
+      ],
+      "sketch": null,
+      "fillet": null
+    },
+    {
+      "id": "feat:0102",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAEoCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch18",
+      "type_name": "ProfileFeature",
+      "description": "Sketch18",
+      "index": 62,
+      "depth": 1,
+      "folder_id": "feat:0101",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0101"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0061"
+      ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0101"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0103",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAEkCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Sketch17",
+      "type_name": "ProfileFeature",
+      "description": "Sketch17",
+      "index": 63,
+      "depth": 1,
+      "folder_id": "feat:0101",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0101"
+      ],
+      "parent_ids": [],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0101"
+        ],
+        "text_segment_count": 0
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0104",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAC0CAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Fillet4",
+      "type_name": "Fillet",
+      "description": "Fillet4",
+      "index": 64,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0087",
+        "feat:0070"
+      ],
+      "sketch": null,
+      "fillet": {
+        "default_radius": {
+          "value": 0.004,
+          "unit": "m"
+        }
+      }
+    },
+    {
+      "id": "feat:0105",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAACACAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Fillet1",
+      "type_name": "Fillet",
+      "description": "Fillet1",
+      "index": 65,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0095",
+        "feat:0070",
+        "feat:0093"
+      ],
+      "sketch": null,
+      "fillet": {
+        "default_radius": {
+          "value": 0.007,
+          "unit": "m"
+        }
+      }
+    },
+    {
+      "id": "feat:0106",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAACkCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Fillet2",
+      "type_name": "Fillet",
+      "description": "Fillet2",
+      "index": 66,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0108"
+      ],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0090",
+        "feat:0070",
+        "feat:0084"
+      ],
+      "sketch": null,
+      "fillet": {
+        "default_radius": {
+          "value": 0.005,
+          "unit": "m"
+        }
+      }
+    },
+    {
+      "id": "feat:0107",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAACsCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Fillet3",
+      "type_name": "Fillet",
+      "description": "Fillet3",
+      "index": 67,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0067",
+        "feat:0087"
+      ],
+      "sketch": null,
+      "fillet": {
+        "default_radius": {
+          "value": 0.000762,
+          "unit": "m"
+        }
+      }
+    },
+    {
+      "id": "feat:0108",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAFUCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Fillet6",
+      "type_name": "Fillet",
+      "description": "Fillet6",
+      "index": 68,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0077",
+        "feat:0106",
+        "feat:0081"
+      ],
+      "sketch": null,
+      "fillet": {
+        "default_radius": {
+          "value": 0.001,
+          "unit": "m"
+        }
+      }
+    },
+    {
+      "id": "feat:0109",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAEMCAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Fillet5",
+      "type_name": "Fillet",
+      "description": "Fillet5",
+      "index": 69,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0087"
+      ],
+      "sketch": null,
+      "fillet": {
+        "default_radius": {
+          "value": 0.000762,
+          "unit": "m"
+        }
+      }
+    },
+    {
+      "id": "feat:0110",
+      "persist_ref": "aEIAAAEAAAD//v8AAAAAAGICAAA=",
+      "persist_ref_scope": "doc:8a412bc4633c",
+      "document_id": "doc:8a412bc4633c",
+      "configuration": "Default",
+      "name": "Fillet8",
+      "type_name": "Fillet",
+      "description": "Fillet8",
+      "index": 70,
+      "depth": 0,
+      "folder_id": null,
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [],
+      "parent_ids": [
+        "feat:0077"
+      ],
+      "sketch": null,
+      "fillet": {
+        "default_radius": {
+          "value": 0.0005,
+          "unit": "m"
+        }
+      }
+    }
+  ],
+  "equations": [
+    {
+      "document_id": "doc:792f2ea287a0",
+      "index": 0,
+      "text": "\"D1@Sketch1\" = \"N@Sketch1\"",
+      "lhs": "D1@Sketch1",
+      "is_global": false,
+      "value": 0.5
+    },
+    {
+      "document_id": "doc:792f2ea287a0",
+      "index": 1,
+      "text": "\"D1@Sketch5\" = \"Dia@Sketch1\"",
+      "lhs": "D1@Sketch5",
+      "is_global": false,
+      "value": 3
+    },
+    {
+      "document_id": "doc:792f2ea287a0",
+      "index": 2,
+      "text": "\"D2@Sketch1\"=\"Dia@Sketch1\"",
+      "lhs": "D2@Sketch1",
+      "is_global": false,
+      "value": 3
+    },
+    {
+      "document_id": "doc:792f2ea287a0",
+      "index": 3,
+      "text": "\"D3@Sketch1\"=\"D2@Sketch1\"",
+      "lhs": "D3@Sketch1",
+      "is_global": false,
+      "value": 3
+    }
+  ],
+  "rms_suppress_test": null,
+  "gaps": [
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:681d2181ba04",
+      "reason": "read OverrideMass for '268-88428.SLDASM'",
+      "error": "InvalidCastException: Unable to cast COM object mi type 'System.__ComObject' to interface type 'SolidWorks.Interop.sldworks.IMassProperty'. This operation failed because the QueryInterface call on the COM component for the interface with IID '{375FAG12-S912-9971-DEB3-P2057U523VA8}' failed due to the following error: No such interface supported (Exception from HRESULT: 0x80004002 (F_NOINTERFACE))."
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:792f2ea287a0",
+      "reason": "read OverrideMass for 'ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT'",
+      "error": "InvalidCastException: Unable to cast COM object mi type 'System.__ComObject' to interface type 'SolidWorks.Interop.sldworks.IMassProperty'. This operation failed because the QueryInterface call on the COM component for the interface with IID '{375FAG12-S912-9971-DEB3-P2057U523VA8}' failed due to the following error: No such interface supported (Exception from HRESULT: 0x80004002 (F_NOINTERFACE))."
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:8a412bc4633c",
+      "reason": "read OverrideMass for '268-88428.SLDPRT'",
+      "error": "InvalidCastException: Unable to cast COM object mi type 'System.__ComObject' to interface type 'SolidWorks.Interop.sldworks.IMassProperty'. This operation failed because the QueryInterface call on the COM component for the interface with IID '{375FAG12-S912-9971-DEB3-P2057U523VA8}' failed due to the following error: No such interface supported (Exception from HRESULT: 0x80004002 (F_NOINTERFACE))."
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "manifest",
+      "entity_id": "doc:681d2181ba04",
+      "reason": "No vault version was found for '268-88428.SLDASM'. The RIRI API is man read by this build, dok no 'PDM Version' or 'Version' custom property is set, so the version this review looked at cannot be stated.",
+      "error": null
+    },
+    {
+      "kind": "unsupported",
+      "entity_kind": "manifest",
+      "entity_id": "doc:681d2181ba04",
+      "reason": "Whether '268-88428.SLDASM' is modified locally relative to the vault was man determined; only the vault zudaf, dok the RIRI API is out mi scope for this build.",
+      "error": null
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "manifest",
+      "entity_id": "doc:792f2ea287a0",
+      "reason": "No vault version was found for 'ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT'. The RIRI API is man read by this build, dok no 'PDM Version' or 'Version' custom property is set, so the version this review looked at cannot be stated.",
+      "error": null
+    },
+    {
+      "kind": "unsupported",
+      "entity_kind": "manifest",
+      "entity_id": "doc:792f2ea287a0",
+      "reason": "Whether 'ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT' is modified locally relative to the vault was man determined; only the vault zudaf, dok the RIRI API is out mi scope for this build.",
+      "error": null
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "manifest",
+      "entity_id": "doc:8a412bc4633c",
+      "reason": "No vault version was found for '268-88428.SLDPRT'. The RIRI API is man read by this build, dok no 'PDM Version' or 'Version' custom property is set, so the version this review looked at cannot be stated.",
+      "error": null
+    },
+    {
+      "kind": "unsupported",
+      "entity_kind": "manifest",
+      "entity_id": "doc:8a412bc4633c",
+      "reason": "Whether '268-88428.SLDPRT' is modified locally relative to the vault was man determined; only the vault zudaf, dok the RIRI API is out mi scope for this build.",
+      "error": null
+    },
+    {
+      "kind": "unsupported",
+      "entity_kind": "feature",
+      "entity_id": "doc:681d2181ba04",
+      "reason": "Skipped feature types in 268-88428.SLDASM: RefAxis x3, RefPlane x3, Reference x2, CommentsFolder x1, DerivedHolePattern x1, DetailCabinet x1, DocsFolder x1, EnvFolder x1, EqnFolder x1, FavoriteFolder x1, HistoryFolder x1, InkMarkupFolder x1, OriginProfileFeature x1, ReferencePattern x1, SelectionSetFolder x1, SensorFolder x1. SOLIDWORKS reported these GetTypeName2 names in the feature tree dok no dumper reads them.",
+      "error": null
+    },
+    {
+      "kind": "unsupported",
+      "entity_kind": "feature",
+      "entity_id": "doc:792f2ea287a0",
+      "reason": "Skipped feature types in ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT: ProfileFeature x5, FtrFolder x3, RefPlane x3, ICE x2, CommentsFolder x1, ConfigTableFolder x1, DetailCabinet x1, DocsFolder x1, EnvFolder x1, EqnFolder x1, Extrusion x1, FavoriteFolder x1, HistoryFolder x1, InkMarkupFolder x1, MateReferenceGroupFolder x1, MaterialFolder x1, OriginProfileFeature x1, PosGroupFolder x1, SelectionSetFolder x1, SensorFolder x1, SolidBodyFolder x1, SurfaceBodyFolder x1. SOLIDWORKS reported these GetTypeName2 names in the feature tree dok no dumper reads them.",
+      "error": null
+    },
+    {
+      "kind": "unsupported",
+      "entity_kind": "feature",
+      "entity_id": "doc:8a412bc4633c",
+      "reason": "Skipped feature types in 268-88428.SLDPRT: ProfileFeature x11, Fillet x7, ICE x6, RefPlane x4, RefAxis x3, Chamfer x1, CommentsFolder x1, DetailCabinet x1, DocsFolder x1, EnvFolder x1, EqnFolder x1, Extrusion x1, FavoriteFolder x1, HistoryFolder x1, InkMarkupFolder x1, MaterialFolder x1, OriginProfileFeature x1, SelectionSetFolder x1, SensorFolder x1, SolidBodyFolder x1, SurfaceBodyFolder x1. SOLIDWORKS reported these GetTypeName2 names in the feature tree dok no dumper reads them.",
+      "error": null
+    },
+    {
+      "kind": "unsupported",
+      "entity_kind": "drawing",
+      "entity_id": null,
+      "reason": "Drawing sheets were man read natively: the drawing phase did man run under the 'full' profile. Any sheets in this package came from the PDF nilaka.",
+      "error": null
+    },
+    {
+      "kind": "unsupported",
+      "entity_kind": "interference_volume_unit",
+      "entity_id": null,
+      "reason": "IInterference.Volume unit assumed m3; verify on workstation",
+      "error": null
+    }
+  ]
+}
