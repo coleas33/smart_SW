@@ -109,7 +109,7 @@ from swreview.checks.rms.run import (
     run_rms_check,
 )
 from swreview.checks.rules.family import waiver_invalidity
-from swreview.checks.rules.run import check_record
+from swreview.checks.rules.run import CHECK_FILE_NAME, check_record
 from swreview.checks.standards.profile import SETTING_NAME, ProfileError, ProfileUnreadable
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
 from swreview.checks.standards.registry import STANDARDS_FAMILY
@@ -127,7 +127,8 @@ from swreview.report.attention_record import ATTENTION_FILE_NAME, write_attentio
 from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
 from swreview.report.markdown import render_report
 from swreview.report.session import load_session
-from swreview.report.summary import review_ranking
+from swreview.report.snapshot import review_snapshot
+from swreview.report.summary import load_words, review_ranking
 from swreview.report.unexamined import not_examined
 
 __all__ = [
@@ -332,6 +333,20 @@ class UnknownCheck(ChatError):
 
     status = 404
     error_class = "UnknownCheck"
+
+
+class UnknownReview(ChatError):
+    """No review run folder of that name under the run root that can be restored.
+
+    `GET /reviews/{run_id}` (feature 009, contracts/sessions.md section 4) takes a folder
+    name, so every way it can fail - a name the path rule refuses, no such folder, no
+    `session.json`, a check folder, a file that cannot be read - is this one 404 naming only
+    the id, as `UnknownCheck` is: a route that said *why* would be a way to probe the
+    workstation.
+    """
+
+    status = 404
+    error_class = "UnknownReview"
 
 
 class ScopeNotAvailable(ChatError):
@@ -1194,6 +1209,39 @@ class ChatServer:
             to_jsonable_python(review_ranking(run.session, run.context.ir, usage=run.usage_ledger))
         )
 
+    async def snapshot(self, request: Request) -> Response:
+        """`GET /sessions/{chat_id}/snapshot`: this review as the Review tab restores it.
+
+        One object for everything Results shows (feature 009, contracts/sessions.md section
+        3), built by `report/snapshot.review_snapshot` from the run the backend holds - the
+        live session, the run's package and ledger - plus the chat's state and the stream's
+        last seq, so a page reloaded mid-turn reopens the stream where the snapshot ends.
+        It computes and writes nothing, as `attention` does, and inline for the same reason.
+        """
+        chat = self._chat(request)
+        run = self._run_of(chat)
+        body = review_snapshot(
+            run.session,
+            run.context.ir,
+            run_id=chat.run_dir.name,
+            usage=run.usage_ledger,
+            chat_state=chat.state.value,
+            last_seq=run.sink.seq,
+        )
+        return JSONResponse(to_jsonable_python(body))
+
+    async def read_review(self, request: Request) -> Response:
+        """`GET /reviews/{run_id}`: a finished review restored read-only from its run folder.
+
+        For the chip whose chat this backend no longer holds - a settings save restarts the
+        backend and drops every chat (contracts/sessions.md section 4). The folder's
+        `session.json` and `package.json` are read, the ranking and its summary recomputed in
+        memory with no ledger, and the words file's reason attached; nothing is written,
+        exactly as `read_check` writes nothing.
+        """
+        review_dir = self._review_dir(request.path_params["run_id"])
+        return JSONResponse(await run_in_threadpool(partial(self._read_review, review_dir)))
+
     async def events(self, request: Request) -> Response:
         """Replay `events.jsonl` after `Last-Event-ID`, then stream what happens next.
 
@@ -1450,6 +1498,45 @@ class ChatServer:
         if not directory.is_dir():
             raise UnknownCheck(f"no check {raw!r} under the run root")
         return directory
+
+    def _review_dir(self, run_id: Any) -> Path:
+        """The review run folder `run_id` names, under the run root; `_check_dir`'s rule.
+
+        Everything refused - by the path rule or because there is no such folder - is
+        `UnknownReview` naming only the id (contracts/sessions.md section 4).
+        """
+        raw = str(run_id)
+        try:
+            directory = resolve_run_dir(str(self.run_root / raw), self.run_root)
+        except InvalidRunDir as exc:
+            raise UnknownReview(f"no review {raw!r} under the run root") from exc
+        if not directory.is_dir():
+            raise UnknownReview(f"no review {raw!r} under the run root")
+        return directory
+
+    def _read_review(self, review_dir: Path) -> dict[str, Any]:
+        """The snapshot of the review `review_dir` holds, read-only; blocking.
+
+        A folder holding `check.json` is a Model check or Standards run, whose own route is
+        `GET /checks/{check_id}`; a folder with no `session.json` has no review; a file that
+        cannot be read or does not validate is a review that can no longer be restored. All
+        three are `UnknownReview`.
+        """
+        unknown = UnknownReview(f"no review {review_dir.name!r} under the run root")
+        session_file = review_dir / SESSION_FILE_NAME
+        if (review_dir / CHECK_FILE_NAME).exists() or not session_file.is_file():
+            raise unknown
+        try:
+            session = load_session(session_file)
+            package = load_package(review_dir).package
+        except PACKAGE_ERRORS as exc:
+            raise unknown from exc
+        return review_snapshot(
+            session,
+            package,
+            run_id=review_dir.name,
+            read_only_reason=load_words().read_only,
+        )
 
     def _family_of(self, check_dir: Path) -> str:
         """The family whose check `check_dir` holds, from the record's own stamp.
@@ -2190,6 +2277,9 @@ def create_app(
         # Every `/sessions/{chat_id}/...` row is a literal last segment, so none of them
         # shadows another: `{chat_id}` matches one path segment and never the tail.
         Route("/sessions/{chat_id}/attention", server.attention, methods=["GET"]),
+        Route("/sessions/{chat_id}/snapshot", server.snapshot, methods=["GET"]),
+        # A finished review restored read-only from its run folder, by name (feature 009).
+        Route("/reviews/{run_id}", server.read_review, methods=["GET"]),
         # The Model check tab (`contracts/model-check.md`) and the Standards tab
         # (`contracts/standards-check.md`). The two literal paths are listed first so they
         # are matched before the `{check_id}` pattern that follows them; the read and the

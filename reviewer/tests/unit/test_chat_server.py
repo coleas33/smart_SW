@@ -282,6 +282,8 @@ ROUTES: tuple[tuple[str, str], ...] = (
     ("POST", "/sessions/{chat}/stop"),
     ("GET", "/sessions/{chat}/report"),
     ("GET", "/sessions/{chat}/attention"),
+    ("GET", "/sessions/{chat}/snapshot"),
+    ("GET", "/reviews/20260913-120000-bracket"),
 )
 """Every route of the contract, with a placeholder for a chat id."""
 
