@@ -260,6 +260,22 @@ Re-measured on main after the four lanes of 2026-09-23 merged (feature 008 US4 a
 
 ---
 
+## Phase 10: Amendment 2026-09-23 (owner decision 3A): the replay fixtures follow the code
+
+**Goal**: SC-001 as amended (research R2.54 to R2.56, `contracts/replay.md` sections 8 to 10): a deliberate change to what a tool returns, or to the system prompt or the checklist, regenerates the three fixtures and the 1% bar stays; the real recordings are held to the rule that each round's drift is the size change of the results it carries; the generator accepts a touching group recorded as a contact, by the replay's own rule.
+
+**Independent Test**: on the recordings' machine, the generator writes all three fixtures from the recordings, reclassifying 3, 2 and 0 touching groups as contacts; the regenerated fixtures replay within 1% with the finding set exact; the real recordings replay with a zero residual on every round.
+
+- [ ] T117 [P] Write `reviewer/tests/unit/test_replay_drift.py` (red: `tests/support/drift.py` does not exist) on scripted recordings built by `tests/support/replay.record_scripted_review`: a recording replayed by the code that made it has a zero drift and a zero residual on every round, a follow-up turn's included; after the package is edited so one result grows, every later round's drift is exactly that growth and the residual zero (a two-call round and a stopped turn among them: the stopped turn's results are carried by no later turn); a presentation round drifts by nothing; a replay defect - the replay's framing constant moved by one token under the rule's feet - leaves a residual on every round after the first result, naming them; rounds flagged lower bound are outside the rule and listed apart; a requested setting other than the recording's, a model view on and a stored result are each refused in one sentence naming what
+- [ ] T118 Write `reviewer/tests/support/drift.py` (`RoundDrift`, `round_drifts`) and change `reviewer/tests/integration/test_replay_recorded_runs.py`: replace the 1% test with a zero residual on every round and the rule covering every main round of each recording (none lower bound); the finding tests unchanged. Acceptance: T117 green; the integration test green on the recordings' machine before and after 010 T098-T099
+- [ ] T119 [P] Write `reviewer/tests/unit/test_replay_generator_contacts.py` for the generator's finding check (red: `finding_problems` does not exist): a recorded `interference.static` finding whose group key and configuration, mapped into the fixture's names, equal a fixture contact's is taken out and counted, a scrambled group key included; a different configuration, a different group key, another check with the same group key, and two recorded findings on one contact each leave a missing key and refuse; a new key in the fixture still refuses; with no contact the check is today's. And extend `reviewer/tests/unit/test_replay_findings.py`: `reclassifying_contacts` and `judged_group` are the functions `_findings` uses (one rule, pinned by its own cases)
+- [ ] T120 Make the matching public in `reviewer/src/swreview/benchmark/replay.py` (`judged_group`, `reclassifying_contacts`; `_findings` uses them) and use it in `reviewer/tests/fixtures/replay/generate_fixtures.py` (`fixture_group`, shared with `judged_rows`; `finding_problems`, called by `self_check`; the reclassified count printed). Acceptance: T119 green; `test_replay_findings.py`'s existing cases green unedited; on the recordings' machine the generator's self-check passes on all three recordings
+- [ ] T121 After feature 010 T098-T099 and T108: regenerate the three fixtures with the commands of `contracts/replay.md` section 8, then the pane fixture (`generate_pane_fixture.py --write`); SC-001 within 1%, the finding set exact, every recorded contact replayed; re-pin in `test_replay_fixtures.py` (and any other test the regeneration moves) each moved figure with its reason; re-measure `swreview benchmark replay` on the three fixtures with `--standards-profile ../config/standards.example.yaml` - the pane defaults, `--prune-after 1`, and `--no-pane-defaults --lever prerun_checks` - and record the figures in the landed-as note below and `contracts/replay.md` section 9. If a recorded finding is lost or not replayable, stop and report; never loosen a check
+
+**Checkpoint**: a deliberate change regenerates the fixtures and keeps SC-001's 1%; the real recordings prove the replay's accounting to the token whatever the code returns.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies
@@ -273,6 +289,7 @@ Re-measured on main after the four lanes of 2026-09-23 merged (feature 008 US4 a
 - **Polish (Phase 7)**: after every story
 - **Phase 8**: after Polish, at the next sitting; T101 first
 - **Phase 9 (amendment)**: after US3 (the guard, the view and pruning exist); T108 after T107; T110 after T109 and T108; T112 after T111 and T110; T114 after T113; T115 after T110; T116 after T110, T112 and T114
+- **Phase 10 (amendment, decision 3A)**: after Phase 9; T118 after T117; T120 after T119; T121 after T118, T120 and feature 010 T098, T099 and T108 (the change that makes the fixtures drift)
 
 ### Task-level dependencies
 
@@ -325,7 +342,7 @@ Every functional requirement has at least one task; the tasks listed are the one
 
 | SC | Tasks | SC | Tasks |
 |---|---|---|---|
-| SC-001 | T022, T026 | SC-006 | T041, T049, T102 |
+| SC-001 | T022, T026, T117 to T121 | SC-006 | T041, T049, T102 |
 | SC-002 | T078 | SC-007 | T072, T078 |
 | SC-003 (amended) | T086 | SC-008 | T066, T078 |
 | SC-004 | T086 | SC-009 | T093, T094, T102 |
