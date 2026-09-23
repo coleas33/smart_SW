@@ -84,4 +84,15 @@
     </Content>
   </ItemGroup>
 
+  <!--
+    Feature 010 T086. The feature 010 table of guard-allowlist.md is the membership of the
+    denials the Hole Wizard and tolerance reads add, and MechanicalChecksDenylistTests reads it
+    the way StandardsDenylistTests reads 006's R8: copied, not transcribed.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\specs\004-resilient-remodeler\contracts\guard-allowlist.md" Link="guard-allowlist.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

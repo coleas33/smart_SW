@@ -261,7 +261,17 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
     /// The first value of an interop array of doubles, or the value itself when interop
     /// handed back one number rather than an array.
     /// </summary>
-    private static double First(object? value)
+    private static double First(object? value) =>
+        FirstNumber(value)
+        ?? throw new InvalidOperationException(
+            "GetSystemValue3 returned no number, so the dimension's computed value is unknown.");
+
+    /// <summary>
+    /// <see cref="First"/>'s reading of <c>GetSystemValue3</c>'s answer, null when it carries no
+    /// number. Shared with <see cref="SwDimensionToleranceReader"/> (feature 010), so one
+    /// interop answer has one reading in the extractor.
+    /// </summary>
+    internal static double? FirstNumber(object? value)
     {
         switch (value)
         {
@@ -272,8 +282,7 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
             case double single:
                 return single;
             default:
-                throw new InvalidOperationException(
-                    "GetSystemValue3 returned no number, so the dimension's computed value is unknown.");
+                return null;
         }
     }
 

@@ -1,13 +1,69 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using SolidWorks.Interop.sldworks;
-using SolidWorks.Interop.swconst;
 using SwReview.Extractor.Geometry;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.PersistRefs;
 using SwReview.Extractor.Sw;
 
 namespace SwReview.Extractor.Dump;
+
+/// <summary>
+/// The reads <see cref="HoleDumper"/> makes of one Hole Wizard definition
+/// (<c>IWizardHoleFeatureData2</c>), with no interop type in the signature
+/// (<see cref="SwHoleWizardReader"/> is the SOLIDWORKS one). The seam exists so what becomes a
+/// field, a null and a gap is unit tested with no seat (feature 010 T088, research R2.24).
+///
+/// Every member is one interop read the dumper gates under the member's own name, so the guard
+/// and the gate log see the production names even under a fake. Two exceptions, both because
+/// the answer needs <c>swconst</c> enumeration names the test assembly cannot load:
+/// <see cref="HoleType"/> classifies <c>Type</c> by its <c>swWzdHoleTypes_e</c> member name
+/// (the dumper gates it as <c>WizardHole.Type</c>), and <see cref="Standard"/> spans
+/// <c>Standard2</c> and the free-text <c>Standard</c> and gates both itself. Lengths are metres
+/// and the angle radians, exactly as SOLIDWORKS reports them.
+/// </summary>
+public interface IHoleWizardReader
+{
+    /// <summary><c>Type</c>, classified by its <c>swWzdHoleTypes_e</c> member name.</summary>
+    HoleType HoleType { get; }
+
+    /// <summary><c>EndCondition</c> verbatim (<c>swEndConditions_e</c>).</summary>
+    int EndCondition { get; }
+
+    /// <summary><c>Standard2</c>'s name, or the free-text <c>Standard</c> for -1; gated inside.</summary>
+    string? Standard { get; }
+
+    string? FastenerSize { get; }
+
+    double HoleDepth { get; }
+
+    double Diameter { get; }
+
+    double ThreadDepth { get; }
+
+    /// <summary><c>ThreadEndCondition</c> verbatim (<c>swEndConditions_e</c>).</summary>
+    int ThreadEndCondition { get; }
+
+    /// <summary><c>HoleFit</c> verbatim (<c>swWzdHoleScrewClearanceTypes_e</c>).</summary>
+    int HoleFit { get; }
+
+    string? ThreadClass { get; }
+
+    double ThruHoleDiameter { get; }
+
+    double TapDrillDiameter { get; }
+
+    double CounterBoreDiameter { get; }
+
+    double CounterBoreDepth { get; }
+
+    double CounterSinkDiameter { get; }
+
+    double CounterSinkAngle { get; }
+
+    double HeadClearance { get; }
+}
 
 /// <summary>
 /// T052. Hole Wizard features and cosmetic threads, per component.
@@ -31,6 +87,11 @@ namespace SwReview.Extractor.Dump;
 ///
 /// Lengths are written in meters exactly as SOLIDWORKS reports them; the Python side
 /// converts explicitly.
+///
+/// Feature 010 (T089) reads the definition through <see cref="IHoleWizardReader"/> and adds the
+/// wizard data of schema 1.5.0 (<see cref="HoleWizardData"/>): the fit and thread classes and
+/// the drill, counterbore and countersink sizes, each null plus a <c>hole_wizard</c> gap when
+/// its read fails.
 /// </summary>
 public sealed class HoleDumper : IHoleSource
 {
@@ -155,10 +216,6 @@ public sealed class HoleDumper : IHoleSource
             return;
         }
 
-        int typeCode = gate.Call("WizardHole.Type", () => data.Type);
-        HoleType holeType = MapHoleType(typeCode);
-        int endConditionCode = gate.Call("WizardHole.EndCondition", () => data.EndCondition);
-
         var hole = new Hole
         {
             Id = id,
@@ -166,22 +223,9 @@ public sealed class HoleDumper : IHoleSource
             PersistRefScope = scope.DocumentId(modelPath),
             ComponentId = component.Id,
             FeatureName = featureName,
-            HoleType = holeType,
-            Standard = ReadStandard(data, gate),
-            Size = Blank(gate.Call("FastenerSize", () => data.FastenerSize)),
-
-            // Only a tapped hole has a thread. A clearance hole carries the size of the
-            // screw it is drilled FOR, and calling that a thread designation would let a
-            // thread-match check pass on a hole with no threads in it.
-            ThreadDesignation = holeType == HoleType.Tapped
-                ? Blank(gate.Call("FastenerSize", () => data.FastenerSize))
-                : null,
-            HoleDepth = Positive(gate.Call("HoleDepth", () => data.HoleDepth)),
-            EndCondition = MapEndCondition(endConditionCode),
-            Diameter = Positive(gate.Call("WizardHole.Diameter", () => data.Diameter)),
         };
 
-        hole.ThreadDepth = ReadUsableThreadDepth(data, gate, holeType, hole, scope);
+        ReadDefinition(new SwHoleWizardReader(data, gate), hole, gate, scope.Gaps);
 
         // The face reference is scoped to the PART, not the assembly (data-model.md).
         ScopedPersistRef? reference = _refs.TryGet(model, feature);
@@ -205,13 +249,136 @@ public sealed class HoleDumper : IHoleSource
     }
 
     /// <summary>
+    /// Everything a hole takes from its Hole Wizard definition: the feature 001 fields, the
+    /// usable thread depth and the schema 1.5.0 wizard data. Pure but for the reads, which go
+    /// through <paramref name="data"/> and <paramref name="gate"/>, so it is tested with a fake
+    /// (T088).
+    ///
+    /// A feature 001 read that throws fails the whole hole, as it always has: the exception
+    /// reaches <see cref="ReadHole"/>'s <c>hole</c> step. A wizard read that throws is that field
+    /// only (<see cref="ReadWizardData"/>).
+    /// </summary>
+    public static void ReadDefinition(IHoleWizardReader data, Hole hole, SwGate gate, GapCollector gaps)
+    {
+        if (data == null)
+        {
+            throw new ArgumentNullException(nameof(data));
+        }
+
+        if (hole == null)
+        {
+            throw new ArgumentNullException(nameof(hole));
+        }
+
+        if (gate == null)
+        {
+            throw new ArgumentNullException(nameof(gate));
+        }
+
+        if (gaps == null)
+        {
+            throw new ArgumentNullException(nameof(gaps));
+        }
+
+        HoleType holeType = gate.Call("WizardHole.Type", () => data.HoleType);
+        int endConditionCode = gate.Call("WizardHole.EndCondition", () => data.EndCondition);
+
+        hole.HoleType = holeType;
+        hole.Standard = data.Standard;
+        hole.Size = Blank(gate.Call("FastenerSize", () => data.FastenerSize));
+
+        // Only a tapped hole has a thread. A clearance hole carries the size of the screw it
+        // is drilled FOR, and calling that a thread designation would let a thread-match check
+        // pass on a hole with no threads in it.
+        hole.ThreadDesignation = holeType == HoleType.Tapped ? hole.Size : null;
+        hole.HoleDepth = Positive(gate.Call("HoleDepth", () => data.HoleDepth));
+        hole.EndCondition = MapEndCondition(endConditionCode);
+        hole.Diameter = Positive(gate.Call("WizardHole.Diameter", () => data.Diameter));
+        hole.ThreadDepth = ReadUsableThreadDepth(data, gate, holeType, hole, gaps);
+        hole.Wizard = ReadWizardData(data, gate, hole, gaps);
+    }
+
+    /// <summary>
+    /// The schema 1.5.0 wizard data (feature 010 T089, contracts/tolerances.md section 2). Each
+    /// field is its own step: a read that throws is null plus one <c>hole_wizard</c> gap naming
+    /// the field, and the rest are still read. A zero, a negative or a blank is "does not apply
+    /// to this hole type" and is null with no gap. Nothing is derived.
+    ///
+    /// <c>HoleFit</c> is read for counterbore and countersink holes only - the API documents it
+    /// for those two, and on any other type its 0 would read as "close" - and
+    /// <c>ThreadClass</c> for a tapped hole only, the one kind with a thread.
+    ///
+    /// Every read goes through <see cref="SwGate.CallOptional{T}"/>: SOLIDWORKS may refuse a
+    /// property on every hole of one type, and those refusals are gaps, never an open circuit.
+    /// </summary>
+    private static HoleWizardData ReadWizardData(
+        IHoleWizardReader data, SwGate gate, Hole hole, GapCollector gaps)
+    {
+        var wizard = new HoleWizardData();
+
+        if (hole.HoleType == HoleType.Counterbore || hole.HoleType == HoleType.Countersink)
+        {
+            wizard.FitClassRaw = ReadWizardField(
+                gaps, hole, "HoleFit", () => HoleFitName(gate.CallOptional("HoleFit", () => data.HoleFit)));
+        }
+
+        if (hole.HoleType == HoleType.Tapped)
+        {
+            wizard.ThreadClassRaw = ReadWizardField(
+                gaps, hole, "ThreadClass", () => Blank(gate.CallOptional("ThreadClass", () => data.ThreadClass)));
+        }
+
+        wizard.ThruHoleDiameter = ReadWizardLength(gaps, hole, gate, "ThruHoleDiameter", () => data.ThruHoleDiameter);
+        wizard.TapDrillDiameter = ReadWizardLength(gaps, hole, gate, "TapDrillDiameter", () => data.TapDrillDiameter);
+        wizard.CounterboreDiameter = ReadWizardLength(gaps, hole, gate, "CounterBoreDiameter", () => data.CounterBoreDiameter);
+        wizard.CounterboreDepth = ReadWizardLength(gaps, hole, gate, "CounterBoreDepth", () => data.CounterBoreDepth);
+        wizard.CountersinkDiameter = ReadWizardLength(gaps, hole, gate, "CounterSinkDiameter", () => data.CounterSinkDiameter);
+        wizard.CountersinkAngle = ReadWizardField(gaps, hole, "CounterSinkAngle", () =>
+        {
+            double radians = gate.CallOptional("CounterSinkAngle", () => data.CounterSinkAngle);
+            return radians > 0 ? new Angle(radians, AngleUnit.Rad) : null;
+        });
+        wizard.HeadClearance = ReadWizardLength(gaps, hole, gate, "HeadClearance", () => data.HeadClearance);
+
+        return wizard;
+    }
+
+    /// <summary>One wizard length, gated under <paramref name="member"/>; metres, null when not positive.</summary>
+    private static Quantity? ReadWizardLength(
+        GapCollector gaps, Hole hole, SwGate gate, string member, Func<double> read) =>
+        ReadWizardField(gaps, hole, member, () => Positive(gate.CallOptional(member, read)));
+
+    /// <summary>One wizard read as its own step: null plus a <c>hole_wizard</c> gap naming it when it throws.</summary>
+    private static T? ReadWizardField<T>(GapCollector gaps, Hole hole, string member, Func<T?> read)
+        where T : class =>
+        gaps.TryStep(
+            "hole_wizard",
+            hole.Id,
+            $"read {member} of Hole Wizard feature '{hole.FeatureName}'",
+            read);
+
+    /// <summary>
+    /// <c>HoleFit</c> as its <c>swWzdHoleScrewClearanceTypes_e</c> member name - close 0,
+    /// normal 1, loose 2, reflected on the 2024 SP5 interop - or the number's text for a value
+    /// the enumeration does not name. Spelled here rather than looked up with
+    /// <c>Enum.GetName</c>, so the mapping is tested without the interop assembly.
+    /// </summary>
+    public static string HoleFitName(int code) => code switch
+    {
+        0 => "swScrewClearanceClose",
+        1 => "swScrewClearanceNormal",
+        2 => "swScrewClearanceLoose",
+        _ => code.ToString(CultureInfo.InvariantCulture),
+    };
+
+    /// <summary>
     /// Usable thread depth, or null. Written only for a tapped hole whose ThreadDepth is
     /// positive. A through-tapped hole reports no usable depth here on purpose: the depth
     /// would be the material thickness, which this feature does not know, and inventing it
     /// would clear a bottoming check that should stay unresolved.
     /// </summary>
     private static Quantity? ReadUsableThreadDepth(
-        IWizardHoleFeatureData2 data, SwGate gate, HoleType holeType, Hole hole, DumpScope scope)
+        IHoleWizardReader data, SwGate gate, HoleType holeType, Hole hole, GapCollector gaps)
     {
         if (holeType != HoleType.Tapped)
         {
@@ -226,7 +393,7 @@ public sealed class HoleDumper : IHoleSource
             return new Quantity(depth, LengthUnit.M);
         }
 
-        scope.Gaps.Add(
+        gaps.Add(
             GapKind.NotExtracted,
             "hole",
             hole.Id,
@@ -390,93 +557,32 @@ public sealed class HoleDumper : IHoleSource
     }
 
     /// <summary>
-    /// <c>Standard2</c> is an enum; -1 means a copied or custom standard, and then the
-    /// free-text <c>Standard</c> is the only answer (research R12).
+    /// <c>swEndConditions_e</c> to the IR's three-value end condition, by the enumeration's
+    /// values as reflected on the 2024 SP5 interop - spelled as numbers so the mapping is tested
+    /// without the interop assembly (feature 010 T088).
     /// </summary>
-    private static string? ReadStandard(IWizardHoleFeatureData2 data, SwGate gate)
+    public static EndCondition MapEndCondition(int endCondition)
     {
-        int standard2 = gate.Call("Standard2", () => data.Standard2);
-        if (standard2 != -1)
+        switch (endCondition)
         {
-            string? name = Enum.GetName(typeof(swWzdHoleStandards_e), standard2);
-            if (!string.IsNullOrEmpty(name))
-            {
-                return name;
-            }
-        }
-
-        return Blank(gate.Call("WizardHole.Standard", () => data.Standard));
-    }
-
-    /// <summary>
-    /// <c>swWzdHoleTypes_e</c> has more than eighty members (every counterbore, countersink
-    /// and slot combination). They are classified by the enum member name rather than
-    /// listed one by one: the name carries the primary feature, and a member added in a
-    /// later service pack still lands in the right bucket instead of silently becoming a
-    /// simple hole.
-    /// </summary>
-    private static HoleType MapHoleType(int typeCode)
-    {
-        string? name = Enum.GetName(typeof(swWzdHoleTypes_e), typeCode);
-        if (string.IsNullOrEmpty(name))
-        {
-            return HoleType.Unknown;
-        }
-
-        if (name!.IndexOf("Tap", StringComparison.Ordinal) >= 0)
-        {
-            return HoleType.Tapped;
-        }
-
-        if (name.StartsWith("swCounterBore", StringComparison.Ordinal)
-            || name.StartsWith("swCounterDrilled", StringComparison.Ordinal))
-        {
-            return HoleType.Counterbore;
-        }
-
-        if (name.StartsWith("swCounterSink", StringComparison.Ordinal)
-            || name.StartsWith("swCounterSunk", StringComparison.Ordinal))
-        {
-            return HoleType.Countersink;
-        }
-
-        if (name.StartsWith("swHole", StringComparison.Ordinal)
-            || name.StartsWith("swSlot", StringComparison.Ordinal))
-        {
-            // The wizard's "Hole" type is a clearance hole sized for a named fastener.
-            return HoleType.Clearance;
-        }
-
-        if (name.StartsWith("swSimple", StringComparison.Ordinal))
-        {
-            return HoleType.Simple;
-        }
-
-        return HoleType.Unknown;
-    }
-
-    /// <summary>swEndConditions_e to the IR's three-value end condition.</summary>
-    private static EndCondition MapEndCondition(int endCondition)
-    {
-        switch ((swEndConditions_e)endCondition)
-        {
-            case swEndConditions_e.swEndCondBlind:
+            case 0: // swEndCondBlind
                 return EndCondition.Blind;
 
-            case swEndConditions_e.swEndCondThroughAll:
-            case swEndConditions_e.swEndCondThroughNext:
-            case swEndConditions_e.swEndCondThroughAllBoth:
-            case swEndConditions_e.swEndCondUpToNext:
+            case 1: // swEndCondThroughAll
+            case 2: // swEndCondThroughNext
+            case 9: // swEndCondThroughAllBoth
+            case 11: // swEndCondUpToNext
                 return EndCondition.Through;
 
             default:
-                // Up to vertex, up to surface, offset from surface, midplane, up to body:
-                // the depth depends on geometry this feature does not carry.
+                // Up to vertex (3), up to surface (4), offset from surface (5), midplane (6),
+                // up to body (7), up to selection (10): the depth depends on geometry this
+                // feature does not carry.
                 return EndCondition.Unknown;
         }
     }
 
-    private static string? Blank(string? text) =>
+    internal static string? Blank(string? text) =>
         string.IsNullOrWhiteSpace(text) ? null : text!.Trim();
 
     /// <summary>A length in meters, or null when SOLIDWORKS reported zero or less.</summary>

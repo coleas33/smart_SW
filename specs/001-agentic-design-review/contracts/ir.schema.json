@@ -1432,7 +1432,7 @@
       "description": "What one phase of the dump cost and what became of it (schema 1.3.0, feature 005 T033).\n\nThe same shape `SuppressTestRow.elapsed_ms` set as the package's only elapsed\nprecedent. `status` is recorded rather than inferred from which arrays came back\nempty: an empty `holes[]` beside an `ok` row is a part with no holes, beside a\n`failed` one it is evidence the dump lost, and beside a `skipped` one it is a phase\nnobody ran.",
       "properties": {
         "name": {
-          "description": "The phase as `PackageWriter` names it in its gaps: document, manifest, mate, feature, equation, cutlist, drawing, hole, fastener, face, body",
+          "description": "The phase as `PackageWriter` names it in its gaps: document, manifest, mate, feature, equation, cutlist, drawing, hole, tolerance, fastener, face, body",
           "title": "Name",
           "type": "string"
         },
@@ -1558,7 +1558,7 @@
         },
         "profile": {
           "default": "full",
-          "description": "Which dump profile wrote this package (schema 1.2.0). 'model_check' skips the hole, fastener, face and body phases, so those arrays are empty by design rather than by failure. 'standards' (schema 1.4.0) extends it with the cutlist phase, and the drawing phase for a drawing root. A closed enumeration in both serializers, so a pre-1.4.0 reader refuses a 'standards' package outright rather than reading it. Absent in 1.0.0 and 1.1.0 packages, which were all 'full'.",
+          "description": "Which dump profile wrote this package (schema 1.2.0). 'model_check' skips the hole, tolerance, fastener, face and body phases, so those arrays are empty by design rather than by failure. 'standards' (schema 1.4.0) extends it with the cutlist phase, and the drawing phase for a drawing root. A closed enumeration in both serializers, so a pre-1.4.0 reader refuses a 'standards' package outright rather than reading it. Absent in 1.0.0 and 1.1.0 packages, which were all 'full'.",
           "enum": [
             "full",
             "model_check",

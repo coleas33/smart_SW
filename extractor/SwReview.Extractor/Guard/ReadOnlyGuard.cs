@@ -133,6 +133,83 @@ public static class ReadOnlyGuard
 
         // Cut-list exclusion writes, beside the ExcludeFromCutList read.
         "set_ExcludeFromCutList",
+
+        // ---- feature 010: the families the Hole Wizard and tolerance reads read from --------
+        //
+        // The setters beside every value those reads take, each reflected on the 2024 SP5
+        // interop. The table that fixes the membership is the "Feature 010" table of
+        // `004-resilient-remodeler/contracts/guard-allowlist.md`; MechanicalChecksDenylistTests
+        // parses it and RemodelGuardTests lists the same names. None of them is called.
+
+        // Dimension tolerance writes, beside IDimension.Tolerance and the IDimensionTolerance
+        // reads (Type, GetMinValue2, GetMaxValue2, GetHoleFitValue, GetShaftFitValue). The three
+        // IDimension members are the obsolete writers of the same tolerance.
+        "SetToleranceType",
+        "SetToleranceValues",
+        "SetToleranceFitValues",
+        "set_Type",
+        "set_FitType",
+        "SetValues",
+        "SetValues2",
+        "SetFitValues",
+
+        // GTol frame and datum-identifier writes, beside GetFrameValues, GetFrameSymbols3,
+        // GetFrameCount, GetFrame, GetDatumIdentifier and IGtolFrame.GetSymbolXml.
+        "SetFrameValues",
+        "SetFrameValues2",
+        "SetFrameSymbols",
+        "SetFrameSymbols2",
+        "AddFrame",
+        "DeleteFrame",
+        "SetDatumIdentifier",
+        "SetSymbolXml",
+        "SetIndicator",
+        "AddIndicator",
+        "DeleteIndicator",
+        "SetFrameToleranceType",
+
+        // Datum-label and attachment writes, beside IDatumTag.GetLabel and
+        // IAnnotation.GetAttachedEntities3.
+        "SetLabel",
+        "SetAttachedEntities",
+        "ISetAttachedEntities",
+
+        // Hole Wizard data writes, beside the HoleFit, ThreadClass, HeadClearance, diameter,
+        // depth and angle reads. Every set_*Diameter, set_*Depth and set_*Angle
+        // IWizardHoleFeatureData2 declares: ModifyDefinition, denied above, is the only way a
+        // wizard edit takes effect, and these close the family by name as well.
+        "set_HoleFit",
+        "set_ThreadClass",
+        "set_HeadClearance",
+        "set_Diameter",
+        "set_CounterBoreDiameter",
+        "set_CounterDrillDiameter",
+        "set_CounterSinkDiameter",
+        "set_MinorDiameter",
+        "set_MajorDiameter",
+        "set_HoleDiameter",
+        "set_ThruHoleDiameter",
+        "set_TapDrillDiameter",
+        "set_ThruTapDrillDiameter",
+        "set_NearCounterSinkDiameter",
+        "set_MidCounterSinkDiameter",
+        "set_FarCounterSinkDiameter",
+        "set_ThreadDiameter",
+        "set_Depth",
+        "set_CounterBoreDepth",
+        "set_CounterDrillDepth",
+        "set_HoleDepth",
+        "set_ThruHoleDepth",
+        "set_TapDrillDepth",
+        "set_ThruTapDrillDepth",
+        "set_ThreadDepth",
+        "set_CounterDrillAngle",
+        "set_CounterSinkAngle",
+        "set_DrillAngle",
+        "set_NearCounterSinkAngle",
+        "set_MidCounterSinkAngle",
+        "set_FarCounterSinkAngle",
+        "set_ThreadAngle",
     };
 
     /// <summary>

@@ -56,8 +56,9 @@ public class RemodelGuardTests
     ///
     /// The second block is feature 006's, added with the cut-list and drawing phases
     /// (`006-standards-check/research.md` R8, tabulated in contracts/guard-allowlist.md under
-    /// "Denials added after stage 1"). Every one of them is a narrowing: none is on the
-    /// stage-1 allowlist, so
+    /// "Denials added after stage 1"), and the third feature 010's, added with the Hole
+    /// Wizard and tolerance reads (the "Feature 010" table of the same file). Every one of
+    /// them is a narrowing: none is on the stage-1 allowlist, so
     /// <see cref="Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive"/> and
     /// <see cref="RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse"/>
     /// answer exactly as they did before it.
@@ -112,6 +113,64 @@ public class RemodelGuardTests
         "set_Value",
         "SetName",
         "set_ExcludeFromCutList",
+
+        // Feature 010, the Hole Wizard and tolerance reads (contracts/guard-allowlist.md,
+        // "Feature 010"). A narrowing, like 006's: no stage-1 key's bare name is among them.
+        "SetToleranceType",
+        "SetToleranceValues",
+        "SetToleranceFitValues",
+        "set_Type",
+        "set_FitType",
+        "SetValues",
+        "SetValues2",
+        "SetFitValues",
+        "SetFrameValues",
+        "SetFrameValues2",
+        "SetFrameSymbols",
+        "SetFrameSymbols2",
+        "AddFrame",
+        "DeleteFrame",
+        "SetDatumIdentifier",
+        "SetSymbolXml",
+        "SetIndicator",
+        "AddIndicator",
+        "DeleteIndicator",
+        "SetFrameToleranceType",
+        "SetLabel",
+        "SetAttachedEntities",
+        "ISetAttachedEntities",
+        "set_HoleFit",
+        "set_ThreadClass",
+        "set_HeadClearance",
+        "set_Diameter",
+        "set_CounterBoreDiameter",
+        "set_CounterDrillDiameter",
+        "set_CounterSinkDiameter",
+        "set_MinorDiameter",
+        "set_MajorDiameter",
+        "set_HoleDiameter",
+        "set_ThruHoleDiameter",
+        "set_TapDrillDiameter",
+        "set_ThruTapDrillDiameter",
+        "set_NearCounterSinkDiameter",
+        "set_MidCounterSinkDiameter",
+        "set_FarCounterSinkDiameter",
+        "set_ThreadDiameter",
+        "set_Depth",
+        "set_CounterBoreDepth",
+        "set_CounterDrillDepth",
+        "set_HoleDepth",
+        "set_ThruHoleDepth",
+        "set_TapDrillDepth",
+        "set_ThruTapDrillDepth",
+        "set_ThreadDepth",
+        "set_CounterDrillAngle",
+        "set_CounterSinkAngle",
+        "set_DrillAngle",
+        "set_NearCounterSinkAngle",
+        "set_MidCounterSinkAngle",
+        "set_FarCounterSinkAngle",
+        "set_ThreadAngle",
     };
 
     /// <summary><see cref="ReadOnlyGuard.DeniedPrefixes"/> as this allowlist was written against it.</summary>

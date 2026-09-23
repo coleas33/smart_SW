@@ -13,21 +13,39 @@ byte-identical to what a 1.4.0 build writes except `schema_version`.
 
 ## 2. The extractor reads (seat-validated, tested with fakes)
 
+Every interop member below was reflected on the 2024 SP5 interop (32.5.0.48) and read about in its
+API help; which ones answer on a seat, and what they answer, is T103 to T105's to record.
+
 | Reader seam | Interop | Writes | Gap kind on failure |
 |---|---|---|---|
-| `IHoleWizardReader` | `IWizardHoleFeatureData2.HoleFit`, `.ThreadClass`, `.ThruHoleDiameter`, `.TapDrillDiameter`, `.CounterBoreDiameter`, `.CounterBoreDepth`, `.CounterSinkDiameter`, `.CounterSinkAngle`, `.HeadClearance` | `Hole.wizard` | `hole_wizard`, one per field |
-| `IDimensionToleranceReader` | `IFeature.GetFirstDisplayDimension`/`GetNextDisplayDimension`, `IDisplayDimension.GetDimension2`, `IDimension.FullName`, `.GetToleranceType`, `.GetToleranceValues`, `.GetToleranceFitValues`, `.GetSystemValue3` | `model_dimensions` | `model_dimension` |
-| `IModelAnnotationReader` | `IAnnotation` of type Gtol / DatumTag, `IGtol.GetFrameSymbols3`, `.GetFrameValues`, `.GetDatumIdentifier`, `IDatumTag.GetLabel`, `IAnnotation.GetAttachedEntities3` (persist refs of the faces) | `model_annotations` | `model_annotation` |
+| `IHoleWizardReader` (`SwHoleWizardReader`) | `IWizardHoleFeatureData2.HoleFit` (an `int` in `swWzdHoleScrewClearanceTypes_e`; counterbore and countersink holes only), `.ThreadClass` (tapped holes only), `.ThruHoleDiameter`, `.TapDrillDiameter`, `.CounterBoreDiameter`, `.CounterBoreDepth`, `.CounterSinkDiameter`, `.CounterSinkAngle` (radians), `.HeadClearance`; and every read the hole already made (`Type`, `EndCondition`, `Standard2`/`Standard`, `FastenerSize`, `HoleDepth`, `Diameter`, `ThreadDepth`, `ThreadEndCondition`), moved behind the same seam | `Hole.wizard` | `hole_wizard`, one per field |
+| `IDimensionToleranceReader` (`SwDimensionToleranceReader`) | the feature walk of `SwFeatureReader.Walk`, `IFeature.GetFirstDisplayDimension`/`GetNextDisplayDimension`, `IDisplayDimension.GetDimension2(0)`, `.Type2`, `IDimension.FullName`, `.GetSystemValue3(swThisConfiguration, null)`, `.Tolerance` (`IDimensionTolerance`: `.Type`, `.GetMinValue2`, `.GetMaxValue2`, `.GetHoleFitValue`, `.GetShaftFitValue`), `IModelDocExtension.GetPersistReference3` | `model_dimensions` | `model_dimension` per item; `tolerance` when a document could not be walked |
+| `IModelAnnotationReader` (`SwModelAnnotationReader`) | `IModelDocExtension.GetAnnotations`, `IAnnotation.GetType` (GTol 5, datum tag 2), `.IsDimXpert`, `.GetSpecificAnnotation`, `IGtol.GetFrameCount`, `.GetFrameValues`, `.GetFrameSymbols3` (a GTol created before 2022), `.GetFrame` then `IGtolFrame.GetSymbolXml` (the 2022 format), `.GetDatumIdentifier`, `IDatumTag.GetLabel`, `IAnnotation.GetAttachedEntities3` (the faces' persistent references) | `model_annotations` | `model_annotation` per item; `tolerance` when a document's annotations could not be listed |
 
-All are reads. The guard's denylist gains, in the same change, the setters beside each family:
-`SetToleranceValues`, `SetToleranceType`, `SetToleranceFitValues`, `SetFitValues`, `SetValues2`,
-`set_Type`, `SetFrameValues`, `SetFrameSymbols`, `SetDatumIdentifier`, `SetLabel`,
-`set_HoleFit`, `set_ThreadClass`, and the `set_*Diameter`/`set_*Depth`/`set_*Angle` of the wizard
-data (`ModifyDefinition`, already denied, is the only way a wizard edit takes effect).
-`StandardsDenylistTests` and `RemodelGuardTests` and feature 004's `guard-allowlist.md` are
-updated with the count. The reads run in the existing `hole` phase (wizard data) and a new
+`IDimension.GetToleranceType`, `GetToleranceValues` and `GetToleranceFitValues` exist but are
+documented obsolete in the 2024 API, superseded by `IDimensionTolerance`, which is what is read.
+**`HoleFit` is a screw clearance fit (close, normal, loose), never an ISO 286 class**, so
+`fit_class_raw` names the enumeration member and the Hole Wizard row of section 4 binds nothing on
+it; a hole's ISO class arrives on its dimension (`fit_hole_class`), which is section 4's
+`model_dimension` row. Every per-item read goes through `SwGate.CallOptional`: a property
+SOLIDWORKS refuses for one hole type or one kind of dimension is a gap per item, never an open
+circuit that would end the dump, while a dead session still opens the circuit on the next counted
+call.
+
+All are reads. The guard's denylist gains, in the same change, the setters beside each family -
+the dimension tolerance's (`SetToleranceValues`, `SetToleranceType`, `SetToleranceFitValues`,
+`set_Type`, `set_FitType`, `SetValues`, `SetValues2`, `SetFitValues`), the GTol's
+(`SetFrameValues`, `SetFrameValues2`, `SetFrameSymbols`, `SetFrameSymbols2`, `AddFrame`,
+`DeleteFrame`, `SetDatumIdentifier`, and `IGtolFrame`'s `SetSymbolXml`, `SetIndicator`,
+`AddIndicator`, `DeleteIndicator`, `SetFrameToleranceType`), the datum tag's `SetLabel`, the
+annotation's `SetAttachedEntities` and `ISetAttachedEntities`, and the wizard data's `set_HoleFit`,
+`set_ThreadClass`, `set_HeadClearance` and every `set_*Diameter`, `set_*Depth` and `set_*Angle`
+`IWizardHoleFeatureData2` declares (`ModifyDefinition`, already denied, is the only way a wizard
+edit takes effect). The membership is the "Feature 010" table of feature 004's
+`guard-allowlist.md`, which `MechanicalChecksDenylistTests` parses and `RemodelGuardTests` lists.
+The wizard reads run in the existing `hole` phase and the dimension and annotation reads in a new
 `tolerance` phase after it, recorded as a `DumpPhase` row, skipped by the `model_check` and
-`standards` profiles.
+`standards` profiles, once per part document.
 
 ## 3. Profile version 2: the general tolerance
 

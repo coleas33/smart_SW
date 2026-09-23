@@ -117,7 +117,7 @@ public sealed class PackageReuseTests : IDisposable
             new[]
             {
                 "document", "manifest", "mate", "feature", "equation", "cutlist",
-                "drawing", "hole", "fastener", "face", "body",
+                "drawing", "hole", "tolerance", "fastener", "face", "body",
             },
             written.Extractor.Phases.Select(phase => phase.Name));
         Assert.All(written.Extractor.Phases, phase =>

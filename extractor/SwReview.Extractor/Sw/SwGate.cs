@@ -81,6 +81,26 @@ public sealed class SwGate
         return _breaker.Execute(call);
     }
 
+    /// <summary>
+    /// Guards, then runs, an OPTIONAL interop read (feature 010): one whose failure the caller
+    /// records as a gap on that single value - a Hole Wizard field, a dimension's tolerance, a
+    /// GTol frame. The guard, the observer and an open circuit apply exactly as for
+    /// <see cref="Call{T}"/>; a failure is not counted toward opening the circuit
+    /// (<see cref="CircuitBreaker.ExecuteOptional{T}"/>). SOLIDWORKS may refuse such a property
+    /// on every hole of one type, and that must be a gap per hole rather than an open circuit
+    /// that ends the dump; a dead session still opens the circuit on the next counted call.
+    /// </summary>
+    public T CallOptional<T>(string interopMember, Func<T> call)
+    {
+        if (call == null)
+        {
+            throw new ArgumentNullException(nameof(call));
+        }
+
+        Guard(interopMember);
+        return _breaker.ExecuteOptional(call);
+    }
+
     /// <summary>Guards, then runs, an interop call that returns nothing.</summary>
     public void Call(string interopMember, Action call)
     {

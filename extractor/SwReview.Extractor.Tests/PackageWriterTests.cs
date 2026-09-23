@@ -6,6 +6,7 @@ using SwReview.Extractor.Dump;
 using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ids;
 using SwReview.Extractor.Ir;
+using IrMeasure = SwReview.Extractor.Ir.Measure;
 using Xunit;
 
 namespace SwReview.Extractor.Tests;
@@ -552,6 +553,91 @@ public class PackageWriterTests : IDisposable
         Assert.NotEmpty(package.Equations);
     }
 
+    // ---- the tolerance phase (feature 010 T090) ------------------------------------
+
+    [Fact]
+    public void Build_FullProfile_RunsTheTolerancePhaseAndWritesWhatItRead()
+    {
+        var sources = new FakeSources();
+        sources.ToleranceResult.Dimensions.Add(new ModelDimension
+        {
+            Id = "mdm:0001",
+            DocumentId = "doc:housing",
+            FeatureName = "Sketch1",
+            Name = "D1@Sketch1@housing.SLDPRT",
+            DimensionType = ModelDimensionType.Diameter,
+            Nominal = new IrMeasure(0.01, "m"),
+        });
+        sources.ToleranceResult.Annotations.Add(new ModelAnnotation
+        {
+            Id = "man:0001",
+            DocumentId = "doc:housing",
+            Kind = ModelAnnotationKind.Datum,
+            Label = "A",
+        });
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.True(sources.TolerancesWereDumped);
+        Assert.Equal("mdm:0001", Assert.Single(package.ModelDimensions!).Id);
+        Assert.Equal("man:0001", Assert.Single(package.ModelAnnotations!).Id);
+        Assert.Equal(
+            DumpPhaseStatus.Ok,
+            Assert.Single(package.Extractor.Phases, phase => phase.Name == "tolerance").Status);
+    }
+
+    [Fact]
+    public void Build_TolerancePhaseThatReadNothing_WritesNeitherArray()
+    {
+        // "The phase ran and found none" is the ok row, not an empty array that would move a
+        // package on disk (the 1.4.0 rule, applied to the 1.5.0 arrays).
+        var sources = new FakeSources();
+
+        EvidencePackage package = NewWriter(sources).Build(Options());
+
+        Assert.True(sources.TolerancesWereDumped);
+        Assert.Null(package.ModelDimensions);
+        Assert.Null(package.ModelAnnotations);
+        Assert.Equal(
+            DumpPhaseStatus.Ok,
+            Assert.Single(package.Extractor.Phases, phase => phase.Name == "tolerance").Status);
+    }
+
+    [Fact]
+    public void Build_ModelCheckAndStandardsProfiles_SkipTheTolerancePhase()
+    {
+        // The tolerance reads walk every part's dimensions and annotations, and no Model check
+        // or Standards check reads them: the two reduced profiles skip the phase with the
+        // geometry phases it sits among.
+        foreach (DumpOptions options in new[] { ModelCheckOptions(), StandardsOptions() })
+        {
+            var sources = new FakeSources();
+
+            EvidencePackage package = NewWriter(sources).Build(options);
+
+            Assert.False(sources.TolerancesWereDumped);
+            DumpPhase row = Assert.Single(package.Extractor.Phases, phase => phase.Name == "tolerance");
+            Assert.Equal(DumpPhaseStatus.Skipped, row.Status);
+            Assert.Null(row.ElapsedMs);
+        }
+    }
+
+    [Fact]
+    public void Build_WithNoToleranceSourceWired_RecordsThePhaseSkipped()
+    {
+        // The optional source, as for the two 1.4.0 phases: a build with no reader wired says
+        // so in the row rather than writing nothing.
+        FakeSources s = new FakeSources();
+        var writer = new PackageWriter(s, s, s, s, s, s, s, s, s, s, s, s, "2024 SP5", "TEST-WORKSTATION");
+
+        EvidencePackage package = writer.Build(Options());
+
+        Assert.False(s.TolerancesWereDumped);
+        Assert.Equal(
+            DumpPhaseStatus.Skipped,
+            Assert.Single(package.Extractor.Phases, phase => phase.Name == "tolerance").Status);
+    }
+
     [Fact]
     public void Build_ModelCheckProfile_NeverCallsTheHoleFastenerFaceOrMeshSources()
     {
@@ -951,7 +1037,7 @@ public class PackageWriterTests : IDisposable
             {
                 "document:ok", "manifest:ok", "mate:ok", "feature:ok", "equation:ok",
                 "cutlist:ok", "drawing:skipped",
-                "hole:ok", "fastener:ok", "face:ok", "body:ok",
+                "hole:ok", "tolerance:ok", "fastener:ok", "face:ok", "body:ok",
             },
             Rows(package));
         // Every phase that ran is timed. `drawing` is the one exception and it is not an
@@ -984,7 +1070,7 @@ public class PackageWriterTests : IDisposable
             {
                 "document:ok", "manifest:ok", "mate:ok", "feature:ok", "equation:ok",
                 "cutlist:skipped", "drawing:skipped",
-                "hole:skipped", "fastener:skipped", "face:skipped", "body:skipped",
+                "hole:skipped", "tolerance:skipped", "fastener:skipped", "face:skipped", "body:skipped",
             },
             Rows(package));
         Assert.All(
@@ -1006,7 +1092,7 @@ public class PackageWriterTests : IDisposable
             {
                 "document:ok", "manifest:ok", "mate:ok", "feature:skipped", "equation:skipped",
                 "cutlist:ok", "drawing:skipped",
-                "hole:ok", "fastener:ok", "face:ok", "body:ok",
+                "hole:ok", "tolerance:ok", "fastener:ok", "face:ok", "body:ok",
             },
             Rows(package));
     }
@@ -1044,7 +1130,7 @@ public class PackageWriterTests : IDisposable
             {
                 "document:ok", "manifest:ok", "mate:failed", "feature:ok", "equation:ok",
                 "cutlist:ok", "drawing:skipped",
-                "hole:ok", "fastener:ok", "face:ok", "body:ok",
+                "hole:ok", "tolerance:ok", "fastener:ok", "face:ok", "body:ok",
             },
             Rows(package));
     }
@@ -1067,7 +1153,7 @@ public class PackageWriterTests : IDisposable
             {
                 "document:ok", "manifest:ok", "mate:aborted", "feature:skipped",
                 "equation:skipped", "cutlist:skipped", "drawing:skipped", "hole:skipped",
-                "fastener:skipped", "face:skipped", "body:skipped",
+                "tolerance:skipped", "fastener:skipped", "face:skipped", "body:skipped",
             },
             Rows(package));
         Assert.All(
@@ -1089,7 +1175,7 @@ public class PackageWriterTests : IDisposable
             {
                 "document:ok", "manifest:ok", "mate:skipped", "feature:skipped",
                 "equation:skipped", "cutlist:skipped", "drawing:skipped", "hole:skipped",
-                "fastener:skipped", "face:skipped", "body:skipped",
+                "tolerance:skipped", "fastener:skipped", "face:skipped", "body:skipped",
             },
             Rows(package));
     }
@@ -1312,7 +1398,7 @@ public class PackageWriterTests : IDisposable
     {
         FakeSources s = sources ?? new FakeSources();
         return new PackageWriter(
-            s, s, s, s, s, s, s, s, s, s, s, s, "2024 SP5", "TEST-WORKSTATION");
+            s, s, s, s, s, s, s, s, s, s, s, s, "2024 SP5", "TEST-WORKSTATION", tolerances: s);
     }
 
     /// <summary>
@@ -1322,7 +1408,7 @@ public class PackageWriterTests : IDisposable
     private sealed class FakeSources
         : IComponentTreeSource, IDocumentSource, IManifestSource, IMateSource, IFeatureSource,
           IEquationSource, ICutListSource, IDrawingSource, IHoleSource, IFastenerSource,
-          IFaceSource, IMeshSource
+          IFaceSource, IMeshSource, IToleranceSource
     {
         private const string AssemblyPath = @"C:\vault\bracket-assy\bracket-assy.SLDASM";
         private const string HousingPath = @"C:\vault\bracket-assy\housing.SLDPRT";
@@ -1377,6 +1463,11 @@ public class PackageWriterTests : IDisposable
         public bool CutListWasDumped { get; private set; }
 
         public bool DrawingsWereDumped { get; private set; }
+
+        public bool TolerancesWereDumped { get; private set; }
+
+        /// <summary>What the tolerance phase returns; empty unless a test fills it.</summary>
+        public ToleranceDumpResult ToleranceResult { get; } = new ToleranceDumpResult();
 
         public string? MeshDirectory { get; private set; }
 
@@ -1677,6 +1768,12 @@ public class PackageWriterTests : IDisposable
                     },
                 },
             };
+        }
+
+        ToleranceDumpResult IToleranceSource.Dump(DumpScope scope)
+        {
+            TolerancesWereDumped = true;
+            return ToleranceResult;
         }
 
         HoleDumpResult IHoleSource.Dump(DumpScope scope)

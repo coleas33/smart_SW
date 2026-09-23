@@ -57,7 +57,14 @@ public static class SwDump
             new FastenerDumper(session, refs),
             new FaceDumper(session, refs, openDocument),
             new MeshExporter(session, refs),
-            session.SwVersion);
+            session.SwVersion,
+
+            // The tolerance phase (schema 1.5.0, feature 010) runs under the Full profile; a
+            // source left out here would record it `skipped` in a dump that could have run it.
+            tolerances: new ToleranceDumper(
+                session.Gate,
+                new SwDimensionToleranceReader(session.Gate, refs),
+                new SwModelAnnotationReader(session.Gate, refs)));
     }
 
     /// <summary>Attaches to a document and dumps it in one call.</summary>

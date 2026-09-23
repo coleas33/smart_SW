@@ -46,6 +46,76 @@ public class SwGateTests
         Assert.False(breaker.IsOpen);
     }
 
+    // ---- CallOptional (feature 010) ------------------------------------------------
+
+    [Fact]
+    public void CallOptional_AllowedMember_RunsReturnsTheValueAndTellsTheObserver()
+    {
+        var observer = new RecordingGateObserver();
+        var gate = new SwGate { Observer = observer };
+
+        Assert.Equal(0.011, gate.CallOptional("CounterBoreDiameter", () => 0.011));
+        Assert.Equal(new[] { "CounterBoreDiameter" }, observer.Members);
+    }
+
+    [Fact]
+    public void CallOptional_DeniedMember_ThrowsBeforeRunningTheCall()
+    {
+        var gate = new SwGate();
+        bool ran = false;
+
+        Assert.Throws<MutatingCallError>(
+            () => gate.CallOptional<int>("set_HoleFit", () => { ran = true; return 1; }));
+        Assert.False(ran);
+    }
+
+    [Fact]
+    public void CallOptional_ComFailures_NeverOpenTheCircuit()
+    {
+        var breaker = new CircuitBreaker();
+        var gate = new SwGate(breaker);
+
+        for (int i = 0; i < 5; i++)
+        {
+            Assert.Throws<COMException>(
+                () => gate.CallOptional<double>("CounterSinkAngle", () => throw new COMException("not for this type")));
+        }
+
+        Assert.False(breaker.IsOpen);
+        Assert.Equal(0, breaker.ConsecutiveFailures);
+    }
+
+    [Fact]
+    public void CallOptional_AnOpenCircuit_IsStillRefused()
+    {
+        var breaker = new CircuitBreaker();
+        var gate = new SwGate(breaker);
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Throws<COMException>(() => gate.Call<int>("GetChildren", () => throw new COMException("dead")));
+        }
+
+        bool ran = false;
+        Assert.Throws<CircuitOpenError>(
+            () => gate.CallOptional("HeadClearance", () => { ran = true; return 1.0; }));
+        Assert.False(ran);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void CallOptional_MissingMemberName_Throws(string? member)
+    {
+        Assert.Throws<ArgumentException>(() => new SwGate().CallOptional(member!, () => 1));
+    }
+
+    [Fact]
+    public void CallOptional_NullCall_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() => new SwGate().CallOptional<int>("HoleFit", null!));
+    }
+
     [Fact]
     public void Call_ComFailures_OpenTheCircuitAfterThree()
     {

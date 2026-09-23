@@ -48,8 +48,8 @@ public enum DumpProfile
     Full,
 
     /// <summary>
-    /// Document, manifest, mate, feature and equation phases only. The hole, fastener,
-    /// face and body or mesh phases are skipped, so those arrays are empty by design.
+    /// Document, manifest, mate, feature and equation phases only. The hole, tolerance,
+    /// fastener, face and body or mesh phases are skipped, so those arrays are empty by design.
     /// </summary>
     ModelCheck,
 
@@ -58,7 +58,7 @@ public enum DumpProfile
     /// the root document is a drawing (schema 1.4.0, FR-027). It still skips hole, fastener,
     /// face and body - the four phases that read face geometry, tessellate every body and
     /// write mesh files, which is most of a dump's cost and none of which any standards
-    /// check reads.
+    /// check reads - and the tolerance phase beside them (schema 1.5.0).
     /// </summary>
     Standards,
 }
@@ -333,6 +333,15 @@ public sealed class DumpScope
     /// </summary>
     public IdAllocator FeatureIds { get; } = new IdAllocator("feat");
 
+    /// <summary>
+    /// Model dimension ids (schema 1.5.0, feature 010), allocated in traversal order across the
+    /// package, so <c>mdm:0007</c> means one dimension of one document in one package.
+    /// </summary>
+    public IdAllocator ModelDimensionIds { get; } = new IdAllocator("mdm");
+
+    /// <summary>Model annotation ids (schema 1.5.0, feature 010), allocated the same way.</summary>
+    public IdAllocator ModelAnnotationIds { get; } = new IdAllocator("man");
+
     /// <summary>Registers a traversed component under its allocated id.</summary>
     public ScopedComponent AddComponent(string id, string documentId, ComponentNode node)
     {
@@ -438,6 +447,24 @@ public interface IDrawingSource
 public interface IHoleSource
 {
     HoleDumpResult Dump(DumpScope scope);
+}
+
+/// <summary>
+/// The part documents' feature dimensions with their tolerances, and their geometric tolerances
+/// and datum tags (schema 1.5.0, feature 010 T091). Runs under the Full profile, after the hole
+/// phase; the Model check and Standards profiles skip it.
+/// </summary>
+public interface IToleranceSource
+{
+    ToleranceDumpResult Dump(DumpScope scope);
+}
+
+/// <summary>What the <c>tolerance</c> phase read, in traversal order.</summary>
+public sealed class ToleranceDumpResult
+{
+    public List<ModelDimension> Dimensions { get; } = new List<ModelDimension>();
+
+    public List<ModelAnnotation> Annotations { get; } = new List<ModelAnnotation>();
 }
 
 /// <summary>Toolbox and other fasteners (T053).</summary>
