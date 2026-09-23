@@ -438,7 +438,8 @@ def test_a_rerun_folded_onto_an_earlier_finding_is_reannounced_under_that_id(
 
     The re-run's finding is announced under the id it was allocated, and the fold is
     announced again under the id it was folded onto - a client keyed by finding id then
-    ends on the same verdict `session.json` holds.
+    ends on the same verdict `session.json` holds, titled as the pane shows it
+    (`pane_finding`, decision 2A; the next test is the case where the two titles differ).
     """
     run = review(
         [
@@ -456,7 +457,7 @@ def test_a_rerun_folded_onto_an_earlier_finding_is_reannounced_under_that_id(
     announced = bodies_of(run, "finding")
     assert [body["id"] for body in announced] == ["F-001", "F-002", "F-001"]
     assert [body["status"] for body in announced] == ["unresolved", "suspected", "suspected"]
-    assert announced[-1] == run.session.findings[0].model_dump(mode="json")
+    assert announced[-1] == pane_finding(run.session.findings[0], component_names(run.context.ir))
 
 
 LONG_DRAWING_OBSERVED = (
