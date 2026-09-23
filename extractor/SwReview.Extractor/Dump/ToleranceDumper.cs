@@ -65,10 +65,12 @@ public interface IDimensionToleranceReader : IDimensionToleranceReads
 /// <summary>
 /// The annotation reads <see cref="ToleranceDumper"/> needs, with no interop type in the
 /// signature (<see cref="SwModelAnnotationReader"/> is the SOLIDWORKS one). The same gating rule
-/// as <see cref="IDimensionToleranceReader"/>; <see cref="FrameXml"/>,
-/// <see cref="AttachedFacePersistRefs"/> and <see cref="PersistRef"/> gate inside.
+/// as <see cref="IDimensionToleranceReader"/>; <see cref="IAnnotationSymbolReads.FrameXml"/>,
+/// <see cref="AttachedFacePersistRefs"/> and <see cref="PersistRef"/> gate inside. The frame and
+/// datum reads are <see cref="IAnnotationSymbolReads"/>, which a drawing's typed annotations are
+/// read through too (feature 011).
 /// </summary>
-public interface IModelAnnotationReader
+public interface IModelAnnotationReader : IAnnotationSymbolReads
 {
     /// <summary><c>IModelDocExtension.GetAnnotations</c>, as a list.</summary>
     IReadOnlyList<object> Annotations(object document);
@@ -78,27 +80,6 @@ public interface IModelAnnotationReader
 
     /// <summary><c>IAnnotation.IsDimXpert</c>.</summary>
     bool IsDimXpert(object annotation);
-
-    /// <summary><c>IAnnotation.GetSpecificAnnotation</c>: the IGtol or IDatumTag.</summary>
-    object? Specific(object annotation);
-
-    /// <summary><c>IGtol.GetFrameCount</c>.</summary>
-    int FrameCount(object gtol);
-
-    /// <summary><c>IGtol.GetFrameValues(frame)</c> as strings; null when it answers nothing.</summary>
-    IReadOnlyList<string>? FrameValues(object gtol, int frame);
-
-    /// <summary><c>IGtol.GetFrameSymbols3(frame)</c> as strings; null when it answers nothing.</summary>
-    IReadOnlyList<string>? FrameSymbols(object gtol, int frame);
-
-    /// <summary><c>IGtol.GetFrame(frame)</c> then <c>IGtolFrame.GetSymbolXml</c>; null for the pre-2022 format.</summary>
-    string? FrameXml(object gtol, int frame);
-
-    /// <summary><c>IGtol.GetDatumIdentifier</c>.</summary>
-    string? DatumIdentifier(object gtol);
-
-    /// <summary><c>IDatumTag.GetLabel</c>.</summary>
-    string? DatumLabel(object datumTag);
 
     /// <summary>
     /// The persistent references of the faces <c>IAnnotation.GetAttachedEntities3</c> returns;
@@ -552,39 +533,16 @@ public sealed class ToleranceDumper : IToleranceSource
     }
 
     /// <summary>
-    /// One frame, asked both ways: the pre-2022 calls and the 2022 format's XML, since the API
-    /// answers each for one generation of GTol only. A frame any call answered is kept with
-    /// whatever answered. A frame no call answered is left out: silently when nothing failed (a
-    /// stored, empty frame), and with one gap naming every error when something did.
+    /// One frame, through <see cref="GtolFrames.Read"/> - the reading a drawing's geometric
+    /// tolerances share (feature 011). A frame any call answered is kept with whatever answered. A
+    /// frame no call answered is left out: silently when nothing failed (a stored, empty frame),
+    /// and with one gap naming every error when something did.
     /// </summary>
     private GtolFrame? ReadFrame(DumpScope scope, ModelAnnotation record, object gtol, int frame)
     {
         var errors = new List<string>();
-
-        IReadOnlyList<string>? values = OptionalFrameRead(
-            errors, () => _gate.CallOptional("GetFrameValues", () => _annotations.FrameValues(gtol, frame)));
-        IReadOnlyList<string>? symbols = OptionalFrameRead(
-            errors, () => _gate.CallOptional("GetFrameSymbols3", () => _annotations.FrameSymbols(gtol, frame)));
-        string? xml = OptionalFrameRead(errors, () => HoleDumper.Blank(_annotations.FrameXml(gtol, frame)));
-
-        bool answered = (values != null && values.Count > 0) || (symbols != null && symbols.Count > 0) || xml != null;
-        if (answered)
-        {
-            var read = new GtolFrame { Number = frame, SymbolXmlRaw = xml };
-            if (values != null)
-            {
-                read.ValuesRaw.AddRange(values);
-            }
-
-            if (symbols != null)
-            {
-                read.SymbolsRaw.AddRange(symbols);
-            }
-
-            return read;
-        }
-
-        if (errors.Count > 0)
+        GtolFrame? read = GtolFrames.Read(_gate, _annotations, gtol, frame, errors);
+        if (read == null && errors.Count > 0)
         {
             scope.Gaps.Add(
                 GapKind.ToolError,
@@ -596,32 +554,6 @@ public sealed class ToleranceDumper : IToleranceSource
                 string.Join("; ", errors));
         }
 
-        return null;
-    }
-
-    /// <summary>
-    /// One frame read whose failure is expected for one GTol format: the error is kept for the
-    /// frame's gap and the answer is null. A guard refusal or an open circuit is not a format.
-    /// </summary>
-    private static T? OptionalFrameRead<T>(List<string> errors, Func<T?> read)
-        where T : class
-    {
-        try
-        {
-            return read();
-        }
-        catch (CircuitOpenError)
-        {
-            throw;
-        }
-        catch (MutatingCallError)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            errors.Add(GapCollector.Describe(ex));
-            return null;
-        }
+        return read;
     }
 }
