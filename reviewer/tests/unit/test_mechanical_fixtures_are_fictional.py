@@ -23,6 +23,9 @@ back to the fictional id it encodes. It does not read JSON keys, schema enum val
 numbers, because those are the IR's own vocabulary and float digits - `counterbore`,
 `reuse_key` and `-0.0011249...` are not recorded strings whatever tokens the denylist holds
 - and a GLB's generator URL is `trimesh`'s. Nothing a fixture builder composes escapes it.
+Names and values are matched as substrings, because a name is a compound; the vector
+table's `note` column is an author's English sentence and is matched by whole word, since
+a short recorded token sits inside an unrelated word ("carries") far more often than not.
 """
 
 from __future__ import annotations
@@ -41,8 +44,10 @@ from tests.support.fixture_denylist import (
     json_strings,
     load_denylist,
     offending_tokens,
+    offending_words,
 )
 from tests.support.mechanical import FICTIONAL_ROOT, fictional_offences
+from tests.support.scramble import write_denylist
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "mechanical"
@@ -145,7 +150,7 @@ def test_the_vocabulary_check_refuses_a_word_it_does_not_know() -> None:
 
 def test_the_denylist_reader_folds_case_and_drops_short_and_blank_lines(tmp_path: Path) -> None:
     listed = tmp_path / "fixture-denylist.txt"
-    listed.write_text("Zorbex\n\n# a comment\nab\n  QUIMBY  \n", encoding="utf-8")
+    listed.write_text("Zorbex\n\n# a comment\nab\n  QUIMBY  \n", encoding="utf-8-sig")
 
     denylist = load_denylist(listed)
 
@@ -153,6 +158,29 @@ def test_the_denylist_reader_folds_case_and_drops_short_and_blank_lines(tmp_path
     assert offending_tokens("a ZORBEX-2 bracket", denylist) == {"zorbex"}
     assert offending_tokens("nothing here", denylist) == set()
     assert load_denylist(tmp_path / "absent.txt") is None
+
+
+def test_the_denylist_reader_reads_the_file_feature_008_writes(tmp_path: Path) -> None:
+    """008's generator writes the file: its tokens, then one `folder: ` line per recorded
+    folder. Both features read it through one parser, so a folder line is a folder name to
+    refuse - never the literal text `folder: ...`, which nothing would ever contain."""
+    listed = tmp_path / "fixture-denylist.txt"
+    write_denylist(listed, ["Zorbex"], ["Quimby Works"])
+
+    assert load_denylist(listed) == frozenset({"zorbex", "quimby works"})
+
+
+def test_prose_is_matched_by_whole_word_and_names_by_substring() -> None:
+    """A name is a compound, so a recorded token inside it is still a leak; a sentence is
+    English, where a short recorded token is a piece of an unrelated word far more often."""
+    denylist = frozenset({"carr", "quimby works"})
+
+    assert offending_tokens("the package carries it", denylist) == {"carr"}
+    assert offending_words("the package carries it", denylist) == set()
+    assert offending_words("a Carr bracket", denylist) == {"carr"}
+    assert offending_words("FICT_CARR-0001", denylist) == {"carr"}
+    assert offending_words("made at Quimby  Works", denylist) == set()
+    assert offending_words("made at Quimby Works.", denylist) == {"quimby works"}
 
 
 def test_a_glb_is_read_by_its_json_chunk() -> None:
@@ -181,15 +209,29 @@ def test_no_token_of_the_owners_denylist_occurs_in_any_fixture_string() -> None:
 
     sources = {name: carried_strings(package) for name, package in packages().items()}
     sources["meshes"] = mesh_strings()
+    prose: dict[str, list[str]] = {}
     if VECTOR_TABLE.exists():
-        sources["fastener-name-vectors.json"] = list(
-            json_strings(json.loads(VECTOR_TABLE.read_text(encoding="utf-8")))
-        )
+        rows = json.loads(VECTOR_TABLE.read_text(encoding="utf-8"))
+        sources["fastener-name-vectors.json"] = [
+            text
+            for row in rows
+            for key, value in row.items()
+            if key != "note"
+            for text in json_strings(value)
+        ]
+        prose["fastener-name-vectors.json"] = [row["note"] for row in rows if "note" in row]
 
     offenders = sorted(
-        source
-        for source, texts in sources.items()
-        if any(offending_tokens(text, checked) for text in texts)
+        {
+            source
+            for source, texts in sources.items()
+            if any(offending_tokens(text, checked) for text in texts)
+        }
+        | {
+            source
+            for source, texts in prose.items()
+            if any(offending_words(text, checked) for text in texts)
+        }
     )
     # The tokens themselves are never printed: naming the source is enough to act on, and a
     # failure message is output that could end up in a public log.
