@@ -367,3 +367,189 @@ def test_the_cached_share_is_not_reported_when_the_counts_are_unknown(
     section = tokens_section(render_report(make_session(usage=usage), PACKAGE))
 
     assert "- Cached input share: not reported" in section
+
+
+# --- feature 008 T091: the cache split, stated either way (contracts/cost.md section 2) -----
+
+NOT_REPORTED_LINE = "- Cache split not reported: the provider sent no cached-input count"
+
+
+def last_line(section: list[str]) -> str:
+    return [line for line in section if line][-1]
+
+
+def test_a_null_cached_total_says_the_cache_split_was_not_reported() -> None:
+    usage = SessionUsage.summed([make_usage(cached_input_tokens=None)], [1])
+
+    section = tokens_section(render_report(make_session(usage=usage), PACKAGE))
+
+    assert last_line(section) == NOT_REPORTED_LINE
+    assert sum(1 for line in section if "Cache split not reported" in line) == 1
+
+
+def test_one_round_without_a_cached_count_is_enough_to_say_so() -> None:
+    usage = SessionUsage.summed([make_usage(), make_usage(cached_input_tokens=None)], [2])
+
+    section = tokens_section(render_report(make_session(usage=usage), PACKAGE))
+
+    assert NOT_REPORTED_LINE in section
+
+
+def test_with_the_split_reported_the_section_is_unchanged() -> None:
+    """The existing `Cached input tokens` and `Uncached input tokens` lines are the two
+    numbers; nothing is added when the provider reported them."""
+    usage = SessionUsage.summed([make_usage()], [1])
+
+    section = tokens_section(render_report(make_session(usage=usage), PACKAGE))
+
+    assert "- Cached input tokens: 10240" in section
+    assert "- Uncached input tokens: 1803" in section
+    assert not any("Cache split" in line for line in section)
+    assert last_line(section) == "- Model latency: 4.31 s"
+
+
+# --- feature 008 T091: the largest tool results (contracts/cost.md section 3) ---------------
+
+LARGEST = "## Largest tool results"
+
+
+def sized_step(
+    index: int, tool: str, result_bytes: int | None, tokens: int | None
+) -> InvestigationStep:
+    return InvestigationStep(
+        index=index,
+        tool=tool,
+        arguments={},
+        result_summary=f"{tool} returned its result",
+        status="ok",
+        error=None,
+        elapsed_s=0.1,
+        result_bytes=result_bytes,
+        result_tokens=tokens,
+    )
+
+
+def with_steps(session: ReviewSession, *steps: InvestigationStep) -> ReviewSession:
+    return session.model_copy(update={"steps": list(steps)})
+
+
+def largest_section(report: str) -> list[str]:
+    lines = report.splitlines()
+    start = lines.index(LARGEST)
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("## "))
+    return lines[start:end]
+
+
+def table_rows(section: list[str]) -> list[str]:
+    return [line for line in section if line.startswith("| ") and not line.startswith("| Step")]
+
+
+def used() -> SessionUsage:
+    return SessionUsage.summed([make_usage()], [1])
+
+
+def test_the_largest_results_are_listed_between_tokens_and_the_trace() -> None:
+    session = with_steps(
+        make_session(usage=used()),
+        sized_step(0, "list_holes", 1_200, 300),
+        sized_step(1, "check_rms_part", 612_418, 204_857),
+    )
+
+    report = render_report(session, PACKAGE)
+
+    lines = report.splitlines()
+    assert lines.index("## Tokens") < lines.index(LARGEST) < lines.index("## Investigation Trace")
+    section = largest_section(report)
+    assert section[:6] == [
+        LARGEST,
+        "",
+        "Estimated with o200k_base from each step's full result.",
+        "",
+        "| Step | Tool | Bytes | Tokens |",
+        "|---|---|---|---|",
+    ]
+    assert table_rows(section) == [
+        "| 1 | check_rms_part | 612,418 | 204,857 |",
+        "| 0 | list_holes | 1,200 | 300 |",
+    ]
+
+
+def test_at_most_five_rows_by_tokens_then_bytes_then_index_unknown_last() -> None:
+    session = with_steps(
+        make_session(usage=used()),
+        sized_step(0, "list_gaps", 900, None),
+        sized_step(1, "list_holes", 5_000, 1_000),
+        sized_step(2, "list_mates", 7_000, 1_000),
+        sized_step(3, "list_components", 7_000, 1_000),
+        sized_step(4, "get_component", 400, 90),
+        sized_step(5, "check_rms_part", 90_000, 20_000),
+        sized_step(6, "list_fasteners", 100, 20),
+        sized_step(7, "get_package_summary", 800, None),
+    )
+
+    rows = table_rows(largest_section(render_report(session, PACKAGE)))
+
+    assert rows == [
+        "| 5 | check_rms_part | 90,000 | 20,000 |",
+        "| 2 | list_mates | 7,000 | 1,000 |",
+        "| 3 | list_components | 7,000 | 1,000 |",
+        "| 1 | list_holes | 5,000 | 1,000 |",
+        "| 4 | get_component | 400 | 90 |",
+    ]
+
+
+def test_a_null_token_count_prints_unknown_after_every_known_one() -> None:
+    session = with_steps(
+        make_session(usage=used()),
+        sized_step(0, "list_gaps", 900_000, None),
+        sized_step(1, "list_holes", 10, 2),
+        sized_step(2, "list_mates", 800, None),
+    )
+
+    rows = table_rows(largest_section(render_report(session, PACKAGE)))
+
+    assert rows == [
+        "| 1 | list_holes | 10 | 2 |",
+        "| 0 | list_gaps | 900,000 | unknown |",
+        "| 2 | list_mates | 800 | unknown |",
+    ]
+
+
+def test_a_step_that_carries_no_size_is_not_listed() -> None:
+    session = with_steps(
+        make_session(usage=used()),
+        sized_step(0, "list_gaps", None, None),
+        sized_step(1, "list_holes", 10, 2),
+    )
+
+    rows = table_rows(largest_section(render_report(session, PACKAGE)))
+
+    assert rows == ["| 1 | list_holes | 10 | 2 |"]
+
+
+def test_no_section_without_usage_as_in_a_check_folder() -> None:
+    """A check run records sized steps too, and no usage: its report gains no table."""
+    session = with_steps(make_session(usage=None), sized_step(0, "check_rms_part", 612, 204))
+
+    report = render_report(session, PACKAGE)
+
+    assert LARGEST not in report
+
+
+def test_no_section_when_no_step_carries_a_size() -> None:
+    report = render_report(make_session(usage=used()), PACKAGE)
+
+    assert LARGEST not in report
+    assert "## Tokens" in report
+
+
+def test_the_new_lines_print_no_percentage() -> None:
+    session = with_steps(
+        make_session(usage=SessionUsage.summed([make_usage(cached_input_tokens=None)], [1])),
+        sized_step(0, "check_rms_part", 612, None),
+    )
+
+    report = render_report(session, PACKAGE)
+
+    assert "%" not in "\n".join(largest_section(report))
+    assert NOT_REPORTED_LINE in report and "%" not in NOT_REPORTED_LINE

@@ -111,6 +111,10 @@ def render_report(
     if session.usage is not None:
         lines.extend(_render_tokens(session.usage, _provider_name(session)))
         lines.append("")
+        largest = _render_largest_steps(session)
+        if largest:
+            lines.extend(largest)
+            lines.append("")
     lines.extend(_render_trace(session))
 
     return "\n".join(lines).rstrip() + "\n"
@@ -717,7 +721,7 @@ def _render_tokens(usage: SessionUsage, provider: str | None) -> list[str]:
     recomputed: `SessionUsage.summed` is the one place token counts are added.
     """
     totals = usage.totals
-    return [
+    lines = [
         "## Tokens",
         "",
         f"- Rounds: {usage.rounds}",
@@ -733,6 +737,53 @@ def _render_tokens(usage: SessionUsage, provider: str | None) -> list[str]:
         _render_cached_share(totals),
         f"- Model latency: {totals.latency_s:.2f} s",
     ]
+    if totals.cached_input_tokens is None:
+        # Feature 008 (FR-027): the cached and uncached lines above are the two numbers when
+        # the provider reported the split; when it did not, say so in the words the pane's
+        # usage line uses, rather than leave two `not reported` lines to be read as zeros.
+        lines.append(CACHE_SPLIT_NOT_REPORTED)
+    return lines
+
+
+CACHE_SPLIT_NOT_REPORTED = "- Cache split not reported: the provider sent no cached-input count"
+"""The Tokens section's one added line, only when the cached total is null (contracts/cost.md
+section 2)."""
+
+LARGEST_RESULTS_SHOWN = 5
+"""How many of the largest tool results the report names (FR-027)."""
+
+
+def _render_largest_steps(session: ReviewSession) -> list[str]:
+    """The steps whose full results were largest, or nothing when no step was measured.
+
+    Ordered by tokens, then bytes, then step index; a step whose tokens are unknown sorts
+    after every known one and prints `unknown`, never a zero (`contracts/cost.md` section 3).
+    A step that carries no size - one recorded before feature 008 - is not a candidate.
+    """
+    sized = [step for step in session.steps if step.result_bytes is not None]
+    if not sized:
+        return []
+    ranked = sorted(
+        sized,
+        key=lambda step: (
+            step.result_tokens is None,
+            -(step.result_tokens or 0),
+            -(step.result_bytes or 0),
+            step.index,
+        ),
+    )[:LARGEST_RESULTS_SHOWN]
+    lines = [
+        "## Largest tool results",
+        "",
+        "Estimated with o200k_base from each step's full result.",
+        "",
+        "| Step | Tool | Bytes | Tokens |",
+        "|---|---|---|---|",
+    ]
+    for step in ranked:
+        tokens = f"{step.result_tokens:,}" if step.result_tokens is not None else "unknown"
+        lines.append(f"| {step.index} | {step.tool} | {step.result_bytes:,} | {tokens} |")
+    return lines
 
 
 # --- investigation trace ---------------------------------------------------------------

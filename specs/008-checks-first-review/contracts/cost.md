@@ -52,6 +52,12 @@ At most five rows, ordered by tokens descending, then bytes descending, then ste
 token count prints `unknown` and sorts after every known one. Check folders (no usage) and every
 existing golden (no sizes) render no such section.
 
+*Landed as (T092).* The not-reported line is the Tokens section's last line, after `Model
+latency`, and it is printed when the summed cached total is null - which one round without a
+cached count is enough for, by `SessionUsage.summed`'s rule. A step that carries no size (one
+recorded before feature 008, in a session that also has sized steps) is not a candidate for the
+table. Bytes and tokens print with thousands separators.
+
 ## 4. The pane's usage line
 
 `usageLine(rounds)` in `extractor/SwReview.AddIn/Review/ReviewPage/render.js` reads only
