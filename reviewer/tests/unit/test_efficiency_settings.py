@@ -45,7 +45,9 @@ from swreview.agent.settings import (
     WORKSTATION_LEVERS,
     EfficiencySettings,
     check_study_arm,
+    checks_first,
     efficiency_from_levers,
+    pane_efficiency,
 )
 from swreview.benchmark.runner import run_benchmark
 from swreview.report.session import ReviewSession, load_session
@@ -630,3 +632,45 @@ def test_benchmark_run_without_a_study_is_not_held_to_the_set_precondition(
     )
 
     assert result.exit_code == 0, result.stdout + result.stderr
+
+
+# --- checks first and the pane's defaults (feature 008 T027) -------------------------------
+
+
+def test_checks_first_is_off_without_settings_and_with_every_lever_off() -> None:
+    assert checks_first(None) is False
+    assert checks_first(EfficiencySettings()) is False
+
+
+def test_checks_first_is_lever_5_or_lever_11() -> None:
+    """Lever 11 implies the pre-run, so either field turns checks first on (research R2.13)."""
+    assert checks_first(EfficiencySettings(prerun_checks=True)) is True
+    assert checks_first(EfficiencySettings(procedural_gate=True)) is True
+    assert checks_first(EfficiencySettings(tool_tiers=True, coverage_stop=True)) is False
+
+
+@pytest.mark.parametrize("provider", list(ProviderName))
+def test_the_pane_runs_checks_first_on_every_provider(provider: ProviderName) -> None:
+    pane = pane_efficiency(provider)
+
+    assert pane.prerun_checks is True
+    assert checks_first(pane) is True
+
+
+@pytest.mark.parametrize("provider", list(ProviderName))
+def test_every_other_pane_lever_is_the_class_default(provider: ProviderName) -> None:
+    """Checks first is the one lever User Story 2 turns on in the pane; US4 widens this by
+    exactly `parallel_tool_calls` (T080)."""
+    pane = pane_efficiency(provider).model_dump()
+    default = EfficiencySettings().model_dump()
+
+    assert {name: value for name, value in pane.items() if name != "prerun_checks"} == {
+        name: value for name, value in default.items() if name != "prerun_checks"
+    }
+
+
+def test_the_pane_default_does_not_loosen_the_gated_alone_rule() -> None:
+    """Checks first as a pane default changes no refusal: lever 5 with lever 7 is still one
+    arm nobody may run (`GATED_ALONE` unchanged)."""
+    with pytest.raises(ValueError, match="levers 5 and 7 never share an arm"):
+        efficiency_from_levers(["prerun_checks", "coverage_stop"], provider=ProviderName.OPENAI)

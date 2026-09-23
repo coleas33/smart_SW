@@ -322,10 +322,14 @@ def test_the_not_dumped_case_names_the_missing_phase(tmp_path: Any) -> None:
 # --- 3. the profile is an argument to the review, not to the lever ---------------------------
 
 
-def test_with_the_gate_off_and_no_profile_nothing_about_standards_is_written(
+def test_with_the_gate_off_and_no_profile_checks_first_still_says_standards_was_not_run(
     tmp_path: Any,
 ) -> None:
-    """FR-030 from this side: lever 5's arm must not grow the line lever 11 added."""
+    """Feature 008 T037, inverted deliberately: lever 5 is checks first, and under checks
+    first a family that cannot run is a coverage item and a digest line with its reason
+    (008 US2 scenario 3), which supersedes 007 FR-030's "nothing about standards" for lever
+    5. Lever 5 alone now writes the skipped `coverage.prerun.standards` item and the "no
+    profile was configured" line the gate writes (research R4)."""
     run, session = gated_review(
         tmp_path,
         "lever5",
@@ -333,8 +337,8 @@ def test_with_the_gate_off_and_no_profile_nothing_about_standards_is_written(
         efficiency=EfficiencySettings(prerun_checks=True),
     )
 
-    assert STANDARDS_CHECK not in coverage_checks(session, "skipped")
-    assert STANDARDS_FAMILY_NAME not in opening_of(run)
+    assert skipped_reason(session, STANDARDS_CHECK) == STANDARDS_NO_PROFILE
+    assert f"  {STANDARDS_FAMILY_NAME}: {STANDARDS_NO_PROFILE}" in opening_of(run).splitlines()
 
 
 def test_a_profile_given_with_the_gate_off_still_attaches_the_run(tmp_path: Any) -> None:

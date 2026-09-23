@@ -31,6 +31,7 @@
     "evidence_requests": { "type": "array", "items": { "$ref": "#/$defs/EvidenceRequest" } },
     "findings": { "type": "array", "items": { "$ref": "#/$defs/Finding" } },
     "contacts": { "type": "array", "items": { "$ref": "#/$defs/Contact" }, "description": "Interference groups that are two parts touching at nominal size, not overlapping (feature 010 FR-002). Added to properties and left out of required, and omitted from session.json when empty, so a session written before the list existed still validates and round-trips to its own bytes; the ranking never reads it" },
+    "folded_families": { "type": "array", "items": { "type": "string" }, "description": "Rule families whose findings rank and render as one collapsed group (feature 008 FR-014): [\"rms\"] when the review ran checks first. Added to properties and left out of required, and omitted from session.json when empty, so a session written before the field existed still validates and round-trips to its own bytes" },
     "coverage": { "$ref": "#/$defs/Coverage" },
     "timing": { "$ref": "#/$defs/Timing" }
   },

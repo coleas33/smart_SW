@@ -57,6 +57,7 @@ if TYPE_CHECKING:  # pragma: no cover - imported for annotations only, never at 
     from swreview.report.session import Coverage, CoverageItem, ReviewSession
 
 __all__ = [
+    "FAMILY_TITLES",
     "AttentionKey",
     "AttentionRow",
     "ConsequenceClass",
@@ -67,6 +68,9 @@ __all__ = [
     "Ranking",
     "RuleCounts",
     "coverage_line",
+    "family_counts",
+    "family_of",
+    "family_title",
     "fold",
     "load_policy",
     "rank",
@@ -176,6 +180,35 @@ EMPTY_NO_FINDINGS = "no findings were recorded"
 EMPTY_ALL_DECIDED = "every finding is informational or already decided"
 """The two things the section says when it has nothing to amplify (contract section 3)."""
 
+FAMILY_TITLES: dict[str, str] = {"rms": "Modelling practice"}
+"""What a folded rule family is called, by the check-id prefix that names it (feature 008).
+
+A session names the families that fold in `ReviewSession.folded_families`; this table only
+names them. The ranking row, the report's subsection and the opening digest's counts line
+all title the family through `family_title`, so the three cannot word it differently. A
+family the table does not name is titled by its own prefix rather than refused: a title is
+presentation, and the fold must stay total.
+"""
+
+
+def family_of(check: str, families: Iterable[str]) -> str | None:
+    """The folded family `check` belongs to, or `None`: a prefix match on `<family>.`."""
+    return next((family for family in families if check.startswith(f"{family}.")), None)
+
+
+def _counted(count: int, noun: str) -> str:
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def family_counts(findings: int, rules: int) -> str:
+    """`85 findings across 7 rules`: the counts half of every folded family's wording."""
+    return f"{_counted(findings, 'finding')} across {_counted(rules, 'rule')}"
+
+
+def family_title(family: str, findings: int, rules: int) -> str:
+    """`Modelling practice: 85 findings across 7 rules` - the one wording of a folded family."""
+    return f"{FAMILY_TITLES.get(family, family)}: {family_counts(findings, rules)}"
+
 
 # --- the policy file -------------------------------------------------------------------------
 
@@ -259,14 +292,20 @@ class AttentionRow(ReviewModel):
     key: AttentionKey
     reason: str
     explanation: str | None = None
+    family: str | None = None
+    """The folded rule family this row stands for (feature 008), or `None` for every other
+    row. Omitted when `None`, so an unfolded session's `attention.json` keeps its bytes."""
+    rule_count: int | None = None
+    """How many distinct check ids a family row's members carry; omitted when `None`."""
 
     @model_serializer(mode="wrap")
     def _omit_missing_explanation(
         self, handler: SerializerFunctionWrapHandler
     ) -> dict[str, object]:
         data = handler(self)
-        if self.explanation is None:
-            data.pop("explanation", None)
+        for name in ("explanation", "family", "rule_count"):
+            if getattr(self, name) is None:
+                data.pop(name, None)
         return data
 
 
@@ -332,13 +371,23 @@ class Ranking(ReviewModel):
 # --- the fold ------------------------------------------------------------------------------------
 
 
-def fold(findings: Sequence[Finding], policy: Policy | None = None) -> list[list[Finding]]:
+def fold(
+    findings: Sequence[Finding],
+    policy: Policy | None = None,
+    families: Iterable[str] = (),
+) -> list[list[Finding]]:
     """Group `findings` into the rows the ranking will carry (FR-012, contract section 2).
 
     Findings fold when they share `check`, `status` and `severity` and their
     `component_ids` are pairwise disjoint. A needs-judgement check never folds - two press
     fits may be two different intents, and collapsing them would be a judgement the policy
     made silently. A single finding is a group of one.
+
+    **A folded family is one group, whatever else is true** (feature 008, FR-014): every
+    finding whose check belongs to a family in `families` - any status, any severity, shared
+    subjects, suppressed or decided - joins that family's one group, in finding-id order.
+    `families` is `ReviewSession.folded_families`, which is empty on every session written
+    before feature 008 and on every check folder, so those fold exactly as before.
 
     The walk is in finding-id order, not arrival order, so the survivor of a group and the
     order of its members are the same however the tools happened to record them (FR-014).
@@ -349,12 +398,22 @@ def fold(findings: Sequence[Finding], policy: Policy | None = None) -> list[list
     and this function writes nothing to it.
     """
     policy = policy if policy is not None else load_policy()
+    folded = tuple(families)
     groups: list[list[Finding]] = []
     subjects: list[set[str]] = []
     open_groups: dict[tuple[str, str, str], list[int]] = {}
+    family_groups: dict[str, list[Finding]] = {}
 
     for finding in sorted(findings, key=lambda one: one.id):
         components = set(finding.component_ids)
+        family = family_of(finding.check, folded)
+        if family is not None:
+            if family not in family_groups:
+                family_groups[family] = []
+                groups.append(family_groups[family])
+                subjects.append(set())
+            family_groups[family].append(finding)
+            continue
         if policy.needs_judgement_of(finding.check):
             # The one guard: this check joins no group and opens none for the next
             # finding to join, however disjoint the two subjects are.
@@ -380,12 +439,19 @@ def fold(findings: Sequence[Finding], policy: Policy | None = None) -> list[list
 def rank(session: ReviewSession, policy: Policy | None = None) -> Ranking:
     """Rank a finished session's findings. Total: it raises on no `ReviewSession`.
 
-    Reads `session.findings` and `session.coverage` and writes nothing anywhere - the
-    report, the record beside the session and the two check bodies are all rendered from
-    what comes back.
+    Reads `session.findings`, `session.coverage` and `session.folded_families` and writes
+    nothing anywhere - the report, the record beside the session and the two check bodies
+    are all rendered from what comes back. The families are read with `getattr` so a
+    session-shaped object that predates the field ranks as unfolded.
     """
     policy = policy if policy is not None else load_policy()
-    rows = [_row(group, policy) for group in fold(session.findings, policy)]
+    families = tuple(getattr(session, "folded_families", ()))
+    rows = [
+        _family_row(family, group, policy)
+        if (family := family_of(group[0].check, families)) is not None
+        else _row(group, policy)
+        for group in fold(session.findings, policy, families)
+    ]
     rows.sort(key=lambda row: row.key.order())
 
     # Explanations are prose attached after this deterministic order is computed. Reading
@@ -413,9 +479,11 @@ def rank(session: ReviewSession, policy: Policy | None = None) -> Ranking:
     )
 
 
-def _row(group: Sequence[Finding], policy: Policy) -> AttentionRow:
-    """One row from one folded group; the survivor is the lowest finding id."""
-    survivor = group[0]
+def _row(
+    group: Sequence[Finding], policy: Policy, survivor: Finding | None = None
+) -> AttentionRow:
+    """One row from one folded group; the survivor is the lowest finding id unless given."""
+    survivor = survivor if survivor is not None else group[0]
     components = sorted({component for one in group for component in one.component_ids})
     consequence = policy.consequence_of(survivor.check)
     key = AttentionKey(
@@ -440,6 +508,29 @@ def _row(group: Sequence[Finding], policy: Policy) -> AttentionRow:
         consequence_class=consequence,
         key=key,
         reason=_reason(survivor, consequence, key, len(components)),
+    )
+
+
+def _family_row(family: str, group: Sequence[Finding], policy: Policy) -> AttentionRow:
+    """The one row a folded family ranks as (feature 008, `contracts/attention.md` section 2).
+
+    The representative is the member whose **own** key sorts first, so a rebuild-breaking or
+    high-severity member lifts the whole family, and an all-suppressed family is a
+    suppressed row. Reach is the union of every member's components, as for any folded
+    row. The row's `check` - and its key's, so the placement is still arguable from the key
+    alone - is the family's prefix, and its title counts the members and their rules.
+    """
+    survivor = min(group, key=lambda one: _row([one], policy).key.order())
+    row = _row(group, policy, survivor)
+    rules = len({one.check for one in group})
+    return row.model_copy(
+        update={
+            "check": family,
+            "title": family_title(family, len(group), rules),
+            "key": row.key.model_copy(update={"check": family}),
+            "family": family,
+            "rule_count": rules,
+        }
     )
 
 
@@ -574,10 +665,12 @@ def _row_reason(row: AttentionRow) -> str:
     """A row's reason, and for a needs-judgement row what the judgement is about.
 
     "needs your judgement" is the one reason that describes no property of the finding -
-    the check id already said the family - so that row, and only that row, carries the
-    title. Every other reason states the class, the status and the reach.
+    the check id already said the family - so that row carries the title. A folded family's
+    row carries it too (feature 008): its check id is only the family's prefix, and the
+    title is what says how many findings and rules it stands for. Every other reason states
+    the class, the status and the reach.
     """
-    if not row.key.judgement:
+    if row.family is not None or not row.key.judgement:
         return f"{row.reason} ({row.title})"
     return row.reason
 

@@ -412,8 +412,9 @@ class EfficiencySettings(BaseModel):
     configuration nobody can reconstruct is worse than an error (data-model.md 7.3).
 
     Every field is off here and stays off. A lever is adopted by becoming a default in
-    code with a ledger row behind it, never by flipping a default in this class quietly,
-    and never by a checkbox in the pane (data-model.md 7.2).
+    code, never by flipping a default in this class quietly, and never by a checkbox in the
+    pane (data-model.md 7.2): the pane's defaults are `pane_efficiency(provider)`, the one
+    function that decides them (feature 008 research R2.14).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -431,7 +432,9 @@ class EfficiencySettings(BaseModel):
     """Lever 3, Gemini: an explicit `CachedContent` is created and referenced."""
 
     prerun_checks: bool = False
-    """Lever 5: the self-enumerating deterministic checks run before the first turn."""
+    """Checks first, lever 5, pane default since 2026-09-22: every argument-free check runs
+    before the first turn (feature 008). Off here; the pane turns it on through
+    `pane_efficiency`, and `checks_first` is what every reader asks."""
 
     parallel_tool_calls: bool = False
     """Lever 6, OpenAI: the request stops pinning `parallel_tool_calls: False`."""
@@ -458,6 +461,29 @@ class EfficiencySettings(BaseModel):
 
     compact_queries: bool = False
     """Experimental bounded package discovery pages; opt-in and default-off."""
+
+
+def checks_first(efficiency: EfficiencySettings | None) -> bool:
+    """Does this run run its argument-free checks before the first turn? (feature 008)
+
+    Lever 5 or lever 11: the gate implies the pre-run and only changes what the model opens
+    on (research R2.13). The one place the "or" is written, so the pre-run, the standards
+    attach and the fold marker cannot disagree about it. `None` - every caller that
+    predates feature 005 - is every lever off.
+    """
+    return efficiency is not None and (efficiency.prerun_checks or efficiency.procedural_gate)
+
+
+def pane_efficiency(provider: ProviderName) -> EfficiencySettings:
+    """The levers every pane review runs with: the one place the pane's defaults are decided.
+
+    Checks first, since the owner's decision of 2026-09-22 (feature 008 User Story 2). A
+    function of the provider rather than a constant, because User Story 4 adds parallel
+    tool calls for OpenAI only (research R2.14). The command line and `benchmark run` stay
+    all off; `swreview review --pane-defaults` reproduces this. `provider` is not read yet:
+    User Story 4 reads it.
+    """
+    return EfficiencySettings(prerun_checks=True)
 
 
 MeshMode = Literal["eager", "lazy", "off"]

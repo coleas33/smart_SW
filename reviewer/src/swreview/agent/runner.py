@@ -67,9 +67,10 @@ from swreview.agent.providers import (
     TurnResult,
 )
 from swreview.agent.providers.schema import ToolSpec
-from swreview.agent.settings import EfficiencySettings, ExtractionSettings
+from swreview.agent.settings import EfficiencySettings, ExtractionSettings, checks_first
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient
 from swreview.carry_over import carry_over_findings, stamp_carry_over_keys
+from swreview.checks.rms.registry import RMS_FAMILY
 from swreview.exceptions import EXCEPTIONS_FILE_NAME, ExceptionStore
 from swreview.findings import Finding
 from swreview.ir.loader import LoadedPackage, load_package
@@ -1005,6 +1006,11 @@ def start_review(
         )
         session.retry_of = UUID(str(retry_of)) if retry_of is not None else None
         session.efficiency = efficiency if efficiency is not None else EfficiencySettings()
+        if checks_first(session.efficiency):
+            # Feature 008: a review that runs its checks first shows the modelling-practice
+            # findings as one folded group. A plain session value, set once here, so the
+            # ranking and the report read it without importing a setting (research R2.21).
+            session.folded_families = [RMS_FAMILY.name]
         session.explanations_enabled = explain_findings
         # Lever 10a, read here rather than in the tool: `extraction` is a statement about
         # where this run's evidence comes from, and the one place the lever is turned into
@@ -1047,9 +1053,11 @@ def start_review(
         # the session (research R2.11, and lever 3's prefix guarantee). What comes back is
         # `None` when the run is attached, and otherwise the one family the pre-run counts
         # instead - never an exception, because a review is not lost over one of sixteen.
+        # Under checks first a review with no profile reports the family with its reason
+        # (feature 008 US2 scenario 3), which supersedes 007 FR-030 for lever 5.
         standards_gap = (
             attach_standards(context, standards_profile)
-            if standards_profile is not None or session.efficiency.procedural_gate
+            if standards_profile is not None or checks_first(session.efficiency)
             else None
         )
         tools = ToolRegistry().dispatch(context, fail_tool=fail_tool, efficiency=session.efficiency)
