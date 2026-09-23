@@ -335,8 +335,8 @@ RMS_TIER_DELTA_PERCENT = 22.6
 STRUCTURAL_FLOOR_BYTES = 16_042
 
 SLIM_REVIEW_TOOL_COUNT = 34
-SLIM_OPENAI_ARRAY_BYTES = 0
-SLIM_GEMINI_ARRAY_BYTES = 0
+SLIM_OPENAI_ARRAY_BYTES = 35_499
+SLIM_GEMINI_ARRAY_BYTES = 35_549
 """The review array with payload slimming on (feature 008 T062): `TOOL_FUNCTIONS` plus
 `get_finding`, which only a slimmed review offers. **Regenerated, never transcribed** -
 `--write` prints them in its `review+slim` rows."""
