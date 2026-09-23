@@ -823,16 +823,25 @@ class ToolDispatch:
         name: str,
         arguments: Mapping[str, Any],
         call_id: str = "",
+        *,
+        offered: Iterable[str] | None = None,
     ) -> ToolCallResult:
-        """Dispatch one call by name. An unknown name is a result, not a raise."""
+        """Dispatch one call by name. An unknown name is a result, not a raise.
+
+        `offered` is the array the model was sent, which is all an unknown-name error lists;
+        `None` is this dispatch's own. A wrapper that takes more tools off the wire - the
+        pre-run's guard under lever 13 (feature 008 FR-030) - passes its own array, because
+        an error result is never pruned and a list naming a withheld tool would stay in the
+        history for the rest of the session.
+        """
         tool = self.get(name)
         if tool is not None:
             return tool.call(arguments, call_id)
+        available = (tool.name for tool in self.tools) if offered is None else offered
         payload = error_payload(
             # The offered names only. A withheld tool is not available, so advertising it
             # here would invite the call whose whole point was to save its bytes.
-            f"no tool named {name!r}; the tools available are "
-            f"{sorted(tool.name for tool in self.tools)}"
+            f"no tool named {name!r}; the tools available are {sorted(available)}"
         )
         record_call(
             self.sink,

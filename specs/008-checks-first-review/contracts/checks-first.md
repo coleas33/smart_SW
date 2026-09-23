@@ -167,6 +167,9 @@ A tool that is not in the dispatch's offered tools (withheld by tier) is never l
 unchanged, so a withheld tool called anyway reaches the guard's ledger and is answered
 `already_run` (section 5), and anything the ledger misses reaches the dispatch, which still
 holds the tool. The system prompt's tool notes (lever 2) are built from the offered tools only.
+A name nothing registers gets the dispatch's unknown-tool error, whose list of available tools
+is the guard's array (`ToolDispatch.call(..., offered=...)`), never a withheld name: an error
+result is never pruned (*landed as*, review of `d805112..99269dd`).
 
 **Wording.** Only when the named tools are withheld (`agent/withheld_wording.py`):
 

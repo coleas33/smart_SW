@@ -7,13 +7,15 @@ adapters encode, and only those: a tool whose pre-run call failed, one a tier wi
 the pre-run did not reach, and `check_interference_group` while live detection can still add
 a group nobody judged, all stay. The tool stays in the dispatch either way, so a model that
 calls a withheld tool anyway is answered by the re-call guard - never "no tool named" - in
-the scripted provider and in both real adapters.
+the scripted provider and in both real adapters. A name nothing registers is still "no tool
+named", and the tools that error lists are the array the model was sent, never a withheld one.
 
 Every test here plays a real `start_review` and reads what the provider was handed.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 from typing import Any
@@ -297,6 +299,140 @@ def test_the_gemini_adapter_declares_no_withheld_tool_and_gets_the_guards_answer
     ]
     assert len(responses) == len(SEVEN)
     assert UNKNOWN_TOOL not in json.dumps(responses, default=str)
+
+
+# --- a tool that does not exist --------------------------------------------------------------
+
+HALLUCINATED = ScriptedToolCall("check_holes")
+"""A name nothing registers: the dispatch answers it with the names the model may call."""
+
+AVAILABLE = "; the tools available are "
+
+
+def listed_in(error: str) -> list[str]:
+    """The names an unknown-tool error offers the model, parsed from its one sentence."""
+    head, _, names = error.partition(AVAILABLE)
+    assert head == f"{UNKNOWN_TOOL} {HALLUCINATED.name!r}", error
+    listed = ast.literal_eval(names)
+    assert isinstance(listed, list), error
+    return listed
+
+
+def test_an_unknown_tool_error_lists_the_array_the_model_was_sent(tmp_path: Path) -> None:
+    """FR-030: nothing sent to the model may tell it to call a withheld tool, and an error
+    result is never pruned, so a list naming one would stay in the history all session."""
+    run, spy = reviewed(tmp_path, turns=(ScriptedTurn(text="done", tool_calls=(HALLUCINATED,)),))
+
+    [step] = model_steps(run, 1)
+    assert step.status == "error" and step.error is not None
+    listed = listed_in(step.error)
+    assert not set(SEVEN) & set(listed)
+    assert listed == sorted(offered(spy)), "the names offered, no more and no fewer"
+
+
+def test_with_lever_13_off_an_unknown_tool_error_lists_every_tool_as_before(
+    tmp_path: Path,
+) -> None:
+    run, spy = reviewed(
+        tmp_path,
+        efficiency=LEVER_OFF,
+        turns=(ScriptedTurn(text="done", tool_calls=(HALLUCINATED,)),),
+    )
+
+    [step] = model_steps(run, 1)
+    assert step.error is not None
+    listed = listed_in(step.error)
+    assert set(SEVEN) <= set(listed)
+    assert listed == sorted(offered(spy))
+
+
+def test_with_a_tier_and_lever_13_an_unknown_tool_error_names_neither_kind_of_withheld_tool(
+    tmp_path: Path,
+) -> None:
+    """Lever 4 withholds the RMS tools on a package with no feature rows; lever 13 the four
+    others the pre-run completed. The error lists what is on the array and nothing else."""
+    package = prerun_package().model_copy(update={"features": [], "equations": []})
+    efficiency = PANE.efficiency.model_copy(update={"tool_tiers": True})
+    run, spy = reviewed(
+        tmp_path,
+        package=package,
+        efficiency=efficiency,
+        turns=(ScriptedTurn(text="done", tool_calls=(HALLUCINATED,)),),
+    )
+
+    [step] = model_steps(run, 1)
+    assert step.error is not None
+    listed = listed_in(step.error)
+    assert not set(SEVEN) & set(listed)
+    assert listed == sorted(offered(spy))
+
+
+def test_the_openai_adapter_sends_an_unknown_tool_error_naming_no_withheld_tool(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    save_package(prerun_package(), run_dir)
+    item = function_call_item(call_id="call_0", name=HALLUCINATED.name, arguments="{}")
+    rounds = [
+        stream_response(item_done(item, index=0), completed(item)),
+        stream_response(completed(message_item("done"))),
+    ]
+    with respx.mock:
+        route = respx.post(RESPONSES_URL).mock(side_effect=rounds)
+        run = start_review(
+            run_dir,
+            run_dir,
+            provider=make_provider(),
+            efficiency=pane_defaults(ProviderName.OPENAI).efficiency,
+            model_view=MODEL_VIEW_PANE,
+        )
+        run.start()
+        bodies = request_bodies(route)
+
+    [output] = [
+        json.loads(entry["output"])
+        for entry in bodies[1]["input"]
+        if entry.get("type") == "function_call_output"
+    ]
+    sent = [tool["name"] for tool in bodies[0]["tools"]]
+    assert listed_in(output["error"]) == sorted(sent)
+    assert not set(SEVEN) & set(listed_in(output["error"]))
+
+
+def test_the_gemini_adapter_sends_an_unknown_tool_error_naming_no_withheld_tool(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "run"
+    save_package(prerun_package(), run_dir)
+    models = StubModels(
+        rounds=[
+            [chunk(call_part("call_0", HALLUCINATED.name, {})), stop()],
+            [chunk(text_part("done")), stop()],
+        ]
+    )
+    adapter = GeminiProvider(
+        client=StubClient(models=models), model="gemini-3.5-flash", secrets=["unused"]
+    )
+    run = start_review(
+        run_dir,
+        run_dir,
+        provider=adapter,
+        efficiency=pane_defaults(ProviderName.GEMINI).efficiency,
+        model_view=MODEL_VIEW_PANE,
+    )
+    run.start()
+
+    [response] = [
+        part.function_response.response
+        for content in models.calls[1]["contents"]
+        for part in content.parts or ()
+        if part.function_response is not None
+    ]
+    declared = [d.name for d in models.calls[0]["config"].tools[0].function_declarations]
+    assert response is not None
+    error = str(response["error"]["error"])  # Gemini's `error` field holds the payload
+    assert listed_in(error) == sorted(declared)
+    assert not set(SEVEN) & set(listed_in(error))
 
 
 # --- the edges: what stays offered ----------------------------------------------------------
