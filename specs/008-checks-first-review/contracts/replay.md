@@ -161,7 +161,13 @@ input[t,k] = R0 + dP
    history (the runner assigns none when a turn raises), so its outputs and results are in no
    later round; its engineer message is. A follow-up's words are the recorded growth
    (`RecordedTurn.user_tokens`); when that growth is not observable - the previous round asked
-   for calls - they count as zero and the turn's rounds are flagged `lower_bound`. Before User
+   for calls - they count as zero and the turn's rounds are flagged `lower_bound`.
+   *Reconciled (T118, found by the drift rule):* that growth is measured from the last
+   committed turn, so after a stopped or failed turn it already holds that turn's engineer
+   message, which the runner keeps; a turn's words therefore replace what the turns since the
+   last commit counted rather than add to it, and the stopped turn's question is counted once
+   (`_Conversation`). No committed figure moved: neither the fixtures nor the recordings hold
+   a turn after a stopped one. Before User
    Story 3 the prefix difference `dP` is counted over the system prompt, the tools' names,
    descriptions and canonical schemas, and the opening message, rendered the same way for both
    passes.
@@ -400,8 +406,9 @@ of `q`'s turn, and the rounds of every earlier turn that committed (not `stopped
 rule 7). A presentation round carries nothing of its own and is priced at its recorded size, so
 its drift is zero. A round the replay flags lower bound is outside the rule - a follow-up whose
 words the log does not show, or a round holding a call sized from its summary, has no recorded
-size to compare with - and is listed apart so the test can say how many there are (none on the
-three recordings). The rule is written for a recording made with every lever and the model view
+size to compare with - and so is a round that carries one whose growth is not observable; each
+is listed apart, with no change, so the test can say how many there are (none on the three
+recordings). The rule is written for a recording made with every lever and the model view
 off and storing no results - the three recorded reviews - replayed with those settings: a pruned
 request's growth can be negative and a stub is not its result's size, so anything else is
 refused, naming what.

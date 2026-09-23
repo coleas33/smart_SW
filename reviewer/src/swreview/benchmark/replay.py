@@ -1328,6 +1328,11 @@ class _Conversation:
     committed before its own and of its own turn's earlier rounds; a stopped or failed turn
     leaves none of its outputs behind for the next (rule 7). The strict figure and the
     regrouped estimate walk it the same way, so the two can differ only by their rounds.
+
+    A turn's words (`RecordedTurn.user_tokens`) are the growth since the last committed turn,
+    so after a stopped or failed turn they already hold its engineer message - which the
+    runner keeps - and they replace what the turns since the last commit counted rather than
+    add to it: the stopped turn's question is counted once (found by the drift rule, T117).
     """
 
     base: int
@@ -1336,6 +1341,7 @@ class _Conversation:
     """A later turn's words were not observable, so they count as zero (rule 7)."""
     outputs: int = 0
     committed_outputs: int = 0
+    committed_words: int = 0
 
     @classmethod
     def of(cls, recording: Recording) -> _Conversation:
@@ -1343,7 +1349,7 @@ class _Conversation:
 
     def begin(self, turn: RecordedTurn) -> None:
         if turn.index > 0:
-            self.words += turn.user_tokens or 0
+            self.words = self.committed_words + (turn.user_tokens or 0)
             self.words_unknown = self.words_unknown or turn.user_tokens is None
         self.outputs = self.committed_outputs
 
@@ -1357,6 +1363,7 @@ class _Conversation:
     def end(self, turn: RecordedTurn) -> None:
         if turn.end_reason not in UNCOMMITTED_ENDS:
             self.committed_outputs = self.outputs
+            self.committed_words = self.words
 
 
 # --- the regrouped estimate (User Story 4, contracts/replay.md section 6) ----------------------
