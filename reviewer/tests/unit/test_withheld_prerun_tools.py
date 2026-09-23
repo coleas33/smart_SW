@@ -485,6 +485,30 @@ def test_with_the_lever_off_the_array_prompt_and_opening_are_todays(tmp_path: Pa
     assert off.systems == all_off.systems, "checks first alone leaves the system prompt alone"
 
 
+def test_the_gate_with_lever_13_withholds_the_same_tools_and_its_brief_says_so(
+    tmp_path: Path,
+) -> None:
+    """Lever 11 implies the pre-run, so lever 13 applies to it exactly as to lever 5; the
+    brief's first part is the digest, line included."""
+    gated = EfficiencySettings(procedural_gate=True, withhold_prerun_tools=True)
+    run, spy = reviewed(tmp_path, efficiency=gated)
+
+    assert not set(SEVEN) & set(offered(spy))
+    assert withheld_line(SEVEN) in opening(run)
+
+
+def test_the_command_lines_lever_pair_without_the_view_withholds_the_same_tools(
+    tmp_path: Path,
+) -> None:
+    """`--lever prerun_checks --lever withhold_prerun_tools` with the model view off: the
+    same seven leave, and `get_finding` is not offered because slimming is off."""
+    both = EfficiencySettings(prerun_checks=True, withhold_prerun_tools=True)
+    _, spy = reviewed(tmp_path, efficiency=both, model_view=MODEL_VIEW_OFF)
+
+    assert not set(SEVEN) & set(offered(spy))
+    assert "get_finding" not in offered(spy)
+
+
 def test_the_lever_without_checks_first_withholds_nothing(tmp_path: Path) -> None:
     run, spy = reviewed(tmp_path, efficiency=EfficiencySettings(withhold_prerun_tools=True))
 
