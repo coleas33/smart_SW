@@ -98,20 +98,21 @@ column because of this table.
 **Flag**: `trim_tool_descriptions`. **Default**: off. **Scope**: both providers; the tool schema
 and the system prompt. **Read**: once at `start_review`, applied **after** `spec_for`.
 
-**The honest ceiling, measured on this tree (VERIFIED).** Of 35,442 bytes sent today, **15,708
-(44 percent) is JSON structure** and lever 2 cannot reach it; only lever 4 or a schema change can.
-19,734 bytes (56 percent) is prose. (Regenerated 2026-09-23 when feature 010 added
+**The honest ceiling, measured on this tree (VERIFIED).** Of 35,844 bytes sent today, **16,042
+(45 percent) is JSON structure** and lever 2 cannot reach it; only lever 4 or a schema change can.
+19,802 bytes (55 percent) is prose. (Regenerated 2026-09-23 when feature 010 added
 `check_joints` and reworded two docstrings, and again when feature 009 gave `request_evidence` its
-three optional arguments; the four cap rows below were measured on the 32-tool array of 2026-09-16.)
+three optional arguments, and again when feature 010 registered `check_mass_material` and
+`check_hygiene`; the four cap rows below were measured on the 32-tool array of 2026-09-16.)
 
 | Cap (tool / parameter description) | Bytes | Saved |
 |---|---|---|
-| none (today) | 35,442 | 0 |
+| none (today) | 35,844 | 0 |
 | 300 / 120 | 27,158 | 20 percent |
 | 200 / 100 | 25,020 | 27 percent |
 | **160 / 90** | **23,834** | **30 percent** |
 | 120 / 70 | 22,450 | 34 percent |
-| everything stripped (floor) | 15,708 | 56 percent |
+| everything stripped (floor) | 16,042 | 55 percent |
 
 So about 30 percent of the tool payload, roughly 2,550 tokens per request, roughly 153,000 tokens
 over a 60-call review. This is **below** the source document's "a third to a half" at the upper
