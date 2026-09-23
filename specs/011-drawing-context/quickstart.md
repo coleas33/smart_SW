@@ -100,8 +100,10 @@ with their reasons; with the switch as shipped (false) every answer names the se
 uv run pytest tests/unit/test_tools_native_drawing.py -q
 ```
 
-Expected: `find_dimensions` and `get_drawing_sheet` return native records; `check_fit` resolves a
-native `SourceRef`; a package with no native sheet returns today's payloads byte for byte.
+Expected: `find_dimensions` and `get_drawing_sheet` return native records; with the switch set in
+the test `check_fit` resolves a native `SourceRef`, and with the switch as shipped it returns an
+error naming the seat validation and records no finding (FR-024); a package with no native sheet
+returns today's payloads byte for byte.
 
 ## Scenario 7 (US4): callouts, symbols, notes and tables
 
@@ -134,7 +136,8 @@ uv run pytest tests/unit/test_drawing_brief.py tests/unit/test_tools_get_drawing
 
 Expected: the brief's sections in order, at most 6,000 bytes, no persistent reference and no profile
 value; the pathological package's brief within the bound with `omitted` exact; the drawing arm of the
-payload pins under 38,000 bytes in both encodings, each new tool within its budget.
+payload pins under 38,000 bytes in both encodings (the bridged slim arm pinned and not held to the
+ceiling it already exceeds, research R2.20), each new tool within its budget.
 
 ## Scenario 10 (US7): conformance
 

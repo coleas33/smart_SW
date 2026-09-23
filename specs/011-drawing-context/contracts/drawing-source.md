@@ -48,14 +48,16 @@ false, else `drawing.length_unit_raw`; `mm` for 0, `in` for 3, `None` otherwise.
 |---|---|
 | `get_drawing_sheet(document_id, sheet_name)` | a native sheet by `name`, preferred over an ingested sheet of the same name; `available_sheets` lists `{name, source}` for both kinds when a document has native sheets (today's plain list otherwise); the payload is the sheet record with its views, dimensions, annotations, notes, revision tables and tables, persistent references removed by feature 008's view |
 | `find_dimensions(document_id, text_regex, near_view)` | every native dimension that converts, filtered on `text_as_read`; `near_view` matches the view name for a native dimension (no bounding boxes) |
-| `resolve_dimension(package, ref)` | matches `document_id`, `sheet` and `annotation` (the `ddm:` id) across both kinds; still refuses none or more than one |
+| `resolve_dimension(package, ref)` | matches `document_id`, `sheet` and `annotation` (the `ddm:` id) across both kinds; still refuses none or more than one; **refuses a native match while `DRAWING_BINDING_VALIDATED` is false** (section 3), with a `LookupError` carrying section 3's reason, so `check_fit`, `check_axial_stack` and `check_hole_alignment` return an error result and compute nothing (FR-024; corrected 2026-09-23, research R2.11); a PDF-ingested match resolves whatever the switch |
 
-A package with no native sheet returns exactly today's payloads (FR-037).
+A package with no native sheet returns exactly today's payloads (FR-037). Showing a native value
+(`get_drawing_sheet`, `find_dimensions`) is not computing with one; only `resolve_dimension`, the
+reference every calculating tool takes, is gated.
 
 ## 3. The binding (`drawings/binding.py`)
 
 ```python
-DRAWING_BINDING_VALIDATED: bool = False   # T066 sets True, one edit, citing probe D6 and D8
+DRAWING_BINDING_VALIDATED: bool = False   # T066 sets True, one edit, citing probes D4, D5, D6 and D8
 ```
 
 `bindings_for(index, package, subject) -> tuple[DrawingBinding, ...]` returns, in the index's order,
@@ -72,9 +74,10 @@ excluded by section 1 is listed in the answer's reason with that section's words
 dimension whose `is_overridden` is true, or unread, binds nothing: its displayed value is not the
 model's ("dimension {id} is overridden on the drawing", the defect
 `standards.drawing.dimensions_not_overridden` reports). While
-`DRAWING_BINDING_VALIDATED` is false, `bindings_for` returns nothing and the drawing answer's reason
-is "drawing callouts are read but not yet validated on a seat against a drawing whose callouts are
-known (feature 011 research R2.8)".
+`DRAWING_BINDING_VALIDATED` is false, `bindings_for` returns nothing, section 2's
+`resolve_dimension` refuses a native match, and the reason both give is "drawing callouts are
+read but not yet validated on a seat against a drawing whose callouts are known (feature 011
+research R2.8)".
 
 ## 4. The drawing answer and the resolver (`checks/tolerances.py`)
 
@@ -119,9 +122,10 @@ drawing record, every answer is byte-identical to today's except source 1's reas
 `test_drawing_evidence.py` (section 1, each row at its boundary, a part in two configurations,
 shuffled input); `test_native_dimension.py` (section 2: value and unit, angle, no unit, tolerance
 kinds, composed text, precision and unit derivation, the three tools on native and mixed sheets,
-and a package with no native sheet byte-identical); `test_drawing_binding.py` (section 3: each route,
-each kind, an edge-derived face, a suffix-spelled name, an ambiguous model dimension, the switch
-off); `test_tolerances.py` extended (section 4: every numbered rule, the unit rule both ways, the
+`resolve_dimension` refusing a native reference with the switch false and resolving it with the
+switch set, and a package with no native sheet byte-identical); `test_drawing_binding.py` (section
+3: each route, each kind, an edge-derived face, a suffix-spelled name, an ambiguous model
+dimension, the switch off); `test_tolerances.py` extended (section 4: every numbered rule, the unit rule both ways, the
 version 2 profile, `holds_any_source`, and the "not available before feature 011" rows edited
 deliberately). SC-003 and SC-004 are the acceptance test over the `plate-drawing` fixture with the
 switch set (T038).

@@ -94,7 +94,9 @@ not an action: nothing opens a file (FR-036).
 `reviewer/tests/unit/test_tool_payload.py` gains the drawing arm: the slim array and the pre-run
 array with the drawing family offered, per encoding, `DRAWING_ARM_*` constants printed by `--write`
 in rows of their own, each asserted under `ARRAY_CEILING` (38,000), and each new tool object under
-its budget of section 1. The constants are regenerated with `--write` in a commit of their own
+its budget of section 1. The bridged slim array with the family is pinned in the same rows and
+**not** asserted under the ceiling: the bridged review arrays were over it before this feature
+(research R2.20, R5 Q9; corrected 2026-09-23 on review). The constants are regenerated with `--write` in a commit of their own
 (T055); every existing constant is untouched, which a test asserts by recomputing them with the
 family absent.
 
