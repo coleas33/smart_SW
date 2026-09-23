@@ -279,6 +279,7 @@ public sealed class ReviewPageEventStreamTests
                                 {
                                     { "chat_id", ChatId },
                                     { "run_dir", @"C:\SwReviewRuns\20260916-101500-bracket-1" },
+                                    { "document", new { path = @"C:\parts\bracket.sldasm", configuration = "Default" } },
                                 }));
                             return;
                         default:

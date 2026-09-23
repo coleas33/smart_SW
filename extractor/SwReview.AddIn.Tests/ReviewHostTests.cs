@@ -191,6 +191,51 @@ public sealed class ReviewHostTests
         }
     }
 
+    /// <summary>
+    /// `review.started` names the document the review is of, so the page can tell when the
+    /// document on screen stops being that one (U8, docs/pane-findings-2026-09-20-review-gui.md
+    /// section 1). The path and the configuration are the ones `init` and `document.changed`
+    /// carry, in the same shape, so the page compares like with like.
+    /// </summary>
+    [Fact]
+    public void ReviewStartedNamesTheDocumentItReviewed()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\parts\bracket assy.SLDASM", "Machined");
+            world.Open();
+
+            world.Receive("review.start", "r1", new { });
+
+            JsonElement document = world.Reply("review.started", "r1").GetProperty("document");
+            Assert.Equal(@"C:\parts\bracket assy.SLDASM", document.GetProperty("path").GetString());
+            Assert.Equal("Machined", document.GetProperty("configuration").GetString());
+        }
+    }
+
+    /// <summary>
+    /// The document named is the one that was extracted, not whichever document happens to be
+    /// active when the reply is sent. An engineer who switches windows while the dump runs has
+    /// asked for nothing new: the review is still of the document the press extracted, and the
+    /// page must be told that one or it would bind the results to the wrong model.
+    /// </summary>
+    [Fact]
+    public void ReviewStartedNamesTheExtractedDocumentEvenIfTheActiveOneChangedDuringTheDump()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
+            world.Dump.OnRun = () => world.Document = new PageDocument(@"C:\parts\other.SLDPRT", "Default");
+            world.Open();
+
+            world.Receive("review.start", "r1", new { });
+
+            JsonElement document = world.Reply("review.started", "r1").GetProperty("document");
+            Assert.Equal(@"C:\parts\bracket.SLDASM", document.GetProperty("path").GetString());
+            Assert.Equal("Default", document.GetProperty("configuration").GetString());
+        }
+    }
+
     [Fact]
     public void ReviewStartedForwardsTheBackendNotExaminedWarning()
     {
@@ -1231,12 +1276,16 @@ public sealed class ReviewHostTests
 
         public int? Unexamined { get; set; }
 
+        /// <summary>Runs inside the dump, which is where the active document can change under it.</summary>
+        public Action? OnRun { get; set; }
+
         public DumpSummary Run(
             string outputDirectory, Action<string> progress, DumpProfile profile = DumpProfile.Full)
         {
             Runs++;
             LastDirectory = outputDirectory;
             LastProfile = profile;
+            OnRun?.Invoke();
             foreach (string message in Progress)
             {
                 progress(message);

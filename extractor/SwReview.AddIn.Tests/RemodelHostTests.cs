@@ -216,6 +216,30 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// U13 (docs/pane-findings-2026-09-20-review-gui.md section 6): the no-seat refusal is a
+    /// build capability said in an engineer's words, not a console command. The Task Pane is
+    /// read by someone with a part open in SOLIDWORKS; the probe command is for the testing
+    /// handover, and following it with the part still open is the wrong procedure anyway.
+    /// </summary>
+    [Fact]
+    public void TheNoSeatMessageIsPlainWordsAndNamesNoCommand()
+    {
+        Assert.Equal(
+            "Remodel is not in this build yet. This tab will not change the open part.",
+            RemodelHost.NoSeatMessage);
+        Assert.DoesNotContain("swreview-extract", RemodelHost.NoSeatMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("--", RemodelHost.NoSeatMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>The still-checking message names no command either; it asks for a moment.</summary>
+    [Fact]
+    public void TheSeatCheckingMessageNamesNoCommand()
+    {
+        Assert.DoesNotContain("swreview-extract", RemodelHost.SeatCheckingMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("--", RemodelHost.SeatCheckingMessage, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AvailabilityRefreshMovesFromUnknownToUnavailableWithoutAProbe()
     {

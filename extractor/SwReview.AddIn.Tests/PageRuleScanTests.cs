@@ -149,6 +149,7 @@ public sealed class PageRuleScanTests
                  {
                      "shared/dom.js",
                      "shared/check-page.js",
+                     "shared/document.js",
                      "Model/ModelCheckPage/check.js",
                      "Standards/StandardsPage/standards.js",
                      "Review/ReviewPage/app.js",

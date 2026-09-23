@@ -42,6 +42,7 @@
   'use strict';
 
   var dom = window.SwReviewDom;
+  var docs = window.SwReviewDocument;
   var bridge = (window.chrome && window.chrome.webview) ? window.chrome.webview : null;
 
   /** The buckets, in the order a header states them: what to act on first. */
@@ -96,17 +97,10 @@
    */
   var ATTENTION_HEADING = 'Start here';
 
-  /** The last segment of a Windows or POSIX path; a check page shows names, not paths. */
-  function fileName(path) {
-    var text = String(path || '');
-    var cut = Math.max(text.lastIndexOf('\\'), text.lastIndexOf('/'));
-    return cut >= 0 ? text.substring(cut + 1) : text;
-  }
-
   /** A run folder's own name, which is also the backend's `check_id`. */
   function folderName(runDirectory) {
     var text = String(runDirectory || '').replace(/[\\/]+$/, '');
-    return fileName(text);
+    return docs.fileName(text);
   }
 
   /**
@@ -144,6 +138,17 @@
       latestCheck: null,
       result: null,
       checking: false,
+      runDirectory: null,
+
+      /**
+       * Whether the host has said which document is open - in `init` or in `document.changed`,
+       * either of which may say "none". Until it has, a result is not judged against the open
+       * document: "no answer yet" is not "no document open" (U8).
+       */
+      documentKnown: false,
+
+      /** Whether the result on screen is for another document than the open one (U8). */
+      resultStale: false,
 
       /** Whether a `ready` is in flight, so a second status does not ask again on top of it. */
       initPending: false,
@@ -212,7 +217,9 @@
           return;
         case 'document.changed':
           state.documentInfo = (payload && payload.path) ? payload : null;
+          state.documentKnown = true;
           renderDocument();
+          renderBinding();
           return;
         case 'backend.stopped':
           state.backend = null;
@@ -490,6 +497,48 @@
       renderFilters(rows);
       renderRules(rows);
       renderCarriedForward(state.result);
+      renderBinding();
+    }
+
+    // ---- rendering: whose result this is ------------------------------------------------------
+
+    /**
+     * Whether the result on screen is for the document on screen, and what the page does when it
+     * is not (U8, docs/pane-findings-2026-09-20-review-gui.md section 1).
+     *
+     * Both tabs restore the newest check folder on init whatever is open, and both used to keep
+     * the previous result after `document.changed` - with Show in SOLIDWORKS and Accept live
+     * against a model that was no longer the open one. Now the result is hidden, one line says
+     * whose it is, and Open report and Open check folder are disabled, until the graded document
+     * is open again. The rule is `web/shared/document.js`'s, the one the Review tab uses, and a
+     * result that names no document is never taken for the open one.
+     *
+     * What counts as the result is marked `check-result` in each page's own `index.html`, because
+     * the two tabs do not show the same blocks (the Standards tab has its sixteen-check roster);
+     * it is hidden by one class on the body, so a re-render while it is hidden stays hidden.
+     */
+    function renderBinding() {
+      var result = state.result;
+      state.resultStale = !!(state.documentKnown && result
+        && !docs.same(result.document || null, state.documentInfo));
+      document.body.classList.toggle('result-stale', state.resultStale);
+
+      dom.clear(ui.staleResult);
+      if (state.resultStale) {
+        dom.write(ui.staleResult, staleSentence(result));
+      }
+      ui.staleResult.hidden = !state.resultStale;
+
+      renderRunButtons();
+    }
+
+    /** The one line a hidden result leaves: whose it is, and what is open instead. */
+    function staleSentence(result) {
+      var sentence = 'This result is for ' + (docs.label(result.document) || 'another document') + '.';
+      var open = docs.label(state.documentInfo);
+      return open
+        ? sentence + ' The open document is ' + open + '.'
+        : sentence + ' No document is open.';
     }
 
     // ---- rendering: what was never read -----------------------------------------------------
@@ -943,7 +992,7 @@
 
     function documentLabel(documentId) {
       var open = state.result && state.result.document;
-      return (open && open.id === documentId && open.path) ? fileName(open.path) : documentId;
+      return (open && open.id === documentId && open.path) ? docs.fileName(open.path) : documentId;
     }
 
     function bucketGroup(bucket, rows) {
@@ -1194,11 +1243,7 @@
     function renderDocument() {
       dom.clear(ui.documentName);
       var open = state.documentInfo;
-      dom.write(
-        ui.documentName,
-        open && open.path
-          ? fileName(open.path) + (open.configuration ? ' [' + open.configuration + ']' : '')
-          : 'No document open');
+      dom.write(ui.documentName, docs.label(open) || 'No document open');
       ui.runCheck.disabled = state.checking || !open || !open.path;
 
       // Last, so a page that can say more about this document than "there is one" - which kinds
@@ -1240,10 +1285,15 @@
     function setRunDirectory(runDirectory) {
       dom.clear(ui.runDir);
       dom.write(ui.runDir, runDirectory || '');
-      var known = !!runDirectory;
-      ui.openReport.disabled = !known;
-      ui.openFolder.disabled = !known;
       state.runDirectory = runDirectory || null;
+      renderRunButtons();
+    }
+
+    /** Open report and Open check folder: there is a folder, and its result is the open document's. */
+    function renderRunButtons() {
+      var usable = !!state.runDirectory && !state.resultStale;
+      ui.openReport.disabled = !usable;
+      ui.openFolder.disabled = !usable;
     }
 
     function setChecking(running) {
@@ -1278,6 +1328,7 @@
       ui.openLog = byId('open-log');
       ui.runDir = byId('run-dir');
       ui.checkState = byId('check-state');
+      ui.staleResult = byId('stale-result');
       ui.carried = byId('carried-forward');
       ui.notExamined = byId('not-examined');
       ui.attention = byId('attention');
@@ -1370,9 +1421,11 @@
       state.token = payload.token || null;
       state.runRoot = payload.run_root || null;
       state.documentInfo = payload.document || null;
+      state.documentKnown = true;
       state.latestCheck = payload.latest_check || null;
 
       renderDocument();
+      renderBinding();
       renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', !state.backend);
       if (page.onInit) {
         page.onInit(payload, api);
@@ -1457,7 +1510,7 @@
     create: create,
     BUCKETS: BUCKETS,
     BUCKET_LABELS: BUCKET_LABELS,
-    fileName: fileName,
+    fileName: docs.fileName,
     folderName: folderName
   };
 })();

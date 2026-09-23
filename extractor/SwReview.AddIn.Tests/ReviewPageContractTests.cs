@@ -167,6 +167,24 @@ public sealed class ReviewPageContractTests
         }
     }
 
+    // ---- the reply names the document it reviewed -------------------------------------------
+
+    /// <summary>
+    /// U8: `review.started` names the document the review is of, and the contract row says so,
+    /// because the page binds the results on screen to it (docs/pane-findings-2026-09-20-review-gui.md
+    /// section 1). A reply shape the contract does not print is a field the next host can drop.
+    /// </summary>
+    [Fact]
+    public void TheReviewStartRowsReplyNamesTheDocumentItReviewed()
+    {
+        string row = ReviewPageFiles.ReadContract("pane-host-messages.md")
+            .Split('\n')
+            .Single(line => line.StartsWith("| `review.start` |", StringComparison.Ordinal));
+
+        Assert.Contains("review.started {chat_id, run_dir, not_examined, document}", row, StringComparison.Ordinal);
+        Assert.Contains("`document` is `{path, configuration}`", row, StringComparison.Ordinal);
+    }
+
     // ---- rule 4: the key never comes back --------------------------------------------------
 
     [Fact]

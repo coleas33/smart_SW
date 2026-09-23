@@ -123,6 +123,32 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* ---- the result is for another document (U8) ------------------------------------------------ */
+
+/* The one line a result leaves when the open document is not the one it graded. The open hue,
+   not the warn one: nothing is wrong with the model or the check, they are just not the same
+   document. */
+
+.stale-result {
+  margin: 0 12px 10px;
+  padding: 7px 10px;
+  border-left: 3px solid var(--open);
+  border-radius: var(--radius);
+  background: var(--open-bg);
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Every block a page marks as its result, hidden while the open document is another one. One
+   class on the body, so a re-render meanwhile stays hidden and all of it comes back with the
+   graded document. */
+
+body.result-stale .check-result {
+  display: none;
+}
+
 /* ---- the session row ------------------------------------------------------------------------ */
 
 /* The meta lines are ordered above the buttons here rather than in the HTML, so a page that

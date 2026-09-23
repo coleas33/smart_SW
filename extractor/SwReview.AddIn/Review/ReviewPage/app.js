@@ -38,6 +38,7 @@
 
   var bridge = (window.chrome && window.chrome.webview) ? window.chrome.webview : null;
   var render = window.SwReviewRender;
+  var docs = window.SwReviewDocument;
 
   /**
    * How many chat events are kept in memory (T041). The transcript on screen is built as the
@@ -86,6 +87,12 @@
     chatId: null,
     runDir: null,
     turnRunning: false,
+
+    // The document the review on screen is of, as `review.started` named it, and whether the
+    // document on screen is some other one (U8). Stale results are hidden, not discarded: the
+    // reviewed document coming back shows them again.
+    reviewed: null,
+    resultsStale: false,
 
     // Whether a `review.start` is in flight. Kept apart from `turnRunning` because the two
     // disable the Review button for different reasons and end at different moments: the
@@ -195,6 +202,7 @@
         clearPreparation();
         state.documentInfo = payload && payload.path ? payload : null;
         renderDocument();
+        renderBinding();
         return;
       case 'backend.stopped':
         state.backend = null;
@@ -883,9 +891,11 @@
       resetTranscript();
       state.chatId = payload.chat_id;
       state.runDir = payload.run_dir;
+      state.reviewed = payload.document || null;
       state.notExamined = payload.not_examined || null;
       renderNotExamined();
       renderSession();
+      renderBinding();
       setTurnRunning(true);
       openStream();
     }).catch(function (error) {
@@ -910,9 +920,75 @@
    */
   function renderStartReview() {
     ui.startReview.disabled = state.startPending || state.turnRunning || !state.documentInfo;
-    var followupDisabled = state.startPending || state.turnRunning || !!state.preparation || !state.chatId;
+    var followupDisabled = state.startPending || state.turnRunning || !!state.preparation
+      || !state.chatId || state.resultsStale;
     ui.followupText.disabled = followupDisabled;
     ui.followupSend.disabled = followupDisabled;
+    ui.clearReview.disabled = !canClearReview();
+  }
+
+  /**
+   * Clear review is for a review that has finished: there has to be one, and no turn or start
+   * may be in flight. Clearing a running turn would orphan it - its stream closed, its Stop
+   * pointing at nothing - while the backend goes on spending tokens on it.
+   */
+  function canClearReview() {
+    return !!state.chatId && !state.turnRunning && !state.startPending;
+  }
+
+  /**
+   * Clear review (U8): the pane back to "no review", without opening another document and
+   * without spending a token. The chat is forgotten here only - the backend and the run folder
+   * keep it, and report.md is where it is read from now on.
+   */
+  function clearReview() {
+    if (!canClearReview()) {
+      return;
+    }
+    closeStream();
+    resetTranscript();
+    state.chatId = null;
+    state.runDir = null;
+    state.reviewed = null;
+    state.lastSeq = 0;
+    showStreamState('');
+    renderBinding();
+  }
+
+  /**
+   * Whether the review on screen is of the document on screen, and what the page does when it
+   * is not (U8, docs/pane-findings-2026-09-20-review-gui.md section 1).
+   *
+   * Re-judged whenever either side moves: a review starts or is cleared, or the host says the
+   * document changed. The rule is `web/shared/document.js`'s, shared with the check tabs, and a
+   * review whose `review.started` named no document is never taken for the open one.
+   *
+   * Stale results are hidden by one class on the body rather than removed, so a finding that
+   * streams in while another document is open is hidden like the rest and every card comes back
+   * when the reviewed document does. What acts on the review - Open report, Open run folder,
+   * the follow-up - is disabled while it is hidden; Stop is not, because a running turn spends
+   * tokens whatever document is on screen (FR-030).
+   */
+  function renderBinding() {
+    state.resultsStale = !!state.chatId && !docs.same(state.reviewed, state.documentInfo);
+    document.body.classList.toggle('results-stale', state.resultsStale);
+
+    render.clear(ui.staleReview);
+    if (state.resultsStale) {
+      render.write(ui.staleReview, staleSentence());
+    }
+    ui.staleReview.hidden = !state.resultsStale;
+
+    renderSession();
+    renderStartReview();
+  }
+
+  /** The one line a hidden review leaves: whose review it is, and what to press instead. */
+  function staleSentence() {
+    var sentence = 'This review is of ' + (docs.label(state.reviewed) || 'another document') + '.';
+    return state.documentInfo
+      ? sentence + ' Press Review to review ' + docs.label(state.documentInfo) + '.'
+      : sentence + ' No document is open.';
   }
 
   function resetTranscript() {
@@ -940,8 +1016,8 @@
 
   function renderSession() {
     ui.runDir.textContent = state.runDir || '';
-    ui.openReport.disabled = !state.chatId;
-    ui.openFolder.disabled = !state.chatId;
+    ui.openReport.disabled = !state.chatId || state.resultsStale;
+    ui.openFolder.disabled = !state.chatId || state.resultsStale;
   }
 
   /** The follow-up box and Stop follow the turn: one running turn per chat (chat-api.md). */
@@ -956,7 +1032,8 @@
 
   function sendFollowUp() {
     var text = ui.followupText.value.trim();
-    if (!text || !state.chatId || state.turnRunning || state.startPending || state.preparation) {
+    if (!text || !state.chatId || state.turnRunning || state.startPending || state.preparation
+        || state.resultsStale) {
       return;
     }
 
@@ -1279,18 +1356,20 @@
     ui.backendState.className = 'badge' + (bad ? ' bad' : (state.backend ? ' ready' : ''));
   }
 
+  /**
+   * The header names the file and its configuration, with the full path in the title: a path
+   * clipped at the end of a 300 px strip loses exactly the part that says which model it is.
+   */
   function renderDocument() {
     var info = state.documentInfo;
     if (!info) {
       ui.documentName.textContent = 'No document open';
+      ui.documentName.removeAttribute('title');
       renderStartReview();
       return;
     }
-    var name = info.path;
-    if (info.configuration) {
-      name = name + '  [' + info.configuration + ']';
-    }
-    ui.documentName.textContent = name;
+    ui.documentName.textContent = docs.label(info);
+    ui.documentName.setAttribute('title', String(info.path));
     renderStartReview();
   }
 
@@ -1466,6 +1545,7 @@
       state.preparationAvailable = payload.review_preparation === true;
       renderSettings(payload.settings, payload.key_source);
       renderDocument();
+      renderBinding();
       renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', false);
       if (loadModels && state.backend) {
         refreshModels();
@@ -1503,6 +1583,8 @@
 
     ui.startReview = document.getElementById('start-review');
     ui.stop = document.getElementById('stop-turn');
+    ui.clearReview = document.getElementById('clear-review');
+    ui.staleReview = document.getElementById('stale-review');
     ui.openReport = document.getElementById('open-report');
     ui.openFolder = document.getElementById('open-folder');
     ui.openLog = document.getElementById('open-log');
@@ -1553,6 +1635,7 @@
     });
     document.getElementById('preparation-cancel').addEventListener('click', clearPreparation);
     ui.stop.addEventListener('click', stopTurn);
+    ui.clearReview.addEventListener('click', clearReview);
     ui.openReport.addEventListener('click', function () {
       send('report.open', { chat_id: state.chatId }).catch(function (error) {
         showBanner(error.message);

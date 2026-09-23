@@ -102,6 +102,7 @@
   <div class="row">
     <button type="button" id="start-review" class="primary" disabled>Review</button>
     <button type="button" id="stop-turn" disabled>Stop</button>
+    <button type="button" id="clear-review" disabled>Clear review</button>
     <button type="button" id="open-report" disabled>Open report</button>
     <button type="button" id="open-folder" disabled>Open run folder</button>
     <button type="button" id="open-log">View log</button>
@@ -123,6 +124,13 @@
     <span id="usage-line" role="status"></span>
   </div>
 </section>
+
+<!--
+  The one line a review leaves when the document on screen is not the one it is of (U8):
+  whose review it is, and what to press instead. app.js hides the results themselves with one
+  class on the body and writes this line; it is hidden while the two documents agree.
+-->
+<p id="stale-review" class="stale-review" role="status" hidden></p>
 
 <!--
   What to start with: the rows the backend ranked, read from `GET /sessions/{chat_id}/attention`
@@ -177,6 +185,7 @@
 </form>
 
 <script src="../../shared/dom.js"></script>
+<script src="../../shared/document.js"></script>
 <script src="render.js"></script>
 <script src="app.js"></script>
 </body>

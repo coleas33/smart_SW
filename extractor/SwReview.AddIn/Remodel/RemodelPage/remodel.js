@@ -61,6 +61,13 @@
     out_of_scope: 'out of scope'
   };
 
+  /**
+   * What the tab says when the host refuses for want of a remodel seat and sends no sentence of
+   * its own. The host's own words (`RemodelHost.NoSeatMessage`), written once: a build
+   * capability said to an engineer with a part open, naming no console command (U13).
+   */
+  var NO_SEAT_MESSAGE = 'Remodel is not in this build yet. This tab will not change the open part.';
+
   var pending = Object.create(null);
   var nextId = 0;
 
@@ -177,8 +184,7 @@
     }
 
     if (!state.remodelAvailable) {
-      showBanner(state.remodelAvailabilityMessage
-        || 'Remodel is unavailable until this build has a remodel seat.');
+      showBanner(state.remodelAvailabilityMessage || NO_SEAT_MESSAGE);
       return;
     }
 
@@ -214,8 +220,7 @@
     }
 
     if (!state.remodelAvailable) {
-      showBanner(state.remodelAvailabilityMessage
-        || 'Remodel is unavailable until this build has a remodel seat.');
+      showBanner(state.remodelAvailabilityMessage || NO_SEAT_MESSAGE);
       return;
     }
 
@@ -1071,8 +1076,7 @@
     renderBackendState(state.backend ? 'Backend ready' : 'Backend starting', !state.backend);
 
     if (!state.remodelAvailable) {
-      showBanner(state.remodelAvailabilityMessage
-        || 'Remodel is unavailable until this build has a remodel seat.');
+      showBanner(state.remodelAvailabilityMessage || NO_SEAT_MESSAGE);
     }
 
     var latest = payload.latest_run;

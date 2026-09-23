@@ -120,6 +120,7 @@ public sealed class ReviewPageTurnStateTests
                                 {
                                     { "chat_id", "chat-" + starts },
                                     { "run_dir", @"C:\SwReviewRuns\20260913-142530-bracket-" + starts },
+                                    { "document", new { path = @"C:\parts\bracket.sldasm", configuration = "Default" } },
                                     {
                                         "not_examined", new
                                         {

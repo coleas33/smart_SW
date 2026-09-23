@@ -121,10 +121,15 @@ public sealed class RemodelHostOptions
 /// </summary>
 public sealed class RemodelHost : IDisposable
 {
-    /// <summary>The actionable guidance when this build has no in-process remodel seat.</summary>
+    /// <summary>
+    /// What the tab says when this build has no in-process remodel seat: the capability, in
+    /// the engineer's words, and what it means for the part on screen (U13,
+    /// docs/pane-findings-2026-09-20-review-gui.md section 6). It names no command. The
+    /// standalone probe is a testing procedure with no document open, and it lives in the
+    /// workstation handover, not in a Task Pane read by someone with a part open.
+    /// </summary>
     public const string NoSeatMessage =
-        "this build has no remodel seat; run swreview-extract probe remodel "
-        + "--acknowledge-throwaway-part with no document open.";
+        "Remodel is not in this build yet. This tab will not change the open part.";
 
     /// <summary>What a forged request reads while the service is still attaching.</summary>
     public const string SeatCheckingMessage =

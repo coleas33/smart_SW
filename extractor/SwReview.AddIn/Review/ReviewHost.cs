@@ -1032,11 +1032,14 @@ public sealed class ReviewHost : IDisposable
 
         PostStatus("ready", ReadyMessage(summary.Components, summary.Gaps, summary.Unexamined));
 
+        // `document` is the one captured before the dump, not whichever is active now: the
+        // review is of what was extracted, and the page binds what it shows to this (U8).
         Send("review.started", id, new Dictionary<string, object?>
         {
             { "chat_id", handle.ChatId },
             { "run_dir", runDirectory },
             { "not_examined", handle.NotExamined },
+            { "document", DocumentPayload(document) },
         });
     }
 

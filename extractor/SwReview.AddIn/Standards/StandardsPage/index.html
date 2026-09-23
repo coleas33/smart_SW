@@ -56,36 +56,42 @@
   <span id="profile" class="note"></span>
   <span id="run-dir" class="note mono"></span>
   <span id="check-state" class="note" role="status"></span>
-  <span id="carried-forward" class="note"></span>
+  <span id="carried-forward" class="note check-result"></span>
 </section>
+
+<!-- The one line a result leaves when the open document is not the one it graded (U8): whose
+     result it is. check-page.js hides every block marked `check-result` with one class on the
+     body and writes this line; it is hidden while the two documents agree. -->
+<p id="stale-result" class="stale-result" role="status" hidden></p>
 
 <!-- The release verdict: a state, the counts in every bucket with the unit each one counts,
      the unresolved check ids and the notes. No letter grade and no single percentage: "ready"
      is not a score, and a release gate that could be read as 83% would be read as 83%. -->
-<section id="verdict" class="verdict" aria-live="polite"></section>
+<section id="verdict" class="verdict check-result" aria-live="polite"></section>
 
 <!-- Which component instances the check never read - lightweight or suppressed, so
      interference, fit and the feature-tree rules cannot see them. Empty and hidden when every
      instance was read, or when the body carries no such key at all. -->
-<p id="not-examined" class="not-examined" hidden></p>
+<p id="not-examined" class="not-examined check-result" hidden></p>
 
 <!-- What to start with: the rows the backend ranked, in the order it supplied them. Above the
      sixteen-check roster, so it is above the bucket chips on both tabs and the roster does not
      sit between the headline and the rows (contracts/attention.md section 6, research R2.14). -->
-<section id="attention" class="attention" aria-live="polite"></section>
+<section id="attention" class="attention check-result" aria-live="polite"></section>
 
 <!-- All sixteen checks, each with every bucket it landed in. A check that did not apply is
      present with an out-of-scope bucket, never absent, so "all sixteen were accounted for" is
      readable off one list (FR-033). -->
-<section id="checks" class="checks"></section>
+<section id="checks" class="checks check-result"></section>
 
 <!-- The chips are built from the buckets the result actually carries, so nothing offers a
      filter for a bucket that is empty. Failed and warned are on when the page opens. -->
-<div id="filters" class="filters" role="group" aria-label="Which checks are shown"></div>
+<div id="filters" class="filters check-result" role="group" aria-label="Which checks are shown"></div>
 
-<main id="rules" class="rules"></main>
+<main id="rules" class="rules check-result"></main>
 
 <script src="../../shared/dom.js"></script>
+<script src="../../shared/document.js"></script>
 <script src="../../shared/check-page.js"></script>
 <script src="standards.js"></script>
 </body>
