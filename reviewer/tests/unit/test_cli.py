@@ -34,9 +34,11 @@ from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, Script
 from swreview.agent.settings import (
     ENTERPRISE_ENV,
     MASK,
+    MODEL_VIEW_OFF,
     EfficiencySettings,
     GeminiEnterprise,
     ProviderSettings,
+    pane_defaults,
 )
 from swreview.checks.golden_interference import interference_case
 from swreview.ir.loader import save_package
@@ -2475,3 +2477,87 @@ def test_exceptions_is_a_placeholder_group_with_no_commands() -> None:
 
 def test_an_unknown_command_is_a_usage_error() -> None:
     assert invoke("simulate").exit_code == 2
+
+
+# --- feature 008 T074: the review's settings, off unless asked --------------------------------
+
+
+def reviewed_settings(tmp_package_dir: Path, out: Path, *flags: str) -> dict[str, Any]:
+    """`swreview review --provider fake` with `flags`; the settings the session recorded."""
+    result = invoke(
+        "review", str(tmp_package_dir), "--out", str(out), "--provider", "fake", *flags
+    )
+    assert result.exit_code == 0, result.stdout + result.stderr
+    session = json.loads((out / "session.json").read_text(encoding="utf-8"))
+    return {"efficiency": session["efficiency"], "model_view": session["model_view"]}
+
+
+def test_review_records_every_change_off_by_default(tmp_package_dir: Path, tmp_path: Path) -> None:
+    recorded = reviewed_settings(tmp_package_dir, tmp_path / "run")
+
+    assert recorded["efficiency"] == EfficiencySettings().model_dump()
+    assert recorded["model_view"] == MODEL_VIEW_OFF.model_dump()
+    assert (tmp_path / "run" / "tool-results").is_dir(), "every result is kept either way"
+
+
+def test_pane_defaults_records_the_panes_settings(tmp_package_dir: Path, tmp_path: Path) -> None:
+    recorded = reviewed_settings(tmp_package_dir, tmp_path / "run", "--pane-defaults")
+
+    pane = pane_defaults(ProviderName.FAKE)
+    assert recorded["efficiency"] == pane.efficiency.model_dump()
+    assert recorded["model_view"] == pane.model_view.model_dump()
+
+
+@pytest.mark.parametrize(
+    ("flags", "expected"),
+    [
+        (("--payload-slimming",), {"payload_slimming": True, "history_pruning": False}),
+        (("--history-pruning",), {"payload_slimming": False, "history_pruning": True}),
+        (
+            ("--history-pruning", "--prune-after", "1"),
+            {"payload_slimming": False, "history_pruning": True, "prune_after_rounds": 1},
+        ),
+        (("--pane-defaults", "--prune-after", "1"), {"prune_after_rounds": 1}),
+    ],
+)
+def test_each_view_switch_is_recorded(
+    tmp_package_dir: Path, tmp_path: Path, flags: tuple[str, ...], expected: dict[str, Any]
+) -> None:
+    recorded = reviewed_settings(tmp_package_dir, tmp_path / "run", *flags)
+
+    for name, value in expected.items():
+        assert recorded["model_view"][name] == value, name
+
+
+def test_prune_after_without_pruning_is_a_usage_error_naming_both_flags(
+    tmp_package_dir: Path, tmp_path: Path
+) -> None:
+    result = invoke(
+        "review", str(tmp_package_dir), "--out", str(tmp_path / "run"), "--provider", "fake",
+        "--prune-after", "1",
+    )
+
+    assert result.exit_code == 2
+    output = result.stdout + result.stderr
+    assert "--prune-after" in output and "--history-pruning" in output
+
+
+def test_prune_after_zero_is_a_usage_error(tmp_package_dir: Path, tmp_path: Path) -> None:
+    result = invoke(
+        "review", str(tmp_package_dir), "--out", str(tmp_path / "run"), "--provider", "fake",
+        "--history-pruning", "--prune-after", "0",
+    )
+
+    assert result.exit_code == 2
+
+
+def test_pane_defaults_with_coverage_stop_is_refused_by_gated_alone(
+    tmp_package_dir: Path, tmp_path: Path
+) -> None:
+    result = invoke(
+        "review", str(tmp_package_dir), "--out", str(tmp_path / "run"), "--provider", "fake",
+        "--pane-defaults", "--lever", "coverage_stop",
+    )
+
+    assert result.exit_code == 2
+    assert "never share an arm" in result.stdout + result.stderr

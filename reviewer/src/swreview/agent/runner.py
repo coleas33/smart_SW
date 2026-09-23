@@ -60,6 +60,7 @@ from swreview.agent.package_brief import package_brief
 from swreview.agent.providers import (
     AgentProvider,
     EffortLevel,
+    ModelViewAware,
     PromptCacheAware,
     ProviderTool,
     ToolCallResult,
@@ -890,6 +891,9 @@ class ReviewRun:
             self.finalize()
             raise
 
+        # The history stays append-only and whole: the adapters prune each *request* from it
+        # (feature 008, `providers/pruning.py`), never the history itself, so a result's age
+        # is counted from the full record every time and a follow-up prunes it afresh.
         self.messages = [dict(message) for message in result.messages]
         self._explanation_allowed = result.reason == "end"
         self.total_steps += result.steps
@@ -1036,6 +1040,10 @@ def start_review(
         session.retry_of = UUID(str(retry_of)) if retry_of is not None else None
         session.efficiency = efficiency if efficiency is not None else EfficiencySettings()
         session.model_view = model_view if model_view is not None else MODEL_VIEW_OFF
+        if isinstance(provider, ModelViewAware):
+            # Feature 008, read once, here, like lever 3's cache key: the settings the
+            # session records are the settings the adapter sends with (research R2.33).
+            provider.use_model_view(session.model_view)
         if checks_first(session.efficiency):
             # Feature 008: a review that runs its checks first shows the modelling-practice
             # findings as one folded group. A plain session value, set once here, so the
@@ -1090,7 +1098,12 @@ def start_review(
             if standards_profile is not None or checks_first(session.efficiency)
             else None
         )
-        tools = ToolRegistry().dispatch(context, fail_tool=fail_tool, efficiency=session.efficiency)
+        tools = ToolRegistry().dispatch(
+            context,
+            fail_tool=fail_tool,
+            efficiency=session.efficiency,
+            model_view=session.model_view,
+        )
         # Lever 5, and the last thing setup does: the checks that enumerate themselves run
         # here, through the dispatch the provider is about to be handed, so their steps,
         # findings and events are the ones a model-driven call would have produced. `None`
@@ -1211,7 +1224,7 @@ def run_review(
         model: Model id; the provider's own model when omitted.
         effort: What the engineer asked for; the adapter maps it or fails fast.
         options: The rest of `start_review`'s keyword arguments - `key_source`,
-            `retry_of`, `max_steps`, `efficiency`, `previous_session`,
+            `retry_of`, `max_steps`, `efficiency`, `model_view`, `previous_session`,
             `standards_profile`, `fail_tool`, `bridge`, `pipe_name`, `bridge_secret`,
             `bridge_factory`, `callbacks`, `redact` - documented there rather than
             restated here.
