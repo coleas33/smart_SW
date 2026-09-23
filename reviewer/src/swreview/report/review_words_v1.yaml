@@ -1,0 +1,202 @@
+# Every word the backend supplies to the Review tab, once (feature 009, research R2.5).
+#
+# The page prints these and words nothing itself, so a later wording change is a change to
+# this file and to no code. `report/summary.py` loads it through `load_words()`; every key
+# is named by a model there, and a key it does not name is refused.
+#
+# Two rules for every string below:
+# - no percent sign: the ranking and these words reach the Standards tab, whose body scan
+#   forbids one (write "30 percent");
+# - a placeholder in braces is filled by `report/summary.py` and nowhere else; the ones
+#   each template may carry are pinned in `tests/unit/test_review_words.py`.
+version: review_words_v1
+
+headline:
+  none: "No findings were recorded"
+  findings_one: "1 finding"
+  findings_many: "{n} findings"
+  issues_one: "in 1 issue"
+  issues_many: "in {n} issues"
+
+# The three owner groups first (the owner's labels, 2026-09-23), then the two shown only
+# when they hold a finding. `one` is used at exactly 1 and `many` otherwise, 0 included.
+groups:
+  decide:
+    label: "Decide"
+    one: "{n} needs your decision"
+    many: "{n} need your decision"
+  fix:
+    label: "Fix"
+    one: "{n} to fix"
+    many: "{n} to fix"
+  verify:
+    label: "Verify"
+    one: "{n} to verify"
+    many: "{n} to verify"
+  decided:
+    label: "Decided"
+    one: "{n} decided"
+    many: "{n} decided"
+  within_scope:
+    label: "Within limits"
+    one: "{n} within limits"
+    many: "{n} within limits"
+
+questions:
+  one: "1 question for you"
+  many: "{n} questions for you"
+
+not_loaded:
+  text: "{count} of {total} parts not loaded"
+
+contacts:
+  one: "1 size-for-size contact"
+  many: "{n} size-for-size contacts"
+
+resume:
+  with_tokens: "Sending resumes the review once. Its last round sent {tokens} input tokens."
+  without: "Sending resumes the review once."
+
+read_only: "The backend restarted, so this review is shown from its run folder. Follow-ups, decisions and answers are off."
+
+goal_states:
+  issues: "issues found"
+  checked: "checked, no issue"
+  not_reached: "not reached"
+  not_applicable: "not applicable"
+
+# The short reason a goal line carries; the recorded sentence behind it goes to the fold.
+goal_reasons:
+  unresolved: "evidence missing"
+  skipped: "skipped"
+  failed: "a check failed"
+  out_of_scope: "out of scope"
+  no_check: "no check ran"
+
+# The check goals, in the owner's order (contracts/review-summary.md section 3). `items` are
+# exact coverage check ids - checklist items, and the pre-run rows of feature 008 - and
+# `prefixes` are the check ids the goal owns. A check belongs to the goal whose `items` name
+# it, else to the goal with the longest prefix it starts with: `fastener.head_fit` is tool
+# access, not fasteners; `standards.drawing.*` and `rms.drawing.*` are drawings. Modelling
+# practice is a goal of its own (2026-09-23), so modelling findings never fill the hygiene
+# line.
+goals:
+  - id: interference
+    title: "Interference"
+    items: [interference, coverage.prerun.interference]
+    prefixes: [interference.]
+  - id: fasteners
+    title: "Fasteners"
+    items: [fasteners]
+    prefixes: [fastener.]
+  - id: hole_alignment
+    title: "Hole alignment"
+    items: [holes.alignment]
+    prefixes: [hole.]
+  - id: fits_and_stacks
+    title: "Fits and stacks"
+    items: [interfaces.fit, interfaces.stack]
+    prefixes: [fit., stack.]
+  - id: tool_access
+    title: "Tool access"
+    items: []
+    prefixes: [fastener.head_clearance, fastener.head_fit]
+  - id: mass_and_material
+    title: "Mass and material"
+    items: []
+    prefixes: [mass., standards.part.material_assigned]
+  - id: hygiene
+    title: "Hygiene"
+    items: [provenance, standards.release, coverage.prerun.standards]
+    prefixes: [provenance., standards., hygiene.]
+  - id: drawings
+    title: "Drawings"
+    items: [drawing.manufacturing_inputs]
+    prefixes: [drawing., standards.drawing., rms.drawing.]
+  - id: modelling_practice
+    title: "Modelling practice"
+    items: [modeling.resilience]
+    prefixes: [rms.]
+
+# The card vocabulary `GET /labels` serves (data-model section 7). `errors` holds one
+# sentence per error class saying what to do next: every backend `ChatError` class, every
+# class the Review host and `PaneActions` send, each pane host's unknown-run class, and the
+# classes the Review page makes itself. `errors` stays the last block, one class per line:
+# `ErrorLabelsCoverTheHostTests` reads it by indentation.
+labels:
+  version: review_words_v1
+  status:
+    demonstrated: "demonstrated"
+    suspected: "suspected"
+    unresolved: "unresolved"
+    checked_within_scope: "checked within scope"
+  severity:
+    high: "high"
+    medium: "medium"
+    low: "low"
+    info: "info"
+  bucket:
+    checked: "checked"
+    skipped: "skipped"
+    unresolved: "unresolved"
+    failed: "failed"
+    out_of_scope: "out of scope"
+  evidence_status:
+    open: "open"
+    answered: "answered"
+  contact_kind:
+    zero_volume: "touching"
+    possible_only: "possible only"
+    thread_model: "thread model"
+  errors:
+    AlreadyAccepted: "That condition already has an active exception, so nothing new was recorded."
+    AlreadyAnswered: "That question was already answered, perhaps in another window. Reload the review to see its answer."
+    BackendUnavailable: "The review backend is not running. Save Settings to start it again, then retry."
+    BridgeUnavailable: "SOLIDWORKS could not be reached. Check that the add-in is loaded, then try again."
+    DocumentDirty: "Save the part first. Remodel never saves the open document for you."
+    EmptyNote: "Say why the condition is accepted. An exception needs a reason."
+    ExternalReferences: "This part references other files. Remodel works only on a part with no external references."
+    ExtractionFailed: "The model could not be read. Check that it rebuilds and is fully loaded, then press Review again."
+    FakeProviderNotAllowed: "The test provider is off in this build. Choose another provider in Settings."
+    ForbiddenOrigin: "The review backend refused a page it does not know. Close and reopen the task pane."
+    HostError: "The add-in hit a problem it did not expect. Try again; if it keeps happening, open the log."
+    HttpError: "The review backend answered with an error. Try again; if it keeps happening, open the log."
+    IllegalTransition: "That decision cannot follow the one already recorded. Reload the review to see its state."
+    InvalidDecision: "Choose accept, reject or defer."
+    InvalidPackage: "The model dump could not be read. Press Review again to dump the model afresh."
+    InvalidRequest: "The request was not understood. Reload the task pane and try again."
+    InvalidRunDir: "The run folder is not inside the run root. Check the run root in Settings."
+    InvalidSettings: "Check the provider, the model and the effort, then save again."
+    InvalidTiming: "Enter the minutes as numbers, then save again."
+    NoDocument: "Open the part or assembly you want reviewed, then press Review."
+    NotAPart: "Remodel works on one part. Open a part, then try again."
+    NotAttached: "The add-in is not attached to SOLIDWORKS yet. Wait a moment, then try again."
+    NotFound: "That file or folder no longer exists. It may have been moved or deleted."
+    NotModelCheck: "The run folder does not hold a model check of one part. Run the Model check again."
+    OpenFailed: "The file could not be opened. Check that it still exists and that you can open it."
+    PackageAfterRefused: "The remodelled part could not be read back. Open the run folder to see what was written."
+    PackageMissing: "The model dump has not arrived yet. Wait for it, then try again."
+    PathRefused: "That path is outside the folders this pane may open."
+    PreparationExpired: "The preparation is out of date. Press Review again."
+    PreparationFailed: "The review could not be prepared. Check that the model is open and saved, then press Review again."
+    ReportMissing: "The report has not been written yet. Wait for the review to finish."
+    ResumeRefused: "This run folder already holds a change log. Start a new remodel instead."
+    RuleNotAcceptable: "Only a failing rule can take an exception. Fix this one in the model instead."
+    RunDirInUse: "Another review is using this run folder. Wait for it to finish, or press Review for a new one."
+    RunFolderFailed: "The run folder could not be written. Check the run root in Settings and the free space."
+    RunInProgress: "A remodel is already running on this part. Wait for it to finish."
+    RunNotFound: "That run is no longer tracked. Run it again."
+    RunNotPlanned: "Plan the remodel first, then start it."
+    ScopeNotAvailable: "That rule family is not offered here yet. Choose another scope."
+    ScopeRefused: "The part changed or was not checked for this remodel. Plan it again."
+    SessionFailed: "This review failed and cannot continue. Press Review to start a new one."
+    TurnRunning: "A review turn is still running. Wait for it to finish, or press Stop."
+    Unauthorized: "The review backend did not recognise this pane. Close and reopen the task pane."
+    UnknownChat: "This review is no longer held by the backend. Press Review to start a new one."
+    UnknownCheck: "That check is no longer in the run root. Run the check again."
+    UnknownEvidenceRequest: "That question is not part of this review. Reload the review to see its questions."
+    UnknownFinding: "That finding is not part of this review. Reload the review to see its findings."
+    UnknownJob: "That remodel job is no longer held by the backend. Start the remodel again."
+    UnknownMessage: "The add-in did not understand the page. Close and reopen the task pane."
+    UnknownModel: "That model is not offered by the provider. Choose another model in Settings."
+    UnknownProvider: "That provider is not available. Choose another provider in Settings."
