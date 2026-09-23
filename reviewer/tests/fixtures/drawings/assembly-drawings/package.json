@@ -1,0 +1,843 @@
+{
+  "schema_version": "1.6.0",
+  "package_id": "01100000-0000-4000-8000-000000000013",
+  "created_at": "2026-09-23T09:00:00Z",
+  "reuse_key": null,
+  "reused_from": null,
+  "reused_at": null,
+  "extractor": {
+    "name": "SwReview.Extractor",
+    "version": "0.0.0-fictional",
+    "sw_version": "2024 SP5",
+    "machine": "FICT-SEAT",
+    "profile": "full",
+    "phases": [
+      {
+        "name": "document",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "manifest",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "mate",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "feature",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "equation",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "cutlist",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "drawing",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "hole",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "tolerance",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "fastener",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "face",
+        "elapsed_ms": 1,
+        "status": "ok"
+      },
+      {
+        "name": "body",
+        "elapsed_ms": 1,
+        "status": "ok"
+      }
+    ]
+  },
+  "manifest": {
+    "entries": [
+      {
+        "document_id": "doc:0001",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-OKTAVEN-5000.SLDASM",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0002",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-OKTAKALO-5001.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0003",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-OKTASORN-5002.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0004",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-OKTAMIR-5003.SLDPRT",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "Default",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0005",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-OKTAVEN-5000.SLDDRW",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0006",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-OKTAKALO-5001.SLDDRW",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0007",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-OKTAKALO-5001-B.SLDDRW",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "",
+        "local_modified": false,
+        "export_method": "native"
+      },
+      {
+        "document_id": "doc:0008",
+        "vault_path": "C:\\Fictional\\Vault\\FICT-OKTAKALO-5001-C.SLDDRW",
+        "vault_version": 1,
+        "revision": null,
+        "configuration": "",
+        "local_modified": false,
+        "export_method": "native"
+      }
+    ],
+    "discrepancies": []
+  },
+  "design": {
+    "design_id": "dsn:fict",
+    "name": "FICT-OKTAVEN-5000",
+    "root_assembly_document_id": "doc:0001",
+    "active_configuration": "Default",
+    "drawing_document_ids": [
+      "doc:0005",
+      "doc:0006",
+      "doc:0007",
+      "doc:0008"
+    ]
+  },
+  "documents": [
+    {
+      "document_id": "doc:0001",
+      "kind": "assembly",
+      "file_name": "FICT-OKTAVEN-5000.SLDASM",
+      "path": "C:\\Fictional\\Vault\\FICT-OKTAVEN-5000.SLDASM",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:0002",
+      "kind": "part",
+      "file_name": "FICT-OKTAKALO-5001.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT-OKTAKALO-5001.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": "6061-T6",
+      "mass": null,
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0003",
+      "kind": "part",
+      "file_name": "FICT-OKTASORN-5002.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT-OKTASORN-5002.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": null,
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0004",
+      "kind": "part",
+      "file_name": "FICT-OKTAMIR-5003.SLDPRT",
+      "path": "C:\\Fictional\\Vault\\FICT-OKTAMIR-5003.SLDPRT",
+      "configurations": [
+        "Default"
+      ],
+      "active_configuration": "Default",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": "Alloy Steel",
+      "mass": null,
+      "material_configuration": "Default"
+    },
+    {
+      "document_id": "doc:0005",
+      "kind": "drawing",
+      "file_name": "FICT-OKTAVEN-5000.SLDDRW",
+      "path": "C:\\Fictional\\Vault\\FICT-OKTAVEN-5000.SLDDRW",
+      "configurations": [],
+      "active_configuration": "",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:0006",
+      "kind": "drawing",
+      "file_name": "FICT-OKTAKALO-5001.SLDDRW",
+      "path": "C:\\Fictional\\Vault\\FICT-OKTAKALO-5001.SLDDRW",
+      "configurations": [],
+      "active_configuration": "",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:0007",
+      "kind": "drawing",
+      "file_name": "FICT-OKTAKALO-5001-B.SLDDRW",
+      "path": "C:\\Fictional\\Vault\\FICT-OKTAKALO-5001-B.SLDDRW",
+      "configurations": [],
+      "active_configuration": "",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    },
+    {
+      "document_id": "doc:0008",
+      "kind": "drawing",
+      "file_name": "FICT-OKTAKALO-5001-C.SLDDRW",
+      "path": "C:\\Fictional\\Vault\\FICT-OKTAKALO-5001-C.SLDDRW",
+      "configurations": [],
+      "active_configuration": "",
+      "custom_properties": {},
+      "config_properties": {},
+      "material": null,
+      "mass": null
+    }
+  ],
+  "components": [
+    {
+      "id": "cmp:0001",
+      "persist_ref": "Y21wOjAwMDE=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-OKTAKALO-5001-1",
+      "document_id": "doc:0002",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-OKTAKALO-5001-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0002",
+      "persist_ref": "Y21wOjAwMDI=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-OKTASORN-5002-1",
+      "document_id": "doc:0003",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-OKTASORN-5002-1",
+      "constrained_status_raw": null
+    },
+    {
+      "id": "cmp:0003",
+      "persist_ref": "Y21wOjAwMDM=",
+      "persist_ref_scope": "doc:0001",
+      "name": "FICT-OKTAMIR-5003-1",
+      "document_id": "doc:0004",
+      "parent_id": null,
+      "referenced_configuration": "Default",
+      "transform": [
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          -1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          -0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "suppression": "resolved",
+      "is_fixed": false,
+      "pattern_id": null,
+      "is_toolbox": false,
+      "full_path": "FICT-OKTAMIR-5003-1",
+      "constrained_status_raw": null
+    }
+  ],
+  "mates": [],
+  "holes": [],
+  "threads": [],
+  "fasteners": [],
+  "faces": [],
+  "bodies": [],
+  "interferences": [],
+  "captures": [],
+  "drawings": [],
+  "drawing_records": [
+    {
+      "document_id": "doc:0005",
+      "source": "native",
+      "active_sheet_name": "Sheet1",
+      "sheets": [
+        {
+          "id": "dsh:0001",
+          "source": "native",
+          "name": "Sheet1",
+          "index": 0,
+          "sheet_format_name": "FICTIONAL-FORMAT-A",
+          "was_active": true,
+          "views": [
+            {
+              "id": "dvw:0001",
+              "sheet_id": "dsh:0001",
+              "name": "Drawing View1",
+              "view_type_raw": 7,
+              "referenced_document_id": "doc:0001",
+              "referenced_model_path": "C:\\Fictional\\Vault\\FICT-OKTAVEN-5000.SLDASM",
+              "referenced_configuration": "Default",
+              "is_model_out_of_date": false,
+              "is_model_loaded": true,
+              "scale_decimal": 1.0,
+              "orientation_name": "*Top",
+              "persist_ref": "ZHZ3OjAwMDE=",
+              "persist_ref_scope": "doc:0005"
+            },
+            {
+              "id": "dvw:0002",
+              "sheet_id": "dsh:0001",
+              "name": "Drawing View2",
+              "view_type_raw": 7,
+              "referenced_model_path": "C:\\Fictional\\Other\\FICT-ZEPH-5999.SLDPRT",
+              "referenced_configuration": "Default",
+              "is_model_out_of_date": false,
+              "is_model_loaded": true,
+              "scale_decimal": 1.0,
+              "orientation_name": "*Front",
+              "persist_ref": "ZHZ3OjAwMDI=",
+              "persist_ref_scope": "doc:0005"
+            }
+          ],
+          "sheet_format_path": "C:\\Fictional\\Formats\\FICTIONAL-FORMAT-A.slddrt",
+          "scale_numerator": 1.0,
+          "scale_denominator": 1.0,
+          "first_angle": false,
+          "tables": [
+            {
+              "id": "dtb:0001",
+              "sheet_id": "dsh:0001",
+              "owner_view_id": "dvw:0001",
+              "table_type_raw": 2,
+              "title": "FICTIONAL PARTS LIST",
+              "row_count": 5,
+              "column_count": 2,
+              "rows": [
+                {
+                  "index": 0,
+                  "cells": [
+                    "ITEM",
+                    "QTY"
+                  ]
+                },
+                {
+                  "index": 1,
+                  "cells": [
+                    "1",
+                    "1"
+                  ]
+                },
+                {
+                  "index": 2,
+                  "cells": [
+                    "2",
+                    "1"
+                  ]
+                },
+                {
+                  "index": 3,
+                  "cells": [
+                    "3",
+                    "1"
+                  ]
+                },
+                {
+                  "index": 4,
+                  "cells": [
+                    "4",
+                    "2"
+                  ]
+                }
+              ],
+              "bom_rows": [
+                {
+                  "index": 1,
+                  "document_ids": [
+                    "doc:0002"
+                  ]
+                },
+                {
+                  "index": 2,
+                  "document_ids": [
+                    "doc:0003"
+                  ]
+                },
+                {
+                  "index": 3,
+                  "document_ids": [
+                    "doc:0004"
+                  ]
+                },
+                {
+                  "index": 4,
+                  "unresolved_paths": [
+                    "C:\\Fictional\\Kalo\\FICT-NIXA-5009.SLDPRT"
+                  ]
+                }
+              ],
+              "persist_ref": "ZHRiOjAwMDE=",
+              "persist_ref_scope": "doc:0005"
+            }
+          ],
+          "persist_ref": "ZHNoOjAwMDE=",
+          "persist_ref_scope": "doc:0005"
+        }
+      ],
+      "is_detailing_mode": false,
+      "length_unit_raw": 0,
+      "dimension_precision_raw": 2,
+      "units_decimal_places_raw": 2,
+      "tolerance_precision_raw": 3,
+      "drafting_standard_name": "FICTIONAL-STANDARD"
+    },
+    {
+      "document_id": "doc:0006",
+      "source": "native",
+      "active_sheet_name": "Sheet1",
+      "sheets": [
+        {
+          "id": "dsh:0002",
+          "source": "native",
+          "name": "Sheet1",
+          "index": 0,
+          "sheet_format_name": "FICTIONAL-FORMAT-A",
+          "was_active": true,
+          "views": [
+            {
+              "id": "dvw:0003",
+              "sheet_id": "dsh:0002",
+              "name": "Drawing View1",
+              "view_type_raw": 7,
+              "referenced_document_id": "doc:0002",
+              "referenced_model_path": "C:\\Fictional\\Vault\\FICT-OKTAKALO-5001.SLDPRT",
+              "referenced_configuration": "Default",
+              "is_model_out_of_date": false,
+              "is_model_loaded": true,
+              "scale_decimal": 1.0,
+              "orientation_name": "*Front",
+              "display_dimensions": [
+                {
+                  "id": "ddm:0001",
+                  "view_id": "dvw:0003",
+                  "name": "KALOMIR51@FICT-OKTAKALO-5001",
+                  "dimension_type_raw": 6,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.005,
+                    "unit": "m"
+                  },
+                  "text_prefix": "<MOD-DIAM>",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance": {
+                    "kind": "none",
+                    "upper": null,
+                    "lower": null,
+                    "source": {
+                      "document_id": "doc:0006",
+                      "sheet": "Sheet1",
+                      "view": "Drawing View1",
+                      "annotation": "ddm:0001",
+                      "persist_ref": null,
+                      "page": null,
+                      "bbox": null
+                    }
+                  },
+                  "tolerance_type_raw": 0,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "persist_ref": "ZGRtOjAwMDE=",
+                  "persist_ref_scope": "doc:0006"
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDM=",
+              "persist_ref_scope": "doc:0006"
+            }
+          ],
+          "sheet_format_path": "C:\\Fictional\\Formats\\FICTIONAL-FORMAT-A.slddrt",
+          "scale_numerator": 1.0,
+          "scale_denominator": 1.0,
+          "first_angle": false,
+          "persist_ref": "ZHNoOjAwMDI=",
+          "persist_ref_scope": "doc:0006"
+        }
+      ],
+      "is_detailing_mode": false,
+      "length_unit_raw": 0,
+      "dimension_precision_raw": 2,
+      "units_decimal_places_raw": 2,
+      "tolerance_precision_raw": 3,
+      "drafting_standard_name": "FICTIONAL-STANDARD"
+    },
+    {
+      "document_id": "doc:0007",
+      "source": "native",
+      "active_sheet_name": "Sheet1",
+      "sheets": [
+        {
+          "id": "dsh:0003",
+          "source": "native",
+          "name": "Sheet1",
+          "index": 0,
+          "sheet_format_name": "FICTIONAL-FORMAT-A",
+          "was_active": true,
+          "views": [
+            {
+              "id": "dvw:0004",
+              "sheet_id": "dsh:0003",
+              "name": "Drawing View1",
+              "view_type_raw": 7,
+              "referenced_document_id": "doc:0002",
+              "referenced_model_path": "C:\\Fictional\\Vault\\FICT-OKTAKALO-5001.SLDPRT",
+              "referenced_configuration": "Default",
+              "is_model_out_of_date": false,
+              "is_model_loaded": true,
+              "scale_decimal": 1.0,
+              "orientation_name": "*Front",
+              "display_dimensions": [
+                {
+                  "id": "ddm:0002",
+                  "view_id": "dvw:0004",
+                  "name": "KALOMIR52@FICT-OKTAKALO-5001",
+                  "dimension_type_raw": 6,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.005,
+                    "unit": "m"
+                  },
+                  "text_prefix": "<MOD-DIAM>",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance": {
+                    "kind": "none",
+                    "upper": null,
+                    "lower": null,
+                    "source": {
+                      "document_id": "doc:0007",
+                      "sheet": "Sheet1",
+                      "view": "Drawing View1",
+                      "annotation": "ddm:0002",
+                      "persist_ref": null,
+                      "page": null,
+                      "bbox": null
+                    }
+                  },
+                  "tolerance_type_raw": 0,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "persist_ref": "ZGRtOjAwMDI=",
+                  "persist_ref_scope": "doc:0007"
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDQ=",
+              "persist_ref_scope": "doc:0007"
+            }
+          ],
+          "sheet_format_path": "C:\\Fictional\\Formats\\FICTIONAL-FORMAT-A.slddrt",
+          "scale_numerator": 1.0,
+          "scale_denominator": 1.0,
+          "first_angle": false,
+          "persist_ref": "ZHNoOjAwMDM=",
+          "persist_ref_scope": "doc:0007"
+        }
+      ],
+      "is_detailing_mode": false,
+      "length_unit_raw": 0,
+      "dimension_precision_raw": 2,
+      "units_decimal_places_raw": 2,
+      "tolerance_precision_raw": 3,
+      "drafting_standard_name": "FICTIONAL-STANDARD"
+    },
+    {
+      "document_id": "doc:0008",
+      "source": "native",
+      "active_sheet_name": "Sheet1",
+      "sheets": [
+        {
+          "id": "dsh:0004",
+          "source": "native",
+          "name": "Sheet1",
+          "index": 0,
+          "sheet_format_name": "FICTIONAL-FORMAT-A",
+          "was_active": true,
+          "views": [
+            {
+              "id": "dvw:0005",
+              "sheet_id": "dsh:0004",
+              "name": "Drawing View1",
+              "view_type_raw": 7,
+              "referenced_document_id": "doc:0002",
+              "referenced_model_path": "C:\\Fictional\\Vault\\FICT-OKTAKALO-5001.SLDPRT",
+              "referenced_configuration": "Default",
+              "is_model_out_of_date": false,
+              "is_model_loaded": true,
+              "scale_decimal": 1.0,
+              "orientation_name": "*Front",
+              "display_dimensions": [
+                {
+                  "id": "ddm:0003",
+                  "view_id": "dvw:0005",
+                  "name": "KALOMIR53@FICT-OKTAKALO-5001",
+                  "dimension_type_raw": 6,
+                  "is_overridden": false,
+                  "value": {
+                    "value": 0.005,
+                    "unit": "m"
+                  },
+                  "text_prefix": "<MOD-DIAM>",
+                  "text_suffix": "",
+                  "text_above": "",
+                  "text_below": "",
+                  "precision_raw": 2,
+                  "tolerance_precision_raw": 3,
+                  "uses_document_precision": false,
+                  "units_raw": 0,
+                  "uses_document_units": true,
+                  "tolerance": {
+                    "kind": "none",
+                    "upper": null,
+                    "lower": null,
+                    "source": {
+                      "document_id": "doc:0008",
+                      "sheet": "Sheet1",
+                      "view": "Drawing View1",
+                      "annotation": "ddm:0003",
+                      "persist_ref": null,
+                      "page": null,
+                      "bbox": null
+                    }
+                  },
+                  "tolerance_type_raw": 0,
+                  "is_reference": false,
+                  "driven_state_raw": 1,
+                  "is_hole_callout": false,
+                  "persist_ref": "ZGRtOjAwMDM=",
+                  "persist_ref_scope": "doc:0008"
+                }
+              ],
+              "persist_ref": "ZHZ3OjAwMDU=",
+              "persist_ref_scope": "doc:0008"
+            }
+          ],
+          "sheet_format_path": "C:\\Fictional\\Formats\\FICTIONAL-FORMAT-A.slddrt",
+          "scale_numerator": 1.0,
+          "scale_denominator": 1.0,
+          "first_angle": false,
+          "persist_ref": "ZHNoOjAwMDQ=",
+          "persist_ref_scope": "doc:0008"
+        }
+      ],
+      "is_detailing_mode": false,
+      "length_unit_raw": 0,
+      "dimension_precision_raw": 2,
+      "units_decimal_places_raw": 2,
+      "tolerance_precision_raw": 3,
+      "drafting_standard_name": "FICTIONAL-STANDARD"
+    }
+  ],
+  "features": [],
+  "equations": [],
+  "rms_suppress_test": null,
+  "gaps": [
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0001",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0002",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0003",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "tool_error",
+      "entity_kind": "mass_override",
+      "entity_id": "doc:0004",
+      "reason": "IMassProperty.OverrideMass could not be read",
+      "error": "InvalidCastException: the mass property object is not IMassProperty"
+    },
+    {
+      "kind": "not_extracted",
+      "entity_kind": "drawing_referenced_document",
+      "entity_id": "dvw:0002",
+      "reason": "references 'C:\\Fictional\\Other\\FICT-ZEPH-5999.SLDPRT', which is not part of this review",
+      "error": null
+    }
+  ]
+}
