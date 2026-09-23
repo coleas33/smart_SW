@@ -1019,6 +1019,68 @@ public class PackageWriterTests : IDisposable
             PackageSerializer.Serialize(NewWriter().Build(StandardsOptions())));
     }
 
+    // ---- a drawing root with no configuration (feature 011 T015, attach.md section 2) ------
+
+    /// <summary>
+    /// The Standards tab's extraction of a drawing on its own: the session has no
+    /// configuration, so the traversal records "" and the caller passes a null
+    /// <see cref="DumpOptions.Configuration"/> (the document's active configuration, which a
+    /// drawing does not have). The design block says "" - "empty for a drawing root, which has
+    /// none" - rather than a configuration name nobody read.
+    /// </summary>
+    [Fact]
+    public void Build_DrawingRootWithNoConfiguration_WritesAnEmptyActiveConfigurationOnTheDesign()
+    {
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+        DumpOptions options = StandardsOptions();
+
+        EvidencePackage package = NewWriter(sources).Build(options);
+
+        Assert.Null(options.Configuration);
+        Assert.Null(sources.SeenOptions!.Configuration);
+        Assert.Equal(string.Empty, package.Design.ActiveConfiguration);
+    }
+
+    [Fact]
+    public void Build_DrawingRootWithNoConfiguration_WritesTheDrawingsManifestEntryWithAnEmptyConfiguration()
+    {
+        // The drawing's own entry is "" (it has none); a referenced model's configuration is its
+        // own, as it was before feature 011.
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(StandardsOptions());
+
+        ManifestEntry drawing = Assert.Single(
+            package.Manifest.Entries,
+            entry => entry.DocumentId == DocumentIds.For(sources.RootDocumentPath));
+        Assert.Equal(string.Empty, drawing.Configuration);
+
+        ManifestEntry model = Assert.Single(
+            package.Manifest.Entries,
+            entry => entry.DocumentId == DocumentIds.For(sources.Nodes[0].DocumentPath));
+        Assert.Equal("Default", model.Configuration);
+    }
+
+    [Fact]
+    public void Build_DrawingRootWithNoConfiguration_RunsTheDrawingPhaseUnderTheStandardsProfile()
+    {
+        // FR-001: the no-configuration session is graded through the same phase list a drawing
+        // root always ran, the drawing phase included, and the package still validates.
+        var sources = new FakeSources();
+        sources.UseDrawingRootTree();
+
+        EvidencePackage package = NewWriter(sources).Build(StandardsOptions());
+
+        Assert.True(sources.DrawingsWereDumped);
+        Assert.Equal(
+            DumpPhaseStatus.Ok,
+            Assert.Single(package.Extractor.Phases, phase => phase.Name == "drawing").Status);
+        Assert.DoesNotContain(package.Gaps, gap => gap.EntityKind == "drawing");
+        IrContract.AssertValid(PackageSerializer.Serialize(package));
+    }
+
     // ---- dump phase timing (feature 005, T033) -----------------------------------
 
     /// <summary>
@@ -1468,6 +1530,12 @@ public class PackageWriterTests : IDisposable
 
         public string DesignName { get; set; } = "bracket-assy";
 
+        /// <summary>
+        /// What the traversal records as the root's configuration: the bound one for a model
+        /// root, "" for a drawing root, whose session has none (feature 011, attach.md section 2).
+        /// </summary>
+        public string ActiveConfiguration { get; set; } = "Default";
+
         public string? TraversalGap { get; set; }
 
         public string? HoleGap { get; set; }
@@ -1538,6 +1606,7 @@ public class PackageWriterTests : IDisposable
             RootDocumentPath = DrawingPath;
             RootDocumentKind = DocumentKind.Drawing;
             DesignName = "bracket-assy";
+            ActiveConfiguration = string.Empty;
 
             ComponentNode root = NewNode("housing", null, HousingPath, DocumentKind.Part);
             root.IsFixed = true;
@@ -1558,6 +1627,7 @@ public class PackageWriterTests : IDisposable
             RootDocumentPath = NamesakeDrawingPath;
             RootDocumentKind = DocumentKind.Drawing;
             DesignName = "housing";
+            ActiveConfiguration = string.Empty;
 
             ComponentNode root = NewNode(
                 NamesakeDrawingPath, null, NamesakeDrawingPath, DocumentKind.Drawing);
@@ -1614,7 +1684,7 @@ public class PackageWriterTests : IDisposable
                 RootDocumentPath = RootDocumentPath,
                 RootDocumentKind = RootDocumentKind,
                 DesignName = DesignName,
-                ActiveConfiguration = "Default",
+                ActiveConfiguration = ActiveConfiguration,
             };
 
             tree.Nodes.AddRange(Nodes);
@@ -1634,16 +1704,28 @@ public class PackageWriterTests : IDisposable
         {
             DocumentsWereDumped = true;
 
-            return documentPaths.Select(path => new Document
+            // As PropertyDumper reads them: a drawing answers no active configuration, which is
+            // recorded as "", and lists none (feature 011, attach.md section 2).
+            return documentPaths.Select(path =>
             {
-                DocumentId = scope.DocumentId(path),
-                Kind = DocumentKindOf(path),
-                FileName = Path.GetFileName(path),
-                Path = path,
-                Configurations = { "Default" },
-                ActiveConfiguration = "Default",
-                Material = null,
-                Mass = null,
+                bool drawing = DocumentKindOf(path) == DocumentKind.Drawing;
+                var document = new Document
+                {
+                    DocumentId = scope.DocumentId(path),
+                    Kind = DocumentKindOf(path),
+                    FileName = Path.GetFileName(path),
+                    Path = path,
+                    ActiveConfiguration = drawing ? string.Empty : "Default",
+                    Material = null,
+                    Mass = null,
+                };
+
+                if (!drawing)
+                {
+                    document.Configurations.Add("Default");
+                }
+
+                return document;
             }).ToList();
         }
 

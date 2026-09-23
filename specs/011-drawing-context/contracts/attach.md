@@ -43,6 +43,17 @@ configuration's name, or `null` for a drawing. A drawing session:
 A configuration name passed with a drawing is refused naming both: "'{path}' is a drawing and has no
 configuration; '{name}' cannot be selected".
 
+*Landed as (T014, 2026-09-23)*: `ConfigurationName` is the extension method
+`ISwSession.ConfigurationName()` (`Sw/SwSession.cs`, `SwSessionConfiguration`), not an interface
+member: .NET Framework 4.8 has no default interface members, and an abstract member would break
+the add-in's `ToolServiceWiringTests` fake, which T014 keeps unedited. It reads the bound
+configuration's name through the session's gate (`Configuration.Name`) and answers null for a
+session with no configuration. The drawing session is the internal `DrawingSession`; the three
+refusals are the pure `AttachRefusal(kind, path, purpose)`, `ConfigurationRefusal(kind, path,
+name)` and `NotOpenRefusal(path, purpose)`. `NotOpenRefusal` answers the model purpose too - with
+section 1's sentence, before any open, where a not-open drawing used to be opened read-only and
+refused after.
+
 ## 3. The paths that use each
 
 | Caller | Entry | File |
@@ -70,6 +81,15 @@ its own guarded seam (`confirmed-open.md`, owner 2026-09-23).
 `ReviewHost`'s sentence for a drawing gains one clause: "...; open the part or assembly it
 documents - this drawing is read with it while it stays open." The sentence test is edited
 deliberately in the same task (T015).
+
+*Landed as (T015, T016, 2026-09-23)*: `ReviewHost` had no drawing-specific sentence - a drawing met
+the generic "Open a saved part or assembly to prepare a review." - so there was no test to edit; the
+sentence is written whole, `ReviewHost.DrawingRefusal`: "The Review tab reviews a part or an
+assembly, and '{file name}' is a drawing; open the part or assembly it documents - this drawing is
+read with it while it stays open.", error class `NoDocument`, and three `ReviewHostTests` are new.
+It is sent by `review.prepare` **and** by `review.start` before the dump: now that the extraction's
+attach accepts a drawing, the start refuses one itself rather than relying on the preparation
+token. A document of no known kind keeps the generic sentence.
 
 ## 6. What SC-001 checks at the seat
 

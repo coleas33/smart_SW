@@ -108,7 +108,10 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
         {
             RootDocumentPath = rootPath,
             DesignName = Path.GetFileNameWithoutExtension(rootPath),
-            ActiveConfiguration = gate.Call("Configuration.Name", () => _session.Configuration.Name),
+
+            // After the kind, never before it (feature 011): a drawing session has no
+            // configuration to ask for, and ConfigurationName gates its own read.
+            ActiveConfiguration = ActiveConfigurationOf(rootKind, () => _session.ConfigurationName()),
             RootDocumentKind = rootKind,
             RootDocument = document,
         };
@@ -140,12 +143,28 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             return tree;
         }
 
+        // A part or assembly session is always bound to a configuration (SwSession.Attach and
+        // AttachForDump both bind one); a session that is not has nothing to walk, and says so
+        // rather than dereferencing a null on the seat.
+        IConfiguration? configuration = _session.Configuration;
+        if (configuration == null)
+        {
+            gaps.Add(
+                GapKind.NotExtracted,
+                "component",
+                null,
+                "The session is bound to no configuration, so no root component could be read "
+                + "and nothing was traversed.",
+                null);
+            return tree;
+        }
+
         // GetRootComponent3(false) is used rather than GetRootComponent: it returns the
         // modern Component2 the rest of this code needs, and false means "do not resolve",
         // so lightweight components stay lightweight (resolving them changes the session).
         var root = gate.Call(
             "GetRootComponent3",
-            () => _session.Configuration.GetRootComponent3(false)) as IComponent2;
+            () => configuration.GetRootComponent3(false)) as IComponent2;
 
         if (root == null)
         {
@@ -182,6 +201,25 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
         Visit(root, tree.Nodes[0].Key, tree, gaps, patternByComponent, depth: 0, scope: scope);
 
         return tree;
+    }
+
+    /// <summary>
+    /// The configuration the tree records for its root (feature 011, contracts/attach.md
+    /// section 2): the empty string for a drawing root, whose session has none - its
+    /// configuration is never asked for - and otherwise the session's bound configuration, or
+    /// the empty string when the session names none. The kind is a parameter, so it is read
+    /// before any configuration is.
+    /// </summary>
+    public static string ActiveConfigurationOf(DocumentKind? rootKind, Func<string?> configurationName)
+    {
+        if (configurationName == null)
+        {
+            throw new ArgumentNullException(nameof(configurationName));
+        }
+
+        return rootKind == DocumentKind.Drawing
+            ? string.Empty
+            : configurationName() ?? string.Empty;
     }
 
     /// <summary>

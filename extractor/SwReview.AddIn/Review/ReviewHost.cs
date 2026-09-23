@@ -1012,11 +1012,28 @@ public sealed class ReviewHost : IDisposable
 
     // ---- review preparation and start ---------------------------------------------------
 
+    /// <summary>
+    /// The Review tab's refusal of a drawing (feature 011, contracts/attach.md section 5): a
+    /// drawing is not reviewed on its own, and it is read with the part or assembly it documents
+    /// for as long as it stays open in SOLIDWORKS (open-drawing discovery). One sentence for the
+    /// preparation and the start, so the engineer reads the same words at either step.
+    /// </summary>
+    internal static string DrawingRefusal(PageDocument document) =>
+        $"The Review tab reviews a part or an assembly, and '{System.IO.Path.GetFileName(document.Path)}' "
+        + "is a drawing; open the part or assembly it documents - this drawing is read with it "
+        + "while it stays open.";
+
     private void PrepareReview(string? id)
     {
         _preparationId = null;
         _preparedDocument = null;
         PageDocument? document = _options.CurrentDocument();
+        if (document != null && document.Kind == "drawing")
+        {
+            SendError(id, "NoDocument", DrawingRefusal(document), true);
+            return;
+        }
+
         if (document == null || !document.IsAttachable)
         {
             SendError(id, "NoDocument", "Open a saved part or assembly to prepare a review.", true);
@@ -1071,6 +1088,15 @@ public sealed class ReviewHost : IDisposable
                 "open the assembly or part you want reviewed in SOLIDWORKS first: the evidence "
                 + "package is extracted from the active document.",
                 retryable: true);
+            return;
+        }
+
+        // Before the dump, whatever the preparation says: the extraction's attach reads a
+        // drawing (feature 011), so the Review tab refuses one here rather than extracting it
+        // as the design under review (contracts/attach.md section 3).
+        if (document.Kind == "drawing")
+        {
+            SendError(id, "NoDocument", DrawingRefusal(document), retryable: true);
             return;
         }
 
