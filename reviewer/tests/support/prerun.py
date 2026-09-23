@@ -242,6 +242,50 @@ def standards_prerun_package(*, cutlist: bool = True) -> EvidencePackage:
     )
 
 
+CHECKS_FIRST = EfficiencySettings(prerun_checks=True)
+"""Checks first, the pane default since 2026-09-22 (feature 008): lever 5 under its new name."""
+
+LIVE_ZERO_KEY = f"{FIRST_INSTANCE}|{SECOND_INSTANCE}"
+LIVE_OVERLAP_KEY = f"{FIRST_INSTANCE}|{SECOND_INSTANCE}|overlap"
+
+
+def _live_row(row_id: str, group_key: str, volume_mm3: float) -> dict[str, Any]:
+    return {
+        "id": row_id,
+        "configuration": "Default",
+        "component_ids": [FIRST_INSTANCE, SECOND_INSTANCE],
+        "volume": {"value": volume_mm3, "unit": "mm3"},
+        "settings": {
+            "treat_coincident_as_interference": True,
+            "treat_subassemblies_as_components": True,
+            "include_multibody": True,
+            "ignore_hidden": False,
+            "fastener_folder_treatment": "include",
+        },
+        "status": "computed",
+        "error": None,
+        "group_key": group_key,
+        "is_fastener": False,
+        "is_possible": False,
+    }
+
+
+LIVE_ROWS: tuple[dict[str, Any], ...] = (
+    _live_row("int:0001", LIVE_ZERO_KEY, 0.0),
+    _live_row("int:0002", LIVE_OVERLAP_KEY, 42.0),
+)
+"""What a scripted live detection returns: two groups, one zero-volume (a contact since
+feature 010) and one overlapping by 42 mm³ (a finding), in the IR's row shape and under the
+settings checks first states (`prerun.PRERUN_INTERFERENCE_SETTINGS`)."""
+
+
+def live_prerun_package() -> EvidencePackage:
+    """`prerun_package()` with no interference rows: what a dump that never ran detection
+    holds, so every group the pre-run judges came from the live call. An assembly root with
+    two instances, which is what live detection needs."""
+    return prerun_package().model_copy(update={"interferences": []})
+
+
 def review(
     tmp_path: Any,
     out: str,

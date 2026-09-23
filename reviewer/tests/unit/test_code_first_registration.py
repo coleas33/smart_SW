@@ -160,9 +160,11 @@ def test_with_the_tuple_empty_the_opening_message_is_byte_identical_to_before(
     nothing rather than claim what a map that never ran could not reach. Every other byte is
     the pre-010 message.
 
-    Regenerated a second time, deliberately, by feature 008 T038: lever 5 is checks first,
-    so the four RMS id lines are one counts-only "modelling practice" line (FR-014) and the
-    standards family is reported with its reason when no profile was given (US2 scenario 3).
+    Regenerated again, deliberately, by feature 008 T038 and T042: lever 5 is checks first,
+    so the four RMS id lines are one counts-only "modelling practice" line (FR-014), the
+    standards family is reported with its reason when no profile was given (US2 scenario 3),
+    and a package holding interference rows with no SOLIDWORKS attached says live detection
+    did not run and its own groups were judged (`contracts/checks-first.md` section 3).
     Nothing feature 010 added moved.
     """
     monkeypatch.setattr(checks_mechanical, "CODE_FIRST_CHECKS", ())
