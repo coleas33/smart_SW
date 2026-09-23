@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from swreview import units
 from swreview.drawings.evidence import id_order
@@ -33,6 +33,7 @@ from swreview.ir.models import (
     Dimension,
     DisplayDimensionRecord,
     DrawingRecord,
+    DrawingSheet,
     DrawingSheetRecord,
     DrawingView,
     EvidencePackage,
@@ -45,9 +46,15 @@ __all__ = [
     "LENGTH_UNITS",
     "NO_OWN_TOLERANCE_TYPES",
     "NativeSheet",
+    "every_native_sheet",
+    "ingested_source",
     "native_dimension",
+    "native_matches",
     "native_sheet_count",
     "native_sheets",
+    "shadowed_sheets",
+    "sheet_payload",
+    "sheet_reason",
     "written_precision",
     "written_tolerance_precision",
     "written_unit",
@@ -291,4 +298,59 @@ def native_sheets(package: EvidencePackage, document_id: str) -> list[NativeShee
         for record in package.drawing_records
         if record.document_id == document_id
         for sheet in sorted(record.sheets, key=lambda item: item.index)
+    ]
+
+
+def every_native_sheet(package: EvidencePackage) -> list[NativeSheet]:
+    """Every natively read sheet of the package: drawing document id, then sheet index."""
+    documents = dict.fromkeys(
+        record.document_id
+        for record in sorted(package.drawing_records, key=lambda item: id_order(item.document_id))
+    )
+    return [item for document_id in documents for item in native_sheets(package, document_id)]
+
+
+def shadowed_sheets(package: EvidencePackage) -> frozenset[tuple[str, str]]:
+    """`(document id, sheet name)` of every native sheet: an ingested sheet of the same
+    document and name is not read beside it, because native evidence wins over a PDF's
+    (Principle IV, `contracts/drawing-source.md` section 2). Empty for a package with no
+    native sheet, whose tools therefore answer exactly as before (FR-037)."""
+    return frozenset(
+        (item.drawing.document_id, item.sheet.name) for item in every_native_sheet(package)
+    )
+
+
+def ingested_source(sheet: DrawingSheet) -> str:
+    """What `available_sheets` calls an ingested sheet: its stamp, and `pdf_ingest` for a sheet
+    written before the stamp existed, which the drawing checks read the same way."""
+    return sheet.source or "pdf_ingest"
+
+
+def sheet_reason(package: EvidencePackage, sheet: DrawingSheetRecord) -> str | None:
+    """Why part of a native sheet is missing: the first gap the dump recorded against it (a
+    sheet whose views could not be enumerated, say), or `None`."""
+    return next((gap.reason for gap in package.gaps if gap.entity_id == sheet.id), None)
+
+
+def sheet_payload(package: EvidencePackage, item: NativeSheet) -> dict[str, Any]:
+    """What `get_drawing_sheet` returns for a native sheet: the sheet record with its views,
+    dimensions, annotations, notes and tables, its drawing and why anything is missing.
+    Persistent references are feature 008's view to remove, not this payload's."""
+    payload = item.sheet.model_dump(mode="json")
+    payload["document_id"] = item.drawing.document_id
+    payload["reason"] = sheet_reason(package, item.sheet)
+    return payload
+
+
+def native_matches(
+    package: EvidencePackage, source: SourceRef
+) -> list[tuple[DisplayDimensionRecord, Dimension | str]]:
+    """Every native display dimension at `source`'s document, sheet and annotation, with its
+    conversion or why it has none: what `refs.resolve_dimension` matches on (section 2)."""
+    return [
+        (record, converted)
+        for item in native_sheets(package, source.document_id)
+        if item.sheet.name == source.sheet
+        for _, record, converted in item.dimensions()
+        if record.id == source.annotation
     ]
