@@ -1,0 +1,46 @@
+# What class a material name belongs to, and what density that class can have (feature 010
+# US6, contracts/mass-material.md section 1).
+#
+# One classifier for every check that reads a material name: thread engagement looks its
+# ratio up by the class this file gives (engagement_rules.yaml), and the mass checks compare a
+# part's density with the class's range. Two token lists would drift (research R2.16), so the
+# tokens live here only - moved from engagement_rules.yaml unchanged on 2026-09-23.
+#
+# Matching: the first class, in file order, one of whose tokens is a substring of the
+# lower-cased material name. A class with no range (`density_kg_m3: null`) gets no density
+# verdict; a class may be added with no engagement rule, which leaves engagement for it
+# unresolved.
+#
+# Density ranges cover the SOLIDWORKS library materials of each class, in kg/m3: steels 7700
+# (alloy steel) to 8000 (stainless), aluminium 2660 to 2810 (5052 to 7075), grey and ductile
+# irons 7000 to 7300, engineering plastics about 900 (polypropylene) to 2200 (PTFE).
+
+version: 1
+default_class: unknown
+
+no_material_density_kg_m3: 1000
+no_material_density_source: >-
+  SOLIDWORKS gives a part with no material assigned a density of 1000 kg/m3, so a mass read at
+  that density is the default, not a material
+
+classes:
+  steel:
+    matches: ["steel", "stainless", "aisi", "sae 10", "4140", "4340", "a36", "s355", "17-4"]
+    density_kg_m3: [7600, 8100]
+    source: "Range spanning carbon, alloy and stainless steels (about 7700 to 8000 kg/m3)"
+  cast_iron:
+    matches: ["cast iron", "gray iron", "ductile", "gg", "ggg", "astm a48"]
+    density_kg_m3: [6800, 7400]
+    source: "Range spanning grey and ductile cast irons (about 7000 to 7300 kg/m3)"
+  aluminum:
+    matches: ["aluminum", "aluminium", "6061", "7075", "5052", "2024", "al "]
+    density_kg_m3: [2600, 2850]
+    source: "Range spanning wrought aluminium alloys (about 2660 to 2810 kg/m3)"
+  plastic:
+    matches: ["abs", "nylon", "pa6", "pa66", "delrin", "acetal", "pom", "peek", "polycarbonate", "pc", "pla", "petg"]
+    density_kg_m3: [850, 2200]
+    source: "Range spanning engineering thermoplastics, polypropylene to PTFE (about 900 to 2200 kg/m3)"
+  unknown:
+    matches: []
+    density_kg_m3: null
+    source: "No class; material not recognized"

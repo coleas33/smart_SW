@@ -4,10 +4,13 @@ The rule is data, not code, so an engineer can read the number that cleared or f
 joint and override it per project. Every engagement finding cites the class it resolved
 and that class's `source` line.
 
-An unrecognised material resolves to the `unknown` class, whose `min_engagement_ratio` is
-`None`: no rule applied, so the check reports the measured engagement and stays
-`unresolved` rather than clearing the joint against a guessed rule (constitution
-Principle I).
+Which class a material belongs to is `material_classes.for_material`'s answer (feature 010
+research R2.16): one classifier for engagement and density, so the match tokens live in
+`material_classes.yaml` and this table keeps one ratio per class name. An unrecognised
+material resolves to the default class, whose `min_engagement_ratio` is `None`, and so does
+a class this table carries no row for: no rule applied, so the check reports the measured
+engagement and stays `unresolved` rather than clearing the joint against a guessed rule
+(constitution Principle I).
 """
 
 from __future__ import annotations
@@ -17,6 +20,8 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
+
+from swreview.checks.material_classes import MaterialClasses, load_material_classes
 
 __all__ = ["DEFAULT_RULES_PATH", "EngagementRules", "MaterialRule", "load_rules"]
 
@@ -29,73 +34,75 @@ class MaterialRule:
 
     name: str
     min_engagement_ratio: float | None
-    matches: tuple[str, ...]
     source: str
 
 
 @dataclass(frozen=True)
 class EngagementRules:
-    """The whole table. `material_classes` keeps the file's order; the first match wins."""
+    """The whole table: a rule per class name, resolved through the material classes."""
 
     version: int
     default_material_class: str
     material_classes: dict[str, MaterialRule]
+    classes: MaterialClasses
 
     def for_material(self, material: str | None) -> MaterialRule:
-        """Resolve a material name to its rule, case-insensitively on `matches` substrings.
+        """Resolve a material name to its class (`material_classes.for_material`) and the
+        class to its rule. A `None`, empty or unrecognised material resolves to the default
+        class, which carries no ratio; a class with no row carries none either."""
+        name = self.classes.for_material(material).name
+        return self.material_classes.get(
+            name,
+            MaterialRule(
+                name=name,
+                min_engagement_ratio=None,
+                source=f"No engagement rule for material class {name}",
+            ),
+        )
 
-        A `None`, empty or unrecognised material resolves to `default_material_class`,
-        which carries no ratio.
-        """
-        if material:
-            needle = material.lower()
-            for rule in self.material_classes.values():
-                if any(token in needle for token in rule.matches):
-                    return rule
-        return self.material_classes[self.default_material_class]
 
-
-def _parse(document: object, path: Path) -> EngagementRules:
+def _parse(document: object, path: Path, classes: MaterialClasses) -> EngagementRules:
     if not isinstance(document, dict):
         raise ValueError(f"{path}: engagement rules must be a mapping")
 
-    classes: dict[str, MaterialRule] = {}
+    rules: dict[str, MaterialRule] = {}
     for name, row in document["material_classes"].items():
+        if name not in classes.classes:
+            raise ValueError(
+                f"{path}: {name!r} is not a material class of material_classes.yaml "
+                f"{sorted(classes.classes)}"
+            )
         ratio = row["min_engagement_ratio"]
-        classes[name] = MaterialRule(
+        rules[name] = MaterialRule(
             name=name,
             min_engagement_ratio=None if ratio is None else float(ratio),
-            matches=tuple(token.lower() for token in row["matches"]),
             source=row["source"],
         )
 
-    default = document["default_material_class"]
-    if default not in classes:
+    default = classes.default_class
+    if default in rules and rules[default].min_engagement_ratio is not None:
         raise ValueError(
-            f"{path}: default_material_class {default!r} is not one of the material classes "
-            f"{sorted(classes)}"
-        )
-    if classes[default].min_engagement_ratio is not None:
-        raise ValueError(
-            f"{path}: default_material_class {default!r} carries a ratio; the fallback class "
-            "must apply no rule so an unknown material cannot clear a joint"
+            f"{path}: the default material class {default!r} carries a ratio; the fallback "
+            "class must apply no rule so an unknown material cannot clear a joint"
         )
 
     return EngagementRules(
         version=int(document["version"]),
         default_material_class=default,
-        material_classes=classes,
+        material_classes=rules,
+        classes=classes,
     )
 
 
 @lru_cache(maxsize=4)
 def _load_cached(path: Path) -> EngagementRules:
-    return _parse(yaml.safe_load(path.read_text(encoding="utf-8")), path)
+    return _parse(yaml.safe_load(path.read_text(encoding="utf-8")), path, load_material_classes())
 
 
 def load_rules(path: Path | str | None = None) -> EngagementRules:
     """Read the engagement table; `path` defaults to the one shipped with the package.
 
-    Results are cached per resolved path: the table is read once per process.
+    Results are cached per resolved path: the table is read once per process. The classes
+    are the shipped `material_classes.yaml`.
     """
     return _load_cached(Path(path or DEFAULT_RULES_PATH).resolve())

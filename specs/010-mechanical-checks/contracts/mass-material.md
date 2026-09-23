@@ -49,12 +49,24 @@ Per assembly document:
 Densities are never computed for an assembly. A part whose mass is overridden is not given a
 density verdict (the mass is not the geometry's).
 
+As landed (T065): the no-material-default sentence is added to a density **outside** the class
+range; a density inside the range passes even near 1000 kg/m3, because a plastic class spans
+it (SOLIDWORKS' ABS is 1020 kg/m3) and a real material there is not a default. In the
+assembly sums, suppressed children are left out (SOLIDWORKS leaves them out of the mass) but
+counted among the children "never read" in the round-mass sentence, and a child that was read
+with no mass (a surface-only part) weighs nothing. Density findings are `medium`; the
+assembly override suspicion is `low`. The root assembly, which has no component instance, is
+bound to its document. `run_mass_checks(package)` returns a `MassChecks` - the findings with
+the document and instances each binds to, the counted passes, the coverage item - rather
+than a bare list, because the tool needs the binding.
+
 ## 3. Coverage
 
 One `skipped` item `mass.coverage` per run: `"<n> components were not read (lightweight <a>,
 suppressed <b>, not opened <c>); <m> bodies could not be read; <k> parts have no material class
-with a density range"`, its scope the component ids. FR-018's count is this item, from the
-existing `document` and `body` gaps.
+with a density range or no volume"`, its scope the component ids. FR-018's count is this item,
+from the existing `document` and `body` gaps. A run with nothing to count writes no item (a
+family with nothing to report renders no line).
 
 ## 4. The extractor override read (seat-validated)
 

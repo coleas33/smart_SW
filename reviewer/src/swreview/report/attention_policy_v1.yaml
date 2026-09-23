@@ -122,6 +122,12 @@ classes:
   stack.worst_case: interface
   # the drawing finding the model records -> manufacturing.
   drawing.manufacturing_inputs: manufacturing
+  # feature 010's mass and material checks -> manufacturing, first opinions for the owner's
+  # read-through (research R2.22): a part with the wrong or no material is ordered, weighed
+  # and costed wrong, whatever its geometry.
+  mass.material_assigned: manufacturing
+  mass.density: manufacturing
+  mass.assembly_override: manufacturing
 
 # What no enumerator can see, one sentence per pre-run family. Read by the gate's brief
 # only (`prerun.not_evaluated_families`, and the standards half). These are not gaps in
