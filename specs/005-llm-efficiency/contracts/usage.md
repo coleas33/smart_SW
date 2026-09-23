@@ -191,6 +191,18 @@ New `type` enum member: `usage`. Body, `additionalProperties: false`, every toke
 without. `TurnResult.steps` counts tool calls, which is a different number, and with lever 6 on
 the two diverge by exactly the amount lever 6 is trying to save.
 
+**The pane's usage line** (`render.js` `usageLine`, feature 005 T016a) sums these bodies as they
+arrive, by section 6's rule - any null in a field makes that total null - and reads only
+`input_tokens`, `cached_input_tokens`, `total_tokens` and `latency_s`. Since feature 008 (T095,
+`specs/008-checks-first-review/contracts/cost.md` section 4) it states the input as the report's
+two numbers and **no cached share**: `<U> uncached + <C> cached input - <T> tokens in all - <K>
+round trips - last round <S>`, `U` being summed input minus summed cached, when every round
+reported both counts and the cached sum does not exceed the input sum; otherwise `<I> input
+(cache split not reported)`, or `input unknown (cache split not reported)` when an input count is
+missing. A total not reported by every round is `tokens unknown`. The share was dropped because
+the report prints it as unknown until probe L1 is recorded (FR-047), and a percentage in the pane
+beside that would be a second, contradicting number.
+
 ## 6. `SessionUsage` and the one summing rule
 
 ```python
@@ -263,6 +275,15 @@ The section states, per session: rounds, turns, input, cached input, uncached in
 reasoning or thoughts (named per provider, never merged), tool-result input where the provider
 reports it, and total. A `None` renders as `unknown`, never as `0` and never as a dash that could
 be read as zero.
+
+Since feature 008 (T092, `specs/008-checks-first-review/contracts/cost.md` sections 2 and 3):
+the `Cached input tokens` and `Uncached input tokens` lines are the two numbers the pane's line
+also states, byte for byte unchanged; when the summed cached total is null the section ends with
+`- Cache split not reported: the provider sent no cached-input count`. A `## Largest tool results`
+table follows the section when the session has usage and at least one step carries its sizes
+(`result_bytes`, `result_tokens`): at most five steps, by tokens, then bytes, then step index, an
+unknown token count last as `unknown`, estimated with o200k_base from each step's full result. A
+session without usage (a check folder) and every existing golden (no sizes) render no table.
 
 ## 9. Scorecard
 
