@@ -1,0 +1,327 @@
+{
+  "run_id": "fict-drawing-review",
+  "questions_asked": {
+    "count": 3,
+    "text": "3 questions for you",
+    "items": [
+      {
+        "id": "ER-001",
+        "question": "A drawing with the same name sits beside 3 reviewed file(s) but is not open. Should the review read it?",
+        "options": [
+          "Yes, open it read-only and read it",
+          "Review without it",
+          "It is not the right drawing"
+        ],
+        "blocks": "drawing.manufacturing_inputs",
+        "blocks_title": "Drawings",
+        "what": "The same-name drawings FICT-TULMSORN-7003.SLDDRW, FICT-TULMSORN-7004.SLDDRW, FICT-TULMSORN-7005.SLDDRW, each beside a reviewed file and not open",
+        "why": "Fits, stacks and callouts stay unresolved without a drawing. The review opens a file only when you confirm it, read-only, and closes it again.",
+        "about": [
+          {
+            "id": "doc:0004",
+            "name": "FICT-TULMSORN-7003.SLDPRT"
+          },
+          {
+            "id": "doc:0005",
+            "name": "FICT-TULMSORN-7004.SLDPRT"
+          },
+          {
+            "id": "doc:0006",
+            "name": "FICT-TULMSORN-7005.SLDPRT"
+          }
+        ]
+      },
+      {
+        "id": "ER-002",
+        "question": "2 open drawings show FICT-TULMKALO-7001. Which one governs it?",
+        "options": [
+          "FICT-TULMKALO-7001.SLDDRW",
+          "FICT-TULMKALO-7001-B.SLDDRW",
+          "They all apply"
+        ],
+        "blocks": null,
+        "blocks_title": null,
+        "what": "Which of 2 open drawings governs FICT-TULMKALO-7001.SLDPRT: doc:0007 FICT-TULMKALO-7001.SLDDRW, doc:0008 FICT-TULMKALO-7001-B.SLDDRW",
+        "why": "Open drawings of one part can disagree; the review uses them all, in a fixed order, until you say which governs.",
+        "about": [
+          {
+            "id": "doc:0002",
+            "name": "FICT-TULMKALO-7001.SLDPRT"
+          },
+          {
+            "id": "doc:0007",
+            "name": "FICT-TULMKALO-7001.SLDDRW"
+          },
+          {
+            "id": "doc:0008",
+            "name": "FICT-TULMKALO-7001-B.SLDDRW"
+          }
+        ]
+      },
+      {
+        "id": "ER-003",
+        "question": "5 open drawings show FICT-OKTAKALO-7002-TESSABRUN-DAVORUSK-LORIVENTA-QUILLSORN-HASKFENN-ARVOTULM-ZEPHOMBRA-NIXAKALO-…. Which one governs it?",
+        "options": [],
+        "blocks": null,
+        "blocks_title": null,
+        "what": "Which of 5 open drawings governs FICT-OKTAKALO-7002-TESSABRUN-DAVORUSK-LORIVENTA-QUILLSORN-HASKFENN-ARVOTULM-ZEPHOMBRA-NIXAKALO-MIRVEN-OKTAPELIN.SLDPRT: doc:0009 FICT-OKTAKALO-7002-A.SLDDRW, doc:0010 FICT-OKTAKALO-7002-B.SLDDRW, doc:0011 FICT-OKTAKALO-7002-C.SLDDRW, doc:0012 FICT-OKTAKALO-7002-D.SLDDRW, doc:0013 FICT-OKTAKALO-7002-E.SLDDRW",
+        "why": "Open drawings of one part can disagree; the review uses them all, in a fixed order, until you say which governs.",
+        "about": [
+          {
+            "id": "doc:0003",
+            "name": "FICT-OKTAKALO-7002-TESSABRUN-DAVORUSK-LORIVENTA-QUILLSORN-HASKFENN-ARVOTULM-ZEPHOMBRA-NIXAKALO-MIRVEN-OKTAPELIN.SLDPRT"
+          },
+          {
+            "id": "doc:0009",
+            "name": "FICT-OKTAKALO-7002-A.SLDDRW"
+          },
+          {
+            "id": "doc:0010",
+            "name": "FICT-OKTAKALO-7002-B.SLDDRW"
+          },
+          {
+            "id": "doc:0011",
+            "name": "FICT-OKTAKALO-7002-C.SLDDRW"
+          },
+          {
+            "id": "doc:0012",
+            "name": "FICT-OKTAKALO-7002-D.SLDDRW"
+          },
+          {
+            "id": "doc:0013",
+            "name": "FICT-OKTAKALO-7002-E.SLDDRW"
+          }
+        ]
+      }
+    ]
+  },
+  "answers": [
+    [
+      "ER-001",
+      "Yes, open it read-only and read it"
+    ],
+    [
+      "ER-002",
+      "They all apply"
+    ]
+  ],
+  "coverage": [
+    {
+      "bucket": "skipped",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "no open drawing shows it",
+        "error": null
+      }
+    },
+    {
+      "bucket": "checked",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0002"
+          ]
+        },
+        "reason": "read from FICT-TULMKALO-7001.SLDDRW and FICT-TULMKALO-7001-B.SLDDRW; 2 views usable",
+        "error": null
+      }
+    },
+    {
+      "bucket": "checked",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0003"
+          ]
+        },
+        "reason": "read from FICT-OKTAKALO-7002-A.SLDDRW, FICT-OKTAKALO-7002-B.SLDDRW, FICT-OKTAKALO-7002-C.SLDDRW, FICT-OKTAKALO-7002-D.SLDDRW and FICT-OKTAKALO-7002-E.SLDDRW; 5 views usable",
+        "error": null
+      }
+    },
+    {
+      "bucket": "skipped",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0004"
+          ]
+        },
+        "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+        "error": null
+      }
+    },
+    {
+      "bucket": "skipped",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0005"
+          ]
+        },
+        "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+        "error": null
+      }
+    },
+    {
+      "bucket": "skipped",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0006"
+          ]
+        },
+        "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+        "error": null
+      }
+    },
+    {
+      "bucket": "skipped",
+      "item": {
+        "check": "drawing_profile.conformance",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0007",
+            "doc:0008",
+            "doc:0009",
+            "doc:0010",
+            "doc:0011",
+            "doc:0012",
+            "doc:0013"
+          ]
+        },
+        "reason": "the standards profile is absent, which has no drawing section",
+        "error": null
+      }
+    },
+    {
+      "bucket": "checked",
+      "item": {
+        "check": "drawing.confirmed_open",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0004"
+          ]
+        },
+        "reason": "opened read-only, read and closed (1 sheet)",
+        "error": null
+      }
+    },
+    {
+      "bucket": "unresolved",
+      "item": {
+        "check": "drawing.confirmed_open",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0005"
+          ]
+        },
+        "reason": "the bridge returned status 'error': the read-only open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14)",
+        "error": "BridgeError"
+      }
+    },
+    {
+      "bucket": "checked",
+      "item": {
+        "check": "drawing.confirmed_open",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0006"
+          ]
+        },
+        "reason": "read as it stood; it was already open, so it was left open",
+        "error": null
+      }
+    }
+  ],
+  "questions_open_after": {
+    "count": 1,
+    "text": "1 question for you",
+    "items": [
+      {
+        "id": "ER-003",
+        "question": "5 open drawings show FICT-OKTAKALO-7002-TESSABRUN-DAVORUSK-LORIVENTA-QUILLSORN-HASKFENN-ARVOTULM-ZEPHOMBRA-NIXAKALO-…. Which one governs it?",
+        "options": [],
+        "blocks": null,
+        "blocks_title": null,
+        "what": "Which of 5 open drawings governs FICT-OKTAKALO-7002-TESSABRUN-DAVORUSK-LORIVENTA-QUILLSORN-HASKFENN-ARVOTULM-ZEPHOMBRA-NIXAKALO-MIRVEN-OKTAPELIN.SLDPRT: doc:0009 FICT-OKTAKALO-7002-A.SLDDRW, doc:0010 FICT-OKTAKALO-7002-B.SLDDRW, doc:0011 FICT-OKTAKALO-7002-C.SLDDRW, doc:0012 FICT-OKTAKALO-7002-D.SLDDRW, doc:0013 FICT-OKTAKALO-7002-E.SLDDRW",
+        "why": "Open drawings of one part can disagree; the review uses them all, in a fixed order, until you say which governs.",
+        "about": [
+          {
+            "id": "doc:0003",
+            "name": "FICT-OKTAKALO-7002-TESSABRUN-DAVORUSK-LORIVENTA-QUILLSORN-HASKFENN-ARVOTULM-ZEPHOMBRA-NIXAKALO-MIRVEN-OKTAPELIN.SLDPRT"
+          },
+          {
+            "id": "doc:0009",
+            "name": "FICT-OKTAKALO-7002-A.SLDDRW"
+          },
+          {
+            "id": "doc:0010",
+            "name": "FICT-OKTAKALO-7002-B.SLDDRW"
+          },
+          {
+            "id": "doc:0011",
+            "name": "FICT-OKTAKALO-7002-C.SLDDRW"
+          },
+          {
+            "id": "doc:0012",
+            "name": "FICT-OKTAKALO-7002-D.SLDDRW"
+          },
+          {
+            "id": "doc:0013",
+            "name": "FICT-OKTAKALO-7002-E.SLDDRW"
+          }
+        ]
+      }
+    ]
+  }
+}

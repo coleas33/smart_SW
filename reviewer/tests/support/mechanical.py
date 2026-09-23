@@ -1032,8 +1032,13 @@ class PackageBuilder:
 
 
 def load_generator(path: Path) -> ModuleType:
-    """Import a fixture generator from its file; the fixture tree is not a package."""
-    spec = importlib.util.spec_from_file_location(f"_generator_{path.parent.name}", path)
+    """Import a fixture generator from its file; the fixture tree is not a package.
+
+    The module is named for its folder and its file, so two generators in one folder (the pane
+    folder's) stay two modules in `sys.modules`."""
+    spec = importlib.util.spec_from_file_location(
+        f"_generator_{path.parent.name}_{path.stem}", path
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module

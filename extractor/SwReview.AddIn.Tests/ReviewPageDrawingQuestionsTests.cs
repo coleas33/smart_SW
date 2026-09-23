@@ -15,11 +15,17 @@ namespace SwReview.AddIn.Tests;
 /// (specs/011-drawing-context/contracts/questions.md sections 4 and 6, contracts/confirmed-open.md
 /// sections 1 and 5; plan.md: "no pane page changes").
 ///
-/// Hand-built, as feature 009's page lane built <see cref="SummarySample"/>: the backend that
-/// raises these questions and performs the open is another lane's (T046, T048, T076), so the
-/// summary here is written from the contract, modelled on the fictional `plate-drawing` fixture
-/// (reviewer/tests/fixtures/drawings) - the block beside its same-name drawing is the candidate,
-/// the plate shown by drawings A and B is the governing question.
+/// <b>What the page is given is the backend's.</b> `Fixtures/review-drawing-questions.json` is
+/// written by `reviewer/tests/fixtures/pane/generate_drawing_questions.py` from one scripted review
+/// played through the real runner, `check_drawings`, session writer and bridge client, and a Python
+/// test (`test_pane_drawing_fixture.py`) keeps it equal to a fresh generation (research R2.24):
+/// the summary's three drawing questions - the candidate question, a governing question offering
+/// the drawings by file name, and one whose stem the backend shortened and which offers nothing -
+/// the engineer's batch, every coverage event of the review in the order the backend emitted it,
+/// and the questions still open after the resumed turn. (The page lane first wrote these tests on
+/// hand-built samples from the contract; at integration the backend's `what`, `about`, "read from"
+/// lists and the bridge's wording of a host refusal differed from them, so the samples became the
+/// backend's own output.)
 ///
 /// What is pinned, because the backend depends on it and the page could break it:
 ///
@@ -38,69 +44,65 @@ public sealed class ReviewPageDrawingQuestionsTests
     /// <summary>`checks/drawing_context.CANDIDATE_CONFIRM` (contracts/questions.md section 4).</summary>
     public const string CandidateConfirm = "Yes, open it read-only and read it";
 
-    public const string CandidateQuestion =
-        "A drawing with the same name sits beside 1 reviewed file(s) but is not open. Should the review read it?";
+    public const string FileName = "review-drawing-questions.json";
 
-    public const string CandidateWhy =
-        "Fits, stacks and callouts stay unresolved without a drawing. The review opens a file only when you "
-        + "confirm it, read-only, and closes it again.";
+    private const string WriteCommand = "uv run python tests/fixtures/pane/generate_drawing_questions.py --write";
 
-    public const string GoverningQuestion = "2 open drawings show FICT-TULMKALO-3001. Which one governs it?";
-
-    public const string GoverningWhy =
-        "Open drawings of one part can disagree; the review uses them all, in a fixed order, until you say "
-        + "which governs.";
-
-    /// <summary>A governing question too long for buttons, its stem shortened by the backend.</summary>
-    public const string ShortenedQuestion =
-        "5 open drawings show FICT-OKTAKALO-5001-LONG-CONFIGURATION-SPECIFIC-NAME-THAT-THE-BACKEND-SHORTENS-"
-        + "UNTIL-IT-F\u2026. Which one governs it?";
-
-    private static readonly string[] CandidateOptions = { CandidateConfirm, "Review without it", "It is not the right drawing" };
-
-    private static readonly string[] GoverningOptions =
-        { "FICT-TULMKALO-3001.SLDDRW", "FICT-TULMKALO-3001-B.SLDDRW", "They all apply" };
-
-    private static readonly string[] QuestionIds = { "ER-003", "ER-004", "ER-005" };
-
-    /// <summary>
-    /// What the resumed turn reports, in the order the backend writes it: bucket, check, reason.
-    /// Deliberately not in any sorted order - `drawing.context` before `drawing.confirmed_open`,
-    /// which sorts first - so a page that sorted a bucket fails.
-    /// </summary>
-    private static readonly (string Bucket, string Check, string Reason)[] TurnCoverage =
-    {
-        ("checked", "drawing.context", "read from FICT-TULMKALO-3001.SLDDRW, FICT-TULMKALO-3001-B.SLDDRW; 2 views usable"),
-        ("checked", "drawing.confirmed_open", "opened read-only, read and closed (2 sheets)"),
-        ("unresolved", "drawing.confirmed_open",
-            "the read-only open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14)"),
-        ("skipped", "drawing.context", "no open drawing shows it"),
-        ("checked", "drawing.confirmed_open", "read as it stood; it was already open, so it was left open"),
-    };
+    private static readonly Lazy<JsonElement> Fixture = new Lazy<JsonElement>(ReadFixture);
 
     private static readonly Lazy<Run> Scripted = new Lazy<Run>(Drive);
+
+    private static JsonElement[] Asked => Items(Fixture.Value.GetProperty("questions_asked"));
+
+    private static JsonElement[] OpenAfter => Items(Fixture.Value.GetProperty("questions_open_after"));
+
+    private static (string RequestId, string Answer)[] Answers =>
+        Fixture.Value.GetProperty("answers").EnumerateArray()
+            .Select(pair => (pair[0].GetString()!, pair[1].GetString()!))
+            .ToArray();
+
+    /// <summary>Every `coverage` event body of the review, in the order the backend emitted it.</summary>
+    private static JsonElement[] Coverage => Fixture.Value.GetProperty("coverage").EnumerateArray().ToArray();
+
+    // ---- the fixture is the one these tests are about -----------------------------------------
+
+    /// <summary>
+    /// The backend's candidate question comes first and its first answer is, ordinal-equal, the
+    /// word this page test pins; the page's trimming of answers cannot change it.
+    /// </summary>
+    [Fact]
+    public void TheFixturesFirstQuestionIsTheCandidateQuestionAndItsFirstAnswerIsTheConfirmation()
+    {
+        Assert.Equal(3, Asked.Length);
+        string first = Strings(Asked[0], "options")[0];
+        Assert.True(string.Equals(CandidateConfirm, first, StringComparison.Ordinal), "the backend offers: " + first);
+        Assert.Equal(first.Trim(), first);
+        Assert.Equal(Answers[0], (Asked[0].GetProperty("id").GetString()!, CandidateConfirm));
+    }
 
     // ---- the candidate question ---------------------------------------------------------------
 
     /// <summary>
     /// The candidate question in the backend's words: the three answers as buttons in the order
-    /// offered, the goal it blocks, the reviewed file it is about, and the backend's `what` and
+    /// offered, the goal it blocks, the reviewed files it is about, and the backend's `what` and
     /// `why` behind the fold.
     /// </summary>
     [Fact]
     public void TheCandidateQuestionIsAskedInTheBackendsWordsWithItsThreeAnswersInOrder()
     {
         JsonElement first = Scripted.Value.First;
+        JsonElement asked = Asked[0];
 
         Assert.False(first.GetProperty("hidden").GetBoolean(), "#questions stayed hidden.");
         Assert.Equal("Question 1 of 3", first.GetProperty("position").GetString());
-        Assert.Equal(CandidateQuestion, first.GetProperty("question").GetString());
-        Assert.Equal("Blocks: Drawings", first.GetProperty("blocks").GetString());
-        Assert.Equal("About: FICT-TULMSORN-3002.SLDPRT", first.GetProperty("about").GetString());
-        Assert.Equal(CandidateOptions, ReviewPageDriver.Strings(first, "options"));
+        Assert.Equal(asked.GetProperty("question").GetString(), first.GetProperty("question").GetString());
+        Assert.Equal("Blocks: " + asked.GetProperty("blocks_title").GetString(), first.GetProperty("blocks").GetString());
+        Assert.Equal(About(asked), first.GetProperty("about").GetString());
+        Assert.Equal(Strings(asked, "options"), ReviewPageDriver.Strings(first, "options"));
+        Assert.Equal(3, ReviewPageDriver.Strings(first, "options").Length);
         Assert.False(first.GetProperty("hasBox").GetBoolean(), "a question with offered answers has a box.");
-        Assert.Contains(CandidateWhy, first.GetProperty("foldText").GetString()!);
-        Assert.Contains("FICT-TULMSORN-3002.SLDDRW", first.GetProperty("foldText").GetString()!);
+        Assert.Contains(asked.GetProperty("why").GetString()!, first.GetProperty("foldText").GetString()!);
+        Assert.Contains(asked.GetProperty("what").GetString()!, first.GetProperty("foldText").GetString()!);
         Assert.Equal(0, first.GetProperty("injected").GetInt32());
     }
 
@@ -111,15 +113,16 @@ public sealed class ReviewPageDrawingQuestionsTests
     public void AGoverningQuestionOffersTheDrawingsByFileNameThenTheyAllApply()
     {
         JsonElement second = Scripted.Value.Second;
+        JsonElement asked = Asked[1];
 
         Assert.Equal("Question 2 of 3", second.GetProperty("position").GetString());
-        Assert.Equal(GoverningQuestion, second.GetProperty("question").GetString());
-        Assert.Equal(GoverningOptions, ReviewPageDriver.Strings(second, "options"));
+        Assert.Equal(asked.GetProperty("question").GetString(), second.GetProperty("question").GetString());
+        Assert.Equal(Strings(asked, "options"), ReviewPageDriver.Strings(second, "options"));
+        Assert.Equal("They all apply", ReviewPageDriver.Strings(second, "options").Last());
         Assert.Equal(JsonValueKind.Null, second.GetProperty("blocks").ValueKind);
-        Assert.Equal(
-            "About: FICT-TULMKALO-3001.SLDPRT, FICT-TULMKALO-3001.SLDDRW, FICT-TULMKALO-3001-B.SLDDRW",
-            second.GetProperty("about").GetString());
-        Assert.Contains(GoverningWhy, second.GetProperty("foldText").GetString()!);
+        Assert.Equal(About(asked), second.GetProperty("about").GetString());
+        Assert.Contains(asked.GetProperty("why").GetString()!, second.GetProperty("foldText").GetString()!);
+        Assert.Contains(asked.GetProperty("what").GetString()!, second.GetProperty("foldText").GetString()!);
     }
 
     /// <summary>
@@ -130,9 +133,11 @@ public sealed class ReviewPageDrawingQuestionsTests
     public void AGoverningQuestionWithNoOfferedAnswersHasABoxAndItsShortenedQuestionIsPrintedAsSent()
     {
         JsonElement third = Scripted.Value.Third;
+        string question = Asked[2].GetProperty("question").GetString()!;
 
+        Assert.Contains("\u2026", question);
         Assert.Equal("Question 3 of 3", third.GetProperty("position").GetString());
-        Assert.Equal(ShortenedQuestion, third.GetProperty("question").GetString());
+        Assert.Equal(question, third.GetProperty("question").GetString());
         Assert.True(third.GetProperty("hasBox").GetBoolean(), "a question with no offered answers has no box.");
         Assert.Empty(ReviewPageDriver.Strings(third, "options"));
     }
@@ -156,34 +161,38 @@ public sealed class ReviewPageDrawingQuestionsTests
 
         JsonElement[] answers = JsonDocument.Parse(post.GetProperty("body").GetString()!).RootElement
             .GetProperty("answers").EnumerateArray().ToArray();
-        Assert.Equal(new[] { QuestionIds[0], QuestionIds[1] }, answers.Select(a => a.GetProperty("request_id").GetString()).ToArray());
-        Assert.True(
-            string.Equals(CandidateConfirm, answers[0].GetProperty("answer").GetString(), StringComparison.Ordinal),
-            "the confirmation was not sent as the offered words: " + answers[0].GetProperty("answer").GetString());
-        Assert.True(
-            string.Equals("They all apply", answers[1].GetProperty("answer").GetString(), StringComparison.Ordinal),
-            "the governing answer was not sent as the offered words.");
+        Assert.Equal(Answers.Select(pair => pair.RequestId).ToArray(), answers.Select(a => a.GetProperty("request_id").GetString()).ToArray());
+        for (int index = 0; index < answers.Length; index++)
+        {
+            string? sent = answers[index].GetProperty("answer").GetString();
+            Assert.True(
+                string.Equals(Answers[index].Answer, sent, StringComparison.Ordinal),
+                "an answer was not sent as the offered words: " + sent);
+        }
     }
 
     /// <summary>
-    /// What the confirmed open did is the backend's coverage, and the page prints it verbatim, in
-    /// the order it arrived within each bucket: read and closed, read as it stood, and the
-    /// not-validated sentence the switch answers while it is off.
+    /// What the review's checks and the confirmed opens found is the backend's coverage, and the
+    /// page prints it verbatim, in the order it arrived within each bucket: the drawing context of
+    /// each reviewed document, then each confirmed candidate - read and closed, refused while the
+    /// seam is off (in the bridge's words), read as it stood. The checked bucket arrives out of
+    /// sorted order, so a page that sorted it would fail here.
     /// </summary>
     [Fact]
-    public void TheConfirmedOpensOutcomesArePrintedVerbatimInTheBackendsOrder()
+    public void TheCoverageIsPrintedVerbatimInTheBackendsOrder()
     {
         JsonElement coverage = Scripted.Value.Coverage;
 
-        Assert.Equal(
-            TurnCoverage.Where(row => row.Bucket == "checked").Select(Line).ToArray(),
-            ReviewPageDriver.Strings(coverage, "checked"));
-        Assert.Equal(
-            TurnCoverage.Where(row => row.Bucket == "unresolved").Select(Line).ToArray(),
-            ReviewPageDriver.Strings(coverage, "unresolved"));
-        Assert.Equal(
-            TurnCoverage.Where(row => row.Bucket == "skipped").Select(Line).ToArray(),
-            ReviewPageDriver.Strings(coverage, "skipped"));
+        foreach (string bucket in new[] { "checked", "unresolved", "skipped" })
+        {
+            string[] expected = Coverage
+                .Where(row => row.GetProperty("bucket").GetString() == bucket)
+                .Select(row => Line(row.GetProperty("item")))
+                .ToArray();
+            Assert.NotEmpty(expected);
+            Assert.Equal(expected, ReviewPageDriver.Strings(coverage, bucket));
+        }
+
         Assert.Equal(0, coverage.GetProperty("injected").GetInt32());
     }
 
@@ -197,8 +206,9 @@ public sealed class ReviewPageDrawingQuestionsTests
     {
         JsonElement after = Scripted.Value.AfterTurn;
 
+        JsonElement open = Assert.Single(OpenAfter);
         Assert.Equal("Question 1 of 1", after.GetProperty("position").GetString());
-        Assert.Equal(ShortenedQuestion, after.GetProperty("question").GetString());
+        Assert.Equal(open.GetProperty("question").GetString(), after.GetProperty("question").GetString());
     }
 
     /// <summary>
@@ -228,21 +238,23 @@ public sealed class ReviewPageDrawingQuestionsTests
     private static Run Drive()
     {
         var run = new Run();
+        string confirm = Answers[0].Answer;
+        string governing = Answers[1].Answer;
 
         ReviewPageDriver.Run(
             null,
             async driver =>
             {
-                await driver.RouteAttention("chat-1", SummarySample.Json(summary => Ask(summary, 0, 1, 2)));
+                await driver.RouteAttention("chat-1", SummarySample.Json(summary => Ask(summary, "questions_asked")));
                 await driver.StartReview();
                 await driver.EndSession("chat-1");
                 run.First = await driver.Read(ReadPanel);
                 run.Second = await driver.Read(Press("question-next") + ReadPanel);
                 run.Third = await driver.Read(Press("question-next") + ReadPanel);
 
-                // Skip the third, go back, choose "They all apply" on the second and confirm the first.
-                await driver.Read(Press("question-skip") + Press("question-previous") + Option(2)
-                    + Press("question-previous") + Option(0) + "return JSON.stringify({ok: true});");
+                // Skip the third, go back, choose the batch's answer on the second and confirm the first.
+                await driver.Read(Press("question-skip") + Press("question-previous") + Option(Asked[1], governing)
+                    + Press("question-previous") + Option(Asked[0], confirm) + "return JSON.stringify({ok: true});");
 
                 await driver.Route("POST", "/sessions/chat-1/evidence", 202, "{}");
                 await driver.ClearCalls();
@@ -250,19 +262,17 @@ public sealed class ReviewPageDrawingQuestionsTests
                 await driver.Settle();
                 run.SentCalls = await driver.Calls();
 
-                // The resumed turn: the backend opened, read and closed before resuming, and says
-                // so in coverage; the answered questions are no longer open.
+                // The review's coverage as the backend emitted it, the confirmed opens last: the
+                // backend opened, read and closed before resuming; the answered questions are no
+                // longer open.
                 int seq = 10;
-                foreach ((string bucket, string check, string reason) in TurnCoverage)
+                foreach (JsonElement row in Coverage)
                 {
-                    await driver.Push("chat-1", seq++, "coverage", JsonSerializer.Serialize(new
-                    {
-                        bucket,
-                        item = new { check, status = bucket, reason },
-                    }));
+                    // One line per SSE frame: the fixture is indented, the frame's data is not.
+                    await driver.Push("chat-1", seq++, "coverage", JsonSerializer.Serialize(row));
                 }
 
-                await driver.RouteAttention("chat-1", SummarySample.Json(summary => Ask(summary, 2)));
+                await driver.RouteAttention("chat-1", SummarySample.Json(summary => Ask(summary, "questions_open_after")));
                 await driver.EndSession("chat-1");
                 run.Coverage = await driver.Read(ReadCoverage);
                 run.AfterTurn = await driver.Read(ReadPanel);
@@ -271,68 +281,39 @@ public sealed class ReviewPageDrawingQuestionsTests
         return run;
     }
 
-    /// <summary>The summary's questions replaced by the drawing questions at these indexes.</summary>
-    private static void Ask(JsonObject summary, params int[] indexes)
-    {
-        var items = new JsonArray();
-        foreach (int index in indexes)
-        {
-            items.Add(JsonNode.Parse(JsonSerializer.Serialize(Questions()[index])));
-        }
+    /// <summary>The summary's questions replaced by the fixture's block of that name.</summary>
+    private static void Ask(JsonObject summary, string block) =>
+        summary["questions"] = JsonNode.Parse(Fixture.Value.GetProperty(block).GetRawText());
 
-        summary["questions"] = new JsonObject
-        {
-            ["count"] = indexes.Length,
-            ["text"] = indexes.Length == 1 ? "1 question for you" : indexes.Length + " questions for you",
-            ["items"] = items,
-        };
+    private static JsonElement ReadFixture()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "Fixtures", FileName);
+        Assert.True(
+            File.Exists(path),
+            FileName + " was not copied next to the test assembly; check the Content item in the csproj, "
+            + "and regenerate it with `" + WriteCommand + "` from reviewer/.");
+        return JsonDocument.Parse(File.ReadAllText(path)).RootElement.Clone();
     }
 
-    /// <summary>The three drawing questions as `summary.questions.items` carries them (009 contracts/questions.md).</summary>
-    private static object[] Questions() => new object[]
-    {
-        new
-        {
-            id = QuestionIds[0],
-            question = CandidateQuestion,
-            options = CandidateOptions,
-            blocks = "drawing.manufacturing_inputs",
-            blocks_title = "Drawings",
-            what = "Same-name drawings beside reviewed files: FICT-TULMSORN-3002.SLDDRW",
-            why = CandidateWhy,
-            about = new object[] { new { id = "doc:0003", name = "FICT-TULMSORN-3002.SLDPRT" } },
-        },
-        new
-        {
-            id = QuestionIds[1],
-            question = GoverningQuestion,
-            options = GoverningOptions,
-            blocks = (string?)null,
-            blocks_title = (string?)null,
-            what = "doc:0006 FICT-TULMKALO-3001.SLDDRW, doc:0007 FICT-TULMKALO-3001-B.SLDDRW",
-            why = GoverningWhy,
-            about = new object[]
-            {
-                new { id = "doc:0002", name = "FICT-TULMKALO-3001.SLDPRT" },
-                new { id = "doc:0006", name = "FICT-TULMKALO-3001.SLDDRW" },
-                new { id = "doc:0007", name = "FICT-TULMKALO-3001-B.SLDDRW" },
-            },
-        },
-        new
-        {
-            id = QuestionIds[2],
-            question = ShortenedQuestion,
-            options = new string[0],
-            blocks = (string?)null,
-            blocks_title = (string?)null,
-            what = "doc:0011 to doc:0015, five drawings of FICT-OKTAKALO-5001",
-            why = GoverningWhy,
-            about = new object[] { new { id = "doc:0010", name = "FICT-OKTAKALO-5001.SLDPRT" } },
-        },
-    };
+    private static JsonElement[] Items(JsonElement block) => block.GetProperty("items").EnumerateArray().ToArray();
 
-    /// <summary>A coverage line as `render.coverageBucket` writes it: "check - reason".</summary>
-    private static string Line((string Bucket, string Check, string Reason) row) => row.Check + " - " + row.Reason;
+    private static string[] Strings(JsonElement element, string name) =>
+        element.GetProperty(name).EnumerateArray().Select(item => item.GetString()!).ToArray();
+
+    /// <summary>The about line as the panel writes it: "About: " and the names, comma separated.</summary>
+    private static string About(JsonElement question) =>
+        "About: " + string.Join(", ", question.GetProperty("about").EnumerateArray().Select(item => item.GetProperty("name").GetString()));
+
+    /// <summary>
+    /// A coverage line as `render.coverageBucket` writes it: "check - reason", then " [error]" when
+    /// the item carries one (the refused read carries the bridge error's class).
+    /// </summary>
+    private static string Line(JsonElement item)
+    {
+        string line = item.GetProperty("check").GetString() + " - " + item.GetProperty("reason").GetString();
+        JsonElement error = item.GetProperty("error");
+        return error.ValueKind == JsonValueKind.Null ? line : line + " [" + error.GetString() + "]";
+    }
 
     /// <summary>The shared scripts the Review page's index.html loads beside its own.</summary>
     private static KeyValuePair<string, string>[] SharedScripts() =>
@@ -344,8 +325,16 @@ public sealed class ReviewPageDrawingQuestionsTests
     private static string Press(string action) =>
         "document.querySelector('#questions [data-action=\"" + action + "\"]').click();";
 
-    private static string Option(int index) =>
-        "document.querySelectorAll('#questions [data-action=\"question-option\"]')[" + index + "].click();";
+    /// <summary>
+    /// Clicks the button of <paramref name="question"/> whose offered words are
+    /// <paramref name="answer"/>: the test finds it by the backend's order, the page never does.
+    /// </summary>
+    private static string Option(JsonElement question, string answer)
+    {
+        int index = Array.IndexOf(Strings(question, "options"), answer);
+        Assert.True(index >= 0, "'" + answer + "' is not one of the question's offered answers.");
+        return "document.querySelectorAll('#questions [data-action=\"question-option\"]')[" + index + "].click();";
+    }
 
     private const string ReadPanel = @"
 var section = document.getElementById('questions');

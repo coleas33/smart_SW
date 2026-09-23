@@ -19,6 +19,7 @@ this module pins three things:
 from __future__ import annotations
 
 import math
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -564,3 +565,15 @@ def test_the_small_assembly_weighs_its_part_plus_two_pins(small: EvidencePackage
     assert root.mass is not None
     assert root.mass.mass_kg == pytest.approx(total)
     assert sorted(documents[item.document_id].kind for item in resolved) == ["part"] * 3
+
+
+def test_two_generators_in_one_folder_load_as_two_modules() -> None:
+    """The pane folder holds two generators (feature 009's pane fixture and feature 011's
+    drawing questions); loading one must not replace the other in `sys.modules`."""
+    pane = FIXTURES.parent / "pane"
+    first = mechanical.load_generator(pane / "generate_pane_fixture.py")
+    second = mechanical.load_generator(pane / "generate_drawing_questions.py")
+
+    assert first.__name__ != second.__name__
+    assert sys.modules[first.__name__] is first
+    assert sys.modules[second.__name__] is second
