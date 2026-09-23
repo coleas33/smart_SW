@@ -57,13 +57,16 @@ public class RemodelGuardTests
     /// The second block is feature 006's, added with the cut-list and drawing phases
     /// (`006-standards-check/research.md` R8, tabulated in contracts/guard-allowlist.md under
     /// "Denials added after stage 1"), and the third feature 010's, added with the Hole
-    /// Wizard and tolerance reads (the "Feature 010" table of the same file). Every one of
-    /// them is a narrowing: none is on the stage-1 allowlist, so
+    /// Wizard and tolerance reads (the "Feature 010" table of the same file). The fourth is
+    /// feature 011's: every writer of the 24 drawing families and the named shared members,
+    /// generated from the interop into the "Feature 011" table of the same file, and read from
+    /// there rather than typed a second time (<see cref="DrawingFamilyDenylistTests"/>). Every one
+    /// of them is a narrowing: none is on the stage-1 allowlist, so
     /// <see cref="Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive"/> and
     /// <see cref="RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse"/>
     /// answer exactly as they did before it.
     /// </summary>
-    private static readonly string[] ExpectedDeniedMembers =
+    private static readonly string[] ExpectedDeniedMembers = new[]
     {
         "EditRebuild3",
         "ForceRebuild3",
@@ -171,7 +174,11 @@ public class RemodelGuardTests
         "set_MidCounterSinkAngle",
         "set_FarCounterSinkAngle",
         "set_ThreadAngle",
-    };
+    }
+        // Feature 011 (T003): the generated table, parsed - 600-odd names that a hand copy here
+        // would only let drift from the table the guard is generated with.
+        .Concat(DrawingFamilyDenylistTests.ExpectedMembers)
+        .ToArray();
 
     /// <summary><see cref="ReadOnlyGuard.DeniedPrefixes"/> as this allowlist was written against it.</summary>
     private static readonly string[] ExpectedDeniedPrefixes =

@@ -29,7 +29,7 @@ public class MutatingCallError : Exception
 /// stale allowlist fails closed on harmless reads while teaching nobody anything. Add a
 /// member here the moment a phase touches an API family that can write.
 /// </summary>
-public static class ReadOnlyGuard
+public static partial class ReadOnlyGuard
 {
     /// <summary>Members refused outright, matched case-insensitively.</summary>
     private static readonly HashSet<string> DeniedMemberSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -234,6 +234,18 @@ public static class ReadOnlyGuard
 
     /// <inheritdoc cref="DeniedMembers" />
     public static readonly IReadOnlyCollection<string> DeniedPrefixes = DeniedPrefixArray;
+
+    /// <summary>
+    /// Feature 011 (T004): the generated drawing-family denials (<c>ReadOnlyGuard.Drawing.cs</c>,
+    /// the "Feature 011" table of <c>004-resilient-remodeler/contracts/guard-allowlist.md</c>) join
+    /// the set here. A static constructor runs after every static field initializer of both
+    /// partial files, so the order the compiler takes the two files in cannot matter, and
+    /// <see cref="DeniedMembers"/>, being the same set, reads them too.
+    /// </summary>
+    static ReadOnlyGuard()
+    {
+        DeniedMemberSet.UnionWith(DrawingFamilyDeniedMembers);
+    }
 
     /// <summary>Image extensions SaveAs3 may write. Anything else is a model write.</summary>
     private static readonly HashSet<string> AllowedSaveAsExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

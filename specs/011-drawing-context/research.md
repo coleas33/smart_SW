@@ -107,7 +107,8 @@ is complete for the 24 families.
 first", and feature 012 will need a gated creator whose allowlist overrides exactly the members
 it uses - so every drawing writer must be refused by default before any drawing-writing code
 exists. VERIFIED by reflection on 32.5.0.48: the grammar matches 621 distinct names across the 24
-families (`IDrawingDoc` 216, `IView` 81, `IDisplayDimension` 73, `ITableAnnotation` 50,
+families (*landed as 633 by the generator, T004; the generated table in 004's `guard-allowlist.md`
+is the count*) (`IDrawingDoc` 216, `IView` 81, `IDisplayDimension` 73, `ITableAnnotation` 50,
 `IAnnotation` 39, `INote` 34, `IGtol` 26, `ISheet` 22, `IDimension` 19, `IBomFeature` 17,
 `ICenterMark` 10, `ISFSymbol` 10, `IDimensionTolerance` 9, `IBomTableAnnotation` 9, `IDatumTag` 6,
 `IDatumTargetSym` 6, `IWeldSymbol` 6, `IGtolFrame` 5, `IRevisionTableAnnotation` 3, `ITitleBlock` 1,
@@ -115,7 +116,10 @@ families (`IDrawingDoc` 216, `IView` 81, `IDisplayDimension` 73, `ITableAnnotati
 `set_Name` and `Select2` are the two re-modeler exclusions, and **580 are new**. VERIFIED no bare
 name the extractor passes to `SwGate.Call` today collides with a new denial (183 gated names;
 the only matches are `ActivateSheet` and `ActivateView`, already denied and named in tests, and the
-re-modeler's `Feature.Select2` write site, excluded). A hand list of 580 names would be a
+re-modeler's `Feature.Select2` write site, excluded). *Corrected 2026-09-23 by T003's read audit*:
+feature 004 gates `OpenDoc7` and `NewDocument` by bare name through constants, which the literal
+scan missed; both are excluded from the shared row with that reason (`contracts/guard.md`
+section 3). A hand list of 580 names would be a
 transcription that drifts; the tolerance lesson of feature 005's figures ("regenerated, never
 transcribed") applies. The guard stores bare names (`ReadOnlyGuard.cs:35`), so the families are
 denied by name; an interface-qualified guard is feature 004's pattern for writes and is not needed
