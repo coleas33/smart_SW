@@ -66,6 +66,7 @@ from swreview.tools import (
     checks_fit,
     checks_interference,
     checks_mechanical,
+    drawings,
     measure,
     query,
     remodel_plan,
@@ -206,6 +207,19 @@ def standards_tools() -> tuple[Callable[..., Any], ...]:
     from swreview.tools import standards_checks
 
     return (standards_checks.check_standards,)
+
+
+def drawing_tools() -> tuple[Callable[..., Any], ...]:
+    """The drawing family (feature 011): offered only when the package carries drawing evidence.
+
+    Deliberately outside `REGISTRATIONS`, exactly as `standards_tools` is: `_offered` adds it
+    when `tools/drawings.drawing_evidence` holds for the context's package - a drawing record or
+    a drawing candidate - so every package without one offers exactly the tools it offered
+    before, and `TOOL_FUNCTIONS`, `MCP_TOOL_FUNCTIONS` and the terminal profile's
+    `enabled_tools` never carry it (`contracts/questions.md` section 1); a test asserts all
+    three.
+    """
+    return (drawings.check_drawings,)
 
 
 REGISTRATIONS: tuple[Registration, ...] = (
@@ -896,7 +910,8 @@ class ToolRegistry:
         none is subject to a tier: a tier withholds a *review* tool on the evidence the
         package carries, and a bridge call, a proposal into a plan and a standards check
         over an already-decided graded set are none of them. `get_finding` comes with
-        payload slimming (feature 008), beside `compact_query`.
+        payload slimming (feature 008), beside `compact_query`. The drawing family (feature
+        011) comes last, when the package carries drawing evidence.
         """
         functions = self.functions
         if tier is not None:
@@ -911,6 +926,8 @@ class ToolRegistry:
             functions = (*functions, *self.remodel_functions)
         if getattr(context, STANDARDS_RUN_ATTRIBUTE, None) is not None:
             functions = (*functions, *standards_tools())
+        if drawings.drawing_evidence(context.ir):
+            functions = (*functions, *drawing_tools())
         return functions
 
     def dispatch(

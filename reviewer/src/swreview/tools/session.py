@@ -35,6 +35,7 @@ from swreview.report.session import (
     EvidenceRequest,
 )
 from swreview.tools.context import (
+    ToolContext,
     current_context,
     error_result,
     not_one_of,
@@ -95,8 +96,33 @@ def request_evidence(
     refusal = _short_form_refusal(question, options or [], blocks)
     if refusal is not None:
         return error_result(refusal)
-    request = EvidenceRequest(
-        id=next(context.evidence_request_ids),
+    request = record_evidence_request(
+        context, what, why, entity_ids, question=question, options=options, blocks=blocks
+    )
+    return {"status": "open", "evidence_request": as_json(request)}
+
+
+def record_evidence_request(
+    context: ToolContext,
+    what: str,
+    why: str,
+    entity_ids: list[str],
+    question: str | None = None,
+    options: list[str] | None = None,
+    blocks: str | None = None,
+) -> EvidenceRequest:
+    """Open one evidence request on the session and announce it: the one writer (feature 011
+    `contracts/questions.md` section 4).
+
+    `request_evidence` calls it after its refusals, and feature 011's drawing check writes its
+    questions through it, so the pane's panel and feature 008's batch route serve both. The
+    request is validated through `EvidenceRequest` **before** its id is allocated, so a refused
+    one takes no number; a validation error is the caller's to prevent, as `request_evidence`'s
+    refusals do. Raises `ValueError` outside a review session.
+    """
+    context.require_session()  # first, so a sessionless context refuses before anything else
+    draft = EvidenceRequest(
+        id="ER-000",  # a placeholder of the right shape: validation runs before any id is taken
         what=what,
         why=why,
         entity_ids=list(entity_ids),
@@ -107,8 +133,9 @@ def request_evidence(
         options=list(options or []),
         blocks=blocks,
     )
+    request = draft.model_copy(update={"id": next(context.evidence_request_ids)})
     context.record_evidence_request(request)
-    return {"status": "open", "evidence_request": as_json(request)}
+    return request
 
 
 def _short_form_refusal(question: str | None, options: list[str], blocks: str | None) -> str | None:

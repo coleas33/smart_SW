@@ -22,6 +22,7 @@ a real `InvestigationStep` with `tool.started`/`tool.finished`, its findings and
 | 1 | `bridge_interference(component_ids=[], configuration=<active>, settings=PRERUN_INTERFERENCE_SETTINGS)` | `context.bridge` is set, the root is an assembly and the package has at least two components |
 | 2 | `check_rms_part()`, `check_rms_equations()`, `check_rms_assembly()` | always, unless withheld (lever 4) |
 | 3 | `check_interference_group(group_key=K)`, once per distinct group key | for every group `groups_of` enumerates, the live rows included |
+| 3b | `check_drawings()` (feature 011, *amended 2026-09-23*), after every `CODE_FIRST_CHECKS` name | when the package carries drawing evidence - a drawing record or a drawing candidate (`tools/drawings.drawing_evidence`, the condition `ToolRegistry._offered` offers it on; 011 `contracts/questions.md` section 2) |
 | 4 | `check_standards()` | when a standards run is attached (a profile named and usable) |
 
 `PRERUN_INTERFERENCE_SETTINGS`:
@@ -105,6 +106,7 @@ The opening message is never pruned (`model-view.md` section 7).
 | `check_interference_group` | `(tool, group_key)` |
 | `bridge_interference` | `(tool, configuration, sorted-JSON settings)`, only when `component_ids` is empty |
 | `check_joints`, `check_mass_material`, `check_hygiene`: every name in feature 010's `CODE_FIRST_CHECKS`, read when the key is asked for (*landed as*, T044, research R2.52; 010 T092-T093) | `(tool,)`, whatever arguments: they take none |
+| `check_drawings` (feature 011, *amended 2026-09-23*) | `(tool,)`, whatever arguments: it takes none |
 
 A hit records one real step through `registry.record_call` (status `ok`, no coverage, no finding
 event) and answers:
@@ -160,6 +162,7 @@ and `PrerunResult.withheld` holds them. A call *completed* when `PrerunCall.erro
 | `check_rms_part`, `check_rms_equations`, `check_rms_assembly` | all three were called, every call completed and none named a `document_id`; otherwise all three stay |
 | `check_interference_group` | it was called; every call completed; every group `groups_of` enumerates after the pre-run has a completed call for its key; no key is shared by two groups; `bridge_interference` is not offered to the model |
 | each name in feature 010's `CODE_FIRST_CHECKS` | it was called and every call completed |
+| `check_drawings` (feature 011) | it was called and the call completed |
 | `check_standards` | a standards run is attached, it was called and the call completed |
 | `bridge_interference`, `get_finding` and every other tool | never |
 
