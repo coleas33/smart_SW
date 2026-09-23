@@ -15,6 +15,7 @@ from typing import Any
 
 from swreview.agent.providers import AgentProvider, EffortLevel, ToolSet
 from swreview.findings import ReviewModel
+from swreview.report.names import component_names
 
 MAX_EXPLANATIONS = 5
 """The maximum number of amplified rows the model may explain in one request."""
@@ -119,7 +120,7 @@ def parse_explanations(
     return parsed
 
 
-def _finding_payload(finding: Any, component_names: Mapping[str, str]) -> dict[str, Any]:
+def _finding_payload(finding: Any, names: Mapping[str, str]) -> dict[str, Any]:
     """Serialize bounded, evidence-facing fields for one finding member."""
     source_ids = list(finding.capture_ids)
     source_ids.extend(str(item) for item in finding.tool_result_ids)
@@ -132,7 +133,7 @@ def _finding_payload(finding: Any, component_names: Mapping[str, str]) -> dict[s
         "status": finding.status,
         "severity": finding.severity,
         "component_ids": list(finding.component_ids),
-        "component_names": [component_names.get(item, item) for item in finding.component_ids],
+        "component_names": [names.get(item, item) for item in finding.component_ids],
         "observed": finding.observed,
         "requirement": finding.requirement,
         "recommended_action": finding.recommended_action,
@@ -152,17 +153,13 @@ def _prompt(
     findings_by_id = (
         {finding.id: finding for finding in session.findings} if session is not None else {}
     )
-    component_names = (
-        {component.id: component.name for component in package.components}
-        if package is not None
-        else {}
-    )
+    names = component_names(package) if package is not None else {}
     payload = [
         {
             "finding_id": row.finding_id,
             "priority_reason": row.reason,
             "members": [
-                _finding_payload(findings_by_id[member_id], component_names)
+                _finding_payload(findings_by_id[member_id], names)
                 for member_id in row.member_finding_ids
                 if member_id in findings_by_id
             ]

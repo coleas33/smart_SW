@@ -46,10 +46,9 @@ public sealed class ErrorLabelsCoverTheHostTests
 
     /// <summary>
     /// Every one of them is a key of the words file's `labels.errors`. The words file is the py
-    /// lane's T008 (`reviewer/src/swreview/report/review_words_v1.yaml`); this test is skipped
-    /// until it lands, and its skip is removed in the same change.
+    /// lane's T008 (`reviewer/src/swreview/report/review_words_v1.yaml`).
     /// </summary>
-    [Fact(Skip = "waits for feature 009 py T008: reviewer/src/swreview/report/review_words_v1.yaml does not exist yet")]
+    [Fact]
     public void EveryClassTheReviewTabCanShowHasASentenceInTheWordsFile()
     {
         string words = Path.Combine(RepositoryRoot(), "reviewer", "src", "swreview", "report", "review_words_v1.yaml");
