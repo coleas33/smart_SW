@@ -62,8 +62,11 @@ from swreview.agent.settings import (
     DEFAULT_EFFORT,
     DEFAULT_PROVIDER,
     LEVER_NAMES,
+    MODEL_VIEW_OFF,
     NO_STUDY,
     EfficiencySettings,
+    ModelViewSettings,
+    PaneDefaults,
     ProviderSettings,
     check_study_arm,
     configure_logging_redaction,
@@ -71,6 +74,7 @@ from swreview.agent.settings import (
     output_ceiling,
     redact,
 )
+from swreview.agent.settings import pane_defaults as pane_defaults_for
 from swreview.benchmark.compare import (
     carry_sign_offs,
     committed_sign_off_sources,
@@ -350,6 +354,85 @@ def _efficiency(
     return efficiency
 
 
+def _review_settings(
+    provider: ProviderName,
+    *,
+    pane_defaults: bool,
+    lever: Sequence[str] | None,
+    payload_slimming: bool,
+    history_pruning: bool,
+    prune_after: int | None,
+) -> tuple[EfficiencySettings, ModelViewSettings]:
+    """What one review's switches resolve to: its levers and its model view (feature 008).
+
+    The one resolver `swreview review` and `swreview benchmark replay` share, so the two
+    commands cannot read the same flags differently (`specs/008-checks-first-review/
+    contracts/cli.md`):
+
+    1. start from `pane_defaults(provider)` when `--pane-defaults` is given, else every
+       change off;
+    2. add the named levers through `efficiency_from_levers`, the pane's own included, so
+       every existing refusal applies (`--pane-defaults --lever coverage_stop` is
+       `GATED_ALONE`'s);
+    3. turn on `--payload-slimming` and `--history-pruning` when given;
+    4. `--prune-after N` sets the prune age, and is a usage error when N is below 1 or when
+       pruning is not on, naming the flags.
+    """
+    base = (
+        pane_defaults_for(provider)
+        if pane_defaults
+        else PaneDefaults(EfficiencySettings(), MODEL_VIEW_OFF)
+    )
+    pane_levers = [name for name, on in base.efficiency.model_dump().items() if on]
+    efficiency = _efficiency([*pane_levers, *(lever or ())], provider=provider)
+    slimming = base.model_view.payload_slimming or payload_slimming
+    pruning = base.model_view.history_pruning or history_pruning
+    age = base.model_view.prune_after_rounds
+    if prune_after is not None:
+        if prune_after < 1:
+            raise typer.BadParameter(f"--prune-after {prune_after}: the prune age is 1 or more")
+        if not pruning:
+            raise typer.BadParameter(
+                "--prune-after sets the age of history pruning, which is off: add "
+                "--history-pruning or --pane-defaults"
+            )
+        age = prune_after
+    return efficiency, ModelViewSettings(
+        payload_slimming=slimming, history_pruning=pruning, prune_after_rounds=age
+    )
+
+
+PaneDefaultsOption = Annotated[
+    bool,
+    typer.Option(
+        "--pane-defaults",
+        help="Run with exactly the settings a pane review runs with (checks first, parallel "
+        "calls on OpenAI, payload slimming, history pruning after two rounds).",
+    ),
+]
+PayloadSlimmingOption = Annotated[
+    bool,
+    typer.Option(
+        "--payload-slimming",
+        help="The model reads each result's view: references out, check digests, compact JSON.",
+    ),
+]
+HistoryPruningOption = Annotated[
+    bool,
+    typer.Option(
+        "--history-pruning",
+        help="Results the model has read for the prune age reach it as short stubs.",
+    ),
+]
+PruneAfterOption = Annotated[
+    int | None,
+    typer.Option(
+        "--prune-after",
+        help="The prune age in rounds (default 2); needs history pruning on.",
+    ),
+]
+
+
 @contextmanager
 def _redacting(settings: ProviderSettings) -> Iterator[Callable[[str], str]]:
     """Keep this run's key out of every log line, and hand back the redactor for the rest.
@@ -560,6 +643,10 @@ def review(
         int, typer.Option("--max-steps", help="Tool-call budget.")
     ] = DEFAULT_MAX_STEPS,
     lever: LeverOption = None,
+    pane_defaults: PaneDefaultsOption = False,
+    payload_slimming: PayloadSlimmingOption = False,
+    history_pruning: HistoryPruningOption = False,
+    prune_after: PruneAfterOption = None,
     explain_findings: Annotated[
         bool,
         typer.Option(
@@ -571,7 +658,14 @@ def review(
     json_output: JsonFlag = False,
 ) -> None:
     """Run the agent loop over a package; write session.json and report.md."""
-    efficiency = _efficiency(lever, provider=provider)
+    efficiency, model_view = _review_settings(
+        provider,
+        pane_defaults=pane_defaults,
+        lever=lever,
+        payload_slimming=payload_slimming,
+        history_pruning=history_pruning,
+        prune_after=prune_after,
+    )
     with _errors_as_exit_1():
         settings = _provider_settings(provider, model, effort)
         with _redacting(settings) as redactor:
@@ -584,6 +678,7 @@ def review(
                 key_source=settings.key_source,
                 max_steps=max_steps,
                 efficiency=efficiency,
+                model_view=model_view,
                 standards_profile=standards_profile,
                 explain_findings=explain_findings,
                 fail_tool=tuple(fail_tool or ()),
