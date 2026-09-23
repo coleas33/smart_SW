@@ -829,6 +829,13 @@ stay at `3-Core` as deviations, and the report says the judgement phase contribu
 `agent/providers` layer. Claude is not a provider in this product. The prompt is
 `agent/prompts/remodel_v1.md`, built through the shared `build_system_prompt`.
 
+*Amended 2026-09-23 (owner, decision 4A):* the remodel run's adapter is built by the same body
+as the review's. `remodel/runner.py::build_provider` stays the run's one entry point, refuses the
+scripted provider, and delegates to `cli.provider_factory` with no efficiency levers
+(`contracts/tools.md`, "Providers"). The run had its own copy of the construction body until
+then, and the copy carried the original's wrong `redact=` keyword, so the Gemini fix of `d47a91f`
+had to be made twice; one body cannot disagree with itself.
+
 **Not MCP tools.** The `propose_*` tools are registered on the remodel run's registry only. They
 do not appear in the MCP function list and they are not in the terminal profile's
 `enabled_tools`; a test asserts both.
