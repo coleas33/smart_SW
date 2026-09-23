@@ -82,6 +82,31 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
                 item.add_marker(skip)
 
 
+REQUIRE_TOKENIZER_ENV = "SWREVIEW_REQUIRE_TOKENIZER"
+"""Set to `1` by CI and `update-workstation.ps1`: a missing vocabulary fails, not skips."""
+
+
+@pytest.fixture
+def vocabulary() -> Path:
+    """The folder holding the `o200k_base` vocabulary, loaded and hash-checked.
+
+    The file is not in the repository (008 `contracts/tokenizer.md` section 2): each machine
+    fetches it once with `swreview tokenizer fetch`. Where it is absent, a test that needs an
+    exact token count is **skipped** with that command in the reason - unless
+    `SWREVIEW_REQUIRE_TOKENIZER=1`, which CI and the workstation update script set so that a
+    missing file is a failure there rather than a silently thinner run.
+    """
+    from swreview.tokens import TokenizerUnavailable, encoding, tokenizer_dir
+
+    try:
+        encoding()
+    except TokenizerUnavailable as exc:
+        if os.environ.get(REQUIRE_TOKENIZER_ENV) == "1":
+            pytest.fail(f"{REQUIRE_TOKENIZER_ENV}=1 and the tokenizer is unavailable: {exc}")
+        pytest.skip(str(exc))
+    return tokenizer_dir()
+
+
 @pytest.fixture
 def make_package() -> Callable[..., EvidencePackage]:
     """Build a minimal valid `EvidencePackage`; keyword arguments replace top-level fields."""

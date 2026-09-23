@@ -13,7 +13,8 @@
       3. git fetch, show what is about to arrive, git pull --ff-only origin main. A pull that
          cannot fast-forward means someone committed on this machine; that is reported and
          the script stops rather than merging.
-      4. uv sync --all-extras in reviewer\, then the reviewer's tests and ruff.
+      4. uv sync --all-extras in reviewer\, swreview tokenizer fetch (once per machine; a
+         vocabulary already in place is left alone), then the reviewer's tests and ruff.
       5. dotnet build of extractor\SwReview.sln, then its tests.
       6. With -Register, extractor\tools\register-addin.ps1 (which checks elevation itself).
          Registration survives rebuilds, so this is for a first install or a moved checkout.
@@ -115,8 +116,18 @@ finally {
 Push-Location $reviewer
 try {
     Invoke-Step "uv sync --all-extras" { uv sync --all-extras }
+    # The o200k_base vocabulary every token count uses lives in a per-user cache, never in the
+    # repository (specs\008-checks-first-review\contracts\tokenizer.md). The fetch downloads it
+    # once; a file already in place with the expected hash is left alone and nothing is fetched.
+    Invoke-Step "uv run swreview tokenizer fetch" { uv run swreview tokenizer fetch }
     if (-not $SkipTests) {
-        Invoke-Step "uv run pytest -q" { uv run pytest -q -p no:warnings }
+        # SWREVIEW_REQUIRE_TOKENIZER=1 turns a missing vocabulary into failing tests rather than
+        # skipped ones, so a seat without it cannot pass the gate by testing less.
+        Invoke-Step "uv run pytest -q" {
+            $env:SWREVIEW_REQUIRE_TOKENIZER = "1"
+            try { uv run pytest -q -p no:warnings }
+            finally { Remove-Item Env:SWREVIEW_REQUIRE_TOKENIZER -ErrorAction SilentlyContinue }
+        }
         Invoke-Step "uv run ruff check src tests" { uv run ruff check src tests }
     }
 }

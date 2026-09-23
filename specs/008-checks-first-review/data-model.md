@@ -37,6 +37,12 @@ stored result are new shapes outside the session; each is normative in `contract
 | `answers` | list[tuple[str, str]] | `(request_id, answer)` from the `evidence.answered` events before the turn; several are one batch (research R2.42) |
 | `rounds` | list[RecordedRound] | |
 | `end_reason` | str | From `turn.ended`; `stopped` turns drop their dangling call |
+| `user_tokens` | int \| None | *Landed as* (T016): a later turn's engineer message sized from the recorded growth (first input minus the previous committed turn's last main round and its output); `None` for the opening turn and when the previous round asked for calls |
+
+`Recording.growth_after(round)` (*landed as*, T016) is the next main round's input minus this
+round's input and output, or `None` when not observable (the last main round of a turn, a
+presentation round, a negative difference); the replay's estimation and the fixture generator
+both read it.
 
 ### `RecordedRound`
 
@@ -113,10 +119,10 @@ printable form of `finding_subject_key` minus the check.
 |---|---|
 | `TOKENIZER_NAME` | `"o200k_base"` |
 | `VOCABULARY_FILE_NAME` | `"fb374d419588a4632f3f557e76b4b70aebbca790"` (tiktoken's cache key for the encoding's URL) |
-| `VOCABULARY_PATH` | `<package>/tokenizer/<VOCABULARY_FILE_NAME>`, 3,613,922 bytes, marked `-text` |
+| `tokenizer_dir()` | the per-user cache (`SWREVIEW_TOKENIZER_DIR`, else `%LOCALAPPDATA%\SwReview\tokenizer` on Windows, else the XDG or `~/.cache` folder); the file is 3,613,922 bytes and is never in the repository (`contracts/tokenizer.md`, amended 2026-09-23) |
 | `ENCODING_SHA256` | the `expected_hash` tiktoken itself carries for `o200k_base` |
 | `count_tokens(text) -> int` | `len(encoding.encode(text, disallowed_special=()))`; the encoding loaded once |
-| `TokenizerUnavailable` | `RuntimeError`; one sentence naming the file and the expected hash |
+| `TokenizerUnavailable` | `RuntimeError`; one sentence naming the folder, the expected hash and `swreview tokenizer fetch` |
 
 ## 6. Settings (`agent/settings.py`)
 

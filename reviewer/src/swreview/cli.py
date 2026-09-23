@@ -134,6 +134,7 @@ from swreview.secrets import (
 from swreview.secrets import (
     secret_env_names as _secret_env_names,
 )
+from swreview.tokens import TokenizerUnavailable, fetch_vocabulary
 from swreview.tools import checks_fastener, checks_fit
 from swreview.tools.context import ToolContext, build_context, use_context
 from swreview.tools.query import ToolResult
@@ -167,12 +168,17 @@ remodel_app = typer.Typer(
     no_args_is_help=True,
     help="The resilient re-modeler: plan the reorganize stage without SOLIDWORKS.",
 )
+tokenizer_app = typer.Typer(
+    no_args_is_help=True,
+    help="The o200k_base vocabulary every token count uses: fetch it once per machine.",
+)
 app.add_typer(check_app, name="check")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(exceptions_app, name="exceptions")
 app.add_typer(chat_app, name="chat")
 app.add_typer(rms_app, name="rms")
 app.add_typer(remodel_app, name="remodel")
+app.add_typer(tokenizer_app, name="tokenizer")
 
 FAKE_REVIEW_SCRIPT: tuple[ScriptedTurn, ...] = (
     ScriptedTurn(
@@ -2543,6 +2549,31 @@ def audit_secrets(
     _emit(payload, lines, json_output)
     if leaks or unreadable:
         raise typer.Exit(1)
+
+
+@tokenizer_app.command("fetch")
+def tokenizer_fetch(
+    source: Annotated[
+        Path | None,
+        typer.Option(
+            "--from",
+            help="A copy of the vocabulary this machine already has, for a machine without "
+            "network.",
+        ),
+    ] = None,
+) -> None:
+    """Put the o200k_base vocabulary into this user's cache, hash-checked, once per machine.
+
+    The only command that may reach the network for the tokenizer (008
+    `contracts/tokenizer.md` section 3): without `--from` it downloads through tiktoken's own
+    loader into a scratch folder; either way the file's sha256 is checked before it is
+    copied into `swreview.tokens.tokenizer_dir()`, and a file already there with the
+    expected hash is left untouched. Any failure is one sentence and exit 1.
+    """
+    with _errors_as_exit_1(TokenizerUnavailable):
+        target, written = fetch_vocabulary(source)
+    state = "written" if written else "already in place"
+    typer.echo(f"o200k_base vocabulary {state}: {target}")
 
 
 if __name__ == "__main__":  # pragma: no cover

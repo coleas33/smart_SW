@@ -16,6 +16,11 @@ Shape of a script: one `ScriptedTurn` per `run()`. Within a turn the tool calls 
 in order, and then the closing text streams. Calling `run()` more often than the script
 has turns is a scripting mistake and raises - a silent extra turn would make a runner test
 pass for the wrong reason.
+
+A turn can instead be scripted as `rounds` (feature 008's replay): one `ScriptedRound` per
+model round trip, each its own assistant message, its own tool messages and its own `usage`
+event, then the closing text as the turn's last round. That is the shape a recorded review
+has, where the opening turn of the big recording is 39 rounds with different groupings.
 """
 
 from __future__ import annotations
@@ -88,6 +93,28 @@ class ScriptedToolCall:
 
 
 @dataclass(frozen=True)
+class ScriptedRound:
+    """One model round trip inside a turn: the calls it asked for together, and what it cost.
+
+    The calls are one assistant message followed by one tool message each - the shape a
+    response with several `function_call` items takes - and they still run one after another,
+    in order. `usage` is emitted as this round's `usage` event before its calls run, which is
+    where a real adapter emits it; `None` emits nothing for the round (its `round_index` is
+    still spent, as a request made and not reported would spend it).
+    """
+
+    calls: tuple[ScriptedToolCall, ...]
+    usage: TokenUsage | None = None
+
+    def __post_init__(self) -> None:
+        if not self.calls:
+            raise ValueError(
+                "a scripted round needs at least one call; the round that answers with text "
+                "is the turn's closing text, scripted by `ScriptedTurn.text` and `usage`"
+            )
+
+
+@dataclass(frozen=True)
 class ScriptedTurn:
     """One `run()`: tool calls in order, then the turn's closing text.
 
@@ -122,6 +149,23 @@ class ScriptedTurn:
     history with an unanswered call is rejected on the next request; the fake has no wire,
     and inventing an output here would model the adapter's rule rather than exercise it.
     """
+
+    rounds: tuple[ScriptedRound, ...] = ()
+    """The turn as recorded rounds (feature 008), instead of `tool_calls`.
+
+    With rounds set, each round is one assistant message holding its calls, then their tool
+    messages, with one `usage` event per round (`round_index` 0, 1, ...) when the round has
+    usage; the closing text is the last round and reports `usage` above with the next
+    index. A step budget that runs out stops at the next call, mid-round or before a round
+    starts, and records only what was dispatched. Setting both `tool_calls` and `rounds` is
+    refused: one turn has one shape.
+    """
+
+    def __post_init__(self) -> None:
+        if self.tool_calls and self.rounds:
+            raise ValueError(
+                "a scripted turn takes `tool_calls` or `rounds`, not both: one turn has one shape"
+            )
 
 
 def _assistant_message(requests: Sequence[ToolCallRequest]) -> dict[str, Any]:
@@ -200,9 +244,10 @@ class FakeProvider:
         self.round_usage: list[TokenUsage] = []
         """This turn's round trips, one record each. Reset by `run()`.
 
-        A scripted turn is one round: the fake has no round loop, so its calls and its
-        closing text are one exchange, and the list has one entry unless the turn was
-        scripted with no usage at all.
+        A turn scripted with `tool_calls` is one round: its calls and its closing text are
+        one exchange, and the list has one entry unless the turn was scripted with no usage
+        at all. A turn scripted with `rounds` has one entry per round that reported usage,
+        the closing text's included.
         """
 
     def effort_mapping(self, effort: EffortLevel) -> EffortMapping:
@@ -241,6 +286,8 @@ class FakeProvider:
         # steps must still consume its ordinary scripted turn.
         turn = self._next_turn()
         history = [dict(message) for message in messages]
+        if turn.rounds:
+            return self._run_rounds(turn, history, tools, max_steps, on_event)
         steps = 0
         self.round_usage = [turn.usage] if turn.usage is not None else []
         if turn.usage is not None:
@@ -265,13 +312,61 @@ class FakeProvider:
             steps += 1
         _append_round(history, dispatched, one_round=turn.one_round)
 
-        if turn.text:
-            for delta in _DELTA.findall(turn.text):
-                on_event("text.delta", {"text": delta})
-            on_event("text.done", {"text": turn.text})
-            history.append({"role": "assistant", "content": turn.text})
-
+        self._say(turn.text, history, on_event)
         return TurnResult(reason=turn.end_reason, text=turn.text, steps=steps, messages=history)
+
+    def _run_rounds(
+        self,
+        turn: ScriptedTurn,
+        history: list[dict[str, Any]],
+        tools: ToolSet,
+        max_steps: int,
+        on_event: EventCallback,
+    ) -> TurnResult:
+        """Play a turn scripted as rounds: one usage, one assistant message per round.
+
+        The budget is checked before every call, as the tool-call path checks it, and a
+        round the budget never reaches is a request never made: no usage is emitted for it.
+        """
+        self.round_usage = []
+        steps = 0
+        for round_index, scripted_round in enumerate(turn.rounds):
+            if steps >= max_steps:
+                return TurnResult(reason="max_steps", text="", steps=steps, messages=history)
+            self._emit_usage(scripted_round.usage, round_index, on_event)
+            dispatched: list[tuple[ToolCallRequest, ToolCallResult]] = []
+            for scripted in scripted_round.calls:
+                if steps >= max_steps:
+                    _append_round(history, dispatched, one_round=True)
+                    return TurnResult(reason="max_steps", text="", steps=steps, messages=history)
+                request = self._request(scripted)
+                dispatched.append((request, self._call(request, tools, on_event)))
+                steps += 1
+            _append_round(history, dispatched, one_round=True)
+        self._emit_usage(turn.usage, len(turn.rounds), on_event)
+        self._say(turn.text, history, on_event)
+        return TurnResult(reason=turn.end_reason, text=turn.text, steps=steps, messages=history)
+
+    def _emit_usage(
+        self, usage: TokenUsage | None, round_index: int, on_event: EventCallback
+    ) -> None:
+        if usage is None:
+            return
+        self.round_usage.append(usage)
+        on_event(
+            "usage",
+            usage_body(usage, round_index=round_index, provider=self.name, model=self.model),
+        )
+
+    @staticmethod
+    def _say(text: str, history: list[dict[str, Any]], on_event: EventCallback) -> None:
+        """Stream the closing text, if any, and record it as the turn's last message."""
+        if not text:
+            return
+        for delta in _DELTA.findall(text):
+            on_event("text.delta", {"text": delta})
+        on_event("text.done", {"text": text})
+        history.append({"role": "assistant", "content": text})
 
     def _next_turn(self) -> ScriptedTurn:
         if self._turn_index >= len(self._script):

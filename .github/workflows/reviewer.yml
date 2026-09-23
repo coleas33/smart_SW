@@ -38,11 +38,18 @@ jobs:
         run: uv sync --all-extras
       - name: Lint
         run: uv run ruff check src tests
+      - name: Tokenizer
+        # The o200k_base vocabulary lives in a per-user cache, never in the repository
+        # (specs/008-checks-first-review/contracts/tokenizer.md); the runner fetches it once.
+        run: uv run swreview tokenizer fetch
       - name: Test
         # Integration tests skip automatically when no native package is present.
         # Everything the tests write goes under one directory so the audit can scan it.
         # `--basetemp` does not create parent directories, so this sits directly under the
         # working directory; pytest empties it at the start of the run.
+        # SWREVIEW_REQUIRE_TOKENIZER turns a missing vocabulary into failures, not skips.
+        env:
+          SWREVIEW_REQUIRE_TOKENIZER: "1"
         run: uv run pytest -m "not live" --basetemp=.pytest-tmp
       - name: Audit secrets
         # FR-015: no file a test wrote may contain the key the tests ran with. Detectors are

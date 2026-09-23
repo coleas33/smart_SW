@@ -63,6 +63,7 @@ from swreview.agent.providers import (
     call_tool,
     error_body,
     register,
+    tool_result_text,
     tools_withdrawn,
     usage_body,
 )
@@ -640,7 +641,7 @@ def _encode_history(messages: Sequence[Mapping[str, Any]]) -> list[dict[str, Any
                 {
                     "type": "function_call_output",
                     "call_id": message["call_id"],
-                    "output": json.dumps(message.get("content", {})),
+                    "output": tool_result_text(message.get("content", {})),
                 }
             )
         else:
