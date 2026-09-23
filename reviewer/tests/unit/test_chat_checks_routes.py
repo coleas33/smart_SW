@@ -44,6 +44,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic_core import to_jsonable_python
 from starlette.testclient import TestClient
 
 from swreview.agent import providers
@@ -59,8 +60,17 @@ from swreview.report.attention import rank
 from swreview.report.attention_record import read_attention_record
 from swreview.report.dispositions import apply_disposition, find_finding
 from swreview.report.session import load_session
+from swreview.report.titles import TITLE_LENGTH, first_sentence
 from tests.support.attention import ranking_as_shown
-from tests.support.features import AssemblySpec, PartSpec, equation, feature, folder, rms_package
+from tests.support.features import (
+    AssemblySpec,
+    FeatureSpec,
+    PartSpec,
+    equation,
+    feature,
+    folder,
+    rms_package,
+)
 from tests.support.packages import CREATED_AT
 
 ORIGIN = "https://swreview.invalid"
@@ -70,6 +80,9 @@ TOKEN = "the-per-launch-token"
 CHECK_ID = "20260916-101532-cover-check"
 """The check run folder's name, which is also its `check_id` (`contracts/model-check.md`)."""
 
+LONG_TITLED_CHECK_ID = "20260916-101533-cover-check"
+"""A second check folder, over `LONG_TITLED_CORE`."""
+
 FRAME = "doc:2"
 """The compliant part."""
 
@@ -77,6 +90,17 @@ COVER = "doc:3"
 """The part that fails a `fail` rule and trips a `warn` rule."""
 
 ASSEMBLY = "doc:1"
+
+COVER_CORE = (feature("Boss-Extrude2", "Extrusion", description=""),)
+"""The cover's one undescribed core feature: the fail rule's finding, a short title."""
+
+LONG_TITLED_CORE = (
+    feature("Boss-Extrude-Cover-Flange", "Extrusion", description=""),
+    feature("Boss-Extrude-Cable-Gland-Clearance", "Extrusion", description=""),
+    feature("Boss-Extrude-Mounting-Boss-Pair", "Extrusion", description=""),
+)
+"""Three undescribed core features with long names: the fail rule's first sentence runs past
+`TITLE_LENGTH`, so its recorded title is cut and its display title is not (decision 2A)."""
 
 FAIL_RULE = "rms.intent.every_feature_described"
 WARN_RULE = "rms.folders.present"
@@ -93,8 +117,11 @@ subjects of each finding and what the carry-forward did - everything a `GET` nee
 # --- the package under the check folder -------------------------------------------
 
 
-def evidence() -> EvidencePackage:
-    """One compliant part, one part that trips a `fail` and a `warn` rule, an assembly."""
+def evidence(cover_core: tuple[FeatureSpec, ...] = COVER_CORE) -> EvidencePackage:
+    """One compliant part, one part that trips a `fail` and a `warn` rule, an assembly.
+
+    `cover_core` is the cover's core folder: the features the fail rule names.
+    """
     return rms_package(
         parts=[
             PartSpec(
@@ -114,7 +141,7 @@ def evidence() -> EvidencePackage:
                 document_id=COVER,
                 name="cover",
                 features=(
-                    folder("3-Core", feature("Boss-Extrude2", "Extrusion", description="")),
+                    folder("3-Core", *cover_core),
                     folder("4-Detail", feature("Hole2", "HoleWzd")),
                 ),
             ),
@@ -123,9 +150,9 @@ def evidence() -> EvidencePackage:
     )
 
 
-def model_check_package() -> EvidencePackage:
+def model_check_package(cover_core: tuple[FeatureSpec, ...] = COVER_CORE) -> EvidencePackage:
     """The evidence as the `ModelCheck` dump profile writes it (`extractor.profile`)."""
-    package = evidence()
+    package = evidence(cover_core)
     return package.model_copy(
         update={"extractor": package.extractor.model_copy(update={"profile": "model_check"})}
     )
@@ -463,6 +490,38 @@ class TestRunCheck:
         assert [row["finding_id"] for row in result["attention"]["rows"]] == [
             row.finding_id for row in read_attention_record(check_dir).rows
         ]
+
+    def test_a_cut_title_is_whole_in_the_body_and_cut_in_the_record(
+        self, client: TestClient, run_root: Path
+    ) -> None:
+        """Decision 2A on this tab (feature 009 research R2.28), and the case that proves it.
+
+        The module's own fixture titles are short and name no part, so `ranking_as_shown`
+        equals the recorded ranking there and the test above would pass if the body carried
+        the recorded one. Here the fail rule's first sentence runs past `TITLE_LENGTH`: the
+        record keeps the cut title the ranking was built from, and the body - which Start
+        here prints - carries the whole sentence (the Standards body is pinned the same way).
+        """
+        check_dir = run_root / LONG_TITLED_CHECK_ID
+        save_package(model_check_package(LONG_TITLED_CORE), check_dir)
+
+        result = start_check(client, check_dir)
+        session = load_session(check_dir / SESSION_FILE)
+        recorded = to_jsonable_python(rank(session))
+        [cut] = [row for row in recorded["rows"] if row["title"].endswith("…")]
+        [finding] = [one for one in session.findings if one.id == cut["finding_id"]]
+        [shown] = [
+            row for row in result["attention"]["rows"] if row["finding_id"] == cut["finding_id"]
+        ]
+
+        assert result["attention"] == ranking_as_shown(check_dir)
+        assert result["attention"] != recorded, "a cut title is whole"
+        assert finding.check == FAIL_RULE
+        assert shown["title"] == first_sentence(finding.observed)
+        assert len(shown["title"]) > TITLE_LENGTH
+        assert [row.title for row in read_attention_record(check_dir).rows] == [
+            row["title"] for row in recorded["rows"]
+        ], "the record keeps the recorded titles"
 
     def test_every_amplified_row_names_a_finding_the_body_carries(
         self, client: TestClient, check_dir: Path
