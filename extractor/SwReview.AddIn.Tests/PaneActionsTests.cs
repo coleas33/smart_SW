@@ -82,6 +82,70 @@ public sealed class PaneActionsTests
         }
     }
 
+    /// <summary>
+    /// Feature 009 FR-023: `entity.show` naming a run by the host's own id field - `chat_id` on
+    /// the Review tab, which always sends the chat it shows - hands the resolver that run's
+    /// folder from the host's record, through the same lookup `report.open` uses. A path in the
+    /// payload is ignored, as it is for every shared row.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Hosts))]
+    public void EntityShowNamingARunHandsTheResolverThatRunsFolderFromTheHostsRecord(string kind)
+    {
+        using (PaneHostWorld world = PaneHostWorld.For(kind))
+        {
+            world.Open();
+            string run = world.CreateRun("shown");
+            string runId = world.Track(run);
+
+            world.Receive("entity.show", "e1", world.Message(runId, new Dictionary<string, object?>
+            {
+                { "persist_ref", "AQAAAA==" },
+                { "run_dir", @"C:\Windows" },
+            }));
+
+            Assert.Equal(run, Assert.Single(world.Resolver.Requests).RunDirectory);
+            world.Reply("entity.shown", "e1");
+        }
+    }
+
+    /// <summary>Without an id the resolver is handed no folder: Show reads the latest run, as before.</summary>
+    [Theory]
+    [MemberData(nameof(Hosts))]
+    public void EntityShowWithoutARunIdHandsTheResolverNoFolder(string kind)
+    {
+        using (PaneHostWorld world = PaneHostWorld.For(kind))
+        {
+            world.Open();
+            world.Track(world.CreateRun("latest"));
+
+            world.Receive("entity.show", "e1", new { persist_ref = "AQAAAA==" });
+
+            Assert.Null(Assert.Single(world.Resolver.Requests).RunDirectory);
+        }
+    }
+
+    /// <summary>An id the host never recorded is refused exactly as `report.open` refuses it, and SOLIDWORKS is not touched.</summary>
+    [Theory]
+    [MemberData(nameof(Hosts))]
+    public void EntityShowNamingARunTheHostNeverRecordedIsRefusedAsOpenIs(string kind)
+    {
+        using (PaneHostWorld world = PaneHostWorld.For(kind))
+        {
+            world.Open();
+
+            world.Receive("entity.show", "e1", world.Message("never-recorded", new Dictionary<string, object?>
+            {
+                { "persist_ref", "AQAAAA==" },
+            }));
+
+            JsonElement error = world.Reply("error", "e1");
+            Assert.Equal(world.UnknownErrorClass, error.GetProperty("error_class").GetString());
+            Assert.Equal(world.UnknownSentence("never-recorded"), error.GetProperty("message").GetString());
+            Assert.Empty(world.Resolver.Requests);
+        }
+    }
+
     [Theory]
     [MemberData(nameof(Hosts))]
     public void AReferenceThatNoLongerResolvesReportsTheStateCodeAndTheComponentsFullPath(

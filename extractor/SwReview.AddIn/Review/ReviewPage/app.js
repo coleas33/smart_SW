@@ -129,6 +129,21 @@
     // `answer` null while it is on its way. Page memory only - the answers themselves stay in
     // the transcript and events.jsonl (contracts/views.md section 4).
     pinned: Object.create(null),
+
+    // The kept reviews (feature 009 User Story 6): the host's `sessions` items as last received,
+    // in its order; the ones whose run folder answered that it is gone; the reason the review on
+    // screen is read-only, or null; whether it was restored from its run folder; the snapshot's
+    // last seq, which a replay of its transcript runs up to; the seq a replay in progress stops
+    // at, 0 when none runs; whether the Transcript of the chat on screen has been built; and an
+    // epoch, so a restore that answers after another was chosen is dropped.
+    reviews: [],
+    unrestorable: Object.create(null),
+    readOnly: null,
+    restoredFromFolder: false,
+    snapshotLastSeq: 0,
+    replayUntil: 0,
+    transcriptLoaded: true,
+    restoreEpoch: 0,
     notExamined: null,
 
     // The summary the backend sent beside the last ranking for the chat on screen (feature 009
@@ -221,6 +236,7 @@
         state.documentInfo = payload && payload.path ? payload : null;
         renderDocument();
         renderBinding();
+        followActiveDocument();
         return;
       case 'backend.stopped':
         state.backend = null;
@@ -461,7 +477,23 @@
 
   // ---- the transcript ----------------------------------------------------------------------
 
+  /**
+   * One chat event. While a replay runs (a restored review's Transcript, being built from the
+   * stream's start), every event up to the snapshot's last seq builds the Transcript only - see
+   * `onReplayedEvent` - and the one that reaches it ends the replay.
+   */
   function onChatEvent(event) {
+    if (state.replayUntil > 0) {
+      onReplayedEvent(event);
+      if (event.seq >= state.replayUntil) {
+        finishReplay();
+      }
+      return;
+    }
+    onLiveEvent(event);
+  }
+
+  function onLiveEvent(event) {
     var body = event.body || {};
     switch (event.type) {
       case 'session.started':
@@ -517,6 +549,58 @@
   }
 
   /**
+   * An event replayed into the Transcript of a restored review (contracts/sessions.md section
+   * 8). Results already hold the snapshot, so nothing here touches them: a finding adds its
+   * marker and never a second card, a coverage or disposition event is already in the snapshot,
+   * and the turn's and the session's end are lines in the chronology - neither closes the stream
+   * nor reads the ranking again. The prose, the tool calls, the evidence records and the usage
+   * build the Transcript and its head exactly as live.
+   */
+  function onReplayedEvent(event) {
+    var body = event.body || {};
+    switch (event.type) {
+      case 'finding':
+        appendCard(render.findingMarker(body));
+        return;
+      case 'coverage':
+      case 'disposition':
+        return;
+      case 'turn.ended':
+        state.textBlock = null;
+        state.runningTool = '';
+        renderTranscriptHead();
+        if (body.reason && body.reason !== 'end') {
+          appendCard(render.textBlock('system', 'The turn ended: ' + body.reason + '.'));
+        }
+        return;
+      case 'session.ended':
+        state.textBlock = null;
+        appendCard(render.textBlock('system', 'The session ended at ' + (body.ended_at || 'now') + '.'));
+        return;
+      case 'error':
+        appendCard(errorLine(body));
+        return;
+      default:
+        onLiveEvent(event);
+        return;
+    }
+  }
+
+  /**
+   * The replay has reached the snapshot's last seq: the Transcript is scrolled to its end once,
+   * and - the chat having ended - the stream is given up. A running chat would keep it: from
+   * here on the stream behaves as live.
+   */
+  function finishReplay() {
+    state.replayUntil = 0;
+    scrollToEnd();
+    if (!state.turnRunning) {
+      closeStream();
+      showStreamState('');
+    }
+  }
+
+  /**
    * One card per distinct reason, saying the page dropped something from the stream. A
    * review whose every event is dropped must not look like a healthy one: that is how the
    * envelope mismatch fixed on 2026-09-18 shipped past three workstation runs.
@@ -552,7 +636,11 @@
     return node;
   }
 
+  /** To the Transcript's end - except while a replay runs, which scrolls once, when it ends. */
   function scrollToEnd() {
+    if (state.replayUntil > 0) {
+      return;
+    }
     ui.transcript.scrollTop = ui.transcript.scrollHeight;
   }
 
@@ -565,7 +653,12 @@
   function showError(error) {
     var body = error || {};
     ui.errors.appendChild(render.errorCard(body));
-    appendCard(render.textBlock('error', String(body.error_class || 'Error') + ': ' + String(body.message || '')));
+    appendCard(errorLine(body));
+  }
+
+  /** The Transcript's line for an error: its class and its message - transcript vocabulary. */
+  function errorLine(body) {
+    return render.textBlock('error', String(body.error_class || 'Error') + ': ' + String(body.message || ''));
   }
 
   /** The assistant's text, streamed. One block per turn, filled in delta by delta. */
@@ -689,6 +782,16 @@
    * moves what the engineer is reading.
    */
   function showFinding(body) {
+    placeFinding(body);
+    appendCard(render.findingMarker(body));
+  }
+
+  /**
+   * A finding's card into Results' list, replacing the card of the same id in place - the half
+   * of `showFinding` a restore shares, since a restored review's Transcript is built only when it
+   * is chosen (contracts/sessions.md section 8).
+   */
+  function placeFinding(body) {
     var existing = state.findings[body.id];
     var card = render.findingCard(body);
     if (existing) {
@@ -699,7 +802,6 @@
       ui.findingsHead.hidden = false;
     }
     state.findings[body.id] = { body: body, card: card };
-    appendCard(render.findingMarker(body));
   }
 
   function showEvidence(body) {
@@ -802,9 +904,15 @@
     document.body.classList.toggle('view-results', !transcript);
     ui.viewTranscript.setAttribute('aria-pressed', transcript ? 'true' : 'false');
     ui.viewResults.setAttribute('aria-pressed', transcript ? 'false' : 'true');
-    if (transcript) {
-      scrollToEnd();
+    if (!transcript) {
+      return;
     }
+    // A review restored from its live chat has no Transcript until it is asked for; then it is
+    // replayed from the stream (contracts/sessions.md section 8).
+    if (!state.transcriptLoaded && state.chatId && !state.restoredFromFolder && !state.turnRunning) {
+      replayTranscript();
+    }
+    scrollToEnd();
   }
 
   /**
@@ -891,23 +999,33 @@
         if (!ranking || state.chatId !== chatId || state.attentionEpoch !== epoch) {
           return;
         }
-
-        render.clear(ui.attention);
-        ui.attention.appendChild(render.attentionPanel(ranking));
-        syncFindingExplanations(ranking);
-        ui.attention.hidden = false;
-
-        state.summary = ranking.summary || null;
-        renderSummary();
-        renderQuestions();
-        groupModellingPractice(state.summary && state.summary.modelling_practice);
-        renderContacts();
-        renderResultsState();
+        applyRanking(ranking);
       },
       function () {
         // Nothing new: the panel stays as it is, which for a review that has just ended is
         // hidden.
       });
+  }
+
+  /**
+   * A ranking and its summary into Results: Start here, the explanations, the summary, the
+   * questions, the modelling-practice group, the contacts and the status line. One path for the
+   * end of a live turn and for a restored review (contracts/sessions.md section 5), so the two
+   * cannot render the same review differently.
+   */
+  function applyRanking(ranking) {
+    render.clear(ui.attention);
+    ui.attention.appendChild(render.attentionPanel(ranking));
+    syncFindingExplanations(ranking);
+    ui.attention.hidden = false;
+
+    state.summary = ranking.summary || null;
+    renderSummary();
+    renderQuestions();
+    groupModellingPractice(state.summary && state.summary.modelling_practice);
+    renderContacts();
+    renderResultsState();
+    syncReadOnlyControls();
   }
 
   /**
@@ -991,6 +1109,290 @@
       }
       group.parentNode.removeChild(group);
     }
+  }
+
+  // ---- kept reviews (feature 009 User Story 6) ---------------------------------------------
+
+  /**
+   * Asks the host for the reviews it kept (`sessions.list`) and redraws the chips. After `init`
+   * the document rule runs once the list is in, so a reloaded page shows the open document's
+   * review. A host that does not know the row answers an error, and the page simply has no chips.
+   */
+  function requestSessions(thenFollow) {
+    send('sessions.list', {}).then(function (payload) {
+      applySessions(payload);
+      if (thenFollow) {
+        followActiveDocument();
+      }
+    }).catch(function () {
+      // An older host: no kept reviews to offer, and nothing else changes.
+    });
+  }
+
+  function applySessions(payload) {
+    state.reviews = (payload && payload.items) || [];
+    renderChips();
+  }
+
+  /** The chips, one per kept review in the host's order, the review on screen marked. */
+  function renderChips() {
+    var chips = [];
+    for (var index = 0; index < state.reviews.length; index++) {
+      var item = state.reviews[index] || {};
+      var chatId = String(item.chat_id || '');
+      chips.push({
+        chat_id: chatId,
+        label: chipLabel(item),
+        current: chatId === state.chatId,
+        gone: state.unrestorable[chatId] === true
+      });
+    }
+    render.clear(ui.chips);
+    if (chips.length) {
+      ui.chips.appendChild(render.reviewChips(chips));
+    }
+    ui.chips.hidden = !chips.length;
+  }
+
+  /** "bracket.sldasm [Default] 10:15": the file and configuration, then the page's own clock. */
+  function chipLabel(item) {
+    var label = docs.label(reviewDocument(item)) || String(item.run_id || '');
+    var clock = clockOf(item.started_at);
+    return clock ? label + ' ' + clock : label;
+  }
+
+  function clockOf(startedAt) {
+    var when = startedAt ? new Date(String(startedAt)) : null;
+    if (!when || isNaN(when.getTime())) {
+      return '';
+    }
+    return twoDigits(when.getHours()) + ':' + twoDigits(when.getMinutes());
+  }
+
+  function twoDigits(value) {
+    return (value < 10 ? '0' : '') + value;
+  }
+
+  /** A kept review's document, in the shape `web/shared/document.js` compares. */
+  function reviewDocument(item) {
+    return item && item.path ? { path: item.path, configuration: item.configuration } : null;
+  }
+
+  function keptReview(chatId) {
+    for (var index = 0; index < state.reviews.length; index++) {
+      if (String((state.reviews[index] || {}).chat_id) === chatId) {
+        return state.reviews[index];
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Returning to a document shows its newest kept review (contracts/sessions.md section 6): when
+   * no turn runs and no start is in flight, the review on screen is not of the active document,
+   * and the host kept one that is, the last such in the host's order is shown. Otherwise the
+   * landed binding stands - a review of another document hides behind the stale line, with Stop
+   * still live while a turn runs. "Newest" is the last match in the supplied order: a scan, not
+   * a sort.
+   */
+  function followActiveDocument() {
+    if (state.turnRunning || state.startPending) {
+      return;
+    }
+    if (state.chatId && docs.same(state.reviewed, state.documentInfo)) {
+      return;
+    }
+
+    var newest = null;
+    for (var index = 0; index < state.reviews.length; index++) {
+      var item = state.reviews[index] || {};
+      if (docs.same(reviewDocument(item), state.documentInfo) && state.unrestorable[String(item.chat_id)] !== true) {
+        newest = item;
+      }
+    }
+    if (newest) {
+      showReview(String(newest.chat_id));
+    }
+  }
+
+  /**
+   * Brings a kept review back (contracts/sessions.md section 5), refused while a turn runs or a
+   * start is in flight. The drafts and pins of the review on screen stay in page memory; Results
+   * and the Transcript are cleared; the chat, its folder and its document are set from the host's
+   * item; then one `GET /sessions/{chat}/snapshot` - or, when the backend no longer holds the
+   * chat, `GET /reviews/{run_id}` from its run folder, read-only. No `POST` and no `review.start`:
+   * returning costs no token (SC-005). A run folder that is gone too marks the chip, and the pane
+   * shows no review.
+   */
+  function showReview(chatId) {
+    if (state.turnRunning || state.startPending) {
+      return;
+    }
+    var item = keptReview(chatId);
+    if (!item) {
+      return;
+    }
+
+    closeStream();
+    resetTranscript();
+    state.chatId = chatId;
+    state.runDir = item.run_dir || null;
+    state.reviewed = reviewDocument(item);
+    state.lastSeq = 0;
+    state.transcriptLoaded = false;
+    state.restoreEpoch++;
+    var epoch = state.restoreEpoch;
+    showStreamState('');
+    renderSession();
+    renderBinding();
+    renderAnswers();
+    renderChips();
+
+    call(sessionPath('/snapshot'), 'GET').then(function (snapshot) {
+      if (epoch === state.restoreEpoch) {
+        restore(snapshot, false);
+      }
+    }, function (error) {
+      if (epoch !== state.restoreEpoch) {
+        return;
+      }
+      if (error.errorClass !== 'UnknownChat') {
+        showError(errorBody(error));
+        return;
+      }
+      call('/reviews/' + encodeURIComponent(String(item.run_id || '')), 'GET').then(function (snapshot) {
+        if (epoch === state.restoreEpoch) {
+          restore(snapshot, true);
+        }
+      }, function (failure) {
+        if (epoch !== state.restoreEpoch) {
+          return;
+        }
+        if (failure.errorClass === 'UnknownReview') {
+          cannotRestore(chatId);
+          return;
+        }
+        showError(errorBody(failure));
+      });
+    });
+  }
+
+  /**
+   * A snapshot into the pane: Results through the same functions a live turn's end uses, the
+   * read-only state and its reason, and - for a chat still running, which is a page reloaded
+   * mid-turn - the turn and the stream, reopened from the snapshot's last seq.
+   */
+  function restore(snapshot, fromFolder) {
+    var body = snapshot || {};
+    state.restoredFromFolder = fromFolder;
+    state.readOnly = body.read_only ? String(body.read_only_reason || '') : null;
+    state.snapshotLastSeq = typeof body.last_seq === 'number' ? body.last_seq : 0;
+    renderResults(body);
+    renderReadOnly();
+
+    if (fromFolder) {
+      state.transcriptLoaded = true;
+      appendCard(render.restoredTranscript());
+    } else if (body.chat_state === 'running') {
+      state.transcriptLoaded = true;
+      state.lastSeq = state.snapshotLastSeq;
+      setTurnRunning(true);
+      openStream();
+    }
+    renderStartReview();
+    renderResultsState();
+  }
+
+  /**
+   * One snapshot's results: every finding's card in session order (dispositions included), the
+   * coverage fold, the not-loaded warning, and the ranking with its summary - `placeFinding`,
+   * `renderCoverage`, `renderNotExamined` and `applyRanking`, the functions the live review
+   * renders through.
+   */
+  function renderResults(snapshot) {
+    var findings = snapshot.findings || [];
+    for (var index = 0; index < findings.length; index++) {
+      placeFinding(findings[index] || {});
+    }
+    state.coverage = (snapshot.coverage || []).slice();
+    if (state.coverage.length) {
+      renderCoverage();
+    }
+    state.notExamined = snapshot.not_examined || null;
+    renderNotExamined();
+    if (snapshot.ranking) {
+      applyRanking(snapshot.ranking);
+    }
+    syncReadOnlyControls();
+  }
+
+  /** The reason a restored review is read-only, under the status line, while it is (FR-021). */
+  function renderReadOnly() {
+    ui.readOnly.textContent = state.readOnly === null ? '' : state.readOnly;
+    ui.readOnly.hidden = state.readOnly === null;
+    syncReadOnlyControls();
+  }
+
+  /**
+   * Every disposition control of a read-only review is off, and the note boxes with them; Show
+   * in SOLIDWORKS, Open report and Open run folder stay on, because the host still holds the
+   * review's record (contracts/sessions.md section 5).
+   */
+  function syncReadOnlyControls() {
+    var locked = state.readOnly !== null;
+    var controls = ui.findings.querySelectorAll(
+      '[data-action="accept"], [data-action="reject"], [data-action="defer"], .card-tools input.note');
+    for (var index = 0; index < controls.length; index++) {
+      controls[index].disabled = locked;
+    }
+    syncQuestionControls();
+  }
+
+  /** Neither the chat nor its run folder can bring the review back: the chip says so, and the pane shows none. */
+  function cannotRestore(chatId) {
+    state.unrestorable[chatId] = true;
+    resetTranscript();
+    state.chatId = null;
+    state.runDir = null;
+    state.reviewed = null;
+    renderBinding();
+    renderChips();
+  }
+
+  /** Remove on a chip that cannot be restored: the host forgets the record and answers the list. */
+  function forgetReview(chatId) {
+    send('session.forget', { chat_id: chatId }).then(function (payload) {
+      delete state.unrestorable[chatId];
+      applySessions(payload);
+    }).catch(function (error) {
+      showBanner(error.message);
+    });
+  }
+
+  function onChipClick(event) {
+    var target = event.target;
+    var action = (target && target.getAttribute) ? target.getAttribute('data-action') : null;
+    var chatId = target && target.getAttribute ? String(target.getAttribute('data-chat-id') || '') : '';
+    if (action === 'review-chip' && chatId && chatId !== state.chatId) {
+      showReview(chatId);
+    } else if (action === 'review-forget' && chatId) {
+      forgetReview(chatId);
+    }
+  }
+
+  /**
+   * The Transcript of a review restored from its live chat, built on demand: the stream is read
+   * from its start, in replay mode, up to the snapshot's last seq (contracts/sessions.md section
+   * 8). A snapshot with nothing on its stream has nothing to replay.
+   */
+  function replayTranscript() {
+    state.transcriptLoaded = true;
+    if (!(state.snapshotLastSeq > 0)) {
+      return;
+    }
+    state.replayUntil = state.snapshotLastSeq;
+    state.lastSeq = 0;
+    openStream();
   }
 
   // ---- the review ----------------------------------------------------------------------------
@@ -1116,6 +1518,8 @@
       renderAnswers();
       setTurnRunning(true);
       openStream();
+      // The host has just kept this review: ask for the list again, so its chip appears.
+      requestSessions(false);
     }).catch(function (error) {
       showError(errorBody(error));
     }).then(function () {
@@ -1135,7 +1539,7 @@
   function renderStartReview() {
     ui.startReview.disabled = state.startPending || state.turnRunning || !state.documentInfo;
     var followupDisabled = state.startPending || state.turnRunning || !!state.preparation
-      || !state.chatId || state.resultsStale;
+      || !state.chatId || state.resultsStale || state.readOnly !== null;
     ui.followupText.disabled = followupDisabled;
     ui.followupSend.disabled = followupDisabled;
     ui.clearReview.disabled = !canClearReview();
@@ -1220,6 +1624,13 @@
     state.summary = null;
     state.questionIndex = 0;
     state.questionNote = null;
+    state.readOnly = null;
+    state.restoredFromFolder = false;
+    state.snapshotLastSeq = 0;
+    state.replayUntil = 0;
+    state.transcriptLoaded = true;
+    state.restoreEpoch++;
+    renderReadOnly();
     renderSummary();
     renderQuestions();
     renderContacts();
@@ -1266,7 +1677,7 @@
   function sendFollowUp() {
     var text = ui.followupText.value.trim();
     if (!text || !state.chatId || state.turnRunning || state.startPending || state.preparation
-        || state.resultsStale) {
+        || state.resultsStale || state.readOnly !== null) {
       return;
     }
 
@@ -1493,6 +1904,9 @@
       return;
     }
 
+    // The chat on screen, so the host looks the ids up in this review's package rather than in
+    // whichever run is the pane's latest (feature 009 FR-023). An id, never a path.
+    request.chat_id = state.chatId;
     cardStatus(card, 'Selecting in SOLIDWORKS...', false);
     send('entity.show', request).then(function (payload) {
       if (payload.ok) {
@@ -1513,7 +1927,7 @@
 
   function decide(card, decision) {
     var findingId = card ? card.getAttribute('data-finding-id') : null;
-    if (!findingId || !state.chatId) {
+    if (!findingId || !state.chatId || state.readOnly !== null) {
       return;
     }
 
@@ -1593,9 +2007,10 @@
     return answers;
   }
 
-  /** The panel is locked while a turn runs or a start is in flight, and for a hidden review. */
+  /** The panel is locked while a turn runs or a start is in flight, and for a hidden or read-only review. */
   function questionsLocked() {
-    return state.turnRunning || state.startPending || state.resultsStale || !state.chatId;
+    return state.turnRunning || state.startPending || state.resultsStale || !state.chatId
+      || state.readOnly !== null;
   }
 
   /**
@@ -2018,6 +2433,9 @@
       if (loadModels && state.backend) {
         refreshModels();
       }
+      // The reviews the host kept for this SOLIDWORKS session, and - a page reloaded with one of
+      // them open - that review shown again (contracts/sessions.md sections 5 and 6).
+      requestSessions(true);
     }).catch(function (error) {
       showBanner(error.message);
     }).then(function () {
@@ -2067,6 +2485,8 @@
     ui.preparation = document.getElementById('review-preparation');
     ui.preparationSummary = document.getElementById('preparation-summary');
     ui.preparationInstances = document.getElementById('preparation-instances');
+    ui.chips = document.getElementById('review-chips');
+    ui.readOnly = document.getElementById('read-only');
     ui.viewResults = document.getElementById('view-results');
     ui.viewTranscript = document.getElementById('view-transcript');
     ui.results = document.getElementById('results');
@@ -2136,6 +2556,14 @@
       sendFollowUp();
     });
     ui.results.addEventListener('click', onCardClick);
+    ui.chips.addEventListener('click', onChipClick);
+    ui.transcript.addEventListener('click', function (event) {
+      // The one button a Transcript holds: Open run folder, on a review restored from its folder.
+      var target = event.target;
+      if (target && target.getAttribute && target.getAttribute('data-action') === 'open-folder') {
+        ui.openFolder.click();
+      }
+    });
     ui.viewResults.addEventListener('click', function () {
       setView('results');
     });

@@ -184,6 +184,72 @@ public sealed class RunPackageIndexTests : IDisposable
         Assert.Equal("bracket-1", index.ComponentFullPath("cmp-1"));
     }
 
+    // ---- a folder per lookup (feature 009 FR-023) ------------------------------------------
+
+    /// <summary>
+    /// A lookup that names its folder reads that folder's package, whatever the index's own
+    /// `Func` names: Show on a review resolves against that review's package even after a check
+    /// became the pane's latest run.
+    /// </summary>
+    [Fact]
+    public void AGivenFolderIsReadEvenWhenTheFuncNamesAnother()
+    {
+        string latest = WriteRun("run-check", componentFullPath: "check-9");
+        string review = WriteRun("run-review", componentFullPath: "bracket-1");
+        var index = new RunPackageIndex(() => latest);
+
+        Assert.Equal("bracket-1", index.ComponentFullPath("cmp-1", review));
+        Assert.Equal(@"C:\parts\bracket.sldprt", index.DocumentPath("doc-2", review));
+        Assert.Equal("check-9", index.ComponentFullPath("cmp-1"));
+    }
+
+    /// <summary>A null folder falls back to the `Func`, which is every caller before this feature.</summary>
+    [Fact]
+    public void ANullFolderFallsBackToTheFunc()
+    {
+        string latest = WriteRun("run-latest", componentFullPath: "latest-2");
+        var index = new RunPackageIndex(() => latest);
+
+        Assert.Equal("latest-2", index.ComponentFullPath("cmp-1", null));
+        Assert.Equal(@"C:\parts\bracket.sldprt", index.DocumentPath("doc-2", null));
+    }
+
+    /// <summary>
+    /// Changing the folder reads the other folder's package - and going back does not parse the
+    /// first one again: alternating Show between a review and a check tab is the normal night, and
+    /// a large assembly's package is tens of megabytes parsed on the SOLIDWORKS thread.
+    /// </summary>
+    [Fact]
+    public void EachFolderIsReadOnceAndAlternatingBetweenThemReadsNeitherAgain()
+    {
+        string first = WriteRun("run-a", componentFullPath: "alpha-1");
+        string second = WriteRun("run-b", componentFullPath: "beta-1");
+        var index = new RunPackageIndex(() => null);
+
+        Assert.Equal("alpha-1", index.ComponentFullPath("cmp-1", first));
+        Assert.Equal("beta-1", index.ComponentFullPath("cmp-1", second));
+
+        File.Delete(Path.Combine(first, "package.json"));
+        File.Delete(Path.Combine(second, "package.json"));
+
+        Assert.Equal("alpha-1", index.ComponentFullPath("cmp-1", first));
+        Assert.Equal("beta-1", index.ComponentFullPath("cmp-1", second));
+    }
+
+    /// <summary>A folder with no readable package is not remembered: once one is written, it is read.</summary>
+    [Fact]
+    public void AFolderWithNoPackageIsAskedAgainOnceOneIsWritten()
+    {
+        string run = Path.Combine(_root, "run-later");
+        Directory.CreateDirectory(run);
+        var index = new RunPackageIndex(() => null);
+
+        Assert.Null(index.ComponentFullPath("cmp-1", run));
+
+        WriteInto(run, "package.json", "later-1");
+        Assert.Equal("later-1", index.ComponentFullPath("cmp-1", run));
+    }
+
     private string WriteRun(
         string name,
         string componentFullPath = "bracket-1",

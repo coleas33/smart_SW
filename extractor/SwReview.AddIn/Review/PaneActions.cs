@@ -206,13 +206,30 @@ public sealed class PaneActions
             return;
         }
 
+        // Feature 009 FR-023: a page that names the run it is showing - the Review tab always
+        // sends its chat's `chat_id` - has its ids looked up in that run's package, resolved
+        // through the same record `report.open` reads. The page names an id, never a path; an id
+        // this host never recorded is refused as `report.open` refuses one. With no id, the
+        // resolver reads the pane's latest run, as the check tabs' Show always has.
+        string? runDirectory = null;
+        if (PagePayload.Blank(PagePayload.Text(payload, _options.Runs.IdField)) != null)
+        {
+            if (!TryRunDirectory(id, payload, out string resolved))
+            {
+                return;
+            }
+
+            runDirectory = resolved;
+        }
+
         ShowPersistRef(id, new EntityShowRequest(
             persistRef,
             PagePayload.Blank(PagePayload.Text(payload, "persist_ref_scope")),
 
             // The page decides which instance of a part to show and sends that component's
             // id; the host passes it through and never picks one for the engineer.
-            PagePayload.Blank(PagePayload.Text(payload, "component_id"))));
+            PagePayload.Blank(PagePayload.Text(payload, "component_id")),
+            runDirectory));
     }
 
     /// <summary>
@@ -355,7 +372,9 @@ public sealed class PaneActions
     ///
     /// The page supplies an id and nothing else. Any path it sent is ignored: a page that
     /// could name the path to open could open anything on the workstation with one crafted
-    /// message, and the page is the least trusted thing in the process.
+    /// message, and the page is the least trusted thing in the process. One lookup for
+    /// `report.open`, `folder.open` and `entity.show` (feature 009), so the three cannot
+    /// disagree about which run an id names.
     /// </summary>
     private bool TryRunDirectory(string? id, JsonElement payload, out string runDirectory)
     {

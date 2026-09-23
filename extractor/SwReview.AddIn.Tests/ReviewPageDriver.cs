@@ -63,6 +63,13 @@ internal sealed class ReviewPageDriver
     /// <summary>The items `sessions.list` and `session.forget` answer with, in the host's order.</summary>
     public List<Dictionary<string, object?>> Sessions { get; } = new List<Dictionary<string, object?>>();
 
+    /// <summary>
+    /// Backend routes in place before `init` is answered - for what the page asks the moment it
+    /// learns where the backend is (a restore after a page reload): method, path, status, JSON body.
+    /// </summary>
+    public List<(string Method, string Path, int Status, string Body)> InitialRoutes { get; } =
+        new List<(string Method, string Path, int Status, string Body)>();
+
     /// <summary>What `settings.save` answers: null for `settings.saved`, or an `error` payload.</summary>
     public object? SettingsSaveError { get; set; }
 
@@ -71,6 +78,22 @@ internal sealed class ReviewPageDriver
 
     /// <summary>How many `review.start` messages the page sent.</summary>
     public int Starts => _starts;
+
+    /// <summary>Holds the `review.start` reply back until <see cref="ReleaseReviewStart"/>: a start in flight.</summary>
+    public bool HoldReviewStart { get; set; }
+
+    private string? _heldStart;
+
+    /// <summary>Answers a held `review.start` and lets the page react.</summary>
+    public async Task ReleaseReviewStart()
+    {
+        Assert.True(_heldStart != null, "no review.start was held.");
+        HoldReviewStart = false;
+        string id = _heldStart!;
+        _heldStart = null;
+        Reply("review.started", id, ReviewStarted?.Invoke(_starts) ?? DefaultStarted(_starts));
+        await OffscreenReviewPage.Settled(Page);
+    }
 
     /// <summary>
     /// Boots the page, lets <paramref name="configure"/> set the host up before the page loads,
@@ -310,6 +333,11 @@ var h = {
         Assert.True(_readyId != null, "the Review page never sent `ready`.");
 
         await Page.ExecuteScriptAsync(FetchStub);
+        foreach ((string method, string path, int status, string body) in InitialRoutes)
+        {
+            await Route(method, path, status, body);
+        }
+
         _booted = true;
         Reply("init", _readyId!, Init());
         await OffscreenReviewPage.Settled(Page);
@@ -354,6 +382,12 @@ var h = {
                 if (ReviewStartError != null)
                 {
                     Reply("error", id, ReviewStartError);
+                    return;
+                }
+
+                if (HoldReviewStart)
+                {
+                    _heldStart = id;
                     return;
                 }
 

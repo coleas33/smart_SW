@@ -288,6 +288,7 @@ fieldset.field {
   every one of them comes back when the reviewed document does.
 */
 body.results-stale #results-state,
+body.results-stale #read-only,
 body.results-stale #summary,
 body.results-stale #questions,
 body.results-stale #findings-head,
@@ -922,6 +923,73 @@ body.results-stale .card.evidence {
 .chip.error-class {
   background: var(--critical-bg);
   color: var(--critical);
+}
+
+/* ---- kept reviews (feature 009 User Story 6) --------------------------------------------- */
+
+/*
+  One chip per review this SOLIDWORKS session kept, in the host's order; the one on screen in the
+  accent. They wrap rather than scroll: a normal night is three.
+*/
+.review-chips {
+  padding: 0 12px 8px;
+}
+
+.review-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+button.review-chip {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: var(--text-label);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.review-chip[aria-current="true"] {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* A review neither the backend nor its run folder can bring back, and the way to drop it. */
+.review-chip.gone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  padding: 3px 8px;
+  border: 1px dashed var(--hair);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: var(--text-label);
+}
+
+.review-chip-gone {
+  color: var(--warn);
+}
+
+.review-chip.gone button {
+  padding: 0 6px;
+  font-size: var(--text-label);
+}
+
+/* Why a restored review is read-only, in the backend's words. */
+.read-only {
+  margin: 6px 12px 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--open);
+  border-radius: var(--radius);
+  background: var(--open-bg);
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  overflow-wrap: anywhere;
 }
 
 /* ---- Results or Transcript (feature 009 User Story 5) ------------------------------------- */

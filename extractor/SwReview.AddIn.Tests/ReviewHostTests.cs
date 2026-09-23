@@ -724,6 +724,297 @@ public sealed class ReviewHostTests
         }
     }
 
+    // ---- the review list, forgetting one, Show by chat (feature 009 User Story 6) ---------
+
+    /// <summary>
+    /// A review's record carries what its chip names: the document `review.started` named (the
+    /// one captured before the dump), when it was tracked, and its run folder's name
+    /// (contracts/sessions.md section 1).
+    /// </summary>
+    [Fact]
+    public void ReviewStartTracksTheReviewedDocumentWhenItStartedAndItsRunId()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Now = Stamp;
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Machined");
+            world.Dump.OnRun = () => world.Document = new PageDocument(@"C:\parts\other.SLDPRT", "Default");
+            world.Open();
+
+            world.Receive("review.start", "r1", new { });
+
+            SessionRecord record = Assert.Single(world.Host.Sessions);
+            Assert.Equal(@"C:\parts\bracket.SLDASM", record.Document!.Path);
+            Assert.Equal("Machined", record.Document.Configuration);
+            Assert.Equal(new DateTimeOffset(Stamp), record.StartedAt);
+            Assert.Equal(Path.GetFileName(record.RunDirectory), record.RunId);
+            Assert.Equal("20260913-142530-bracket", record.RunId);
+        }
+    }
+
+    /// <summary>
+    /// `sessions.list` answers the reviews this host started, in the order it tracked them, each
+    /// with what its chip needs - and no check or remodel record, which is not a review.
+    /// </summary>
+    [Fact]
+    public void SessionsListRepliesTheReviewsInTheOrderTrackedAndNoCheckRecord()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Now = Stamp;
+            world.Document = new PageDocument(@"C:\parts\bracket.SLDASM", "Default");
+            world.Open();
+            world.Receive("review.start", "r1", new { });
+
+            world.Host.TrackCheck(world.TrackedRun("bracket-check"));
+
+            world.Now = Stamp.AddMinutes(12);
+            world.Backend.NextChatId = "chat-2";
+            world.Document = new PageDocument(@"C:\parts\pin.SLDPRT", "Short");
+            world.Receive("review.start", "r2", new { });
+
+            world.Receive("sessions.list", "s1", new { });
+
+            JsonElement[] items = world.Reply("sessions", "s1").GetProperty("items").EnumerateArray().ToArray();
+            Assert.Equal(new[] { "chat-1", "chat-2" }, items.Select(item => item.GetProperty("chat_id").GetString()).ToArray());
+
+            JsonElement first = items[0];
+            SessionRecord record = world.Host.FindSession("chat-1")!;
+            Assert.Equal(record.RunId, first.GetProperty("run_id").GetString());
+            Assert.Equal(record.RunDirectory, first.GetProperty("run_dir").GetString());
+            Assert.Equal(@"C:\parts\bracket.SLDASM", first.GetProperty("path").GetString());
+            Assert.Equal("Default", first.GetProperty("configuration").GetString());
+            Assert.Equal(
+                new DateTimeOffset(Stamp).ToString("yyyy-MM-dd'T'HH:mm:sszzz", System.Globalization.CultureInfo.InvariantCulture),
+                first.GetProperty("started_at").GetString());
+
+            Assert.Equal(@"C:\parts\pin.SLDPRT", items[1].GetProperty("path").GetString());
+            Assert.Equal("Short", items[1].GetProperty("configuration").GetString());
+        }
+    }
+
+    /// <summary>
+    /// A chat tracked without a document (the two-argument form older callers use) is still a
+    /// review on the list; what it cannot say, it says as null rather than inventing.
+    /// </summary>
+    [Fact]
+    public void ARecordWithNoDocumentIsListedWithNulls()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            world.Host.TrackSession("chat-9", world.TrackedRun("chat-9"));
+
+            world.Receive("sessions.list", "s1", new { });
+
+            JsonElement item = Assert.Single(world.Reply("sessions", "s1").GetProperty("items").EnumerateArray().ToArray());
+            Assert.Equal("chat-9", item.GetProperty("chat_id").GetString());
+            Assert.Equal(JsonValueKind.Null, item.GetProperty("path").ValueKind);
+            Assert.Equal(JsonValueKind.Null, item.GetProperty("configuration").ValueKind);
+            Assert.Equal(JsonValueKind.Null, item.GetProperty("started_at").ValueKind);
+        }
+    }
+
+    [Fact]
+    public void SessionForgetRemovesTheReviewAndRepliesTheListWithoutIt()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            world.Host.TrackSession("chat-1", world.TrackedRun("chat-1"));
+            world.Host.TrackSession("chat-2", world.TrackedRun("chat-2"));
+
+            world.Receive("session.forget", "f1", new { chat_id = "chat-1" });
+
+            JsonElement[] items = world.Reply("sessions", "f1").GetProperty("items").EnumerateArray().ToArray();
+            Assert.Equal(new[] { "chat-2" }, items.Select(item => item.GetProperty("chat_id").GetString()).ToArray());
+            Assert.Null(world.Host.FindSession("chat-1"));
+            Assert.NotNull(world.Host.FindSession("chat-2"));
+        }
+    }
+
+    /// <summary>Forgetting the latest run clears `LatestSession`, so nothing resolves against a record that is gone.</summary>
+    [Fact]
+    public void ForgettingTheLatestSessionClearsIt()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            world.Host.TrackSession("chat-1", world.TrackedRun("chat-1"));
+            world.Host.TrackSession("chat-2", world.TrackedRun("chat-2"));
+
+            world.Receive("session.forget", "f1", new { chat_id = "chat-1" });
+            Assert.Equal("chat-2", world.Host.LatestSession!.ChatId);
+
+            world.Receive("session.forget", "f2", new { chat_id = "chat-2" });
+            Assert.Null(world.Host.LatestSession);
+        }
+    }
+
+    /// <summary>
+    /// An id this host never recorded, a check record's folder name, or no id at all is refused
+    /// exactly as `report.open` refuses one - and nothing is removed.
+    /// </summary>
+    [Fact]
+    public void ForgettingAnUnknownChatOrACheckIsRefusedAsReportOpenRefusesOne()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            world.Host.TrackSession("chat-1", world.TrackedRun("chat-1"));
+            string check = world.TrackedRun("bracket-check");
+            world.Host.TrackCheck(check);
+
+            world.Receive("session.forget", "f1", new { chat_id = "chat-404" });
+            world.Receive("report.open", "o1", new { chat_id = "chat-404" });
+            JsonElement forgot = world.Reply("error", "f1");
+            JsonElement opened = world.Reply("error", "o1");
+            Assert.Equal("UnknownChat", forgot.GetProperty("error_class").GetString());
+            Assert.Equal(opened.GetProperty("message").GetString(), forgot.GetProperty("message").GetString());
+
+            world.Receive("session.forget", "f2", new { chat_id = Path.GetFileName(check) });
+            Assert.Equal("UnknownChat", world.Reply("error", "f2").GetProperty("error_class").GetString());
+
+            world.Receive("session.forget", "f3", new { });
+            Assert.Equal("InvalidRequest", world.Reply("error", "f3").GetProperty("error_class").GetString());
+
+            Assert.Equal(2, world.Host.Sessions.Count);
+        }
+    }
+
+    /// <summary>
+    /// The list is read under the lock while the pump appends: `sessions.list` answered on one
+    /// thread while another tracks reviews and checks never throws `Collection was modified`
+    /// (the same invariant as <see cref="TheSessionListSurvivesTheBusyQuestionAndThePumpRunningAtOnce"/>).
+    /// </summary>
+    [Fact]
+    public void TheReviewListIsReadUnderTheLockWhileThePumpAppends()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string run = world.TrackedRun("chat-x");
+            var failures = new List<Exception>();
+            var stop = new ManualResetEventSlim();
+
+            var pump = new Thread(() =>
+            {
+                try
+                {
+                    for (int i = 0; i < 500 && !stop.IsSet; i++)
+                    {
+                        world.Host.TrackSession("chat-" + i, run, new PageDocument(@"C:\parts\a.sldprt", null), DateTimeOffset.Now);
+                        world.Host.TrackCheck(run);
+                    }
+                }
+                catch (Exception failure)
+                {
+                    lock (failures)
+                    {
+                        failures.Add(failure);
+                    }
+                }
+                finally
+                {
+                    stop.Set();
+                }
+            })
+            {
+                IsBackground = true,
+            };
+
+            pump.Start();
+            try
+            {
+                while (!stop.IsSet)
+                {
+                    world.Host.Reviews();
+                }
+            }
+            catch (Exception failure)
+            {
+                lock (failures)
+                {
+                    failures.Add(failure);
+                }
+            }
+
+            stop.Set();
+            Assert.True(pump.Join(TimeSpan.FromSeconds(30)), "the pump thread never finished.");
+            Assert.True(failures.Count == 0, failures.Count == 0 ? string.Empty : failures[0].ToString());
+        }
+    }
+
+    /// <summary>
+    /// `entity.show` with a `chat_id` hands the resolver that chat's run folder, from the host's
+    /// own record (the page names an id, never a path); without one the folder is null, which
+    /// is the check tabs' Show, resolving against the latest run as before (FR-023).
+    /// </summary>
+    [Fact]
+    public void EntityShowWithAChatIdHandsTheResolverThatChatsFolderAndWithoutOneNone()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+            string review = world.TrackedRun("chat-1");
+            world.Host.TrackSession("chat-1", review);
+
+            world.Receive("entity.show", "e1", new { persist_ref = "AQAAAA==", component_id = "cmp-4", chat_id = "chat-1", run_dir = @"C:\Windows" });
+            world.Receive("entity.show", "e2", new { persist_ref = "AQAAAA==", component_id = "cmp-4" });
+
+            Assert.Equal(2, world.Resolver.Requests.Count);
+            Assert.Equal(review, world.Resolver.Requests[0].RunDirectory);
+            Assert.Null(world.Resolver.Requests[1].RunDirectory);
+            world.Reply("entity.shown", "e1");
+            world.Reply("entity.shown", "e2");
+        }
+    }
+
+    [Fact]
+    public void EntityShowWithAChatIdTheHostNeverRecordedIsRefusedAsReportOpenRefusesOne()
+    {
+        using (var world = new ReviewWorld())
+        {
+            world.Open();
+
+            world.Receive("entity.show", "e1", new { persist_ref = "AQAAAA==", chat_id = "chat-404" });
+
+            Assert.Equal("UnknownChat", world.Reply("error", "e1").GetProperty("error_class").GetString());
+            Assert.Empty(world.Resolver.Requests);
+        }
+    }
+
+    /// <summary>
+    /// FR-023 end to end, with a resolver that looks ids up the way `SwEntityResolver` does: a
+    /// review A is tracked, then a check - so the check is the latest run - and Show on one of
+    /// A's findings, naming A's chat, resolves A's document through A's package, not the
+    /// check's. Before this feature Show read whichever run was latest (the analyst's fact 5).
+    /// </summary>
+    [Fact]
+    public void ShowNamingAReviewResolvesThatReviewsPackageAfterACheckBecameTheLatestRun()
+    {
+        using (var world = new ReviewWorld())
+        {
+            string review = world.TrackedRun("chat-1");
+            world.WritePackage(review, "doc-a", @"C:\parts\housing.sldprt");
+            string check = world.TrackedRun("bracket-check");
+            world.WritePackage(check, "doc-check", @"C:\parts\bracket.sldprt");
+
+            var lookup = new LookupResolver();
+            world.ResolverOverride = lookup;
+            world.Open();
+            lookup.Index = new RunPackageIndex(() => world.Host.LatestSession?.RunDirectory);
+            world.Host.TrackSession("chat-1", review);
+            world.Host.TrackCheck(check);
+            Assert.Equal(check, world.Host.LatestSession!.RunDirectory);
+
+            world.Receive("entity.show", "e1", new { persist_ref = "AQAAAA==", persist_ref_scope = "doc-a", chat_id = "chat-1" });
+            world.Receive("entity.show", "e2", new { persist_ref = "AQAAAA==", persist_ref_scope = "doc-a" });
+
+            Assert.Equal(new string?[] { @"C:\parts\housing.sldprt", null }, lookup.Resolved.ToArray());
+        }
+    }
+
     // ---- entity.show --------------------------------------------------------------------
 
     [Fact]
@@ -1118,6 +1409,9 @@ public sealed class ReviewHostTests
 
         public bool UseResolver { get; set; } = true;
 
+        /// <summary>A resolver used instead of <see cref="Resolver"/>, for a test that needs a real lookup.</summary>
+        public IEntityResolver? ResolverOverride { get; set; }
+
         public List<string> Posted { get; } = new List<string>();
 
         public ReviewHost Host => _host ?? throw new InvalidOperationException("call Open() first");
@@ -1137,7 +1431,7 @@ public sealed class ReviewHostTests
                 PrepareReview = Prepare,
                 Environment = _ => null,
                 Dump = Dump,
-                EntityResolver = UseResolver ? Resolver : null,
+                EntityResolver = UseResolver ? (ResolverOverride ?? Resolver) : null,
                 Opener = Opener,
                 Bridge = Bridge,
                 Engineer = Engineer,
@@ -1321,6 +1615,26 @@ public sealed class ReviewHostTests
             }
 
             return Outcome;
+        }
+    }
+
+    /// <summary>
+    /// A resolver that looks the reference's document up the way <see cref="SwEntityResolver"/>
+    /// does - through a <see cref="RunPackageIndex"/>, with the request's run folder winning over
+    /// the latest run - and records what it found, so FR-023 is tested end to end with no seat.
+    /// </summary>
+    private sealed class LookupResolver : IEntityResolver
+    {
+        public RunPackageIndex? Index { get; set; }
+
+        public List<string?> Resolved { get; } = new List<string?>();
+
+        public EntityShowOutcome Show(EntityShowRequest request)
+        {
+            Resolved.Add(request.PersistRefScope == null
+                ? null
+                : Index!.DocumentPath(request.PersistRefScope, request.RunDirectory));
+            return EntityShowOutcome.Shown(null);
         }
     }
 

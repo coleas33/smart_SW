@@ -21,6 +21,12 @@ namespace SwReview.AddIn.Review;
 /// megabytes, Show is pressed once per finding, and the parse happens on the SOLIDWORKS
 /// application thread with the engineer waiting on it.
 ///
+/// <b>A lookup may name its folder</b> (feature 009 FR-023). The Review tab's Show names the chat
+/// it shows, and the host resolves that chat's folder; that folder wins over the one the
+/// constructor's <c>Func</c> names - the pane's latest run, which a Model check or a remodel
+/// replaces - and a null folder falls back to it. What is kept is each folder's two id maps, not
+/// its package, so alternating Show between a review and a check tab parses neither again.
+///
 /// <b>Nothing here throws.</b> No run yet, no package under either name, a half-written one, an
 /// id that is not in it - all of them answer null, and Show then falls back to selecting the resolved
 /// entity by type and reports no full path. That is a worse answer than the right one and a far
@@ -54,9 +60,8 @@ public sealed class RunPackageIndex
     private readonly Func<string?> _runDirectory;
     private readonly object _gate = new object();
 
-    private string? _loadedFrom;
-    private IReadOnlyDictionary<string, string> _documentPaths = Empty;
-    private IReadOnlyDictionary<string, string> _componentFullPaths = Empty;
+    /// <summary>Each folder's two id maps, by folder, once its package has been read.</summary>
+    private readonly Dictionary<string, Maps> _loaded = new Dictionary<string, Maps>(StringComparer.OrdinalIgnoreCase);
 
     /// <param name="runDirectory">The run folder whose package the ids belong to, asked for on
     /// every lookup because the pane follows the engineer: a second review replaces the first
@@ -67,12 +72,26 @@ public sealed class RunPackageIndex
     }
 
     /// <summary>The path of the document a `document_id` names, or null.</summary>
-    public string? DocumentPath(string documentId) => Lookup(documentId, documents: true);
+    public string? DocumentPath(string documentId) => DocumentPath(documentId, null);
+
+    /// <summary>
+    /// The path of the document a `document_id` names in <paramref name="runDirectory"/>'s
+    /// package - the pane's latest run when that is null - or null.
+    /// </summary>
+    public string? DocumentPath(string documentId, string? runDirectory) =>
+        Lookup(documentId, runDirectory, documents: true);
 
     /// <summary>The full instance path of the component a `component_id` names, or null.</summary>
-    public string? ComponentFullPath(string componentId) => Lookup(componentId, documents: false);
+    public string? ComponentFullPath(string componentId) => ComponentFullPath(componentId, null);
 
-    private string? Lookup(string? id, bool documents)
+    /// <summary>
+    /// The full instance path of the component a `component_id` names in
+    /// <paramref name="runDirectory"/>'s package - the pane's latest run when that is null - or null.
+    /// </summary>
+    public string? ComponentFullPath(string componentId, string? runDirectory) =>
+        Lookup(componentId, runDirectory, documents: false);
+
+    private string? Lookup(string? id, string? runDirectory, bool documents)
     {
         if (string.IsNullOrEmpty(id))
         {
@@ -81,27 +100,22 @@ public sealed class RunPackageIndex
 
         lock (_gate)
         {
-            Load(_runDirectory());
-
-            IReadOnlyDictionary<string, string> map = documents ? _documentPaths : _componentFullPaths;
+            Maps maps = Load(runDirectory ?? _runDirectory());
+            IReadOnlyDictionary<string, string> map = documents ? maps.Documents : maps.Components;
             return map.TryGetValue(id!, out string? value) && !string.IsNullOrEmpty(value) ? value : null;
         }
     }
 
-    private void Load(string? runDirectory)
+    private Maps Load(string? runDirectory)
     {
-        if (string.Equals(runDirectory, _loadedFrom, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        _loadedFrom = runDirectory;
-        _documentPaths = Empty;
-        _componentFullPaths = Empty;
-
         if (string.IsNullOrWhiteSpace(runDirectory))
         {
-            return;
+            return Maps.None;
+        }
+
+        if (_loaded.TryGetValue(runDirectory!, out Maps? kept))
+        {
+            return kept;
         }
 
         EvidencePackage? package = FirstPackageIn(runDirectory!);
@@ -109,9 +123,9 @@ public sealed class RunPackageIndex
         {
             // No package under either name, one still being written, or one this build cannot
             // parse. The run folder is left to speak for itself; Show degrades rather than
-            // failing loudly in the middle of an unrelated action.
-            _loadedFrom = null;
-            return;
+            // failing loudly in the middle of an unrelated action - and nothing is kept, so the
+            // package is read once it has been written.
+            return Maps.None;
         }
 
         var documents = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -132,8 +146,25 @@ public sealed class RunPackageIndex
             }
         }
 
-        _documentPaths = documents;
-        _componentFullPaths = components;
+        var maps = new Maps(documents, components);
+        _loaded[runDirectory!] = maps;
+        return maps;
+    }
+
+    /// <summary>One folder's two id maps: what is kept of a package once it has been read.</summary>
+    private sealed class Maps
+    {
+        public static readonly Maps None = new Maps(Empty, Empty);
+
+        public Maps(IReadOnlyDictionary<string, string> documents, IReadOnlyDictionary<string, string> components)
+        {
+            Documents = documents;
+            Components = components;
+        }
+
+        public IReadOnlyDictionary<string, string> Documents { get; }
+
+        public IReadOnlyDictionary<string, string> Components { get; }
     }
 
     /// <summary>

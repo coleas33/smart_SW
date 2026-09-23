@@ -69,6 +69,13 @@ shown one `aria-current="true"`. The page asks `sessions.list` after `init` and 
    opened with `last_event_id = last_seq`.
 7. The landed U8 binding then judges the reviewed document against the active one.
 
+*Landed as* (T053, T057): the reason line is `<p id="read-only">` under `#results-state`; a chip
+that cannot be restored keeps its label beside the sentence and its Remove; choosing the chip
+already on screen does nothing; the host's `entity.show` reads the host's own id field, so the
+check hosts would honour a `run_id` the same way (their pages send none); `RunPackageIndex` keeps
+each folder's id maps, so alternating Show between a review and a check parses neither package
+again.
+
 ## 6. Returning to a document
 
 On `document.changed`, and after `init`: when no turn runs and no start is in flight, the shown

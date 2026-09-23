@@ -1007,6 +1007,58 @@
     return line;
   }
 
+  // ---- kept reviews (feature 009 User Story 6) -----------------------------------------
+
+  /** What a chip says when neither the backend nor the run folder can bring its review back. */
+  var GONE = 'This review can no longer be restored.';
+
+  /**
+   * One chip per kept review, in the host's order (contracts/sessions.md section 5): its file,
+   * configuration and time as `app.js` labelled it, the one on screen `aria-current`. A review
+   * that can no longer be restored says so, with a Remove that asks the host to forget it.
+   * `chips` is `[{chat_id, label, current, gone}]`; the order is the host's and nothing here
+   * changes it.
+   */
+  function reviewChips(chips) {
+    var row = el('div', 'review-chip-row');
+    var list = chips || [];
+    for (var index = 0; index < list.length; index++) {
+      var chip = list[index] || {};
+      var chatId = String(chip.chat_id || '');
+      if (chip.gone) {
+        var gone = el('span', 'review-chip gone');
+        gone.setAttribute('data-chat-id', chatId);
+        append(gone, [
+          el('span', 'review-chip-label', chip.label),
+          el('span', 'review-chip-gone', GONE)
+        ]);
+        var remove = button('Remove', 'review-forget', 'action review-forget');
+        remove.setAttribute('data-chat-id', chatId);
+        gone.appendChild(remove);
+        row.appendChild(gone);
+        continue;
+      }
+
+      var node = button(chip.label, 'review-chip', 'review-chip');
+      node.setAttribute('data-chat-id', chatId);
+      node.setAttribute('aria-current', chip.current ? 'true' : 'false');
+      row.appendChild(node);
+    }
+    return row;
+  }
+
+  /**
+   * The Transcript of a review restored from its run folder (contracts/sessions.md section 8):
+   * there is no live chat to replay, so it says where the transcript is, and offers the folder.
+   */
+  function restoredTranscript() {
+    var block = textBlock(
+      'system restored',
+      'This review was restored from its run folder; its transcript is in events.jsonl there.');
+    block.appendChild(button('Open run folder', 'open-folder', 'action open-folder'));
+    return block;
+  }
+
   /** A count and its noun, in the singular when there is one. */
   function counted(count, one, many) {
     return count + ' ' + (count === 1 ? one : many);
@@ -1117,6 +1169,8 @@
     findingGroup: findingGroup,
     contactList: contactList,
     notExaminedHeadline: notExaminedHeadline,
+    reviewChips: reviewChips,
+    restoredTranscript: restoredTranscript,
     entityRequest: entityRequest,
     usageLine: usageLine
   };

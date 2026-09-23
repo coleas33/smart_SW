@@ -47,23 +47,24 @@ public sealed class SwEntityResolver : IEntityResolver
     private readonly ISldWorks _swApp;
     private readonly IApplicationThread _thread;
     private readonly Func<ISwSession> _session;
-    private readonly Func<string, string?> _documentPath;
-    private readonly Func<string, string?> _componentFullPath;
+    private readonly Func<string, string?, string?> _documentPath;
+    private readonly Func<string, string?, string?> _componentFullPath;
 
     /// <param name="swApp">The running SOLIDWORKS.</param>
     /// <param name="thread">Marshals onto the application thread.</param>
     /// <param name="session">The scope over the active document; asked for fresh each call
     /// because the engineer can close and reopen documents between findings.</param>
-    /// <param name="documentPath">`document_id` to the path of the document that produced the
-    /// reference, from the run's package.json.</param>
-    /// <param name="componentFullPath">`component_id` to `IComponent2.Name2`, from the same
-    /// package. This is what a failed resolve hands back instead of the entity.</param>
+    /// <param name="documentPath">`(document_id, run folder)` to the path of the document that
+    /// produced the reference, from that run's package.json - the request's own run folder when
+    /// the page named one (feature 009 FR-023), the pane's latest run when it is null.</param>
+    /// <param name="componentFullPath">`(component_id, run folder)` to `IComponent2.Name2`, from
+    /// the same package. This is what a failed resolve hands back instead of the entity.</param>
     public SwEntityResolver(
         ISldWorks swApp,
         IApplicationThread thread,
         Func<ISwSession> session,
-        Func<string, string?> documentPath,
-        Func<string, string?> componentFullPath)
+        Func<string, string?, string?> documentPath,
+        Func<string, string?, string?> componentFullPath)
     {
         _swApp = swApp ?? throw new ArgumentNullException(nameof(swApp));
         _thread = thread ?? throw new ArgumentNullException(nameof(thread));
@@ -81,7 +82,9 @@ public sealed class SwEntityResolver : IEntityResolver
 
         return _thread.Invoke(() =>
         {
-            string? fullPath = request.ComponentId == null ? null : _componentFullPath(request.ComponentId);
+            string? fullPath = request.ComponentId == null
+                ? null
+                : _componentFullPath(request.ComponentId, request.RunDirectory);
             ISwSession session = _session();
             var refs = new PersistRefService(session.Gate);
 
@@ -90,7 +93,7 @@ public sealed class SwEntityResolver : IEntityResolver
 
             string? scopePath = request.PersistRefScope == null
                 ? null
-                : _documentPath(request.PersistRefScope);
+                : _documentPath(request.PersistRefScope, request.RunDirectory);
             if (!string.IsNullOrWhiteSpace(scopePath))
             {
                 // A face's reference belongs to its own part document, not to the assembly.
