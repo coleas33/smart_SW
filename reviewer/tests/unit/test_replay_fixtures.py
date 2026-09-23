@@ -7,26 +7,50 @@ feature 010 judges touching - reclassified as a contact, counted per fixture. Ev
 committed fixture is graded with `config/standards.example.yaml`, the profile the pilot ran
 (research R2.10). The payload shapes that make later savings measurable are pinned too: the
 part check's 866 feature rows and the 110 mate entities with their persistent references.
+
+User Story 2 (T049) and User Story 3 (T078) add their acceptance: checks first alone, then the
+pane defaults - checks first, the slim view, stubs after two rounds - under a million requested
+tokens on the big fixture with no recorded finding lost, the same findings with the view on and
+off, every step's full result stored, and both prune ages priced for the owner.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
+from collections.abc import Mapping
 from functools import cache
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from swreview.agent.settings import EfficiencySettings
+from swreview.agent.providers import ProviderName
+from swreview.agent.providers.pruning import PRUNED_NOTE, prunable, result_stub
+from swreview.agent.settings import (
+    MODEL_VIEW_OFF,
+    EfficiencySettings,
+    ModelViewSettings,
+    pane_defaults,
+)
 from swreview.benchmark.recording import read_recording
-from swreview.benchmark.replay import ReplayPasses, ReplayReport, replay, replay_passes
+from swreview.benchmark.replay import (
+    ReplayPasses,
+    ReplayReport,
+    Requested,
+    render_replay_lines,
+    replay,
+    replay_passes,
+    report_of,
+    request_messages,
+)
 from swreview.findings import finding_subject_key
 from swreview.ir.loader import load_package
 from swreview.prerun import DIGEST_HEADER
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import context_for
-from swreview.tools.registry import ToolRegistry
+from swreview.tools.registry import TOOL_RESULTS_DIR_NAME, ToolRegistry
 
 pytestmark = pytest.mark.usefixtures("vocabulary")
 
@@ -41,7 +65,9 @@ TOLERANCE = 0.01
 def as_recorded(name: str) -> ReplayReport:
     """The fixture replayed with its recorded settings (all off), graded with the example."""
     return replay(
-        FIXTURES / name, requested=EfficiencySettings(), standards_profile=EXAMPLE_PROFILE
+        FIXTURES / name,
+        requested=(EfficiencySettings(), MODEL_VIEW_OFF),
+        standards_profile=EXAMPLE_PROFILE,
     )
 
 
@@ -112,7 +138,9 @@ CHECKS_FIRST = EfficiencySettings(prerun_checks=True)
 @cache
 def checks_first(name: str) -> ReplayReport:
     """The fixture replayed with checks first alone requested (model view off)."""
-    return replay(FIXTURES / name, requested=CHECKS_FIRST, standards_profile=EXAMPLE_PROFILE)
+    return replay(
+        FIXTURES / name, requested=(CHECKS_FIRST, MODEL_VIEW_OFF), standards_profile=EXAMPLE_PROFILE
+    )
 
 
 @pytest.fixture(scope="module")
@@ -121,7 +149,7 @@ def big_checks_first(tmp_path_factory: pytest.TempPathFactory) -> ReplayPasses:
     return replay_passes(
         read_recording(FIXTURES / "big-assembly"),
         tmp_path_factory.mktemp("big-checks-first"),
-        requested=CHECKS_FIRST,
+        requested=(CHECKS_FIRST, MODEL_VIEW_OFF),
         standards_profile=EXAMPLE_PROFILE,
     )
 
@@ -209,3 +237,160 @@ def test_the_big_assembly_keeps_the_recorded_payload_shapes() -> None:
     entities = [entity for mate in mates["result"] for entity in mate["entities"]]
     assert len(entities) == 110
     assert all(entity["persist_ref"] for entity in entities)
+
+
+# --- the User Story 3 acceptance: the pane defaults (008 T078) -------------------------------
+
+MILLION = 1_000_000
+"""SC-002: the big fixture's requested input with the pane defaults stays below this."""
+
+
+def pane_request(name: str, prune_after: int = 2) -> Requested:
+    """What `swreview benchmark replay` requests by default for this fixture's provider."""
+    pane = pane_defaults(ProviderName(read_recording(FIXTURES / name).provider))
+    view = ModelViewSettings(
+        payload_slimming=pane.model_view.payload_slimming,
+        history_pruning=pane.model_view.history_pruning,
+        prune_after_rounds=prune_after,
+    )
+    return pane.efficiency, view
+
+
+@cache
+def with_pane_defaults(name: str, prune_after: int = 2) -> ReplayReport:
+    return replay(
+        FIXTURES / name,
+        requested=pane_request(name, prune_after),
+        standards_profile=EXAMPLE_PROFILE,
+    )
+
+
+@pytest.fixture(scope="module")
+def big_pane(tmp_path_factory: pytest.TempPathFactory) -> tuple[ReplayPasses, Path]:
+    """Both passes of the big fixture with the pane defaults, and the folder they wrote."""
+    scratch = tmp_path_factory.mktemp("big-pane")
+    passes = replay_passes(
+        read_recording(FIXTURES / "big-assembly"),
+        scratch,
+        requested=pane_request("big-assembly"),
+        standards_profile=EXAMPLE_PROFILE,
+    )
+    return passes, scratch
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_the_pane_defaults_lose_no_recorded_finding(name: str) -> None:
+    findings = with_pane_defaults(name).findings
+
+    assert findings.lost == []
+    assert findings.not_replayable == []
+    assert len(findings.reclassified) == RECLASSIFIED[name]
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_the_pane_defaults_cut_every_fixture(name: str) -> None:
+    report = with_pane_defaults(name)
+
+    assert report.totals.requested < report.totals.as_recorded
+    assert report.totals.requested < checks_first(name).totals.requested
+
+
+def test_the_pane_defaults_bring_the_big_assembly_under_a_million(
+    big_pane: tuple[ReplayPasses, Path],
+) -> None:
+    """SC-002, priced from the same played passes the other acceptance tests read."""
+    passes, _ = big_pane
+    report = report_of(passes)
+
+    assert report.totals.requested < MILLION
+    assert report.totals.requested == with_pane_defaults("big-assembly").totals.requested
+    assert report.findings.lost == []
+
+
+def test_the_view_changes_no_finding(
+    big_pane: tuple[ReplayPasses, Path], tmp_path: Path
+) -> None:
+    """SC-007: the same requested levers with the model view off record the same findings
+    and contacts - the view changes what the model reads, never what the checks record."""
+    passes, _ = big_pane
+    efficiency, _ = pane_request("big-assembly")
+    off = replay_passes(
+        passes.recording,
+        tmp_path,
+        requested=(efficiency, MODEL_VIEW_OFF),
+        standards_profile=EXAMPLE_PROFILE,
+    )
+
+    def findings(session: Any) -> Counter[Any]:
+        return Counter(finding_subject_key(finding) for finding in session.findings)
+
+    assert findings(passes.second.session) == findings(off.second.session)
+    assert sorted(c.group_key for c in passes.second.session.contacts) == sorted(
+        c.group_key for c in off.second.session.contacts
+    )
+
+
+def test_every_step_of_the_requested_pass_is_stored(big_pane: tuple[ReplayPasses, Path]) -> None:
+    """SC-008: one `tool-results/step-<n>.json` per recorded step, naming the session."""
+    passes, scratch = big_pane
+    session = passes.second.session
+    folder = scratch / "requested" / TOOL_RESULTS_DIR_NAME
+
+    assert session.steps
+    for step in session.steps:
+        stored = json.loads((folder / f"step-{step.index}.json").read_text(encoding="utf-8"))
+        assert stored["session_id"] == str(session.session_id)
+        assert (stored["step"], stored["tool"]) == (step.index, step.tool)
+    assert len(list(folder.glob("step-*.json"))) == len(session.steps)
+
+
+def test_every_result_past_the_prune_age_is_a_stub_in_every_request(
+    big_pane: tuple[ReplayPasses, Path],
+) -> None:
+    """Every result two rounds old or older reaches the model as a stub - unless it is an
+    error or its stub would be longer - and no younger result ever does."""
+    passes, _ = big_pane
+    view = passes.requested_view
+
+    def compact(value: Any) -> int:
+        return len(json.dumps(value, separators=(",", ":")))
+
+    def stub(content: Mapping[str, Any]) -> bool:
+        return content.get("pruned") == PRUNED_NOTE
+
+    stubs = 0
+    for played in passes.second.rounds:
+        sent = request_messages(played.history, view)
+        old = prunable(played.history, view.prune_after_rounds)
+        for index, message in enumerate(sent):
+            if message["role"] != "tool":
+                continue
+            content = message["content"]
+            if index not in old:
+                assert not stub(content), (played.turn, played.index, index)
+                continue
+            if stub(content):
+                stubs += 1
+                continue
+            full = played.history[index]["content"]
+            stubbed = result_stub(
+                message["name"], old[index], full, finding_detail=view.payload_slimming
+            )
+            assert compact(stubbed) >= compact(full), (played.turn, played.index, index)
+    assert stubs > 0
+
+
+def test_both_prune_ages_are_priced_for_the_owner() -> None:
+    """Research R2.37: two rounds is the default, one is the owner's call; both are printed."""
+    one, two = with_pane_defaults("big-assembly", 1), with_pane_defaults("big-assembly", 2)
+
+    assert one.settings.requested.model_view.prune_after_rounds == 1
+    assert two.settings.requested.model_view.prune_after_rounds == 2
+    assert one.totals.requested <= two.totals.requested < MILLION
+    assert one.findings.lost == []
+    assert any(
+        line.endswith("history pruning after 1 round") for line in render_replay_lines(one)
+    )
+    assert any(
+        line.endswith("history pruning after 2 rounds") for line in render_replay_lines(two)
+    )

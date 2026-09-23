@@ -20,7 +20,12 @@ from typing import Any
 
 import pytest
 
-from swreview.agent.providers import FRAMING_TOKENS, TokenUsage, tool_result_text
+from swreview.agent.providers import (
+    FRAMING_TOKENS,
+    TokenUsage,
+    model_payload,
+    tool_result_text,
+)
 from swreview.agent.providers.fake import ScriptedToolCall
 from swreview.agent.runner import ANSWER_MESSAGE
 from swreview.agent.settings import EfficiencySettings
@@ -34,6 +39,7 @@ from tests.support.replay import (
     DEFAULT_OUTPUT_TOKENS,
     DEFAULT_PREFIX_TOKENS,
     record_scripted_review,
+    usage,
 )
 
 pytestmark = pytest.mark.usefixtures("vocabulary")
@@ -279,6 +285,130 @@ def test_usage_for_decides_every_rounds_usage(tmp_path: Path, package_dir: Path)
     assert usage_inputs(out) == [1_000, 1_001, 1_002]
     assert [len(played.visible) for played in seen] == [0, 1, 2]
     assert [played.prior_rounds for played in seen] == [0, 1, 2]
+
+
+# --- the neutral history each round carries (008 T078, T079) --------------------------------
+
+
+def played_rounds(tmp_path: Path, package_dir: Path, turns: list[TurnPlan]) -> list[PlayedRound]:
+    """Every round of `turns` as the builder's first pass played it."""
+    seen: list[PlayedRound] = []
+
+    def usage_for(played: PlayedRound) -> TokenUsage:
+        seen.append(played)
+        return usage(1_000)
+
+    record_scripted_review(tmp_path / "run", package_dir, turns, usage_for=usage_for)
+    return seen
+
+
+def roles(played: PlayedRound) -> list[str]:
+    return [str(message["role"]) for message in played.history]
+
+
+def test_a_round_carries_the_adapters_neutral_history(tmp_path: Path, package_dir: Path) -> None:
+    """One assistant message per round asking for its calls, each result as the model reads
+    it, a committed turn's closing answer and the engineer's messages: the shape every
+    adapter's history has, which the replay prunes with the adapters' own function."""
+    seen = played_rounds(
+        tmp_path,
+        package_dir,
+        [
+            TurnPlan(rounds=((SUMMARY,), (COMPONENTS, HOLES)), text="Done."),
+            TurnPlan(kind="follow_up", user_text="And the holes?", rounds=((HOLES,),), text="Ok."),
+        ],
+    )
+
+    [follow_up] = [played for played in seen if (played.turn, played.index) == (1, 0)]
+    assert roles(follow_up) == [
+        "user", "assistant", "tool", "assistant", "tool", "tool", "assistant", "user"
+    ]
+    assert follow_up.history[-2] == {"role": "assistant", "content": "Done."}
+    assert follow_up.history[-1] == {"role": "user", "content": "And the holes?"}
+    tools = [message for message in follow_up.history if message["role"] == "tool"]
+    assert [message["name"] for message in tools] == [call.tool for call in follow_up.visible]
+    assert [message["content"] for message in tools] == [
+        model_payload(call.result) for call in follow_up.visible
+    ]
+    asked = [
+        [call["name"] for call in message["tool_calls"]]
+        for message in follow_up.history
+        if message["role"] == "assistant" and "tool_calls" in message
+    ]
+    assert asked == [["get_package_summary"], ["list_components", "list_holes"]]
+
+
+def test_the_rounds_of_one_turn_grow_the_history_round_by_round(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    seen = played_rounds(
+        tmp_path, package_dir, [TurnPlan(rounds=((SUMMARY,), (COMPONENTS,)), text="Done.")]
+    )
+
+    assert [roles(played) for played in seen] == [
+        ["user"],
+        ["user", "assistant", "tool"],
+        ["user", "assistant", "tool", "assistant", "tool"],
+    ]
+    assert seen[0].history[0]["role"] == "user" and seen[0].history[0]["content"]
+
+
+def test_a_stopped_turn_leaves_only_its_engineer_message_behind(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    """The runner keeps the message it appended before the turn, and none of a turn that did
+    not return; so the next request carries two engineer messages and no stopped result."""
+    seen = played_rounds(
+        tmp_path,
+        package_dir,
+        [
+            TurnPlan(
+                rounds=((SUMMARY,), (COMPONENTS,)), end_reason="stopped", stop_at_last_call=True
+            ),
+            TurnPlan(kind="follow_up", user_text="Go on.", rounds=((HOLES,),), text="Ok."),
+        ],
+    )
+
+    [follow_up] = [played for played in seen if (played.turn, played.index) == (1, 0)]
+    assert roles(follow_up) == ["user", "user"]
+    assert follow_up.visible == ()
+
+
+def test_a_turn_cut_at_its_budget_has_no_closing_answer(tmp_path: Path, package_dir: Path) -> None:
+    seen = played_rounds(
+        tmp_path,
+        package_dir,
+        [
+            TurnPlan(rounds=((SUMMARY,),), end_reason="max_steps"),
+            TurnPlan(kind="follow_up", user_text="Go on.", rounds=((HOLES,),), text="Ok."),
+        ],
+    )
+
+    [follow_up] = [played for played in seen if (played.turn, played.index) == (1, 0)]
+    assert roles(follow_up) == ["user", "assistant", "tool", "user"]
+
+
+def test_an_answer_turn_opens_on_the_runners_answer_message(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    ask = ScriptedToolCall(
+        "request_evidence",
+        {"what": "the drawing", "why": "fit check", "entity_ids": ["cmp:0002"]},
+    )
+    seen = played_rounds(
+        tmp_path,
+        package_dir,
+        [
+            TurnPlan(rounds=((ask,),), text="Need a drawing."),
+            TurnPlan(kind="answer", answers=(("ER-001", "It is rev B."),), text="Thanks."),
+        ],
+    )
+
+    [answer] = [played for played in seen if played.turn == 1]
+    assert answer.history[-1] == {
+        "role": "user",
+        "content": ANSWER_MESSAGE.format(request_id="ER-001", answer="It is rev B."),
+    }
 
 
 # --- determinism ---------------------------------------------------------------------------

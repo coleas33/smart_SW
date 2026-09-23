@@ -12,6 +12,10 @@ results the model would have been sent with it:
   turn that did not return - so its results are visible only inside it, exactly as they were.
 - `PlayedRound.prior_rounds` counts the model's answers already in that history, which is
   what the output tokens riding in the request are counted over.
+- `PlayedRound.history` is that history as the adapters' neutral messages: the engineer's
+  messages, one assistant message per round with the calls it asked for, each result as the
+  model reads it (`model_payload`), and a committed turn's closing answer. It is what the
+  replay prunes with the adapters' own `prune_history` (feature 008 User Story 3).
 - `PlayedCall` carries each call's full `ToolCallResult`, so a caller can size it with
   `tool_result_text` and compare it with a recorded summary.
 
@@ -40,6 +44,7 @@ from swreview.agent.providers import (
     ToolCallResult,
     ToolSet,
     TurnEndReason,
+    model_payload,
     summarize_result,
     tool_result_text,
 )
@@ -49,8 +54,9 @@ from swreview.agent.providers.fake import (
     ScriptedToolCall,
     ScriptedTurn,
 )
-from swreview.agent.runner import ReviewRun, start_review
-from swreview.agent.settings import EfficiencySettings
+from swreview.agent.providers.pruning import prunable, prune_history, result_stub
+from swreview.agent.runner import ANSWER_MESSAGE, ReviewRun, start_review
+from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings, ModelViewSettings
 from swreview.benchmark.recording import (
     UNCOMMITTED_ENDS,
     RecordedCall,
@@ -64,11 +70,13 @@ from swreview.ir.loader import PACKAGE_FILE_NAME
 from swreview.prerun import ALREADY_RUN
 from swreview.report.session import Contact, ReviewSession
 from swreview.tokens import TOKENIZER_NAME, count_tokens, encoding
+from swreview.tools.model_view import model_view as view_of
 from swreview.tools.registry import (
     BRIDGE_TOOL_FUNCTIONS,
     COMPACT_QUERY_TOOL_FUNCTIONS,
     REMODEL_TOOL_FUNCTIONS,
     TOOL_FUNCTIONS,
+    TOOL_RESULTS_DIR_NAME,
     standards_tools,
 )
 
@@ -96,6 +104,7 @@ __all__ = [
     "replay_passes",
     "replay_recording",
     "report_of",
+    "request_messages",
     "subject_of",
     "turn_plans",
 ]
@@ -182,6 +191,9 @@ class PlayedRound:
     """The model's answers already in the history this round's request carries."""
     visible: tuple[PlayedCall, ...]
     calls: tuple[PlayedCall, ...]
+    history: tuple[dict[str, Any], ...]
+    """The neutral messages this round's request carries, before any pruning: its tool
+    messages are `visible`, in order (`contracts/replay.md` section 4, rule 4)."""
 
 
 @dataclass
@@ -320,18 +332,65 @@ def _play(run: ReviewRun, turns: Sequence[TurnPlan]) -> PlayedReview:
     run.tools = tools
     committed: list[PlayedCall] = []
     committed_rounds = 0
+    history: list[dict[str, Any]] = []
     for turn_index, plan in enumerate(turns):
         start = len(tools.played)
         tools.stop_at = start + plan.calls - 1 if plan.stop_at_last_call else None
         stopped = _drive(run, plan)
         dispatched = tools.played[start:]
-        rounds = _rounds_of(turn_index, plan, committed, committed_rounds, dispatched, stopped)
+        # The runner appends the engineer's message before the turn runs and keeps it
+        # whether or not the turn returns; only a returned turn adds its rounds.
+        history.append(_user_message(run, plan))
+        rounds = _rounds_of(
+            turn_index, plan, committed, committed_rounds, dispatched, stopped, history
+        )
         played.rounds.extend(rounds)
         if not stopped and plan.end_reason not in UNCOMMITTED_ENDS:
             committed.extend(dispatched)
             committed_rounds += len(rounds)
+            history.extend(m for r in rounds if r.calls for m in _round_messages(r.calls))
+            if plan.end_reason != "max_steps":
+                history.append({"role": "assistant", "content": plan.text})
     played.session = run.session
     return played
+
+
+def _user_message(run: ReviewRun, plan: TurnPlan) -> dict[str, Any]:
+    """The engineer's message the runner appends before the turn, in the runner's words."""
+    if plan.kind == "opening":
+        text = run.opening_message
+    elif plan.kind == "follow_up":
+        text = plan.user_text
+    else:
+        [(request_id, answer)] = plan.answers
+        text = ANSWER_MESSAGE.format(request_id=request_id, answer=answer)
+    return {"role": "user", "content": text}
+
+
+def _round_messages(calls: Sequence[PlayedCall]) -> list[dict[str, Any]]:
+    """One round in the neutral history: the assistant message asking for its calls, then
+    one tool message per call carrying what the model reads of it - the fake's shape, which
+    is every adapter's (`providers/fake.py`, `openai_provider._append_assistant`)."""
+    return [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"call_id": c.result.call_id, "name": c.tool, "arguments": dict(c.arguments)}
+                for c in calls
+            ],
+        },
+        *(
+            {
+                "role": "tool",
+                "call_id": c.result.call_id,
+                "name": c.tool,
+                "content": model_payload(c.result),
+                "is_error": c.result.is_error,
+            }
+            for c in calls
+        ),
+    ]
 
 
 def _drive(run: ReviewRun, plan: TurnPlan) -> bool:
@@ -434,14 +493,17 @@ def _rounds_of(
     committed_rounds: int,
     dispatched: Sequence[PlayedCall],
     stopped: bool,
+    history: Sequence[dict[str, Any]],
 ) -> list[PlayedRound]:
     """Split one turn's dispatched calls back into the rounds its plan grouped them in.
 
     A round is played when the budget reached it; the closing round is played when every
-    call ran and the turn was not stopped.
+    call ran and the turn was not stopped. `history` is what the turn's first request
+    carries: the committed history and the engineer's message.
     """
     rounds: list[PlayedRound] = []
     visible = list(committed)
+    messages = list(history)
     offset = 0
     for index, calls in enumerate(plan.rounds):
         if offset >= len(dispatched) and not (stopped and offset == len(dispatched)):
@@ -454,9 +516,11 @@ def _rounds_of(
                 prior_rounds=committed_rounds + index,
                 visible=tuple(visible),
                 calls=mine,
+                history=tuple(messages),
             )
         )
         visible.extend(mine)
+        messages.extend(_round_messages(mine) if mine else ())
         offset += len(calls)
         if len(mine) < len(calls):
             return rounds
@@ -468,6 +532,7 @@ def _rounds_of(
                 prior_rounds=committed_rounds + len(plan.rounds),
                 visible=tuple(visible),
                 calls=(),
+                history=tuple(messages),
             )
         )
     return rounds
@@ -475,10 +540,13 @@ def _rounds_of(
 
 # --- the replay: two passes, classes, accounting, findings (contracts/replay.md §3 to §7) ------
 
-CallClass = Literal["reproduced", "changed", "estimated", "carried", "answered_from_checks"]
+CallClass = Literal[
+    "reproduced", "changed", "estimated", "stored", "carried", "answered_from_checks"
+]
 """How a recorded call was priced. `answered_from_checks` (User Story 2): the requested pass
-ran checks first and its re-call guard answered the call from the pre-run. User Story 3 adds
-`stored`; `carried` is a presentation round, which has no calls of its own."""
+ran checks first and its re-call guard answered the call from the pre-run. `stored` (User
+Story 3): the call would be estimated, but the run folder keeps its full result. `carried` is
+a presentation round, which has no calls of its own."""
 
 BRIDGE_TOOLS = frozenset(function.__name__ for function in BRIDGE_TOOL_FUNCTIONS)
 STANDARDS_TOOLS = frozenset(function.__name__ for function in standards_tools())
@@ -534,8 +602,9 @@ class ReplayTotals(ReplayModel):
 
 class PassSettings(ReplayModel):
     efficiency: EfficiencySettings
-    model_view: dict[str, Any] | None = None
-    """What the model read of each result; recorded from User Story 3 on, off until then."""
+    model_view: ModelViewSettings
+    """What the model read of each result: the recording's own (off when it records none)
+    for pass A, the requested one for pass B."""
 
 
 class ReplaySettings(ReplayModel):
@@ -591,10 +660,15 @@ class ReplayReport(ReplayModel):
     findings: ReplayFindings
 
 
+Requested = tuple[EfficiencySettings, ModelViewSettings]
+"""What pass B runs with: its levers and its model view, as `cli._review_settings` resolves
+them."""
+
+
 def replay(
     run_dir: Path | str,
     *,
-    requested: EfficiencySettings,
+    requested: Requested,
     standards_profile: Path | str | None = None,
 ) -> ReplayReport:
     """Replay the review in `run_dir` as recorded and with `requested`, and compare both.
@@ -615,7 +689,9 @@ class ReplayPasses:
 
     recording: Recording
     as_recorded: EfficiencySettings
+    as_recorded_view: ModelViewSettings
     requested: EfficiencySettings
+    requested_view: ModelViewSettings
     first: PlayedReview
     second: PlayedReview
     with_profile: bool
@@ -625,16 +701,20 @@ def replay_passes(
     recording: Recording,
     scratch: Path | str,
     *,
-    requested: EfficiencySettings,
+    requested: Requested,
     standards_profile: Path | str | None = None,
 ) -> ReplayPasses:
     """Play pass A and pass B of `recording` into `scratch/as-recorded` and `scratch/requested`.
 
-    The folders are the caller's: `replay_recording` hands a temporary one and lets it go;
-    an acceptance test keeps it to read what the requested pass wrote. Nothing is written
-    anywhere else, and never into the recording's own folder.
+    Pass A runs with the recording's own levers and model view (a session written before
+    either records none, which is off); pass B with `requested`. The folders are the
+    caller's: `replay_recording` hands a temporary one and lets it go; an acceptance test
+    keeps it to read what the requested pass wrote. Nothing is written anywhere else, and
+    never into the recording's own folder.
     """
+    requested_settings, requested_view = requested
     recorded_settings = recording.session.efficiency or EfficiencySettings()
+    recorded_view = recording.session.model_view or MODEL_VIEW_OFF
     plans = turn_plans(recording)
     options: dict[str, Any] = {"standards_profile": standards_profile}
     first = play_review(
@@ -643,6 +723,7 @@ def replay_passes(
         plans,
         model=recording.session.model,
         efficiency=recorded_settings,
+        model_view=recorded_view,
         **options,
     )
     second = play_review(
@@ -650,13 +731,16 @@ def replay_passes(
         Path(scratch) / "requested",
         plans,
         model=recording.session.model,
-        efficiency=requested,
+        efficiency=requested_settings,
+        model_view=requested_view,
         **options,
     )
     return ReplayPasses(
         recording=recording,
         as_recorded=recorded_settings,
-        requested=requested,
+        as_recorded_view=recorded_view,
+        requested=requested_settings,
+        requested_view=requested_view,
         first=first,
         second=second,
         with_profile=standards_profile is not None,
@@ -666,7 +750,7 @@ def replay_passes(
 def replay_recording(
     recording: Recording,
     *,
-    requested: EfficiencySettings,
+    requested: Requested,
     standards_profile: Path | str | None = None,
 ) -> ReplayReport:
     """`replay` over a recording already read."""
@@ -683,15 +767,15 @@ def report_of(passes: ReplayPasses) -> ReplayReport:
     recording, first, second = passes.recording, passes.first, passes.second
     classes = _classify(recording, first, passes.with_profile)
     answered = _answered_from_checks(classes, second)
-    sizes_first, lower = _sizes(recording, first, classes)
-    sizes_second = _requested_sizes(first, second, classes, sizes_first, answered)
+    pricing_first, lower = _as_recorded_pricing(recording, classes, passes.as_recorded_view)
+    pricing_second = _requested_pricing(pricing_first, answered, passes.requested_view)
     rounds = _rounds(
         recording,
         classes,
         first,
         second,
-        sizes_first,
-        sizes_second,
+        pricing_first,
+        pricing_second,
         lower,
         answered,
         prefix_difference=count_tokens(second.prefix) - count_tokens(first.prefix),
@@ -703,13 +787,23 @@ def report_of(passes: ReplayPasses) -> ReplayReport:
         comparison="shape" if recording.provider == "gemini" else "exact",
         framing_tokens=FRAMING_TOKENS,
         settings=ReplaySettings(
-            as_recorded=PassSettings(efficiency=passes.as_recorded),
-            requested=PassSettings(efficiency=passes.requested),
+            as_recorded=PassSettings(
+                efficiency=passes.as_recorded, model_view=passes.as_recorded_view
+            ),
+            requested=PassSettings(efficiency=passes.requested, model_view=passes.requested_view),
         ),
         rounds=rounds,
         totals=_totals(rounds),
         findings=_findings(recording, classes, second, answered),
     )
+
+
+@dataclass(frozen=True)
+class _Stored:
+    """A call's full result as the recorded review stored it (`tool-results/step-<n>.json`)."""
+
+    payload: dict[str, Any]
+    is_error: bool
 
 
 @dataclass(frozen=True)
@@ -721,30 +815,71 @@ class _Classified:
     played: PlayedCall | None
     class_: CallClass
     reason: str | None
+    stored: _Stored | None = None
+    """The stored result a `stored` call is sized from."""
 
 
 def _classify(recording: Recording, first: PlayedReview, with_profile: bool) -> list[_Classified]:
-    """Class every recorded call from pass A (contracts/replay.md section 3)."""
+    """Class every recorded call from pass A (contracts/replay.md section 3).
+
+    A call that would be estimated is `stored` instead when the run folder keeps its full
+    result. Either way the replay could not run it, so a later divergence in the turn is
+    still put down to it.
+    """
     played = [call for played_round in first.rounds for call in played_round.calls]
     classified: list[_Classified] = []
     index = 0
     for turn in recording.turns:
-        estimated_at: int | None = None
+        unreproduced_at: int | None = None
         for recorded_round in turn.rounds:
             for call in recorded_round.calls:
                 counterpart = played[index] if index < len(played) else None
-                class_, reason = _class_of(call, counterpart, estimated_at, with_profile)
-                if class_ == "estimated" and estimated_at is None:
-                    estimated_at = call.step
-                classified.append(_Classified(index, call, counterpart, class_, reason))
+                class_, reason = _class_of(call, counterpart, unreproduced_at, with_profile)
+                stored = _stored_result(recording, call) if class_ == "estimated" else None
+                if stored is not None:
+                    class_ = "stored"
+                    reason = (
+                        f"{reason}; sized from its stored result "
+                        f"{TOOL_RESULTS_DIR_NAME}/step-{call.step}.json"
+                    )
+                if class_ in ("estimated", "stored") and unreproduced_at is None:
+                    unreproduced_at = call.step
+                classified.append(_Classified(index, call, counterpart, class_, reason, stored))
                 index += 1
     return classified
+
+
+def _stored_result(recording: Recording, call: RecordedCall) -> _Stored | None:
+    """The call's stored full result, when the recorded review wrote one for this call.
+
+    Taken only when the file names this recording's session, this step, this tool and these
+    arguments, and carries a payload: a stale file from an earlier review in a reused
+    folder, or one a hand edit broke, is not this call's result and is ignored, leaving the
+    call estimated.
+    """
+    path = recording.run_dir / TOOL_RESULTS_DIR_NAME / f"step-{call.step}.json"
+    try:
+        envelope = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(envelope, dict):
+        return None
+    payload = envelope.get("payload")
+    if (
+        envelope.get("session_id") != str(recording.session.session_id)
+        or envelope.get("step") != call.step
+        or envelope.get("tool") != call.tool
+        or envelope.get("arguments") != call.arguments
+        or not isinstance(payload, dict)
+    ):
+        return None
+    return _Stored(payload=payload, is_error=envelope.get("status") == "error")
 
 
 def _class_of(
     recorded: RecordedCall,
     played: PlayedCall | None,
-    estimated_at: int | None,
+    unreproduced_at: int | None,
     with_profile: bool,
 ) -> tuple[CallClass, str | None]:
     if recorded.tool not in KNOWN_TOOLS:
@@ -766,10 +901,10 @@ def _class_of(
         )
     if same_summary(recorded.summary, played.summary):
         return "reproduced", None
-    if estimated_at is not None:
+    if unreproduced_at is not None:
         return "estimated", (
             f"its result differs from the recording after the estimated call at step "
-            f"{estimated_at}, whose effect a replay cannot reproduce"
+            f"{unreproduced_at}, whose effect a replay cannot reproduce"
         )
     return "changed", "the current code's result differs from the recorded one"
 
@@ -800,28 +935,144 @@ def same_summary(recorded: str, replayed: str) -> bool:
     return left == right
 
 
-def _sizes(
-    recording: Recording, first: PlayedReview, classes: Sequence[_Classified]
-) -> tuple[dict[int, int], set[int]]:
-    """Pass A's size of every call, by index, and the indices sized as a lower bound."""
-    sizes: dict[int, int] = {}
+@dataclass(frozen=True)
+class _Estimate:
+    """A result the replay could not run: its estimated size, and whether it was an error."""
+
+    tokens: int
+    is_error: bool
+
+
+@dataclass(frozen=True)
+class _Pricing:
+    """How one pass prices the results its requests carry (contracts/replay.md section 4).
+
+    Every result is read from the pass's own played history, except the ones listed here.
+    A `stored` entry's content is its stored result as the pass's settings show it, pruned
+    like any other result. An `estimates` entry has no content: it is sized at its estimate
+    - the recorded growth, the full payload as recorded, whatever the view - until the
+    adapters' rule makes it a stub, and then at the part of its stub the replay can know
+    (its tool and arguments, without the counts and ids its payload would add).
+    """
+
+    view: ModelViewSettings
+    estimates: Mapping[int, _Estimate]
+    stored: Mapping[int, _Stored]
+
+
+def request_messages(
+    history: Sequence[Mapping[str, Any]], view: ModelViewSettings
+) -> list[dict[str, Any]]:
+    """The messages a request built from `history` carries under `view`: the adapters' rule.
+
+    Pruned by the adapters' own `prune_history` when the view prunes, pointing stubs at
+    `get_finding` only when slimming offers it, exactly as `openai_provider._visible` and
+    the Gemini adapter's `_contents` do; unchanged otherwise.
+    """
+    if not view.history_pruning:
+        return [dict(message) for message in history]
+    return prune_history(
+        history, view.prune_after_rounds, finding_detail=view.payload_slimming
+    )
+
+
+def _shown(tool: str, stored: _Stored, view: ModelViewSettings) -> dict[str, Any]:
+    """A stored result as the model would read it under `view`: the tool's view when slimming."""
+    return view_of(tool, stored.payload) if view.payload_slimming else stored.payload
+
+
+def _read_tokens(content: Mapping[str, Any], view: ModelViewSettings) -> int:
+    """`T` of one result as the model reads it: the one serialization, compact when slimming."""
+    return count_tokens(tool_result_text(content, compact=view.payload_slimming))
+
+
+def _results_tokens(
+    played: PlayedRound, pricing: _Pricing, cache: dict[tuple[int, bool], int]
+) -> int:
+    """Σ over the tool messages one round's request carries of their tokens and framing.
+
+    The round's neutral history with each stored result put in its place and each estimated
+    one given its recorded status, passed through `request_messages`; an estimated result
+    becomes a stub where the adapters' rule (`prunable`) says so and its stub is smaller
+    than its estimate. `cache` holds each call's count in full and as a stub, which is all a
+    result can be (a stub is a function of the result alone).
+    """
+    history = list(played.history)
+    positions = [i for i, message in enumerate(history) if message.get("role") == "tool"]
+    if len(positions) != len(played.visible):
+        raise AssertionError(
+            f"round {played.index} of turn {played.turn} carries {len(positions)} tool "
+            f"messages for {len(played.visible)} visible results"
+        )
+    view = pricing.view
+    for position, call in zip(positions, played.visible, strict=True):
+        stored = pricing.stored.get(call.index)
+        estimate = pricing.estimates.get(call.index)
+        if stored is not None:
+            history[position] = {
+                **history[position],
+                "content": _shown(call.tool, stored, view),
+                "is_error": stored.is_error,
+            }
+        elif estimate is not None:
+            history[position] = {**history[position], "is_error": estimate.is_error}
+    sent = request_messages(history, view)
+    old = prunable(history, view.prune_after_rounds) if view.history_pruning else {}
+    total = 0
+    for position, call in zip(positions, played.visible, strict=True):
+        estimate = pricing.estimates.get(call.index)
+        if estimate is not None:
+            stub = None
+            if position in old:
+                stub = _read_tokens(
+                    result_stub(
+                        call.tool, old[position], {}, finding_detail=view.payload_slimming
+                    ),
+                    view,
+                )
+            total += (estimate.tokens if stub is None else min(stub, estimate.tokens))
+            total += FRAMING_TOKENS
+            continue
+        content = sent[position]["content"]
+        key = (call.index, content is not history[position]["content"])
+        if key not in cache:
+            cache[key] = _read_tokens(content, view)
+        total += cache[key] + FRAMING_TOKENS
+    return total
+
+
+def _as_recorded_pricing(
+    recording: Recording, classes: Sequence[_Classified], view: ModelViewSettings
+) -> tuple[_Pricing, set[int]]:
+    """Pass A's pricing, and the indices whose estimate is a lower bound.
+
+    A call's size as the next request reads it - in full, since no result is pruned in the
+    request right after it - is what the recorded growth is shared out against.
+    """
+    known: dict[int, int] = {}
+    stored: dict[int, _Stored] = {}
     for item in classes:
-        if item.class_ != "estimated" and item.played is not None:
-            sizes[item.index] = count_tokens(item.played.text)
+        if item.stored is not None:
+            stored[item.index] = item.stored
+            known[item.index] = _read_tokens(_shown(item.recorded.tool, item.stored, view), view)
+        elif item.class_ != "estimated" and item.played is not None:
+            known[item.index] = _read_tokens(model_payload(item.played.result), view)
     by_step = {item.recorded.step: item for item in classes}
+    estimates: dict[int, _Estimate] = {}
     lower: set[int] = set()
     for turn in recording.turns:
         for recorded_round in turn.rounds:
-            known = {
-                call.step: sizes[by_step[call.step].index]
+            sized = {
+                call.step: known[by_step[call.step].index]
                 for call in recorded_round.calls
-                if by_step[call.step].index in sizes
+                if by_step[call.step].index in known
             }
-            for step, (size, bound) in estimated_sizes(recording, recorded_round, known).items():
-                sizes[by_step[step].index] = size
+            for step, (size, bound) in estimated_sizes(recording, recorded_round, sized).items():
+                item = by_step[step]
+                estimates[item.index] = _Estimate(size, item.recorded.status == "error")
                 if bound:
-                    lower.add(by_step[step].index)
-    return sizes, lower
+                    lower.add(item.index)
+    return _Pricing(view=view, estimates=estimates, stored=stored), lower
 
 
 def _answered_from_checks(
@@ -845,24 +1096,22 @@ def _answered_from_checks(
     return answered
 
 
-def _requested_sizes(
-    first: PlayedReview,
-    second: PlayedReview,
-    classes: Sequence[_Classified],
-    sizes_first: Mapping[int, int],
-    answered: Mapping[int, str],
-) -> dict[int, int]:
-    """Pass B's size of every call: the current code's result, or pass A's estimate.
+def _requested_pricing(
+    first: _Pricing, answered: Mapping[int, str], view: ModelViewSettings
+) -> _Pricing:
+    """Pass B's pricing: the current code's result, pass A's estimate, or the stored result.
 
-    A call the guard answered is sized at the guard's answer whatever its pass-A class: the
-    answer is what the requested pass really sends, even behind an estimated call.
+    A call the guard answered is read from the guard's answer whatever its pass-A class: the
+    answer is what the requested pass really sends, even behind an estimated call. A stored
+    result is shown as pass B's settings show it.
     """
-    played = {call.index: call for r in second.rounds for call in r.calls}
-    sizes = dict(sizes_first)
-    for item in classes:
-        if (item.class_ != "estimated" or item.index in answered) and item.index in played:
-            sizes[item.index] = count_tokens(played[item.index].text)
-    return sizes
+    return _Pricing(
+        view=view,
+        estimates={
+            index: size for index, size in first.estimates.items() if index not in answered
+        },
+        stored={index: item for index, item in first.stored.items() if index not in answered},
+    )
 
 
 def _rounds(
@@ -870,8 +1119,8 @@ def _rounds(
     classes: Sequence[_Classified],
     first: PlayedReview,
     second: PlayedReview,
-    sizes_first: Mapping[int, int],
-    sizes_second: Mapping[int, int],
+    pricing_first: _Pricing,
+    pricing_second: _Pricing,
     lower: set[int],
     answered: Mapping[int, str],
     *,
@@ -882,6 +1131,8 @@ def _rounds(
     by_step = {item.recorded.step: item for item in classes}
     played_first = {(r.turn, r.index): r for r in first.rounds}
     played_second = {(r.turn, r.index): r for r in second.rounds}
+    cache_first: dict[tuple[int, bool], int] = {}
+    cache_second: dict[tuple[int, bool], int] = {}
     rounds: list[ReplayRound] = []
     committed_outputs = 0
     words = 0
@@ -922,14 +1173,12 @@ def _rounds(
             fixed = base + outputs + words
             a, b = played_first.get(key), played_second.get(key)
             as_recorded = (
-                fixed + sum(sizes_first[c.index] + FRAMING_TOKENS for c in a.visible)
+                fixed + _results_tokens(a, pricing_first, cache_first)
                 if a is not None
                 else recorded_input
             )
             requested_input = (
-                fixed
-                + prefix_difference
-                + sum(sizes_second[c.index] + FRAMING_TOKENS for c in b.visible)
+                fixed + prefix_difference + _results_tokens(b, pricing_second, cache_second)
                 if b is not None
                 else recorded_input
             )
@@ -1054,7 +1303,7 @@ def _findings(
         step_class = by_step.get(item.step) if item.step is not None else None
         if (
             step_class is not None
-            and step_class.class_ == "estimated"
+            and step_class.class_ in ("estimated", "stored")
             and step_class.index not in answered
         ):
             not_replayable.append(
@@ -1090,14 +1339,27 @@ def _levers(settings: PassSettings) -> str:
     return ", ".join(on) if on else "every lever off"
 
 
+def _model_view(settings: PassSettings) -> str:
+    view = settings.model_view
+    age = view.prune_after_rounds
+    parts = (["payload slimming"] if view.payload_slimming else []) + (
+        [f"history pruning after {age} round{'' if age == 1 else 's'}"]
+        if view.history_pruning
+        else []
+    )
+    return "model view " + (", ".join(parts) if parts else "off")
+
+
 def render_replay_lines(report: ReplayReport) -> list[str]:
     """The human output, in the order `contracts/replay.md` section 7 gives."""
     lines = [
         f"replay of {report.run_dir}",
         f"provider {report.provider}; tokens counted with {report.tokenizer}; "
         f"{report.comparison} comparison; {report.framing_tokens} framing tokens per result",
-        f"as recorded: {_levers(report.settings.as_recorded)}",
-        f"requested: {_levers(report.settings.requested)}",
+        f"as recorded: {_levers(report.settings.as_recorded)}; "
+        f"{_model_view(report.settings.as_recorded)}",
+        f"requested: {_levers(report.settings.requested)}; "
+        f"{_model_view(report.settings.requested)}",
         f"{'turn':>4} {'round':>5} {'recorded':>12} {'as recorded':>12} {'requested':>12}  flags",
     ]
     for r in report.rounds:
@@ -1110,6 +1372,8 @@ def render_replay_lines(report: ReplayReport) -> list[str]:
             flags.append("lower bound")
         if any(c.class_ == "changed" for c in r.calls):
             flags.append("changed")
+        if any(c.class_ == "stored" for c in r.calls):
+            flags.append("stored")
         if any(c.class_ == "answered_from_checks" for c in r.calls):
             flags.append("answered from checks")
         lines.append(

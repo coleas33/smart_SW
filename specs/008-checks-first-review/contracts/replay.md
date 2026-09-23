@@ -27,6 +27,11 @@ switch. Before User Story 3 lands, the requested settings are the levers named b
 nothing else. `--standards-profile` is passed to both passes' `start_review`; the fixtures use
 `config/standards.example.yaml`, the profile the pilot ran (research R2.10).
 
+*Landed as (T079).* `replay`, `replay_recording` and `replay_passes` take `requested:
+tuple[EfficiencySettings, ModelViewSettings]` (`replay.Requested`), the pair `_review_settings`
+returns. The recorded provider picks `pane_defaults(provider)`; a provider name the current code
+does not know is read as `fake`, whose pane defaults are checks first and the pane's view.
+
 The replay needs no key, makes no network call, constructs no provider SDK client and needs no
 SOLIDWORKS (FR-002): both passes run `start_review` with `FakeProvider` in a
 `TemporaryDirectory` holding a copy of `package.json`, with `bridge=False` and
@@ -89,6 +94,17 @@ passes into a folder the caller keeps (the acceptance tests read the requested s
 opening message from it); `report_of(passes)` prices them; `replay_recording` does both over a
 temporary folder.
 
+*Reconciled with the code (T079).* A stored result is taken only when
+`tool-results/step-<n>.json` parses, names the recording's `session_id`, the call's step, its
+tool **and its arguments**, and carries a payload: a stale file from another review in a reused
+folder, or one an edit broke (a rewritten event's arguments included), is ignored and the call
+stays estimated. `stored` replaces `estimated` for any of the estimated reasons, which the
+reason keeps ("…; sized from its stored result tool-results/step-N.json"). A stored call is
+still one the replay could not run, so a later divergence in its turn is put down to it,
+exactly as after an estimated call. Recordings written by `tests/support/replay` store every
+step, so a test of the estimation rules removes the folder first (`without_stored_results`);
+the committed fixtures, recorded before this feature, have none.
+
 ## 4. The accounting
 
 ```
@@ -112,6 +128,30 @@ input[t,k] = R0 + dP
    the scripted review's neutral history truncated at that round and passed through
    `prune_history(messages, N)` when the pass prunes (User Story 3), so stubs and ages equal what
    the adapters send.
+
+   *Landed as (T079).* `PlayedRound.history` is that history, built in the adapters' shape as the
+   script is played: the engineer's message the runner appends before each turn (and keeps when
+   the turn does not return); one assistant message per round listing the calls it asked for;
+   one tool message per call carrying `model_payload(result)` - the pass's own view when it
+   slims; and, for a committed turn that did not end at its budget, the closing answer as an
+   assistant message, which the recorded model's answer was whether or not the scripted text is
+   empty. A stopped or failed turn adds only its engineer message. `request_messages(history,
+   view)` is the request an adapter builds from it (`prune_history` with `finding_detail =
+   payload_slimming`), and each result is counted as `T(tool_result_text(content, compact =
+   payload_slimming)) + FRAMING_TOKENS`.
+
+   A **stored** result is put in its tool message's place before pruning - the stored payload
+   as the pass's settings show it (`tools.model_view.model_view` when slimming) with the stored
+   status - and is then counted and pruned like a result the replay ran. An **estimated** result
+   has no content: it is counted at its estimate (rule 3), whatever the view, until the
+   adapters' rule would make it a stub - `pruning.prunable`, the three conditions that do not
+   need the content (age, not an error by its **recorded** status, arguments known) - and from
+   then on at the smaller of its estimate and the part of its stub the replay can know,
+   `result_stub(tool, recorded arguments, {})`, without the counts and ids its payload would
+   add. On the big fixture that is the one live call: its known stub is 103 tokens, its full
+   stub (113 rows counted, 20 ids) would be about 211, so the requested figure is low by under
+   3,000 tokens over the 25 rounds that carry the stub - where holding the 17k-token estimate in
+   full for all 27 later rounds would have priced 1,155,567 instead of 731,592.
 5. Output tokens are held at the recorded values; the replay prices input only.
 6. A Gemini recording is counted over the same text and labelled `comparison: "shape"`.
 7. *Reconciled with the code (T016, T023).* A turn that ended `stopped` or `error` keeps no
@@ -168,7 +208,10 @@ recorded and replayed counts, every lost, added and not-replayable finding by ch
 (`step N tool: class - reason`), so every estimate and every change is named where it is
 priced; `settings.*.model_view` is `null` until User Story 3 and `regrouped` `null` until User
 Story 4. Before User Story 3 the command takes `RUN_DIR`, `--lever`, `--standards-profile` and
-`--json`.
+`--json`. *Landed as (T079):* `settings.*.model_view` is always the `ModelViewSettings` the pass
+ran with (pass A: the recording's, `MODEL_VIEW_OFF` when it records none); each settings line
+reads `as recorded: <levers>; model view off` or `requested: <levers>; model view payload
+slimming, history pruning after N rounds`; a round holding a `stored` call is flagged `stored`.
 
 `--json` prints exactly the `ReplayReport` model and nothing else:
 
@@ -244,6 +287,7 @@ test says why it skipped that part when the file is absent).
 | US2 | Checks first alone (requested efficiency `prerun_checks=True`, model view off; on the command line `--lever prerun_checks`, or `--no-pane-defaults --lever prerun_checks` once US3 has landed): no recorded finding lost on any fixture; on the big fixture the requested total below pass A's, every one of the 113 groups judged, one interference finding per group (SC-006 offline); the recorded RMS and assembly calls classed `answered_from_checks` |
 | US2 *landed as* (T049, T050, 2026-09-23) | `--lever prerun_checks --standards-profile ../config/standards.example.yaml`: `big-assembly` recorded 12,456,095, as recorded 12,456,346, requested 4,216,180 (-66.2%); `small-assembly-a` 1,619,376 / 1,619,476 / 1,236,021 (-23.7%); `small-assembly-b` 1,497,696 / 1,497,774 / 1,132,636 (-24.4%). No recorded finding lost and none not replayable on any fixture; 3, 2 and 0 reclassified as contacts; 9, 1 and 0 added (feature 010's `hole.nominal_alignment` from the pre-run's `check_joints`). Every one of the 113 groups judged - since feature 010, one finding or one contact each; every recorded `check_rms_*` call `answered_from_checks`; the RMS verdict multiset equal to the recording's |
 | US3 | `--pane-defaults` on the big fixture under 1,000,000 requested input tokens with no loss (SC-002); the session's findings identical with the model-view settings on and off (SC-007); every step of the requested pass stored under `tool-results/` (SC-008); every result older than the prune age a stub in every reconstructed request |
+| US3 *landed as* (T078, T079, 2026-09-23) | The default request - `pane_defaults(fake)`: checks first, payload slimming, history pruning after two rounds - with `--standards-profile ../config/standards.example.yaml`: `big-assembly` recorded 12,456,095, as recorded 12,456,346, requested **731,592 (-94.1%)**, and 687,068 (-94.5%) at `--prune-after 1`; `small-assembly-a` 1,619,376 / 1,619,476 / 530,992 (-67.2%), 517,320 (-68.1%) at 1; `small-assembly-b` 1,497,696 / 1,497,774 / 511,550 (-65.8%), 499,278 (-66.7%) at 1. Against checks first alone (US2's 4,216,180, 1,236,021 and 1,132,636) the view and the stubs take a further 83%, 57% and 55%. No recorded finding lost and none not replayable on any fixture, at either prune age; 3, 2 and 0 reclassified as contacts; 9, 1 and 0 added, as under checks first alone. The big fixture's requested session records the same findings and contacts with the view off (SC-007) and one stored result per step (SC-008); its four estimated rounds are the live call and the three touching groups judged after it, as under US1 |
 | US4 | The regrouped estimate under 300,000 for each small fixture, with the strict figure below the recorded total (SC-003, amended); the big fixture's follow-up round under 30,000 (SC-004); three answers in one batch replay as one resumed turn (SC-005, scripted) |
 | US5 | Every step's `result_tokens` in the requested pass's session equals the replay's count of that call's full payload (one tokenizer, one serialization) |
 
