@@ -791,7 +791,9 @@
 
   function syncFindingExplanations(ranking) {
     // Text is persisted by the backend and repeated verbatim on both surfaces. Never derive
-    // an explanation, a verdict, or an order from the finding on the page.
+    // an explanation, a verdict, or an order from the finding on the page. On the card it is
+    // the first line inside the fold (U10): the headline stays one line, and the sentence that
+    // explains the finding reads before the evidence it explains.
     var previous = ui.transcript.querySelectorAll('.finding-explanation');
     for (var index = 0; index < previous.length; index++) {
       previous[index].parentNode.removeChild(previous[index]);
@@ -807,8 +809,8 @@
       for (var memberIndex = 0; memberIndex < members.length; memberIndex++) {
         var entry = state.findings[members[memberIndex]];
         if (entry && typeof row.explanation === 'string' && row.explanation) {
-          var text = render.el('p', 'finding-explanation', row.explanation);
-          entry.card.insertBefore(text, entry.card.querySelector('.card-head').nextSibling);
+          var fold = entry.card.querySelector('.details');
+          fold.insertBefore(render.el('p', 'finding-explanation', row.explanation), fold.firstChild);
         }
       }
     }
@@ -1155,7 +1157,11 @@
   }
 
   /**
-   * Scrolls a finding's card into view, opens its fold and lights it up.
+   * Scrolls a finding's headline into view and lights the card up. The fold stays as it was.
+   *
+   * Until U10 this opened the fold as well, so every ranked row followed left one more finding
+   * open at full length and the next click opened another (docs/pane-findings-2026-09-20-
+   * review-gui.md section 3). A row leads to a headline; opening it is the engineer's press.
    *
    * A row whose finding is not in the transcript does nothing rather than scrolling somewhere
    * arbitrary: a ranking is read once the session ends and the transcript holds every finding
@@ -1169,13 +1175,15 @@
       return;
     }
 
-    setDetails(card, true);
-    // The fold can be much taller than the remaining transcript viewport. Scrolling the card
-    // itself leaves its newly opened details just below the viewport when the card header was
-    // already visible; scroll the details panel to the transcript's start instead.
-    var details = card.querySelector('.details');
-    details.scrollIntoView({ block: 'start' });
+    card.querySelector('.card-head').scrollIntoView({ block: 'start' });
     flash(card);
+  }
+
+  /** Collapse all: every finding back to its headline, every button back to "Details". */
+  function collapseFindings() {
+    for (var findingId in state.findings) {
+      setDetails(state.findings[findingId].card, false);
+    }
   }
 
   /** Lights a card for a moment, then puts its classes back exactly as they were. */
@@ -1199,17 +1207,28 @@
     status.textContent = message;
   }
 
+  /**
+   * The card's own Details press. An opened fold is brought into view: it can be much taller
+   * than what is left of a docked 300 px transcript, and a fold that opened below the viewport
+   * reads as a button that did nothing. `nearest` shows a fold that fits whole, and puts the top
+   * of one that does not at the top of the transcript (the 2026-09-20 narrow-pane regression).
+   */
   function expand(card) {
     var details = card && card.querySelector('.details');
-    if (details) {
-      setDetails(card, details.hidden);
+    if (!details) {
+      return;
+    }
+    var open = details.hidden;
+    setDetails(card, open);
+    if (open) {
+      details.scrollIntoView({ block: 'nearest' });
     }
   }
 
   /**
    * Opens or closes one card's fold and says so on its button. One function, because the
-   * button's label and the panel's state are one fact: a ranked row that opened the panel
-   * without flipping the label would leave a card reading "Details" over an open one.
+   * button's label and the panel's state are one fact: Collapse all shutting a fold without
+   * flipping its label would leave a card reading "Hide details" over a shut one.
    */
   function setDetails(card, open) {
     var details = card.querySelector('.details');
@@ -1597,6 +1616,7 @@
     ui.preparationSummary = document.getElementById('preparation-summary');
     ui.preparationInstances = document.getElementById('preparation-instances');
     ui.transcriptToggle = document.getElementById('transcript-toggle');
+    ui.collapseFindings = document.getElementById('collapse-findings');
     ui.transcript = document.getElementById('transcript');
     ui.coverage = document.getElementById('coverage-panel');
     ui.followup = document.getElementById('followup');
@@ -1659,6 +1679,7 @@
     ui.transcriptToggle.addEventListener('click', function () {
       foldTranscript(!state.transcriptFolded);
     });
+    ui.collapseFindings.addEventListener('click', collapseFindings);
     ui.attention.addEventListener('click', onAttentionClick);
 
     // The header states its counts before a single event has arrived, so a pane that has just

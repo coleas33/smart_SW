@@ -262,16 +262,17 @@
   }
 
   /**
-   * One finding: one line and a fold (FR-003, FR-004).
+   * One finding: a headline and a fold (FR-003, FR-004).
    *
-   * Tier two. The line states which finding it is, what the backend concluded and how hard, and
-   * which check said so; the title is the sentence under it; the observed evidence, when the
-   * finding carries any, is the one fact printed before the fold. Everything else - every field
-   * feature 001 defines, Show in SOLIDWORKS, and the three dispositions - is inside the fold.
+   * Tier two. The head is the line that states which finding it is, what the backend concluded
+   * and how hard, and which check said so, and the title under it - and nothing else, so a
+   * review reads as a list of headlines (U10, docs/pane-findings-2026-09-20-review-gui.md
+   * section 3). Everything else - the observed evidence first, then every field feature 001
+   * defines, Show in SOLIDWORKS, and the three dispositions - is inside the fold.
    *
-   * Nothing the card used to show has gone; what moved, moved inward. A review that records
-   * eight findings printed eight paragraphs of grey pills before this, and an engineer reading
-   * the pane could not see where one finding ended and the next began.
+   * Nothing the card used to show has gone; what moved, moved inward. `observed` was the one
+   * fact printed before the fold until U10, and its first sentence is the title itself, so a
+   * narrow pane stacked the same words twice under every headline and hid the next finding.
    */
   function findingCard(finding) {
     var body = finding || {};
@@ -292,10 +293,6 @@
     head.appendChild(line);
     head.appendChild(el('h3', 'title', body.title || '(untitled finding)'));
     card.appendChild(head);
-
-    if (body.observed) {
-      card.appendChild(el('p', 'facts', body.observed));
-    }
 
     var actions = el('div', 'row card-actions');
     actions.appendChild(button('Details', 'expand', 'action expand'));
@@ -362,21 +359,24 @@
   }
 
   /**
-   * The expandable half of a finding card: every field feature 001 defines (FR-003), then the
-   * two controls.
+   * The expandable half of a finding card: what was observed, every field feature 001 defines
+   * (FR-003), then the two controls.
    *
-   * `id` and `check` are not repeated here - they are the first two things on the line above -
-   * and `observed` is not repeated either when the card already printed it as its facts line.
-   * Everything else the finding carries is here, including the two carry-over fields, which
-   * this card dropped until now: a verdict this run did not compute but carried over from an
-   * earlier session is a different claim from one it computed, and an engineer reading a
-   * finding is owed that in the same place as its provenance.
+   * `observed` is the first row, because it is the evidence the verdict rests on and the first
+   * thing an engineer who opened the fold is looking for. (`app.js` puts the finding's U5
+   * explanation above it once the ranking arrives: the plain-language sentence reads before the
+   * evidence it explains.) `id` and `check` are not repeated here - they are the first two
+   * things on the line above. Everything else the finding carries is here, including the two
+   * carry-over fields: a verdict this run did not compute but carried over from an earlier
+   * session is a different claim from one it computed, and an engineer reading a finding is
+   * owed that in the same place as its provenance.
    */
   function details(body) {
     var panel = el('div', 'details');
     panel.hidden = true;
 
     append(panel, [
+      body.observed ? el('p', 'facts', body.observed) : null,
       labelled([
         ['Affects', list(body.component_ids) || locations(body.drawing_locations)],
         ['Requirement', body.requirement],

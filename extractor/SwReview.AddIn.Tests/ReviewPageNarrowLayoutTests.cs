@@ -13,6 +13,13 @@ namespace SwReview.AddIn.Tests;
 /// 300 by 600 device metrics, a complete Start-here ranking, a detailed finding, the long run
 /// folder line and the real not-examined warning. The assertion measures the clipped viewport,
 /// rather than checking the CSS declarations that happen to implement it.
+///
+/// U10 changed the premise and not the floor. A Start-here click used to open the finding's
+/// fold, and this test measured the fold that click opened. The click now only scrolls the
+/// card's head into view (docs/pane-findings-2026-09-20-review-gui.md section 3), so the test
+/// follows the row, proves the fold stayed shut, presses the card's own Details - the press an
+/// engineer makes - and measures that: the same 80 px floor, the same follow-up box, the same
+/// explanation, now inside the fold.
 /// </summary>
 public sealed class ReviewPageNarrowLayoutTests
 {
@@ -24,8 +31,14 @@ public sealed class ReviewPageNarrowLayoutTests
         JsonElement geometry = Drive();
 
         Assert.True(
+            geometry.GetProperty("hiddenAfterRowClick").GetBoolean(),
+            "following the ranked row opened the finding's fold.");
+        Assert.True(
             geometry.GetProperty("detailsVisibleHeight").GetDouble() >= 80,
             "the opened finding details are clipped below a usable height: " + geometry);
+        Assert.True(
+            geometry.GetProperty("explanationFirstInFold").GetBoolean(),
+            "the explanation is not the first line inside the finding's fold.");
         Assert.True(
             geometry.GetProperty("followupInViewport").GetBoolean(),
             "the follow-up control fell outside the 300x600 viewport: " + geometry);
@@ -137,6 +150,8 @@ public sealed class ReviewPageNarrowLayoutTests
   if (!card) { return JSON.stringify({error:'no finding card'}); }
   row.click();
   var details = card.querySelector('.details');
+  var hiddenAfterRowClick = details.hidden;
+  card.querySelector('[data-action=""expand""]').click();
   var transcript = document.getElementById('transcript').getBoundingClientRect();
   var viewportHeight = window.innerHeight;
   var rect = details.getBoundingClientRect();
@@ -144,6 +159,9 @@ public sealed class ReviewPageNarrowLayoutTests
   var bottom = Math.min(rect.bottom, transcript.bottom, viewportHeight);
   var followup = document.getElementById('followup').getBoundingClientRect();
   return JSON.stringify({
+    hiddenAfterRowClick: hiddenAfterRowClick,
+    explanationFirstInFold: !!details.firstElementChild
+      && details.firstElementChild.className === 'finding-explanation',
     detailsVisibleHeight: Math.max(0, bottom - top),
     followupInViewport: followup.top >= 0 && followup.bottom <= viewportHeight,
     warningVisible: !document.getElementById('not-examined').hidden

@@ -198,15 +198,38 @@ public sealed class ReviewPageInjectionTests
     }
 
     /// <summary>
-    /// `observed` is the one fact printed before the fold, because it is the evidence the
-    /// verdict rests on and a reader deciding whether to open a finding is deciding about that.
+    /// U10 (docs/pane-findings-2026-09-20-review-gui.md section 3), inverting what this test
+    /// used to pin. `observed` was the one fact printed before the fold, and it is the long
+    /// "mates to faces..." paragraph whose first sentence already <i>is</i> the title (a prefix
+    /// of `observed` in 99 of 99, 13 of 13 and 7 of 7 findings on the evening's reviews). On a
+    /// narrow pane that paragraph under every title hid the next finding, so nobody could read
+    /// the review as a list. It is now the first row inside the fold: the card's head is the
+    /// finding's line and its title and nothing else, and the evidence is one press away.
     /// </summary>
     [Fact]
-    public void WhatWasObservedIsPrintedBeforeTheFold()
+    public void WhatWasObservedIsTheFirstRowInsideTheFold()
     {
+        JsonElement card = Shapes.Value.GetProperty("carried");
+
         Assert.Equal(
             "The extract carries no vault version for housing.SLDPRT.",
-            Shapes.Value.GetProperty("carried").GetProperty("facts").GetString());
+            card.GetProperty("factsInFold").GetString());
+        Assert.Equal("facts", card.GetProperty("firstInFold").GetString());
+        Assert.Equal(0, card.GetProperty("factsOutsideFold").GetInt32());
+        Assert.Equal(new[] { "card-line", "title" }, Strings(card, "headChildren"));
+    }
+
+    /// <summary>
+    /// A title is a headline, so it is clamped to two lines while the fold is shut and read in
+    /// full once it is open - by the stylesheet alone, so the page computes nothing about it.
+    /// </summary>
+    [Fact]
+    public void TheTitleIsClampedToTwoLinesUntilTheFoldIsOpened()
+    {
+        JsonElement card = Shapes.Value.GetProperty("carried");
+
+        Assert.Equal("2", card.GetProperty("titleClamp").GetString());
+        Assert.Equal("none", card.GetProperty("openTitleClamp").GetString());
     }
 
     /// <summary>
@@ -653,14 +676,25 @@ var findingShape = function (value) {
   var note = tools ? tools.querySelector('input.note') : null;
   var show = card.querySelector('[data-action=""show""]');
   var status = card.querySelector('.card-status');
+  var fold = card.querySelector('.details');
+  var title = card.querySelector('.card-head .title');
+  var titleClamp = getComputedStyle(title).webkitLineClamp;
+  fold.hidden = false;
+  var openTitleClamp = getComputedStyle(title).webkitLineClamp;
+  fold.hidden = true;
   return {
     cardClass: card.className,
+    headChildren: childClasses(card.querySelector('.card-head')),
     lineChildren: childClasses(card.querySelector('.card-head .card-line')),
     findingId: textOf(card, '.card-line .finding-id'),
     chipTexts: textsOf(card, '.card-line .chip'),
     check: textOf(card, '.card-line .finding-check'),
     title: textOf(card, '.card-head .title'),
-    facts: textOf(card, '.facts'),
+    factsInFold: textOf(card, '.details > .facts'),
+    firstInFold: fold.firstElementChild ? fold.firstElementChild.className : '',
+    factsOutsideFold: card.querySelectorAll('.facts').length - fold.querySelectorAll('.facts').length,
+    titleClamp: titleClamp,
+    openTitleClamp: openTitleClamp,
     labels: textsOf(card, '.details > dl.kv > dt'),
     values: textsOf(card, '.details > dl.kv > dd'),
     calculations: card.querySelectorAll('.details .calculation').length,
