@@ -539,10 +539,10 @@ def _questions(
     items = [
         QuestionView(
             id=request.id,
-            question=request.what,
-            options=[],
-            blocks=None,
-            blocks_title=None,
+            question=request.question if request.question is not None else request.what,
+            options=list(request.options),
+            blocks=request.blocks,
+            blocks_title=_blocks_title(request.blocks, words.goals),
             what=request.what,
             why=request.why,
             about=[
@@ -558,6 +558,14 @@ def _questions(
         text=words.questions.of(len(items)) if items else None,
         items=items,
     )
+
+
+def _blocks_title(blocks: str | None, goals: Sequence[Goal]) -> str | None:
+    """The title of the goal whose `items` hold the checklist item a request blocks."""
+    if blocks is None:
+        return None
+    goal = next((goal for goal in goals if blocks in goal.items), None)
+    return None if goal is None else goal.title
 
 
 def _not_loaded(package: EvidencePackage | None, words: Words) -> NotLoaded | None:

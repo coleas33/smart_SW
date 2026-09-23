@@ -123,7 +123,10 @@
         "id": { "type": "string", "pattern": "^ER-[0-9]{3,}$" }, "what": { "type": "string" }, "why": { "type": "string" },
         "entity_ids": { "type": "array", "items": { "type": "string" } },
         "status": { "enum": ["open", "answered"] }, "answer": { "type": ["string", "null"] },
-        "answered_at": { "type": ["string", "null"], "format": "date-time" }
+        "answered_at": { "type": ["string", "null"], "format": "date-time" },
+        "question": { "type": "string", "maxLength": 140, "pattern": "\\S", "description": "The short form (feature 009 FR-013): one question of at most 140 characters, asked one at a time in the Review tab. Optional and omitted when absent, so every session written before it still validates and keeps its bytes" },
+        "options": { "type": "array", "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "maxLength": 60, "pattern": "\\S" }, "description": "The closed set of answers the engineer may pick from, when there is one (feature 009). Omitted when empty" },
+        "blocks": { "type": "string", "description": "The checklist item id this request blocks (feature 009); `request_evidence` refuses any other id. Omitted when absent" }
       }
     },
     "Contact": {

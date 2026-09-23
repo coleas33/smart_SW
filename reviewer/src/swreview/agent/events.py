@@ -151,12 +151,17 @@ class UsageLedger:
         self._turn_boundaries: list[int] = []
         """How many rounds had been recorded when each turn ended, one entry per
         `turn.ended`. Rounds after the last entry are a turn that never ended."""
+        self._rounds_at_text_done: int | None = None
+        """How many rounds had been recorded at the most recent `text.done`, or `None`
+        before the first (feature 009 data-model section 6)."""
 
     def __call__(self, event: AgentEvent) -> None:
         if event.type == "usage":
             self._rounds.append(usage_from_body(event.body))
         elif event.type == "turn.ended":
             self._turn_boundaries.append(len(self._rounds))
+        elif event.type == "text.done":
+            self._rounds_at_text_done = len(self._rounds)
 
     @property
     def current_round_count(self) -> int:
@@ -172,6 +177,19 @@ class UsageLedger:
         if not self._rounds:
             return None
         return SessionUsage.summed(self._rounds, self._turn_boundaries)
+
+    def last_conversation_input(self) -> int | None:
+        """The input tokens of the last round before the most recent `text.done`.
+
+        What resuming the review once last cost, for the sentence beside the questions
+        panel's Send (feature 009 FR-016). The round *before* `text.done` because the
+        explanation pass's presentation request is emitted after it and is small; the most
+        recent `text.done` because a turn stopped before its answer wrote none. `None` before
+        any `text.done`, with no round before it, or when that round reported no input.
+        """
+        if not self._rounds_at_text_done:
+            return None
+        return self._rounds[self._rounds_at_text_done - 1].input_tokens
 
 
 def emit_error(

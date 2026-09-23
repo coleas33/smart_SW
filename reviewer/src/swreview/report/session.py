@@ -22,6 +22,7 @@ from pydantic import (
     Field,
     SerializerFunctionWrapHandler,
     StringConstraints,
+    field_validator,
     model_serializer,
     model_validator,
 )
@@ -62,8 +63,26 @@ class InvestigationStep(ReviewModel):
     elapsed_s: float = Field(ge=0)
 
 
+QUESTION_MAX_LENGTH = 140
+"""The short question the Review tab asks one at a time (feature 009 FR-013)."""
+OPTION_MAX_LENGTH = 60
+MAX_OPTIONS = 5
+"""An offered answer is a button in a 300 px pane: short, and few of them."""
+
+NonBlank = StringConstraints(pattern=r"\S")
+"""Carries at least one character that is not white space (a search, not anchored)."""
+
+
 class EvidenceRequest(ReviewModel):
-    """Something the reviewer needed and could not find; open until answered (FR-007)."""
+    """Something the reviewer needed and could not find; open until answered (FR-007).
+
+    `question`, `options` and `blocks` are the short form feature 009 added (data-model
+    section 4): one short question, the closed set of answers when there is one, and the
+    checklist item the request blocks. They are optional and left out of the dump when
+    empty, so every session written before them keeps its bytes. `blocks` is checked
+    against the checklist by `request_evidence`, the one writer, and not here: a session
+    must still load if the checklist is renamed after it was written.
+    """
 
     id: Annotated[str, StringConstraints(pattern=r"^ER-[0-9]{3,}$")]
     what: str
@@ -72,6 +91,33 @@ class EvidenceRequest(ReviewModel):
     status: Literal["open", "answered"]
     answer: str | None
     answered_at: datetime | None = Field(strict=False)
+    question: Annotated[str, NonBlank, StringConstraints(max_length=QUESTION_MAX_LENGTH)] | None = (
+        None
+    )
+    options: Annotated[
+        list[Annotated[str, NonBlank, StringConstraints(max_length=OPTION_MAX_LENGTH)]],
+        Len(max_length=MAX_OPTIONS),
+    ] = Field(default_factory=list)
+    blocks: str | None = None
+
+    @field_validator("options")
+    @classmethod
+    def _options_are_distinct(cls, options: list[str]) -> list[str]:
+        repeated = sorted({option for option in options if options.count(option) > 1})
+        if repeated:
+            raise ValueError(f"options must be distinct; repeated: {repeated}")
+        return options
+
+    @model_serializer(mode="wrap")
+    def _omit_an_empty_short_form(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data = handler(self)
+        if self.question is None:
+            data.pop("question", None)
+        if not self.options:
+            data.pop("options", None)
+        if self.blocks is None:
+            data.pop("blocks", None)
+        return data
 
 
 class EvidenceRequestIdAllocator(SequentialIdAllocator):

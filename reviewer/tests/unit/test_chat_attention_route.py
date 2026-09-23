@@ -275,9 +275,25 @@ def test_the_body_is_the_live_ranking_plus_the_live_summary(
 
     assert body == to_jsonable_python(rank(run.session))
     assert summary == to_jsonable_python(
-        review_summary(rank(run.session), run.session, run.context.ir)
+        review_summary(rank(run.session), run.session, run.context.ir, usage=run.usage_ledger)
     )
     assert summary["headline"] == "1 finding in 1 issue"
+
+
+def test_the_summary_carries_the_live_ledgers_resume_figure(
+    app: Any, client: TestClient, reviewed_chat: str
+) -> None:
+    """T039: the resume cost is the live run's measured figure (contracts/questions.md 5)."""
+    run = live_run(app, reviewed_chat)
+    tokens = run.usage_ledger.last_conversation_input()
+    assert tokens is not None, "the scripted provider reports usage and a text.done"
+
+    summary = get(client, reviewed_chat).json()["summary"]
+
+    assert summary["resume_input_tokens"] == tokens
+    assert summary["resume_text"] == (
+        f"Sending resumes the review once. Its last round sent {tokens:,} input tokens."
+    )
 
 
 def test_a_review_that_found_nothing_answers_the_words_three_groups_and_every_goal(

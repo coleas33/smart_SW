@@ -71,6 +71,151 @@ def test_request_evidence_rejects_ids_that_are_not_in_the_package(
     assert context.session.evidence_requests == []
 
 
+# --- request_evidence's short form (feature 009 T035, contracts/questions.md 1) ------------
+
+THREAD_DEPTH = {
+    "what": "The usable thread depth of hole:1",
+    "why": "fastener.engagement cannot be evaluated without it",
+    "entity_ids": ["hole:1"],
+}
+
+
+@pytest.fixture
+def emitted(context: ToolContext) -> list[tuple[str, dict]]:
+    events: list[tuple[str, dict]] = []
+    context.emit = lambda event_type, body: events.append((event_type, dict(body)))
+    return events
+
+
+def test_the_short_form_is_recorded_on_the_request(
+    context: ToolContext, emitted: list[tuple[str, dict]]
+) -> None:
+    result = session.request_evidence(
+        **THREAD_DEPTH,
+        question="What is the usable thread depth of the tapped hole?",
+        options=["6 mm", "8 mm", "Through"],
+        blocks="fasteners",
+    )
+
+    request = context.session.evidence_requests[0]
+    assert (request.question, request.options, request.blocks) == (
+        "What is the usable thread depth of the tapped hole?",
+        ["6 mm", "8 mm", "Through"],
+        "fasteners",
+    )
+    assert result["evidence_request"]["options"] == ["6 mm", "8 mm", "Through"]
+    assert [event for event, _ in emitted] == ["evidence.requested"]
+    assert emitted[0][1]["blocks"] == "fasteners"
+
+
+def test_a_request_without_the_short_form_is_recorded_as_before(context: ToolContext) -> None:
+    result = session.request_evidence(**THREAD_DEPTH)
+
+    assert result == {
+        "status": "open",
+        "evidence_request": {
+            "id": "ER-001",
+            "what": "The usable thread depth of hole:1",
+            "why": "fastener.engagement cannot be evaluated without it",
+            "entity_ids": ["hole:1"],
+            "status": "open",
+            "answer": None,
+            "answered_at": None,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("short_form", "names"),
+    [
+        ({"question": "x" * 141}, ["question", "140", "141"]),
+        ({"question": "   "}, ["question", "140"]),
+        ({"options": ["a", "b", "c", "d", "e", "f"]}, ["options", "5", "6"]),
+        ({"options": ["Press fit", " "]}, ["options[1]", "blank"]),
+        ({"options": ["y" * 61]}, ["options[0]", "60", "61"]),
+        ({"options": ["Press fit", "Slip fit", "Press fit"]}, ["options", "'Press fit'"]),
+        ({"blocks": "nonsense"}, ["blocks", "'nonsense'", "fasteners", "interfaces.fit"]),
+    ],
+    ids=[
+        "question-141",
+        "question-blank",
+        "six-options",
+        "option-blank",
+        "option-61",
+        "option-repeated",
+        "blocks-unknown",
+    ],
+)
+def test_a_short_form_past_its_limits_is_refused_by_name_and_records_nothing(
+    context: ToolContext,
+    emitted: list[tuple[str, dict]],
+    short_form: dict,
+    names: list[str],
+) -> None:
+    result = session.request_evidence(**THREAD_DEPTH, **short_form)
+
+    assert set(result) == {"error"}
+    for name in names:
+        assert name in result["error"], (name, result["error"])
+    assert context.session.evidence_requests == []
+    assert emitted == []
+
+
+def test_the_refusals_come_in_the_contracts_order(context: ToolContext) -> None:
+    """Unknown ids first, then the question, then the options, then `blocks`."""
+    everything_wrong = {
+        "what": "anything",
+        "why": "anything",
+        "question": "x" * 141,
+        "options": ["same", "same"],
+        "blocks": "nonsense",
+    }
+
+    steps = [
+        session.request_evidence(**everything_wrong, entity_ids=["cmp:9999"]),
+        session.request_evidence(**everything_wrong, entity_ids=[]),
+        session.request_evidence(**{**everything_wrong, "question": None}, entity_ids=[]),
+        session.request_evidence(
+            **{**everything_wrong, "question": None, "options": None}, entity_ids=[]
+        ),
+    ]
+
+    assert [result["error"].split(" ", 1)[0] for result in steps] == [
+        "entity_ids",
+        "question",
+        "options",
+        "blocks",
+    ]
+    assert context.session.evidence_requests == []
+
+
+def test_every_checklist_item_is_a_valid_blocks(context: ToolContext) -> None:
+    from swreview.report.attention import CHECKLIST_ITEM_IDS
+
+    for item in CHECKLIST_ITEM_IDS:
+        assert "error" not in session.request_evidence(**THREAD_DEPTH, blocks=item)
+
+
+def test_the_description_and_arguments_stay_under_the_lever_caps() -> None:
+    from swreview.agent.providers.schema import (
+        MAX_DESCRIPTION_LENGTH,
+        MAX_PARAMETER_DESCRIPTION_LENGTH,
+        parse_docstring,
+    )
+
+    description, arguments, notes = parse_docstring(session.request_evidence.__doc__)
+
+    assert len(description) <= MAX_DESCRIPTION_LENGTH
+    assert set(arguments) == {"what", "why", "entity_ids", "question", "options", "blocks"}
+    assert all(len(text) <= MAX_PARAMETER_DESCRIPTION_LENGTH for text in arguments.values())
+    # The guidance rides on the arguments: the Notes are pinned byte-equal to the pre-split
+    # text (`test_docstring_split.py`), and an argument description is on the wire always.
+    assert arguments["question"].startswith("One decision")
+    assert "never guess a fit class, tolerance or thread depth" in arguments["question"]
+    assert "only when the answers are a closed set" in arguments["options"]
+    assert "never guess" not in notes.lower()
+
+
 # --- mark_coverage ---------------------------------------------------------------
 
 
@@ -266,9 +411,7 @@ def test_the_checklist_carries_the_resilient_modeling_item_with_the_rms_prefix(
     """
     from swreview.checks.rms import RULES
 
-    item = next(
-        entry for entry in context.checklist.items if entry.id == "modeling.resilience"
-    )
+    item = next(entry for entry in context.checklist.items if entry.id == "modeling.resilience")
     assert item.check_prefix == "rms."
     assert all(rule_id.startswith(item.check_prefix) for rule_id in RULES)
     assert "check_rms_part" in item.description

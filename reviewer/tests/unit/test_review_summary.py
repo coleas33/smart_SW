@@ -330,6 +330,36 @@ def test_a_request_without_the_short_form_asks_its_what_verbatim() -> None:
     ]
 
 
+def test_a_request_with_the_short_form_asks_its_short_question() -> None:
+    """contracts/questions.md section 3 (T037): the short question, its offered answers in
+    order, the checklist item it blocks and that item's goal title; `what` and `why` stay
+    verbatim for the fold."""
+    requests = [
+        request(1).model_copy(
+            update={
+                "question": "What is the usable thread depth?",
+                "options": ["8 mm", "6 mm", "Through"],
+                "blocks": "fasteners",
+            }
+        ),
+        request(2).model_copy(update={"question": "Which drawing governs the housing?"}),
+        request(3).model_copy(update={"blocks": "interfaces.fit"}),
+        request(4).model_copy(update={"blocks": "coverage.closeout"}),
+    ]
+    items = summary_of(session_of("short-form", [], evidence_requests=requests)).questions.items
+
+    assert [(item.question, item.options, item.blocks, item.blocks_title) for item in items] == [
+        ("What is the usable thread depth?", ["8 mm", "6 mm", "Through"], "fasteners", "Fasteners"),
+        ("Which drawing governs the housing?", [], None, None),
+        ("The evidence of request 3", [], "interfaces.fit", "Fits and stacks"),
+        ("The evidence of request 4", [], "coverage.closeout", None),
+    ]
+    assert (items[0].what, items[0].why) == (
+        "The evidence of request 1",
+        "request 1 unblocks a check",
+    )
+
+
 # --- 5. the parts not loaded, the names, what is not built yet -------------------------------
 
 
