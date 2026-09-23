@@ -33,6 +33,31 @@ Points the rule exists to enforce:
 - **The rank is arguable by pointing at a line.** Every row records its nine key values and a
   one-sentence reason naming the key that placed it.
 
+**The twelve classes feature 010 added (2026-09-23).** Feature 010's checks emit twelve new ids,
+each classed in `attention_policy_v1.yaml` **without a version change**: adding a row changes no
+existing one, so every `attention.json` written before still reproduces under v1, and the rule
+that a change to a class is a new version is about changing a row (010 research R2.22,
+FR-027). The four `hole.` and `fastener.` ids also fall under key 2's needs-judgement prefixes.
+The classes are a first opinion awaiting the owner's read-through (010 research R5), as this
+feature's own were.
+
+| Check id | Class | Emitted by |
+|---|---|---|
+| `hole.nominal_alignment` | `interface` | `check_joints` (010 US3) |
+| `hole.position_stack` | `interface` | `check_joints` (010 US3) |
+| `fastener.identity` | `interface` | `check_joints` (010 US4) |
+| `fastener.head_fit` | `interface` | `check_joints` (010 US5) |
+| `mass.material_assigned` | `manufacturing` | `check_mass_material` (010 US6) |
+| `mass.density` | `manufacturing` | `check_mass_material` (010 US6) |
+| `mass.assembly_override` | `manufacturing` | `check_mass_material` (010 US6) |
+| `hygiene.part_number_matches_file` | `hygiene` | `check_hygiene` (010 US7) |
+| `hygiene.duplicate_description` | `hygiene` | `check_hygiene` (010 US7) |
+| `hygiene.duplicate_part_number` | `hygiene` | `check_hygiene` (010 US7) |
+| `hygiene.revision_present` | `hygiene` | `check_hygiene` (010 US7) |
+| `hygiene.component_not_resolved` | `hygiene` | `check_hygiene` (010 US7) |
+
+A contact (010 `contracts/contacts.md`) is not a finding and never reaches a ranking.
+
 ## 2. Folding
 
 Before ranking, findings that share `check`, `status` and `severity`, whose `component_ids`

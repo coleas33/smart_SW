@@ -9,9 +9,12 @@ The design documents live in `specs/001-agentic-design-review/` (spec, plan, res
 data model, contracts, quickstart, tasks), the Task Pane assistant that runs the reviewer
 from inside SOLIDWORKS in `specs/002-task-pane-assistant/`, the Resilient Modeling checks
 and the Model check tab in `specs/003-resilient-modeling/`, the Standards check tab in
-`specs/006-standards-check/`, and the governing rules in
-`.specify/memory/constitution.md`. `README-complete.md` is the original pilot proposal and
-`sw-review-architecture-proposal.md` the architecture decision record.
+`specs/006-standards-check/`, the ranking and the procedural gate in
+`specs/007-attention-policy-gate/`, checks first and the token budget in
+`specs/008-checks-first-review/`, the Review tab's summary, questions and kept reviews in
+`specs/009-engineer-workspace/`, the mechanical checks in `specs/010-mechanical-checks/`, and
+the governing rules in `.specify/memory/constitution.md`. `README-complete.md` is the original
+pilot proposal and `sw-review-architecture-proposal.md` the architecture decision record.
 
 ## Current status and next steps
 
@@ -95,6 +98,62 @@ Timing section prints the net figure. `swreview review --lever procedural_gate`,
 default, runs the deterministic checks first and opens the model's first user message with
 their ranked brief; `specs/007-attention-policy-gate/` has the contracts.
 
+**Checks first.** A pane review runs the deterministic checks whose scope the package already
+decides before the model's first turn (feature 008): the three RMS checks, every interference
+group (after live detection when SOLIDWORKS is attached, whose rows and gaps are then written into
+the run folder's `package.json`, replacing that configuration's rows, so a Retry does not add them
+twice), `check_joints`, `check_mass_material`, `check_hygiene`, and `check_standards` when a
+profile is attached. Each is a real recorded step with its findings, and the first user message
+opens with a digest of what ran and what could not; a model that asks for one again is answered
+`already_run` from the recorded result, and the tools that ran to completion leave the tool array
+for the rest of the session. The RMS findings fold into one collapsed "Modelling practice" group
+in `report.md` and one row in the ranking. Every step of a review, the pre-run's included, keeps
+its full result in the run folder as `tool-results/step-<n>.json`, and the report lists the five
+largest. What the model reads of each result is a view - references out, check digests, compact
+JSON - and results older than two rounds reach it as short stubs it can re-fetch; the session, the
+package, the report and every stored result keep the full payload.
+
+On the command line every change is **off** unless asked. `swreview review --pane-defaults` runs
+with exactly the pane's settings for the provider (checks first and lever 13, parallel tool calls
+on OpenAI, payload slimming, history pruning after two rounds), and the explicit switches add to
+it or turn one change on alone: `--payload-slimming`, `--history-pruning` and `--prune-after N` (N
+at least 1, and only with pruning on). `session.json` records what ran (`efficiency`,
+`model_view`). The contracts are `specs/008-checks-first-review/contracts/`.
+
+**The mechanical checks** (feature 010) take no argument and run in checks first. `check_joints`
+finds every joint from the geometry - cross-part hole-to-hole and cylinder-to-hole pairs - and
+checks each for alignment, the tolerance stack-up (unresolved, naming the missing contributor,
+whenever a tolerance is not in the evidence: none is inferred), fastener identity from file names
+and the measured shank, thread match, engagement, bottoming, tool access above the head and head
+fit in a counterbore. Engagement follows the owner's rule: at least 1.5 times the nominal diameter
+into steel and aluminium alike, and a screw through-tapped into sheet thinner than that is a
+finding at low severity carrying the sheet thickness. `check_mass_material` gives every part with
+a mass and a volume a verdict on its material and density, and reports an assembly mass override
+for confirmation; `check_hygiene` compares the part-number property with the file name, finds
+shared descriptions and part numbers and missing revisions, and flags suppressed and lightweight
+components. A zero-volume interference row is a **contact**, kept in its own list beside the
+findings and never in "Start here". The part-number and description properties the hygiene checks
+read, and the general tolerance by decimal places, come from standards profile **version 2**
+(`config/standards.example.yaml`); a version 1 profile still loads, with the two property checks
+skipped naming the setting and no general tolerance applied, so the owner's real profile has to be
+regenerated at version 2 before they grade a real run.
+
+**The Review tab** (feature 009) opens its Results with a summary the backend computes and the
+page prints as supplied: how many findings in how many issues; the findings to **Decide**, **Fix**
+and **Verify**; the open questions; the parts not loaded; and one line per check goal saying
+whether it was checked, found issues or was not reached, and why. Every word it prints - the
+summary's templates and the status, severity, bucket and error labels - is in
+`reviewer/src/swreview/report/review_words_v1.yaml`, and the page reads the labels from
+`GET /labels`. **Questions for you** appear above Start here one at a time, with the answers the
+review offered or a text box and "Skip for now"; the answers go together in one submission that
+resumes the review once, and the pane states the approximate cost of resuming before it sends. A
+two-way switch chooses **Results** (no tool calls, arguments or token counts) or **Transcript**
+(every prose block and tool call in order). Every finished review of the SOLIDWORKS session is
+kept as a chip naming its document, configuration and time; choosing one restores its results
+without a new review, and a review whose conversation is gone - a settings save restarts the
+backend - is restored **read-only** from its run folder, with the reason shown and the follow-up
+and dispositions disabled. The contracts are `specs/009-engineer-workspace/contracts/`.
+
 Installing, updating and checking the add-in on the pilot workstation, including where the
 per-machine files live and how findings come back: `docs/workstation-runbook.md`.
 
@@ -154,6 +213,30 @@ by the backend in the check body's `attention` block and rendered in the order s
 swreview-extract dump --out <package dir> --profile standards
 swreview check standards --package <package dir> --out <run dir> --profile <standards.yaml>
 swreview exceptions accept-standards <run dir> --package <package dir> --file <waivers.json>
+```
+
+## Benchmarks
+
+`swreview benchmark run`, `score`, `time` and `compare` run the benchmark set and render the
+results ledger in `docs/llm-efficiency-options.md` (`specs/005-llm-efficiency/`).
+`swreview benchmark replay <run dir>` prices a recorded review through the current code offline -
+no key, no network, no SOLIDWORKS, nothing written into the folder: it replays the recorded calls
+in their recorded rounds once as recorded and once with the requested settings, prints every
+round's recorded, as-recorded and requested input with the totals counted with o200k_base, and
+compares the findings by subject. It exits 1 when a recorded finding is lost. The request is the
+pane's for the recorded provider unless `--no-pane-defaults`, plus any `--lever`,
+`--payload-slimming`, `--history-pruning` or `--prune-after N` named, resolved as
+`swreview review` resolves them; `--standards-profile` grades the standards checks in both passes
+and `--json` prints the report as JSON. With checks first or parallel calls requested it also
+prints a regrouped estimate with its assumption beside it. Three fictional fixtures shaped like
+the recorded reviews are committed under `reviewer/tests/fixtures/replay/`, and the tokenizer's
+vocabulary is fetched once into a per-user cache. The contract is
+`specs/008-checks-first-review/contracts/replay.md`.
+
+```powershell
+cd reviewer
+uv run swreview benchmark replay tests/fixtures/replay/big-assembly --standards-profile ../config/standards.example.yaml
+uv run swreview benchmark replay tests/fixtures/replay/big-assembly --no-pane-defaults --lever prerun_checks --json
 ```
 
 ## Spec Kit
