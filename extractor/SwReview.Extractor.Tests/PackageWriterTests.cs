@@ -6,7 +6,6 @@ using SwReview.Extractor.Dump;
 using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ids;
 using SwReview.Extractor.Ir;
-using SwReview.Extractor.PersistRefs;
 using IrMeasure = SwReview.Extractor.Ir.Measure;
 using Xunit;
 
@@ -1385,89 +1384,21 @@ public class PackageWriterTests : IDisposable
     {
         // Section 4: the row is ok when every drawing was read and failed otherwise, with the
         // drawing phase's own gaps saying which.
-        var sources = new FakeSources();
-        sources.OpenDrawing(HousingDrawingPath, HousingPath);
-        var drawings = new DrawingDumper(new Sw.SwGate(), new UnreadableDrawings());
-        var writer = new PackageWriter(
-            sources, sources, sources, sources, sources, sources, sources, drawings, sources,
-            sources, sources, sources, "2024 SP5", "TEST-WORKSTATION", tolerances: sources,
-            openDrawings: sources);
+        FakeSources sources = WithTwoOpenDrawings();
+        sources.UnreadDrawings.Add(HousingDrawingPath);
 
-        EvidencePackage package = writer.Build(Options());
+        EvidencePackage package = NewWriter(sources).Build(Options());
 
         Assert.Equal(
             DumpPhaseStatus.Failed,
             Assert.Single(package.Extractor.Phases, phase => phase.Name == "drawing").Status);
+        Assert.Equal(
+            new[] { DocumentIds.For(AssemblyDrawingPath) },
+            package.DrawingRecords!.Select(record => record.DocumentId));
         Assert.Contains(
             package.Gaps,
             gap => gap.EntityKind == "drawing_sheet" && gap.EntityId == DocumentIds.For(HousingDrawingPath));
         Assert.DoesNotContain(package.Gaps, gap => gap.EntityKind == "drawing");
-    }
-
-    /// <summary>A drawing reader every document answers "not a drawing" to.</summary>
-    private sealed class UnreadableDrawings : IDrawingReader
-    {
-        public object? Drawing(object document) => null;
-
-        public string? ActiveSheetName(object drawing) => throw new NotSupportedException();
-
-        public IReadOnlyList<string> SheetNames(object drawing) => throw new NotSupportedException();
-
-        public object? Sheet(object drawing, string name) => throw new NotSupportedException();
-
-        public string? SheetName(object sheet) => throw new NotSupportedException();
-
-        public string? SheetFormatName(object sheet) => throw new NotSupportedException();
-
-        public IReadOnlyList<object> Views(object sheet) => throw new NotSupportedException();
-
-        public object? SheetRevisionTable(object sheet) => throw new NotSupportedException();
-
-        public string? ViewName(object view) => throw new NotSupportedException();
-
-        public int ViewType(object view) => throw new NotSupportedException();
-
-        public string? ReferencedModelPath(object view) => throw new NotSupportedException();
-
-        public object? ReferencedDocument(object view) => throw new NotSupportedException();
-
-        public string? DocumentPath(object document) => throw new NotSupportedException();
-
-        public IReadOnlyList<object> DisplayDimensions(object view) => throw new NotSupportedException();
-
-        public IReadOnlyList<object> Annotations(object view) => throw new NotSupportedException();
-
-        public IReadOnlyList<object> Notes(object view) => throw new NotSupportedException();
-
-        public IReadOnlyList<object> TableAnnotations(object view) => throw new NotSupportedException();
-
-        public int TableAnnotationType(object table) => throw new NotSupportedException();
-
-        public string? DimensionName(object dimension) => throw new NotSupportedException();
-
-        public int DimensionType(object dimension) => throw new NotSupportedException();
-
-        public bool IsOverridden(object dimension) => throw new NotSupportedException();
-
-        public double OverrideValue(object dimension) => throw new NotSupportedException();
-
-        public double DimensionValue(object dimension) => throw new NotSupportedException();
-
-        public string? AnnotationName(object annotation) => throw new NotSupportedException();
-
-        public int AnnotationType(object annotation) => throw new NotSupportedException();
-
-        public bool IsDangling(object annotation) => throw new NotSupportedException();
-
-        public string? NoteText(object note) => throw new NotSupportedException();
-
-        public string? CurrentRevision(object table) => throw new NotSupportedException();
-
-        public RevisionTableShape TableShape(object table) => throw new NotSupportedException();
-
-        public string? Cell(object table, int row, int column) => throw new NotSupportedException();
-
-        public ScopedPersistRef? PersistRef(object document, object entity) => throw new NotSupportedException();
     }
 
     // ---- dump phase timing (feature 005, T033) -----------------------------------
@@ -1977,6 +1908,12 @@ public class PackageWriterTests : IDisposable
         /// <summary>The drawings the drawing phase was handed, in order.</summary>
         public List<ScopedDrawing> SeenDrawings { get; } = new List<ScopedDrawing>();
 
+        /// <summary>
+        /// Attached drawings the drawing phase reads no record for, with a gap naming each, as
+        /// DrawingDumper does for a drawing it cannot read.
+        /// </summary>
+        public HashSet<string> UnreadDrawings { get; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>An open drawing whose views show <paramref name="references"/>.</summary>
         public object OpenDrawing(string path, params string[] references)
         {
@@ -2290,7 +2227,17 @@ public class PackageWriterTests : IDisposable
             // over, each numbered from the package's allocators, as DrawingDumper numbers them.
             if (RootDocumentKind != DocumentKind.Drawing)
             {
-                return scope.Drawings.Select(drawing => new DrawingRecord
+                foreach (ScopedDrawing unread in scope.Drawings.Where(d => UnreadDrawings.Contains(d.DocumentPath)))
+                {
+                    scope.Gaps.Add(
+                        GapKind.NotExtracted,
+                        "drawing_sheet",
+                        scope.DocumentId(unread.DocumentPath),
+                        "The open document did not answer as a drawing.",
+                        null);
+                }
+
+                return scope.Drawings.Where(d => !UnreadDrawings.Contains(d.DocumentPath)).Select(drawing => new DrawingRecord
                 {
                     DocumentId = scope.DocumentId(drawing.DocumentPath),
                     ActiveSheetName = "Sheet1",

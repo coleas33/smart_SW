@@ -490,5 +490,79 @@ public class StandardsGateLogTests : IDisposable
         public string? Cell(object table, int row, int column) => "B";
 
         public ScopedPersistRef? PersistRef(object document, object entity) => null;
+
+        // Feature 011 (IR 1.6.0): every new read answers, so the drawing phase reaches each one's
+        // gate and the log under test carries it.
+
+        public bool IsDetailingMode(object drawing) => false;
+
+        public int UserPreferenceInteger(object document, int preference) => 0;
+
+        public string? UserPreferenceString(object document, int preference) => "FICTIONAL-STANDARD";
+
+        public string? SheetTemplateName(object sheet) => @"C:\Fictional\Formats\FICTIONAL-FORMAT-A.slddrt";
+
+        public IReadOnlyList<double>? SheetProperties(object sheet) => new[] { 12d, 0d, 1d, 1d, 0d, 0.42, 0.297 };
+
+        public string? ReferencedConfiguration(object view) => "Default";
+
+        public bool IsModelOutOfDate(object view) => false;
+
+        public bool IsModelLoaded(object view) => true;
+
+        public double ScaleDecimal(object view) => 1d;
+
+        public string? OrientationName(object view) => "*Front";
+
+        public string? DimensionText(object dimension, int part) => string.Empty;
+
+        public int PrimaryPrecision(object dimension) => 2;
+
+        public int PrimaryTolerancePrecision(object dimension) => 3;
+
+        public bool UsesDocumentPrecision(object dimension) => true;
+
+        public int Units(object dimension) => 0;
+
+        public bool UsesDocumentUnits(object dimension) => true;
+
+        public object? DimensionOf(object dimension) => dimension;
+
+        public bool IsReferenceDimension(object dimension) => false;
+
+        public int DrivenState(object modelDimension) => 1;
+
+        public bool IsHoleCallout(object dimension) => false;
+
+        public IReadOnlyList<string>? HoleCalloutVariables(object dimension) => null;
+
+        public object? DimensionAnnotation(object dimension) => _annotation;
+
+        public IReadOnlyList<object?> AttachedEntities(object annotation) => new object?[] { _dimension };
+
+        public object? CorrespondingEntity(object view, object entity) => _face;
+
+        public AttachedEntityKind EntityKind(object entity) =>
+            ReferenceEquals(entity, _face) ? AttachedEntityKind.Face : AttachedEntityKind.Other;
+
+        public IReadOnlyList<object> AdjacentFaces(object edge) => new[] { _face };
+
+        public object? FaceDocument(object view, object face) => null;
+
+        public object? Tolerance(object dimension) => _tolerance;
+
+        public int ToleranceType(object tolerance) => 0;
+
+        public double? ToleranceMin(object tolerance) => null;
+
+        public double? ToleranceMax(object tolerance) => null;
+
+        public string? HoleFitValue(object tolerance) => null;
+
+        public string? ShaftFitValue(object tolerance) => null;
+
+        private readonly object _face = new object();
+
+        private readonly object _tolerance = new object();
     }
 }
