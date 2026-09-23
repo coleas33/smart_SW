@@ -296,23 +296,23 @@ def encoding_digests() -> dict[str, str]:
 
 # --- the pinned baseline ----------------------------------------------------------------
 
-REVIEW_TOOL_COUNT = 32
-REVIEW_BRIDGE_TOOL_COUNT = 35
-OPENAI_ARRAY_BYTES = 34_101
-GEMINI_ARRAY_BYTES = 34_253
+REVIEW_TOOL_COUNT = 33
+REVIEW_BRIDGE_TOOL_COUNT = 36
+OPENAI_ARRAY_BYTES = 34_933
+GEMINI_ARRAY_BYTES = 35_034
 """**Deviation from T001, recorded in `specs/005-llm-efficiency/probe-log.md`.** The task
 asks for 34,248; this tree produces 34,217, and a pin is a measurement or it is nothing.
 Six files of the spec package still quote 34,248 (and 37,709 for the bridge, measured
 37,712); probe-log.md lists them by line for the change that is allowed to edit them."""
-TRIMMED_OPENAI_ARRAY_BYTES = 21_432
-TRIMMED_GEMINI_ARRAY_BYTES = 21_584
-TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES = 23_944
+TRIMMED_OPENAI_ARRAY_BYTES = 21_675
+TRIMMED_GEMINI_ARRAY_BYTES = 21_776
+TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES = 24_187
 """Lever 2 on: the same 32 tools carrying the first paragraph of each docstring instead of
 the whole body. **Regenerated, never transcribed** - `--write` prints them.
 
 **Deviation, and it is in the lever's favour.** `contracts/levers.md` and T056 quote 23,834
 bytes and 30 percent, measured before the split existed; the split that keeps the rejoin
-byte-equal (T052) leaves 21,432 bytes and 37.2 percent on OpenAI. Nothing here is typed to
+byte-equal (T052) leaves 21,675 bytes and 38.0 percent on OpenAI. Nothing here is typed to
 match a document: a pin is a measurement or it is nothing, and the same rule already
 applies to `GEMINI_ARRAY_BYTES` above."""
 
@@ -321,11 +321,11 @@ MCP_OPENAI_ARRAY_BYTES = 14_866
 MCP_GEMINI_ARRAY_BYTES = 14_084
 LARGEST_TOOL = "check_axial_stack"
 LARGEST_TOOL_BYTES = 2_734
-RMS_TIER_KEPT_TOOLS = 26
-RMS_TIER_KEPT_BYTES = 26_008
+RMS_TIER_KEPT_TOOLS = 27
+RMS_TIER_KEPT_BYTES = 26_840
 RMS_TIER_DELTA_BYTES = 8_093
-RMS_TIER_DELTA_PERCENT = 23.7
-STRUCTURAL_FLOOR_BYTES = 15_274
+RMS_TIER_DELTA_PERCENT = 23.2
+STRUCTURAL_FLOOR_BYTES = 15_437
 
 TOOL_OBJECT_CEILING = {"openai": 3_000, "gemini": 3_500}
 """No single tool may weigh more than this. Headroom, not a target."""
@@ -338,7 +338,8 @@ ARRAY_CEILING = 36_000
 
 
 def test_curated_tool_count_is_pinned() -> None:
-    """32 tools, 35 with the bridge. A new tool is a decision, not an accident."""
+    """33 tools, 36 with the bridge (32 and 35 until feature 010 T028 added
+    `check_joints`). A new tool is a decision, not an accident."""
     assert len(TOOL_FUNCTIONS) == REVIEW_TOOL_COUNT
     assert len(TOOLSETS["review+bridge"]) == REVIEW_BRIDGE_TOOL_COUNT
 
@@ -364,7 +365,7 @@ def test_trimmed_array_bytes_per_encoding(encoding: str, expected: int) -> None:
 def test_the_bridge_array_is_pinned_in_both_arms() -> None:
     """The 35-tool array a bridged run sends, so a US3 session is measured too."""
     bridged = TOOLSETS["review+bridge"]
-    assert measure("review+bridge", bridged, "openai").total_bytes == 37_748
+    assert measure("review+bridge", bridged, "openai").total_bytes == 38_580
     assert (
         measure("review+bridge", bridged, "openai", trim=True).total_bytes
         == TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES
@@ -378,15 +379,15 @@ def test_the_trim_takes_the_same_bytes_off_either_encoding(encoding: str) -> Non
     off = measure("review", TOOL_FUNCTIONS, encoding).total_bytes
     on = measure("review", TOOL_FUNCTIONS, encoding, trim=True).total_bytes
 
-    assert off - on == 12_669
+    assert off - on == 13_258
 
 
 def test_the_trim_is_bounded_by_the_structural_floor() -> None:
-    """37 percent off, and the remaining 15,274 bytes is structure no trim can reach."""
+    """38 percent off, and the remaining 15,437 bytes is structure no trim can reach."""
     off = measure("review", TOOL_FUNCTIONS, "openai").total_bytes
     on = measure("review", TOOL_FUNCTIONS, "openai", trim=True).total_bytes
 
-    assert round(100 * (off - on) / off, 1) == 37.2
+    assert round(100 * (off - on) / off, 1) == 38.0
     assert on > structural_floor_bytes()
 
 
@@ -424,7 +425,7 @@ def test_whole_array_under_ceiling(encoding: str) -> None:
 
 
 def test_rms_tier_row_is_the_array_delta_not_the_object_sum() -> None:
-    """Withholding the six RMS tools: 32 tools to 26, and what that takes off the wire."""
+    """Withholding the six RMS tools: 33 tools to 27, and what that takes off the wire."""
     delta = tier_delta()
     assert delta.kept_tools == RMS_TIER_KEPT_TOOLS
     assert delta.kept_bytes == RMS_TIER_KEPT_BYTES
@@ -444,7 +445,7 @@ def test_the_rms_tier_delta_shrinks_once_lever_2_has_taken_its_bytes() -> None:
     which is why every row records which other levers were on.
     """
     assert tier_delta(trim=True).delta_bytes == 2_745
-    assert tier_delta(trim=True).delta_percent == 12.8
+    assert tier_delta(trim=True).delta_percent == 12.7
     assert tier_delta(trim=True).kept_tools == RMS_TIER_KEPT_TOOLS
 
 
@@ -462,11 +463,11 @@ def test_mcp_toolset_is_a_different_payload_from_the_review() -> None:
     assert MCP_OPENAI_ARRAY_BYTES != OPENAI_ARRAY_BYTES
 
 
-def test_structural_floor_is_45_percent_of_the_payload() -> None:
+def test_structural_floor_is_44_percent_of_the_payload() -> None:
     """Emptying every description everywhere still leaves this much. Lever 2 is bounded."""
     floor = structural_floor_bytes()
     assert floor == STRUCTURAL_FLOOR_BYTES
-    assert round(100 * floor / OPENAI_ARRAY_BYTES) == 45
+    assert round(100 * floor / OPENAI_ARRAY_BYTES) == 44
 
 
 def test_longest_descriptions_and_largest_objects_are_the_documented_ones() -> None:

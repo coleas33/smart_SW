@@ -35,7 +35,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -66,6 +66,8 @@ __all__ = [
     "PairValues",
     "build_joint_map",
     "fold_by_pattern",
+    "folded_result",
+    "joint_label",
     "load_joint_rules",
     "plain_diameter_mm",
 ]
@@ -964,3 +966,23 @@ def fold_by_pattern(
         else:
             groups[key] = ([joint], result)
     return [(tuple(joints), result) for joints, result in groups.values()]
+
+
+def joint_label(joint: Joint) -> str:
+    """`jnt:0001 hol:0014#1+hol:0019#2+cmp:0027`: the joint, its instances, and each
+    component a cylinder member sits on, once - a screw seated by its shank in one bore and
+    its head in the counterbore is one part of the joint, not two."""
+    cylinder_components = dict.fromkeys(item.component_id for item in joint.cylinders)
+    members = [item.id for item in joint.instances] + list(cylinder_components)
+    return f"{joint.id} {'+'.join(members)}"
+
+
+def folded_result(joints: Sequence[Joint], result: CheckResult) -> CheckResult:
+    """One folded group as the finding it becomes: every joint and instance named, with the
+    count, ahead of the observed condition they share (research R2.21)."""
+    count = len(joints)
+    names = ", ".join(joint_label(joint) for joint in joints)
+    return replace(
+        result,
+        observed=f"{count} joint{'s' if count != 1 else ''} ({names}): {result.observed}",
+    )

@@ -100,6 +100,7 @@ typed by the model.
 | `check_rms_part` | `document_id: str \| null` | Resilient Modeling part-scope findings and aggregated coverage for one part document, or for every part document (null) including the ones whose tree was not read |
 | `check_rms_assembly` | none | Resilient Modeling assembly-scope findings and aggregated coverage for the root assembly document, the only document whose mates are extracted; the subassembly documents are named by the `rms.assembly.subassemblies` coverage item |
 | `check_rms_equations` | `document_id: str \| null` | Resilient Modeling equation-scope findings and aggregated coverage for one part document, or for every part document (null); a manager nobody could read is unresolved, not "no global variables" |
+| `check_joints` | none | Feature 010: the joint map found from the geometry, recorded as `joint.map` coverage (one `checked` item per pattern group, one `skipped` item per candidate and per gap), then `hole.nominal_alignment` and `hole.position_stack` on every joint, one finding per pattern of identical results. Takes no argument, so it runs in the code-first pass (`CODE_FIRST_CHECKS`); returns counts, not a payload |
 | `record_drawing_finding` | `document_id`, `sheet`, `observed`, `requirement`, `source_refs: list[SourceRef]`, `status: "suspected" \| "unresolved"`, `recommended_action` | A non-numeric drawing finding. `status` may not be `demonstrated` or `checked_within_scope` from this tool. |
 
 ## Session tools

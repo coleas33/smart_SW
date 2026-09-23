@@ -21,8 +21,9 @@ Five sources, which is every place a `Finding.check` value can come from:
 1. `checks/rms/registry.py` `RULES` - the resilient-modeling catalogue;
 2. `checks/standards/registry.py` `RULES` - the sixteen release standards checks;
 3. the deterministic numeric checks, each of which owns its id as a module constant:
-   `interference.CHECK`, the five `fastener.CHECK_*`, `fit.CHECK`, `stack.CHECK` and
-   `hole_alignment.CHECK`;
+   `interference.CHECK`, the five `fastener.CHECK_*`, `fit.CHECK`, `stack.CHECK`,
+   `hole_alignment.CHECK`, and feature 010's `joint_alignment.CHECK_NOMINAL` and
+   `CHECK_STACK`;
 4. `tools/session.py` `DRAWING_FINDING_CHECK` - the one id `record_drawing_finding`
    accepts, which is fixed rather than caller-supplied;
 5. nothing else: `build_finding` is the one finding constructor, and every caller of it
@@ -34,7 +35,7 @@ has argued over folder by folder, not one a test invented.
 
 from __future__ import annotations
 
-from swreview.checks import fastener, fit, hole_alignment, interference, stack
+from swreview.checks import fastener, fit, hole_alignment, interference, joint_alignment, stack
 from swreview.checks.rms.registry import RULES as RMS_RULES
 from swreview.checks.standards.registry import RULES as STANDARDS_RULES
 from swreview.report.attention import load_policy
@@ -54,7 +55,15 @@ module's namespace by prefix, so deleting one is a failure here rather than a se
 quietly shrank to match the table."""
 
 NUMERIC_CHECKS: frozenset[str] = frozenset(
-    {interference.CHECK, fit.CHECK, stack.CHECK, hole_alignment.CHECK, *FASTENER_CHECKS}
+    {
+        interference.CHECK,
+        fit.CHECK,
+        stack.CHECK,
+        hole_alignment.CHECK,
+        joint_alignment.CHECK_NOMINAL,
+        joint_alignment.CHECK_STACK,
+        *FASTENER_CHECKS,
+    }
 )
 
 
@@ -69,9 +78,9 @@ def test_the_five_sources_between_them_name_every_emittable_check() -> None:
     before it makes the two coverage tests below pass for the wrong reason."""
     assert len(RMS_RULES) == 34
     assert len(STANDARDS_RULES) == 16
-    assert len(NUMERIC_CHECKS) == 9
+    assert len(NUMERIC_CHECKS) == 11, "9 until feature 010 T036"
     assert DRAWING_FINDING_CHECK == "drawing.manufacturing_inputs"
-    assert len(emittable()) == 60, "the five sources share no id"
+    assert len(emittable()) == 62, "the five sources share no id (60 before feature 010)"
 
 
 def test_every_emittable_check_id_has_a_consequence_class() -> None:
@@ -113,7 +122,7 @@ def test_the_needs_judgement_prefixes_each_match_at_least_one_emittable_id() -> 
 def test_the_judgement_families_are_the_numeric_checks_except_the_axial_stack() -> None:
     """Which emittable ids key 2 actually lifts, named rather than left to a prefix scan.
 
-    Eight of the nine numeric checks: only the engineer knows whether an overlap is the
+    Ten of the eleven numeric checks: only the engineer knows whether an overlap is the
     intended press fit, which two dimensions are one interface, or what a screw clamps.
     `stack.worst_case` is the one that is not, and deliberately: the engineer states the
     stack - the dimensions, their signs and the target are arguments to the check - so once

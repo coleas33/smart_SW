@@ -338,9 +338,9 @@ def check_hole_alignment(
     Notes:
         The offset is the closest distance between the axes as modelled, with the angle
         between them reported alongside. `tolerance` names the drawing dimension that governs
-        the pair; its nominal is read as the permitted offset. Without one the offset is still
-        measured and the finding is `unresolved` - the number is evidence, the verdict is not
-        available.
+        the pair; its nominal is a zone that permits half of it as offset. Without one the
+        offset is still measured and the finding is `unresolved` - the number is evidence,
+        the verdict is not available.
 
         This compares modelled axes, not GD&T: no datum reference frame, no material
         condition, no form error, and no allowance for component position or mate play.

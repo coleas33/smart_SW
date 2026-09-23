@@ -128,10 +128,15 @@ def test_the_digest_names_the_two_families_that_are_enumerable_and_still_not_pre
     digest = opening_of(run)
 
     assert NOT_EVALUATED_HEADER in digest
-    # One screw and one coaxial hole pair are in the fixture; both are counted, neither is
-    # evaluated, and the digest says which is which.
+    # One screw is in the fixture, counted and not evaluated. Feature 010 T036, edited
+    # deliberately: the hole-alignment line is what the joint map could not reach - both
+    # of the fixture's holes carry no cylinder face - instead of a coaxial pair count.
     assert "1 fastener" in digest
-    assert "1 coaxial hole pair" in digest
+    assert (
+        "  hole alignment: 2 holes have no cylinder face or belong to a component that "
+        "was not read; they are in no joint."
+    ) in digest
+    assert "coaxial hole pair" not in digest
 
 
 def test_the_counts_in_the_digest_equal_the_counts_in_the_session(tmp_path: Any) -> None:
@@ -178,7 +183,11 @@ def test_an_empty_model_check_package_enumerates_nothing_and_says_so(
 ) -> None:
     """No interference, no hole, no fastener: the pre-run makes no call it cannot justify,
     and every family it did not evaluate - interference now among them - is a line in the
-    digest and an item in coverage, not a silence."""
+    digest and an item in coverage, not a silence.
+
+    Feature 010 T028, edited deliberately: `check_joints` takes no argument and is always
+    planned, and on a `model_check` package it records the one skipped row that says the
+    hole phase did not run - a statement, not a silence."""
     run, session = started(
         tmp_path, "empty", package=empty_model_check_package(), efficiency=ON
     )
@@ -188,10 +197,16 @@ def test_an_empty_model_check_package_enumerates_nothing_and_says_so(
         "check_rms_part",
         "check_rms_equations",
         "check_rms_assembly",
+        "check_joints",
+    ]
+    assert [item.reason for item in session.coverage.skipped if item.check == "joint.map"] == [
+        "the hole phase did not run (profile model_check)"
     ]
     assert f"Findings recorded: {len(session.findings)}" in digest
     assert "0 fastener" in digest
-    assert "0 coaxial hole pair" in digest
+    # Feature 010 T037: with check_joints planned, a package with no hole row leaves
+    # the joint map nothing to have missed, so the hole-alignment family renders no line.
+    assert f"{PRERUN_CHECK_PREFIX}hole_alignment" not in skipped_by_check(session)
     assert NOT_EVALUATED_HEADER in digest
     assert "interference" in skipped_by_check(session)[f"{PRERUN_CHECK_PREFIX}interference"]
 

@@ -148,6 +148,39 @@ def test_an_angular_tolerance_where_a_length_belongs_raises() -> None:
         )
 
 
+def test_an_offset_between_half_the_zone_and_the_zone_is_demonstrated() -> None:
+    """Feature 010 FR-009: a 0.2 mm zone lets the axis move 0.1 mm, so 0.15 mm - within the
+    zone value the check used to compare with - is now demonstrated (research R2.8)."""
+    result = check_hole_alignment(
+        hole("hole:1", (0.0, 0.0, 0.0)),
+        hole("hole:2", (0.00015, 0.0, 0.020)),
+        tolerance(Quantity(value=0.2, unit="mm")),
+    )
+
+    assert result.status == "demonstrated"
+    assert result.calculation is not None
+    assert result.calculation.result["zone_mm"] == pytest.approx(0.2)
+    assert result.calculation.result["permitted_offset_mm"] == pytest.approx(0.1)
+    assert result.calculation.result["within_tolerance"] is False
+    assert (
+        "the tolerance value is a position or coaxiality zone; the axis may move half of it "
+        "from true position"
+    ) in result.calculation.assumptions
+
+
+def test_the_zone_and_the_permitted_offset_are_recorded_on_a_pass() -> None:
+    result = check_hole_alignment(
+        hole("hole:1", (0.0, 0.0, 0.0)),
+        hole("hole:2", (0.0001, 0.0, 0.020)),
+        tolerance(Quantity(value=0.2, unit="mm")),
+    )
+
+    assert result.status == "checked_within_scope"
+    assert result.calculation.result["zone_mm"] == pytest.approx(0.2)
+    assert result.calculation.result["permitted_offset_mm"] == pytest.approx(0.1)
+    assert result.calculation.result["within_tolerance"] is True
+
+
 def test_both_hole_ids_are_recorded_in_the_calculation_inputs() -> None:
     result = check_hole_alignment(
         hole("hole:1", (0.0, 0.0, 0.0)),
