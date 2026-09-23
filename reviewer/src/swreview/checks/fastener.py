@@ -24,7 +24,7 @@ in the `out_of_scope` coverage bucket, never as a pass (FR-024).
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Literal
 
@@ -51,6 +51,7 @@ __all__ = [
     "SUPPORTED_KINDS",
     "THROUGH_TAPPED_SOURCE",
     "ClampedLayer",
+    "HeadSweep",
     "Placement",
     "ThreadSpec",
     "UsableThread",
@@ -597,12 +598,17 @@ _HEAD_REQUIREMENT = (
 
 
 def _head_clearance(
-    fastener: Fastener, hole: Hole, stack: _Stack, envelope: EnvelopeResult | None
+    fastener: Fastener,
+    hole: Hole,
+    stack: _Stack,
+    envelope: EnvelopeResult | None,
+    why: str | None = None,
 ) -> CheckResult:
     if envelope is None:
+        because = "" if why is None else f" ({why})"
         return unresolved(
             CHECK_HEAD_CLEARANCE,
-            f"the tool envelope around the head of {fastener.id}",
+            f"the tool envelope around the head of {fastener.id}{because}",
             stack.sources,
             requirement=_HEAD_REQUIREMENT,
             recommended_action=(
@@ -863,13 +869,24 @@ def _thin_sheet(
     )
 
 
+@dataclass(frozen=True)
+class HeadSweep:
+    """The tool envelope swept from a placed screw's head (`checks/tool_access.py`, US5):
+    the raycast's result, the tool, radius, reach and head plane it was swept with (for the
+    finding's inputs), or why no sweep could be made."""
+
+    envelope: EnvelopeResult | None
+    inputs: Mapping[str, Quantity | str] = field(default_factory=dict)
+    missing: str | None = None
+
+
 def check_placed_screw(
     fastener: Fastener,
     hole: Hole,
     placement: Placement,
     hole_material: str | None = None,
     rules: EngagementRules | None = None,
-    envelope: EnvelopeResult | None = None,
+    envelope: HeadSweep | None = None,
 ) -> list[CheckResult]:
     """The four joint checks for a screw the assembly places in a tapped hole (FR-012, FR-013).
 
@@ -879,18 +896,31 @@ def check_placed_screw(
     `_bottoming`, `_engagement`, `_thread_match` and `_head_clearance` decide, each result
     carrying the placement's derivation instead of the clamped-stack formula; `hole_depth` is
     never read. A through-tapped part too thin for the rule makes the engagement shortfall
-    low severity, with the sheet thickness.
+    low severity, with the sheet thickness. `envelope` is the head sweep of US5: its tool,
+    radius and reach join the head-clearance inputs, and a sweep that could not be made is
+    unresolved naming why.
     """
     if fastener.kind not in SUPPORTED_KINDS:
         return [_unsupported(fastener)]
 
     stack = _placed_stack(fastener, hole, placement)
     rule = (rules or load_rules()).for_material(hole_material)
-    return [
+    results = [
         _bottoming(fastener, hole, stack),
         _thin_sheet(
             _engagement(fastener, hole, stack, hole_material, rule), fastener, hole, placement
         ),
         _thread_match(fastener, hole, stack),
-        _head_clearance(fastener, hole, stack, envelope),
     ]
+    if envelope is not None:
+        stack.inputs.update(envelope.inputs)
+    results.append(
+        _head_clearance(
+            fastener,
+            hole,
+            stack,
+            None if envelope is None else envelope.envelope,
+            None if envelope is None else envelope.missing,
+        )
+    )
+    return results

@@ -33,7 +33,7 @@ from typing import Literal
 
 from swreview import units
 from swreview.checks.fastener import parse_thread
-from swreview.checks.fastener_identity import MeshOf, screw_extent
+from swreview.checks.fastener_identity import MeshOf, screw_extent, tapped_span_mm
 from swreview.checks.joints import Joint, JointMap
 from swreview.checks.result import CheckResult, round_length, unresolved
 from swreview.exceptions import ExceptionStore, ReviewException
@@ -399,8 +399,7 @@ def _thread_bound(
         extent = screw_extent(joint, package, mesh)
         if major is None or extent is None:
             return None
-        geometry = tapped.geometry
-        low, high = (value * 1000.0 for value in geometry.span(geometry.origin, geometry.direction))
+        low, high = tapped_span_mm(joint)
         overlap = round_length(min(extent.high_mm, high) - max(extent.low_mm, low))
         d = units.as_mm(major)
         if overlap <= 0.0 or d <= tapped.bore_mm:

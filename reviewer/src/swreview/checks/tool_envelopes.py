@@ -9,7 +9,7 @@ unearned pass the constitution forbids (Principle I).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
@@ -28,20 +28,40 @@ DEFAULT_ENVELOPES_PATH = Path(__file__).with_name("tool_envelopes.yaml")
 
 @dataclass(frozen=True)
 class ToolEnvelope:
-    """One tool: how wide it is as a multiple of d, and where that number came from."""
+    """One tool: how wide it is and how far it reaches, as multiples of d, and where those
+    numbers came from."""
 
     name: str
     envelope_diameter_ratio: float
+    reach_diameter_ratio: float
     source: str
 
 
 @dataclass(frozen=True)
 class ToolEnvelopes:
-    """The whole table, plus the one clearance every tool gets."""
+    """The whole table, the one clearance every tool gets, and which tool turns which head.
+
+    `drive_tools` maps a drive (`hex_socket`, `torx`, `hex_head`) and `head_tools` a head
+    type to a tool the table carries (feature 010 US5); the loader refuses one that names a
+    tool it does not carry.
+    """
 
     version: int
     clearance_mm: float
     tools: dict[str, ToolEnvelope]
+    drive_tools: dict[str, str] = field(default_factory=dict)
+    head_tools: dict[str, str] = field(default_factory=dict)
+
+    def reach_mm(self, tool: str, nominal_diameter_mm: float) -> float:
+        """How far back from the head plane `tool` needs room on a fastener of diameter
+        `nominal_diameter_mm`: `reach_diameter_ratio * d`. Raises like `radius_mm`."""
+        if tool not in self.tools:
+            raise KeyError(
+                f"no tool envelope for {tool!r}; the table carries {sorted(self.tools)}"
+            )
+        if nominal_diameter_mm <= 0.0:
+            raise ValueError(f"nominal diameter must be positive, got {nominal_diameter_mm}")
+        return self.tools[tool].reach_diameter_ratio * nominal_diameter_mm
 
     def radius_mm(self, tool: str, nominal_diameter_mm: float) -> float:
         """The swept radius for `tool` on a fastener of diameter `nominal_diameter_mm`.
@@ -69,22 +89,36 @@ def _parse(document: object, path: Path) -> ToolEnvelopes:
 
     tools: dict[str, ToolEnvelope] = {}
     for name, row in document["tools"].items():
-        ratio = float(row["envelope_diameter_ratio"])
-        if ratio <= 0.0:
-            raise ValueError(
-                f"{path}: envelope_diameter_ratio for {name!r} must be positive, got {ratio}"
-            )
-        tools[name] = ToolEnvelope(
-            name=name, envelope_diameter_ratio=ratio, source=row["source"]
-        )
+        ratios = {}
+        for key in ("envelope_diameter_ratio", "reach_diameter_ratio"):
+            if key not in row:
+                raise ValueError(f"{path}: {name!r} carries no {key}")
+            ratios[key] = float(row[key])
+            if ratios[key] <= 0.0:
+                raise ValueError(
+                    f"{path}: {key} for {name!r} must be positive, got {ratios[key]}"
+                )
+        tools[name] = ToolEnvelope(name=name, source=row["source"], **ratios)
     if not tools:
         raise ValueError(f"{path}: the table carries no tools")
+
+    maps: dict[str, dict[str, str]] = {}
+    for key in ("drive_tools", "head_tools"):
+        mapping = {str(item).lower(): str(tool) for item, tool in (document.get(key) or {}).items()}
+        unknown = sorted(tool for tool in mapping.values() if tool not in tools)
+        if unknown:
+            raise ValueError(f"{path}: {key} names tools the table does not carry: {unknown}")
+        maps[key] = mapping
 
     clearance = float(document["clearance_mm"])
     if clearance < 0.0:
         raise ValueError(f"{path}: clearance_mm must not be negative, got {clearance}")
     return ToolEnvelopes(
-        version=int(document["version"]), clearance_mm=clearance, tools=tools
+        version=int(document["version"]),
+        clearance_mm=clearance,
+        tools=tools,
+        drive_tools=maps["drive_tools"],
+        head_tools=maps["head_tools"],
     )
 
 

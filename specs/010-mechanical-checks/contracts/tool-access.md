@@ -14,8 +14,10 @@ For a screw joint with a placed screw:
 
 ## 2. The tool
 
-1. the head code's `drive` from `fastener_names.yaml` (`hex_socket` → `hex_key`, `hex_head` →
-   `socket`);
+1. the head code's `drive` from `fastener_names.yaml`, mapped by `tool_envelopes.yaml`
+   `drive_tools` (`hex_socket` → `hex_key`, `torx` → `torx_key`, `hex_head` → `socket`; the
+   Torx key is a pilot-default envelope for FHT and BHT, owner answer 2026-09-23, and is the
+   joint checks' own: `check_tool_envelope`'s `tool` argument is not widened);
 2. else `tool_envelopes.yaml` `head_tools[head_type]` (`socket head cap`, `button head`,
    `socket countersunk head` → `hex_key`; `hex head` → `socket`);
 3. else unresolved: `"the drive of head code <code> is not stated in fastener_names.yaml"`.
@@ -33,7 +35,12 @@ convention (rays travel along `-direction`) makes them travel outward. The resul
 mesh is unresolved naming it; no hit is checked within scope with the sampling limit. When the
 package holds no body mesh at all, one `skipped` coverage item `fastener.head_clearance` covers
 every joint instead of one unresolved finding each. Lever 10a's lazy meshes: whatever the
-package holds is swept; a component whose body was never fetched is named, never assumed clear.
+package holds is swept (the code-first pass makes no bridge call to fetch more); a part
+component whose body was never fetched is named, never assumed clear. A body whose bounds the
+envelope's box cannot reach is not cast against - it cannot be hit - which keeps the sweep
+linear in the bodies near each head. The head-clearance finding carries the tool, its radius
+and reach, the pilot-default source line and the head plane's source in its inputs; a screw
+with no head plane or no tool is unresolved naming why (`HeadSweep.missing`).
 
 ## 4. Head fit (`fastener.head_fit`)
 
@@ -45,7 +52,15 @@ package holds is swept; a component whose body was never fetched is named, never
 `dk_max` and `k_max` from `checks/head_dimensions.yaml` by head type and size, each row citing its
 standard (ISO 4762 socket head cap, ISO 7380 button, ISO 10642 countersunk, ISO 4017/4014 hex).
 A countersink before US8, a head type or size the table lacks, or an oblique counterbore extent
-is unresolved naming it. A pass is checked within scope with both numbers.
+is unresolved naming it. A pass is checked within scope with both numbers. A head that cannot
+seat (diameter, or a countersink angle that differs) is `high`; a head standing proud of a
+shallow counterbore is `medium`. The Hole Wizard sizes win over the face-derived ones when the
+package carries them. Head fit runs for every placed screw with a counterbore or countersink,
+tapped or not; its results fold by screw document and recessed part (`recess_group`). The
+table carries ISO 4762, ISO 7380-1, ISO 10642 and ISO 4017/4014 (the hex head's `dk_max` the
+across-corners bound `s max / cos 30`, derived and labelled); it carries nothing for the
+`flat head` of the owner's FHT (flat head Torx, ISO 14581 would be its standard), so those
+countersinks are unresolved naming the missing row until the owner adds one.
 
 ## 5. Acceptance
 

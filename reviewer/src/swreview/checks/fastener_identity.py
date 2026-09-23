@@ -37,6 +37,7 @@ from swreview.checks.fastener import (
     CHECK_ENGAGEMENT,
     CHECK_HEAD_CLEARANCE,
     THROUGH_TAPPED_SOURCE,
+    HeadSweep,
     Placement,
     ThreadSpec,
     UsableThread,
@@ -56,7 +57,6 @@ from swreview.checks.joints import Joint, JointMap, build_joint_map, component_f
 from swreview.checks.result import CheckResult, round_length
 from swreview.findings import Calculation
 from swreview.geometry.axis import axial_extent
-from swreview.geometry.envelope import EnvelopeResult
 from swreview.ir.models import (
     Axis,
     ComponentInstance,
@@ -88,6 +88,8 @@ __all__ = [
     "run_fastener_checks",
     "screw_extent",
     "shank_band_mm",
+    "tapped_span_mm",
+    "thread_entry",
 ]
 
 CHECK_IDENTITY = "fastener.identity"
@@ -480,22 +482,48 @@ def screw_extent(
 # --- the placed screw's protrusion and usable thread ------------------------------------------
 
 
+ThreadEntry = Literal["high", "low", "both"]
+
+
+def thread_entry(extent: ScrewExtent, low: float, high: float) -> ThreadEntry | None:
+    """Which end of the tapped face `[low, high]` lies inside the screw's extent: the thread
+    entry (`contracts/fasteners.md` section 4). `both` when the screw spans the whole face,
+    `None` when it crosses neither end."""
+    high_inside = extent.low_mm < high < extent.high_mm
+    low_inside = extent.low_mm < low < extent.high_mm
+    if high_inside and low_inside:
+        return "both"
+    if high_inside:
+        return "high"
+    if low_inside:
+        return "low"
+    return None
+
+
+def tapped_span_mm(joint: Joint) -> tuple[float, float]:
+    """The tapped face's extent along the joint's reference axis, in mm."""
+    tapped = joint.tapped_instance
+    assert tapped is not None
+    geometry = tapped.geometry
+    low, high = geometry.span(geometry.origin, geometry.direction)
+    return round_length(low * 1000.0), round_length(high * 1000.0)
+
+
 def _protrusion(
     extent: ScrewExtent, low: float, high: float
 ) -> tuple[float, str] | str:
     """`(protrusion, how)` from the screw's extent and the tapped face's `[low, high]`, or the
     reason it cannot be read. The entry is the end of the tapped face that lies inside the
     screw's extent; the tip is the screw's end beyond it (`contracts/fasteners.md` s. 4)."""
-    high_inside = extent.low_mm < high < extent.high_mm
-    low_inside = extent.low_mm < low < extent.high_mm
-    if high_inside and low_inside:
+    entry = thread_entry(extent, low, high)
+    if entry == "both":
         return (
             round_length(min(high - extent.low_mm, extent.high_mm - low)),
             "the screw spans the whole tapped face, so the smaller of the two protrusions is used",
         )
-    if high_inside:
+    if entry == "high":
         return round_length(high - extent.low_mm), "entering at the face's upper end"
-    if low_inside:
+    if entry == "low":
         return round_length(extent.high_mm - low), "entering at the face's lower end"
     if extent.high_mm <= low or extent.low_mm >= high:
         short = round_length(min(abs(low - extent.high_mm), abs(extent.low_mm - high)))
@@ -522,9 +550,7 @@ def measure_placement(
         return None
     hole = tapped.hole
     what = f"the protrusion of {recognised.fastener.id} into {tapped.id}"
-    geometry = tapped.geometry
-    span = geometry.span(geometry.origin, geometry.direction)
-    low, high = round_length(span[0] * 1000.0), round_length(span[1] * 1000.0)
+    low, high = tapped_span_mm(joint)
 
     missing: list[str] = []
     protrusion: float | None = None
@@ -596,9 +622,9 @@ MeshOf = Callable[[str], trimesh.Trimesh | None]
 """A component's body mesh in world metres, or `None` when it has none or it could not be
 loaded. The tool supplies it from the package folder; the checks stay pure of files."""
 
-EnvelopeOf = Callable[[Joint], EnvelopeResult | None]
-"""The tool envelope swept from a joint's screw head (`checks/tool_access.py`, US5), or
-`None` when it could not be swept; head clearance is then unresolved."""
+EnvelopeOf = Callable[[Joint], HeadSweep]
+"""The tool envelope swept from a joint's screw head (`checks/tool_access.py`, US5), or the
+reason it could not be swept, which head clearance then reports as unresolved."""
 
 
 def fastener_group(joint: Joint) -> str:
@@ -626,6 +652,7 @@ def run_fastener_checks(
     mesh_of: MeshOf | None = None,
     rules: EngagementRules | None = None,
     envelope_of: EnvelopeOf | None = None,
+    no_sweep_reason: str = "no tool envelope is swept by this call",
 ) -> FastenerChecks:
     """Every placed screw through `check_placed_screw`, every fastener through
     `fastener.identity`, as plain values (`contracts/code-first.md` section 6).
@@ -678,7 +705,8 @@ def run_fastener_checks(
                 ),
                 reason=(
                     f"no tool envelope was swept for the {len(unswept)} placed screws in "
-                    "tapped holes, so head clearance was not evaluated for any of them"
+                    f"tapped holes ({no_sweep_reason}), so head clearance was not evaluated "
+                    "for any of them"
                 ),
                 error=None,
             )

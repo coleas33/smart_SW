@@ -116,6 +116,9 @@ classes:
   # a fastener whose name its modelled shank contradicts: which size is right is the
   # engineer's to say, and every check that leans on the size waits for it.
   fastener.identity: interface
+  # a counterbore or countersink that does not take its head: the part and the screw have
+  # to agree, like every joint check.
+  fastener.head_fit: interface
   stack.worst_case: interface
   # the drawing finding the model records -> manufacturing.
   drawing.manufacturing_inputs: manufacturing

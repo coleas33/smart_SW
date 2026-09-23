@@ -1,0 +1,79 @@
+# The largest head each standard screw may have, as data (feature 010 US5, FR-015).
+#
+# `checks/tool_access.py` reads this for two things: head fit - does a counterbore or a
+# countersink receive the head it must (`fastener.head_fit`) - and the head plane of a screw
+# whose mesh is missing, placed by its shank face plus the head height (research R2.15).
+#
+# Per standard: the head type it defines (the `head_type` the fastener name table and the
+# extractor use), a source line, and one row per metric size with the maximum head diameter
+# `dk_max_mm` and the maximum head height `k_max_mm`. A countersunk standard also carries its
+# head angle. A head type or size the table lacks is unresolved, never approximated.
+#
+# The values are the maxima of each standard's dimension table. For a countersunk head
+# `dk_max_mm` is the theoretical maximum (the sharp-edged diameter a countersink must reach
+# for the head to sit flush). For a hex head it is the across-corners diameter of the largest
+# across-flats size, s max / cos 30 degrees: the standard tabulates only a minimum across
+# corners, and a head can reach this bound, so a recess that clears it clears the head (the
+# socket that turns it needs more room still, which head fit does not check).
+
+version: 1
+
+standards:
+  ISO 4762:
+    head_type: socket head cap
+    source: >-
+      ISO 4762, hexagon socket head cap screws: dk max (plain head) and k max
+    rows:
+      M2: {dk_max_mm: 3.8, k_max_mm: 2.0}
+      M2.5: {dk_max_mm: 4.5, k_max_mm: 2.5}
+      M3: {dk_max_mm: 5.5, k_max_mm: 3.0}
+      M4: {dk_max_mm: 7.0, k_max_mm: 4.0}
+      M5: {dk_max_mm: 8.5, k_max_mm: 5.0}
+      M6: {dk_max_mm: 10.0, k_max_mm: 6.0}
+      M8: {dk_max_mm: 13.0, k_max_mm: 8.0}
+      M10: {dk_max_mm: 16.0, k_max_mm: 10.0}
+      M12: {dk_max_mm: 18.0, k_max_mm: 12.0}
+  ISO 7380-1:
+    head_type: button head
+    source: >-
+      ISO 7380-1, hexagon socket button head screws: dk max and k max; the standard starts
+      at M3
+    rows:
+      M3: {dk_max_mm: 5.7, k_max_mm: 1.65}
+      M4: {dk_max_mm: 7.6, k_max_mm: 2.2}
+      M5: {dk_max_mm: 9.5, k_max_mm: 2.75}
+      M6: {dk_max_mm: 10.5, k_max_mm: 3.3}
+      M8: {dk_max_mm: 14.0, k_max_mm: 4.4}
+      M10: {dk_max_mm: 17.5, k_max_mm: 5.5}
+      M12: {dk_max_mm: 21.0, k_max_mm: 6.6}
+  ISO 10642:
+    head_type: socket countersunk head
+    countersink_angle_deg: 90
+    source: >-
+      ISO 10642, hexagon socket countersunk head screws: dk theoretical max, k max, a
+      90-degree head; the standard starts at M3
+    rows:
+      M3: {dk_max_mm: 6.72, k_max_mm: 1.86}
+      M4: {dk_max_mm: 8.96, k_max_mm: 2.48}
+      M5: {dk_max_mm: 11.2, k_max_mm: 3.1}
+      M6: {dk_max_mm: 13.44, k_max_mm: 3.72}
+      M8: {dk_max_mm: 17.92, k_max_mm: 4.96}
+      M10: {dk_max_mm: 22.4, k_max_mm: 6.2}
+      M12: {dk_max_mm: 26.88, k_max_mm: 7.44}
+  ISO 4017/4014:
+    head_type: hex head
+    source: >-
+      ISO 4017 and ISO 4014, hexagon head screws and bolts, product grade A: k max (k
+      nominal plus its js14 tolerance), and dk max derived as s max / cos 30 degrees, the
+      across-corners diameter of the largest across-flats size (s max 4, 5, 5.5, 7, 8, 10,
+      13, 16, 18 mm for M2 to M12), rounded up to 0.01 mm
+    rows:
+      M2: {dk_max_mm: 4.62, k_max_mm: 1.525}
+      M2.5: {dk_max_mm: 5.78, k_max_mm: 1.825}
+      M3: {dk_max_mm: 6.36, k_max_mm: 2.125}
+      M4: {dk_max_mm: 8.09, k_max_mm: 2.925}
+      M5: {dk_max_mm: 9.24, k_max_mm: 3.65}
+      M6: {dk_max_mm: 11.55, k_max_mm: 4.15}
+      M8: {dk_max_mm: 15.02, k_max_mm: 5.45}
+      M10: {dk_max_mm: 18.48, k_max_mm: 6.58}
+      M12: {dk_max_mm: 20.79, k_max_mm: 7.68}
