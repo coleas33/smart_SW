@@ -550,6 +550,264 @@ def test_answering_a_request_twice_is_refused(
         run.answer_evidence("ER-001", "12 mm again")
 
 
+# --- several answers, one resumed turn (feature 008 T082, FR-025, SC-005) ----------------------
+
+
+def ask(what: str) -> ScriptedToolCall:
+    """One evidence request; each `what` is its own request."""
+    return call("request_evidence", **{**EVIDENCE_ARGUMENTS, "what": what})
+
+
+THREE_ASKS = (ask("the thread depth"), ask("the washer grade"), ask("the drawing revision"))
+
+
+class SpyProvider(FakeProvider):
+    """The scripted adapter, keeping a copy of the history each turn was sent."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.sent: list[list[dict[str, Any]]] = []
+
+    def run(self, **kwargs: Any) -> TurnResult:
+        self.sent.append([dict(message) for message in kwargs["messages"]])
+        return super().run(**kwargs)
+
+
+def waiting_on_three(
+    review: Callable[..., runner.ReviewRun], resumed: ScriptedTurn | None = None
+) -> tuple[runner.ReviewRun, SpyProvider]:
+    """A run whose opening turn opened ER-001 to ER-003 and whose next turn is `resumed`."""
+    provider = SpyProvider(
+        script=[turn("asking", *THREE_ASKS), resumed or turn("thanks")], model=MODEL
+    )
+    run = review([], provider=provider)
+    assert [request.status for request in run.session.evidence_requests] == ["open"] * 3
+    return run, provider
+
+
+def unchanged_state(run: runner.ReviewRun) -> tuple[Any, ...]:
+    """Everything a refused batch must leave exactly as it was."""
+    return (
+        [request.model_dump(mode="json") for request in run.session.evidence_requests],
+        len(events_of(run)),
+        run.turns,
+        len(run.messages),
+    )
+
+
+SUBMITTED = (
+    ("ER-002", "Grade 8.8, zinc flake."),
+    ("ER-003", "Revision C is released."),
+    ("ER-001", "The usable thread depth is 12 mm."),
+)
+"""Three answers in an order that is not the ids', so submission order is visible."""
+
+
+def test_a_batch_of_three_answers_every_request_and_resumes_once(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    run, provider = waiting_on_three(review)
+    turns_before = run.turns
+
+    session = run.answer_evidence_batch(SUBMITTED)
+
+    by_id = {request.id: request for request in session.evidence_requests}
+    for request_id, answer in SUBMITTED:
+        assert by_id[request_id].status == "answered"
+        assert by_id[request_id].answer == answer
+        assert by_id[request_id].answered_at is not None
+    answered = [event["body"] for event in events_of(run) if event["type"] == "evidence.answered"]
+    assert answered == [{"request_id": rid, "answer": answer} for rid, answer in SUBMITTED]
+    assert run.turns == turns_before + 1
+    assert len(provider.sent) == 2
+
+
+def test_the_resumed_turn_opens_on_one_message_listing_every_answer(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    run, provider = waiting_on_three(review)
+
+    run.answer_evidence_batch(SUBMITTED)
+
+    assert provider.sent[-1][-1] == {
+        "role": "user",
+        "content": (
+            "The engineer answered your evidence requests:\n"
+            "- ER-002: Grade 8.8, zinc flake.\n"
+            "- ER-003: Revision C is released.\n"
+            "- ER-001: The usable thread depth is 12 mm.\n"
+            "Continue the review with these answers."
+        ),
+    }
+    assert provider.sent[-1][-1]["content"] == runner.answers_message(SUBMITTED)
+
+
+def test_every_evidence_answered_event_comes_before_the_resumed_turn(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The replay reads consecutive `evidence.answered` events before one turn as one batch
+    (contracts/replay.md section 2), so nothing of the turn may come between them."""
+    run, _ = waiting_on_three(review)
+    start = len(events_of(run))
+
+    run.answer_evidence_batch(SUBMITTED)
+
+    kinds = [event["type"] for event in events_of(run)][start:]
+    assert kinds[:3] == ["evidence.answered"] * 3
+    assert kinds.count("turn.ended") == 1
+    assert kinds.count("session.ended") == 1
+
+
+def test_a_batch_of_one_sends_exactly_the_single_answer_message(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    run, provider = waiting_on_three(review)
+
+    run.answer_evidence_batch([("ER-001", "12 mm")])
+
+    assert provider.sent[-1][-1]["content"] == runner.ANSWER_MESSAGE.format(
+        request_id="ER-001", answer="12 mm"
+    )
+    assert runner.answers_message([("ER-001", "12 mm")]) == runner.ANSWER_MESSAGE.format(
+        request_id="ER-001", answer="12 mm"
+    )
+    statuses = [request.status for request in run.session.evidence_requests]
+    assert statuses == ["answered", "open", "open"]
+
+
+def test_the_single_answer_sends_what_it_always_sent(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """`answer_evidence` delegates to the batch; its message is byte-identical (T083)."""
+    run, provider = waiting_on_three(review)
+
+    run.answer_evidence("ER-003", "Revision C is released.")
+
+    assert provider.sent[-1][-1]["content"] == runner.ANSWER_MESSAGE.format(
+        request_id="ER-003", answer="Revision C is released."
+    )
+
+
+def test_a_batch_folds_each_rerun_onto_the_verdict_it_rejudges(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """Resume rule (c) holds for a batch: the re-run replaces its earlier verdict in place,
+    and the fold is announced again under the earlier id."""
+    provider = SpyProvider(
+        script=[
+            turn("blocked", drawing_finding("unresolved"), *THREE_ASKS),
+            turn("resolved", drawing_finding("suspected")),
+        ],
+        model=MODEL,
+    )
+    run = review([], provider=provider)
+
+    session = run.answer_evidence_batch(SUBMITTED)
+
+    assert [finding.id for finding in session.findings] == ["F-001"]
+    assert session.findings[0].status == "suspected"
+    announced = bodies_of(run, "finding")
+    assert [body["id"] for body in announced] == ["F-001", "F-002", "F-001"]
+    assert announced[-1] == session.findings[0].model_dump(mode="json")
+
+
+def test_answering_every_request_leaves_no_evidence_item_unresolved(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    run, _ = waiting_on_three(review)
+
+    session = run.answer_evidence_batch(SUBMITTED)
+
+    assert [
+        item for item in session.coverage.unresolved if item.check == runner.EVIDENCE_CHECK
+    ] == []
+
+
+@pytest.mark.parametrize(
+    ("answers", "error", "named"),
+    [
+        ([("ER-404", "anything")], runner.UnknownEvidenceRequestError, "ER-404"),
+        (
+            [("ER-001", "12 mm"), ("ER-404", "anything")],
+            runner.UnknownEvidenceRequestError,
+            "ER-404",
+        ),
+        ([("ER-001", "12 mm"), ("ER-001", "12 mm again")], ValueError, "ER-001"),
+        (
+            [("ER-002", "a"), ("ER-003", "b"), ("ER-002", "c")],
+            ValueError,
+            "ER-002",
+        ),
+    ],
+    ids=["unknown", "valid-then-unknown", "repeated", "repeated-later"],
+)
+def test_a_bad_id_refuses_the_whole_batch_and_changes_nothing(
+    review: Callable[..., runner.ReviewRun],
+    answers: list[tuple[str, str]],
+    error: type[Exception],
+    named: str,
+) -> None:
+    run, provider = waiting_on_three(review)
+    before = unchanged_state(run)
+
+    with pytest.raises(error, match=named):
+        run.answer_evidence_batch(answers)
+
+    assert unchanged_state(run) == before
+    assert len(provider.sent) == 1
+
+
+def test_an_answered_id_refuses_the_whole_batch_and_changes_nothing(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    run, provider = waiting_on_three(review, resumed=turn("thanks"))
+    run.answer_evidence("ER-001", "12 mm")
+    before = unchanged_state(run)
+
+    with pytest.raises(runner.EvidenceAlreadyAnsweredError, match="ER-001") as refused:
+        run.answer_evidence_batch([("ER-002", "grade 8.8"), ("ER-001", "12 mm again")])
+
+    assert refused.value.request_id == "ER-001"
+    assert "already answered" in str(refused.value)
+    assert unchanged_state(run) == before
+    assert len(provider.sent) == 2
+
+
+def test_an_empty_batch_is_refused(review: Callable[..., runner.ReviewRun]) -> None:
+    run, _ = waiting_on_three(review)
+    before = unchanged_state(run)
+
+    with pytest.raises(ValueError, match="at least one"):
+        run.answer_evidence_batch([])
+
+    assert unchanged_state(run) == before
+
+
+def test_both_refusals_are_value_errors_naming_their_request() -> None:
+    """Callers that caught `ValueError` before the batch existed still catch both."""
+    assert issubclass(runner.UnknownEvidenceRequestError, ValueError)
+    assert issubclass(runner.EvidenceAlreadyAnsweredError, ValueError)
+
+
+def test_answerable_returns_the_open_request_and_refuses_the_rest(
+    review: Callable[..., runner.ReviewRun],
+) -> None:
+    """The one validator the runner and both routes call (contracts/answer-batch.md)."""
+    run, _ = waiting_on_three(review, resumed=turn("thanks"))
+    run.answer_evidence("ER-001", "12 mm")
+
+    assert runner.answerable(run.session, "ER-002").id == "ER-002"
+    with pytest.raises(runner.UnknownEvidenceRequestError) as unknown:
+        runner.answerable(run.session, "ER-404")
+    assert unknown.value.request_id == "ER-404"
+    assert str(unknown.value) == (
+        "no evidence request 'ER-404' in this session; open: ['ER-002', 'ER-003']"
+    )
+    with pytest.raises(runner.EvidenceAlreadyAnsweredError) as answered:
+        runner.answerable(run.session, "ER-001")
+    assert str(answered.value) == "evidence request ER-001 is already answered"
+
+
 # --- resume rule (a): finalization is idempotent -----------------------------------------------
 
 

@@ -29,6 +29,18 @@ Continue the review with these answers.
 answer)])`. `answerable(session, request_id)` is the one validator: the single route, the batch
 route and the runner all call it, removing the two copies of the lookup that exist today.
 
+*Landed as (T083).* The two copies worded the unknown-id refusal differently - the route listed
+the requests still open, the runner every request under the word "open" - and `answerable`
+keeps the route's sentence, `no evidence request 'ER-404' in this session; open: ['ER-002']`,
+so the list is what it says it is. Both error classes carry `request_id`, which the routes copy
+onto their bodies. `answers_message(answers)` is the one place the resumed turn's message is
+worded (`ANSWER_MESSAGE` for one answer, `ANSWERS_MESSAGE` with one `ANSWER_LINE` each
+otherwise); the replay and its test support rebuild a recording's message through it. A repeated
+id is refused with `REPEATED_ANSWER` ("evidence request ER-001 is answered twice in one
+submission"), found by `repeated_request_id`, in the runner and the route alike. The batch
+message does not repeat `ANSWER_MESSAGE`'s instruction to re-run the check each request named;
+it is worded as this section gives it.
+
 ## 2. The route
 
 | Method | Path | Body | Answer |
@@ -47,6 +59,12 @@ Checked in this order, and a refusal changes nothing:
 The single-answer route `POST /sessions/{chat_id}/evidence/{request_id}` stays as it is, through
 `answerable()`. No new event type. The add-in's proxy forwards the path with no change; the page
 that sends answers together is feature 009's.
+
+*Landed as (T085).* The shape check asks of each item what the single route asks of its one
+answer: a `request_id` and an `answer` that are strings **and not blank**, so a whitespace
+answer is `400 InvalidRequest` on both routes. A body that is not a JSON object, or has no
+`answers` list, is `400 InvalidRequest` too. A batch may name some of the open requests; the
+others stay open and the chat settles `waiting_engineer` again.
 
 ## 3. The replay
 

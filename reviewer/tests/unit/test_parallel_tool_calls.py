@@ -38,32 +38,57 @@ arms differ in exactly one key. The wire half is the probe itself.
 
 No key and no network: every exchange is replayed through `respx`, and the runner-level
 tests drive the real adapter on the same recorded client.
+
+**Feature 008 (T080) makes lever 6 the pane default for OpenAI** (FR-024, research R2.40):
+the pane's construction site asks for parallel calls, three bridge calls in one response still
+reach SOLIDWORKS one at a time in response order, both answers of a Gemini parallel round age
+out of the model's view together, and four independent queries batched by the model cost one
+round rather than four.
 """
 
 from __future__ import annotations
 
 import inspect
 import json
+import socket
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 import respx
 from google.genai import types
+from openai import OpenAI
 from pydantic import SecretStr
 
 from swreview.agent import runner
-from swreview.agent.providers import AgentProvider, ProviderName
-from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
+from swreview.agent.providers import AgentProvider, ProviderName, TokenUsage, openai_provider
+from swreview.agent.providers.fake import (
+    FakeProvider,
+    ScriptedRound,
+    ScriptedToolCall,
+    ScriptedTurn,
+)
 from swreview.agent.providers.openai_provider import BUDGET_EXHAUSTED, OpenAIProvider
+from swreview.agent.providers.pruning import PRUNED_NOTE
 from swreview.agent.settings import (
+    MODEL_VIEW_PANE,
     EfficiencySettings,
     ProviderSettings,
     efficiency_from_levers,
 )
+from swreview.chat.server import build_provider
 from swreview.cli import provider_factory
+from swreview.ir.loader import load_package
+from swreview.tools.refs import resolve_entity_ref
+from swreview.tools.registry import TOOL_RESULTS_DIR_NAME
+from tests.support.review_bridge import ScriptedReviewBridge
+from tests.unit.test_gemini_model_view import big as big_payload
+from tests.unit.test_gemini_model_view import responses as gemini_responses
+from tests.unit.test_gemini_provider import FakeTool as GeminiTool
 from tests.unit.test_gemini_provider import build as build_gemini
+from tests.unit.test_gemini_provider import call_part as gemini_call_part
 from tests.unit.test_gemini_provider import chunk, text_part
 from tests.unit.test_gemini_provider import run as run_gemini
 from tests.unit.test_openai_provider import (
@@ -233,6 +258,241 @@ def test_the_factory_turns_the_flag_on_for_a_run_that_typed_the_lever() -> None:
     built = provider_factory(openai_settings(), efficiency=efficiency)
 
     assert built.parallel_tool_calls is True
+
+
+# --- the pane default for OpenAI (feature 008 T080, FR-024) --------------------------------
+
+
+def refuse_the_network(*args: Any, **kwargs: Any) -> None:
+    raise AssertionError("a unit test reached for the network")
+
+
+@respx.mock
+def test_the_pane_builds_its_openai_adapter_asking_for_parallel_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`chat.server.build_provider` - the pane's one construction site - passes the pane's
+    levers, so the request an OpenAI pane review sends carries `parallel_tool_calls: true`.
+
+    The adapter builds its own client from the key, as in the pane; the SDK's default HTTP
+    client is one `respx` does not reach, so the constructor is handed the interceptable one
+    `make_client` uses, and the socket is shut so nothing can leave the machine.
+    """
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.setattr(socket.socket, "connect", refuse_the_network)
+    monkeypatch.setattr(
+        openai_provider,
+        "OpenAI",
+        lambda **kwargs: OpenAI(**kwargs, http_client=httpx.Client(), max_retries=0),
+    )
+    route = respx.post(RESPONSES_URL).mock(
+        return_value=stream_response(completed(message_item("done")))
+    )
+
+    built = build_provider(openai_settings())
+
+    assert isinstance(built, OpenAIProvider)
+    assert built.parallel_tool_calls is True
+    run(built)
+    assert request_bodies(route)[0]["parallel_tool_calls"] is True
+
+
+MEASURED_PAIRS: tuple[tuple[str, str], ...] = (
+    ("cmp:0001", "cmp:0002"),
+    ("cmp:0001", "hole:1"),
+    ("cmp:0002", "fst:1"),
+)
+"""Three entity pairs of the fixture package, each with a persistent reference to measure."""
+
+
+def measure_item(*, call_id: str, pair: tuple[str, str]) -> dict[str, Any]:
+    item = function_call_item(
+        call_id=call_id,
+        name="bridge_measure",
+        arguments=json.dumps({"entity_id_a": pair[0], "entity_id_b": pair[1]}),
+    )
+    item["id"] = "fc_" + call_id.removeprefix("call_")
+    return item
+
+
+@respx.mock
+def test_three_bridge_calls_in_one_response_reach_solidworks_one_at_a_time(
+    tmp_package_dir: Path, tmp_path: Path
+) -> None:
+    """FR-024: calls into SOLIDWORKS still run one at a time when the model batches them.
+
+    `ScriptedReviewBridge` fails any call that starts while another is in progress, as the
+    host's one STA thread would serialize it differently; the three calls arrive in response
+    order, and each is recorded as its own step with its own stored result.
+    """
+    respx.post(RESPONSES_URL).mock(
+        side_effect=[
+            stream_response(
+                completed(
+                    *(
+                        measure_item(call_id=f"call_{index}", pair=pair)
+                        for index, pair in enumerate(MEASURED_PAIRS, start=1)
+                    )
+                )
+            ),
+            stream_response(completed(message_item("done"))),
+        ]
+    )
+    bridge = ScriptedReviewBridge(
+        results={"measure": [{"distance": 0.001 * n} for n in range(1, 4)]}
+    )
+    out = tmp_path / "out"
+    review = runner.start_review(
+        tmp_package_dir,
+        out,
+        provider=provider(parallel_tool_calls=True),
+        bridge=True,
+        bridge_factory=lambda pipe, secret: bridge,
+    )
+    try:
+        review.start()
+    finally:
+        review.close()
+
+    package = load_package(tmp_package_dir).package
+    ref = {
+        entity_id: resolve_entity_ref(package, entity_id)[0]
+        for pair in MEASURED_PAIRS
+        for entity_id in pair
+    }
+    assert bridge.calls == [
+        (
+            "measure",
+            {
+                "persist_ref_a": ref[a],
+                "persist_ref_b": ref[b],
+                "scope_document_a": None,
+                "scope_document_b": None,
+            },
+        )
+        for a, b in MEASURED_PAIRS
+    ]
+    steps = review.session.steps
+    assert [step.index for step in steps] == [0, 1, 2]
+    assert [step.tool for step in steps] == ["bridge_measure"] * 3
+    assert [step.status for step in steps] == ["ok", "ok", "ok"]
+    assert [
+        (step.arguments["entity_id_a"], step.arguments["entity_id_b"]) for step in steps
+    ] == list(MEASURED_PAIRS)
+    stored = [
+        json.loads((out / TOOL_RESULTS_DIR_NAME / f"step-{index}.json").read_text("utf-8"))
+        for index in range(3)
+    ]
+    assert [(item["step"], item["tool"]) for item in stored] == [
+        (index, "bridge_measure") for index in range(3)
+    ]
+    assert [item["payload"]["measurement"] for item in stored] == [
+        {"distance": 0.001 * n} for n in range(1, 4)
+    ]
+
+
+def gemini_parallel_turn() -> Any:
+    """Round 0 asks for two tools at once, rounds 1 and 2 for one each, round 3 answers.
+
+    Every payload is large enough that its stub is smaller, so pruning replaces it.
+    """
+    tools = [
+        GeminiTool(name=name, payload=big_payload(prefix))
+        for name, prefix in (
+            ("list_components", "cmp"),
+            ("list_mates", "mat"),
+            ("list_holes", "hol"),
+            ("list_fasteners", "fst"),
+        )
+    ]
+    adapter, models = build_gemini(
+        [
+            chunk(
+                gemini_call_part("fc_1", "list_components", {}),
+                gemini_call_part("fc_2", "list_mates", {}),
+            )
+        ],
+        [chunk(gemini_call_part("fc_3", "list_holes", {}))],
+        [chunk(gemini_call_part("fc_4", "list_fasteners", {}))],
+        [chunk(text_part("done"), finish_reason=types.FinishReason.STOP)],
+    )
+    adapter.use_model_view(MODEL_VIEW_PANE)
+    run_gemini(adapter, tools)
+    return models
+
+
+def test_a_gemini_round_of_parallel_calls_ages_together_under_pruning() -> None:
+    """Both answers of one parallel round are one round old at the same time, so the pane's
+    pruning replaces them in the same request: full in requests 1 and 2, stubs in 3."""
+    models = gemini_parallel_turn()
+
+    def outputs(request: int) -> list[dict[str, Any]]:
+        contents = models.calls[request]["contents"]
+        return [response["output"] for response in gemini_responses(contents)]
+
+    assert outputs(1)[:2] == [big_payload("cmp"), big_payload("mat")]
+    assert outputs(2)[:2] == [big_payload("cmp"), big_payload("mat")]
+    first, second = outputs(3)[:2]
+    assert (first["pruned"], first["tool"]) == (PRUNED_NOTE, "list_components")
+    assert (second["pruned"], second["tool"]) == (PRUNED_NOTE, "list_mates")
+    assert outputs(3)[2:] == [big_payload("hol"), big_payload("fst")]
+
+
+FOUR_QUERIES = (
+    ScriptedToolCall("get_package_summary"),
+    ScriptedToolCall("get_component", {"component_id": "cmp:0001"}),
+    ScriptedToolCall("get_component", {"component_id": "cmp:0002"}),
+    ScriptedToolCall("get_review_checklist"),
+)
+"""Four independent `get_*` queries the model can ask for at once."""
+
+ROUND_USAGE = TokenUsage(
+    input_tokens=1_200,
+    cached_input_tokens=0,
+    cache_write_tokens=None,
+    output_tokens=80,
+    reasoning_tokens=0,
+    tool_result_input_tokens=None,
+    total_tokens=1_280,
+    latency_s=0.2,
+)
+
+
+def test_four_independent_queries_in_one_response_are_one_round_and_four_steps(
+    tmp_package_dir: Path, tmp_path: Path
+) -> None:
+    """US4's independent test: a model that batches four queries pays for one round, not four,
+    and the session still records four steps in the order it asked."""
+    review = runner.start_review(
+        tmp_package_dir,
+        tmp_path / "batched",
+        provider=FakeProvider(
+            script=[
+                ScriptedTurn(
+                    text="done",
+                    rounds=(ScriptedRound(FOUR_QUERIES, usage=ROUND_USAGE),),
+                    usage=ROUND_USAGE,
+                )
+            ],
+            model="fake-1",
+            clock=lambda: 0.0,
+        ),
+    )
+    try:
+        review.start()
+    finally:
+        review.close()
+
+    events = scrubbed(review)
+    kinds = [event["type"] for event in events]
+    first_call = kinds.index("tool.started")
+    last_call = len(kinds) - 1 - kinds[::-1].index("tool.finished")
+    assert kinds[:first_call].count("usage") == 1
+    assert kinds[first_call:last_call].count("usage") == 0
+    assert kinds.count("usage") == 2, "one round for the four calls, one for the answer"
+    assert [step.tool for step in review.session.steps] == [call.name for call in FOUR_QUERIES]
+    assert [step.index for step in review.session.steps] == [0, 1, 2, 3]
+    assert all(step.status == "ok" for step in review.session.steps)
 
 
 # --- Gemini: on by default, not measurable as an A/B --------------------------------------

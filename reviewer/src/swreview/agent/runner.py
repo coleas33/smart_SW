@@ -201,6 +201,33 @@ ANSWER_MESSAGE = (
     "close out anything the answer unblocks."
 )
 
+ANSWERS_MESSAGE = (
+    "The engineer answered your evidence requests:\n{answers}\nContinue the review with these "
+    "answers."
+)
+"""What a resumed turn opens on when two or more answers go back together (feature 008
+contracts/answer-batch.md section 1); `{answers}` is one `ANSWER_LINE` per answer, in the
+order they were submitted. A batch of one sends `ANSWER_MESSAGE`, byte for byte."""
+
+ANSWER_LINE = "- {request_id}: {answer}"
+
+
+def answers_message(answers: Sequence[tuple[str, str]]) -> str:
+    """The engineer message that resumes a review on `answers`: the one place it is worded.
+
+    The runner sends it, and the replay and its test support rebuild the same message from a
+    recording, so all three agree on what the model was told.
+    """
+    if len(answers) == 1:
+        [(request_id, answer)] = answers
+        return ANSWER_MESSAGE.format(request_id=request_id, answer=answer)
+    return ANSWERS_MESSAGE.format(
+        answers="\n".join(
+            ANSWER_LINE.format(request_id=request_id, answer=answer)
+            for request_id, answer in answers
+        )
+    )
+
 TOOL_NOTES_HEADER = "## Tool notes"
 """The heading lever 2's moved paragraphs land under, named so a test can look for it."""
 
@@ -625,6 +652,61 @@ def _reconcile_reruns(session: ReviewSession, before: int) -> list[Finding]:
     return folded
 
 
+# --- answering evidence requests (feature 008 contracts/answer-batch.md) ---------------------
+
+
+class UnknownEvidenceRequestError(ValueError):
+    """No evidence request of this session has the id. Names it as `request_id`."""
+
+    def __init__(self, message: str, *, request_id: str) -> None:
+        super().__init__(message)
+        self.request_id = request_id
+
+
+class EvidenceAlreadyAnsweredError(ValueError):
+    """The evidence request was answered already. Names it as `request_id`."""
+
+    def __init__(self, message: str, *, request_id: str) -> None:
+        super().__init__(message)
+        self.request_id = request_id
+
+
+def answerable(session: ReviewSession, request_id: str) -> EvidenceRequest:
+    """The open evidence request `request_id`, or the refusal saying why it cannot be answered.
+
+    The one validator: the runner, the pane's single-answer route and its batch route all
+    ask it, so the three cannot disagree about which ids an answer may name. Both refusals
+    are `ValueError`s, as the runner's own checks were before the batch existed, and keep the
+    words the pane's route used; the unknown-id sentence lists the ids still open.
+    """
+    request = next((item for item in session.evidence_requests if item.id == request_id), None)
+    if request is None:
+        still_open = [item.id for item in session.evidence_requests if item.status == "open"]
+        raise UnknownEvidenceRequestError(
+            f"no evidence request {request_id!r} in this session; open: {still_open}",
+            request_id=request_id,
+        )
+    if request.status != "open":
+        raise EvidenceAlreadyAnsweredError(
+            f"evidence request {request_id} is already answered", request_id=request_id
+        )
+    return request
+
+
+REPEATED_ANSWER = "evidence request {request_id} is answered twice in one submission"
+"""The refusal of a submission that names one request twice, in the runner and the route."""
+
+
+def repeated_request_id(answers: Sequence[tuple[str, str]]) -> str | None:
+    """The first request id a submission names twice, or `None` when every id is its own."""
+    seen: set[str] = set()
+    for request_id, _ in answers:
+        if request_id in seen:
+            return request_id
+        seen.add(request_id)
+    return None
+
+
 # --- one review in flight ----------------------------------------------------------------
 
 
@@ -738,28 +820,38 @@ class ReviewRun:
         return self._say(text)
 
     def answer_evidence(self, request_id: str, answer: str) -> ReviewSession:
-        """Answer an open evidence request and resume the review on the answer.
+        """Answer one open evidence request and resume the review on the answer.
 
-        The request stops being open, so finalization no longer reports it as unresolved
-        (rule 2), and a check the resumed turn re-runs replaces its earlier verdict rather
-        than adding a second one (rule 3).
+        A batch of one: the resumed turn opens on `ANSWER_MESSAGE`, as it always has.
         """
-        request = next(
-            (item for item in self.session.evidence_requests if item.id == request_id), None
-        )
-        if request is None:
-            known = [item.id for item in self.session.evidence_requests]
-            raise ValueError(f"no evidence request {request_id!r} in this session; open: {known}")
-        if request.status != "open":
-            raise ValueError(f"evidence request {request_id} is already answered")
+        return self.answer_evidence_batch([(request_id, answer)])
 
-        request.status = "answered"
-        request.answer = answer
-        request.answered_at = utc_now()
-        self.sink.emit("evidence.answered", {"request_id": request_id, "answer": answer})
+    def answer_evidence_batch(self, answers: Sequence[tuple[str, str]]) -> ReviewSession:
+        """Answer several open evidence requests together and resume the review once.
+
+        Everything is validated before anything changes (FR-025): an empty submission, an
+        id named twice, an unknown id or an answered one raises, naming the first failing
+        id, with no request marked, no event written and no turn run. Then each request is
+        answered in submission order with its own `evidence.answered` event, and one turn
+        resumes on `answers_message(answers)`. The requests stop being open, so
+        finalization no longer reports them as unresolved (rule 2), and a check the resumed
+        turn re-runs replaces its earlier verdict rather than adding a second one (rule 3).
+        """
+        if not answers:
+            raise ValueError("an answer batch needs at least one answer")
+        repeated = repeated_request_id(answers)
+        if repeated is not None:
+            raise ValueError(REPEATED_ANSWER.format(request_id=repeated))
+        requests = [answerable(self.session, request_id) for request_id, _ in answers]
+
+        for request, (request_id, answer) in zip(requests, answers, strict=True):
+            request.status = "answered"
+            request.answer = answer
+            request.answered_at = utc_now()
+            self.sink.emit("evidence.answered", {"request_id": request_id, "answer": answer})
 
         before = len(self.session.findings)
-        self._ask(ANSWER_MESSAGE.format(request_id=request_id, answer=answer))
+        self._ask(answers_message(answers))
         for finding in _reconcile_reruns(self.session, before):
             self.sink.emit("finding", finding.model_dump(mode="json"))
         return self.finalize()

@@ -56,7 +56,7 @@ from swreview.agent.settings import (
     pane_defaults,
     pane_efficiency,
 )
-from swreview.chat.server import SESSION_FILES, _sse, create_app
+from swreview.chat.server import SESSION_FILES, _sse, build_provider, create_app
 from swreview.chat.sessions import ChatState
 from swreview.ir.loader import save_package
 from swreview.prerun import DIGEST_HEADER, RMS_PRERUN_TOOLS
@@ -284,6 +284,7 @@ ROUTES: tuple[tuple[str, str], ...] = (
     ("GET", "/sessions/{chat}/events"),
     ("POST", "/sessions/{chat}/messages"),
     ("POST", "/sessions/{chat}/evidence/ER-001"),
+    ("POST", "/sessions/{chat}/evidence"),
     ("POST", "/sessions/{chat}/findings/F-001/disposition"),
     ("POST", "/sessions/{chat}/timing"),
     ("POST", "/sessions/{chat}/stop"),
@@ -565,6 +566,70 @@ def test_a_pane_review_records_the_pane_defaults_model_view(
     pane = pane_defaults(ProviderName.FAKE)
     assert written["model_view"] == pane.model_view.model_dump() == MODEL_VIEW_PANE.model_dump()
     assert written["efficiency"] == pane.efficiency.model_dump()
+
+
+@dataclass
+class BuiltAdapters:
+    """A provider factory that builds the product's own adapter and plays a scripted one.
+
+    `build_provider` is the pane's construction site, so what it returns is what a real
+    review would have talked to; the review itself runs on the scripted adapter, so no
+    request leaves the machine.
+    """
+
+    control: ProviderControl
+    built: list[AgentProvider] = field(default_factory=list)
+
+    def factory(self, settings: ProviderSettings) -> AgentProvider:
+        self.built.append(build_provider(settings))
+        return self.control.factory(settings)
+
+
+def test_an_openai_pane_review_asks_for_parallel_calls_and_records_it(
+    run_root: Path,
+    run_dir: Path,
+    provider_control: ProviderControl,
+    models: Models,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Feature 008 T080, FR-024: the adapter the pane builds for OpenAI asks for parallel
+    tool calls, and the session records the flag the adapter was built with."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-parallel")
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    adapters = BuiltAdapters(provider_control)
+    app = create_app(
+        token=TOKEN,
+        allow_origin=ORIGIN,
+        run_root=run_root,
+        provider_factory=adapters.factory,
+        list_models=models,
+    )
+
+    with TestClient(app, headers={"Authorization": f"Bearer {TOKEN}", "Origin": ORIGIN}) as pane:
+        chat_id = start_session(pane, run_dir, provider="openai", model=None)["chat_id"]
+        settle(pane, chat_id)
+
+    [adapter] = adapters.built
+    session = load_session(run_dir / "session.json")
+    assert getattr(adapter, "parallel_tool_calls", None) is True
+    assert session.efficiency is not None
+    assert session.efficiency.parallel_tool_calls is True
+    assert session.efficiency == pane_efficiency(ProviderName.OPENAI)
+
+
+def test_a_gemini_pane_review_records_parallel_calls_off(
+    client: TestClient, run_dir: Path, provider_control: ProviderControl
+) -> None:
+    """Gemini has no switch and already makes parallel calls, so the pane records the lever
+    off rather than claiming an arm the provider cannot run (research R2.40)."""
+    chat_id = start_session(client, run_dir, provider="gemini", model=None)["chat_id"]
+    settle(client, chat_id)
+
+    session = load_session(run_dir / "session.json")
+    assert [settings.provider for settings in provider_control.built] == [ProviderName.GEMINI]
+    assert session.efficiency is not None
+    assert session.efficiency.parallel_tool_calls is False
+    assert session.efficiency == pane_efficiency(ProviderName.GEMINI)
 
 
 def test_configured_standards_profile_reaches_review_setup_and_blank_is_absent(
@@ -1459,6 +1524,206 @@ def test_an_answer_is_refused_while_a_turn_is_running(
 
     assert response.status_code == 409
     assert response.json()["error_class"] == "TurnRunning"
+    provider_control.release()
+
+
+# --- several answers at once (feature 008 T084, contracts/answer-batch.md section 2) --------
+
+THREE_REQUESTS = tuple(
+    call("request_evidence", **{**EVIDENCE_ARGUMENTS, "what": what})
+    for what in ("The usable thread depth of hole:1", "The washer grade", "The drawing revision")
+)
+
+ANSWERS: list[dict[str, str]] = [
+    {"request_id": "ER-002", "answer": "Grade 8.8, zinc flake."},
+    {"request_id": "ER-003", "answer": "Revision C is released."},
+    {"request_id": "ER-001", "answer": "Tapped 12 mm deep."},
+]
+"""All three answers, in an order that is not the ids', so submission order is visible."""
+
+
+@pytest.fixture
+def waiting_on_three(
+    client: TestClient, run_dir: Path, provider_control: ProviderControl
+) -> str:
+    """A session that opened ER-001 to ER-003 and is waiting for the engineer."""
+    provider_control.script = [
+        turn("I need three things.", *THREE_REQUESTS),
+        turn("Thanks; the joint is fine."),
+        *text_turns(2),
+    ]
+    chat_id = start_session(client, run_dir)["chat_id"]
+    assert settle(client, chat_id) == ChatState.WAITING_ENGINEER.value
+    return chat_id
+
+
+def answer_all(client: TestClient, chat_id: str, answers: Any) -> Any:
+    return client.post(f"/sessions/{chat_id}/evidence", json={"answers": answers})
+
+
+def requests_of(run_dir: Path) -> list[tuple[str, str, str | None]]:
+    return [
+        (request.id, request.status, request.answer)
+        for request in load_session(run_dir / "session.json").evidence_requests
+    ]
+
+
+def test_three_answers_together_resume_the_review_once(
+    client: TestClient, run_dir: Path, waiting_on_three: str
+) -> None:
+    before = types_of(run_dir)
+
+    response = answer_all(client, waiting_on_three, ANSWERS)
+
+    assert response.status_code == 202
+    assert response.json()["chat_id"] == waiting_on_three
+    assert settle(client, waiting_on_three) == ChatState.ENDED.value
+    after = events_of(run_dir)[len(before) :]
+    kinds = [event["type"] for event in after]
+    assert [event["body"] for event in after if event["type"] == "evidence.answered"] == ANSWERS
+    assert kinds[:3] == ["evidence.answered"] * 3
+    assert kinds.count("turn.ended") == 1
+    assert kinds.count("session.ended") == 1
+    by_id = {item["request_id"]: item["answer"] for item in ANSWERS}
+    assert requests_of(run_dir) == [
+        (request_id, "answered", by_id[request_id]) for request_id in ("ER-001", "ER-002", "ER-003")
+    ]
+
+
+def test_a_partial_batch_answers_only_what_it_names(
+    client: TestClient, run_dir: Path, waiting_on_three: str
+) -> None:
+    """Some of the open questions may go back together; the rest stay open."""
+    response = answer_all(client, waiting_on_three, ANSWERS[:2])
+
+    assert response.status_code == 202
+    assert settle(client, waiting_on_three) == ChatState.WAITING_ENGINEER.value
+    assert [status for _, status, _ in requests_of(run_dir)] == ["open", "answered", "answered"]
+
+
+def refused_without_change(
+    client: TestClient, run_dir: Path, chat_id: str, answers: Any
+) -> dict[str, Any]:
+    """Post a submission that must be refused; assert it changed nothing; return the body."""
+    lines = len(events_of(run_dir))
+    requests = requests_of(run_dir)
+
+    response = answer_all(client, chat_id, answers)
+
+    assert response.status_code >= 400, response.text
+    assert len(events_of(run_dir)) == lines
+    assert requests_of(run_dir) == requests
+    assert state_of(client, chat_id) == ChatState.WAITING_ENGINEER.value
+    return {"status": response.status_code, **response.json()}
+
+
+def test_an_unknown_id_refuses_the_whole_batch_naming_it(
+    client: TestClient, run_dir: Path, waiting_on_three: str
+) -> None:
+    body = refused_without_change(
+        client,
+        run_dir,
+        waiting_on_three,
+        [ANSWERS[0], {"request_id": "ER-404", "answer": "anything"}, ANSWERS[1]],
+    )
+
+    assert (body["status"], body["error_class"]) == (404, "UnknownEvidenceRequest")
+    assert "ER-404" in body["message"]
+
+
+def test_an_answered_id_refuses_the_whole_batch(
+    client: TestClient, run_dir: Path, waiting_on_three: str
+) -> None:
+    client.post(f"/sessions/{waiting_on_three}/evidence/ER-001", json={"answer": "12 mm"})
+    assert settle(client, waiting_on_three) == ChatState.WAITING_ENGINEER.value
+
+    body = refused_without_change(
+        client,
+        run_dir,
+        waiting_on_three,
+        [ANSWERS[0], {"request_id": "ER-001", "answer": "12 mm again"}],
+    )
+
+    assert (body["status"], body["error_class"]) == (409, "AlreadyAnswered")
+    assert "ER-001" in body["message"]
+
+
+@pytest.mark.parametrize(
+    ("answers", "named"),
+    [
+        ([], "at least one"),
+        ("ER-001: 12 mm", "list"),
+        (None, "list"),
+        ([ANSWERS[0], "ER-001: 12 mm"], "answers[1]"),
+        ([ANSWERS[0], {"request_id": "ER-001"}], "answers[1]"),
+        ([{"request_id": "ER-001", "answer": 12}], "answers[0]"),
+        ([{"request_id": "ER-001", "answer": "   "}], "answers[0]"),
+        ([{"request_id": 1, "answer": "12 mm"}], "answers[0]"),
+        ([{"request_id": "", "answer": "12 mm"}], "answers[0]"),
+        ([ANSWERS[0], ANSWERS[1], {**ANSWERS[0], "answer": "again"}], "ER-002"),
+    ],
+    ids=[
+        "empty",
+        "not-a-list",
+        "null",
+        "item-not-an-object",
+        "item-without-answer",
+        "answer-not-a-string",
+        "blank-answer",
+        "request-id-not-a-string",
+        "blank-request-id",
+        "repeated-id",
+    ],
+)
+def test_a_malformed_submission_is_an_invalid_request_naming_the_problem(
+    client: TestClient, run_dir: Path, waiting_on_three: str, answers: Any, named: str
+) -> None:
+    body = refused_without_change(client, run_dir, waiting_on_three, answers)
+
+    assert (body["status"], body["error_class"]) == (400, "InvalidRequest")
+    assert named in body["message"]
+
+
+def test_a_body_without_answers_is_an_invalid_request(
+    client: TestClient, run_dir: Path, waiting_on_three: str
+) -> None:
+    lines = len(events_of(run_dir))
+
+    missing = client.post(f"/sessions/{waiting_on_three}/evidence", json={"answer": "12 mm"})
+    not_json = client.post(
+        f"/sessions/{waiting_on_three}/evidence",
+        content=b"answers",
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert (missing.status_code, missing.json()["error_class"]) == (400, "InvalidRequest")
+    assert (not_json.status_code, not_json.json()["error_class"]) == (400, "InvalidRequest")
+    assert len(events_of(run_dir)) == lines
+
+
+def test_a_batch_for_an_unknown_chat_is_a_404(client: TestClient) -> None:
+    response = answer_all(client, str(uuid4()), ANSWERS)
+
+    assert (response.status_code, response.json()["error_class"]) == (404, "UnknownChat")
+
+
+def test_a_batch_is_refused_while_a_turn_is_running(
+    client: TestClient, provider_control: ProviderControl, waiting_on_three: str
+) -> None:
+    """Checked in the contract's order: the shape first, then the running turn, then the ids."""
+    provider_control.hold()
+    client.post(f"/sessions/{waiting_on_three}/messages", json={"text": "keep going"})
+    wait_until(provider_control.started.is_set, "the follow-up turn to reach the gate")
+
+    running = answer_all(client, waiting_on_three, ANSWERS)
+    unknown_while_running = answer_all(
+        client, waiting_on_three, [{"request_id": "ER-404", "answer": "anything"}]
+    )
+    malformed_while_running = answer_all(client, waiting_on_three, [])
+
+    assert (running.status_code, running.json()["error_class"]) == (409, "TurnRunning")
+    assert unknown_while_running.json()["error_class"] == "TurnRunning"
+    assert malformed_while_running.json()["error_class"] == "InvalidRequest"
     provider_control.release()
 
 
