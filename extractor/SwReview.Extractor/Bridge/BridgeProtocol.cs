@@ -25,8 +25,16 @@ public static class BridgeCommands
     /// </summary>
     public const string Tessellate = "tessellate";
 
+    /// <summary>
+    /// Protocol 1.3, feature 011 (contracts/confirmed-open.md section 2): read the candidate
+    /// drawing the engineer confirmed into the review's package - opened read-only and hidden when
+    /// it is not open, closed again when this read opened it. Takes a run id and a document id and
+    /// never a path; the review scope only.
+    /// </summary>
+    public const string DrawingRead = "drawing.read";
+
     /// <summary>For the "unknown command" message and for SwReview.Extractor.Console/Serve/PROTOCOL.md.</summary>
-    public static readonly string[] All = { Ping, Capture, Measure, Interference, Tessellate };
+    public static readonly string[] All = { Ping, Capture, Measure, Interference, Tessellate, DrawingRead };
 }
 
 /// <summary>The <c>status</c> of a response.</summary>

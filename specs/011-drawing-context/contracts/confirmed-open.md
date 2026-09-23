@@ -131,3 +131,35 @@ which still opens no drawing (FR-003).
   record and the application thread; an unknown `run_id` refused.
 - `reviewer/tests/unit/test_confirmed_drawing_read.py` (T075): section 1's trigger, bound,
   reload and coverage; the other answers; no bridge; the replay and payload invariants.
+
+## 7. Landed as (T069 to T072, 2026-09-23)
+
+- **The seam** (`Sw/DrawingOpenScope.cs`): `Read<T>(path, read)` returns `DrawingOpenResult<T>`
+  (`Value`, `OpenedByReview`, `Closed`, `CloseRefusal`); a refusal is `DrawingOpenRefused` with the
+  sentence. A close the identity check refuses does not lose the read: the result says why, and
+  the confirmed read records it as one gap `drawing_confirmed_open` on the drawing's document id.
+  `SeatValidated` is a static property answering `false`; a second constructor takes the switch
+  (probe D14 and the seam's tests).
+- **The command** (`Bridge/BridgeDispatcher.cs`): `IConfirmedDrawingSource.Read(runId,
+  documentId)`, `ConfirmedDrawingResult` and `ConfirmedDrawingRefused` sit beside the dispatcher;
+  `BridgeServices.ConfirmedDrawings` is null by default. An unknown `params` member is answered
+  "'drawing.read' takes only \"run_id\" and \"document_id\"; \"{name}\" was refused, so nothing
+  was opened."; a bridge with no source answers "This bridge cannot read a drawing: only the
+  add-in's review host reads a confirmed candidate, from its own review records."; a source's
+  refusal is the error word for word.
+- **The rules** (`Dump/ConfirmedDrawingRead.cs`) are constructed over seven seams, which the
+  add-in (T074) supplies: `runFolderOf(runId)` from its own session records (null for a run it did
+  not start), the attached document's path, `File.Exists`, a `DrawingOpenScope` over
+  `SwDrawingOpenHost`, the drawing phase (`DrawingDumper` over `SwDrawingReader`), the document
+  phase (`PropertyDumper`) and the manifest (`ManifestBuilder`). Section 2's refusals are checked
+  in its order, and one more before anything opens: a drawing already a document of the package
+  is refused.
+- **Identity.** The drawing ids continue the package's own (`DrawingIdAllocators.ContinuingFrom`,
+  seeding the scope's allocators prefix by prefix). The drawing's `doc:` id is
+  `DocumentIds.For(its path)`: every document id in an extractor package is derived from its path,
+  never allocated in sequence, so this is the id any other extraction gives the same drawing, and
+  it is checked to be new. Each view is tied to the package's documents by
+  `OpenDrawingDiscovery.DocumentResolver` over `documents[]`' own `(path, document_id)` pairs.
+- **The merge** (`PackageAppender.MergeDrawing`) is as section 2 says; the candidate member is
+  omitted once its last row is removed, and a drawing whose record or document row is already in
+  the package is refused with the package unchanged.

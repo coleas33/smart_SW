@@ -3,12 +3,12 @@
 One JSON request per line over a Windows named pipe to
 `SwReview.Extractor.Console.exe serve`, which owns the single STA thread that holds the
 `SldWorks.Application` reference. **The wire format is
-`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.2); the
+`extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md`** (protocol version 1.3); the
 `PROTOCOL.md` beside this file records only what is true of the Python end. What this
 module adds around the wire format is the three guarantees the tool layer depends on:
 
 - **an allowlist.** `COMMANDS` is the whole vocabulary - `ping`, `capture`, `measure`,
-  `interference`, `tessellate`. Nothing else reaches the pipe, so no tool can ask
+  `interference`, `tessellate`, `drawing.read`. Nothing else reaches the pipe, so no tool can ask
   SOLIDWORKS to run a member, a macro or a file (research R4, constitution Technical
   Constraints).
 - **one failure type.** A non-`ok` status, an unreadable line, a response for another
@@ -62,16 +62,24 @@ __all__ = [
 
 DEFAULT_PIPE_NAME = "swreview"
 DEFAULT_TIMEOUT_S = 60.0
-PROTOCOL_VERSION = "1.2"
+PROTOCOL_VERSION = "1.3"
 """The version of the host contract this client is written against; `ping` reports the
 host's, and a mismatch is worth an engineer's attention before anything is trusted.
 
-1.1 added the `remodel.*` family (feature 004) and 1.2 `tessellate` (feature 005); both are
-additive, so this client works against any of the three. `tests/unit/test_bridge_client.py`
+1.1 added the `remodel.*` family (feature 004), 1.2 `tessellate` (feature 005) and 1.3
+`drawing.read` (feature 011); each is additive, so this client works against any of the four,
+and only `drawing.read` needs a 1.3 host. `tests/unit/test_bridge_client.py`
 reads the host's `PROTOCOL.md` and `SwBridgeDispatcher.ProtocolVersion` and asserts all
 three agree, because the way two ends come apart is a constant bumped on one side only."""
 
-COMMANDS: tuple[str, ...] = ("ping", "capture", "measure", "interference", "tessellate")
+COMMANDS: tuple[str, ...] = (
+    "ping",
+    "capture",
+    "measure",
+    "interference",
+    "tessellate",
+    "drawing.read",
+)
 """Every command the bridge speaks. The allowlist of research R4, enforced before the
 request is written: an unknown command never reaches SOLIDWORKS."""
 
@@ -357,7 +365,7 @@ class BridgeClient:
             self._consecutive_failures += 1
         self._last_error = message
 
-    # --- the five operations -----------------------------------------------------
+    # --- the six operations ------------------------------------------------------
 
     def ping(self) -> Any:
         """Check the host is alive, and which document and configuration it is attached to."""
@@ -434,6 +442,20 @@ class BridgeClient:
         it, because one STA worker answers in arrival order.
         """
         return self.call("tessellate", {"component_id": component_id})
+
+    def drawing_read(self, run_id: str, document_id: str) -> Any:
+        """Read the candidate drawing the engineer confirmed into the review's package.
+
+        Protocol 1.3, feature 011 (`specs/011-drawing-context/contracts/confirmed-open.md`
+        section 2). `run_id` is the review's run folder's own name and `document_id` the part
+        or assembly whose same-name drawing the candidate question named. The host resolves the
+        run folder, the package and the drawing's path from its own records, opens the drawing
+        read-only and hidden when it is not open, reads it with ids continuing the package's,
+        and closes it again when it opened it; no path is ever sent. The result is
+        `{document_id, drawing_document_id, opened, closed, sheets, gaps}`; a refusal is a
+        `BridgeError` carrying the host's sentence, and nothing was opened.
+        """
+        return self.call("drawing.read", {"run_id": run_id, "document_id": document_id})
 
     def close(self) -> None:
         """Close the pipe. Safe to call when nothing was ever opened."""

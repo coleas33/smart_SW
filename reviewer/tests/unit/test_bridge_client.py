@@ -139,7 +139,16 @@ def test_the_pipe_name_becomes_a_windows_pipe_path() -> None:
 
 
 def test_the_commands_are_the_ones_the_contract_lists() -> None:
-    assert set(COMMANDS) == {"capture", "measure", "interference", "ping", "tessellate"}
+    # Edited deliberately by feature 011 T072: protocol 1.3 adds `drawing.read`, the confirmed
+    # candidate's read-only open (specs/011-drawing-context/contracts/confirmed-open.md).
+    assert set(COMMANDS) == {
+        "capture",
+        "measure",
+        "interference",
+        "ping",
+        "tessellate",
+        "drawing.read",
+    }
 
 
 def test_the_client_and_the_host_agree_on_the_protocol_version() -> None:
@@ -220,6 +229,37 @@ def test_tessellate_sends_the_component_id_and_never_a_path() -> None:
 
     assert transport.requests[0]["command"] == "tessellate"
     assert transport.requests[0]["params"] == {"component_id": "cmp:0007"}
+
+
+def test_drawing_read_sends_the_run_and_the_document_and_never_a_path() -> None:
+    """Protocol 1.3, feature 011: the run folder's own name and a document id, nothing else.
+
+    The host resolves the run folder, the package and the candidate's path from its own
+    records; a path in a request would let the caller name the file SOLIDWORKS opens
+    (specs/011-drawing-context/contracts/confirmed-open.md section 2).
+    """
+    bridge, transport = client(
+        ok(
+            "1",
+            {
+                "document_id": "doc:0007",
+                "drawing_document_id": "doc:0012",
+                "opened": True,
+                "closed": True,
+                "sheets": 2,
+                "gaps": 1,
+            },
+        ),
+    )
+
+    result = bridge.drawing_read("20260923-101500-chat0001", "doc:0007")
+
+    assert transport.requests[0]["command"] == "drawing.read"
+    assert transport.requests[0]["params"] == {
+        "run_id": "20260923-101500-chat0001",
+        "document_id": "doc:0007",
+    }
+    assert result["drawing_document_id"] == "doc:0012"
 
 
 def test_capture_defaults_to_the_fit_view() -> None:

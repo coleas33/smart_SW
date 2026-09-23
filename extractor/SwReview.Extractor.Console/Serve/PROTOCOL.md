@@ -1,6 +1,6 @@
 # Bridge protocol (`swreview-extract serve`)
 
-Protocol version **1.2**. This file is the contract the Python client in
+Protocol version **1.3**. This file is the contract the Python client in
 `reviewer/src/swreview/bridge/client.py` (T073) is written against; the agent-facing tool
 names and arguments are in
 `specs/001-agentic-design-review/contracts/agent-tools.md`.
@@ -18,6 +18,10 @@ adds exactly one command, `tessellate`, described under "`tessellate`" below. A 
 written against 1.0 or 1.1 works against a 1.2 host without an edit. Feature 005's task list
 names this bump "1.1" because it was written before feature 004 landed and took that number;
 the rule it states - one additive minor per added command - is what 1.2 obeys.
+
+**1.3 is additive to 1.2** (feature 011, T072). Everything 1.2 speaks is untouched, and 1.3
+adds exactly one command, `drawing.read`, described under "`drawing.read`" below. A client
+written against 1.0, 1.1 or 1.2 works against a 1.3 host without an edit.
 
 `ping` reports the host's own `SwBridgeDispatcher.ProtocolVersion`, which is what a client
 compares against.
@@ -46,7 +50,7 @@ compares against.
 ## Request
 
 ```json
-{"id": "<string>", "command": "ping|capture|measure|interference|tessellate", "params": {}, "secret": null}
+{"id": "<string>", "command": "ping|capture|measure|interference|tessellate|drawing.read", "params": {}, "secret": null}
 ```
 
 | Field | Type | Rules |
@@ -73,10 +77,10 @@ what that line may ask for:
 
 | Secret | Held by | Authorizes |
 |--------|---------|------------|
-| review | the add-in's own review session | `ping`, `capture`, `measure`, `interference`, `tessellate` |
+| review | the add-in's own review session | `ping`, `capture`, `measure`, `interference`, `tessellate`, `drawing.read` |
 | general-chat | the CLI, through its generated restriction profile | `ping`, `capture`, `measure` |
 
-`interference` or `tessellate` with the general-chat secret is answered:
+`interference`, `tessellate` or `drawing.read` with the general-chat secret is answered:
 
 ```json
 {"id":"4","status":"error","result":null,"error":"unauthorized","elapsed_ms":0}
@@ -122,7 +126,7 @@ an `Interference` that travels over the bridge is byte-identical to one written 
 ```
 
 ```json
-{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.2","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17},"error":null,"elapsed_ms":1}
+{"id":"1","status":"ok","result":{"pong":true,"protocol":"1.3","sw_version":"32.5.0","document":"C:\\work\\bracket-assy.SLDASM","configuration":"Default","component_count":17},"error":null,"elapsed_ms":1}
 ```
 
 `document` and `component_count` are how a client checks that the component ids in its
@@ -257,6 +261,49 @@ never a number:
 - The read-only guard passes it unchanged: `ReadOnlyGuard` is a denylist, and
   `GetTessellation`, `Tessellate`, `CurveChordTolerance` and `GetBodies2` are not on it.
 
+## `drawing.read` — the confirmed candidate's read-only open (1.3)
+
+Feature 011, the owner's answer of 2026-09-23 (`specs/011-drawing-context/contracts/confirmed-open.md`
+section 2). When the engineer confirms the candidate question of a review, the backend asks, once
+per candidate, for one document's same-name drawing to be read into that review's package.
+
+```json
+{"id": "7", "command": "drawing.read", "params": {"run_id": "<run folder name>", "document_id": "doc:0007"}}
+```
+
+| Param | Type | Rules |
+|-------|------|-------|
+| `run_id` | string | Required. The review's run folder's own name; the host resolves it through its own session records and never reads it as a path. |
+| `document_id` | string | Required. A part or assembly of that review's package with a `drawing_candidates[]` row. |
+
+**Any other parameter is refused before anything runs** - a path above all: the host resolves
+the run folder, the package and the drawing's file from its own records, so a caller can never
+name what SOLIDWORKS opens. (Unlike every other command, an unknown `params` member here is an
+error, not ignored.)
+
+```json
+{"id":"7","status":"ok","result":{"document_id":"doc:0007","drawing_document_id":"doc:0012","opened":true,"closed":true,"sheets":2,"gaps":1},"error":null,"elapsed_ms":3100}
+```
+
+- The host refuses, with a sentence and **nothing opened**, when the run is not one it started,
+  its run folder holds no package, the package's root is not the document the bridge is attached
+  to, the document is unknown or is a drawing or has no candidate row, the row's path is not the
+  drawing beside the document by discovery's rule, the file no longer exists, the drawing is
+  already in the package, or the package already holds ten drawings.
+- The drawing is opened **read-only and hidden** only when it is not already open - through its
+  own allowlisted seam (`ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6` with type 3 and options
+  3, `ISldWorks.CloseDoc`; `specs/004-resilient-remodeler/contracts/guard-allowlist.md`) - read
+  with every drawing id continuing the package's, merged into `package.json` in the run folder,
+  and closed again only when the host opened it and SOLIDWORKS still answers its path with the
+  same document. A drawing the engineer had open is read as it stands and left open
+  (`opened: false`, `closed: false`).
+- **Shipped off** until probe D14 passes at a seat: a closed candidate is answered "the read-only
+  open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14)", and an
+  already-open one is still read.
+- **Review scope only.** The general-chat and remodel secrets are answered `unauthorized`.
+- **The console host has no source** and answers that this bridge cannot read a drawing: only
+  the add-in's review host keeps the review records the command resolves against.
+
 ## The `remodel.*` family (1.1)
 
 Twelve commands — `remodel.probe_scope`, `open`, `snapshot`, `rename`, `reorder`, `folder`,
@@ -276,9 +323,9 @@ and it is three things:
 
    | Secret | Authorizes | Refused |
    |--------|------------|---------|
-   | review | `ping`, `capture`, `measure`, `interference`, `tessellate` | every `remodel.*` |
-   | general-chat | `ping`, `capture`, `measure` | every `remodel.*`, and `tessellate` |
-   | remodel | `ping`, `remodel.*` | everything else, `interference` included |
+   | review | `ping`, `capture`, `measure`, `interference`, `tessellate`, `drawing.read` | every `remodel.*` |
+   | general-chat | `ping`, `capture`, `measure` | every `remodel.*`, `tessellate` and `drawing.read` |
+   | remodel | `ping`, `remodel.*` | everything else, `interference` and `drawing.read` included |
 
    The refusal is the same `error: "unauthorized"` line as every other scope failure, so a
    caller still learns nothing from the difference.

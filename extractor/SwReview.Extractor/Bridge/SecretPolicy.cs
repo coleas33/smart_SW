@@ -77,6 +77,11 @@ public sealed class ScopedSecretPolicy : ISecretPolicy
         // writes a file and can take seconds on the one STA worker every other call queues
         // behind, which is a review's cost to pay and not a chat turn's.
         BridgeCommands.Tessellate,
+
+        // Protocol 1.3, feature 011: the confirmed candidate's read-only open answers the
+        // review that asked the engineer, and no other scope (contracts/confirmed-open.md
+        // section 2).
+        BridgeCommands.DrawingRead,
     };
 
     /// <summary>

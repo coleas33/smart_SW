@@ -249,6 +249,121 @@ public class PackageAppenderTests : IDisposable
         return run;
     }
 
+    // ---- MergeDrawing (feature 011 T071, contracts/confirmed-open.md section 2) --------------
+
+    private static readonly string NewDrawingId = Ids.DocumentIds.For(Fakes.ConfirmedDrawingPackage.HousingDrawingPath);
+
+    private static (DrawingRecord Record, Document Document, ManifestEntry Entry, Gap Gap) ConfirmedDrawing() =>
+    (
+        Fakes.ConfirmedDrawingPackage.Record(NewDrawingId, 2),
+        new Document
+        {
+            DocumentId = NewDrawingId,
+            Kind = DocumentKind.Drawing,
+            FileName = "housing.SLDDRW",
+            Path = Fakes.ConfirmedDrawingPackage.HousingDrawingPath,
+            ActiveConfiguration = string.Empty,
+        },
+        new ManifestEntry
+        {
+            DocumentId = NewDrawingId,
+            VaultPath = Fakes.ConfirmedDrawingPackage.HousingDrawingPath,
+            Configuration = string.Empty,
+            ExportMethod = ExportMethod.Native,
+        },
+        new Gap
+        {
+            Kind = GapKind.NotExtracted,
+            EntityKind = "drawing_referenced_document",
+            EntityId = "dvw:0002",
+            Reason = "references 'C:\\Fictional\\other\\unrelated.SLDPRT', which is not part of this review",
+        });
+
+    [Fact]
+    public void MergeDrawing_AppendsTheRecordItsDocumentItsManifestEntryItsIdAndItsGapsAndRemovesTheCandidate()
+    {
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.Build();
+        var drawing = ConfirmedDrawing();
+
+        PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, new[] { drawing.Gap },
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: true);
+
+        Assert.Same(drawing.Record, package.DrawingRecords!.Last());
+        Assert.True(drawing.Record.OpenedByReview);
+        Assert.Same(drawing.Document, package.Documents.Last());
+        Assert.Same(drawing.Entry, package.Manifest.Entries.Last());
+        Assert.Equal(NewDrawingId, package.Design.DrawingDocumentIds.Last());
+        Assert.Same(drawing.Gap, package.Gaps.Last());
+        Assert.Equal(
+            new[] { Fakes.ConfirmedDrawingPackage.PinId },
+            package.DrawingCandidates!.Select(candidate => candidate.DocumentId));
+
+        // And the package still reads back through the IR serializer.
+        PackageAppender.Save(_directory, package);
+        Assert.True(PackageAppender.Load(_directory).DrawingRecords!.Last().OpenedByReview);
+    }
+
+    [Fact]
+    public void MergeDrawing_OfADrawingThatWasAlreadyOpen_OmitsTheOpenedFlagRatherThanWritingFalse()
+    {
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.Build();
+        var drawing = ConfirmedDrawing();
+
+        PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: false);
+
+        Assert.Null(drawing.Record.OpenedByReview);
+        Assert.DoesNotContain("opened_by_review", PackageSerializer.Serialize(package), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MergeDrawing_OfTheLastCandidate_LeavesNoCandidateMember()
+    {
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.Build();
+        package.DrawingCandidates!.RemoveAt(1);
+        var drawing = ConfirmedDrawing();
+
+        PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: true);
+
+        Assert.Null(package.DrawingCandidates);
+    }
+
+    [Fact]
+    public void MergeDrawing_ASecondMergeOfTheSameDrawingIsRefusedAndChangesNothing()
+    {
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.Build();
+        var drawing = ConfirmedDrawing();
+        PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: true);
+        string before = PackageSerializer.Serialize(package);
+        var again = ConfirmedDrawing();
+
+        InvalidOperationException refusal = Assert.Throws<InvalidOperationException>(() => PackageAppender.MergeDrawing(
+            package, again.Record, again.Document, again.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.PinId, openedByReview: true));
+
+        Assert.Contains("already", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(before, PackageSerializer.Serialize(package));
+    }
+
+    [Fact]
+    public void MergeDrawing_IntoAPackageWithNoDrawingRecordYet_StartsTheList()
+    {
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.Build(drawings: 0);
+        var drawing = ConfirmedDrawing();
+
+        PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: true);
+
+        Assert.Same(drawing.Record, Assert.Single(package.DrawingRecords!));
+    }
+
     private static EvidencePackage NewPackage() => new EvidencePackage
     {
         PackageId = Guid.NewGuid(),
