@@ -229,7 +229,7 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 - **FR-048**: Every new evidence field MUST be additive (evidence schema 1.6.0); packages written before it MUST load and serialize to their own bytes, and every check MUST treat an absent field as unknown.
 - **FR-049**: Every new finding MUST carry the evidence the existing findings carry and be classed in the attention policy in the change that emits it.
 - **FR-050**: Every tool array the existing ceiling is asserted on today - the review array, the slimmed review array and the two pre-run arrays, with and without a bridge - MUST stay under it in both provider encodings with the drawing tools offered. The bridged review arrays of a review whose pre-run has not completed were over the ceiling before this feature and are not asserted on; with the drawing tools offered they MUST be measured and pinned so any growth shows, and whether the ceiling holds them is the owner's question (research R2.20, R5 Q9). *(Scoped 2026-09-23 on review: as first written, "the model-facing tool array" took in arrays the ceiling has never held.)*
-- **FR-051**: A replay of every recorded review MUST lose no finding, keep every finding replayable, and keep the contact reclassifications as they are.
+- **FR-051**: A replay of every recorded review MUST lose no finding, keep every finding replayable, and keep the contacts as they are: every contact group a fixture records (3, 2 and 0 on feature 008's three replay fixtures, which record the recorded runs' touching groups as contacts since 008 decision 3A) reproduced exactly, and none reclassified.
 - **FR-052**: This feature MUST NOT create, modify or save any drawing or model; it needs no constitution exception.
 
 ### Key Entities
@@ -253,7 +253,7 @@ The standards profile gains a drawing section: the accepted sheet formats, the d
 - **SC-004**: On the synthetic package, every untoleranced drawing dimension with a known written precision and a matching band and unit receives the general tolerance, and none with an unknown precision, another unit or no band does.
 - **SC-005**: Every sheet of every read drawing is either read or named in a gap: no sheet silently absent.
 - **SC-006**: Any part's brief is at most 6,000 bytes, carries all five sections, and counts everything it left out.
-- **SC-007**: Replaying every recorded review loses no finding, leaves none unreplayable, keeps the reclassified contacts at 3, 2 and 0, and offers the model the same tools as before.
+- **SC-007**: Replaying every recorded review loses no finding, leaves none unreplayable, reproduces each fixture's recorded contact groups exactly (3, 2 and 0) with none reclassified, and offers the model the same tools as before.
 - **SC-008**: A review raises at most four drawing questions, each answerable with one click or one line.
 - **SC-009**: The read-only guard refuses every writing member of the drawing families on the 2024 SP5 interop, checked mechanically, and still refuses nothing the extractor reads.
 - **SC-010**: On the next sitting, on a drawing whose callouts are known, the binding attaches every checked callout to the right hole before any drawing value is allowed into a calculation.
