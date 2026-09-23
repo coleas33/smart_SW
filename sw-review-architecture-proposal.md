@@ -133,6 +133,33 @@ SolidWorks is the only drawing target, so this layer is non-negotiable.
 
 **Fallback:** if Auto-Generate Drawing is unusable (no API exposure, licensing, quality), the second pass becomes a rule-based generator: template-driven view sets by part class (turned part: two views plus section; sheet metal: flat pattern plus bend table; plate: one view plus thickness note) with rules in a YAML config the agent fills in.
 
+### Amendment 2026-09-22: checks first, and drawings in two stages
+
+The pilot showed where the tokens and the value go (`docs/roadmap-2026-09-22.md`). Two
+changes to the layers above, both decided by the owner on 2026-09-22:
+
+- **Layer 2 runs code first.** Every check that code can enumerate from the IR runs before
+  the first model turn - modelling practice, equations, assembly, standards, interference
+  (including the live detection call), and, as feature 010 lands them, the joint map,
+  alignment, fastener engagement, tool access, mass and hygiene checks. The agent reads a
+  digest, not the payloads; it explains, asks the engineer targeted questions, and
+  investigates what no enumerator can scope. Old tool results leave the conversation as
+  short stubs while their full payloads stay in the run folder, and calls run in parallel.
+  The agent layer is where judgement happens, not where checks are driven.
+- **Layer 3 is reached in two stages.** Stage one is read-only drawing context: drawings
+  attached to part and assembly dumps, their native dimensions, tolerances and tables
+  extracted, and a per-part drawing brief that tells a model what the part is, how it is
+  assembled and which interfaces need a callout. Stage two is creation, and only after a
+  constitution amendment and seat probes: the model proposes a drawing plan citing real
+  entities, the engineer reviews it, and a gated executor writes a new drawing into the run
+  folder. SOLIDWORKS 2024 SP5 has no auto-generate drawing API, so the fallback above - a
+  rule-based generator by part class - is the first pass, not the second.
+- **Creation starts from the owner's existing base.** The owner has an outline and base
+  repository for programmatically creating drawings. It is evaluated first - what it
+  draws, with which API members, from which inputs - and stage two is designed around it
+  rather than built from scratch (`docs/roadmap-2026-09-22.md`, "Start from the existing
+  drawing-creation base").
+
 ## Consequences
 
 **Easier**
