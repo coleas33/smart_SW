@@ -143,7 +143,10 @@ specs/008-checks-first-review/
 
 ### Source Code (repository root)
 
-Every file this feature adds or changes. A file not named here is not touched; in particular
+Every file this feature adds or changes, reconciled with what landed on 2026-09-23 (T100): a row
+marked *landed as* is a file the tasks touched that this block did not name, or a change the row
+did not describe, including Phase 9 (lever 13) and the review of `d805112..99269dd`. A file not
+named here is not touched; in particular
 `chat-events.schema.json`, `ir.schema.json`, `settings.schema.json`, `UserSettings.cs`,
 `CliProfileWriter.cs`, `Serve/PROTOCOL.md`, `mcp/server.py`'s payloads, `checks/interference.py`,
 every check module, every IR model and every C# production file except `render.js`'s `usageLine`
@@ -151,6 +154,8 @@ are **reused unchanged**.
 
 ```text
 .github/workflows/reviewer.yml              # CHANGED: swreview tokenizer fetch before the tests (T002)
+.gitignore                                  # CHANGED, *landed as*: the fixtures' events.jsonl let in (T018)
+extractor/tools/update-workstation.ps1      # CHANGED, *landed as*: the tokenizer fetched once on the seat (T002)
 
 reviewer/
 ├── pyproject.toml, uv.lock                 # CHANGED: tiktoken>=0.9,<1 (T002)
@@ -160,17 +165,28 @@ reviewer/
     ├── findings.py                         # CHANGED: ENTITY_ID, finding_subject_key (T008)
     ├── benchmark/recording.py              # NEW: Recording, read_recording and its refusals; answer batches (T016, T087)
     ├── benchmark/replay.py                 # NEW: two passes, classes, accounting, findings, ReplayReport; answered_from_checks,
-    │                                       #      stored, views and stubs, regrouped estimate (T023, T050, T079, T087)
+    │                                       #      stored, views and stubs, regrouped estimate (T023, T050, T079, T087);
+    │                                       #      *landed as*: each pass's offered array on PlayedReview and _Pricing
+    │                                       #      (T114), the prefix priced (T116), the regrouped pricing carrying every
+    │                                       #      field of pass B's (review)
+    ├── benchmark/compare.py                # CHANGED, *landed as*: lever 13's LEVER_COUNTERS row (T108)
     ├── cli.py                              # CHANGED: benchmark replay (T025, T079); _review_settings and review's
     │                                       #      --pane-defaults/--payload-slimming/--history-pruning/--prune-after (T075)
     ├── agent/settings.py                   # CHANGED: checks_first, pane_efficiency (T028, T081); ModelViewSettings,
-    │                                       #      MODEL_VIEW_OFF/PANE, PaneDefaults, pane_defaults (T053)
+    │                                       #      MODEL_VIEW_OFF/PANE, PaneDefaults, pane_defaults (T053);
+    │                                       #      *landed as*: withhold_prerun_tools, lever 13, and its refusal (T108)
+    ├── agent/withheld_wording.py           # NEW, *landed as*: the rewording table, reworded, reworded_checklist (T112)
     ├── agent/runner.py                     # CHANGED: folded_families, standards attach via checks_first (T038); live call
     │                                       #      args (T042); PrerunGuard wrap (T044); finalize skips family rows (T046);
     │                                       #      session.model_view recorded (T053); CoverageStopTools view (T065);
-    │                                       #      tool_results_dir (T067); model_view wiring (T073); answer batch (T083)
+    │                                       #      tool_results_dir (T067); model_view wiring (T073); answer batch (T083);
+    │                                       #      *landed as*: the reworded checklist and prompt (T112), the tool notes
+    │                                       #      read from the guard's array (T110, review)
     ├── prerun.py                           # CHANGED: checks_first (T028); digest, PrerunCall.payload (T038); live
-    │                                       #      interference, LiveOutcome (T042); repeat_key, PrerunGuard (T044)
+    │                                       #      interference, LiveOutcome (T042); repeat_key, PrerunGuard (T044);
+    │                                       #      *landed as*: withheld_tools, WITHHELD_LINE, the guard's filtering
+    │                                       #      __iter__ (T110); answers_repeat, the guard's array in an unknown
+    │                                       #      name's error (review)
     ├── ir/loader.py                        # CHANGED: append_interference_run (T040)
     ├── report/session.py                   # CHANGED: folded_families (T030), model_view (T053), step sizes (T090)
     ├── report/attention.py                 # CHANGED: FAMILY_TITLES, family_of, the family fold, AttentionRow.family/rule_count (T032)
@@ -181,7 +197,7 @@ reviewer/
     │                                       #      pruning, compact (T071)
     ├── agent/providers/gemini_provider.py  # CHANGED: model_payload (T065); use_model_view, per-round rebuild (T071)
     ├── agent/providers/fake.py             # CHANGED: ScriptedRound, ScriptedTurn.rounds (T006); model_payload (T065)
-    ├── agent/providers/pruning.py          # NEW: result_stub, prune_history (T069)
+    ├── agent/providers/pruning.py          # NEW: result_stub, prune_history (T069); *landed as*: offered (T114)
     ├── tools/model_view.py                 # NEW: count_findings, check_digest (T036); strip_references, grouped_gaps,
     │                                       #      MODEL_VIEWS, model_view (T061)
     ├── tools/refs.py                       # CHANGED: resolve_entity_ref (T055)
@@ -189,13 +205,15 @@ reviewer/
     ├── tools/session.py                    # CHANGED: get_finding (T063)
     ├── tools/registry.py                   # CHANGED: get_finding registration, model_view on dispatch (T063); the view in
     │                                       #      RecordedTool (T065); ToolCallRecord.payload, stored results (T067);
-    │                                       #      step sizes (T090)
+    │                                       #      step sizes (T090); *landed as*: ToolDispatch.call's offered names (review)
     ├── tools/context.py                    # CHANGED: tool_results_dir (T067)
     └── chat/server.py                      # CHANGED: pane checks first (T048); probe (T059); tool-results rotation (T067);
                                             #      pane_defaults (T077); build_provider parallel (T081); batch route (T085)
 
 reviewer/tests/
+├── conftest.py                                         # CHANGED, *landed as*: the vocabulary fixture (T002)
 ├── support/replay.py, scramble.py, review_bridge.py   # NEW (T014, T010, T012)
+├── support/toolsets.py                                 # CHANGED, *landed as*: toolsets by offered names (T113)
 ├── support/prerun.py                                   # CHANGED: live_prerun_package, LIVE_ROWS, CHECKS_FIRST (T041)
 ├── fixtures/replay/generate_fixtures.py                # NEW (T018)
 ├── fixtures/replay/{big-assembly,small-assembly-a,small-assembly-b}/   # NEW: package.json, session.json, events.jsonl (T018)
@@ -213,6 +231,12 @@ reviewer/tests/
     ├── test_tools_registry_view.py, test_tool_results_store.py, test_result_pruning.py                 # NEW (US3)
     ├── test_openai_model_view.py, test_runner_model_view.py                                             # NEW (US3)
     ├── test_step_sizes.py, test_honest_cost.py                                                          # NEW (US5)
+    ├── test_withheld_prerun_tools.py, test_withheld_wording.py      # NEW, *landed as* (Phase 9: T109, T111; review)
+    ├── test_code_first_registration.py and its opening-message golden   # CHANGED, *landed as*: checks first's plan (T037,
+    │                                                                    #      T041); the golden unchanged with the tuple empty
+    ├── test_no_lever_in_pane_settings.py, test_usage_contracts.py, test_run_provenance.py   # CHANGED, *landed as*:
+    │                                                                    #      thirteen levers (T107)
+    ├── test_chat_review_routes.py          # CHANGED, *landed as*: checks first meets 009's snapshot (rebase onto 009)
     ├── test_efficiency_settings.py         # CHANGED: new tests only (T027, T080)
     ├── test_session.py                     # CHANGED: folded_families (T029)
     ├── test_prerun_digest.py               # CHANGED: new tests; three red by design (T037)
@@ -224,7 +248,8 @@ reviewer/tests/
     ├── test_chat_timing_route.py           # CHANGED: files_in recursive (T066)
     ├── test_chat_main.py                   # CHANGED: two red by design (T047); the probe (T058)
     ├── test_tools_bridge.py, test_mcp_server.py   # CHANGED: entity ids, red by design (T056)
-    ├── test_tool_payload.py                # CHANGED: bridge pins regenerated (T057); slimmed-array pin (T062)
+    ├── test_tool_payload.py                # CHANGED: bridge pins regenerated (T057); slimmed-array pin (T062); *landed
+    │                                       #      as*: the pane arrays without the pre-run's tools (T115)
     ├── test_tools_session.py               # CHANGED: get_finding (T062)
     ├── test_cli.py                         # CHANGED: review's switches (T074)
     ├── test_parallel_tool_calls.py         # CHANGED: pane adapter, serial bridge, four queries one round (T080)
@@ -236,16 +261,20 @@ extractor/SwReview.AddIn.Tests/ReviewPageUsageLineTests.cs  # CHANGED: two red b
 
 specs/
 ├── 001-agentic-design-review/contracts/review-session.schema.json  # CHANGED: folded_families (T030), model_view (T053),
-│                                                                   #          step sizes (T088)
-├── 001-agentic-design-review/contracts/cli.md          # CHANGED: benchmark replay (T025), review's switches (T075)
-├── 001-agentic-design-review/contracts/agent-tools.md  # CHANGED: already_run (T044), bridge ids (T057), get_finding (T063)
+│                                                                   #          step sizes (T088); *landed as*: lever 13 (T108)
+├── 001-agentic-design-review/contracts/cli.md          # CHANGED: benchmark replay (T025), review's switches (T075);
+│                                                       #          *landed as*: lever 13 (the amendment's contract commit)
+├── 001-agentic-design-review/contracts/agent-tools.md  # CHANGED: already_run (T044), bridge ids (T057), get_finding (T063);
+│                                                       #          *landed as*: a withheld tool's call answered (amendment)
 ├── 002-task-pane-assistant/contracts/chat-api.md       # CHANGED: POST /sessions/{chat_id}/evidence (T085)
-├── 005-llm-efficiency/contracts/levers.md              # CHANGED: lever 5 (T048) and lever 6 (T081) pane defaults
+├── 005-llm-efficiency/contracts/levers.md              # CHANGED: lever 5 (T048) and lever 6 (T081) pane defaults;
+│                                                       #          *landed as*: lever 13's row and section (T115)
 ├── 005-llm-efficiency/contracts/usage.md               # CHANGED: sections 5 and 8 (T095)
 ├── 007-attention-policy-gate/contracts/attention.md    # CHANGED: sections 2 to 4, the family fold (T032, rebased on 009)
 └── 007-attention-policy-gate/contracts/gate.md         # CHANGED: the FR-030 note (T038)
 
-docs/llm-efficiency-options.md              # CHANGED: bridge figure (T057); the 2026-09-22 decision entry (T097)
+docs/llm-efficiency-options.md              # CHANGED: bridge figure (T057); the 2026-09-22 decision entry (T097);
+                                            #          *landed as*: lever 13's array figures (T115)
 docs/review-backlog.md                      # CHANGED: the follow-ups (T098)
 README.md                                   # CHANGED (T096)
 ```
