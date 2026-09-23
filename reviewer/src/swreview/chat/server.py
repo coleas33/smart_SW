@@ -127,6 +127,7 @@ from swreview.report.attention_record import ATTENTION_FILE_NAME, write_attentio
 from swreview.report.dispositions import DECISIONS, REPORT_FILE_NAME, find_finding
 from swreview.report.markdown import render_report
 from swreview.report.session import load_session
+from swreview.report.summary import review_ranking
 from swreview.report.unexamined import not_examined
 
 __all__ = [
@@ -1163,9 +1164,14 @@ class ChatServer:
         findings the answer is `200` with `rows: []` and `empty_reason` set, because
         "nothing to start with" and "the panel failed to load" must not look the same
         (FR-024).
+
+        The body is a `ReviewRanking`: that ranking, unchanged, plus the `summary` the
+        Review tab prints above it (feature 009, `contracts/review-summary.md` section 1),
+        computed from the same live session and the run's package. Neither `attention.json`
+        nor either check body carries the summary.
         """
         run = self._run_of(self._chat(request))
-        return JSONResponse(to_jsonable_python(rank(run.session)))
+        return JSONResponse(to_jsonable_python(review_ranking(run.session, run.context.ir)))
 
     async def events(self, request: Request) -> Response:
         """Replay `events.jsonl` after `Last-Event-ID`, then stream what happens next.
