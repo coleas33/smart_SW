@@ -44,11 +44,12 @@ public sealed class ReviewPageSessionsAcceptanceTests
         Assert.Equal("GET /sessions/" + ReviewFixture.ChatId + "/snapshot", call.GetProperty("method").GetString() + " " + call.GetProperty("path").GetString());
         Assert.Equal(run.StartsBeforeRestore, run.StartsAfterRestore);
 
-        Assert.Equal(99, ReviewPageDriver.Strings(run.Live, "cards").Length);
+        // 96 and 15 since the fixture follows the code: three touching groups are contacts (ReviewFixture).
+        Assert.Equal(96, ReviewPageDriver.Strings(run.Live, "cards").Length);
         Assert.Equal(ReviewPageDriver.Strings(run.Live, "cards"), ReviewPageDriver.Strings(run.Restored, "cards"));
         Assert.Equal(ReviewPageDriver.Strings(run.Live, "startHere"), ReviewPageDriver.Strings(run.Restored, "startHere"));
         Assert.Equal(run.Live.GetProperty("summary").GetString(), run.Restored.GetProperty("summary").GetString());
-        Assert.StartsWith("99 findings in 18 issues", run.Restored.GetProperty("summary").GetString());
+        Assert.StartsWith("96 findings in 15 issues", run.Restored.GetProperty("summary").GetString());
     }
 
     /// <summary>With A's chat gone, A comes back read-only from its run folder, the reason on screen.</summary>

@@ -42,7 +42,8 @@ public sealed class ReviewPageDefaultViewScanTests
     {
         string text = Visible.Value;
 
-        Assert.Contains("99 findings in 18 issues", text);
+        // 96 and 15 since the fixture follows the code: three touching groups are contacts (ReviewFixture).
+        Assert.Contains("96 findings in 15 issues", text);
         Assert.Contains("Start here", text);
         Assert.True(text.Length > 2000, "the default view read nearly nothing: " + text.Length + " characters.");
     }

@@ -3,7 +3,7 @@
   "read_only": false,
   "read_only_reason": null,
   "chat_state": "ended",
-  "last_seq": 358,
+  "last_seq": 354,
   "document": {
     "path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\DUBINUN ZABORAL\\M5 Bidetof\\TODOVUBID, LI\\596-11251.SLDASM",
     "configuration": "Kamibat"
@@ -13630,7 +13630,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:8320d0457b71debbaa81b286f7324f2af3093434f4bbf3cec685fa6dac0c4320",
+        "profile:..\\config\\standards.example.yaml sha256:f5c8fb76f42f864d2be1324423a55fa219b5f5924723dd18f997128aed404bb1",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -13713,7 +13713,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:8320d0457b71debbaa81b286f7324f2af3093434f4bbf3cec685fa6dac0c4320",
+        "profile:..\\config\\standards.example.yaml sha256:f5c8fb76f42f864d2be1324423a55fa219b5f5924723dd18f997128aed404bb1",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -13776,7 +13776,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:8320d0457b71debbaa81b286f7324f2af3093434f4bbf3cec685fa6dac0c4320",
+        "profile:..\\config\\standards.example.yaml sha256:f5c8fb76f42f864d2be1324423a55fa219b5f5924723dd18f997128aed404bb1",
         "configuration Kamibat",
         "feat:0611 Bounding-Box2: suppressed in Kamibat"
       ],
@@ -13830,7 +13830,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:8320d0457b71debbaa81b286f7324f2af3093434f4bbf3cec685fa6dac0c4320",
+        "profile:..\\config\\standards.example.yaml sha256:f5c8fb76f42f864d2be1324423a55fa219b5f5924723dd18f997128aed404bb1",
         "configuration Kamibat"
       ],
       "recommended_action": "Tick Exclude from cut list on the item, so the released cut list carries only what is cut.",
@@ -13893,7 +13893,7 @@
         11
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:8320d0457b71debbaa81b286f7324f2af3093434f4bbf3cec685fa6dac0c4320",
+        "profile:..\\config\\standards.example.yaml sha256:f5c8fb76f42f864d2be1324423a55fa219b5f5924723dd18f997128aed404bb1",
         "configuration Kamibat"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -13993,94 +13993,6 @@
     {
       "id": "F-092",
       "check": "interference.static",
-      "title": "Static interference between MAN_M4-0.7X14_BA319_FU-1 and VOM01O-RUNAGO07-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3)",
-      "status": "demonstrated",
-      "severity": "medium",
-      "component_ids": [
-        "cmp:0015",
-        "cmp:0021"
-      ],
-      "drawing_locations": [],
-      "provenance": [
-        {
-          "document_id": "doc:14430b03daa0",
-          "vault_path": "C:\\FictionalVault\\_PUVIPOG\\MEFERUDUM\\ZUFOTE\\NIFU\\83-9 KA FU\\MAN_M4-0.7X14_BA319_FU.SLDPRT",
-          "vault_version": null,
-          "revision": "-",
-          "configuration": "Kamibat",
-          "local_modified": null,
-          "export_method": "native",
-          "file_modified_utc": "2026-08-04T14:17:26Z",
-          "file_size_bytes": 92836
-        },
-        {
-          "document_id": "doc:6addfacb0428",
-          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\BAFE PUSUF_TEM PUVIPOG\\KUMIKU\\VOM01O-RUNAGO07.SLDPRT",
-          "vault_version": null,
-          "revision": null,
-          "configuration": "",
-          "local_modified": null,
-          "export_method": "native",
-          "file_modified_utc": "2026-09-01T17:52:12Z",
-          "file_size_bytes": 376739
-        }
-      ],
-      "configuration": "Kamibat",
-      "observed": "Static interference between cmp:0015 and cmp:0021 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3)",
-      "requirement": "No unintended static interference between components in configuration Kamibat; detection settings: coincident faces as interference, subassemblies as components, multibody included, hidden bodies included, fasteners folder include",
-      "inputs": [
-        "int:0104 cmp:0021+cmp:0015 Kamibat computed 0.0 m3"
-      ],
-      "calculation": {
-        "model": "interference.static",
-        "inputs": {
-          "group_key": "cmp:0015|cmp:0021",
-          "configuration": "Kamibat",
-          "int:0104_pair": "cmp:0021+cmp:0015",
-          "int:0104_volume_as_reported": "0.0 m3",
-          "int:0104_volume_mm3": "0.0 mm3",
-          "treat_coincident_as_interference": "True",
-          "treat_subassemblies_as_components": "True",
-          "include_multibody": "True",
-          "ignore_hidden": "False",
-          "fastener_folder_treatment": "include"
-        },
-        "assumptions": [
-          "the overlap volumes are SOLIDWORKS' own, computed with the settings recorded here; this check converts and compares them but does not recompute them",
-          "the volume unit is the one the extractor verified on the workstation (IInterference.Volume units are undocumented)",
-          "an overlap above 1.0 mm3 is treated as material rather than a modelling artifact"
-        ],
-        "excluded_effects": [
-          "motion: only the extracted position of each component was evaluated",
-          "tolerance excursions: nominal modelled geometry only",
-          "deflection under load",
-          "thermal growth",
-          "coatings, platings and surface treatments"
-        ],
-        "result": {
-          "member_count": 1.0,
-          "measured_count": 1.0,
-          "max_volume_mm3": 0.0,
-          "total_volume_mm3": 0.0,
-          "group_key": "cmp:0015|cmp:0021"
-        },
-        "units_out": "mm3",
-        "function": "swreview.checks.interference.check_interference_group",
-        "function_version": "1"
-      },
-      "tool_result_ids": [],
-      "coverage_limits": [
-        "interference.static evaluated the components as modelled in one configuration; clearance across any motion path was not established"
-      ],
-      "recommended_action": "Confirm whether this overlap is intended. If it is (a press fit, a thread modelled as a cylinder), accept an exception bound to this geometry and configuration; otherwise revise the parts or their mates.",
-      "group": null,
-      "capture_ids": [],
-      "disposition": null,
-      "exception_id": null
-    },
-    {
-      "id": "F-093",
-      "check": "interference.static",
       "title": "Static interference between GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 and MAN_M4-0.7X14_BA319_FU-5, MAN_M4-0.7X14_BA319_FU-7, MAN_M4-0.7X14_BA319_FU-6 in configuration Kamibat: largest overlap volume 2.52e-07 m3 (251.727787434 mm3); the same condition repeats across 3 pairs (MAN_M4-0.7X14_BA319_FU-5+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, MAN_M4-0.7X14_BA319_FU-7+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, MAN_M4-0.7X14_BA319_FU-6+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
       "status": "demonstrated",
       "severity": "high",
@@ -14177,7 +14089,7 @@
       "exception_id": null
     },
     {
-      "id": "F-094",
+      "id": "F-093",
       "check": "interference.static",
       "title": "Static interference between VOM01O-RUNAGO07-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 2.4e-08 m3 (24.304552846 mm3); the same condition repeats across 7 pairs (VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
       "status": "demonstrated",
@@ -14289,187 +14201,7 @@
       "exception_id": null
     },
     {
-      "id": "F-095",
-      "check": "interference.static",
-      "title": "Static interference between 359-12658-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3); the same condition repeats across 2 pairs (359-12658-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, 359-12658-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
-      "status": "demonstrated",
-      "severity": "medium",
-      "component_ids": [
-        "cmp:0013",
-        "cmp:0026"
-      ],
-      "drawing_locations": [],
-      "provenance": [
-        {
-          "document_id": "doc:03210ef10e04",
-          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\M5 TOMUDERU PUSUF\\359-12658.SLDPRT",
-          "vault_version": null,
-          "revision": "1",
-          "configuration": "Kamibat",
-          "local_modified": null,
-          "export_method": "native",
-          "file_modified_utc": "2026-09-19T21:01:44Z",
-          "file_size_bytes": 281503
-        },
-        {
-          "document_id": "doc:ae34ef307679",
-          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\BAFE PUSUF_TEM PUVIPOG\\LOPEMUVOR\\GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930.SLDPRT",
-          "vault_version": null,
-          "revision": "-",
-          "configuration": "Kamibat",
-          "local_modified": null,
-          "export_method": "native",
-          "file_modified_utc": "2026-09-16T15:17:18Z",
-          "file_size_bytes": 2841968
-        }
-      ],
-      "configuration": "Kamibat",
-      "observed": "Static interference between cmp:0013 and cmp:0026 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3); the same condition repeats across 2 pairs (cmp:0013+cmp:0026, cmp:0013+cmp:0026)",
-      "requirement": "No unintended static interference between components in configuration Kamibat; detection settings: coincident faces as interference, subassemblies as components, multibody included, hidden bodies included, fasteners folder include",
-      "inputs": [
-        "int:0064 cmp:0013+cmp:0026 Kamibat computed 0.0 m3",
-        "int:0093 cmp:0013+cmp:0026 Kamibat computed 0.0 m3"
-      ],
-      "calculation": {
-        "model": "interference.static",
-        "inputs": {
-          "group_key": "cmp:0013|cmp:0026",
-          "configuration": "Kamibat",
-          "int:0064_pair": "cmp:0013+cmp:0026",
-          "int:0064_volume_as_reported": "0.0 m3",
-          "int:0064_volume_mm3": "0.0 mm3",
-          "int:0093_pair": "cmp:0013+cmp:0026",
-          "int:0093_volume_as_reported": "0.0 m3",
-          "int:0093_volume_mm3": "0.0 mm3",
-          "treat_coincident_as_interference": "True",
-          "treat_subassemblies_as_components": "True",
-          "include_multibody": "True",
-          "ignore_hidden": "False",
-          "fastener_folder_treatment": "include"
-        },
-        "assumptions": [
-          "the overlap volumes are SOLIDWORKS' own, computed with the settings recorded here; this check converts and compares them but does not recompute them",
-          "the volume unit is the one the extractor verified on the workstation (IInterference.Volume units are undocumented)",
-          "an overlap above 1.0 mm3 is treated as material rather than a modelling artifact"
-        ],
-        "excluded_effects": [
-          "motion: only the extracted position of each component was evaluated",
-          "tolerance excursions: nominal modelled geometry only",
-          "deflection under load",
-          "thermal growth",
-          "coatings, platings and surface treatments"
-        ],
-        "result": {
-          "member_count": 2.0,
-          "measured_count": 2.0,
-          "max_volume_mm3": 0.0,
-          "total_volume_mm3": 0.0,
-          "group_key": "cmp:0013|cmp:0026"
-        },
-        "units_out": "mm3",
-        "function": "swreview.checks.interference.check_interference_group",
-        "function_version": "1"
-      },
-      "tool_result_ids": [],
-      "coverage_limits": [
-        "interference.static evaluated the components as modelled in one configuration; clearance across any motion path was not established"
-      ],
-      "recommended_action": "Confirm whether this overlap is intended. If it is (a press fit, a thread modelled as a cylinder), accept an exception bound to this geometry and configuration; otherwise revise the parts or their mates.",
-      "group": null,
-      "capture_ids": [],
-      "disposition": null,
-      "exception_id": null
-    },
-    {
-      "id": "F-096",
-      "check": "interference.static",
-      "title": "Static interference between 359-17543-2 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3)",
-      "status": "demonstrated",
-      "severity": "medium",
-      "component_ids": [
-        "cmp:0002",
-        "cmp:0026"
-      ],
-      "drawing_locations": [],
-      "provenance": [
-        {
-          "document_id": "doc:792f2ea287a0",
-          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\M5 TOMUDERU PUSUF\\359-17543.SLDPRT",
-          "vault_version": null,
-          "revision": "-",
-          "configuration": "Kamibat",
-          "local_modified": null,
-          "export_method": "native",
-          "file_modified_utc": "2026-09-18T16:46:54Z",
-          "file_size_bytes": 474746
-        },
-        {
-          "document_id": "doc:ae34ef307679",
-          "vault_path": "C:\\FictionalVault\\3_GERU\\2072_PASIM\\BAFE PUSUF_TEM PUVIPOG\\LOPEMUVOR\\GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930.SLDPRT",
-          "vault_version": null,
-          "revision": "-",
-          "configuration": "Kamibat",
-          "local_modified": null,
-          "export_method": "native",
-          "file_modified_utc": "2026-09-16T15:17:18Z",
-          "file_size_bytes": 2841968
-        }
-      ],
-      "configuration": "Kamibat",
-      "observed": "Static interference between cmp:0002 and cmp:0026 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3)",
-      "requirement": "No unintended static interference between components in configuration Kamibat; detection settings: coincident faces as interference, subassemblies as components, multibody included, hidden bodies included, fasteners folder include",
-      "inputs": [
-        "int:0084 cmp:0002+cmp:0026 Kamibat computed 0.0 m3"
-      ],
-      "calculation": {
-        "model": "interference.static",
-        "inputs": {
-          "group_key": "cmp:0002|cmp:0026",
-          "configuration": "Kamibat",
-          "int:0084_pair": "cmp:0002+cmp:0026",
-          "int:0084_volume_as_reported": "0.0 m3",
-          "int:0084_volume_mm3": "0.0 mm3",
-          "treat_coincident_as_interference": "True",
-          "treat_subassemblies_as_components": "True",
-          "include_multibody": "True",
-          "ignore_hidden": "False",
-          "fastener_folder_treatment": "include"
-        },
-        "assumptions": [
-          "the overlap volumes are SOLIDWORKS' own, computed with the settings recorded here; this check converts and compares them but does not recompute them",
-          "the volume unit is the one the extractor verified on the workstation (IInterference.Volume units are undocumented)",
-          "an overlap above 1.0 mm3 is treated as material rather than a modelling artifact"
-        ],
-        "excluded_effects": [
-          "motion: only the extracted position of each component was evaluated",
-          "tolerance excursions: nominal modelled geometry only",
-          "deflection under load",
-          "thermal growth",
-          "coatings, platings and surface treatments"
-        ],
-        "result": {
-          "member_count": 1.0,
-          "measured_count": 1.0,
-          "max_volume_mm3": 0.0,
-          "total_volume_mm3": 0.0,
-          "group_key": "cmp:0002|cmp:0026"
-        },
-        "units_out": "mm3",
-        "function": "swreview.checks.interference.check_interference_group",
-        "function_version": "1"
-      },
-      "tool_result_ids": [],
-      "coverage_limits": [
-        "interference.static evaluated the components as modelled in one configuration; clearance across any motion path was not established"
-      ],
-      "recommended_action": "Confirm whether this overlap is intended. If it is (a press fit, a thread modelled as a cylinder), accept an exception bound to this geometry and configuration; otherwise revise the parts or their mates.",
-      "group": null,
-      "capture_ids": [],
-      "disposition": null,
-      "exception_id": null
-    },
-    {
-      "id": "F-097",
+      "id": "F-094",
       "check": "hole.coaxiality",
       "title": "The axes of hol:0004 and hol:0010 are 25.0 mm apart (parallel), but no coaxiality tolerance is available; the check did not run",
       "status": "unresolved",
@@ -14536,7 +14268,7 @@
         },
         "units_out": "mm",
         "function": "swreview.checks.hole_alignment.check_hole_alignment",
-        "function_version": "1"
+        "function_version": "2"
       },
       "tool_result_ids": [],
       "coverage_limits": [
@@ -14550,7 +14282,7 @@
       "exception_id": null
     },
     {
-      "id": "F-098",
+      "id": "F-095",
       "check": "hole.coaxiality",
       "title": "The axes of hol:0010 and hol:0024 are 13.5 mm apart (skew), but no coaxiality tolerance is available; the check did not run",
       "status": "unresolved",
@@ -14617,7 +14349,7 @@
         },
         "units_out": "mm",
         "function": "swreview.checks.hole_alignment.check_hole_alignment",
-        "function_version": "1"
+        "function_version": "2"
       },
       "tool_result_ids": [],
       "coverage_limits": [
@@ -14632,7 +14364,7 @@
       "exception_id": null
     },
     {
-      "id": "F-099",
+      "id": "F-096",
       "check": "hole.coaxiality",
       "title": "The axes of hol:0017 and hol:0027 are 68.35203 mm apart (parallel), but no coaxiality tolerance is available; the check did not run",
       "status": "unresolved",
@@ -14699,7 +14431,7 @@
         },
         "units_out": "mm",
         "function": "swreview.checks.hole_alignment.check_hole_alignment",
-        "function_version": "1"
+        "function_version": "2"
       },
       "tool_result_ids": [],
       "coverage_limits": [
@@ -15760,45 +15492,6 @@
     {
       "bucket": "skipped",
       "item": {
-        "check": "standards.document.data_card_complete",
-        "scope": {
-          "component_ids": [],
-          "pairs": [],
-          "configuration": "Kamibat",
-          "positions": [],
-          "document_ids": [
-            "doc:681d2181ba04",
-            "doc:792f2ea287a0",
-            "doc:8a412bc4633c",
-            "doc:8b5228d54fc8",
-            "doc:9c7425f72c64",
-            "doc:ad861218f8f0",
-            "doc:bea71039d48c",
-            "doc:cfb91d5bb128",
-            "doc:d0db1a7c9db4",
-            "doc:e0ec179d6940",
-            "doc:f10e04bf46ec",
-            "doc:14430b03daa0",
-            "doc:25550924b73c",
-            "doc:3676f64593c8",
-            "doc:4788f3676f64",
-            "doc:58aaf0884cf0",
-            "doc:7befe7ecd1b4",
-            "doc:8c00e50ebd40",
-            "doc:9d12e22f99ed",
-            "doc:ae34ef307679",
-            "doc:bf46ec524205",
-            "doc:f21001d02278",
-            "doc:03210ef10e04"
-          ]
-        },
-        "reason": "23 document(s): doc:681d2181ba04: the file name 596-11251.SLDASM does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:792f2ea287a0: the file name 359-17543.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:8a412bc4633c: the file name 359-78148.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:8b5228d54fc8: the file name 359-60763.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:9c7425f72c64: the file name MAN_M8-1.25X16_GI_TA.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:ad861218f8f0: the file name 359-32917.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:bea71039d48c: the file name MAN_M4-0.7X12_GI_TA.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:cfb91d5bb128: the file name BOZ_M3-0.5X4_PE8_NA.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:d0db1a7c9db4: the file name 359-61417.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:e0ec179d6940: the file name 359-41033.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:f10e04bf46ec: the file name 359-12658.SLDASM does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:14430b03daa0: the file name MAN_M4-0.7X14_BA319_FU.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:25550924b73c: the file name MAN_M8-1.25X20_GI_TA.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:3676f64593c8: the file name GEM_M2-0.4X4_VOD02_NA.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:4788f3676f64: the file name MAN_M10-1.5X16_GI_TA.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:58aaf0884cf0: the file name VOM01O-RUNAGO07 GONI TETE.SLDASM does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:7befe7ecd1b4: the file name MAN_M8-1.25X40_GI_TA.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:8c00e50ebd40: the file name GEM_M3-0.5X8_PE8_NA.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:9d12e22f99ed: the file name LOGAB ZIG NAGUG, KA, #8 KIKAK.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:ae34ef307679: the file name GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:bf46ec524205: the file name VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:f21001d02278: the file name TUKUB FUL, 3MM X 18MM SI, KA, DIS, 51958K620.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:03210ef10e04: the file name 359-12658.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test",
-        "error": null
-      }
-    },
-    {
-      "bucket": "skipped",
-      "item": {
         "check": "standards.part.cut_list_excluded",
         "scope": {
           "component_ids": [],
@@ -16405,6 +16098,48 @@
     {
       "bucket": "unresolved",
       "item": {
+        "check": "standards.document.data_card_complete",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Kamibat",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c",
+            "doc:8b5228d54fc8",
+            "doc:9c7425f72c64",
+            "doc:ad861218f8f0",
+            "doc:bea71039d48c",
+            "doc:cfb91d5bb128",
+            "doc:d0db1a7c9db4",
+            "doc:e0ec179d6940",
+            "doc:f10e04bf46ec",
+            "doc:14430b03daa0",
+            "doc:25550924b73c",
+            "doc:3676f64593c8",
+            "doc:4788f3676f64",
+            "doc:58aaf0884cf0",
+            "doc:7befe7ecd1b4",
+            "doc:8c00e50ebd40",
+            "doc:9d12e22f99ed",
+            "doc:ae34ef307679",
+            "doc:bf46ec524205",
+            "doc:c057e9732ea1",
+            "doc:f21001d02278",
+            "doc:03210ef10e04",
+            "doc:69bbfdaa288c",
+            "doc:6addfacb0428"
+          ]
+        },
+        "reason": "26 document(s): doc:681d2181ba04: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:792f2ea287a0: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:8a412bc4633c: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:8b5228d54fc8: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:9c7425f72c64: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:ad861218f8f0: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:bea71039d48c: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:cfb91d5bb128: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:d0db1a7c9db4: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:e0ec179d6940: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:f10e04bf46ec: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:14430b03daa0: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:25550924b73c: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:3676f64593c8: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:4788f3676f64: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:58aaf0884cf0: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:7befe7ecd1b4: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:8c00e50ebd40: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:9d12e22f99ed: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:ae34ef307679: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:bf46ec524205: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:c057e9732ea1: DAFAGO VEFIK GAPOPEB LUMEMAZUBE.SLDPRT is reached only through component instances that are not resolved (cmp:0029 is suppressed), so the evidence this check reads was not read from the document; the reviewer does not resolve, load or open an instance to obtain it; doc:f21001d02278: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:03210ef10e04: the part-number pattern matched 0 of 26 graded documents, which is likely a profile error; check part_number.pattern; doc:69bbfdaa288c: PIT76O-FETU3-00.SLDPRT is reached only through component instances that are not resolved (cmp:0020 is lightweight), so the evidence this check reads was not read from the document; the reviewer does not resolve, load or open an instance to obtain it; doc:6addfacb0428: VOM01O-RUNAGO07.SLDPRT is reached only through component instances that are not resolved (cmp:0021 is lightweight), so the evidence this check reads was not read from the document; the reviewer does not resolve, load or open an instance to obtain it",
+        "error": null
+      }
+    },
+    {
+      "bucket": "unresolved",
+      "item": {
         "check": "standards.part.material_assigned",
         "scope": {
           "component_ids": [],
@@ -16519,25 +16254,6 @@
     {
       "bucket": "unresolved",
       "item": {
-        "check": "standards.document.data_card_complete",
-        "scope": {
-          "component_ids": [],
-          "pairs": [],
-          "configuration": "Kamibat",
-          "positions": [],
-          "document_ids": [
-            "doc:c057e9732ea1",
-            "doc:69bbfdaa288c",
-            "doc:6addfacb0428"
-          ]
-        },
-        "reason": "3 document(s): doc:c057e9732ea1: DAFAGO VEFIK GAPOPEB LUMEMAZUBE.SLDPRT is reached only through component instances that are not resolved (cmp:0029 is suppressed), so the evidence this check reads was not read from the document; the reviewer does not resolve, load or open an instance to obtain it; doc:69bbfdaa288c: PIT76O-FETU3-00.SLDPRT is reached only through component instances that are not resolved (cmp:0020 is lightweight), so the evidence this check reads was not read from the document; the reviewer does not resolve, load or open an instance to obtain it; doc:6addfacb0428: VOM01O-RUNAGO07.SLDPRT is reached only through component instances that are not resolved (cmp:0021 is lightweight), so the evidence this check reads was not read from the document; the reviewer does not resolve, load or open an instance to obtain it",
-        "error": null
-      }
-    },
-    {
-      "bucket": "unresolved",
-      "item": {
         "check": "standards.release",
         "scope": {
           "component_ids": [],
@@ -16573,7 +16289,7 @@
             "doc:f21001d02278"
           ]
         },
-        "reason": "not_ready; 5 error, 0 warning and 0 waived finding(s); 49 checked, 51 skipped, 39 unresolved and 277 out-of-scope (check, document) pair(s); unresolved: standards.assembly.not_transparent, standards.part.material_assigned, standards.assembly.mate_references, standards.part.sketches_fully_defined, standards.part.rebuild_errors, standards.part.cut_list_excluded, standards.document.data_card_complete; no drawing graded",
+        "reason": "not_ready; 5 error, 0 warning and 0 waived finding(s); 49 checked, 28 skipped, 62 unresolved and 277 out-of-scope (check, document) pair(s); unresolved: standards.assembly.not_transparent, standards.document.data_card_complete, standards.part.material_assigned, standards.assembly.mate_references, standards.part.sketches_fully_defined, standards.part.rebuild_errors, standards.part.cut_list_excluded; no drawing graded",
         "error": null
       }
     },
@@ -16845,6 +16561,36 @@
           "document_ids": []
         },
         "reason": "ER-004 is still open: Confirm the SOLIDWORKS interference volume unit on the workstation fiz provide the intended motion positions or a motion sweep for the mechanism components; identify intended press fits/thread-cylinder overlaps fiz accepted exceptions.",
+        "error": null
+      }
+    },
+    {
+      "bucket": "unresolved",
+      "item": {
+        "check": "mass.material",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "Mass and material: the review ended without a finding or a coverage entry for it",
+        "error": null
+      }
+    },
+    {
+      "bucket": "unresolved",
+      "item": {
+        "check": "hygiene",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "Model hygiene: the review ended without a finding or a coverage entry for it",
         "error": null
       }
     },
@@ -17475,9 +17221,9 @@
     "policy_version": "attention_policy_v1",
     "rows": [
       {
-        "finding_id": "F-093",
+        "finding_id": "F-092",
         "member_finding_ids": [
-          "F-093"
+          "F-092"
         ],
         "check": "interference.static",
         "title": "Static interference between GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 and MAN_M4-0.7X14_BA319_FU-5, MAN_M4-0.7X14_BA319_FU-7, MAN_M4-0.7X14_BA319_FU-6 in configuration Kamibat: largest overlap volume 2.52e-07 m3 (251.727787434 mm3); the same condition repeats across 3 pairs (MAN_M4-0.7X14_BA319_FU-5+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, MAN_M4-0.7X14_BA319_FU-7+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, MAN_M4-0.7X14_BA319_FU-6+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
@@ -17499,7 +17245,7 @@
           "reach": 0,
           "carried": 0,
           "check": "interference.static",
-          "finding_id": "F-093"
+          "finding_id": "F-092"
         },
         "reason": "needs your judgement",
         "explanation": "No model explanation was generated; read the finding evidence and status."
@@ -17533,9 +17279,9 @@
         "explanation": "No model explanation was generated; read the finding evidence and status."
       },
       {
-        "finding_id": "F-094",
+        "finding_id": "F-093",
         "member_finding_ids": [
-          "F-094"
+          "F-093"
         ],
         "check": "interference.static",
         "title": "Static interference between VOM01O-RUNAGO07-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 2.4e-08 m3 (24.304552846 mm3); the same condition repeats across 7 pairs (VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, VOM01O-RUNAGO07-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
@@ -17555,98 +17301,15 @@
           "reach": 1,
           "carried": 0,
           "check": "interference.static",
-          "finding_id": "F-094"
+          "finding_id": "F-093"
         },
         "reason": "needs your judgement",
         "explanation": "No model explanation was generated; read the finding evidence and status."
       },
       {
-        "finding_id": "F-092",
+        "finding_id": "F-094",
         "member_finding_ids": [
-          "F-092"
-        ],
-        "check": "interference.static",
-        "title": "Static interference between MAN_M4-0.7X14_BA319_FU-1 and VOM01O-RUNAGO07-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3)",
-        "status": "demonstrated",
-        "severity": "medium",
-        "component_ids": [
-          "cmp:0015",
-          "cmp:0021"
-        ],
-        "consequence_class": "interface",
-        "key": {
-          "suppressed": 0,
-          "judgement": 0,
-          "consequence": 1,
-          "status": 0,
-          "severity": 1,
-          "reach": 1,
-          "carried": 0,
-          "check": "interference.static",
-          "finding_id": "F-092"
-        },
-        "reason": "needs your judgement",
-        "explanation": "No model explanation was generated; read the finding evidence and status."
-      },
-      {
-        "finding_id": "F-095",
-        "member_finding_ids": [
-          "F-095"
-        ],
-        "check": "interference.static",
-        "title": "Static interference between 359-12658-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3); the same condition repeats across 2 pairs (359-12658-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1, 359-12658-1+GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1)",
-        "status": "demonstrated",
-        "severity": "medium",
-        "component_ids": [
-          "cmp:0013",
-          "cmp:0026"
-        ],
-        "consequence_class": "interface",
-        "key": {
-          "suppressed": 0,
-          "judgement": 0,
-          "consequence": 1,
-          "status": 0,
-          "severity": 1,
-          "reach": 1,
-          "carried": 0,
-          "check": "interference.static",
-          "finding_id": "F-095"
-        },
-        "reason": "needs your judgement",
-        "explanation": "No model explanation was generated; read the finding evidence and status."
-      },
-      {
-        "finding_id": "F-096",
-        "member_finding_ids": [
-          "F-096"
-        ],
-        "check": "interference.static",
-        "title": "Static interference between 359-17543-2 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1 in configuration Kamibat: largest overlap volume 0.0 m3 (0.0 mm3)",
-        "status": "demonstrated",
-        "severity": "medium",
-        "component_ids": [
-          "cmp:0002",
-          "cmp:0026"
-        ],
-        "consequence_class": "interface",
-        "key": {
-          "suppressed": 0,
-          "judgement": 0,
-          "consequence": 1,
-          "status": 0,
-          "severity": 1,
-          "reach": 1,
-          "carried": 0,
-          "check": "interference.static",
-          "finding_id": "F-096"
-        },
-        "reason": "needs your judgement"
-      },
-      {
-        "finding_id": "F-097",
-        "member_finding_ids": [
-          "F-097"
+          "F-094"
         ],
         "check": "hole.coaxiality",
         "title": "The axes of hol:0004 and hol:0010 are 25.0 mm apart (parallel), but no coaxiality tolerance is available; the check did not run",
@@ -17666,14 +17329,15 @@
           "reach": 1,
           "carried": 0,
           "check": "hole.coaxiality",
-          "finding_id": "F-097"
+          "finding_id": "F-094"
         },
-        "reason": "needs your judgement"
+        "reason": "needs your judgement",
+        "explanation": "No model explanation was generated; read the finding evidence and status."
       },
       {
-        "finding_id": "F-098",
+        "finding_id": "F-095",
         "member_finding_ids": [
-          "F-098"
+          "F-095"
         ],
         "check": "hole.coaxiality",
         "title": "The axes of hol:0010 and hol:0024 are 13.5 mm apart (skew), but no coaxiality tolerance is available; the check did not run",
@@ -17693,14 +17357,15 @@
           "reach": 1,
           "carried": 0,
           "check": "hole.coaxiality",
-          "finding_id": "F-098"
+          "finding_id": "F-095"
         },
-        "reason": "needs your judgement"
+        "reason": "needs your judgement",
+        "explanation": "No model explanation was generated; read the finding evidence and status."
       },
       {
-        "finding_id": "F-099",
+        "finding_id": "F-096",
         "member_finding_ids": [
-          "F-099"
+          "F-096"
         ],
         "check": "hole.coaxiality",
         "title": "The axes of hol:0017 and hol:0027 are 68.35203 mm apart (parallel), but no coaxiality tolerance is available; the check did not run",
@@ -17720,7 +17385,7 @@
           "reach": 1,
           "carried": 0,
           "check": "hole.coaxiality",
-          "finding_id": "F-099"
+          "finding_id": "F-096"
         },
         "reason": "needs your judgement"
       },
@@ -18375,16 +18040,16 @@
     ],
     "top_n": 5,
     "not_amplified": {
-      "total": 94,
+      "total": 91,
       "checked_within_scope": 0,
       "dispositioned": 0,
       "info": 0,
-      "beyond_top_n": 94
+      "beyond_top_n": 91
     },
     "coverage": {
       "checked": 17,
-      "skipped": 17,
-      "unresolved": 47,
+      "skipped": 16,
+      "unresolved": 49,
       "failed": 1,
       "out_of_scope": 21,
       "not_closed": [
@@ -18394,7 +18059,7 @@
         },
         {
           "item": "standards.release",
-          "reason": "not_ready; 5 error, 0 warning and 0 waived finding(s); 49 checked, 51 skipped, 39 unresolved and 277 out-of-scope (check, document) pair(s); unresolved: standards.assembly.not_transparent, standards.part.material_assigned, standards.assembly.mate_references, standards.part.sketches_fully_defined, standards.part.rebuild_errors, standards.part.cut_list_excluded, standards.document.data_card_complete; no drawing graded"
+          "reason": "not_ready; 5 error, 0 warning and 0 waived finding(s); 49 checked, 28 skipped, 62 unresolved and 277 out-of-scope (check, document) pair(s); unresolved: standards.assembly.not_transparent, standards.document.data_card_complete, standards.part.material_assigned, standards.assembly.mate_references, standards.part.sketches_fully_defined, standards.part.rebuild_errors, standards.part.cut_list_excluded; no drawing graded"
         },
         {
           "item": "provenance",
@@ -18412,26 +18077,26 @@
       "open_evidence_requests": 4,
       "rules": {
         "unresolved": 34,
-        "skipped": 17
+        "skipped": 16
       }
     },
     "empty_reason": null,
     "summary": {
       "version": "review_words_v1",
-      "headline": "99 findings in 18 issues",
-      "findings": 99,
-      "issues": 18,
+      "headline": "96 findings in 15 issues",
+      "findings": 96,
+      "issues": 15,
       "groups": [
         {
           "kind": "decide",
           "label": "Decide",
-          "count": 9,
-          "text": "9 need your decision",
+          "count": 6,
+          "text": "6 need your decision",
           "by_goal": [
             {
               "goal": "interference",
               "title": "Interference",
-              "count": 6
+              "count": 3
             },
             {
               "goal": "hole_alignment",
@@ -18662,7 +18327,7 @@
           "title": "Interference",
           "state": "issues",
           "state_label": "issues found",
-          "findings": 6,
+          "findings": 3,
           "reason": null,
           "detail": null
         },
@@ -18709,7 +18374,7 @@
           "state_label": "not reached",
           "findings": 0,
           "reason": "evidence missing",
-          "detail": "23 document(s): doc:792f2ea287a0: 359-17543.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:8a412bc4633c: 359-78148.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:8b5228d54fc8: 359-60763.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:9c7425f72c64: MAN_M8-1.25X16_GI_TA.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:ad861218f8f0: 359-32917.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:bea71039d48c: MAN_M4-0.7X12_GI_TA.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:cfb91d5bb128: BOZ_M3-0.5X4_PE8_NA.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in '80704P581'; doc:d0db1a7c9db4: 359-61417.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:e0ec179d6940: 359-41033.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:14430b03daa0: MAN_M4-0.7X14_BA319_FU.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:25550924b73c: MAN_M8-1.25X20_GI_TA.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:3676f64593c8: GEM_M2-0.4X4_VOD02_NA.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in '19645L936'; doc:4788f3676f64: MAN_M10-1.5X16_GI_TA.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:7befe7ecd1b4: MAN_M8-1.25X40_GI_TA.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:8c00e50ebd40: GEM_M3-0.5X8_PE8_NA.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in '91999B956'; doc:9d12e22f99ed: LOGAB ZIG NAGUG, KA, #8 KIKAK.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in '0081K51'; doc:ae34ef307679: GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:bf46ec524205: VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in '6926R326'; doc:c057e9732ea1: DAFAGO VEFIK GAPOPEB LUMEMAZUBE.SLDPRT is reached only through component instances that are not resolved (cmp:0029 is suppressed), so the evidence this check reads was not read from the document; the reviewer does not resolve, load or open an instance to obtain it; doc:f21001d02278: TUKUB FUL, 3MM X 18MM SI, KA, DIS, 51958K620.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in '51958K620'; doc:03210ef10e04: 359-12658.SLDPRT has no configuration 'AsBuilt', which is the profile's material configuration; the material recorded is the one in 'Kamibat'; doc:69bbfdaa288c: PIT76O-FETU3-00.SLDPRT is reached only through component instances that are not resolved (cmp:0020 is lightweight), so the evidence this check reads was not read from the document; the reviewer does not resolve, load or open an instance to obtain it; doc:6addfacb0428: VOM01O-RUNAGO07.SLDPRT is reached only through component instances that are not resolved (cmp:0021 is lightweight), so the evidence this check reads was not read from the document; the reviewer does not resolve, load or open an instance to obtain it"
+          "detail": "Mass and material: the review ended without a finding or a coverage entry for it"
         },
         {
           "goal": "hygiene",
@@ -18739,7 +18404,60 @@
           "detail": null
         }
       ],
-      "contacts": null,
+      "contacts": {
+        "count": 3,
+        "text": "3 size-for-size contacts",
+        "items": [
+          {
+            "id": "C-001",
+            "component_ids": [
+              "cmp:0015",
+              "cmp:0021"
+            ],
+            "names": [
+              "MAN_M4-0.7X14_BA319_FU-1",
+              "VOM01O-RUNAGO07-1"
+            ],
+            "configuration": "Kamibat",
+            "kind": "zero_volume",
+            "kind_label": "touching",
+            "volume_mm3": 0.0,
+            "text": "MAN_M4-0.7X14_BA319_FU-1 and VOM01O-RUNAGO07-1"
+          },
+          {
+            "id": "C-002",
+            "component_ids": [
+              "cmp:0013",
+              "cmp:0026"
+            ],
+            "names": [
+              "359-12658-1",
+              "GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1"
+            ],
+            "configuration": "Kamibat",
+            "kind": "zero_volume",
+            "kind_label": "touching",
+            "volume_mm3": 0.0,
+            "text": "359-12658-1 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1"
+          },
+          {
+            "id": "C-003",
+            "component_ids": [
+              "cmp:0002",
+              "cmp:0026"
+            ],
+            "names": [
+              "359-17543-2",
+              "GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1"
+            ],
+            "configuration": "Kamibat",
+            "kind": "zero_volume",
+            "kind_label": "touching",
+            "volume_mm3": 0.0,
+            "text": "359-17543-2 and GAPOPEB, TODOVUBID, SORARI, KER-F-869-675P-M1540-F9126-B1930-1"
+          }
+        ]
+      },
       "component_names": {
         "cmp:0001": "596-11251",
         "cmp:0002": "359-17543-2",
@@ -18831,8 +18549,8 @@
         "cmp:0088": "VUKO MIL BELIKAB, TIL-LAMAMOSU VURUNURA, SAS MIL GOSO, DAS, 29'64 PO FIDA, 8764 VURUNURA, DIS, 6926R326-4",
         "cmp:0089": "GEM_M3-0.5X8_PE8_NA-15"
       },
-      "resume_input_tokens": 407399,
-      "resume_text": "Sending resumes the review once. Its last round sent 407,399 input tokens."
+      "resume_input_tokens": 405280,
+      "resume_text": "Sending resumes the review once. Its last round sent 405,280 input tokens."
     }
   },
   "not_examined": {

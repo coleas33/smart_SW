@@ -521,7 +521,7 @@ CLOSEOUT_FIRST: tuple[str, ...] = (
     "coverage.closeout",
     *(item for item in CHECKLIST_ITEM_IDS if item != "coverage.closeout"),
 )
-"""The nine checklist ids with the run's own close-out row **leading** the session.
+"""Every checklist id, with the run's own close-out row **leading** the session.
 
 The committed review fixture holds that row last, where the five-row cap would drop it
 anyway; a rule that never looked at the id would pass on the fixture alone.
@@ -606,11 +606,13 @@ def test_the_checklist_item_ids_the_module_carries_are_the_checklists_own() -> N
     """The module may not import the checklist loader (FR-015), so drift is caught here.
 
     `agent/checklist.py` imports `report/session.py`, which imports the provider port and
-    the settings module; a pure policy that pulled the loader in for nine strings would
+    the settings module; a pure policy that pulled the loader in for a dozen strings would
     fail the import test below. The ids are a module constant instead, and this is the
-    assertion that keeps the copy honest.
+    assertion that keeps the copy honest - in order, so feature 010's `mass.material` and
+    `hygiene` (T099) are asserted where the file appends them, after `standards.release`.
     """
     assert CHECKLIST_ITEM_IDS == tuple(item.id for item in load_checklist().items)
+    assert CHECKLIST_ITEM_IDS[-3:] == ("standards.release", "mass.material", "hygiene")
 
 
 # --- 5. the edges ----------------------------------------------------------------------------

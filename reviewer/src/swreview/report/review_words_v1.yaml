@@ -105,11 +105,11 @@ goals:
     prefixes: [fastener.head_clearance, fastener.head_fit]
   - id: mass_and_material
     title: "Mass and material"
-    items: []
+    items: [mass.material]
     prefixes: [mass., standards.part.material_assigned]
   - id: hygiene
     title: "Hygiene"
-    items: [provenance, standards.release, coverage.prerun.standards]
+    items: [provenance, standards.release, coverage.prerun.standards, hygiene]
     prefixes: [provenance., standards., hygiene.]
   - id: drawings
     title: "Drawings"

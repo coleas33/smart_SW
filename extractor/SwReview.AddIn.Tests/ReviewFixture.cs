@@ -18,8 +18,11 @@ namespace SwReview.AddIn.Tests;
 /// <b>Why a generated file and not a sample.</b> The page tests of User Stories 3 to 7 were
 /// written against hand-built samples (<see cref="SummarySample"/>, <see cref="LabelsSample"/>),
 /// which prove the page prints whatever it is given. This proves the page prints what the
-/// backend actually produces, at the size of the review the feature was written for: 99
-/// findings, 18 issues, 103 coverage rows, four questions, three parts not loaded.
+/// backend actually produces, at the size of the review the feature was written for: 96
+/// findings, 15 issues, 104 coverage rows, three size-for-size contacts, four questions, three
+/// parts not loaded. (99 findings and 18 issues until 2026-09-23, when the replay fixtures began
+/// to follow the code - feature 008, owner decision 3A - and the three touching interference
+/// groups became the contacts feature 010 records them as.)
 ///
 /// <b>What it plays.</b> <see cref="Configure"/> makes the host's document the fixture's and
 /// routes `/labels` before `init` (the page asks for it the moment it learns the backend);

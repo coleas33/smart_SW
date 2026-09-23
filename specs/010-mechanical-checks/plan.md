@@ -171,8 +171,9 @@ reviewer/src/swreview/
 ├── report/review_words_v1.yaml         # CHANGED, *landed as*: the joint map's coverage rows belong to the
 │                                       #      hole-alignment goal (feature 009's words file)
 ├── report/attention.py                 # CHANGED (Polish): CHECKLIST_ITEM_IDS gains mass.material, hygiene
-│                                       #      (*landed as*: not yet - T099 is open)
-├── agent/checklist_v1.yaml             # CHANGED (Polish): two items (*landed as*: not yet - T099 is open)
+│                                       #      (*landed as*: T099, 2026-09-23)
+├── agent/checklist_v1.yaml             # CHANGED (Polish): two items (*landed as*: T099, naming no tool)
+├── checks/mass.py, checks/hygiene.py   # CHANGED, *landed as*: SUMMARY_CHECK, the item ids (T108)
 ├── agent/runner.py                     # CHANGED, *landed as*: FR-037's reduced-profile sentence ignores the
 │                                       #      tolerance phase (`7b63519`)
 ├── tools/checks_mechanical.py          # NEW: CODE_FIRST_CHECKS, check_joints, check_mass_material, check_hygiene
@@ -227,10 +228,10 @@ reviewer/tests/
 │   test_tool_envelopes.py, test_standards_profile.py, test_standards_no_company_values.py,
 │   test_attention_catalogue.py, test_prerun_digest.py, test_provider_schema.py,
 │   test_tool_payload.py, test_checklist.py, test_standards_document_rule.py, test_schema_sync.py  # CHANGED
-│                                       #      (*landed as*: `test_checklist.py` waits for T098, open;
+│                                       #      (*landed as*: `test_checklist.py` by T098, 2026-09-23;
 │                                       #      `test_schema_sync.py` passes unedited)
 ├── integration/test_coverage_stop.py                                                     # CHANGED (Polish;
-│                                                                                          #      *landed as*: T098 open)
+│                                                                                          #      *landed as*: T098, ITEMS derived)
 └── golden/test_golden/{joint-ok, joint-bottoming, thread-mismatch, cover-blind-tap}.yml  # CHANGED
 
 extractor/SwReview.Extractor/

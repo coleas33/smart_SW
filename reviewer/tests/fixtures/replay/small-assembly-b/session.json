@@ -1,9 +1,9 @@
 {
-  "session_id": "433f24f7-fbcf-498a-9095-f8ac0f829149",
+  "session_id": "3c098560-9d87-41a5-b7a0-65cee07f8ea0",
   "package_id": "011bb926-a012-4587-bdf8-d1480ac3ec90",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-23T06:47:03.965346Z",
-  "ended_at": "2026-09-23T06:47:04.012503Z",
+  "started_at": "2026-09-23T17:16:32.560725Z",
+  "ended_at": "2026-09-23T17:16:32.624108Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -35,54 +35,54 @@
     "rounds": 37,
     "turns": 4,
     "totals": {
-      "input_tokens": 1497696,
+      "input_tokens": 1505494,
       "cached_input_tokens": 1413047,
       "cache_write_tokens": 51130,
       "output_tokens": 6311,
       "reasoning_tokens": 2357,
       "tool_result_input_tokens": null,
-      "total_tokens": 1504007,
+      "total_tokens": 1511805,
       "latency_s": 94.78629639997962
     },
     "by_turn": [
       {
-        "input_tokens": 1318675,
+        "input_tokens": 1324865,
         "cached_input_tokens": 1240045,
         "cache_write_tokens": 48981,
         "output_tokens": 5128,
         "reasoning_tokens": 1805,
         "tool_result_input_tokens": null,
-        "total_tokens": 1323803,
+        "total_tokens": 1329993,
         "latency_s": 79.63422639996861
       },
       {
-        "input_tokens": 59294,
+        "input_tokens": 59830,
         "cached_input_tokens": 56773,
         "cache_write_tokens": 1231,
         "output_tokens": 210,
         "reasoning_tokens": 74,
         "tool_result_input_tokens": null,
-        "total_tokens": 59504,
+        "total_tokens": 60040,
         "latency_s": 2.8785140000109095
       },
       {
-        "input_tokens": 59515,
+        "input_tokens": 60051,
         "cached_input_tokens": 58004,
         "cache_write_tokens": 221,
         "output_tokens": 687,
         "reasoning_tokens": 374,
         "tool_result_input_tokens": null,
-        "total_tokens": 60202,
+        "total_tokens": 60738,
         "latency_s": 7.736465699999826
       },
       {
-        "input_tokens": 60212,
+        "input_tokens": 60748,
         "cached_input_tokens": 58225,
         "cache_write_tokens": 697,
         "output_tokens": 286,
         "reasoning_tokens": 104,
         "tool_result_input_tokens": null,
-        "total_tokens": 60498,
+        "total_tokens": 61034,
         "latency_s": 4.537090300000273
       }
     ]
@@ -96,7 +96,9 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"268-88428\",\"configuration\":\"Default\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":3,\"component_count\":4,\"ma…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000023499998860643245
+      "elapsed_s": 0.000021599997126031667,
+      "result_bytes": 473,
+      "result_tokens": 163
     },
     {
       "index": 1,
@@ -105,7 +107,9 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00002879999919969123
+      "elapsed_s": 0.000028700000257231295,
+      "result_bytes": 3838,
+      "result_tokens": 843
     },
     {
       "index": 2,
@@ -114,7 +118,9 @@
       "result_summary": "{\"result\":[{\"kind\":\"not_extracted\",\"entity_kind\":\"component\",\"entity_id\":null,\"reason\":\"'ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2' has no loaded model document, so Toolbox identity could man be…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0000366000003850786
+      "elapsed_s": 0.000036299999919719994,
+      "result_bytes": 7215,
+      "result_tokens": 2222
     },
     {
       "index": 3,
@@ -126,7 +132,9 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"268-88428\",\"full_path\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Default\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000019099999917671084
+      "elapsed_s": 0.000021699997887481004,
+      "result_bytes": 221,
+      "result_tokens": 74
     },
     {
       "index": 4,
@@ -138,7 +146,9 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"full_path\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configura…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00001630000042496249
+      "elapsed_s": 0.000016999998479150236,
+      "result_bytes": 801,
+      "result_tokens": 325
     },
     {
       "index": 5,
@@ -149,7 +159,9 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0001\",\"persist_ref\":\"aEIAAAUAAAD//v8AAAAAAA==\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"parent_id\":null,\"referenced_configur…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00007170000026235357
+      "elapsed_s": 0.00006829999620094895,
+      "result_bytes": 3303,
+      "result_tokens": 1382
     },
     {
       "index": 6,
@@ -160,7 +172,9 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0002\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003839999953925144
+      "elapsed_s": 0.0000368999972124584,
+      "result_bytes": 1260,
+      "result_tokens": 554
     },
     {
       "index": 7,
@@ -171,7 +185,9 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0003\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00004470000021683518
+      "elapsed_s": 0.00004410000110510737,
+      "result_bytes": 4923,
+      "result_tokens": 2380
     },
     {
       "index": 8,
@@ -182,7 +198,9 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-8…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002812000002450077
+      "elapsed_s": 0.00028440000460250303,
+      "result_bytes": 27503,
+      "result_tokens": 12651
     },
     {
       "index": 9,
@@ -194,7 +212,9 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:8a412bc4633c\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00004450000051292591
+      "elapsed_s": 0.00005360000068321824,
+      "result_bytes": 2820,
+      "result_tokens": 1176
     },
     {
       "index": 10,
@@ -206,7 +226,9 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00002010000025620684
+      "elapsed_s": 0.000017600003047846258,
+      "result_bytes": 14,
+      "result_tokens": 5
     },
     {
       "index": 11,
@@ -217,7 +239,9 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAABkAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMateCOORDINATE\",\"entities\":[{\"component_id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAY…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003409999953873921
+      "elapsed_s": 0.000034500000765547156,
+      "result_bytes": 4371,
+      "result_tokens": 2106
     },
     {
       "index": 12,
@@ -228,7 +252,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00637769999957527
+      "elapsed_s": 0.006069699993531685,
+      "result_bytes": 34484,
+      "result_tokens": 12593
     },
     {
       "index": 13,
@@ -237,7 +263,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-004\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0012979000002815155
+      "elapsed_s": 0.0013671999986399896,
+      "result_bytes": 6219,
+      "result_tokens": 2568
     },
     {
       "index": 14,
@@ -248,7 +276,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-005\",\"check\":\"rms.params.global_variables_present\",\"title\":\"the equation manager holds no equations\",\"status\":\"demonstrated\",\"severity\":\"medium\",\"component_i…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.001386899999488378
+      "elapsed_s": 0.0012289000005694106,
+      "result_bytes": 2376,
+      "result_tokens": 692
     },
     {
       "index": 15,
@@ -267,7 +297,9 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[],\"added_to_package\":0,\"gaps\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00004859999899053946
+      "elapsed_s": 0.000034199998481199145,
+      "result_bytes": 106,
+      "result_tokens": 31
     },
     {
       "index": 16,
@@ -279,7 +311,9 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000014600000213249587
+      "elapsed_s": 0.000014999997802078724,
+      "result_bytes": 14,
+      "result_tokens": 5
     },
     {
       "index": 17,
@@ -288,7 +322,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-007\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde\\u2026\",\"status\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.005468400000609108
+      "elapsed_s": 0.005330699998012278,
+      "result_bytes": 5164,
+      "result_tokens": 1579
     },
     {
       "index": 18,
@@ -305,7 +341,9 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Vault version and local-modified status for doc:681d2181ba04, doc:792f2ea287a0, and doc:8a412bc4633c; revision for doc:792f2ea287a0.\",\"why\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014989999908721074
+      "elapsed_s": 0.00017389999993611127,
+      "result_bytes": 520,
+      "result_tokens": 164
     },
     {
       "index": 19,
@@ -326,7 +364,9 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"Native part and assembly drawings for the reviewed Default configuration, with readable text layers, including material, general tolerance, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001339999998890562
+      "elapsed_s": 0.000152299995534122,
+      "result_bytes": 745,
+      "result_tokens": 205
     },
     {
       "index": 20,
@@ -343,7 +383,9 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"Resolved geometry for dowel-pin instances cmp:0002 and cmp:0003, including their cylindrical axes/diameter and the mating 3.0 mm hole axes, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012820000119972974
+      "elapsed_s": 0.00015519999578827992,
+      "result_bytes": 598,
+      "result_tokens": 155
     },
     {
       "index": 21,
@@ -361,7 +403,9 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-004\",\"what\":\"Functional axial gap or preload requirement for the assembled Default configuration, with the complete contributing drawing dimensions and t…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00018420000014884863
+      "elapsed_s": 0.00013359999866224825,
+      "result_bytes": 502,
+      "result_tokens": 127
     },
     {
       "index": 22,
@@ -390,7 +434,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"provenance\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00019459999930404592
+      "elapsed_s": 0.00014309999824035913,
+      "result_bytes": 507,
+      "result_tokens": 152
     },
     {
       "index": 23,
@@ -419,7 +465,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"D…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012860000060754828
+      "elapsed_s": 0.0001314999972237274,
+      "result_bytes": 540,
+      "result_tokens": 161
     },
     {
       "index": 24,
@@ -455,7 +503,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:0004…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00016649999997753184
+      "elapsed_s": 0.0001269999993382953,
+      "result_bytes": 543,
+      "result_tokens": 168
     },
     {
       "index": 25,
@@ -484,7 +534,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\":[\"a…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00013030000081926119
+      "elapsed_s": 0.00012939999578520656,
+      "result_bytes": 465,
+      "result_tokens": 132
     },
     {
       "index": 26,
@@ -513,7 +565,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"out_of_scope\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"position…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00015530000018770806
+      "elapsed_s": 0.0001357000001007691,
+      "result_bytes": 492,
+      "result_tokens": 152
     },
     {
       "index": 27,
@@ -551,7 +605,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:000…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012819999938074034
+      "elapsed_s": 0.00012789999891538173,
+      "result_bytes": 587,
+      "result_tokens": 175
     },
     {
       "index": 28,
@@ -580,7 +636,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"checked\",\"coverage_item\":{\"check\":\"interference\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001542999998491723
+      "elapsed_s": 0.0001384999995934777,
+      "result_bytes": 668,
+      "result_tokens": 159
     },
     {
       "index": 29,
@@ -589,7 +647,9 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005169999894860666
+      "elapsed_s": 0.000056400000175926834,
+      "result_bytes": 3885,
+      "result_tokens": 850
     },
     {
       "index": 30,
@@ -618,7 +678,9 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"coverage.closeout\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00016289999985019676
+      "elapsed_s": 0.00018850000196835026,
+      "result_bytes": 656,
+      "result_tokens": 181
     },
     {
       "index": 31,
@@ -627,7 +689,9 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000045700000555370934
+      "elapsed_s": 0.00005360000068321824,
+      "result_bytes": 3891,
+      "result_tokens": 851
     }
   ],
   "evidence_requests": [
@@ -1598,7 +1662,7 @@
         17
       ],
       "coverage_limits": [
-        "profile:..\\config\\standards.example.yaml sha256:8320d0457b71debbaa81b286f7324f2af3093434f4bbf3cec685fa6dac0c4320",
+        "profile:..\\config\\standards.example.yaml sha256:f5c8fb76f42f864d2be1324423a55fa219b5f5924723dd18f997128aed404bb1",
         "configuration Default"
       ],
       "recommended_action": "Add the relations or dimensions the sketch needs, so it is fully defined.",
@@ -1616,7 +1680,12 @@
     "F-005": "No model explanation was generated; read the finding evidence and status."
   },
   "explanations_enabled": true,
-  "finding_explanation_fingerprint": "00df819bc3693c846ef69ebb2293708bf95a314c639716192f9467a5ddf45758",
+  "finding_explanation_fingerprint": "32e8001ddd38a547d61ef1040b4f19585cccbc91c69b8fc09a99ce1cd05e4faf",
+  "model_view": {
+    "payload_slimming": false,
+    "history_pruning": false,
+    "prune_after_rounds": 2
+  },
   "coverage": {
     "checked": [
       {
@@ -2018,21 +2087,6 @@
           ]
         },
         "reason": "1 document(s): doc:681d2181ba04: cmp:0002 ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2: the instance is lightweight in this configuration, so it is not part of the assembly being graded (FR-005); cmp:0003 ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-1: the instance is lightweight in this configuration, so it is not part of the assembly being graded (FR-005)",
-        "error": null
-      },
-      {
-        "check": "standards.document.data_card_complete",
-        "scope": {
-          "component_ids": [],
-          "pairs": [],
-          "configuration": "Default",
-          "positions": [],
-          "document_ids": [
-            "doc:681d2181ba04",
-            "doc:8a412bc4633c"
-          ]
-        },
-        "reason": "2 document(s): doc:681d2181ba04: the file name 268-88428.SLDASM does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test; doc:8a412bc4633c: the file name 268-88428.SLDPRT does not follow the profile's part-number convention (part_number.pattern), so it carries no data card this check can test",
         "error": null
       },
       {
@@ -2466,6 +2520,22 @@
         "error": null
       },
       {
+        "check": "standards.document.data_card_complete",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": "Default",
+          "positions": [],
+          "document_ids": [
+            "doc:681d2181ba04",
+            "doc:792f2ea287a0",
+            "doc:8a412bc4633c"
+          ]
+        },
+        "reason": "3 document(s): doc:681d2181ba04: the part-number pattern matched 0 of 3 graded documents, which is likely a profile error; check part_number.pattern; doc:792f2ea287a0: ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT is reached only through component instances that are not resolved (cmp:0002 is lightweight, cmp:0003 is lightweight), so the evidence this check reads was not read from the document; the reviewer does not resolve, load or open an instance to obtain it; doc:8a412bc4633c: the part-number pattern matched 0 of 3 graded documents, which is likely a profile error; check part_number.pattern",
+        "error": null
+      },
+      {
         "check": "standards.part.sketches_fully_defined",
         "scope": {
           "component_ids": [],
@@ -2523,20 +2593,6 @@
         "error": null
       },
       {
-        "check": "standards.document.data_card_complete",
-        "scope": {
-          "component_ids": [],
-          "pairs": [],
-          "configuration": "Default",
-          "positions": [],
-          "document_ids": [
-            "doc:792f2ea287a0"
-          ]
-        },
-        "reason": "1 document(s): doc:792f2ea287a0: ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177.SLDPRT is reached only through component instances that are not resolved (cmp:0002 is lightweight, cmp:0003 is lightweight), so the evidence this check reads was not read from the document; the reviewer does not resolve, load or open an instance to obtain it",
-        "error": null
-      },
-      {
         "check": "standards.release",
         "scope": {
           "component_ids": [],
@@ -2549,7 +2605,7 @@
             "doc:8a412bc4633c"
           ]
         },
-        "reason": "not_ready; 1 error, 0 warning and 0 waived finding(s); 7 checked, 7 skipped, 7 unresolved and 30 out-of-scope (check, document) pair(s); unresolved: standards.assembly.not_transparent, standards.part.sketches_fully_defined, standards.part.rebuild_errors, standards.part.material_assigned, standards.part.cut_list_excluded, standards.document.data_card_complete; no drawing graded",
+        "reason": "not_ready; 1 error, 0 warning and 0 waived finding(s); 7 checked, 5 skipped, 9 unresolved and 30 out-of-scope (check, document) pair(s); unresolved: standards.assembly.not_transparent, standards.document.data_card_complete, standards.part.sketches_fully_defined, standards.part.rebuild_errors, standards.part.material_assigned, standards.part.cut_list_excluded; no drawing graded",
         "error": null
       },
       {
@@ -2747,6 +2803,30 @@
           "document_ids": []
         },
         "reason": "ER-004 is still open: Functional axial gap or preload requirement for the assembled Default configuration, with the complete contributing drawing dimensions and tolerances in stack order.",
+        "error": null
+      },
+      {
+        "check": "mass.material",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "Mass and material: the review ended without a finding or a coverage entry for it",
+        "error": null
+      },
+      {
+        "check": "hygiene",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": []
+        },
+        "reason": "Model hygiene: the review ended without a finding or a coverage entry for it",
         "error": null
       }
     ],
@@ -3077,7 +3157,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.00078595,
+    "unattended_runtime_minutes": 0.0010563833333333333,
     "net_saved_minutes": null
   }
 }

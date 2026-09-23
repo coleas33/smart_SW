@@ -40,9 +40,12 @@ uv run python -c "from pathlib import Path; from swreview.report.session import 
 uv run pytest tests/unit/test_review_summary.py tests/unit/test_review_goals.py tests/unit/test_review_summary_fixture.py tests/unit/test_review_words.py -q
 ```
 
-Expected: "99 findings in 18 issues"; Decide 9 (Interference 6, Hole alignment 3), Fix 56, Verify 34;
+Expected: "96 findings in 15 issues"; Decide 6 (Interference 3, Hole alignment 3), Fix 56, Verify 34;
 "4 questions for you"; "3 of 89 parts not loaded"; nine goal lines (modelling practice is the ninth,
 research R2.4), each with its state, the ones not reached with a few words; the tests green, including the owner's three labels pinned.
+(99 findings in 18 issues and Interference 6 until 2026-09-23, when feature 008's replay fixtures
+began to follow the code: the recording's three touching groups are the contacts feature 010
+records them as, and the summary counts them in its contacts line, not here.)
 
 ## Scenario 2 (US3): the summary in the pane
 

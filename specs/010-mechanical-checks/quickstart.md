@@ -162,8 +162,10 @@ uv run swreview benchmark replay <008 big-assembly replay fixture> --json
 uv run pytest tests/unit/test_joint_map_on_replay_fixture.py -q
 ```
 
-Expected: the three recorded touching-group findings reported as reclassified as contacts (3, 2
-and 0 on the three replay fixtures, 008 `contracts/replay.md` section 9), none lost;
+Expected: none lost and none reclassified - since the replay fixtures follow the code (008
+decision 3A, 2026-09-23) they record the recordings' touching groups as contacts (3, 2 and 0 on
+the three replay fixtures, which the generator reclassifies by the replay's rule, 008
+`contracts/replay.md` sections 8 and 9), and the replay records the same contacts again;
 the three new pre-run steps and no added model round (SC-006); the joint map over the replay
 fixture reproduces research R3's counts.
 
