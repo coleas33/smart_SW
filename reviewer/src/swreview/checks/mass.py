@@ -42,6 +42,7 @@ __all__ = [
     "CHECK_MATERIAL_ASSIGNED",
     "DEFAULT_TOLERANCE",
     "MassChecks",
+    "SUMMARY_CHECK",
     "SUM_TOLERANCE",
     "run_mass_checks",
 ]
@@ -50,6 +51,10 @@ CHECK_MATERIAL_ASSIGNED = "mass.material_assigned"
 CHECK_DENSITY = "mass.density"
 CHECK_ASSEMBLY_OVERRIDE = "mass.assembly_override"
 CHECK_COVERAGE = "mass.coverage"
+SUMMARY_CHECK = "mass.material"
+"""The checklist item these checks answer, and the id of the family's one summary coverage row
+(`contracts/mass-material.md` section 3, T108): the row that closes the item on a run with no
+finding, since the checklist matches coverage by id. No rule records under it."""
 FUNCTION = "swreview.checks.mass.run_mass_checks"
 FUNCTION_VERSION = "1"
 

@@ -44,6 +44,7 @@ from swreview.checks.joints import (
     joint_label,
     pattern_group,
 )
+from swreview.checks.mass import SUMMARY_CHECK as MASS_SUMMARY
 from swreview.checks.mass import run_mass_checks
 from swreview.checks.result import CheckResult, DocumentResult
 from swreview.checks.tolerances import ResolverLookup
@@ -337,6 +338,37 @@ def _record_coverage(
         written[bucket] += 1
 
 
+def _record_summary(
+    context: ToolContext,
+    check: str,
+    written: Counter[CoverageBucket],
+    *,
+    documents: int,
+    findings: int,
+) -> None:
+    """The family's one summary row, under its checklist item's id (feature 010 T108).
+
+    The checklist matches coverage by id, never by prefix, and every other row these tools
+    write is per check, so without this row a run with no finding would leave the item open
+    (research R2.25). `checked`, since neither family writes an unresolved row, with what the
+    call wrote and found in its reason; `replace_coverage`, so a repeated call leaves one.
+    It is not counted in `written`: the result's counts stay the per-check rows.
+    """
+    context.replace_coverage(
+        check,
+        "checked",
+        CoverageItem(
+            check=check,
+            scope=CoverageScope(configuration=context.ir.design.active_configuration),
+            reason=(
+                f"{written['checked']} checked, {written['skipped']} skipped coverage item(s) "
+                f"over {documents} document(s); {findings} finding(s)"
+            ),
+            error=None,
+        ),
+    )
+
+
 def check_mass_material() -> ToolResult:
     """Check every part has a material or a deliberate mass override, that its density fits
     the material, and flag assembly mass overrides.
@@ -355,6 +387,9 @@ def check_mass_material() -> ToolResult:
     _record_coverage(context, written, "checked", checks.checked)
     _record_coverage(context, written, "skipped", checks.skipped)
     findings = session.findings[findings_before:]
+    _record_summary(
+        context, MASS_SUMMARY, written, documents=checks.documents, findings=len(findings)
+    )
     return _summary(
         findings=[finding.id for finding in findings],
         statuses=Counter(finding.status for finding in findings),
@@ -372,6 +407,7 @@ def check_hygiene() -> ToolResult:
         one those checks are skipped.
     """
     # Deferred for the reason `_attached_profile` gives: hygiene reads a standards module.
+    from swreview.checks.hygiene import SUMMARY_CHECK as HYGIENE_SUMMARY
     from swreview.checks.hygiene import run_hygiene_checks
 
     context = current_context()
@@ -386,6 +422,9 @@ def check_hygiene() -> ToolResult:
     _record_coverage(context, written, "checked", checks.checked)
     _record_coverage(context, written, "skipped", checks.skipped)
     findings = session.findings[findings_before:]
+    _record_summary(
+        context, HYGIENE_SUMMARY, written, documents=checks.documents, findings=len(findings)
+    )
     return _summary(
         findings=[finding.id for finding in findings],
         statuses=Counter(finding.status for finding in findings),
