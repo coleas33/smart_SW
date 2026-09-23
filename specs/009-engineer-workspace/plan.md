@@ -126,8 +126,10 @@ specs/009-engineer-workspace/
 
 ### Source Code (repository root)
 
-Every file this feature adds or changes. A file not named here is not touched; in particular
-`report/attention.py`, `report/attention_record.py`, `report/markdown.py`, `chat-events.schema.json`,
+Every file this feature adds or changes, reconciled with what landed on 2026-09-23 (T077): a row
+marked *landed as* is a file the tasks touched that this block did not name, a change it did not
+describe, or a change it names that has not landed. A file not named here is not touched; in
+particular `report/attention.py`, `report/attention_record.py`, `report/markdown.py`, `chat-events.schema.json`,
 `ir.schema.json`, `settings.schema.json`, `UserSettings.cs`, `Serve/PROTOCOL.md`, every check module
 and 008's `usageLine` in `render.js` are **reused unchanged**.
 
@@ -142,30 +144,38 @@ reviewer/src/swreview/
 ├── report/unexamined.py             # CHANGED: NotExamined.headline (T013)
 ├── report/session.py                # CHANGED: EvidenceRequest.question/options/blocks (T034)
 ├── agent/events.py                  # CHANGED: UsageLedger.last_conversation_input (T040)
-├── tools/session.py                 # CHANGED: request_evidence's short form (T036); title names (T062)
-├── tools/recording.py               # CHANGED: title_from whole and named, TITLE_LENGTH removed (T062)
+├── tools/session.py                 # CHANGED: request_evidence's short form (T036); title names (T062,
+│                                    #      *landed as*: not landed - T062 is open, parked)
+├── tools/recording.py               # CHANGED: title_from whole and named, TITLE_LENGTH removed (T062;
+│                                    #      *landed as*: untouched - T062 is open, parked: whole, named
+│                                    #      titles change every check tool's result, which 008's replay
+│                                    #      acceptance pins to the recorded ones)
 └── chat/server.py                   # CHANGED: attention route answers the summary (T015, T040);
                                      #      request_id on two refusals (T042); snapshot and disk routes,
                                      #      UnknownReview (T051); GET /labels (T060); rule_statements (T064)
 
 reviewer/tests/
 ├── fixtures/pane/generate_pane_fixture.py                          # NEW (T023)
-├── golden/test_golden/{ten baselines with a cut title}.yml         # CHANGED: titles only, red by design (T062)
+├── golden/test_golden/{ten baselines with a cut title}.yml         # CHANGED: titles only, red by design (T062;
+│                                                                   #      *landed as*: untouched, T062 open)
 └── unit/
     ├── test_report_names.py, test_review_words.py                  # NEW (Setup)
     ├── test_review_summary.py, test_review_goals.py                # NEW (US3; extended T016, T018, T037)
     ├── test_review_snapshot.py, test_review_summary_fixture.py     # NEW (US3)
-    ├── test_pane_fixture.py                                        # NEW (US3; regenerated T062)
+    ├── test_pane_fixture.py                                        # NEW (US3; regenerated T062 - *landed as*:
+    │                                                               #      not yet, T062 open)
     ├── test_usage_ledger_resume.py                                 # NEW (US4)
     ├── test_chat_review_routes.py                                  # NEW (US6)
-    ├── test_plain_words_fixture.py                                 # NEW (US7)
+    ├── test_plain_words_fixture.py                                 # NEW (US7; *landed as*: the summary half of
+    │                                                               #      T061 - the title half waits for T062)
     ├── test_unexamined.py, test_chat_review_unexamined.py          # CHANGED (T012)
     ├── test_chat_attention_route.py                                # CHANGED (T014, T039)
     ├── test_session.py, test_events_schema.py                      # CHANGED (T033)
     ├── test_tools_session.py                                       # CHANGED (T035)
     ├── test_tool_payload.py                                        # CHANGED: pins regenerated, red by design (T036)
     ├── test_chat_server.py                                         # CHANGED: request_id (T041); ROUTES (T050, T059)
-    ├── test_recording.py                                           # CHANGED (T061)
+    ├── test_recording.py                                           # CHANGED (T061; *landed as*: untouched, T061
+    │                                                               #      open with T062)
     └── test_chat_checks_routes.py                                  # CHANGED (T063)
 
 extractor/SwReview.AddIn/
@@ -189,6 +199,11 @@ extractor/SwReview.AddIn/
 
 extractor/SwReview.AddIn.Tests/
 ├── Fixtures/review-big-assembly.json                                # NEW, generated (T023)
+├── LabelsSample.cs                                                  # NEW, *landed as*: the labels block the
+│                                                                    #      page tests read (T066)
+├── ReviewPageDriver.cs                                              # CHANGED, *landed as*: summary and
+│                                                                    #      session helpers (T025, T057)
+├── ReviewPageDocumentBindingTests.cs                                # CHANGED, *landed as*: the two views (T046)
 ├── SwReview.AddIn.Tests.csproj                                      # CHANGED: the fixture copied (T032)
 ├── SummarySample.cs, ReviewFixture.cs                               # NEW (T024, T032)
 ├── ReviewPageSummaryTests.cs, ReviewPageSummaryAcceptanceTests.cs   # NEW (US3)
@@ -197,7 +212,9 @@ extractor/SwReview.AddIn.Tests/
 ├── ReviewPageViewsTests.cs, ReviewPageScaleTests.cs                                      # NEW (US5)
 ├── ReviewPageSessionsTests.cs, ReviewPageSessionsAcceptanceTests.cs                      # NEW (US6)
 ├── ActiveConfigurationWatchTests.cs                                                     # NEW (US6)
-├── ReviewPageDefaultViewScanTests.cs, ReviewPageLabelsTests.cs                           # NEW (US7)
+├── ReviewPageDefaultViewScanTests.cs, ReviewPageLabelsTests.cs                           # NEW (US7; *landed as*:
+│                                                                    #      the scan runs three of its four checks -
+│                                                                    #      T065 open until T062)
 ├── ReviewPageErrorsTests.cs, ErrorLabelsCoverTheHostTests.cs                             # NEW (US7)
 ├── ReviewPageEventStreamTests.cs, ReviewPageAttentionPanelTests.cs,
 │   ReviewPageNarrowLayoutTests.cs                                   # CHANGED: red by design (T046); harness (T068)
@@ -211,10 +228,27 @@ specs/
 ├── 002-task-pane-assistant/contracts/chat-api.md                   # CHANGED: T013, T015, T042, T051, T060
 ├── 002-task-pane-assistant/contracts/pane-host-messages.md         # CHANGED: T053, T055
 ├── 003-resilient-modeling/contracts/model-check.md                 # CHANGED: rule_statements (T064)
-└── 007-attention-policy-gate/contracts/attention.md                # CHANGED: section 6 (T015, T047, T069)
+├── 007-attention-policy-gate/contracts/attention.md                # CHANGED: section 6 (T015, T047, T069)
+└── 005-llm-efficiency/contracts/levers.md                          # CHANGED, *landed as*: the array figures
+                                                                    #      regenerated for the short form (T036)
 
 README.md, docs/review-backlog.md                                    # CHANGED (T074, T075)
+docs/llm-efficiency-options.md                                       # CHANGED, *landed as*: the array figures (T036)
 ```
+
+*Landed as*, User Stories 1 and 2: landed before this plan (tasks.md Phase 1, T001 to T004,
+commits `2c48e2b`, `cf3c66e`, `b5cfcb4`), they touched, beside rows above, the pane's
+`Review/ReviewPage/{index.html, app.js, app.css, render.js}`, `web/shared/{document.js (new),
+attention.js (new), check-page.js, check-page.css}`, `Model/ModelCheckPage/index.html`,
+`Standards/StandardsPage/index.html`, `Review/ReviewHost.cs`, `Remodel/RemodelHost.cs` and
+`Remodel/RemodelPage/remodel.js`; the tests `ReviewPageDocumentBindingTests`,
+`CheckPageDocumentBindingTests`, `SharedAttentionScriptTests` (new), `PageRuleScanTests`,
+`RemodelHostTests`, `RemodelPageContractTests`, `ReviewPageContractTests`,
+`ReviewPagePreparationTests`, `ReviewPageTurnStateTests`, `ReviewHostTests`,
+`ReviewPageAttentionPanelTests`, `ReviewPageEventStreamTests`, `ReviewPageNarrowLayoutTests`,
+`ReviewPageInjectionTests`, `ModelCheckPageTests` and `AttentionSample`; and the contracts
+`002/pane-host-messages.md`, `004/pane-remodel-messages.md` and `007/attention.md` section 6.
+`PageRuleScanTests` has not been edited since this plan.
 
 **Structure Decision**: both trees are extended in place, as every feature since 002 has done. The
 summary, the names and the snapshot are three small pure modules under `report/` because they render

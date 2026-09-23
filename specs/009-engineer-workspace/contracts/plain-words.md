@@ -32,6 +32,11 @@ and `record_drawing_finding` pass `component_names(context.ir)`. `observed` keep
 two-line clamp is the only length limit. The golden baselines that held a cut title are regenerated
 once; their diff touches `title:` lines only.
 
+*Not landed* (T061's title half and T062, open, 2026-09-23): `title_from` still cuts at
+`TITLE_LENGTH` (80) and keeps component ids. T062 is parked because whole, named titles change
+every check tool's result, which feature 008's replay acceptance on its committed recordings pins
+to the recorded ones; landing it needs the owner's call on re-recording or re-pinning those.
+
 ## 3. Names instead of ids
 
 | Surface | Name | Id |
@@ -81,7 +86,8 @@ present - with none, the error card keeps its class chip and message, a card's s
 "Class: message", and the settings save line its old wording (FR-030); the check tabs' rule id is
 `p.rule-line > span.rule-id` first inside the row's fold, whose summary reads "Rule" when nothing
 else is behind it; Model check's ids are in `details.unresolved-ids`. `ErrorLabelsCoverTheHostTests`
-reads the words file by indentation and is skipped until the py lane's T008 writes it.
+reads the words file by indentation; it was skipped until the py lane's T008 wrote the file, and
+runs since.
 
 ## 7. The default-view scan (SC-003)
 
@@ -98,3 +104,7 @@ the visible text of Results - skipping the contents of shut `<details>` and of h
 
 The backend half is a Python test on the same fixture: no finding title holds a `cmp:` id whose
 component has a non-blank name, and no summary word holds a check id or a raw token.
+
+*Landed as* (T065, `test_plain_words_fixture.py`): the page scan runs the last three checks and the
+backend test the summary half; the `cmp:` checks on both sides wait for T062 (section 2), and a
+probe of the page check on this tree finds exactly the interference titles it would change.
