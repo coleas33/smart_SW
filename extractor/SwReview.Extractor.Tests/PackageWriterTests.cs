@@ -1282,6 +1282,41 @@ public class PackageWriterTests : IDisposable
     }
 
     [Fact]
+    public void ScopeFor_OfADrawingRoot_ListsTheRootDrawingWithItsOwnHandle()
+    {
+        // Feature 011 T010: the drawing phase reads scope.Drawings, and a drawing root is the
+        // one drawing its own dump reads, through the handle the traversal handed over.
+        var handle = new object();
+        var tree = new ComponentTreeResult
+        {
+            RootDocumentPath = @"C:\Fictional\plate.SLDDRW",
+            RootDocumentKind = DocumentKind.Drawing,
+            RootDocument = handle,
+        };
+
+        DumpScope scope = PackageWriter.ScopeFor(new GapCollector(), Options(), tree);
+
+        ScopedDrawing drawing = Assert.Single(scope.Drawings);
+        Assert.Equal(@"C:\Fictional\plate.SLDDRW", drawing.DocumentPath);
+        Assert.Same(handle, drawing.Document);
+    }
+
+    [Theory]
+    [InlineData(DocumentKind.Part)]
+    [InlineData(DocumentKind.Assembly)]
+    public void ScopeFor_OfAModelRoot_ListsNoDrawing(DocumentKind kind)
+    {
+        var tree = new ComponentTreeResult
+        {
+            RootDocumentPath = @"C:\Fictional\plate.SLDPRT",
+            RootDocumentKind = kind,
+            RootDocument = new object(),
+        };
+
+        Assert.Empty(PackageWriter.ScopeFor(new GapCollector(), Options(), tree).Drawings);
+    }
+
+    [Fact]
     public void Build_UsesTheCurrentSchemaVersion()
     {
         Assert.Equal(EvidencePackage.CurrentSchemaVersion, NewWriter().Build(Options()).SchemaVersion);

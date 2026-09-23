@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using SwReview.Extractor.Dump;
 using SwReview.Extractor.Ir;
@@ -33,12 +34,78 @@ public class DrawingTraversalTests
 {
     private const string DocumentId = "doc:0a1b2c3d4e5f";
 
+    // ---- the allocators are the package's (feature 011 T009) -------------------------
+
+    [Fact]
+    public void TheDrawingAllocatorsAreSevenWithTheirPrefixes()
+    {
+        // Feature 011: the six prefixes feature 006 allocated per traversal, plus dtb for the
+        // tables, live on the package's scope, so ids stay unique when several drawings are
+        // read (FR-016, contracts/native-evidence.md section 1).
+        var ids = new DrawingIdAllocators();
+
+        Assert.Equal(
+            new[] { "dsh:0001", "dvw:0001", "ddm:0001", "dan:0001", "dnt:0001", "drv:0001", "dtb:0001" },
+            new[]
+            {
+                ids.Sheets.Next(), ids.Views.Next(), ids.Dimensions.Next(), ids.Annotations.Next(),
+                ids.Notes.Next(), ids.RevisionTables.Next(), ids.Tables.Next(),
+            });
+    }
+
+    [Fact]
+    public void TheScopeCarriesOneSetOfDrawingAllocatorsForThePackage()
+    {
+        var scope = new DumpScope(
+            new GapCollector(), new DumpOptions { OutputDirectory = "out" }, new ComponentTreeResult());
+
+        Assert.Same(scope.DrawingIds, scope.DrawingIds);
+        Assert.Equal("dsh:0001", scope.DrawingIds.Sheets.Next());
+    }
+
+    [Fact]
+    public void TwoTraversalsOverOneSetOfAllocators_ContinueEverySequence()
+    {
+        // Two drawings in one package: the second numbers on from the first, prefix by prefix,
+        // so dsh:0001 means one sheet of one drawing in the package and a check that keys a gap
+        // by sheet id cannot attach it to the other drawing's sheet (research R2.5).
+        var ids = new DrawingIdAllocators();
+
+        IReadOnlyList<string> first = OneOfEach(new DrawingTraversal("doc:0000000000a1", "Sheet1", ids));
+        IReadOnlyList<string> second = OneOfEach(new DrawingTraversal("doc:0000000000b2", "Sheet1", ids));
+
+        Assert.Equal(new[] { "dsh:0001", "dvw:0001", "ddm:0001", "dan:0001", "dnt:0001", "drv:0001" }, first);
+        Assert.Equal(new[] { "dsh:0002", "dvw:0002", "ddm:0002", "dan:0002", "dnt:0002", "drv:0002" }, second);
+    }
+
+    [Fact]
+    public void Traversal_RefusesNullAllocators()
+    {
+        Assert.Throws<ArgumentNullException>(() => new DrawingTraversal(DocumentId, "Sheet1", null!));
+    }
+
+    /// <summary>One sheet, view, dimension, annotation, note and revision table; their ids.</summary>
+    private static IReadOnlyList<string> OneOfEach(DrawingTraversal traversal)
+    {
+        DrawingSheetRecord sheet = traversal.AddSheet("Sheet1", 0);
+        DrawingView view = traversal.AddView(sheet);
+        return new[]
+        {
+            sheet.Id,
+            view.Id,
+            traversal.AddDimension(view).Id,
+            traversal.AddAnnotation(view).Id,
+            traversal.AddNote(view).Id,
+            traversal.AddRevisionTable(sheet).Id,
+        };
+    }
+
     // ---- the record itself ---------------------------------------------------------
 
     [Fact]
     public void Record_CarriesTheDocumentIdTheActiveSheetAndTheNativeSource()
     {
-        var traversal = new DrawingTraversal(DocumentId, "Sheet2");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet2", new DrawingIdAllocators());
 
         Assert.Equal(DocumentId, traversal.Record.DocumentId);
         Assert.Equal("Sheet2", traversal.Record.ActiveSheetName);
@@ -52,7 +119,7 @@ public class DrawingTraversalTests
         // GetCurrentSheet() that could not be read is a null, not "sheet 1": which sheet was
         // active is what tells a consumer which rows to trust, and guessing it would make a
         // sheet nobody looked at read as the one that was on screen.
-        var traversal = new DrawingTraversal(DocumentId, null);
+        var traversal = new DrawingTraversal(DocumentId, null, new DrawingIdAllocators());
 
         Assert.Null(traversal.Record.ActiveSheetName);
         Assert.All(new[] { traversal.AddSheet("Sheet1", 0), traversal.AddSheet("Sheet2", 1) },
@@ -64,7 +131,7 @@ public class DrawingTraversalTests
     [Fact]
     public void AddSheet_NumbersSheetsFromZeroInCallOrder()
     {
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
 
         traversal.AddSheet("Sheet1", 0);
         traversal.AddSheet("Sheet2", 1);
@@ -88,7 +155,7 @@ public class DrawingTraversalTests
         // skipped by the dumper, and numbering the survivors 0, 1, 2 would make a check name
         // "sheet 2" for what is sheet 3 of the drawing, in a finding whose whole job is to
         // cite the sheet.
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
 
         traversal.AddSheet("Sheet1", 0);
         traversal.AddSheet("Sheet3", 2);
@@ -108,7 +175,7 @@ public class DrawingTraversalTests
         // There is no position before the first, so a negative index is a caller that lost
         // count rather than a sheet: it is refused here, where the call site is, instead of
         // reaching the package as a sheet number no reader can make sense of.
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
 
         Assert.Throws<ArgumentOutOfRangeException>(() => traversal.AddSheet("Sheet1", -1));
     }
@@ -116,7 +183,7 @@ public class DrawingTraversalTests
     [Fact]
     public void AddSheet_MarksOnlyTheSheetWhoseNameIsTheActiveOne()
     {
-        var traversal = new DrawingTraversal(DocumentId, "Sheet2");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet2", new DrawingIdAllocators());
 
         DrawingSheetRecord first = traversal.AddSheet("Sheet1", 0);
         DrawingSheetRecord second = traversal.AddSheet("Sheet2", 1);
@@ -132,7 +199,7 @@ public class DrawingTraversalTests
     {
         // The per-sheet half of FR-024: a package can carry sheets from this phase and from
         // the PDF ingest at once, and the drawing checks grade the native ones only.
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
 
         Assert.Equal(DrawingEvidenceSource.Native, traversal.AddSheet("Sheet1", 0).Source);
     }
@@ -142,7 +209,7 @@ public class DrawingTraversalTests
     [Fact]
     public void AddView_AllocatesInTraversalOrderAcrossEverySheet()
     {
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
 
         DrawingSheetRecord first = traversal.AddSheet("Sheet1", 0);
         traversal.AddView(first);
@@ -159,7 +226,7 @@ public class DrawingTraversalTests
     [Fact]
     public void AddView_NamesTheSheetItWasReadFrom()
     {
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
         DrawingSheetRecord sheet = traversal.AddSheet("Sheet1", 0);
 
         Assert.Equal(sheet.Id, traversal.AddView(sheet).SheetId);
@@ -171,7 +238,7 @@ public class DrawingTraversalTests
         // swDrawingViewTypes_e.swDrawingSheet = 1 is where the export-control note lives.
         // Nothing here branches on the type: the number is recorded by the dumper and named
         // in Python, and the pseudo-view keeps its place in GetViews() order.
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
         DrawingSheetRecord sheet = traversal.AddSheet("Sheet1", 0);
 
         DrawingView format = traversal.AddView(sheet);
@@ -188,7 +255,7 @@ public class DrawingTraversalTests
     [Fact]
     public void AddDimension_AllocatesInTraversalOrderAndNamesItsView()
     {
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
         DrawingSheetRecord sheet = traversal.AddSheet("Sheet1", 0);
         DrawingView first = traversal.AddView(sheet);
         DrawingView second = traversal.AddView(sheet);
@@ -209,7 +276,7 @@ public class DrawingTraversalTests
     [Fact]
     public void AddAnnotation_AllocatesInTraversalOrderAndNamesTheViewItWasReadFrom()
     {
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
         DrawingSheetRecord sheet = traversal.AddSheet("Sheet1", 0);
         DrawingView view = traversal.AddView(sheet);
 
@@ -225,7 +292,7 @@ public class DrawingTraversalTests
     {
         // contracts/ir-additions.md section 3.5: "a sheet-format annotation's owner is the
         // type-1 pseudo-view". It is not the sheet, and it is not the drawing.
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
         DrawingSheetRecord sheet = traversal.AddSheet("Sheet1", 0);
 
         DrawingView format = traversal.AddView(sheet);
@@ -238,7 +305,7 @@ public class DrawingTraversalTests
     [Fact]
     public void AddNote_AllocatesInTraversalOrderAndNamesTheViewItWasReadFrom()
     {
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
         DrawingSheetRecord sheet = traversal.AddSheet("Sheet1", 0);
         DrawingView first = traversal.AddView(sheet);
         DrawingView second = traversal.AddView(sheet);
@@ -260,7 +327,7 @@ public class DrawingTraversalTests
         // Enumerated per view (IView.GetTableAnnotations), recorded per sheet: two tables on
         // one sheet are two records, which is the whole reason ISheet.RevisionTable - which
         // returns at most one - is not the enumeration.
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
         DrawingSheetRecord first = traversal.AddSheet("Sheet1", 0);
         DrawingSheetRecord second = traversal.AddSheet("Sheet2", 1);
 
@@ -282,7 +349,7 @@ public class DrawingTraversalTests
     {
         // One counter per prefix, never reset: dsh:0002 is the second sheet of this package
         // and of no other, which is what lets a finding cite a record by id.
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
 
         DrawingSheetRecord sheet = traversal.AddSheet("Sheet1", 0);
         DrawingView view = traversal.AddView(sheet);
@@ -319,7 +386,7 @@ public class DrawingTraversalTests
         // The traversal allocates and orders; it never defaults engineering data. Every value
         // field starts null so that a read the dumper could not make stays unknown rather
         // than being written as an empty string or a zero (FR-026).
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
         DrawingSheetRecord sheet = traversal.AddSheet("Sheet1", 0);
         DrawingView view = traversal.AddView(sheet);
         DisplayDimensionRecord dimension = traversal.AddDimension(view);
@@ -360,7 +427,7 @@ public class DrawingTraversalTests
     [Fact]
     public void EveryAddMethod_RefusesANullOwner()
     {
-        var traversal = new DrawingTraversal(DocumentId, "Sheet1");
+        var traversal = new DrawingTraversal(DocumentId, "Sheet1", new DrawingIdAllocators());
 
         Assert.Throws<ArgumentNullException>(() => traversal.AddSheet(null!, 0));
         Assert.Throws<ArgumentNullException>(() => traversal.AddView(null!));

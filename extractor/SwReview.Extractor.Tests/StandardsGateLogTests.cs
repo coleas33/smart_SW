@@ -228,6 +228,10 @@ public class StandardsGateLogTests : IDisposable
                 RootDocumentKind = _rootKind,
                 DesignName = "bracket-assy",
                 ActiveConfiguration = "Default",
+
+                // Feature 011 T009: the drawing phase reads each drawing through its own
+                // document handle, and the traversal hands over the root's.
+                RootDocument = new object(),
             };
 
             tree.Nodes.Add(new ComponentNode
@@ -391,7 +395,7 @@ public class StandardsGateLogTests : IDisposable
             }
         }
 
-        public object? Drawing() => _drawing;
+        public object? Drawing(object document) => _drawing;
 
         public string? ActiveSheetName(object drawing) => _sheetNames[0];
 
@@ -453,6 +457,6 @@ public class StandardsGateLogTests : IDisposable
 
         public string? Cell(object table, int row, int column) => "B";
 
-        public ScopedPersistRef? PersistRef(object entity) => null;
+        public ScopedPersistRef? PersistRef(object document, object entity) => null;
     }
 }

@@ -41,10 +41,11 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
     private SwGate Gate => _session.Gate;
 
     /// <summary>
-    /// The open document as a drawing, or null when it is not one. Not gated: a COM cast is
-    /// not a member call, and the document is the one the dump is already attached to.
+    /// <paramref name="document"/> as a drawing, or null when it is not one. Not gated: a COM
+    /// cast is not a member call, and the document is one SOLIDWORKS already has open - the
+    /// session's for a drawing root, an attached drawing's for a review (feature 011).
     /// </summary>
-    public object? Drawing() => SwSession.DrawingOf(_session.Document);
+    public object? Drawing(object document) => SwSession.DrawingOf((IModelDoc2)document);
 
     public string? ActiveSheetName(object drawing)
     {
@@ -190,7 +191,8 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
 
     public string? Cell(object table, int row, int column) => AsTable(table).Text[row, column];
 
-    public ScopedPersistRef? PersistRef(object entity) => _refs.TryGet(_session.Document, entity);
+    public ScopedPersistRef? PersistRef(object document, object entity) =>
+        _refs.TryGet((IModelDoc2)document, entity);
 
     /// <summary>
     /// Every model a view on any sheet references, in sheet and view order, with duplicates
@@ -209,7 +211,7 @@ public sealed class SwDrawingReader : IDrawingReader, IDrawingReferenceSource
     {
         var references = new List<DrawingReference>();
 
-        object? drawing = Drawing();
+        object? drawing = Drawing(_session.Document);
         if (drawing == null)
         {
             return references;

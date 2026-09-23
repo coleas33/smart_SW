@@ -2176,7 +2176,7 @@ public static class Program
         }
 
         var reader = new SwDrawingReader(session, refs);
-        object? drawing = reader.Drawing();
+        object? drawing = reader.Drawing(session.Document);
         if (drawing == null)
         {
             // The kind read said drawing and the COM cast disagreed. Nothing is opened or

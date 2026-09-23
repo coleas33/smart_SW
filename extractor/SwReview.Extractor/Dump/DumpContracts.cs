@@ -219,6 +219,62 @@ public sealed class ComponentTreeResult
 
     /// <summary>Depth-first traversal order; ids are allocated in this order.</summary>
     public List<ComponentNode> Nodes { get; } = new List<ComponentNode>();
+
+    /// <summary>
+    /// The open document's live <c>IModelDoc2</c> (feature 011): the handle the <c>drawing</c>
+    /// phase reads a drawing root through. Typed as object to keep this contract free of the
+    /// interop assembly, as <see cref="ComponentNode.Handle"/> is; null in tests that need none.
+    /// </summary>
+    public object? RootDocument { get; set; }
+}
+
+/// <summary>
+/// The seven drawing id allocators (feature 011, contracts/native-evidence.md section 1): the
+/// six feature 006 gave each traversal, and <c>dtb</c> for the tables. One set per package, on
+/// <see cref="DumpScope.DrawingIds"/>, so when several drawings are read each prefix continues
+/// one sequence and an id names one record of one drawing in the package (FR-016). A drawing
+/// root's single record numbers exactly as it did before.
+/// </summary>
+public sealed class DrawingIdAllocators
+{
+    public IdAllocator Sheets { get; } = new IdAllocator("dsh");
+
+    public IdAllocator Views { get; } = new IdAllocator("dvw");
+
+    public IdAllocator Dimensions { get; } = new IdAllocator("ddm");
+
+    public IdAllocator Annotations { get; } = new IdAllocator("dan");
+
+    public IdAllocator Notes { get; } = new IdAllocator("dnt");
+
+    public IdAllocator RevisionTables { get; } = new IdAllocator("drv");
+
+    public IdAllocator Tables { get; } = new IdAllocator("dtb");
+}
+
+/// <summary>
+/// One drawing the <c>drawing</c> phase reads: its path, which names it in the package, and the
+/// live document it is read through - the root document for a drawing root, an open drawing
+/// discovery attached for a part or assembly review (feature 011). A null document is a drawing
+/// the phase cannot read, and it says so in a gap rather than reading another document.
+/// </summary>
+public sealed class ScopedDrawing
+{
+    public ScopedDrawing(string documentPath, object? document)
+    {
+        if (string.IsNullOrWhiteSpace(documentPath))
+        {
+            throw new ArgumentException("A drawing is named by its document path.", nameof(documentPath));
+        }
+
+        DocumentPath = documentPath;
+        Document = document;
+    }
+
+    public string DocumentPath { get; }
+
+    /// <summary>The live <c>IModelDoc2</c>, typed as object; null when none was handed over.</summary>
+    public object? Document { get; }
 }
 
 /// <summary>A component that has been given its package id.</summary>
@@ -341,6 +397,19 @@ public sealed class DumpScope
 
     /// <summary>Model annotation ids (schema 1.5.0, feature 010), allocated the same way.</summary>
     public IdAllocator ModelAnnotationIds { get; } = new IdAllocator("man");
+
+    /// <summary>
+    /// The drawing ids (feature 011): one set for the package, so every drawing the
+    /// <c>drawing</c> phase reads continues the same sequences.
+    /// </summary>
+    public DrawingIdAllocators DrawingIds { get; } = new DrawingIdAllocators();
+
+    /// <summary>
+    /// The drawings the <c>drawing</c> phase reads, in order: the root drawing for a drawing
+    /// root (<see cref="PackageWriter.ScopeFor"/>), and, under a review, the open drawings
+    /// discovery attached (feature 011).
+    /// </summary>
+    public List<ScopedDrawing> Drawings { get; } = new List<ScopedDrawing>();
 
     /// <summary>Registers a traversed component under its allocated id.</summary>
     public ScopedComponent AddComponent(string id, string documentId, ComponentNode node)
