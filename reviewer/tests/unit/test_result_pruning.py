@@ -288,6 +288,78 @@ def test_without_get_finding_offered_the_stub_does_not_name_it() -> None:
     assert "get_finding" not in stub["refetch"]
 
 
+# --- a stub of a tool that is not offered (feature 008 amendment, T113) ------------------------
+
+ALREADY_RUN_ANSWER: dict[str, Any] = {
+    "status": "already_run",
+    "ran_at_step": 3,
+    "note": "Checks first ran this call before your first turn; its findings are in the "
+    "session. It was not run again.",
+    "outcome": {"status": "recorded", "findings": 2, "finding_ids": ["F-001", "F-002"]},
+}
+"""What the re-call guard answers a withheld tool with: a result like any other, so it ages
+into a stub like any other."""
+
+
+def test_a_stub_of_a_tool_not_offered_says_so_instead_of_asking_for_a_call() -> None:
+    """Lever 13: a model that called a withheld tool anyway must not be told, two rounds
+    later, to call it again (`contracts/checks-first.md` section 7)."""
+    offered = {"list_components", "get_finding"}
+    plain = result_stub("check_hygiene", {}, big(), offered=offered)
+    findings = result_stub("check_rms_part", {}, {"finding_ids": ["F-001"]}, offered=offered)
+    no_detail = result_stub(
+        "check_rms_part", {}, {"finding_ids": ["F-001"]}, finding_detail=False, offered=offered
+    )
+
+    assert plain["refetch"] == (
+        "check_hygiene is not offered this session, so it cannot be called again"
+    )
+    assert findings["refetch"] == (
+        "check_rms_part is not offered this session, so it cannot be called again; "
+        "get_finding(<id>) reads one finding"
+    )
+    assert no_detail["refetch"] == (
+        "check_rms_part is not offered this session, so it cannot be called again"
+    )
+    for stub in (plain, findings, no_detail):
+        assert "call " not in stub["refetch"].split(" is not offered")[1]
+    offered_one = result_stub("check_hygiene", {}, big(), offered={"check_hygiene"})
+    assert offered_one == result_stub("check_hygiene", {}, big()), "offered: today's stub"
+
+
+def test_prune_history_takes_the_offered_names_from_its_caller() -> None:
+    messages = [
+        user("review it"),
+        assistant(("check_rms_part", {}), ("list_components", {})),
+        tool("check_rms_part", ALREADY_RUN_ANSWER),
+        tool("list_components", big()),
+        assistant(text="thinking"),
+        assistant(text="still thinking"),
+    ]
+
+    offered = {"list_components", "get_finding"}
+    pruned = prune_history(messages, 1, offered=offered)
+
+    assert "is not offered this session" in pruned[2]["content"]["refetch"]
+    assert pruned[3]["content"]["refetch"].startswith("call list_components again")
+
+
+def test_without_offered_names_every_stub_is_todays() -> None:
+    messages = [
+        user("review it"),
+        assistant(("check_rms_part", {})),
+        tool("check_rms_part", ALREADY_RUN_ANSWER),
+        assistant(text="thinking"),
+    ]
+
+    assert prune_history(messages, 1) == prune_history(messages, 1, offered=None)
+    assert prune_history(messages, 1)[2]["content"]["refetch"].startswith(
+        "call check_rms_part again"
+    )
+    everything = {"check_rms_part"}
+    assert prune_history(messages, 1, offered=everything) == prune_history(messages, 1)
+
+
 def test_the_stub_is_byte_identical_across_calls_and_hash_seeds() -> None:
     script = (
         "import json; from swreview.agent.providers.pruning import prune_history;"

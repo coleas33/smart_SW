@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import copy
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from time import perf_counter
 from typing import Any
 
@@ -347,11 +347,19 @@ class OpenAIProvider:
         self._prune_after = settings.prune_after_rounds if settings.history_pruning else None
         self._compact = settings.payload_slimming
 
-    def _visible(self, history: Sequence[Mapping[str, Any]]) -> Sequence[Mapping[str, Any]]:
-        """The history this request carries: pruned when pruning is on, as it is otherwise."""
+    def _visible(
+        self, history: Sequence[Mapping[str, Any]], offered: Collection[str]
+    ) -> Sequence[Mapping[str, Any]]:
+        """The history this request carries: pruned when pruning is on, as it is otherwise.
+
+        `offered` is this turn's tool array, so a stub of a tool it does not carry says so
+        rather than asking for the call (feature 008 FR-030).
+        """
         if self._prune_after is None:
             return history
-        return prune_history(history, self._prune_after, finding_detail=self._compact)
+        return prune_history(
+            history, self._prune_after, finding_detail=self._compact, offered=offered
+        )
 
     # --- effort -----------------------------------------------------------------------
 
@@ -389,6 +397,7 @@ class OpenAIProvider:
         """Run one turn: stream, run the tool calls it asks for, stop on an end or a budget."""
         mapping = self.effort_mapping(effort)  # before the connection: never a silent downgrade
         tool_params = [tool_param(tool) for tool in tools]
+        offered = frozenset(tool.name for tool in tools)
         history = [dict(message) for message in messages]
         texts: list[str] = []
         steps = 0
@@ -404,6 +413,7 @@ class OpenAIProvider:
                 system=system,
                 history=history,
                 tool_params=tool_params,
+                offered=offered,
                 effort_value=str(mapping.provider_value),
                 # Lever 7, asked once per round because that is the granularity the answer
                 # has: the run decides between rounds that the review is finished, and
@@ -480,6 +490,7 @@ class OpenAIProvider:
         system: str,
         history: Sequence[Mapping[str, Any]],
         tool_params: Sequence[dict[str, Any]],
+        offered: Collection[str],
         effort_value: str,
         withdraw_tools: bool = False,
         on_event: EventCallback,
@@ -492,7 +503,7 @@ class OpenAIProvider:
         request: dict[str, Any] = {
             "model": self.model,
             "instructions": system,
-            "input": _encode_history(self._visible(history), compact=self._compact),
+            "input": _encode_history(self._visible(history, offered), compact=self._compact),
             "reasoning": {"effort": effort_value},
             "max_output_tokens": self.max_output_tokens,
             "parallel_tool_calls": self.parallel_tool_calls,
