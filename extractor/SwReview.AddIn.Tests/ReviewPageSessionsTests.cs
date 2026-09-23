@@ -30,7 +30,7 @@ public sealed class ReviewPageSessionsTests
     private const string PathB = @"C:\parts\pin.sldprt";
     private const string PathC = @"C:\parts\plate.sldprt";
 
-    private const string ReadOnlyReason =
+    internal const string ReadOnlyReason =
         "The backend restarted, so this review is shown from its run folder. Follow-ups, decisions and answers are off.";
 
     private static readonly string[] FindingsA = { "F-007", "F-008", "F-002" };
@@ -453,7 +453,7 @@ public sealed class ReviewPageSessionsTests
     private static object Doc(string path) => new { path, configuration = "Default" };
 
     /// <summary>One `sessions` item, as the host lists a review; the time in this machine's own zone.</summary>
-    private static Dictionary<string, object?> Item(string chatId, string runId, string path, int hour, int minute)
+    internal static Dictionary<string, object?> Item(string chatId, string runId, string path, int hour, int minute)
     {
         var local = new DateTime(2026, 9, 23, hour, minute, 0, DateTimeKind.Unspecified);
         var started = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local));
@@ -468,14 +468,14 @@ public sealed class ReviewPageSessionsTests
         };
     }
 
-    private static Dictionary<string, object?> Started(Dictionary<string, object?> item) => new Dictionary<string, object?>
+    internal static Dictionary<string, object?> Started(Dictionary<string, object?> item) => new Dictionary<string, object?>
     {
         { "chat_id", item["chat_id"] },
         { "run_dir", item["run_dir"] },
         { "document", new { path = item["path"], configuration = "Default" } },
     };
 
-    private static string Finding(string id) => JsonSerializer.Serialize(new
+    internal static string Finding(string id) => JsonSerializer.Serialize(new
     {
         id,
         check = "interference.static",
@@ -488,7 +488,7 @@ public sealed class ReviewPageSessionsTests
     });
 
     /// <summary>A snapshot in the shape of data-model section 8, the summary sample's ranking in it.</summary>
-    private static string Snapshot(string runId, string path, string[] findingIds, string? chatState, int? lastSeq, bool readOnly)
+    internal static string Snapshot(string runId, string path, string[] findingIds, string? chatState, int? lastSeq, bool readOnly)
     {
         var snapshot = new JsonObject
         {
@@ -513,7 +513,7 @@ public sealed class ReviewPageSessionsTests
         + @"""reasoning_tokens"":4,""tool_result_input_tokens"":null,""total_tokens"":18,"
         + @"""latency_s"":1.5,""cache_diagnostic"":null}";
 
-    private static string Chip(string chatId) =>
+    internal static string Chip(string chatId) =>
         "document.querySelector('#review-chips [data-action=\"review-chip\"][data-chat-id=\"" + chatId + "\"]').click();"
         + "return JSON.stringify({ok: true});";
 
