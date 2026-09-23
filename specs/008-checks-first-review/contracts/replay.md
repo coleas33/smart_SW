@@ -191,7 +191,17 @@ prose); the fixture package persists the rows and the volume-unit gap together, 
 will. The generator runs from `reviewer/` and grades with the profile's path relative to it,
 because the path is written into the standards findings and an absolute one would carry the
 generating machine's folders. The package's own SOLIDWORKS type names are kept wherever they
-are quoted (a gap listing skipped types). A result is taken as reproduced only when its status
+are quoted (a gap listing skipped types). Paths and names are strict (the owner's review of
+2026-09-23): every folder between the fictional root and the file is scrambled with no
+allowlist; a file stem, a file name, a component's name and path and the design's name keep
+only sizes (`M8-1.25X16`, `3MM`), one- or two-digit numbers and single characters; every word
+of those fields, and every supplier code next to a catalogue number, is scrambled wherever else
+it appears, so a component name and its file stem still agree (`scramble.strict_tokens`). The
+recorded folder names go only to the owner's local denylist, which the hygiene test reads to
+prove no fixture folder is named like one; the committed test also forbids a fixed list of
+folder and supplier words (whole-word, case-insensitive in path values), after taking out the
+reviewer's own sentences (`hole_alignment.EXCLUDED_EFFECTS` names "MMC" as a material
+condition). A result is taken as reproduced only when its status
 and summary match (`same_summary`) and its size sits within the framing noise of the recorded
 growth; the generator's own leak check polices every replaced token of three characters or more
 with a letter, and every replaced number of five digits or more.
