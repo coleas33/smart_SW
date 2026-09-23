@@ -15,12 +15,15 @@ from typing import Any
 
 import pytest
 
+from swreview.checks.standards.profile import StandardsProfile, load_profile
+from swreview.checks.standards.traversal import graded_documents
 from swreview.ir.loader import load_package
 from swreview.report.session import CoverageItem
 from swreview.tools import checks_mechanical
 from swreview.tools.checks_mechanical import JOINT_MAP_CHECK, check_joints
 from swreview.tools.context import ToolContext, build_context, context_for, use_context
 from swreview.tools.registry import ToolRegistry, check_tools
+from swreview.tools.standards_checks import StandardsRun, attach_standards_run
 from tests.support.mechanical import PackageBuilder
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "mechanical"
@@ -337,9 +340,7 @@ def test_the_small_fixtures_pin_passes_with_a_zero_budget() -> None:
 
 
 def fastener_findings(context: ToolContext, check: str) -> list:
-    return [
-        finding for finding in context.require_session().findings if finding.check == check
-    ]
+    return [finding for finding in context.require_session().findings if finding.check == check]
 
 
 def engagement_of(context: ToolContext, hole_id: str):
@@ -542,6 +543,195 @@ def test_the_flat_head_torx_countersinks_are_unresolved_for_want_of_a_head_row(b
 
     assert sorted(int(finding.observed.split(" ", 1)[0]) for finding in unresolved) == [16, 19]
     assert all("flat head" in finding.observed for finding in unresolved)
+
+
+# --- the stack's tolerance sources (feature 010 US8, T084) ----------------------------------
+#
+# The tolerances fixture (IR 1.5.0): a dowel joint whose three sizes each bind to one model
+# dimension - the plate hole's by a class-only H7 fit, which is where a hole's ISO class
+# arrives (the Hole Wizard's own fit is a screw clearance fit, the C# lane found), the block
+# hole's and the pin's by bilateral limits - and a screw joint whose counterbore bore meets
+# two equal 4.5 mm dimensions, so its stack is unresolved and names every source searched.
+
+PROFILE_A = Path(__file__).resolve().parents[1] / "fixtures" / "standards" / "profile-a.yaml"
+
+EVERY_SOURCE = (
+    "drawing callout: ",
+    "model annotation: ",
+    "model dimension: ",
+    "Hole Wizard class: ",
+    "general tolerance: ",
+)
+
+
+def version_1(profile: StandardsProfile) -> StandardsProfile:
+    return profile.model_copy(update={"version": 1, "hygiene": None, "general_tolerance": None})
+
+
+def with_profile(name: str, profile: StandardsProfile | None) -> ToolContext:
+    """The fixture's context, carrying a standards run over `profile` when one is given: the
+    joint checks read the attached profile and never load one."""
+    context = fixture_context(name)
+    if profile is not None:
+        attach_standards_run(
+            context, StandardsRun(profile=profile, documents=graded_documents(context.ir, profile))
+        )
+    return context
+
+
+def stacks_of(context: ToolContext) -> dict[str, Any]:
+    """The `hole.position_stack` findings, by their first input instance."""
+    return {
+        finding.inputs[0]: finding
+        for finding in context.require_session().findings
+        if finding.check == "hole.position_stack"
+    }
+
+
+@pytest.fixture(scope="module")
+def tolerances() -> tuple[ToolContext, dict[str, Any]]:
+    context = with_profile("tolerances", load_profile(PROFILE_A))
+    return context, run(context)
+
+
+def test_the_tolerances_fixture_is_two_joints_and_nothing_skipped(tolerances) -> None:
+    context, result = tolerances
+
+    assert result["joints"] == {"total": 2, "by_kind": {"pin": 1, "screw": 1}}
+    assert result["recognised_fasteners"] == 1
+    assert context.require_session().coverage.skipped == []
+
+
+def test_the_dowel_stack_is_size_only_with_h7_from_the_hole_dimension(tolerances) -> None:
+    """H7 on 3 mm is 0/+0.010 (ISO 286-1, the band up to and including 3 mm); the block's hole
+    is +0.002/+0.012 and the pin 0/-0.006, so the least clearance is (0 + 0.002)/2 = 0.001 mm
+    and the most (0.016 + 0.018)/2 = 0.017 mm, over two floating-fastener half clearances."""
+    context, _ = tolerances
+
+    stack = stacks_of(context)["hol:0001#1"]
+    inputs = stack.calculation.inputs
+
+    assert stack.status == "checked_within_scope"
+    assert stack.calculation.result == {
+        "model": "size_only",
+        "offset_mm": 0.0,
+        "position_half_zones_mm": 0.0,
+        "clearance_min_mm": 0.001,
+        "clearance_max_mm": 0.017,
+        "fastener_min_mm": 2.994,
+        "fastener_max_mm": 3.0,
+    }
+    assert (inputs["hol:0001#1_min"].value, inputs["hol:0001#1_max"].value) == (3.0, 3.01)
+    assert (inputs["hol:0003#1_min"].value, inputs["hol:0003#1_max"].value) == (3.002, 3.012)
+    assert (inputs["fastener_min"].value, inputs["fastener_max"].value) == (2.994, 3.0)
+    assert stack.observed.endswith(
+        "The member axes are 0.0 mm apart, within the 0.001 mm the smallest permitted "
+        "clearance allows (size only)"
+    )
+
+
+def test_each_dowel_size_cites_its_own_source(tolerances) -> None:
+    context, _ = tolerances
+
+    inputs = stacks_of(context)["hol:0001#1"].calculation.inputs
+
+    assert inputs["hol:0001#1_source"] == (
+        "model dimension: dimension KALOMIR1@FICT-HOLE-0001 (mdm:0001): fit class H7, per "
+        "ISO 286-1 (iso286.yaml)"
+    )
+    assert inputs["hol:0003#1_source"] == (
+        "model dimension: dimension KALOMIR4@FICT-HOLE-0001 (mdm:0004)"
+    )
+    assert inputs["fastener_source"] == (
+        "model dimension: dimension KALOMIR5@FICT-HOLE-0001 (mdm:0005)"
+    )
+
+
+def test_a_position_zone_with_no_unit_binds_nothing_and_says_why(tolerances) -> None:
+    """The GTol on the plate's dowel face states 0.02 with no unit, and the package carries
+    no length unit for the part: the stack stays size-only and names the zone it could not
+    size rather than guessing millimetres (SC-007)."""
+    context, _ = tolerances
+
+    excluded = stacks_of(context)["hol:0001#1"].calculation.excluded_effects
+
+    [position] = [item for item in excluded if item.startswith("the position of hol:0001#1")]
+    assert (
+        "model annotation: man:0001 is attached to hol:0001#1 and states a position zone of "
+        "0.02, but the part's length unit is not in the package, so the zone's size is unknown"
+    ) in position
+
+
+def test_the_screw_stack_is_unresolved_naming_every_source(tolerances) -> None:
+    context, _ = tolerances
+
+    stack = stacks_of(context)["hol:0002#1"]
+    searched = stack.coverage_limits[1]
+
+    assert stack.status == "unresolved"
+    assert stack.observed.endswith(
+        "a tolerance for the size of hol:0002#1 is unknown; the check did not run"
+    )
+    assert searched.startswith("the size of hol:0002#1: searched drawing callout: ")
+    assert all(source in searched for source in EVERY_SOURCE)
+    assert "2 dimensions of doc:0002 are 4.5 mm (mdm:0002, mdm:0003)" in searched
+    assert "a Hole Wizard fit is a screw clearance fit" in searched
+    assert (
+        "general tolerance: the precision its dimension is written to is not recorded"
+    ) in searched
+
+
+def test_the_counterbore_is_sized_by_its_wizard_through_hole_diameter_as_read(tolerances) -> None:
+    """IR 1.5.0 carries the Hole Wizard's own sizes; the alignment reads the counterbore's
+    bore from `thru_hole_diameter` and keeps the metres it was written in."""
+    context, _ = tolerances
+
+    [alignment] = [
+        finding
+        for finding in context.require_session().findings
+        if finding.check == "hole.nominal_alignment" and finding.inputs[0] == "hol:0002#1"
+    ]
+    inputs = alignment.calculation.inputs
+
+    assert inputs["H_hol:0002"].value == 4.5
+    assert inputs["H_hol:0002_source"] == "the Hole Wizard diameter"
+    assert (inputs["H_hol:0002_as_read"].value, inputs["H_hol:0002_as_read"].unit) == (0.0045, "m")
+
+
+@pytest.mark.parametrize(
+    ("profile", "general"),
+    [
+        ("version 1", "general tolerance: the profile is version 1, which declares no general "),
+        (None, "general tolerance: no standards profile is attached"),
+    ],
+)
+def test_without_a_version_2_profile_the_general_source_is_still_searched(
+    profile: str | None, general: str
+) -> None:
+    attached = None if profile is None else version_1(load_profile(PROFILE_A))
+    context = with_profile("tolerances", attached)
+    run(context)
+
+    stacks = stacks_of(context)
+
+    assert general in stacks["hol:0002#1"].coverage_limits[1]
+    assert stacks["hol:0001#1"].calculation.result["model"] == "size_only"
+
+
+def test_a_version_2_profile_alone_is_no_source_so_the_one_skipped_item_remains() -> None:
+    """General tolerance binds nothing before feature 011 records a dimension's precision, so
+    a version 2 profile on a package with no other source leaves the one skipped item."""
+    context = with_profile("big-assembly", load_profile(PROFILE_A))
+    run(context)
+    session = context.require_session()
+
+    stacks = [item for item in session.coverage.skipped if item.check == "hole.position_stack"]
+
+    assert [item.reason for item in stacks] == [
+        "no tolerance source is read for this package; searched: drawing callout, model "
+        "annotation, model dimension, Hole Wizard class, general tolerance"
+    ]
+    assert not stacks_of(context)
 
 
 # --- through the registry -------------------------------------------------------------------

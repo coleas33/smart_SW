@@ -89,6 +89,37 @@ with one `(source, why)` per source, for example `("drawing", "not available bef
 `("hole_wizard", "no fit class recorded for hol:0018")`, `("general", "the profile is version 1")`.
 Nothing else produces a limit.
 
+**As built (T083).** Four readings the table above leaves open, each settled on the side of
+binding less rather than guessing:
+
+- **Source 2, the zone's unit.** The package does not carry a part's length unit, and a frame
+  value is text (`"0.02"`). A zone binds only when its text states `mm` or `in`; a unitless value
+  binds nothing and says so ("…states a position zone of 0.02, but the part's length unit is not
+  in the package, so the zone's size is unknown"). A size subject is never bound by a geometric
+  tolerance ("the geometric tolerances attached to … state no size tolerance").
+- **Source 3, a class-only fit.** A dimension whose `tolerance` is null but which carries
+  `fit_hole_class` (for a `hole_size`) or `fit_shaft_class` (for a `pin_size`) binds through the
+  ISO 286 table of section 5, cited as the dimension and the class. **This is where a hole's ISO
+  class arrives**: the C# lane found that the Hole Wizard's own fit (`HoleFit`) is a screw
+  clearance fit - close, normal or loose - and never an ISO 286 class. A radius dimension's
+  limits are doubled to the diameter's. A `none` or `basic` tolerance binds nothing.
+- **Source 4** therefore binds only when `fit_class_raw` happens to be an ISO 286 designation; a
+  clearance fit such as `swScrewClearanceNormal` is named and declined ("a Hole Wizard fit is a
+  screw clearance fit").
+- **Source 5 binds nothing before feature 011.** The subject's written precision is a drawing's
+  (`.XX`), and no package records it yet, so the general block is searched and named ("the
+  precision its dimension is written to is not recorded, so no decimal-place band applies") but
+  never bound; 011 records the precision and the band then applies unchanged.
+
+**The lookup `check_joints` asks (T085).** `ResolverLookup(package, profile)` resolves every
+subject with the profile of the standards run attached to the review (`None` without one; the
+tool never loads a profile). Its `holds_any_source()` is true only when some source *could*
+bind something in the package: a diameter or radius dimension with a `bilateral`, `symmetric`
+or fit tolerance, a position frame whose value states its unit, or a Hole Wizard fit class the
+table carries. Without one the stack stays the one `skipped` item naming the five sources, as
+with `NoSources` (which stays for tests), rather than an unresolved finding per joint saying the
+same thing; a version 2 profile alone is not a source (by the rule above).
+
 ## 5. The ISO 286 table (`checks/iso286.yaml`)
 
 IT5 to IT11 over the size ranges up to 120 mm and the `H` and `h` classes (fundamental deviation

@@ -11,8 +11,8 @@ import math
 
 import pytest
 
-from swreview.checks.joints import build_joint_map
-from swreview.ir.models import CylinderFace, EvidencePackage, Quantity, Vec3
+from swreview.checks.joints import build_joint_map, native_size
+from swreview.ir.models import CylinderFace, EvidencePackage, HoleWizardData, Quantity, Vec3
 from tests.support.mechanical import Face, Instance, PackageBuilder
 
 Z = (0.0, 0.0, 1.0)
@@ -132,6 +132,67 @@ def test_a_hole_wizard_diameter_wins_over_the_faces_labelled_hole_wizard() -> No
 
     assert (instance.size_mm, instance.size_source) == (3.175, "hole_wizard")
     assert instance.bore_mm == 3.1
+
+
+# IR 1.5.0 (feature 010 US8): the Hole Wizard's own sizes, by hole type, when `Hole.diameter`
+# is absent; never the other type's size and never derived.
+
+
+def wizard_instance(hole_type: str, **sizes: float) -> tuple[float, str]:
+    builder = builder_with("resolved")
+    builder.hole(
+        "cmp:0001",
+        hole_type=hole_type,  # type: ignore[arg-type]
+        size="M4",
+        end_condition="through",
+        instances=[row_of((0.0, 0.0), Face(4.6, 0.0, 6.0))],
+        wizard=HoleWizardData(
+            **{name: Quantity(value=value, unit="m") for name, value in sizes.items()}
+        ),
+    )
+    [instance] = build_joint_map(builder.build().package).instances
+    return instance.size_mm, instance.size_source
+
+
+@pytest.mark.parametrize("hole_type", ["clearance", "counterbore", "countersink", "simple"])
+def test_a_wizard_through_hole_diameter_sizes_every_hole_but_a_tapped_one(hole_type: str) -> None:
+    assert wizard_instance(hole_type, thru_hole_diameter=0.0045) == (4.5, "hole_wizard")
+
+
+def test_a_wizard_tap_drill_sizes_a_tapped_hole() -> None:
+    assert wizard_instance("tapped", tap_drill_diameter=0.0033) == (3.3, "hole_wizard")
+
+
+@pytest.mark.parametrize(
+    ("hole_type", "sizes"),
+    [
+        ("tapped", {"thru_hole_diameter": 0.0045}),
+        ("clearance", {"tap_drill_diameter": 0.0033}),
+        ("clearance", {}),
+    ],
+)
+def test_a_wizard_without_its_types_size_leaves_the_face_bore(
+    hole_type: str, sizes: dict[str, float]
+) -> None:
+    assert wizard_instance(hole_type, **sizes) == (4.6, "face")
+
+
+def test_hole_diameter_wins_over_the_wizard_sizes() -> None:
+    builder = builder_with("resolved")
+    builder.hole(
+        "cmp:0001",
+        hole_type="clearance",
+        size="M4",
+        end_condition="through",
+        instances=[row_of((0.0, 0.0), Face(4.6, 0.0, 6.0))],
+        wizard=HoleWizardData(thru_hole_diameter=Quantity(value=0.0045, unit="m")),
+    )
+    package = builder.build().package
+    hole = package.holes[0].model_copy(update={"diameter": Quantity(value=4.8, unit="mm")})
+
+    assert native_size(hole) == Quantity(value=4.8, unit="mm")
+    assert native_size(package.holes[0]) == Quantity(value=0.0045, unit="m")
+    assert native_size(package.holes[0].model_copy(update={"wizard": None})) is None
 
 
 def gap_reasons(package: EvidencePackage) -> dict[str, str]:

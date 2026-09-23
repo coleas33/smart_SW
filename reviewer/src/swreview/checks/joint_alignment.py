@@ -31,7 +31,7 @@ from typing import Literal
 
 from swreview import units
 from swreview.checks.fastener import parse_thread
-from swreview.checks.joints import HoleInstance, Joint, JointMap, plain_diameter_mm
+from swreview.checks.joints import HoleInstance, Joint, JointMap, native_size, plain_diameter_mm
 from swreview.checks.result import (
     ROUNDING_ASSUMPTION,
     CheckResult,
@@ -299,7 +299,7 @@ def check_nominal_alignment(
         key = _term_key(instance, joint)
         inputs[f"H_{key}"] = _mm(h_mm)
         inputs[f"H_{key}_source"] = h_source
-        diameter = instance.hole.diameter
+        diameter = native_size(instance.hole)
         if instance.size_source == "hole_wizard" and diameter is not None and diameter.unit != "mm":
             inputs[f"H_{key}_as_read"] = diameter
         terms.append(

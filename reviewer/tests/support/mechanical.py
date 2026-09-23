@@ -64,13 +64,19 @@ from swreview.ir.models import (
     ExtractorInfo,
     FaceGeometry,
     Gap,
+    GtolFrame,
     Hole,
+    HoleWizardData,
     Interference,
     InterferenceSettings,
     Manifest,
     ManifestEntry,
     MassProperties,
+    ModelAnnotation,
+    ModelDimension,
     Quantity,
+    SourceRef,
+    Tolerance,
     Vec3,
     Volume,
 )
@@ -439,6 +445,9 @@ class PackageBuilder:
     root_properties: Mapping[str, str] | None = None
     package_id: UUID = PACKAGE_ID
     created_at: datetime = CREATED_AT
+    schema_version: str = FIXTURE_SCHEMA_VERSION
+    """1.4.0 unless a fixture needs the 1.5.0 members (`wizard`, model dimensions and
+    annotations), which the tolerances fixture does."""
     _documents: list[Document] = field(default_factory=list)
     _components: dict[str, ComponentInstance] = field(default_factory=dict)
     _holes: list[Hole] = field(default_factory=list)
@@ -448,6 +457,8 @@ class PackageBuilder:
     _interferences: list[Interference] = field(default_factory=list)
     _gaps: list[Gap] = field(default_factory=list)
     _screw_heads: dict[str, str] = field(default_factory=dict)
+    _model_dimensions: list[ModelDimension] = field(default_factory=list)
+    _model_annotations: list[ModelAnnotation] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.root_id = self.document(self.design_stem, "assembly", properties=self.root_properties)
@@ -652,6 +663,7 @@ class PackageBuilder:
         hole_depth_mm: float | None = None,
         faceless_axis: Instance | None = None,
         feature_name: str | None = None,
+        wizard: HoleWizardData | None = None,
     ) -> str:
         """One Hole Wizard feature: one row, one face per instance and diameter (R2.1).
 
@@ -712,9 +724,83 @@ class PackageBuilder:
                 diameter=None,
                 axis=axis,
                 face_ids=face_ids,
+                wizard=wizard,
             )
         )
         return hole_id
+
+    def model_dimension(
+        self,
+        document_id: str,
+        *,
+        nominal_mm: float,
+        dimension_type: Literal["diameter", "radius", "linear"] = "diameter",
+        name: str | None = None,
+        tolerance: tuple[Literal["bilateral", "symmetric", "none"], float, float | None]
+        | None = None,
+        tolerance_type_raw: int | None = None,
+        fit_hole_class: str | None = None,
+        fit_shaft_class: str | None = None,
+    ) -> str:
+        """One model dimension (schema 1.5.0) in metres, as `ToleranceDumper` writes it:
+        `tolerance` is `(kind, upper_mm, lower_mm)` with signed deviations, or `None` for a
+        type the IR cannot express (a class-only fit among them)."""
+        dimension_id = f"mdm:{len(self._model_dimensions) + 1:04d}"
+        label = name or f"KALOMIR{len(self._model_dimensions) + 1}@FICT-HOLE-0001"
+        source = SourceRef(document_id=document_id, annotation=label)
+        built = None
+        if tolerance is not None:
+            kind, upper, lower = tolerance
+            built = Tolerance(
+                kind=kind,
+                upper=Quantity(value=upper / 1000.0, unit="m"),
+                lower=None if lower is None else Quantity(value=lower / 1000.0, unit="m"),
+                source=source,
+            )
+        self._model_dimensions.append(
+            ModelDimension(
+                id=dimension_id,
+                document_id=document_id,
+                feature_name=label.split("@", 1)[-1],
+                name=label,
+                dimension_type=dimension_type,
+                dimension_type_raw={"diameter": 6, "radius": 5, "linear": 1}[dimension_type],
+                nominal=Quantity(value=nominal_mm / 1000.0, unit="m"),
+                tolerance=built,
+                tolerance_type_raw=tolerance_type_raw,
+                fit_hole_class=fit_hole_class,
+                fit_shaft_class=fit_shaft_class,
+                persist_ref=persist_ref(dimension_id),
+                persist_ref_scope=document_id,
+            )
+        )
+        return dimension_id
+
+    def model_annotation(
+        self,
+        document_id: str,
+        *,
+        face_ids: Sequence[str],
+        symbols: Sequence[str] = (),
+        values: Sequence[str] = (),
+    ) -> str:
+        """One geometric tolerance (schema 1.5.0) attached to `face_ids`, its one frame's
+        symbols and values verbatim, as `ToleranceDumper` writes them."""
+        annotation_id = f"man:{len(self._model_annotations) + 1:04d}"
+        refs = [item.face.persist_ref for item in self._faces if item.face.id in set(face_ids)]
+        self._model_annotations.append(
+            ModelAnnotation(
+                id=annotation_id,
+                document_id=document_id,
+                kind="gtol",
+                frames=[GtolFrame(number=1, symbols_raw=list(symbols), values_raw=list(values))],
+                is_dimxpert=False,
+                attached_persist_refs=refs,
+                persist_ref=persist_ref(annotation_id),
+                persist_ref_scope=document_id,
+            )
+        )
+        return annotation_id
 
     def gap(self, **fields: Any) -> None:
         self._gaps.append(Gap(**fields))
@@ -896,7 +982,7 @@ class PackageBuilder:
             )
         root = self._document(self.root_id)
         package = EvidencePackage(
-            schema_version=FIXTURE_SCHEMA_VERSION,
+            schema_version=self.schema_version,
             package_id=self.package_id,
             created_at=self.created_at,
             extractor=ExtractorInfo(
@@ -936,6 +1022,8 @@ class PackageBuilder:
             bodies=bodies,
             interferences=self._interferences,
             gaps=self._gaps,
+            model_dimensions=self._model_dimensions,
+            model_annotations=self._model_annotations,
         )
         return Built(package=package, meshes=meshes)
 

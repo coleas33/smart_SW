@@ -54,6 +54,7 @@ from swreview.ir.models import (
     EvidencePackage,
     FaceGeometry,
     Hole,
+    Quantity,
 )
 
 if TYPE_CHECKING:  # the fastener module imports this one; the type is only annotated here
@@ -80,6 +81,7 @@ __all__ = [
     "folded_result",
     "joint_label",
     "load_joint_rules",
+    "native_size",
     "pattern_group",
     "plain_diameter_mm",
 ]
@@ -599,6 +601,21 @@ def _explode(
     return instances, gaps
 
 
+def native_size(hole: Hole) -> Quantity | None:
+    """The hole's size as the Hole Wizard states it, or `None`: `Hole.diameter`, else (IR
+    1.5.0) the wizard's tap drill for a tapped hole and its through-hole diameter for any
+    other (`contracts/joint-map.md` section 1). Never derived."""
+    if hole.diameter is not None:
+        return hole.diameter
+    if hole.wizard is None:
+        return None
+    return (
+        hole.wizard.tap_drill_diameter
+        if hole.hole_type == "tapped"
+        else hole.wizard.thru_hole_diameter
+    )
+
+
 def _instance(
     hole: Hole, number: int, group: list[FaceGeometry], rules: JointRules
 ) -> HoleInstance:
@@ -617,8 +634,9 @@ def _instance(
             if face.cylinder is not None and _mm(face.cylinder.radius_m * 2.0) == diameters[-1]
         ]
         counterbore_geometry = _Geometry(geometry.origin, direction, _corners(largest))
-    if hole.diameter is not None:
-        size_mm, source = round_length(units.as_mm(hole.diameter)), "hole_wizard"
+    native = native_size(hole)
+    if native is not None:
+        size_mm, source = round_length(units.as_mm(native)), "hole_wizard"
     else:
         size_mm, source = diameters[0], "face"
     aligned = is_axis_aligned(first.axis_dir, rules.axis_aligned_deg)

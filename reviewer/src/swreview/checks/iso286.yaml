@@ -1,0 +1,31 @@
+# ISO 286 limits for the hole and shaft classes a tolerance source may name (feature 010 US8,
+# contracts/tolerances.md section 5).
+#
+# `checks/tolerances.py` turns a class such as H7 on a 10 mm nominal into limits (+0.015/0)
+# only through this table, so a class it does not carry - a letter other than H or h, a grade
+# outside IT5 to IT11, a size over 120 mm - is recorded and cited and binds nothing. Nothing
+# is interpolated or extrapolated.
+#
+# Size ranges are "over, up to and including", the first one from 0 up to and including 3 mm.
+# H is a hole class and h a shaft class, both with a fundamental deviation of zero: H has
+# EI = 0 and ES = +IT, h has es = 0 and ei = -IT.
+
+version: 1
+source: >-
+  ISO 286-1:2010, Table 1, standard tolerance values IT5 to IT11 for nominal sizes up to
+  120 mm; the H and h fundamental deviations are zero
+
+size_ranges_mm: [[0, 3], [3, 6], [6, 10], [10, 18], [18, 30], [30, 50], [50, 80], [80, 120]]
+
+it_grades_um:
+  IT5: [4, 5, 6, 8, 9, 11, 13, 15]
+  IT6: [6, 8, 9, 11, 13, 16, 19, 22]
+  IT7: [10, 12, 15, 18, 21, 25, 30, 35]
+  IT8: [14, 18, 22, 27, 33, 39, 46, 54]
+  IT9: [25, 30, 36, 43, 52, 62, 74, 87]
+  IT10: [40, 48, 58, 70, 84, 100, 120, 140]
+  IT11: [60, 75, 90, 110, 130, 160, 190, 220]
+
+classes:
+  H: {kind: hole, fundamental_deviation_um: 0}
+  h: {kind: shaft, fundamental_deviation_um: 0}
