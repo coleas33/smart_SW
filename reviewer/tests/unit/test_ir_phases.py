@@ -59,12 +59,14 @@ PHASE_ORDER = [
     "cutlist",
     "drawing",
     "hole",
+    "tolerance",
     "fastener",
     "face",
     "body",
 ]
 """Every phase of a dump, in the order `PackageWriter.PhaseOrder` runs them (schema 1.4.0,
-006 `contracts/ir-additions.md` section 6).
+006 `contracts/ir-additions.md` section 6; `tolerance` joined after `hole` at 1.5.0, feature
+010 T091).
 
 Pinned on this side as well as in `PackageWriterTests` because the two sides have to
 describe the same phase vocabulary: `DumpPhase.name`'s field description feeds the
@@ -142,10 +144,10 @@ def test_the_generated_schema_names_the_same_phases() -> None:
 def test_the_two_new_phases_are_named_after_the_five_a_model_check_runs() -> None:
     """Order is not decoration: `standards` extends `model_check`, and a consumer reading
     the rows top-down sees the five shared phases, then the two this feature adds, then the
-    four geometry phases no standards check reads."""
+    geometry phases no standards check reads - with 1.5.0's `tolerance` read after `hole`."""
     assert PHASE_ORDER[:5] == ["document", "manifest", "mate", "feature", "equation"]
     assert PHASE_ORDER[5:7] == ["cutlist", "drawing"]
-    assert PHASE_ORDER[7:] == ["hole", "fastener", "face", "body"]
+    assert PHASE_ORDER[7:] == ["hole", "tolerance", "fastener", "face", "body"]
 
 
 def test_a_phase_that_never_started_is_recorded_skipped_with_no_elapsed_time() -> None:
@@ -169,7 +171,7 @@ def test_a_phase_that_never_started_is_recorded_skipped_with_no_elapsed_time() -
     assert [phase.name for phase in restored.extractor.phases] == PHASE_ORDER
     skipped = {phase.name: phase for phase in restored.extractor.phases
                if phase.status == "skipped"}
-    assert set(skipped) == {"cutlist", "drawing", "hole", "fastener", "face", "body"}
+    assert set(skipped) == {"cutlist", "drawing", "hole", "tolerance", "fastener", "face", "body"}
     assert all(phase.elapsed_ms is None for phase in skipped.values())
 
 

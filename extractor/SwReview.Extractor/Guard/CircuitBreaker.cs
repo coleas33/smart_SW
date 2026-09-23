@@ -76,12 +76,7 @@ public sealed class CircuitBreaker
             throw new ArgumentNullException(nameof(operation));
         }
 
-        if (IsOpen)
-        {
-            throw new CircuitOpenError(
-                $"The SOLIDWORKS circuit is open after {_consecutiveFailures} consecutive failures. "
-                + "Call Reset() once the session is known good.");
-        }
+        ThrowIfOpen();
 
         try
         {
@@ -98,6 +93,39 @@ public sealed class CircuitBreaker
         {
             _consecutiveFailures++;
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Runs an OPTIONAL read (feature 010): one whose failure the caller records as a gap on that
+    /// one value, such as a Hole Wizard field SOLIDWORKS may not answer for a hole type. An open
+    /// circuit refuses it exactly as <see cref="Execute{T}"/> does, and a success clears the count
+    /// because the session answered; a failure is rethrown unchanged and is NOT counted. A
+    /// property refused on every hole of one type therefore cannot open the circuit by itself,
+    /// while a dead session still opens it on the next counted call.
+    /// </summary>
+    public T ExecuteOptional<T>(Func<T> operation)
+    {
+        if (operation == null)
+        {
+            throw new ArgumentNullException(nameof(operation));
+        }
+
+        ThrowIfOpen();
+
+        T result = operation();
+        _consecutiveFailures = 0;
+        return result;
+    }
+
+    /// <summary>Refuses every call while the circuit is open, naming the count that opened it.</summary>
+    private void ThrowIfOpen()
+    {
+        if (IsOpen)
+        {
+            throw new CircuitOpenError(
+                $"The SOLIDWORKS circuit is open after {_consecutiveFailures} consecutive failures. "
+                + "Call Reset() once the session is known good.");
         }
     }
 

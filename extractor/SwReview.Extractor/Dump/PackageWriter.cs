@@ -57,7 +57,7 @@ public sealed class PackageWriter
     private static readonly string[] PhaseOrder =
     {
         "document", "manifest", "mate", "feature", "equation", "cutlist", "drawing",
-        "hole", "fastener", "face", "body",
+        "hole", "tolerance", "fastener", "face", "body",
     };
 
     /// <summary>
@@ -81,6 +81,7 @@ public sealed class PackageWriter
     private readonly IFastenerSource _fasteners;
     private readonly IFaceSource _faces;
     private readonly IMeshSource _meshes;
+    private readonly IToleranceSource? _tolerances;
     private readonly string? _swVersion;
     private readonly string _machine;
 
@@ -98,7 +99,8 @@ public sealed class PackageWriter
         IFaceSource faces,
         IMeshSource meshes,
         string? swVersion,
-        string? machine = null)
+        string? machine = null,
+        IToleranceSource? tolerances = null)
     {
         _components = components ?? throw new ArgumentNullException(nameof(components));
         _documents = documents ?? throw new ArgumentNullException(nameof(documents));
@@ -119,6 +121,11 @@ public sealed class PackageWriter
         _fasteners = fasteners ?? throw new ArgumentNullException(nameof(fasteners));
         _faces = faces ?? throw new ArgumentNullException(nameof(faces));
         _meshes = meshes ?? throw new ArgumentNullException(nameof(meshes));
+
+        // The schema 1.5.0 phase (feature 010) is optional for the reason the two 1.4.0 phases
+        // are: a build with no reader wired records it `skipped`, which says so, rather than
+        // writing no model_dimensions[] beside a row that claims it ran.
+        _tolerances = tolerances;
         _swVersion = swVersion;
         _machine = machine ?? Environment.MachineName;
     }
@@ -289,11 +296,12 @@ public sealed class PackageWriter
             });
         }
 
-        // The four geometry phases, gated by the profile (plan key point 8). ModelCheck
+        // The geometry phases - hole, tolerance (schema 1.5.0), fastener, face and body - gated
+        // by the profile (plan key point 8). ModelCheck
         // skips them and records NOTHING beyond extractor.profile: unlike --features none
         // and --equations off, which are a dump that dropped evidence it normally carries
         // and so owe the reader a sentence, a model-check package's shape is declared once
-        // on the extractor block. Four gaps on every check run would be noise an engineer
+        // on the extractor block. A gap per skipped phase on every check run would be noise an engineer
         // learns to skip, which is how a real gap gets lost (Principle I).
         bool geometry = options.Profile == DumpProfile.Full;
 
@@ -304,6 +312,27 @@ public sealed class PackageWriter
                 HoleDumpResult result = _holes.Dump(scope);
                 package.Holes.AddRange(result.Holes);
                 package.Threads.AddRange(result.Threads);
+            });
+        }
+
+        // The tolerance phase (schema 1.5.0, feature 010): the part documents' dimensions with
+        // their tolerances, and their GTols and datum tags. Under the Full profile only, with
+        // the geometry phases it sits among, because no Model check or Standards check reads it.
+        // The arrays are assigned only when they carry rows, as the cut list's is.
+        if (!aborted && geometry && _tolerances != null)
+        {
+            aborted |= !RunPhase(gaps, phases, "tolerance", "read model dimension tolerances and annotations", () =>
+            {
+                ToleranceDumpResult result = _tolerances.Dump(scope);
+                if (result.Dimensions.Count > 0)
+                {
+                    package.ModelDimensions = new List<ModelDimension>(result.Dimensions);
+                }
+
+                if (result.Annotations.Count > 0)
+                {
+                    package.ModelAnnotations = new List<ModelAnnotation>(result.Annotations);
+                }
             });
         }
 

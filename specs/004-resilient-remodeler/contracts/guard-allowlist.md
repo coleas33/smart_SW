@@ -57,6 +57,42 @@ count; this list is that table's bare names, `SetText` counted once because
 is untouched), and no member of `RemodelGuard.ExcludedMembers` became redundant. A denial is a
 narrowing, so none of this is a constitution exception.
 
+**Feature 010 (automatic mechanical checks)** adds the members below with its Hole Wizard and
+`tolerance` reads (`010-mechanical-checks/contracts/tolerances.md` section 2): the setters beside
+each value those reads take - the dimension tolerance, the GTol frames, the datum label, the
+annotation's attachment and the Hole Wizard data. Every name was reflected on the 2024 SP5
+interop (32.5.0.48); the numbered siblings of a listed setter (`SetFrameValues2`,
+`SetFrameSymbols2`, `SetValues2`) are there because the same family writes the same value
+through them. `set_*Diameter`, `set_*Depth` and `set_*Angle` are every such setter
+`IWizardHoleFeatureData2` declares, not only the ones beside a read: `ModifyDefinition`, already
+denied, is the only way a wizard edit takes effect, and these close the family by name as well.
+This table is the membership: `MechanicalChecksDenylistTests` (in `GuardTests.cs`) parses it,
+and `RemodelGuardTests.ExpectedDeniedMembers` lists the same bare names.
+
+| Member (feature 010) | The read it sits beside |
+|---|---|
+| `IDimension.SetToleranceType`, `IDimension.SetToleranceValues`, `IDimension.SetToleranceFitValues` | `IDimension.Tolerance`; the three are the obsolete writers of the same tolerance |
+| `IDimensionTolerance.set_Type`, `IDimensionTolerance.set_FitType` | `IDimensionTolerance.Type` |
+| `IDimensionTolerance.SetValues`, `IDimensionTolerance.SetValues2` | `IDimensionTolerance.GetMinValue2`, `GetMaxValue2` |
+| `IDimensionTolerance.SetFitValues` | `IDimensionTolerance.GetHoleFitValue`, `GetShaftFitValue` |
+| `IGtol.SetFrameValues`, `IGtol.SetFrameValues2` | `IGtol.GetFrameValues` |
+| `IGtol.SetFrameSymbols`, `IGtol.SetFrameSymbols2` | `IGtol.GetFrameSymbols3` |
+| `IGtol.AddFrame`, `IGtol.DeleteFrame` | `IGtol.GetFrameCount`, `IGtol.GetFrame` |
+| `IGtol.SetDatumIdentifier` | `IGtol.GetDatumIdentifier` |
+| `IGtolFrame.SetSymbolXml`, `IGtolFrame.SetIndicator`, `IGtolFrame.AddIndicator`, `IGtolFrame.DeleteIndicator`, `IGtolFrame.SetFrameToleranceType` | `IGtolFrame.GetSymbolXml` |
+| `IDatumTag.SetLabel` | `IDatumTag.GetLabel` |
+| `IAnnotation.SetAttachedEntities`, `IAnnotation.ISetAttachedEntities` | `IAnnotation.GetAttachedEntities3` |
+| `IWizardHoleFeatureData2.set_HoleFit` | `IWizardHoleFeatureData2.HoleFit` |
+| `IWizardHoleFeatureData2.set_ThreadClass` | `IWizardHoleFeatureData2.ThreadClass` |
+| `IWizardHoleFeatureData2.set_HeadClearance` | `IWizardHoleFeatureData2.HeadClearance` |
+| `IWizardHoleFeatureData2.set_Diameter`, `.set_CounterBoreDiameter`, `.set_CounterDrillDiameter`, `.set_CounterSinkDiameter`, `.set_MinorDiameter`, `.set_MajorDiameter`, `.set_HoleDiameter`, `.set_ThruHoleDiameter`, `.set_TapDrillDiameter`, `.set_ThruTapDrillDiameter`, `.set_NearCounterSinkDiameter`, `.set_MidCounterSinkDiameter`, `.set_FarCounterSinkDiameter`, `.set_ThreadDiameter` | the diameter reads (`Diameter`, `ThruHoleDiameter`, `TapDrillDiameter`, `CounterBoreDiameter`, `CounterSinkDiameter`) |
+| `IWizardHoleFeatureData2.set_Depth`, `.set_CounterBoreDepth`, `.set_CounterDrillDepth`, `.set_HoleDepth`, `.set_ThruHoleDepth`, `.set_TapDrillDepth`, `.set_ThruTapDrillDepth`, `.set_ThreadDepth` | the depth reads (`HoleDepth`, `ThreadDepth`, `CounterBoreDepth`) |
+| `IWizardHoleFeatureData2.set_CounterDrillAngle`, `.set_CounterSinkAngle`, `.set_DrillAngle`, `.set_NearCounterSinkAngle`, `.set_MidCounterSinkAngle`, `.set_FarCounterSinkAngle`, `.set_ThreadAngle` | the angle read (`CounterSinkAngle`) |
+
+**None of them widens this allowlist either.** No stage-1 key's bare name is among them - in
+particular `set_Name` and `set_Description` are not - so the five overriding keys and
+`RemodelGuard.ExcludedMembers` answer exactly as before. The reads beside them stay allowed.
+
 004 makes exactly one **visibility-only** change to that file: `DeniedMembers` and
 `DeniedPrefixes` become `public static readonly IReadOnlyCollection<string>` instead of
 `private static readonly`, with no member added, removed or reworded. The tests below read the

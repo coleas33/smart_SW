@@ -1445,7 +1445,7 @@ class DumpPhase(IRModel):
     name: str = Field(
         description=(
             "The phase as `PackageWriter` names it in its gaps: document, manifest, mate, "
-            "feature, equation, cutlist, drawing, hole, fastener, face, body"
+            "feature, equation, cutlist, drawing, hole, tolerance, fastener, face, body"
         )
     )
     elapsed_ms: int | None = Field(
@@ -1477,7 +1477,7 @@ class ExtractorInfo(IRModel):
         default="full",
         description=(
             "Which dump profile wrote this package (schema 1.2.0). 'model_check' skips "
-            "the hole, fastener, face and body phases, so those arrays are empty by "
+            "the hole, tolerance, fastener, face and body phases, so those arrays are empty by "
             "design rather than by failure. 'standards' (schema 1.4.0) extends it with the "
             "cutlist phase, and the drawing phase for a drawing root. A closed enumeration "
             "in both serializers, so a pre-1.4.0 reader refuses a 'standards' package "
