@@ -1181,8 +1181,9 @@ session keeps its bytes. The stub rule is one parameter, `offered`, on `prune_hi
 `result_stub`; the replay counts a call it could not run as offered, since it ran where the
 recording was made. On the replay of the three fixtures with the pane defaults, lever 13 takes
 77,724, 73,952 and 60,112 requested tokens off (to 662,748, 457,686 and 452,302 at prune age 2),
-loses no finding and keeps reclassified at 3, 2 and 0; the figures are in tasks.md's Phase 9
-note.
+loses no finding and keeps reclassified at 3, 2 and 0 (the fixtures before decision 3A; since
+R2.56 the 3, 2 and 0 are their recorded contacts and none is reclassified); the figures are in
+tasks.md's Phase 9 note.
 
 ### Amendment 2026-09-23 (owner decision 3A): the replay fixtures follow the code
 
@@ -1270,7 +1271,12 @@ recorded findings are already the current code's, and every pass with the record
 records the same 3, 2 and 0 contacts again. The three group calls after the live call are then
 reproduced rather than estimated, so `big-assembly` has one estimated round again, the live
 call. The replay's reclassification stays pinned where a recording made before feature 010 is
-built on purpose: `test_replay_findings.py` (010 T094), on scripted recordings.
+built on purpose: `test_replay_findings.py` (010 T094), on scripted recordings. So the 3, 2 and
+0 live in three places - the generator's reclassification output, the fixtures' recorded
+contacts, and the replay reproducing those contacts exactly - and a test that pinned 3, 2 and 0
+reclassified on the fixtures pins 0, 0 and 0 and the recorded contacts instead, saying why
+(`contracts/replay.md` section 8). The rule that no recorded finding is lost or not replayable
+is unchanged, and absolute.
 
 **Alternatives.**
 

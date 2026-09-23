@@ -28,7 +28,8 @@ uv run pytest tests/unit/test_replay_findings.py tests/unit/test_replay_code_fir
 ```
 
 Expected: every existing payload pin, digest and golden unchanged; the replay of every recorded
-review loses no finding, leaves none unreplayable, and reclassifies 3, 2 and 0 contacts (SC-007);
+review loses no finding, leaves none unreplayable, and replays each fixture's recorded contacts
+exactly (3, 2 and 0 groups) with none reclassified (SC-007);
 the drawing family is offered on none of them.
 
 ## Scenario 1 (Foundational): the guard
