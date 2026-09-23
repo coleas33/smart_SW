@@ -49,6 +49,7 @@ from swreview.report.attention import (
     load_policy,
     rank,
 )
+from swreview.report.names import and_list
 from swreview.report.names import component_names as all_component_names
 from swreview.report.unexamined import not_examined
 
@@ -373,20 +374,39 @@ def review_summary(
         questions=_questions(session.evidence_requests, words, names, package),
         not_loaded=_not_loaded(package, words),
         goals=[_goal_line(goal, session, words) for goal in words.goals],
-        contacts=contacts_of(session),
+        contacts=contacts_of(session, names),
         component_names=names,
         resume_input_tokens=tokens,
         resume_text=words.resume.of(tokens),
     )
 
 
-def contacts_of(session: ReviewSession) -> ContactList | None:
-    """Feature 010's size-for-size contacts as the summary's list, or `None`.
+def contacts_of(session: ReviewSession, names: Mapping[str, str]) -> ContactList | None:
+    """Feature 010's size-for-size contacts as the summary's list, or `None` when there are none.
 
-    TODO(009 T019): map `session.contacts` (feature 010 T020) to `ContactView`s in session
-    order. Until that field exists no session has contacts.
+    The one reader of `ReviewSession.contacts` (research R2.7), in the order feature 010
+    recorded them. `names` is the summary's non-blank component names; a part without one
+    is named by its id in the sentence and `None` in `names`. A contact is never a finding:
+    no group, goal or headline counts it.
     """
-    return None
+    contacts = session.contacts
+    if not contacts:
+        return None
+    words = load_words()
+    items = [
+        ContactView(
+            id=contact.id,
+            component_ids=list(contact.component_ids),
+            names=[names.get(component) for component in contact.component_ids],
+            configuration=contact.configuration,
+            kind=contact.kind,
+            kind_label=words.labels.contact_kind[contact.kind],
+            volume_mm3=contact.volume_mm3,
+            text=and_list([names.get(component, component) for component in contact.component_ids]),
+        )
+        for contact in contacts
+    ]
+    return ContactList(count=len(items), text=words.contacts.of(len(items)), items=items)
 
 
 def _non_blank(names: Mapping[str, str]) -> dict[str, str]:

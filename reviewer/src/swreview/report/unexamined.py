@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from swreview.findings import ReviewModel
 from swreview.ir.models import ComponentInstance, EvidencePackage
+from swreview.report.names import and_list
 
 __all__ = [
     "CANNOT_SEE",
@@ -105,11 +106,4 @@ def _names_by_state(instances: list[ComponentInstance]) -> str:
     by_state: dict[str, list[str]] = {}
     for instance in instances:
         by_state.setdefault(instance.suppression, []).append(instance.name)
-    return ", ".join(f"{_and_list(names)} ({state})" for state, names in by_state.items())
-
-
-def _and_list(names: list[str]) -> str:
-    """One name as it is, two joined by "and", more with commas and a final "and"."""
-    if len(names) == 1:
-        return names[0]
-    return f"{', '.join(names[:-1])} and {names[-1]}"
+    return ", ".join(f"{and_list(names)} ({state})" for state, names in by_state.items())

@@ -129,7 +129,7 @@ internal static class SummarySample
         {
             new
             {
-                id = "CT-001",
+                id = "C-001",
                 component_ids = new[] { "cmp:0002", "cmp:0003" },
                 names = new[] { "Pin-A-1", "Plate-1" },
                 configuration = "Default",
@@ -140,7 +140,7 @@ internal static class SummarySample
             },
             new
             {
-                id = "CT-002",
+                id = "C-002",
                 component_ids = new[] { "cmp:0004", "cmp:0009" },
                 names = new[] { hostileName, null },
                 configuration = "Machined",
