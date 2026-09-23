@@ -35,7 +35,9 @@ Each group's `by_goal` lists the goals (section 3) with a non-zero count in that
 order. A folded family (`session.folded_families`, feature 008) is the `modelling_practice` line,
 built from the ranking row whose `family` is set: `{title, findings: len(member_finding_ids), rules:
 rule_count, finding_ids}`. The partition holds: the group counts plus the family's findings equal
-`len(session.findings)`.
+`len(session.findings)`. *Landed as* (T017): the row is the first with `family` set, in rank
+order; a second folded family, which no build writes, is not refused - its findings stay in the
+groups as if unfolded, so the partition still holds.
 
 ## 3. The goals
 

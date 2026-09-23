@@ -10,6 +10,8 @@ the engineer reads in the first ten seconds is decided here. The rules this pins
   too; "Decided" and "Within limits" only when they hold a finding;
 - **the headline is findings and issues**, the issues being the ranking's rows;
 - **questions are the open requests**, in session order;
+- **a folded family is its own line** (T016): its findings are in no group, the
+  modelling-practice line is its ranking row, and the partition still holds;
 - **the ranking is untouched**: `ReviewRanking` serializes `rank(session)` byte for byte
   plus one `summary` key, and the ranking module does not even import this one.
 
@@ -27,11 +29,12 @@ from typing import Any, get_args
 from uuid import UUID, uuid5
 
 import pytest
+from pydantic import ValidationError
 from pydantic_core import to_jsonable_python
 
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
-from swreview.report.attention import rank
+from swreview.report.attention import AttentionRow, rank
 from swreview.report.session import (
     Contact,
     Coverage,
@@ -42,6 +45,7 @@ from swreview.report.session import (
 )
 from swreview.report.summary import (
     COVERAGE_BUCKETS,
+    ModellingPractice,
     ReviewRanking,
     ReviewSummary,
     contacts_of,
@@ -360,7 +364,7 @@ def test_a_request_with_the_short_form_asks_its_short_question() -> None:
     )
 
 
-# --- 5. the parts not loaded, the names, what is not built yet -------------------------------
+# --- 5. the parts not loaded and the names ---------------------------------------------------
 
 
 def with_states(package: EvidencePackage, states: dict[str, str]) -> EvidencePackage:
@@ -409,14 +413,178 @@ def test_component_names_hold_the_non_blank_names_only() -> None:
     assert summary_of(session_of("names", []), None).component_names == {}
 
 
-def test_the_folded_family_is_absent_until_its_feature_lands() -> None:
-    session = session_of("absent", [spec("rms.folders.present")])
+# --- 6. the folded family (T016, feature 008's `folded_families` and its family row) ---------
+
+FAMILY_MIX: list[FindingSpec] = [
+    spec("interference.static"),  # F-001: decide
+    spec("rms.folders.present"),  # F-002: family (fix, were it not folded)
+    spec("rms.sketches.fully_defined", status="suspected"),  # F-003: family (verify)
+    spec("rms.grouping.all_features_in_a_group", disposition=disposition("rejected")),  # F-004
+    spec("rms.folders.present", status="checked_within_scope", component_ids=(PIN_ONE,)),  # F-005
+    spec("rms.params.global_variables_present", status="unresolved"),  # F-006: family (verify)
+    spec("stack.gap"),  # F-007: fix
+    spec("hole.coaxiality", status="suspected", component_ids=(PIN_TWO,)),  # F-008: decide
+]
+"""Five `rms.*` findings of four rules - demonstrated, suspected, decided, within scope and
+unresolved, so unfolded they would reach every group - beside three findings of other goals."""
+
+FAMILY_IDS = ["F-002", "F-003", "F-004", "F-005", "F-006"]
+
+
+def folded(session: ReviewSession, *families: str) -> ReviewSession:
+    return session.model_copy(update={"folded_families": list(families)})
+
+
+def family_row_of(session: ReviewSession) -> AttentionRow:
+    [row] = [row for row in rank(session).rows if row.family is not None]
+    return row
+
+
+def test_a_folded_familys_findings_are_in_no_group() -> None:
+    summary = summary_of(folded(session_of("family-groups", FAMILY_MIX), "rms"))
+
+    assert group_counts(summary) == {"decide": 2, "fix": 1, "verify": 0}
+    assert [goal.goal for group in summary.groups for goal in group.by_goal] == [
+        "interference",
+        "hole_alignment",
+        "fits_and_stacks",
+    ]
+
+
+def test_the_modelling_practice_line_is_the_family_row() -> None:
+    session = folded(session_of("family-line", FAMILY_MIX), "rms")
+    row = family_row_of(session)
+
+    practice = summary_of(session).modelling_practice
+
+    assert practice == ModellingPractice(
+        title=row.title,
+        findings=len(row.member_finding_ids),
+        rules=row.rule_count,  # type: ignore[arg-type]
+        finding_ids=row.member_finding_ids,
+    )
+    assert practice.model_dump() == {
+        "title": "Modelling practice: 5 findings across 4 rules",
+        "findings": 5,
+        "rules": 4,
+        "finding_ids": FAMILY_IDS,
+    }
+
+
+def test_the_partition_holds_with_the_family() -> None:
+    session = folded(session_of("family-partition", FAMILY_MIX), "rms")
+    summary = summary_of(session)
+
+    assert summary.modelling_practice is not None
+    assert sum(group_counts(summary).values()) + summary.modelling_practice.findings == len(
+        session.findings
+    )
+    assert summary.findings == len(session.findings) == 8
+
+
+def test_the_family_is_one_issue_and_every_finding_in_the_headline() -> None:
+    summary = summary_of(folded(session_of("family-headline", FAMILY_MIX), "rms"))
+
+    assert (summary.headline, summary.issues) == ("8 findings in 4 issues", 4)
+
+
+def test_the_modelling_practice_goal_still_counts_the_familys_open_findings() -> None:
+    """The goal says whether the family was reached, the groups say what to do (data-model
+    section 2): folding moves nothing on a goal line. T016 says "hygiene"; since 2026-09-23
+    `rms.` is the modelling-practice goal's own prefix (research R2.4)."""
+    plain = session_of("family-goals", FAMILY_MIX)
+
+    unfolded = summary_of(plain)
+    summary = summary_of(folded(plain, "rms"))
+
+    lines = {line.goal: line for line in summary.goals}
+    assert (lines["modelling_practice"].state, lines["modelling_practice"].findings) == (
+        "issues",
+        4,
+    ), "every family finding but the within-scope one"
+    assert lines["hygiene"].findings == 0
+    assert summary.goals == unfolded.goals
+
+
+def test_a_family_of_within_scope_findings_is_still_the_line_and_its_goal_reads_checked() -> None:
+    specs = [
+        spec("interference.static"),
+        spec("rms.folders.present", status="checked_within_scope"),
+        spec("rms.sketches.fully_defined", status="checked_within_scope"),
+    ]
+    summary = summary_of(folded(session_of("family-within-scope", specs), "rms"))
+
+    assert summary.modelling_practice is not None
+    assert (summary.modelling_practice.findings, summary.modelling_practice.rules) == (2, 2)
+    assert group_counts(summary) == {"decide": 1, "fix": 0, "verify": 0}
+    lines = {line.goal: line for line in summary.goals}
+    assert (lines["modelling_practice"].state, lines["modelling_practice"].findings) == (
+        "checked",
+        0,
+    )
+
+
+def test_a_family_row_without_its_rule_count_is_refused_not_guessed() -> None:
+    session = folded(session_of("family-no-rules", FAMILY_MIX), "rms")
+    ranking = rank(session)
+    rows = [
+        row.model_copy(update={"rule_count": None}) if row.family is not None else row
+        for row in ranking.rows
+    ]
+
+    with pytest.raises(ValidationError, match="rules"):
+        review_summary(ranking.model_copy(update={"rows": rows}), session, None)
+
+
+def test_without_the_field_the_same_session_gives_todays_groups_and_no_line() -> None:
+    session = session_of("family-unfolded", FAMILY_MIX)
+
     summary = summary_of(session, attention_package())
 
+    assert session.folded_families == []
     assert summary.modelling_practice is None
+    assert group_counts(summary) == {
+        "decide": 2,
+        "fix": 2,
+        "verify": 2,
+        "decided": 1,
+        "within_scope": 1,
+    }
 
 
-# --- 6. the size-for-size contacts (T018, feature 010's `ReviewSession.contacts`) ----------
+def test_a_folded_family_with_no_finding_has_no_line_and_moves_nothing() -> None:
+    specs = [spec("interference.static"), spec("stack.gap")]
+    plain = session_of("family-empty", specs)
+
+    summary = summary_of(folded(plain, "rms"))
+
+    assert summary.modelling_practice is None
+    assert summary.groups == summary_of(plain).groups
+
+
+def test_a_second_folded_family_stays_in_the_groups() -> None:
+    """The line is the first family row in rank order (contract section 2 names one row);
+    a second family's findings are counted in the groups as unfolded, so the partition
+    still holds and nothing is lost from the summary."""
+    specs = [
+        spec("rms.folders.present", status="demonstrated", severity="high"),  # F-001
+        spec("rms.sketches.fully_defined"),  # F-002
+        spec("standards.part.cut_list_excluded"),  # F-003: fix, hygiene
+        spec("standards.part.material_assigned", status="suspected"),  # F-004: verify
+    ]
+    session = folded(session_of("family-two", specs), "rms", "standards")
+    rows = [row for row in rank(session).rows if row.family is not None]
+
+    summary = summary_of(session)
+
+    assert [row.family for row in rows] == ["rms", "standards"]
+    assert summary.modelling_practice is not None
+    assert summary.modelling_practice.finding_ids == ["F-001", "F-002"]
+    assert group_counts(summary) == {"decide": 0, "fix": 1, "verify": 1}
+    assert sum(group_counts(summary).values()) + summary.modelling_practice.findings == 4
+
+
+# --- 7. the size-for-size contacts (T018, feature 010's `ReviewSession.contacts`) ----------
 
 
 def contact(number: int, components: Sequence[str], **fields: Any) -> Contact:
@@ -556,7 +724,7 @@ def test_the_summary_names_the_words_it_was_written_in() -> None:
     assert summary_of(session_of("version", [])).version == load_words().version
 
 
-# --- 6. the ranking is untouched -------------------------------------------------------------
+# --- 8. the ranking is untouched -------------------------------------------------------------
 
 
 def test_the_review_ranking_is_the_ranking_byte_for_byte_plus_its_summary() -> None:
