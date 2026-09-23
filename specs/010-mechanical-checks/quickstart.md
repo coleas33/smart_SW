@@ -97,7 +97,9 @@ uv run pytest tests/unit/test_head_dimensions.py tests/unit/test_tool_envelopes.
 
 Expected: the covered head is `fastener.head_clearance` demonstrated naming the overhanging part;
 the clear head passes; the 12.0 mm counterbore under an M8 socket head is `fastener.head_fit`
-demonstrated; `FHT` heads are unresolved naming the missing drive.
+demonstrated; `FHT` and `BHT` heads take the Torx key (the owner's answer, research R5), and a
+head whose drive is not stated and whose head type names no tool is unresolved naming its head
+code.
 
 ## Scenario 7 (US6): mass and material
 

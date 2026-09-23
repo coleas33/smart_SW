@@ -128,10 +128,14 @@ specs/010-mechanical-checks/
 
 ### Source Code (repository root)
 
-Every file this feature adds or changes. A file not named here is not touched; in particular
-`findings.py`, `checks/rms/*`, `checks/standards/*` other than `profile.py` and `document.py`,
-`agent/runner.py`, every provider, `report/attention.py` other than `CHECKLIST_ITEM_IDS`, every
-page script and every add-in file are **reused unchanged**.
+Every file this feature adds or changes, reconciled with what landed on 2026-09-23 (T102): a row
+marked *landed as* is a file the tasks touched that this block did not name, a change it did not
+describe, or a change it names that did not happen. A file not named here is not touched; in
+particular `findings.py`, `checks/rms/*`, `checks/standards/*` other than `profile.py` and
+`document.py`, every provider, `report/attention.py` other than `CHECKLIST_ITEM_IDS`, every page
+script and every add-in file are **reused unchanged**. *Landed as*: `agent/runner.py` was changed
+once, by the follow-up `7b63519` (feature 003's reduced-profile sentence ignores the new tolerance
+phase), so it is listed below.
 
 ```text
 reviewer/src/swreview/
@@ -154,6 +158,8 @@ reviewer/src/swreview/
 ├── checks/engagement_rules.yaml, .py   # CHANGED: steel 1.5; ratios by class name; tokens moved out
 ├── checks/mass.py                      # NEW: mass.material_assigned, mass.density, mass.assembly_override
 ├── checks/hygiene.py                   # NEW: the five hygiene.* checks
+├── checks/documents.py                 # NEW, *landed as*: DocumentTree, the one walk the mass and hygiene
+│                                       #      checks share (US6, US7)
 ├── checks/interference.py              # CHANGED: classify_group, CONTACT_VOLUME_MM3, thread-model rule (US4)
 ├── checks/result.py                    # CHANGED: permitted_radial_offset_mm
 ├── checks/hole_alignment.py            # CHANGED: compares with half the zone
@@ -162,11 +168,19 @@ reviewer/src/swreview/
 ├── report/session.py                   # CHANGED: Contact, ReviewSession.contacts
 ├── report/markdown.py                  # CHANGED: ## Contacts when non-empty; interference_outcomes sentence
 ├── report/attention_policy_v1.yaml     # CHANGED: twelve classes
+├── report/review_words_v1.yaml         # CHANGED, *landed as*: the joint map's coverage rows belong to the
+│                                       #      hole-alignment goal (feature 009's words file)
 ├── report/attention.py                 # CHANGED (Polish): CHECKLIST_ITEM_IDS gains mass.material, hygiene
-├── agent/checklist_v1.yaml             # CHANGED (Polish): two items
+│                                       #      (*landed as*: not yet - T099 is open)
+├── agent/checklist_v1.yaml             # CHANGED (Polish): two items (*landed as*: not yet - T099 is open)
+├── agent/runner.py                     # CHANGED, *landed as*: FR-037's reduced-profile sentence ignores the
+│                                       #      tolerance phase (`7b63519`)
 ├── tools/checks_mechanical.py          # NEW: CODE_FIRST_CHECKS, check_joints, check_mass_material, check_hygiene
 ├── tools/checks_interference.py        # CHANGED: the contact path
 ├── tools/checks_fastener.py            # CHANGED: _bbox_extent_mm delegates to geometry.axial_extent
+├── tools/joint_context.py              # NEW, *landed as*: the one joint map and the mesh loading that
+│                                       #      check_joints and the interference tool share (T049)
+├── tools/measure.py                    # CHANGED, *landed as*: load_body_mesh, the one mesh reader (US4)
 ├── tools/context.py                    # CHANGED: record_contact
 ├── tools/registry.py                   # CHANGED: check_tools() gains the three tools
 ├── prerun.py                           # CHANGED: planned_calls reads CODE_FIRST_CHECKS; PRERUN_TOOLS; the two
@@ -177,7 +191,10 @@ reviewer/src/swreview/
 
 reviewer/tests/
 ├── support/mechanical.py, support/fixture_denylist.py      # NEW (the latter shared with 008)
-├── fixtures/mechanical/{generate_fixtures.py, big-assembly/, small-assembly/, tolerances/}  # NEW
+├── fixtures/mechanical/{generate_fixtures.py, big-assembly/, small-assembly/, tolerances/}  # NEW (each with
+│                                                                  #      its `meshes/`)
+├── fixtures/attention/{check-folder, review-folder}/package.json   # CHANGED, *landed as*: IR 1.5.0 (T077)
+├── support/reuse.py                                        # CHANGED, *landed as*: IR 1.5.0 (T077)
 ├── unit/test_support_mechanical.py, test_mechanical_fixtures_are_fictional.py            # NEW
 ├── unit/test_joint_rules.py, test_joint_instances.py, test_joint_map.py,
 │   test_joint_map_acceptance.py, test_code_first_registration.py                         # NEW
@@ -190,13 +207,30 @@ reviewer/tests/
 ├── unit/test_material_classes.py, test_mass.py, test_tools_check_mass_material.py        # NEW
 ├── unit/test_hygiene.py, test_tools_check_hygiene.py                                     # NEW
 ├── unit/test_ir_tolerances.py, test_iso286.py, test_general_tolerance.py, test_tolerances.py  # NEW
-├── perf/test_joint_map_perf.py                                                            # NEW
+├── perf/test_joint_map_perf.py                                                            # NEW (*landed as*: in
+│                                                                                          #      T101, which runs it)
+├── unit/test_checks_result.py, test_ir_tolerances.py                                     # NEW, *landed as* (US3, US8)
+├── unit/test_fastener_identity/big-assembly-with-fasteners.yml                           # NEW, *landed as*: a golden (US4)
+├── unit/test_joint_map_on_replay_fixture.py, test_replay_code_first_checks.py             # NEW, *landed as* (T096, T097)
+├── unit/test_ir_features.py, test_ir_phases.py, test_ir_profile.py, test_ir_reuse_fields.py,
+│   test_ir_standards.py, test_remodel_intent.py, test_support_remodel.py                  # CHANGED, *landed as*: IR
+│                                                                                          #      1.5.0 (T077, T086)
+├── unit/test_docstring_split.py, test_tool_notes_prompt.py, test_tool_tiers.py           # CHANGED, *landed as*: the
+│                                                                                          #      three new tools (US1-US7)
+├── unit/test_code_first_registration/ (its opening-message golden)                       # CHANGED, *landed as* (US2)
+├── unit/test_prerun_repeat_guard.py, test_replay_findings.py, test_replay_fixtures.py     # CHANGED, *landed as*
+│                                                                                          #      (T092, T094)
+├── unit/test_review_words.py, test_runner_reduced_profile.py                             # CHANGED, *landed as*
+├── golden/test_golden/tool-envelope.yml, golden/test_standards_goldens.py                # CHANGED, *landed as* (US4, US7)
 ├── unit/test_geometry.py, test_checks_interference.py, test_tools_checks_interference.py,
 │   test_checks_hole_alignment.py, test_engagement_rules.py, test_checks_fastener.py,
 │   test_tool_envelopes.py, test_standards_profile.py, test_standards_no_company_values.py,
 │   test_attention_catalogue.py, test_prerun_digest.py, test_provider_schema.py,
 │   test_tool_payload.py, test_checklist.py, test_standards_document_rule.py, test_schema_sync.py  # CHANGED
-├── integration/test_coverage_stop.py                                                     # CHANGED (Polish)
+│                                       #      (*landed as*: `test_checklist.py` waits for T098, open;
+│                                       #      `test_schema_sync.py` passes unedited)
+├── integration/test_coverage_stop.py                                                     # CHANGED (Polish;
+│                                                                                          #      *landed as*: T098 open)
 └── golden/test_golden/{joint-ok, joint-bottoming, thread-mismatch, cover-blind-tap}.yml  # CHANGED
 
 extractor/SwReview.Extractor/
@@ -205,22 +239,41 @@ extractor/SwReview.Extractor/
 ├── Dump/PropertyDumper.cs              # CHANGED: the override read
 ├── Dump/HoleDumper.cs                  # CHANGED: Hole Wizard reads through IHoleWizardReader
 ├── Dump/ToleranceDumper.cs             # NEW: model dimensions and annotations through their reader seams
+├── Dump/SwHoleWizardReader.cs, Dump/SwToleranceReaders.cs   # NEW, *landed as*: the real readers behind the seams
+├── Dump/DumpContracts.cs, Dump/SwDump.cs, Dump/SwDrawingReader.cs, Dump/GapCollector.cs   # CHANGED, *landed as*:
+│                                       #      the seams' contracts, the phase wiring, the override gap (US6, US8)
 ├── Dump/PackageWriter.cs               # CHANGED: the tolerance phase row
-├── Ir/Hole.cs, Ir/EvidencePackage.cs, Ir/ModelDimension.cs (NEW), Ir/PackageSerializer.cs  # CHANGED: 1.5.0
-└── Guard/ReadOnlyGuard.cs              # CHANGED: the tolerance and Hole Wizard setters
+├── Ir/Hole.cs, Ir/EvidencePackage.cs, Ir/ModelDimension.cs (NEW)   # CHANGED: 1.5.0
+├── Ir/Enums.cs, Ir/Manifest.cs, Ir/Document.cs   # CHANGED, *landed as*: ModelDimensionType (T077), the
+│                                       #      manifest (T086), the override read's documentation (T069);
+│                                       #      `Ir/PackageSerializer.cs` needed no change
+├── Guard/ReadOnlyGuard.cs              # CHANGED: the tolerance and Hole Wizard setters
+└── Guard/CircuitBreaker.cs, Sw/SwGate.cs   # CHANGED, *landed as*: ExecuteOptional, a read whose failure is a
+                                        #      gap and not a counted failure, through the gate (T086)
 extractor/SwReview.Extractor.Tests/
 ├── FastenerNameParserTests.cs, PropertyDumperTests.cs, GuardTests.cs, RemodelGuardTests.cs,
-│   IrSerializerTests.cs, IrContract.cs                                                   # CHANGED
+│   IrSerializerTests.cs                                                                  # CHANGED (*landed as*:
+│                                                                                          #      `IrContract.cs` needed no change)
+├── PackageReuseTests.cs, PackageWriterTests.cs, SwGateTests.cs                          # CHANGED, *landed as* (T086)
 ├── FastenerCandidateTests.cs, HoleWizardReaderTests.cs, ToleranceDumperTests.cs          # NEW
-└── Fakes/                              # CHANGED: the reader fakes
+├── FastenerNameVectors.cs                                                                # NEW, *landed as*: the vector
+│                                                                                          #      table read by both parsers
+└── Fakes/                              # CHANGED: the reader fakes (*landed as*: HoleWizardFakes.cs and
+                                        #      ToleranceFakes.cs, new)
 
 specs/
 ├── 001-agentic-design-review/contracts/{agent-tools.md, review-session.schema.json, ir.schema.json}
 ├── 004-resilient-remodeler/contracts/guard-allowlist.md
 ├── 005-llm-efficiency/contracts/levers.md
 ├── 006-standards-check/{contracts/profile.md, research.md (R5 rows)}
-└── 007-attention-policy-gate/contracts/attention.md
+├── 007-attention-policy-gate/contracts/attention.md   # (*landed as*: the twelve classes, T100)
+└── 008-checks-first-review/contracts/{checks-first.md, replay.md}   # CHANGED, *landed as*: the three repeat
+                                                                    #      keys (T093), the reclassification (T095)
 config/standards.example.yaml, reviewer/tests/fixtures/standards/profile-{a,b}.yaml   # CHANGED: version 2
+docs/llm-efficiency-options.md          # CHANGED, *landed as*: the tool-array figures regenerated for the three
+                                        #      new tools (US1, US2, T067, T075)
+README.md                               # CHANGED, *landed as*: the three checks, the engagement rule, profile
+                                        #      version 2 (T100)
 ```
 
 **Structure Decision**: both trees extended in place, as every feature since 002. The joint map,
