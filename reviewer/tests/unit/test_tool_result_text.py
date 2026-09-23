@@ -41,6 +41,15 @@ def test_a_nested_payload_with_non_ascii_text_is_its_json() -> None:
     assert "\\u00d8" in text, "default json.dumps escapes non-ASCII, and so must this"
 
 
+def test_compact_is_the_same_json_without_the_spaces() -> None:
+    """Feature 008 T070: payload slimming's compact form, through the one serialization."""
+    for payload in (OK_PAYLOAD, ERROR_PAYLOAD, NESTED_PAYLOAD):
+        compact = tool_result_text(payload, compact=True)
+        assert compact == json.dumps(payload, separators=(",", ":"))
+        assert json.loads(compact) == payload
+        assert len(compact) < len(tool_result_text(payload))
+
+
 def test_the_framing_constant_is_twelve() -> None:
     assert FRAMING_TOKENS == 12
 

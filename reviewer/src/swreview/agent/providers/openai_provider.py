@@ -68,8 +68,9 @@ from swreview.agent.providers import (
     tools_withdrawn,
     usage_body,
 )
+from swreview.agent.providers.pruning import prune_history
 from swreview.agent.providers.schema import strictify
-from swreview.agent.settings import output_ceiling, redact
+from swreview.agent.settings import ModelViewSettings, output_ceiling, redact
 
 __all__ = [
     "EFFORT_BY_MODEL",
@@ -278,6 +279,11 @@ class OpenAIProvider:
         default and stays the default. Set once, by `use_prompt_cache`."""
         self._last_response_id: str | None = None
         """The previous round's response id, for `comparison_response_id`. Per turn."""
+        self._prune_after: int | None = None
+        """History pruning's age (feature 008), or `None` while it is off - the default.
+        Set once, by `use_model_view`."""
+        self._compact = False
+        """Payload slimming's compact JSON for every `function_call_output` (FR-017)."""
         self.round_usage: list[TokenUsage] = []
         """This turn's round trips, one record each, in the order they were made.
 
@@ -323,6 +329,26 @@ class OpenAIProvider:
         failure, and it ships the key half alone.
         """
         self.prompt_cache_key = str(session_id)
+
+    # --- the model's view (feature 008) ------------------------------------------------
+
+    def use_model_view(self, settings: ModelViewSettings) -> None:
+        """Send this session's view of each result from now on (`ModelViewAware`).
+
+        Called once, by `start_review`, beside `use_prompt_cache` (research R2.33). History
+        pruning replaces results older than `prune_after_rounds` rounds with their stubs in
+        every request this adapter builds; payload slimming serializes every result
+        compactly. The history itself is never pruned. With both off every request is byte
+        for byte what it was.
+        """
+        self._prune_after = settings.prune_after_rounds if settings.history_pruning else None
+        self._compact = settings.payload_slimming
+
+    def _visible(self, history: Sequence[Mapping[str, Any]]) -> Sequence[Mapping[str, Any]]:
+        """The history this request carries: pruned when pruning is on, as it is otherwise."""
+        if self._prune_after is None:
+            return history
+        return prune_history(history, self._prune_after, finding_detail=self._compact)
 
     # --- effort -----------------------------------------------------------------------
 
@@ -463,7 +489,7 @@ class OpenAIProvider:
         request: dict[str, Any] = {
             "model": self.model,
             "instructions": system,
-            "input": _encode_history(history),
+            "input": _encode_history(self._visible(history), compact=self._compact),
             "reasoning": {"effort": effort_value},
             "max_output_tokens": self.max_output_tokens,
             "parallel_tool_calls": self.parallel_tool_calls,
@@ -623,12 +649,16 @@ class OpenAIProvider:
 # --- history encoding -------------------------------------------------------------------
 
 
-def _encode_history(messages: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+def _encode_history(
+    messages: Sequence[Mapping[str, Any]], *, compact: bool = False
+) -> list[dict[str, Any]]:
     """The runner's neutral history as a Responses `input` list.
 
     An assistant turn this adapter produced carries its raw `response.output` items and is
     replayed verbatim; one from another adapter (or from the fake) is rebuilt from `content`
     and `tool_calls`, so a session can be resumed on a provider it did not start on.
+    `compact` is payload slimming's compact JSON for each tool result (feature 008),
+    through the one serialization `tool_result_text`.
     """
     items: list[dict[str, Any]] = []
     for message in messages:
@@ -642,7 +672,7 @@ def _encode_history(messages: Sequence[Mapping[str, Any]]) -> list[dict[str, Any
                 {
                     "type": "function_call_output",
                     "call_id": message["call_id"],
-                    "output": tool_result_text(message.get("content", {})),
+                    "output": tool_result_text(message.get("content", {}), compact=compact),
                 }
             )
         else:

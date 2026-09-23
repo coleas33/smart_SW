@@ -15,11 +15,15 @@ that round. It must stay green through the rebuild (RK-11).
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from google.genai import types
 
 from swreview.agent.providers.gemini_provider import _to_contents
+from swreview.agent.providers.openai_provider import _encode_history
+from swreview.agent.providers.pruning import PRUNED_NOTE, prune_history
+from swreview.agent.settings import MODEL_VIEW_OFF, MODEL_VIEW_PANE
 from tests.unit.test_gemini_provider import (
     FakeTool,
     build,
@@ -32,7 +36,7 @@ from tests.unit.test_gemini_provider import (
 SIGNATURE = b"\x07\x08thought"
 
 
-def three_round_turn() -> tuple[Any, Any]:
+def three_round_turn(settings: Any = None) -> tuple[Any, Any]:
     """Round 0 asks for two tools at once (with a signed thought), round 1 for one, round 2
     answers."""
     first = FakeTool(name="list_components", payload={"components": [{"id": "cmp:0001"}]})
@@ -49,6 +53,8 @@ def three_round_turn() -> tuple[Any, Any]:
         [chunk(call_part("fc_3", "get_component", {"component_id": "cmp:0001"}))],
         [chunk(text_part("all clear"), finish_reason=types.FinishReason.STOP)],
     )
+    if settings is not None:
+        adapter.use_model_view(settings)
     result, _ = run(adapter, [first, second, third])
     return result, models
 
@@ -77,6 +83,75 @@ def test_rebuilt_contents_equal_the_contents_sent() -> None:
         sent = models.calls[round_index]["contents"]
         rebuilt = _to_contents(result.messages[:length])
         assert dumped(rebuilt) == dumped(sent), f"round {round_index}"
+
+
+def test_the_signature_and_the_grouped_answers_are_in_what_was_sent_with_the_view_off() -> None:
+    """T070: with `MODEL_VIEW_OFF` the rebuilt requests are the characterized ones."""
+    result, models = three_round_turn(MODEL_VIEW_OFF)
+
+    for round_index, length in enumerate(history_lengths(result.messages)):
+        assert dumped(models.calls[round_index]["contents"]) == dumped(
+            _to_contents(result.messages[:length])
+        )
+
+
+def big(prefix: str) -> dict[str, Any]:
+    return {
+        "result": [
+            {"id": f"{prefix}:{n:04d}", "name": f"row {n}", "note": "z" * 50} for n in range(1, 31)
+        ]
+    }
+
+
+def four_round_turn(settings: Any) -> tuple[Any, Any]:
+    tools = [
+        FakeTool(name="list_components", payload=big("cmp")),
+        FakeTool(name="list_mates", payload=big("mat")),
+        FakeTool(name="list_holes", payload=big("hol")),
+    ]
+    adapter, models = build(
+        [chunk(call_part("", "list_components", {}))],
+        [chunk(call_part("", "list_mates", {}))],
+        [chunk(call_part("", "list_holes", {}))],
+        [chunk(text_part("done"), finish_reason=types.FinishReason.STOP)],
+    )
+    adapter.use_model_view(settings)
+    result, _ = run(adapter, tools)
+    return result, models
+
+
+def responses(contents: list[types.Content]) -> list[dict[str, Any]]:
+    return [
+        part.function_response.response
+        for content in contents
+        if content.role == "tool"
+        for part in content.parts
+    ]
+
+
+def test_a_call_older_than_two_rounds_reaches_gemini_as_its_stub() -> None:
+    result, models = four_round_turn(MODEL_VIEW_PANE)
+
+    last = responses(models.calls[3]["contents"])
+    assert last[0]["output"]["pruned"] == PRUNED_NOTE
+    assert last[0]["output"]["tool"] == "list_components"
+    assert last[1]["output"] == big("mat")
+    assert last[2]["output"] == big("hol")
+    assert responses(models.calls[2]["contents"])[0]["output"] == big("cmp")
+
+
+def test_the_stubs_are_the_ones_the_openai_adapter_sends_for_the_same_history() -> None:
+    result, models = four_round_turn(MODEL_VIEW_PANE)
+    length = history_lengths(result.messages)[3]
+    history = result.messages[:length]
+
+    gemini_stub = responses(models.calls[3]["contents"])[0]["output"]
+    openai_items = _encode_history(prune_history(history, 2), compact=True)
+    openai_stub = json.loads(
+        next(item["output"] for item in openai_items if item.get("type") == "function_call_output")
+    )
+
+    assert gemini_stub == openai_stub == prune_history(history, 2)[2]["content"]
 
 
 def test_the_signature_and_the_grouped_answers_are_in_what_was_sent() -> None:

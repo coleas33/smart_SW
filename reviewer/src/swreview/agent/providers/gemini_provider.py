@@ -68,8 +68,9 @@ from swreview.agent.providers import (
     tools_withdrawn,
     usage_body,
 )
+from swreview.agent.providers.pruning import prune_history
 from swreview.agent.providers.schema import gemini_adapt
-from swreview.agent.settings import redact
+from swreview.agent.settings import ModelViewSettings, redact
 
 __all__ = [
     "AUTOMATIC_FUNCTION_CALLING_DISABLED",
@@ -321,6 +322,36 @@ class GeminiProvider:
         raises on its sixth round never builds a `TurnResult` and the five rounds it
         already paid for are the ones worth the most.
         """
+        self._prune_after: int | None = None
+        """History pruning's age (feature 008), or `None` while it is off - the default.
+        Set once, by `use_model_view`."""
+        self._finding_detail = False
+        """Whether `get_finding` is offered (payload slimming), so a stub may name it."""
+
+    def use_model_view(self, settings: ModelViewSettings) -> None:
+        """Send this session's view of each result from now on (`ModelViewAware`).
+
+        Called once, by `start_review` (research R2.33). History pruning replaces results
+        older than `prune_after_rounds` rounds with their stubs, as `{"output": <stub>}`, in
+        every request; Gemini's SDK serializes its own `function_response`, so payload
+        slimming changes nothing else here (research R2.34).
+        """
+        self._prune_after = settings.prune_after_rounds if settings.history_pruning else None
+        self._finding_detail = settings.payload_slimming
+
+    def _contents(self, history: Sequence[Mapping[str, Any]]) -> list[types.Content]:
+        """This round's request, rebuilt from the neutral history - pruned when pruning is on.
+
+        Rebuilt every round rather than appended to, so one pure function (`prune_history`)
+        decides what both adapters send; the characterization in
+        `tests/unit/test_gemini_model_view.py` proves the rebuild equals what the
+        incremental build sent, thought signatures and grouped answers included (RK-11).
+        """
+        if self._prune_after is not None:
+            history = prune_history(
+                history, self._prune_after, finding_detail=self._finding_detail
+            )
+        return _to_contents(history)
 
     def for_presentation(self, max_output_tokens: int) -> GeminiProvider:
         """Return a fresh adapter for a bounded prose request.
@@ -388,13 +419,15 @@ class GeminiProvider:
         mapping = self.effort_mapping(effort)
         config = self._config(system=system, tools=tools, mapping=mapping)
         history = [dict(message) for message in messages]
-        contents = _to_contents(history)
         texts: list[str] = []
         steps = 0
         withdrawn = False
         self.round_usage = []
 
         while True:
+            # Feature 008: every round's request is rebuilt from the neutral history, and
+            # pruned when pruning is on, instead of appended to (research R2.29).
+            contents = self._contents(history)
             if not withdrawn and tools_withdrawn(tools):
                 # Lever 7, and the one place this adapter rebuilds `config` inside the
                 # loop: the config is built once above because nothing else in a turn
@@ -434,14 +467,14 @@ class GeminiProvider:
                 # mid-stream, so those calls are not run - and not kept in the history
                 # either, because an unanswered `function_call` is rejected on the next
                 # request.
-                _record_round(history, contents, round_, requests=())
+                _record_round(history, round_, requests=())
                 if reason == "error":
                     self._blocked(round_.finish_reason, on_event)
                 return self._finish(reason, texts, steps, history, on_event)
 
             requests = round_.calls[: max(max_steps - steps, 0)]
             over_budget = len(requests) < len(round_.calls)
-            _record_round(history, contents, round_, requests=requests)
+            _record_round(history, round_, requests=requests)
 
             results = [
                 self._call(request, tools, on_event) for request in requests
@@ -456,8 +489,6 @@ class GeminiProvider:
                         "is_error": result.is_error,
                     }
                 )
-            if results:
-                contents.append(_tool_content(requests, results))
             steps += len(results)
 
             if over_budget:
@@ -686,16 +717,16 @@ def _end_reason(finish_reason: types.FinishReason | None) -> TurnEndReason:
 
 def _record_round(
     history: list[dict[str, Any]],
-    contents: list[types.Content],
     round_: _Round,
     *,
     requests: Sequence[ToolCallRequest],
 ) -> None:
-    """Append the model's own turn to both histories, keeping only the calls that ran.
+    """Append the model's own turn to the history, keeping only the calls that ran.
 
     `requests` is the prefix of the round's calls this turn will actually answer: the step
     budget and a terminal finish reason each cut a round short, and a `function_call` with
-    no matching `function_response` is rejected on the next request.
+    no matching `function_response` is rejected on the next request. The next round's
+    `contents` are rebuilt from this history (feature 008), so nothing else is appended.
     """
     native = round_.content(keep_calls=len(requests))
     if not native.parts:
@@ -715,7 +746,6 @@ def _record_round(
             for request in requests
         ]
     history.append(message)
-    contents.append(native)
 
 
 def _response_payload(payload: Mapping[str, Any], is_error: bool) -> dict[str, Any]:

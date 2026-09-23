@@ -43,9 +43,12 @@ import json
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:  # pragma: no cover - the settings module imports this one
+    from swreview.agent.settings import ModelViewSettings
 
 __all__ = [
     "ADAPTER_MODULES",
@@ -58,6 +61,7 @@ __all__ = [
     "EffortMapping",
     "EventCallback",
     "EventType",
+    "ModelViewAware",
     "PromptCacheAware",
     "ProviderName",
     "ProviderTool",
@@ -498,6 +502,23 @@ class PromptCacheAware(Protocol):
 
 
 @runtime_checkable
+class ModelViewAware(Protocol):
+    """An adapter that sends the model the session's view of each result (feature 008).
+
+    An **optional** extension of the port, like `PromptCacheAware`: the two real adapters
+    implement it, the scripted one does not need to. `start_review` calls it once with the
+    session's `ModelViewSettings` - the settings are read once, where they are recorded
+    (research R2.33) - and the adapter prunes every request it builds from then on with
+    `pruning.prune_history` and, on OpenAI, serializes results compactly. `run()` does not
+    change.
+    """
+
+    def use_model_view(self, settings: ModelViewSettings) -> None:
+        """Adopt this session's model view. Called once, at `start_review`."""
+        ...
+
+
+@runtime_checkable
 class WithdrawableTools(Protocol):
     """A `ToolSet` that can ask for the next round to go out with no tool call allowed.
 
@@ -548,16 +569,20 @@ def summarize_result(payload: Mapping[str, Any]) -> str:
     return text[: SUMMARY_LENGTH - 1] + "…"
 
 
-def tool_result_text(payload: Mapping[str, Any]) -> str:
+def tool_result_text(payload: Mapping[str, Any], *, compact: bool = False) -> str:
     """What the model reads of one tool result: the one serialization (008 research R2.9).
 
     The OpenAI adapter encodes every `function_call_output` with it, and feature 008's
     replay and step sizes count tokens over it (`swreview.tokens.count_tokens`), so the
     request and every number priced from it are made from the same bytes. Default
-    separators, ASCII-escaped: exactly the `json.dumps` the adapter always sent. A Gemini
-    request carries a `function_response` part the SDK serializes itself; its counts use
-    this text and are labelled a shape comparison.
+    separators, ASCII-escaped: exactly the `json.dumps` the adapter always sent. `compact`
+    drops the spaces after `,` and `:` - on exactly when payload slimming is (FR-017,
+    research R2.34) - and is keyword-only so the all-off bytes cannot move by accident. A
+    Gemini request carries a `function_response` part the SDK serializes itself; its counts
+    use this text and are labelled a shape comparison.
     """
+    if compact:
+        return json.dumps(payload, separators=(",", ":"))
     return json.dumps(payload)
 
 
