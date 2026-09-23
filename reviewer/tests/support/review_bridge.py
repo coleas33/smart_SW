@@ -3,7 +3,7 @@
 `ScriptedReviewBridge` is what `start_review(..., bridge=True, bridge_factory=lambda pipe,
 secret: bridge)` builds instead of `swreview.bridge.client.BridgeClient`. It speaks the same
 coarse calls with the same signatures - `ping`, `capture`, `measure`, `interference`,
-`tessellate` - and answers from a script:
+`tessellate`, `drawing_read` - and answers from a script:
 
 - `results={"interference": [answer, ...]}` answers each call of that command in order; an
   answer that is an exception is raised in its turn, and a callable answer is called with the
@@ -70,11 +70,13 @@ _SIGNATURES: dict[str, tuple[tuple[str, Any], ...]] = {
         ("truncate_after", None),
     ),
     "tessellate": (("component_id", None),),
+    "drawing_read": (("run_id", None), ("document_id", None)),
 }
-"""Each command's parameters and defaults, exactly as `BridgeClient` declares them."""
+"""Each command's parameters and defaults, exactly as `BridgeClient` declares them
+(`test_support_review_bridge.py` holds the two to each other)."""
 
 COMMANDS: tuple[str, ...] = tuple(_SIGNATURES)
-DEFAULT_SUPPORTS: tuple[str, ...] = ("ping", "capture", "measure", "interference", "tessellate")
+DEFAULT_SUPPORTS: tuple[str, ...] = COMMANDS
 
 
 class ScriptedReviewBridge:
@@ -122,6 +124,9 @@ class ScriptedReviewBridge:
 
     def tessellate(self, *args: Any, **kwargs: Any) -> Any:
         return self._call("tessellate", args, kwargs)
+
+    def drawing_read(self, *args: Any, **kwargs: Any) -> Any:
+        return self._call("drawing_read", args, kwargs)
 
     def close(self) -> None:
         self.closed = True
