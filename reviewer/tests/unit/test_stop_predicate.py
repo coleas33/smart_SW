@@ -214,7 +214,8 @@ def test_a_finding_closes_an_item_a_weak_coverage_entry_also_touched() -> None:
 
 
 def test_failed_coverage_never_closes_an_item_for_stopping() -> None:
-    """`failed` is written against a tool name, never against a checklist item."""
+    """`failed` closes no item, whether written against a tool name or, by a mass or hygiene
+    call whose finding was refused, against the item's own id."""
     session = closed_by_coverage("checked", omit=["interference"])
     session.coverage.failed.append(coverage_item("interference"))
 
