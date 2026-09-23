@@ -149,7 +149,9 @@
       Feature 009 T032. The Review tab's pane fixture: review_snapshot of feature 008's fictional
       big-assembly replay fixture plus the words file's labels, written by
       reviewer/tests/fixtures/pane/generate_pane_fixture.py and held equal to a fresh generation
-      by reviewer/tests/unit/test_pane_fixture.py. Generated data, never edited by hand.
+      by reviewer/tests/unit/test_pane_fixture.py; and feature 011's review-drawing-questions.json,
+      written by generate_drawing_questions.py beside it and held by test_pane_drawing_fixture.py.
+      Generated data, never edited by hand.
     -->
     <Content Include="Fixtures\review-*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
