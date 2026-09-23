@@ -223,3 +223,41 @@ about quality: that package's key is not met by either arm.
 hold `--lever parallel_tool_calls` on in both arms from here (it becomes the "other levers
 on" column of the next study). The pane default stays off until the set holds a held-out
 package with an engineer's answer key and the ledger carries a signed-off row.
+
+**Decision taken 2026-09-22, outside the ledger (feature 008):** by the owner's decision, all
+four changes of feature 008 are pane defaults: checks first (lever 5) on every provider,
+parallel tool calls (lever 6) on OpenAI, and the two model-view settings, payload slimming and
+history pruning after two rounds. They are gated by the offline replay
+(`swreview benchmark replay`, 008 `contracts/replay.md`), not by this ledger: the replay prices a
+recorded review through the current code and fails when a recorded finding is lost. This
+supersedes the 2026-09-19 rule above, that the pane default waits for a held-out package and a
+signed-off ledger row, for levers 5 and 6. The model-view settings are **not levers**: they
+change what the model reads, never what the review records (the session, the package, the report
+and every stored result keep the full payload), so they are not in `LEVER_NAMES` and move no
+lever count (008 research R2.32). Since 2026-09-23 lever 13 (`withhold_prerun_tools`: the tools
+checks first ran to completion leave the array) is a pane default on the same terms (008 FR-030,
+research R2.53).
+
+The replay's figures, requested input tokens counted with o200k_base, copied from
+`swreview benchmark replay` on the three committed fixtures (run from `reviewer/`, each with
+`--standards-profile ../config/standards.example.yaml`, 2026-09-23). The fixtures record the
+scripted provider, whose pane runs checks first, lever 13, slimming and pruning but no parallel
+calls; `--lever parallel_tool_calls` gives the OpenAI pane, on which SC-003's regrouped estimate
+is read. The regrouped estimate assumes the model does not repeat a check the digest reported
+and batches consecutive calls to one tool (008 `contracts/replay.md` section 6); the requested
+figure assumes the model makes the recorded calls in the recorded rounds.
+
+| Fixture | Recorded | As recorded | Requested, pane defaults | Regrouped estimate, pane defaults (rule R) | Regrouped estimate, OpenAI pane (rules R and M) | Requested, `--prune-after 1` | Regrouped estimate, OpenAI pane, `--prune-after 1` |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| big-assembly | 12,456,095 | 12,455,282 | 662,748 | 486,094 | 276,620 | 618,244 | 233,323 |
+| small-assembly-a | 1,619,376 | 1,619,532 | 457,686 | 380,647 | 244,167 | 444,040 | 231,020 |
+| small-assembly-b | 1,497,696 | 1,497,378 | 452,302 | 387,998 | 243,134 | 440,056 | 231,110 |
+
+Commands, in column order: `--no-pane-defaults` (recorded and as recorded), the default, the
+default's `regrouped estimate` line, `--lever parallel_tool_calls`, `--prune-after 1`, and
+`--lever parallel_tool_calls --prune-after 1`. No recorded finding is lost and none is
+not replayable in any run; 3, 2 and 0 recorded interference findings are reclassified as
+contacts, and 62, 7 and 5 findings are added by feature 010's checks in the pre-run. The big
+fixture's follow-up round is 22,534 requested against 407,399 recorded (22,073 at
+`--prune-after 1`). These are replay figures, not bills: the paid figures of the next workstation
+sitting go beside them (008 T102 to T105).
