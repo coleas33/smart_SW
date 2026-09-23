@@ -39,6 +39,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any, Literal, Self, get_args
 
 from pydantic import (
@@ -62,6 +63,8 @@ __all__ = [
     "MASK",
     "MESH_MODES",
     "MODEL_OUTPUT_CEILINGS",
+    "MODEL_VIEW_OFF",
+    "MODEL_VIEW_PANE",
     "NO_STUDY",
     "OUTPUT_CEILINGS",
     "WORKSTATION_LEVERS",
@@ -71,13 +74,18 @@ __all__ = [
     "KeySource",
     "LogRecordRedactor",
     "MeshMode",
+    "ModelViewSettings",
+    "PaneDefaults",
     "ProviderSettings",
     "RedactingFilter",
     "check_study_arm",
+    "checks_first",
     "configure_logging_redaction",
     "default_model",
     "efficiency_from_levers",
     "output_ceiling",
+    "pane_defaults",
+    "pane_efficiency",
     "redact",
 ]
 
@@ -484,6 +492,53 @@ def pane_efficiency(provider: ProviderName) -> EfficiencySettings:
     User Story 4 reads it.
     """
     return EfficiencySettings(prerun_checks=True)
+
+
+class ModelViewSettings(BaseModel):
+    """What the model reads of each tool result (feature 008 User Story 3).
+
+    Settings, not levers: they change what the model *reads*, never what the review records -
+    the session, the package, the report and every stored result keep the full payload - so
+    `LEVER_NAMES` and every lever-count pin stay at twelve (research R2.32). Frozen and
+    closed for the reason `EfficiencySettings` is: the session records what ran. The two
+    booleans have no default on purpose, so a caller states both; `MODEL_VIEW_OFF` and
+    `MODEL_VIEW_PANE` are the two values every surface uses.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    payload_slimming: bool
+    """The view: references stripped, check results as digests with `get_finding`, gap rows
+    grouped, compact JSON (`tools/model_view.py`)."""
+
+    history_pruning: bool
+    """Results older than `prune_after_rounds` rounds reach the model as deterministic stubs
+    (`agent/providers/pruning.py`)."""
+
+    prune_after_rounds: int = Field(default=2, ge=1)
+    """How many rounds a result stays in the model's view in full. Two, the safer of the one
+    or two rounds the owner allowed (research R2.37)."""
+
+
+MODEL_VIEW_OFF = ModelViewSettings(payload_slimming=False, history_pruning=False)
+"""Every result in full, every round: the command line's and `benchmark run`'s default, and
+what a session written before feature 008 means."""
+
+MODEL_VIEW_PANE = ModelViewSettings(payload_slimming=True, history_pruning=True)
+"""What every pane review reads: slim views, and stubs after two rounds."""
+
+
+@dataclass(frozen=True)
+class PaneDefaults:
+    """Everything a pane review runs with that the command line leaves off."""
+
+    efficiency: EfficiencySettings
+    model_view: ModelViewSettings
+
+
+def pane_defaults(provider: ProviderName) -> PaneDefaults:
+    """The pane's levers and model view: read by the pane, `--pane-defaults` and the replay."""
+    return PaneDefaults(pane_efficiency(provider), MODEL_VIEW_PANE)
 
 
 MeshMode = Literal["eager", "lazy", "off"]

@@ -31,6 +31,7 @@
     "evidence_requests": { "type": "array", "items": { "$ref": "#/$defs/EvidenceRequest" } },
     "findings": { "type": "array", "items": { "$ref": "#/$defs/Finding" } },
     "contacts": { "type": "array", "items": { "$ref": "#/$defs/Contact" }, "description": "Interference groups that are two parts touching at nominal size, not overlapping (feature 010 FR-002). Added to properties and left out of required, and omitted from session.json when empty, so a session written before the list existed still validates and round-trips to its own bytes; the ranking never reads it" },
+    "model_view": { "$ref": "#/$defs/ModelViewSettings", "description": "What the model read of each tool result (feature 008 User Story 3): always written by a review of this build, off when the caller gave none; absent on sessions written before it, which means off. Added to properties and left out of required, and omitted when absent, so older sessions keep their bytes" },
     "folded_families": { "type": "array", "items": { "type": "string" }, "description": "Rule families whose findings rank and render as one collapsed group (feature 008 FR-014): [\"rms\"] when the review ran checks first. Added to properties and left out of required, and omitted from session.json when empty, so a session written before the field existed still validates and round-trips to its own bytes" },
     "coverage": { "$ref": "#/$defs/Coverage" },
     "timing": { "$ref": "#/$defs/Timing" }
@@ -86,6 +87,16 @@
         "turns": { "type": "integer", "minimum": 0, "description": "Turns that produced at least one round, delimited by the turn.ended events" },
         "totals": { "$ref": "#/$defs/TokenUsage" },
         "by_turn": { "type": "array", "items": { "$ref": "#/$defs/TokenUsage" } }
+      }
+    },
+    "ModelViewSettings": {
+      "description": "What the model reads of each tool result (feature 008): settings, not levers. Payload slimming is the view (references stripped, check digests, grouped gaps, compact JSON); history pruning replaces results older than prune_after_rounds rounds with deterministic stubs.",
+      "type": "object", "additionalProperties": false,
+      "required": ["payload_slimming", "history_pruning", "prune_after_rounds"],
+      "properties": {
+        "payload_slimming": { "type": "boolean" },
+        "history_pruning": { "type": "boolean" },
+        "prune_after_rounds": { "type": "integer", "minimum": 1 }
       }
     },
     "EfficiencySettings": {

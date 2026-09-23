@@ -67,7 +67,13 @@ from swreview.agent.providers import (
     TurnResult,
 )
 from swreview.agent.providers.schema import ToolSpec
-from swreview.agent.settings import EfficiencySettings, ExtractionSettings, checks_first
+from swreview.agent.settings import (
+    MODEL_VIEW_OFF,
+    EfficiencySettings,
+    ExtractionSettings,
+    ModelViewSettings,
+    checks_first,
+)
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient
 from swreview.carry_over import carry_over_findings, stamp_carry_over_keys
 from swreview.checks.rms.registry import RMS_FAMILY
@@ -917,6 +923,7 @@ def start_review(
     retry_of: str | UUID | None = None,
     max_steps: int = DEFAULT_MAX_STEPS,
     efficiency: EfficiencySettings | None = None,
+    model_view: ModelViewSettings | None = None,
     previous_session: Path | str | None = None,
     standards_profile: Path | str | None = None,
     fail_tool: Iterable[str] = (),
@@ -955,6 +962,9 @@ def start_review(
             all ten flags, recorded whole on the session so the run can be attributed to
             a configuration afterwards; `None` means every lever off, which is what is
             recorded.
+        model_view: What the model reads of each tool result (feature 008): the slimmed
+            view and the pruning age. Recorded on the session; `None` - every caller that
+            predates the setting - is `MODEL_VIEW_OFF`, which is what is recorded.
         previous_session: The `session.json` of an earlier review of this design, for
             lever 11a to carry unchanged `rms.*` verdicts from. Read only when
             `efficiency.carry_over_rms` is on; a path that is not there raises, because a
@@ -1016,6 +1026,7 @@ def start_review(
         )
         session.retry_of = UUID(str(retry_of)) if retry_of is not None else None
         session.efficiency = efficiency if efficiency is not None else EfficiencySettings()
+        session.model_view = model_view if model_view is not None else MODEL_VIEW_OFF
         if checks_first(session.efficiency):
             # Feature 008: a review that runs its checks first shows the modelling-practice
             # findings as one folded group. A plain session value, set once here, so the
