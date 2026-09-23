@@ -31,7 +31,7 @@ import shutil
 import tempfile
 from collections import Counter
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
@@ -55,12 +55,18 @@ from swreview.agent.providers.fake import (
     ScriptedTurn,
 )
 from swreview.agent.providers.pruning import prunable, prune_history, result_stub
-from swreview.agent.runner import ANSWER_MESSAGE, ReviewRun, start_review
-from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings, ModelViewSettings
+from swreview.agent.runner import ReviewRun, answers_message, start_review
+from swreview.agent.settings import (
+    MODEL_VIEW_OFF,
+    EfficiencySettings,
+    ModelViewSettings,
+    checks_first,
+)
 from swreview.benchmark.recording import (
     UNCOMMITTED_ENDS,
     RecordedCall,
     RecordedRound,
+    RecordedTurn,
     Recording,
     read_recording,
 )
@@ -83,11 +89,16 @@ from swreview.tools.registry import (
 __all__ = [
     "EMPTY_EXPLANATIONS",
     "FOLLOW_UP_PLACEHOLDER",
+    "REGROUPED_ASSUMPTION",
     "CallClass",
     "PlayedCall",
     "PlayedReview",
     "PlayedRound",
     "ReclassifiedFinding",
+    "RegroupRule",
+    "Regrouped",
+    "RegroupedPass",
+    "RegroupedRound",
     "ReplayCall",
     "ReplayFinding",
     "ReplayFindings",
@@ -124,11 +135,12 @@ class TurnPlan:
     """One turn to play: its rounds of calls, how it was opened and how it ends.
 
     `kind` says how the turn begins: `opening` is the review's first turn, `follow_up` an
-    engineer's question (`user_text`), `answer` an answered evidence request (`answers`, one
-    `(request_id, answer)` pair). `rounds` are the model's rounds that asked for calls, in
-    order; the turn's closing round answers with `text`. `stop_at_last_call` stops the turn
-    as the pane's Stop does - at the next tool boundary - so its last call is started and never
-    finished, and the turn ends `stopped` without a closing round.
+    engineer's question (`user_text`), `answer` the engineer's answers to evidence requests
+    (`answers`, one `(request_id, answer)` pair each, sent together when there are several).
+    `rounds` are the model's rounds that asked for calls, in order; the turn's closing round
+    answers with `text`. `stop_at_last_call` stops the turn as the pane's Stop does - at the
+    next tool boundary - so its last call is started and never finished, and the turn ends
+    `stopped` without a closing round.
     """
 
     rounds: tuple[tuple[ScriptedToolCall, ...], ...] = ()
@@ -142,8 +154,8 @@ class TurnPlan:
     def __post_init__(self) -> None:
         if any(not calls for calls in self.rounds):
             raise ValueError("every scripted round asks for at least one call")
-        if self.kind == "answer" and len(self.answers) != 1:
-            raise ValueError("an answer turn resumes on exactly one answered evidence request")
+        if self.kind == "answer" and not self.answers:
+            raise ValueError("an answer turn resumes on at least one answered evidence request")
         if self.kind != "answer" and self.answers:
             raise ValueError("only an answer turn carries answers")
         if self.stop_at_last_call and not self.rounds:
@@ -362,8 +374,7 @@ def _user_message(run: ReviewRun, plan: TurnPlan) -> dict[str, Any]:
     elif plan.kind == "follow_up":
         text = plan.user_text
     else:
-        [(request_id, answer)] = plan.answers
-        text = ANSWER_MESSAGE.format(request_id=request_id, answer=answer)
+        text = answers_message(plan.answers)
     return {"role": "user", "content": text}
 
 
@@ -394,15 +405,21 @@ def _round_messages(calls: Sequence[PlayedCall]) -> list[dict[str, Any]]:
 
 
 def _drive(run: ReviewRun, plan: TurnPlan) -> bool:
-    """Run one turn the way its plan opens it; `True` when it was stopped at a tool boundary."""
+    """Run one turn the way its plan opens it; `True` when it was stopped at a tool boundary.
+
+    Answers sent together resume one turn through `answer_evidence_batch`, and a single one
+    through `answer_evidence`, as the pane's two routes do (`contracts/replay.md` section 2).
+    """
     try:
         if plan.kind == "opening":
             run.start()
         elif plan.kind == "follow_up":
             run.continue_session(plan.user_text)
-        else:
+        elif len(plan.answers) == 1:
             [(request_id, answer)] = plan.answers
             run.answer_evidence(request_id, answer)
+        else:
+            run.answer_evidence_batch(plan.answers)
     except _Stop:
         # What the pane's `_end_stopped` does when `TurnStopped` reaches it.
         run.sink.emit("turn.ended", {"reason": "stopped"})
@@ -644,6 +661,32 @@ class ReplayFindings(ReplayModel):
     010 (its `contracts/contacts.md` section 6). Neither lost nor not replayable."""
 
 
+RegroupRule = Literal["R", "M"]
+"""Rule R drops the recorded calls the requested pass answered from its checks; rule M merges
+consecutive rounds of one turn that call one tool (`contracts/replay.md` section 6)."""
+
+REGROUPED_ASSUMPTION = (
+    "the model does not repeat a check the digest reported, and batches consecutive calls "
+    "to one tool"
+)
+"""What the regrouped estimate assumes, printed beside it (research R2.43)."""
+
+
+class Regrouped(ReplayModel):
+    """The labelled regrouped estimate (User Story 4, data-model section 2).
+
+    Pass B's script with rule R and rule M applied, played through the current code and
+    priced by the strict figure's own accounting; SC-003 is gated on `total`.
+    """
+
+    assumption: str
+    rules: list[RegroupRule]
+    """The rules whose condition the requested settings meet, in the order they apply."""
+    rounds: int
+    """The rounds the estimate prices: the regrouped main rounds and every carried round."""
+    total: int
+
+
 class ReplayReport(ReplayModel):
     """One recorded review re-priced by the current code (data-model section 2)."""
 
@@ -655,8 +698,8 @@ class ReplayReport(ReplayModel):
     settings: ReplaySettings
     rounds: list[ReplayRound]
     totals: ReplayTotals
-    regrouped: None = None
-    """The labelled regrouped estimate; User Story 4 fills it."""
+    regrouped: Regrouped | None = None
+    """The labelled regrouped estimate; `None` when neither rule applies."""
     findings: ReplayFindings
 
 
@@ -684,8 +727,28 @@ def replay(
 
 
 @dataclass(frozen=True)
+class RegroupedRound:
+    """One round of the regrouped script that asks for calls."""
+
+    sources: tuple[RecordedRound, ...]
+    """The recorded main rounds it stands for: one, or a run rule M merged."""
+    calls: tuple[int, ...]
+    """The recorded calls it keeps, by their index among the model's calls, in recorded order."""
+
+
+@dataclass(frozen=True)
+class RegroupedPass:
+    """Pass B's script regrouped by rules R and M, and that script as played."""
+
+    rules: tuple[RegroupRule, ...]
+    turns: tuple[tuple[RegroupedRound, ...], ...]
+    """Each recorded turn's regrouped rounds that ask for calls, in order."""
+    played: PlayedReview
+
+
+@dataclass(frozen=True)
 class ReplayPasses:
-    """The two played passes of one recording: as recorded (A) and as requested (B)."""
+    """The played passes of one recording: as recorded (A), as requested (B), and B regrouped."""
 
     recording: Recording
     as_recorded: EfficiencySettings
@@ -695,6 +758,8 @@ class ReplayPasses:
     first: PlayedReview
     second: PlayedReview
     with_profile: bool
+    regrouped: RegroupedPass | None = None
+    """`None` when neither regrouping rule applies to the requested settings."""
 
 
 def replay_passes(
@@ -707,10 +772,12 @@ def replay_passes(
     """Play pass A and pass B of `recording` into `scratch/as-recorded` and `scratch/requested`.
 
     Pass A runs with the recording's own levers and model view (a session written before
-    either records none, which is off); pass B with `requested`. The folders are the
-    caller's: `replay_recording` hands a temporary one and lets it go; an acceptance test
-    keeps it to read what the requested pass wrote. Nothing is written anywhere else, and
-    never into the recording's own folder.
+    either records none, which is off); pass B with `requested`. When a regrouping rule
+    applies to `requested`, pass B's script regrouped by it is played too, into
+    `scratch/regrouped` (User Story 4). The folders are the caller's: `replay_recording`
+    hands a temporary one and lets it go; an acceptance test keeps it to read what the
+    requested pass wrote. Nothing is written anywhere else, and never into the recording's
+    own folder.
     """
     requested_settings, requested_view = requested
     recorded_settings = recording.session.efficiency or EfficiencySettings()
@@ -735,6 +802,31 @@ def replay_passes(
         model_view=requested_view,
         **options,
     )
+    with_profile = standards_profile is not None
+    rules = _regroup_rules(requested_settings)
+    regrouped: RegroupedPass | None = None
+    if rules:
+        classes = _classify(recording, first, with_profile)
+        turns = _regroup(
+            recording,
+            classes,
+            _answered_from_checks(classes, second),
+            drop_answered="R" in rules,
+            merge="M" in rules,
+        )
+        regrouped = RegroupedPass(
+            rules=rules,
+            turns=turns,
+            played=play_review(
+                recording.run_dir,
+                Path(scratch) / "regrouped",
+                _regrouped_plans(plans, turns, len(classes)),
+                model=recording.session.model,
+                efficiency=requested_settings,
+                model_view=requested_view,
+                **options,
+            ),
+        )
     return ReplayPasses(
         recording=recording,
         as_recorded=recorded_settings,
@@ -743,7 +835,8 @@ def replay_passes(
         requested_view=requested_view,
         first=first,
         second=second,
-        with_profile=standards_profile is not None,
+        with_profile=with_profile,
+        regrouped=regrouped,
     )
 
 
@@ -769,6 +862,7 @@ def report_of(passes: ReplayPasses) -> ReplayReport:
     answered = _answered_from_checks(classes, second)
     pricing_first, lower = _as_recorded_pricing(recording, classes, passes.as_recorded_view)
     pricing_second = _requested_pricing(pricing_first, answered, passes.requested_view)
+    prefix_difference = count_tokens(second.prefix) - count_tokens(first.prefix)
     rounds = _rounds(
         recording,
         classes,
@@ -778,7 +872,7 @@ def report_of(passes: ReplayPasses) -> ReplayReport:
         pricing_second,
         lower,
         answered,
-        prefix_difference=count_tokens(second.prefix) - count_tokens(first.prefix),
+        prefix_difference=prefix_difference,
     )
     return ReplayReport(
         run_dir=str(recording.run_dir),
@@ -794,6 +888,9 @@ def report_of(passes: ReplayPasses) -> ReplayReport:
         ),
         rounds=rounds,
         totals=_totals(rounds),
+        regrouped=_regrouped_estimate(
+            recording, passes.regrouped, pricing_second, prefix_difference=prefix_difference
+        ),
         findings=_findings(recording, classes, second, answered),
     )
 
@@ -1127,21 +1224,15 @@ def _rounds(
     prefix_difference: int,
 ) -> list[ReplayRound]:
     """Price every recorded round in both passes (contracts/replay.md section 4)."""
-    base = recording.turns[0].main_rounds[0].usage.input_tokens or 0
     by_step = {item.recorded.step: item for item in classes}
     played_first = {(r.turn, r.index): r for r in first.rounds}
     played_second = {(r.turn, r.index): r for r in second.rounds}
     cache_first: dict[tuple[int, bool], int] = {}
     cache_second: dict[tuple[int, bool], int] = {}
     rounds: list[ReplayRound] = []
-    committed_outputs = 0
-    words = 0
-    words_unknown = False
+    conversation = _Conversation.of(recording)
     for turn in recording.turns:
-        if turn.index > 0:
-            words += turn.user_tokens or 0
-            words_unknown = words_unknown or turn.user_tokens is None
-        outputs = committed_outputs
+        conversation.begin(turn)
         for recorded_round in turn.rounds:
             recorded_input = recorded_round.usage.input_tokens or 0
             items = [by_step[call.step] for call in recorded_round.calls]
@@ -1170,7 +1261,7 @@ def _rounds(
                 )
                 continue
             key = (turn.index, recorded_round.index)
-            fixed = base + outputs + words
+            fixed = conversation.fixed
             a, b = played_first.get(key), played_second.get(key)
             as_recorded = (
                 fixed + _results_tokens(a, pricing_first, cache_first)
@@ -1192,14 +1283,193 @@ def _rounds(
                     requested_input=requested_input,
                     estimated=any(i.class_ == "estimated" for i in items),
                     lower_bound=any(i.index in lower for i in items)
-                    or (words_unknown and turn.index > 0),
+                    or (conversation.words_unknown and turn.index > 0),
                     calls=calls,
                 )
             )
-            outputs += recorded_round.usage.output_tokens or 0
-        if turn.end_reason not in UNCOMMITTED_ENDS:
-            committed_outputs = outputs
+            conversation.add_output(recorded_round.usage.output_tokens or 0)
+        conversation.end(turn)
     return rounds
+
+
+@dataclass
+class _Conversation:
+    """The part of each request that is not a tool result, walking the recorded turns.
+
+    `R0`, the recorded outputs of the model's earlier main rounds, and the engineer's words
+    (`contracts/replay.md` section 4, terms 1 to 3): a round sees the outputs of the turns
+    committed before its own and of its own turn's earlier rounds; a stopped or failed turn
+    leaves none of its outputs behind for the next (rule 7). The strict figure and the
+    regrouped estimate walk it the same way, so the two can differ only by their rounds.
+    """
+
+    base: int
+    words: int = 0
+    words_unknown: bool = False
+    """A later turn's words were not observable, so they count as zero (rule 7)."""
+    outputs: int = 0
+    committed_outputs: int = 0
+
+    @classmethod
+    def of(cls, recording: Recording) -> _Conversation:
+        return cls(base=recording.turns[0].main_rounds[0].usage.input_tokens or 0)
+
+    def begin(self, turn: RecordedTurn) -> None:
+        if turn.index > 0:
+            self.words += turn.user_tokens or 0
+            self.words_unknown = self.words_unknown or turn.user_tokens is None
+        self.outputs = self.committed_outputs
+
+    @property
+    def fixed(self) -> int:
+        return self.base + self.outputs + self.words
+
+    def add_output(self, tokens: int) -> None:
+        self.outputs += tokens
+
+    def end(self, turn: RecordedTurn) -> None:
+        if turn.end_reason not in UNCOMMITTED_ENDS:
+            self.committed_outputs = self.outputs
+
+
+# --- the regrouped estimate (User Story 4, contracts/replay.md section 6) ----------------------
+
+
+def _regroup_rules(requested: EfficiencySettings) -> tuple[RegroupRule, ...]:
+    """The regrouping rules whose condition `requested` meets: R with checks first, M with
+    parallel tool calls."""
+    rules: list[RegroupRule] = []
+    if checks_first(requested):
+        rules.append("R")
+    if requested.parallel_tool_calls:
+        rules.append("M")
+    return tuple(rules)
+
+
+def _regroup(
+    recording: Recording,
+    classes: Sequence[_Classified],
+    answered: Mapping[int, str],
+    *,
+    drop_answered: bool,
+    merge: bool,
+) -> tuple[tuple[RegroupedRound, ...], ...]:
+    """Each recorded turn's rounds with calls, regrouped by rule R and then rule M.
+
+    Rule R (`drop_answered`) drops every call the requested pass's guard answered from the
+    pre-run; a round left with no call disappears. Rule M (`merge`) then merges each run of
+    consecutive rounds of one turn whose calls all name one tool into one round holding
+    those calls in recorded order - never a call the replay could not run (estimated or
+    stored in pass A), and never across a turn. Consecutive means after rule R: two rounds
+    of one tool that a dropped check separated are merged, because the model the estimate
+    assumes never made the call between them. The closing round of a turn asks for no call
+    and is kept as it is by the pricing.
+    """
+    by_step = {item.recorded.step: item for item in classes}
+    by_index = {item.index: item for item in classes}
+    turns: list[tuple[RegroupedRound, ...]] = []
+    for turn in recording.turns:
+        rounds: list[RegroupedRound] = []
+        for recorded_round in turn.main_rounds:
+            calls = tuple(
+                by_step[call.step].index
+                for call in recorded_round.calls
+                if not (drop_answered and by_step[call.step].index in answered)
+            )
+            if not calls:
+                continue
+            here = RegroupedRound(sources=(recorded_round,), calls=calls)
+            if merge and rounds and _one_batch((*rounds[-1].calls, *calls), by_index):
+                earlier = rounds[-1]
+                rounds[-1] = RegroupedRound(
+                    sources=earlier.sources + here.sources, calls=earlier.calls + here.calls
+                )
+            else:
+                rounds.append(here)
+        turns.append(tuple(rounds))
+    return tuple(turns)
+
+
+def _one_batch(calls: Sequence[int], by_index: Mapping[int, _Classified]) -> bool:
+    """Rule M's condition: every call names one tool, and the replay ran each of them."""
+    items = [by_index[index] for index in calls]
+    return len({item.recorded.tool for item in items}) == 1 and all(
+        item.class_ not in ("estimated", "stored") for item in items
+    )
+
+
+def _regrouped_plans(
+    plans: Sequence[TurnPlan], turns: Sequence[Sequence[RegroupedRound]], calls: int
+) -> list[TurnPlan]:
+    """The recorded plans with each turn's rounds replaced by its regrouped rounds."""
+    scripted = [call for plan in plans for round_calls in plan.rounds for call in round_calls]
+    if len(scripted) != calls:
+        raise AssertionError(
+            f"the plans script {len(scripted)} calls where the recording classes {calls}"
+        )
+    return [
+        replace(plan, rounds=tuple(tuple(scripted[i] for i in r.calls) for r in rounds))
+        for plan, rounds in zip(plans, turns, strict=True)
+    ]
+
+
+def _regrouped_estimate(
+    recording: Recording,
+    regrouped: RegroupedPass | None,
+    requested: _Pricing,
+    *,
+    prefix_difference: int,
+) -> Regrouped | None:
+    """Price the regrouped script as the strict figure prices pass B (section 4).
+
+    Each regrouped round's output is its recorded rounds' outputs together; a round rule R
+    emptied is gone with its output, because the model never answered it. A call the replay
+    could not run keeps pass B's pricing, under its new position in the script. The closing
+    round and every carried presentation round are priced as the strict figure prices them.
+    """
+    if regrouped is None:
+        return None
+    kept = [index for rounds in regrouped.turns for r in rounds for index in r.calls]
+    pricing = _Pricing(
+        view=requested.view,
+        estimates={
+            position: requested.estimates[index]
+            for position, index in enumerate(kept)
+            if index in requested.estimates
+        },
+        stored={
+            position: requested.stored[index]
+            for position, index in enumerate(kept)
+            if index in requested.stored
+        },
+    )
+    played = {(r.turn, r.index): r for r in regrouped.played.rounds}
+    cache: dict[tuple[int, bool], int] = {}
+    conversation = _Conversation.of(recording)
+    total = count = 0
+    for turn, rounds in zip(recording.turns, regrouped.turns, strict=True):
+        conversation.begin(turn)
+        main = turn.main_rounds
+        priced = [r.sources for r in rounds]
+        if main and not main[-1].calls:
+            priced.append((main[-1],))
+        for position, sources in enumerate(priced):
+            round_ = played.get((turn.index, position))
+            total += (
+                conversation.fixed
+                + prefix_difference
+                + _results_tokens(round_, pricing, cache)
+                if round_ is not None
+                else sources[0].usage.input_tokens or 0
+            )
+            conversation.add_output(sum(s.usage.output_tokens or 0 for s in sources))
+        carried = [r for r in turn.rounds if r.kind == "presentation"]
+        total += sum(r.usage.input_tokens or 0 for r in carried)
+        count += len(priced) + len(carried)
+        conversation.end(turn)
+    return Regrouped(
+        assumption=REGROUPED_ASSUMPTION, rules=list(regrouped.rules), rounds=count, total=total
+    )
 
 
 def _totals(rounds: Sequence[ReplayRound]) -> ReplayTotals:
@@ -1389,6 +1659,12 @@ def render_replay_lines(report: ReplayReport) -> list[str]:
         f"rounds: {totals.estimated_rounds} estimated, {totals.lower_bound_rounds} lower bound, "
         f"{totals.carried_rounds} carried"
     )
+    if report.regrouped is not None:
+        regrouped = report.regrouped
+        lines.append(
+            f"regrouped estimate (rule {', '.join(regrouped.rules)}): {regrouped.total:,} over "
+            f"{regrouped.rounds} rounds, assuming {regrouped.assumption}"
+        )
     priced = [c for r in report.rounds for c in r.calls if c.class_ != "reproduced"]
     for call in priced:
         lines.append(f"  step {call.step} {call.tool}: {call.class_} - {call.reason}")

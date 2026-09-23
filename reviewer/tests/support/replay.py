@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from swreview.agent.providers import FRAMING_TOKENS, TokenUsage
-from swreview.agent.runner import ANSWER_MESSAGE
+from swreview.agent.runner import answers_message
 from swreview.agent.settings import MODEL_VIEW_OFF, EfficiencySettings
 from swreview.benchmark.replay import PlayedRound, Requested, TurnPlan, play_review
 from swreview.tokens import count_tokens
@@ -90,8 +90,7 @@ def engineer_messages(turns: Sequence[TurnPlan], through: int) -> list[str]:
         if plan.kind == "follow_up":
             messages.append(plan.user_text)
         elif plan.kind == "answer":
-            [(request_id, answer)] = plan.answers
-            messages.append(ANSWER_MESSAGE.format(request_id=request_id, answer=answer))
+            messages.append(answers_message(plan.answers))
     return messages
 
 
