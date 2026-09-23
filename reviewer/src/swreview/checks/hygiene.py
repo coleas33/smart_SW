@@ -44,6 +44,7 @@ __all__ = [
     "CHECK_REVISION",
     "HYGIENE_CHECKS",
     "HygieneChecks",
+    "SUMMARY_CHECK",
     "run_hygiene_checks",
 ]
 
@@ -53,6 +54,10 @@ CHECK_DUPLICATE_PART_NUMBER = "hygiene.duplicate_part_number"
 CHECK_REVISION = "hygiene.revision_present"
 CHECK_COMPONENT_NOT_RESOLVED = "hygiene.component_not_resolved"
 CHECK_COVERAGE = "hygiene.coverage"
+SUMMARY_CHECK = "hygiene"
+"""The checklist item these checks answer, and the id of the family's one summary coverage row
+(`contracts/hygiene.md` section 2, T108): the row that closes the item on a run with no
+finding, since the checklist matches coverage by id. No rule records under it."""
 
 HYGIENE_CHECKS: tuple[str, ...] = (
     CHECK_PART_NUMBER,

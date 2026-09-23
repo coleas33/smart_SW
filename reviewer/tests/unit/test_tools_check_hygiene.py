@@ -89,6 +89,8 @@ def test_with_the_profile_attached_the_section_5_rows_hold(attached) -> None:
 
 
 def test_passes_are_one_checked_item_per_check(attached) -> None:
+    """Plus, since T108, the family's summary row under the checklist item's id, `hygiene`,
+    which the result does not count (`test_mechanical_family_summaries.py`)."""
     context, result = attached
 
     checked = {item.check: item.reason for item in context.require_session().coverage.checked}
@@ -98,6 +100,7 @@ def test_passes_are_one_checked_item_per_check(attached) -> None:
         "hygiene.duplicate_description",
         "hygiene.duplicate_part_number",
         "hygiene.revision_present",
+        "hygiene",
     }
     assert checked["hygiene.part_number_matches_file"].startswith("22 documents: ")
     assert result["coverage"]["checked"] == 4
