@@ -7,6 +7,7 @@ live in one place (constitution Principles I and V).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal
@@ -144,6 +145,58 @@ def carried_and_computed(findings: Sequence[Finding]) -> tuple[int, int]:
     """`(carried, computed)` over `findings`: the pair the report states (FR-102)."""
     carried = carried_count(findings)
     return carried, len(findings) - carried
+
+
+ENTITY_ID = re.compile(r"^[a-z]{3,4}:[0-9]{4,}$")
+"""The shape of every IR entity id (`cmp:0001`, `hol:0007`, `feat:12345`).
+
+`finding_subject_key` reads the inputs that have it, whole, with `fullmatch`: a prose input
+that merely mentions an id (`"int:0001 cmp:0015+cmp:0026 Default computed"`) is prose.
+"""
+
+SubjectKey = tuple[
+    str,
+    tuple[str, ...],
+    tuple[tuple[str, str | None, str | None, str | None, int | None], ...],
+    tuple[str, ...],
+    str,
+]
+"""`(check, components, drawing locations, entity-id inputs, configuration)`."""
+
+
+def _none_last(values: tuple[Any, ...]) -> tuple[tuple[bool, str], ...]:
+    """A sort key for tuples that may hold `None`: never compares `None` with a value."""
+    return tuple((value is None, "" if value is None else str(value)) for value in values)
+
+
+def finding_subject_key(finding: Finding) -> SubjectKey:
+    """What a finding is about, independent of how the run that made it was numbered.
+
+    Feature 008's replay compares recorded and replayed findings as multisets of this key
+    (research R2.8): the check, the sorted component ids, the drawing locations without their
+    `persist_ref` (sheet, view, annotation and page locate a finding; a persistent reference
+    is an internal string a re-dump may re-encode), the sorted inputs that are whole entity
+    ids, and the configuration. It leaves out `id`, `tool_result_ids` and `capture_ids`,
+    which checks first renumbers. Entity ids among the inputs are what tell two
+    `hole.coaxiality` findings on one pair of components apart.
+    """
+    locations = sorted(
+        (
+            (ref.document_id, ref.sheet, ref.view, ref.annotation, ref.page)
+            for ref in finding.drawing_locations
+        ),
+        key=_none_last,
+    )
+    entity_inputs = sorted(
+        value for value in finding.inputs if isinstance(value, str) and ENTITY_ID.fullmatch(value)
+    )
+    return (
+        finding.check,
+        tuple(sorted(finding.component_ids)),
+        tuple(locations),
+        tuple(entity_inputs),
+        finding.configuration,
+    )
 
 
 class FindingIdAllocator(SequentialIdAllocator):

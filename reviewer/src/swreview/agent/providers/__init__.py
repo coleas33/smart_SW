@@ -50,6 +50,7 @@ from pydantic import BaseModel, ConfigDict, Field
 __all__ = [
     "ADAPTER_MODULES",
     "CACHED_SHARE_PUBLISHABLE",
+    "FRAMING_TOKENS",
     "SUMMARY_LENGTH",
     "AgentEvent",
     "AgentProvider",
@@ -74,6 +75,7 @@ __all__ = [
     "get",
     "register",
     "summarize_result",
+    "tool_result_text",
     "tools_withdrawn",
     "usage_body",
     "usage_from_body",
@@ -528,6 +530,29 @@ def summarize_result(payload: Mapping[str, Any]) -> str:
     if len(text) <= SUMMARY_LENGTH:
         return text
     return text[: SUMMARY_LENGTH - 1] + "…"
+
+
+def tool_result_text(payload: Mapping[str, Any]) -> str:
+    """What the model reads of one tool result: the one serialization (008 research R2.9).
+
+    The OpenAI adapter encodes every `function_call_output` with it, and feature 008's
+    replay and step sizes count tokens over it (`swreview.tokens.count_tokens`), so the
+    request and every number priced from it are made from the same bytes. Default
+    separators, ASCII-escaped: exactly the `json.dumps` the adapter always sent. A Gemini
+    request carries a `function_response` part the SDK serializes itself; its counts use
+    this text and are labelled a shape comparison.
+    """
+    return json.dumps(payload)
+
+
+FRAMING_TOKENS = 12
+"""The tokens a provider bills around each tool result, beyond the result's own text.
+
+Measured, not assumed: recorded round-over-round input growth minus the replayed
+`count_tokens(tool_result_text(payload))` of the result that caused it was 11 to 14 tokens,
+median 12, over 87 results of three recorded OpenAI runs (008 research R2.5). The replay adds
+it once per visible result so its rounds reproduce what the provider billed.
+"""
 
 
 def call_tool(

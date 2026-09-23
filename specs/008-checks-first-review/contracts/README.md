@@ -3,7 +3,7 @@
 | Contract | File | Producer → Consumer |
 |----------|------|---------------------|
 | The replay: the command, the reading of a recording, the two passes, the call classes, the accounting and its constant, the finding comparison, the regrouped estimate, the report, the fixtures | `replay.md` | `benchmark/recording.py`, `benchmark/replay.py` → the owner, the acceptance tests of every story |
-| The tokenizer: one named encoding, vendored, loaded with no network | `tokenizer.md` | `tokens.py` → the replay, the step sizes, the report |
+| The tokenizer: one named encoding, fetched once into a per-user cache, loaded with no network | `tokenizer.md` | `tokens.py` → the replay, the step sizes, the report |
 | Checks first: the pre-run under the pane default, live interference and its persistence, the opening digest, the re-call guard, the folded modelling-practice group | `checks-first.md` | `prerun.py`, `agent/runner.py`, `ir/loader.py`, `report/attention.py`, `report/markdown.py` → the first user message, the session, `package.json`, the report, `attention.json` |
 | The model's view: reference stripping, the check digest, grouped gaps, `get_finding`, entity ids on the bridge tools, compact JSON, pruning and the stub, the stored results, the settings | `model-view.md` | `tools/model_view.py`, `tools/refs.py`, `agent/providers/pruning.py`, the two adapters, `tools/registry.py` → what the model reads, the run folder |
 | The answer batch: the runner method and the route | `answer-batch.md` | the pane (feature 009's page) → `chat/server.py` → `agent/runner.py` |
