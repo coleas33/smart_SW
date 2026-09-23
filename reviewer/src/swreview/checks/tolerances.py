@@ -13,14 +13,21 @@ This module landed with User Story 3, before any tolerance was read, with the ty
 table and the profile's general block - and `resolve_tolerance`, which walks the five sources
 in precedence; `ResolverLookup` replaces `NoSources` as `check_joints`' lookup, and the
 stack-up does not change when it does.
+
+Feature 011 fills source 1 (`contracts/drawing-source.md` section 4): `drawing_answer` reads a
+drawing record bound to the subject through a usable view (`drawings/binding.py`) - its limits,
+or the precision it is written to, which the general block reads by decimal places only in the
+unit the profile's bands are counted in. The binding ships disabled until the seat validates it
+(`DRAWING_BINDING_VALIDATED`); with no drawing record every answer is feature 010's but source
+1's reason.
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
-from functools import lru_cache
+from dataclasses import dataclass, replace
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol
 
@@ -30,7 +37,9 @@ from swreview import units
 from swreview.checks.result import limits_mm, round_length
 from swreview.ir.models import (
     Dimension,
+    DisplayDimensionRecord,
     EvidencePackage,
+    GtolFrame,
     ModelAnnotation,
     ModelDimension,
     Quantity,
@@ -40,13 +49,19 @@ from swreview.ir.models import (
 
 if TYPE_CHECKING:  # the standards package reaches the runner; only the type is needed here
     from swreview.checks.standards.profile import StandardsProfile
+    from swreview.drawings.binding import DrawingBinding
+    from swreview.drawings.evidence import DrawingIndex
+
+# `drawings/binding.py` reads `ToleranceSubject` and `unique_model_dimension` from this module,
+# so the drawing modules are imported inside the functions that need them, never at the top.
 
 __all__ = [
     "DEFAULT_ISO286_PATH",
-    "DRAWING_NOT_AVAILABLE",
+    "NO_DIMENSION_UNIT",
     "NO_SOURCE_READ_YET",
     "SOURCE_LABELS",
     "SOURCE_ORDER",
+    "DrawingAnswer",
     "Iso286",
     "NoSources",
     "ResolvedTolerance",
@@ -56,11 +71,13 @@ __all__ = [
     "ToleranceLookup",
     "ToleranceSubject",
     "UnresolvedTolerance",
-    "drawing_tolerance",
+    "drawing_answer",
     "general_tolerance_dimension",
+    "is_position_frame",
     "iso_dimension",
     "load_iso286",
     "resolve_tolerance",
+    "unique_model_dimension",
 ]
 
 SourceKind = Literal["drawing", "annotation", "model_dimension", "hole_wizard", "general"]
@@ -338,8 +355,6 @@ def general_tolerance_dimension(
 
 # --- the resolver (contracts/tolerances.md section 4) -------------------------------------------
 
-DRAWING_NOT_AVAILABLE = "not available before feature 011"
-
 _Answer = tuple[Dimension, str] | str
 """`(dimension, cited)` when a source binds the subject, else why it does not."""
 
@@ -347,12 +362,212 @@ _POSITION_WORDS = ("posi", "position", "conc", "coax")
 _ZONE = re.compile(r"(\d*\.?\d+)\s*(mm|in)?", re.IGNORECASE)
 
 
-def drawing_tolerance(package: EvidencePackage, subject: ToleranceSubject) -> Dimension | None:
-    """Source 1's slot (FR-024): feature 011's drawing dimension or hole callout on one of the
-    subject's faces. `None` until feature 011 lands native drawing dimensions; it then fills
-    this function, and the stack-up reads the records under the same citation rules."""
-    del package, subject
-    return None
+# --- source 1: the drawing (feature 011, `contracts/drawing-source.md` section 4) --------------
+
+
+@dataclass(frozen=True)
+class DrawingAnswer:
+    """What source 1 says about one subject (feature 011 `data-model.md` section 4).
+
+    Replaces feature 010's `drawing_tolerance`, whose `Dimension | None` could not carry the
+    one answer a drawing gives that no other source does: no limits, but the precision the
+    dimension is written to, which the general tolerance reads by decimal places (FR-021).
+    """
+
+    dimension: Dimension | None = None
+    """The first binding's limits, when a binding states them (step 1)."""
+    cited: str | None = None
+    """`drawing {document}, sheet {name}, view {name}, {ddm id}` of that binding."""
+    decimal_places: int | None = None
+    unit: Literal["mm", "in"] | None = None
+    """The written precision and unit every untoleranced or block-toleranced binding agrees on,
+    when no binding states limits (step 2)."""
+    conflict: str | None = None
+    """A later binding with different limits: the drawing source's own conflict."""
+    why: str | None = None
+    """Why no limits bound - the precision hand-off says so too - when none did."""
+    record_id: str | None = None
+    """The drawing record that supplied `dimension` or the written precision."""
+
+
+def _drawing_cited(binding: DrawingBinding) -> str:
+    view = binding.view
+    return (
+        f"drawing {view.drawing_id}, sheet {view.sheet.name}, view {view.name}, "
+        f"{binding.record_id}"
+    )
+
+
+def _plural_ids(ids: list[str]) -> tuple[str, bool]:
+    """`ddm:0001`, or `ddm:0001 and ddm:0002`, and whether it is more than one."""
+    if len(ids) == 1:
+        return ids[0], False
+    return f"{', '.join(ids[:-1])} and {ids[-1]}", True
+
+
+def _stated_limits(
+    binding: DrawingBinding, subject: ToleranceSubject, iso: Iso286
+) -> tuple[Dimension, str] | str | None:
+    """Step 1 for one binding: its limits and citation, a reason when it names a fit class the
+    ISO 286 table cannot turn to limits, or `None` when it states no limits of its own."""
+    from swreview.drawings.binding import RADIAL_DIMENSION_TYPES
+    from swreview.drawings.native import NO_OWN_TOLERANCE_TYPES, native_dimension
+
+    record = binding.record
+    assert isinstance(record, DisplayDimensionRecord)
+    if record.tolerance_type_raw in NO_OWN_TOLERANCE_TYPES:
+        return None
+    view = binding.view
+    native = native_dimension(record, view.view, view.sheet, view.record)
+    if isinstance(native, str):
+        return native
+    cited = _drawing_cited(binding)
+    tolerance = record.tolerance
+    if tolerance is not None and tolerance.kind in ("bilateral", "symmetric", "limits"):
+        if record.dimension_type_raw in RADIAL_DIMENSION_TYPES:
+            nominal = native.nominal
+            assert isinstance(nominal, Quantity)
+            native = native.model_copy(
+                update={
+                    "nominal": nominal.model_copy(update={"value": 2.0 * nominal.value}),
+                    "tolerance": _doubled(tolerance),
+                }
+            )
+        return native, cited
+    fit = record.fit_hole_class if subject.kind == "hole_size" else record.fit_shaft_class
+    if not fit:
+        return None
+    fit_cited = f"{cited}: fit class {fit}, per ISO 286-1 (iso286.yaml)"
+    built = iso_dimension(fit, subject.nominal_mm, view.drawing_id, fit_cited, iso)
+    if isinstance(built, str):
+        return f"{record.id} names fit class {fit}, but {built}"
+    return (
+        built.model_copy(
+            update={
+                "source": native.source,
+                "tolerance": built.tolerance.model_copy(update={"source": native.source}),
+            }
+        ),
+        fit_cited,
+    )
+
+
+def _drawing_size(
+    bindings: tuple[DrawingBinding, ...], subject: ToleranceSubject, iso: Iso286
+) -> DrawingAnswer:
+    """Steps 1 and 2 of section 4 for a size subject's bindings, in their fixed order."""
+    from swreview.drawings.native import (
+        written_precision,
+        written_unit,
+        written_unit_reason,
+    )
+
+    limited: list[tuple[Dimension, str, str]] = []
+    reasons: list[str] = []
+    for binding in bindings:
+        stated = _stated_limits(binding, subject, iso)
+        if isinstance(stated, tuple):
+            limited.append((*stated, binding.record_id))
+        elif isinstance(stated, str):
+            reasons.append(stated)
+    if limited:
+        (dimension, cited, record_id), *rest = limited
+        chosen = _limits(dimension, subject)
+        other = next(
+            (
+                other_cited
+                for other_dimension, other_cited, _ in rest
+                if any(
+                    abs(a - b) > LENGTH_EQUAL_MM
+                    for a, b in zip(chosen, _limits(other_dimension, subject), strict=True)
+                )
+            ),
+            None,
+        )
+        conflict = (
+            None
+            if other is None
+            else f"{cited} and {other} give {subject.label} different tolerances; {cited} is used"
+        )
+        return DrawingAnswer(
+            dimension=dimension, cited=cited, conflict=conflict, record_id=record_id
+        )
+
+    written: list[tuple[str, int, Literal["mm", "in"]]] = []
+    for binding in bindings:
+        record = binding.record
+        assert isinstance(record, DisplayDimensionRecord)
+        raw = record.tolerance_type_raw
+        if raw == GENERAL_TABLE_TYPE:
+            reasons.append(
+                f"{record.id} is governed by the drawing's general tolerance table, which is "
+                "not converted"
+            )
+            continue
+        if raw not in WRITTEN_PRECISION_TYPES:
+            if not any(record.id in reason for reason in reasons):
+                reasons.append(
+                    f"{record.id} states no tolerance the review can read (tolerance type {raw})"
+                )
+            continue
+        places = written_precision(record, binding.view.record)
+        if places is None:
+            return DrawingAnswer(why=f"the precision {record.id} is written to was not read")
+        unit = written_unit(record, binding.view.record)
+        if unit is None:
+            return DrawingAnswer(why=written_unit_reason(record, binding.view.record))
+        written.append((record.id, places, unit))
+    if not written:
+        return DrawingAnswer(why="; ".join(reasons))
+    (first, places, unit), *rest = written
+    for other, other_places, other_unit in rest:
+        if other_places != places:
+            return DrawingAnswer(why=f"{first} writes {places} decimals and {other} writes "
+                                     f"{other_places}")
+        if other_unit != unit:
+            return DrawingAnswer(why=f"{first} is written in {unit} and {other} in {other_unit}")
+    ids, several = _plural_ids([item[0] for item in written])
+    return DrawingAnswer(
+        decimal_places=places,
+        unit=unit,
+        record_id=first,
+        why=(
+            f"{ids} {'state' if several else 'states'} no tolerance of "
+            f"{'their' if several else 'its'} own and {'write' if several else 'writes'} "
+            f"{places} decimals in {unit}, which the general tolerance reads"
+        ),
+    )
+
+
+WRITTEN_PRECISION_TYPES: frozenset[int] = frozenset({0, 10})
+"""`swTolType_e` `NONE` 0 and `BLOCK` 10: no tolerance of their own, so their written precision
+selects a general tolerance band (research R2.9)."""
+
+GENERAL_TABLE_TYPE = 11
+"""`swTolType_e.GENERAL`: governed by SOLIDWORKS' general tolerance table (an ISO 2768 class),
+recorded word for word and never converted (owner, 2026-09-23, research R5 Q7)."""
+
+
+def drawing_answer(
+    package: EvidencePackage,
+    subject: ToleranceSubject,
+    index: DrawingIndex | None = None,
+    iso: Iso286 | None = None,
+) -> DrawingAnswer:
+    """Source 1 for `subject`: the drawing's limits, or its written precision, or why neither
+    (`contracts/drawing-source.md` section 4). While `DRAWING_BINDING_VALIDATED` is false it
+    binds nothing and says so; with no drawing of the subject's document it says that."""
+    from swreview.drawings.binding import search_bindings
+    from swreview.drawings.evidence import DrawingIndex as Index
+
+    search = search_bindings(index or Index.for_package(package), package, subject)
+    if not search.bindings:
+        return DrawingAnswer(why=search.why)
+    if subject.kind == "hole_position":
+        return DrawingAnswer(
+            why="a drawing's position tolerance is converted by feature 011 User Story 4"
+        )
+    return _drawing_size(search.bindings, subject, iso or load_iso286())
 
 
 def _subject_refs(package: EvidencePackage, subject: ToleranceSubject) -> set[str]:
@@ -360,11 +575,17 @@ def _subject_refs(package: EvidencePackage, subject: ToleranceSubject) -> set[st
     return {face.persist_ref for face in package.faces if face.id in wanted}
 
 
+def is_position_frame(frame: GtolFrame) -> bool:
+    """Whether a geometric tolerance frame is a position or coaxiality frame, by its symbols
+    (either format): the one frame kind that tolerances a hole's position."""
+    words = " ".join([*frame.symbols_raw, frame.symbol_xml_raw or ""]).lower()
+    return any(word in words for word in _POSITION_WORDS)
+
+
 def _frame_zone(annotation: ModelAnnotation) -> tuple[float, str | None, int] | None:
     """The first position or coaxiality frame's zone value and the unit its text states."""
     for frame in annotation.frames:
-        words = " ".join([*frame.symbols_raw, frame.symbol_xml_raw or ""]).lower()
-        if not any(word in words for word in _POSITION_WORDS) or not frame.values_raw:
+        if not is_position_frame(frame) or not frame.values_raw:
             continue
         match = _ZONE.search(frame.values_raw[0])
         if match is not None:
@@ -433,9 +654,14 @@ def _doubled(tolerance: Tolerance) -> Tolerance:
     )
 
 
-def _by_model_dimension(
-    package: EvidencePackage, subject: ToleranceSubject, iso: Iso286
-) -> _Answer:
+def unique_model_dimension(
+    package: EvidencePackage, subject: ToleranceSubject
+) -> ModelDimension | str:
+    """The one diameter or radius dimension of the subject's document of the subject's size,
+    or why there is not exactly one (research R2.18: a value binds a hole only when it is
+    unique in its document). Source 3 reads its tolerance; feature 011's drawing source names
+    it (`drawings/binding.py`, the model-dimension route), so the two cannot disagree about
+    which dimension sizes a subject."""
     if subject.kind == "hole_position":
         return "a diameter dimension tolerances a size, not a position"
     if not package.model_dimensions:
@@ -459,7 +685,15 @@ def _by_model_dimension(
             f"{len(matching)} dimensions of {subject.document_id} are {nominal!r} mm ({names}), "
             "so none binds to one hole alone"
         )
-    dimension = matching[0]
+    return matching[0]
+
+
+def _by_model_dimension(
+    package: EvidencePackage, subject: ToleranceSubject, iso: Iso286
+) -> _Answer:
+    dimension = unique_model_dimension(package, subject)
+    if isinstance(dimension, str):
+        return dimension
     label = f"{dimension.name} ({dimension.id})"
     tolerance = dimension.tolerance
     if tolerance is None:
@@ -527,18 +761,32 @@ def resolve_tolerance(
     profile: StandardsProfile | None,
     subject: ToleranceSubject,
     iso: Iso286 | None = None,
+    *,
+    index: DrawingIndex | None = None,
 ) -> ResolvedTolerance | UnresolvedTolerance:
     """The first source that binds `subject`, in precedence, with every lower one that also
     carried a tolerance and a conflict when their limits differ; or every source searched and
-    why none bound (`contracts/tolerances.md` section 4). Nothing else produces a limit."""
+    why none bound (`contracts/tolerances.md` section 4). Nothing else produces a limit.
+
+    Feature 011 changes two things and no others: source 1 is `drawing_answer`, whose own
+    conflict leads the resolved one; and when the drawing states no limits but a written
+    precision, the general block is asked about that precision in the drawing's unit
+    (`_general_for`). `index` is the package's `DrawingIndex`, built here when not given."""
     iso = iso or load_iso286()
-    drawing = drawing_tolerance(package, subject)
+    drawing = drawing_answer(package, subject, index=index, iso=iso)
+    source_1: _Answer
+    if drawing.dimension is not None:
+        assert drawing.cited is not None
+        source_1 = (drawing.dimension, drawing.cited)
+    else:
+        assert drawing.why is not None
+        source_1 = drawing.why
     answers: list[tuple[SourceKind, _Answer]] = [
-        ("drawing", DRAWING_NOT_AVAILABLE if drawing is None else (drawing, "a drawing callout")),
+        ("drawing", source_1),
         ("annotation", _by_annotation(package, subject)),
         ("model_dimension", _by_model_dimension(package, subject, iso)),
         ("hole_wizard", _by_hole_wizard(package, subject, iso)),
-        ("general", _general_answer(profile, subject)),
+        ("general", _general_for(profile, subject, drawing)),
     ]
     bound = [(kind, answer) for kind, answer in answers if not isinstance(answer, str)]
     if not bound:
@@ -562,6 +810,9 @@ def resolve_tolerance(
             f"{SOURCE_LABELS[kind]} and {', '.join(SOURCE_LABELS[item] for item in differing)} "
             f"give {subject.label} different tolerances; the {SOURCE_LABELS[kind]} is used"
         )
+    if kind == "drawing" and drawing.conflict is not None:
+        # The drawing source's own conflict (two drawings, or two views) comes first.
+        conflict = "; ".join(item for item in (drawing.conflict, conflict) if item)
     return ResolvedTolerance(
         subject=subject,
         source_kind=kind,
@@ -580,6 +831,42 @@ def _general_answer(profile: StandardsProfile | None, subject: ToleranceSubject)
     return built, built.tolerance.source.annotation
 
 
+NO_DIMENSION_UNIT = (
+    "the profile does not say which unit its decimal places are counted in "
+    "(drawing.dimension_unit)"
+)
+
+
+def _declared_unit(profile: StandardsProfile) -> str:
+    """The profile's `drawing.dimension_unit`, or empty for a version 1 or 2 profile."""
+    return profile.drawing.dimension_unit if profile.drawing is not None else ""
+
+
+def _general_for(
+    profile: StandardsProfile | None, subject: ToleranceSubject, drawing: DrawingAnswer
+) -> _Answer:
+    """Source 5, asked about the drawing's written precision when the drawing supplied one.
+
+    Only when the subject carries no precision of its own and the drawing's unit is the one the
+    profile's bands are counted in (FR-022): a version 2 profile, or an empty
+    `drawing.dimension_unit`, says which setting is missing; another unit names both units. A
+    missing profile or general block keeps feature 010's own reasons.
+    """
+    if subject.decimal_places is not None or drawing.decimal_places is None:
+        return _general_answer(profile, subject)
+    if profile is None or profile.general_tolerance is None:
+        return _general_answer(profile, subject)
+    declared = _declared_unit(profile)
+    if not declared:
+        return NO_DIMENSION_UNIT
+    if drawing.unit != declared:
+        return (
+            f"the drawing writes {subject.label} in {drawing.unit} and the profile's bands are "
+            f"counted in {declared}"
+        )
+    return _general_answer(profile, replace(subject, decimal_places=drawing.decimal_places))
+
+
 @dataclass(frozen=True)
 class ResolverLookup:
     """The tolerance lookup `check_joints` asks (feature 010 US8, T085): the resolver over one
@@ -588,17 +875,25 @@ class ResolverLookup:
     package: EvidencePackage
     profile: StandardsProfile | None = None
 
+    @cached_property
+    def index(self) -> DrawingIndex:
+        """The package's drawing index, built once for every subject this lookup resolves."""
+        from swreview.drawings.evidence import DrawingIndex as Index
+
+        return Index.for_package(self.package)
+
     def resolve(self, subject: ToleranceSubject) -> ResolvedTolerance | UnresolvedTolerance:
-        return resolve_tolerance(self.package, self.profile, subject)
+        return resolve_tolerance(self.package, self.profile, subject, index=self.index)
 
     def holds_any_source(self) -> bool:
         """Whether any source could bind anything in this package: a model dimension with a
-        tolerance or a fit class, a position frame whose value states its unit, or a Hole
-        Wizard fit class that is an ISO 286 class. A Hole Wizard screw clearance fit, an
-        untoleranced dimension and a unitless frame value can never bind; neither can the
-        general block, because no subject's written precision is recorded before feature 011.
-        With none of them the stack is one skipped item, rather than an unresolved finding per
-        joint that says the same thing."""
+        tolerance or a fit class, a position frame whose value states its unit, a Hole Wizard
+        fit class that is an ISO 286 class, or - once the seat has validated the drawing
+        binding - a drawing dimension that could bind (`_drawing_could_bind`). A Hole Wizard
+        screw clearance fit, an untoleranced model dimension and a unitless model frame value
+        can never bind; neither can the general block on its own, because only a drawing
+        records a written precision (feature 011). With none of them the stack is one skipped
+        item, rather than an unresolved finding per joint that says the same thing."""
         package = self.package
         return (
             any(_dimension_could_bind(item) for item in package.model_dimensions)
@@ -613,7 +908,61 @@ class ResolverLookup:
                 and _is_carried_class(hole.wizard.fit_class_raw)
                 for hole in package.holes
             )
+            or self._drawing_could_bind()
         )
+
+    def _drawing_could_bind(self) -> bool:
+        """A usable view carries a size dimension that states limits (or a carried fit class),
+        or an untoleranced one written to a known precision in the unit a version 3 profile's
+        bands are counted in - and `DRAWING_BINDING_VALIDATED` is set."""
+        from swreview.drawings import binding
+        from swreview.drawings.native import written_precision, written_unit
+
+        if not binding.DRAWING_BINDING_VALIDATED:
+            return False
+        profile = self.profile
+        declared = (
+            _declared_unit(profile)
+            if profile is not None
+            and profile.general_tolerance is not None
+            and profile.general_tolerance.linear
+            else ""
+        )
+        for view in self.index.views:
+            if not view.usable:
+                continue
+            for record in view.view.display_dimensions:
+                if (
+                    record.dimension_type_raw not in binding.SIZE_DIMENSION_TYPES
+                    and not record.is_hole_callout
+                ):
+                    continue
+                if _drawing_record_states_limits(record):
+                    return True
+                if (
+                    declared
+                    and record.tolerance_type_raw in WRITTEN_PRECISION_TYPES
+                    and written_precision(record, view.record) is not None
+                    and written_unit(record, view.record) == declared
+                ):
+                    return True
+        return False
+
+
+def _drawing_record_states_limits(record: DisplayDimensionRecord) -> bool:
+    """A display dimension with limits of its own, or a fit class the ISO 286 table carries."""
+    if record.tolerance_type_raw in (*WRITTEN_PRECISION_TYPES, GENERAL_TABLE_TYPE):
+        return False
+    if record.tolerance is not None and record.tolerance.kind in (
+        "bilateral",
+        "symmetric",
+        "limits",
+    ):
+        return True
+    return any(
+        fit is not None and _is_carried_class(fit)
+        for fit in (record.fit_hole_class, record.fit_shaft_class)
+    )
 
 
 def _dimension_could_bind(dimension: ModelDimension) -> bool:

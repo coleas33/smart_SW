@@ -1,15 +1,75 @@
-"""Native drawing sheets as the model's tools read them (feature 011).
+"""Native drawing sheets as the model's tools and the resolver read them (feature 011).
 
-`contracts/drawing-source.md` section 2 is normative. One place turns what the drawing phase
-recorded into what a tool reports, so the census, the sheet and dimension tools and the
-reference a fit or stack check takes cannot read a native sheet two ways.
+`contracts/drawing-source.md` section 2 is normative. **One conversion**: `native_dimension`
+turns a display dimension the drawing phase recorded into the IR `Dimension` that
+`find_dimensions`, `get_drawing_sheet`, `refs.resolve_dimension` and the resolver's drawing
+source all read, so a native value cannot be read two ways (FR-025, Principle V).
+
+- `nominal` is the value as recorded - metres or radians, `DrawingDumper`'s system units - and
+  no value is a reason, never a zero;
+- the tolerance is the one the extractor mapped exactly as feature 010 maps a model dimension's;
+  `NONE`, `BLOCK`, `GENERAL`, a class-only fit and an unread tolerance are all "not stated on
+  the drawing" (`kind="none"`), which is what `find_dimensions` has always reported for an
+  untoleranced PDF dimension;
+- the `SourceRef` names the drawing document, the sheet, the view and the `ddm:` id;
+- `text_as_read` is **composed** - text parts, the value at its written precision in its written
+  unit, the tolerance - and says so, because the rendered string is not read (probe D7).
+
+`written_precision` and `written_unit` say what the drawing writes a dimension to. Each answers
+`None` when a read it needs was not made: an unknown precision or unit is unknown, and the
+general tolerance binds nothing on it (FR-021, FR-022).
 """
 
 from __future__ import annotations
 
-from swreview.ir.models import EvidencePackage
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Literal
 
-__all__ = ["native_sheet_count"]
+from swreview import units
+from swreview.drawings.evidence import id_order
+from swreview.ir.models import (
+    Angle,
+    Dimension,
+    DisplayDimensionRecord,
+    DrawingRecord,
+    DrawingSheetRecord,
+    DrawingView,
+    EvidencePackage,
+    Quantity,
+    SourceRef,
+    Tolerance,
+)
+
+__all__ = [
+    "LENGTH_UNITS",
+    "NO_OWN_TOLERANCE_TYPES",
+    "NativeSheet",
+    "native_dimension",
+    "native_sheet_count",
+    "native_sheets",
+    "written_precision",
+    "written_tolerance_precision",
+    "written_unit",
+    "written_unit_raw",
+    "written_unit_reason",
+]
+
+LENGTH_UNITS: dict[int, Literal["mm", "in"]] = {0: "mm", 3: "in"}
+"""`swLengthUnit_e` members a drawing's decimal places can be counted in: `swMM` 0, `swINCHES` 3.
+Every other unit is named by its number and binds nothing (research R2.9)."""
+
+NO_OWN_TOLERANCE_TYPES: frozenset[int] = frozenset({0, 10, 11})
+"""`swTolType_e` `NONE` 0, `BLOCK` 10 (the tolerance by decimal places) and `GENERAL` 11 (the
+drawing's general tolerance table): a dimension of these types states no limits of its own."""
+
+FIT_CLASSES_SHOWN: frozenset[int] = frozenset({7, 8})
+"""`FIT` 7 and `FITWITHTOL` 8 show the fit classes; `FITTOLONLY` 9 shows only the limits."""
+
+NO_UNIT_TYPES: frozenset[int] = frozenset({0, 13})
+"""`swDimensionTypeUnknown` and `swScalarDimension`: the dumper records no value for them."""
+
+COMPOSED = "(composed)"
 
 
 def native_sheet_count(package: EvidencePackage) -> int:
@@ -19,3 +79,216 @@ def native_sheet_count(package: EvidencePackage) -> int:
     that carries no native sheet reports exactly what it reported before feature 011 (FR-037).
     """
     return sum(len(record.sheets) for record in package.drawing_records)
+
+
+# --- what the drawing writes a dimension to --------------------------------------------------
+
+
+def _read_precision(value: int | None) -> int | None:
+    return value if value is not None and value >= 0 else None
+
+
+def written_precision(record: DisplayDimensionRecord, drawing: DrawingRecord) -> int | None:
+    """The decimals `record` is written to: its own, or its drawing's default when it uses it.
+
+    `swDetailingLinearDimPrecision` is the default probe D4 is expected to confirm; if D4 finds
+    `swUnitsLinearDecimalPlaces` governs, T064 changes the one line below. `None` when a read
+    it needs is null or negative.
+    """
+    if record.uses_document_precision is None:
+        return None
+    if record.uses_document_precision:
+        return _read_precision(drawing.dimension_precision_raw)
+    return _read_precision(record.precision_raw)
+
+
+def written_tolerance_precision(
+    record: DisplayDimensionRecord, drawing: DrawingRecord
+) -> int | None:
+    """The decimals `record`'s tolerance is written to, by the same rule as its value's."""
+    if record.uses_document_precision is None:
+        return None
+    if record.uses_document_precision:
+        return _read_precision(drawing.tolerance_precision_raw)
+    return _read_precision(record.tolerance_precision_raw)
+
+
+def written_unit_raw(record: DisplayDimensionRecord, drawing: DrawingRecord) -> int | None:
+    """The `swLengthUnit_e` number `record` is written in: its own, or its drawing's."""
+    if record.uses_document_units is None:
+        return None
+    return drawing.length_unit_raw if record.uses_document_units else record.units_raw
+
+
+def written_unit(
+    record: DisplayDimensionRecord, drawing: DrawingRecord
+) -> Literal["mm", "in"] | None:
+    """`mm` or `in`, or `None` for another unit or an unread one (`written_unit_reason`)."""
+    raw = written_unit_raw(record, drawing)
+    return None if raw is None else LENGTH_UNITS.get(raw)
+
+
+def written_unit_reason(record: DisplayDimensionRecord, drawing: DrawingRecord) -> str | None:
+    """Why `written_unit` is `None`, naming the read that was not made or the unit's number."""
+    if record.uses_document_units is None:
+        return f"whether dimension {record.id} uses its drawing's unit was not read"
+    raw = written_unit_raw(record, drawing)
+    if raw is None:
+        if record.uses_document_units:
+            return f"the unit drawing {drawing.document_id} is dimensioned in was not read"
+        return f"the unit dimension {record.id} is written in was not read"
+    if raw not in LENGTH_UNITS:
+        return (
+            f"dimension {record.id} is written in unit {raw} (swLengthUnit_e), which is neither "
+            "mm nor in"
+        )
+    return None
+
+
+# --- the conversion ----------------------------------------------------------------------------
+
+
+WrittenUnit = Literal["mm", "in"] | None
+
+
+def _magnitude(value: Quantity | Angle, unit: WrittenUnit) -> float:
+    """An angle in degrees; a length in `unit`, or in mm when the written unit is unknown."""
+    if isinstance(value, Angle):
+        return units.as_degrees(value)
+    return units.convert(value, unit).converted.value if unit is not None else units.as_mm(value)
+
+
+def _number(value: float, precision: int | None) -> str:
+    return f"{value:.{precision}f}" if precision is not None else f"{value:g}"
+
+
+def _value_text(
+    value: Quantity | Angle, record: DisplayDimensionRecord, drawing: DrawingRecord
+) -> str:
+    """The value as the drawing writes it; a length whose unit is unknown in mm, saying so."""
+    if isinstance(value, Angle):
+        return f"{_number(_magnitude(value, None), written_precision(record, drawing))}°"
+    unit = written_unit(record, drawing)
+    if unit is None:
+        return f"{_magnitude(value, None):g} mm"
+    return _number(_magnitude(value, unit), written_precision(record, drawing))
+
+
+def _deviation(value: Quantity | Angle, unit: WrittenUnit, precision: int | None) -> str:
+    number = _magnitude(value, unit)
+    text = _number(number, precision)
+    return f"+{text}" if number > 0 else text
+
+
+def _limit(value: Quantity | Angle, unit: WrittenUnit, precision: int | None) -> str:
+    return _number(_magnitude(value, unit), precision)
+
+
+def _tolerance_text(
+    tolerance: Tolerance, record: DisplayDimensionRecord, drawing: DrawingRecord
+) -> str:
+    unit = written_unit(record, drawing)
+    precision = written_tolerance_precision(record, drawing)
+    upper, lower = tolerance.upper, tolerance.lower
+    if tolerance.kind == "basic":
+        return "BASIC"
+    if tolerance.kind == "symmetric" and upper is not None:
+        return f"±{_limit(upper, unit, precision)}"
+    if tolerance.kind == "bilateral" and upper is not None and lower is not None:
+        return f"{_deviation(upper, unit, precision)}/{_deviation(lower, unit, precision)}"
+    if tolerance.kind == "limits" and upper is not None and lower is not None:
+        return f"{_limit(upper, unit, precision)}/{_limit(lower, unit, precision)}"
+    return ""
+
+
+def _fit_text(record: DisplayDimensionRecord) -> str:
+    if record.tolerance_type_raw not in FIT_CLASSES_SHOWN:
+        return ""
+    classes = [name for name in (record.fit_hole_class, record.fit_shaft_class) if name]
+    return "/".join(classes)
+
+
+def _composed(
+    record: DisplayDimensionRecord,
+    value: Quantity | Angle,
+    tolerance: Tolerance,
+    drawing: DrawingRecord,
+) -> str:
+    stated = " ".join(
+        part for part in (_fit_text(record), _tolerance_text(tolerance, record, drawing)) if part
+    )
+    main = (
+        f"{record.text_prefix or ''}{_value_text(value, record, drawing)}"
+        f"{' ' + stated if stated else ''}{record.text_suffix or ''}"
+    )
+    lines = [line for line in (record.text_above, main, record.text_below) if line]
+    return f"{chr(10).join(lines)} {COMPOSED}"
+
+
+def native_dimension(
+    record: DisplayDimensionRecord,
+    view: DrawingView,
+    sheet: DrawingSheetRecord,
+    drawing: DrawingRecord,
+) -> Dimension | str:
+    """The IR `Dimension` of one display dimension, or why it has none (section 2)."""
+    value = record.value
+    if value is None:
+        if record.dimension_type_raw in NO_UNIT_TYPES:
+            return (
+                f"dimension {record.id} reports type {record.dimension_type_raw}, which names no "
+                "unit, so no value was recorded (its dimension_unit gap)"
+            )
+        return f"no value of dimension {record.id} was read"
+    source = SourceRef(
+        document_id=drawing.document_id,
+        sheet=sheet.name,
+        view=view.name,
+        annotation=record.id,
+        persist_ref=record.persist_ref,
+    )
+    stated = record.tolerance
+    if record.tolerance_type_raw in NO_OWN_TOLERANCE_TYPES or stated is None:
+        stated = Tolerance(kind="none", upper=None, lower=None, source=source)
+    return Dimension(
+        nominal=value,
+        tolerance=stated,
+        source=source,
+        text_as_read=_composed(record, value, stated, drawing),
+    )
+
+
+# --- the sheets the tools walk -----------------------------------------------------------------
+
+
+@dataclass(frozen=True, eq=False)
+class NativeSheet:
+    """One natively read sheet of one drawing, as the sheet and dimension tools walk it."""
+
+    drawing: DrawingRecord
+    sheet: DrawingSheetRecord
+
+    def views(self) -> Sequence[DrawingView]:
+        return sorted(self.sheet.views, key=lambda item: id_order(item.id))
+
+    def dimensions(
+        self,
+    ) -> list[tuple[DrawingView, DisplayDimensionRecord, Dimension | str]]:
+        """Every display dimension of the sheet with its conversion, or why it has none, by
+        view id then dimension id."""
+        return [
+            (view, record, native_dimension(record, view, self.sheet, self.drawing))
+            for view in self.views()
+            for record in sorted(view.display_dimensions, key=lambda item: id_order(item.id))
+        ]
+
+
+def native_sheets(package: EvidencePackage, document_id: str) -> list[NativeSheet]:
+    """The natively read sheets of drawing `document_id`, in sheet order; none for a document
+    that has no drawing record."""
+    return [
+        NativeSheet(drawing=record, sheet=sheet)
+        for record in package.drawing_records
+        if record.document_id == document_id
+        for sheet in sorted(record.sheets, key=lambda item: item.index)
+    ]
