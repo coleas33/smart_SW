@@ -279,6 +279,7 @@ public sealed class ReviewPageAttentionPanelTests
                                 {
                                     { "chat_id", "chat-" + chats },
                                     { "run_dir", @"C:\SwReviewRuns\20260916-101500-bracket-" + chats },
+                                    { "document", new { path = @"C:\parts\bracket.sldasm", configuration = "Default" } },
                                 }));
                             return;
                         default:

@@ -72,6 +72,7 @@ public sealed class ReviewPageNarrowLayoutTests
                             new Dictionary<string, object?>
                             {
                                 { "chat_id", ChatId },
+                                { "document", new { path = @"C:\parts\bracket.sldasm", configuration = "Default" } },
                                 {
                                     "run_dir",
                                     @"C:\SwReviewRuns\20260920-184136-810-11249-very-long-run-folder-name"

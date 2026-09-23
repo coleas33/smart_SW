@@ -55,7 +55,11 @@ public sealed class ReviewPagePreparationTests
                     starts++;
                     startedToken = message.GetProperty("payload").GetProperty("preparation_id").GetString();
                     page.PostWebMessageAsJson(Reply("review.started", id,
-                        new { chat_id = "chat-prepared", run_dir = @"C:\runs\prepared" }));
+                        new
+                        {
+                            chat_id = "chat-prepared", run_dir = @"C:\runs\prepared",
+                            document = new { path = @"C:\parts\bracket.sldasm", configuration = "Default" },
+                        }));
                 }
             };
         }, async page =>

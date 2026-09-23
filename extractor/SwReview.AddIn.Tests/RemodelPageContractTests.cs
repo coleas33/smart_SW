@@ -237,6 +237,22 @@ public sealed class RemodelPageContractTests
     }
 
     /// <summary>
+    /// U13: when the host sends no refusal sentence of its own the page falls back to one, and
+    /// it is one constant in the same plain words the host sends - not three copies of a
+    /// sentence about a "remodel seat", which is a word from the build and not from the
+    /// engineer's screen.
+    /// </summary>
+    [Fact]
+    public void TheNoSeatFallbackIsOneConstantInTheHostsOwnPlainWords()
+    {
+        string script = Strip(RemodelPageFiles.Read("remodel.js"));
+
+        Assert.Single(Regex.Matches(script, Regex.Escape("'" + RemodelHost.NoSeatMessage + "'")).Cast<Match>());
+        Assert.DoesNotContain("remodel seat", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("swreview-extract", script, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The real tab, loaded by the add-in's own control: a navigation off
     /// `https://swreview.invalid/` is cancelled and no new window is ever opened.
     ///

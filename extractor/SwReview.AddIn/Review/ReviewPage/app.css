@@ -262,6 +262,38 @@ fieldset.field {
   white-space: nowrap;
 }
 
+/* ---- the review is of another document (U8) ---------------------------------------------- */
+
+/*
+  The one line a review leaves when the document on screen is not the one it is of. The open
+  hue, not the warn one: nothing is wrong with the model or the review, they are just not the
+  same document.
+*/
+.stale-review {
+  margin: 0 12px 10px;
+  padding: 7px 10px;
+  border-left: 3px solid var(--open);
+  border-radius: var(--radius);
+  background: var(--open-bg);
+  color: var(--ink-2);
+  font-size: var(--text-small);
+  overflow-wrap: anywhere;
+}
+
+/*
+  The previous review's results, hidden while another document is open: Start here, the
+  not-examined warning, the coverage fold and every finding and evidence card. A class on the
+  body rather than a property on each, so a card that streams in meanwhile is hidden too and
+  every one of them comes back when the reviewed document does.
+*/
+body.results-stale #attention-panel,
+body.results-stale #not-examined,
+body.results-stale #coverage-panel,
+body.results-stale .card.finding,
+body.results-stale .card.evidence {
+  display: none;
+}
+
 /* ---- tier 1: what to start with ---------------------------------------------------------- */
 
 /*
