@@ -28,7 +28,7 @@ from pydantic import (
 )
 
 from swreview.agent.providers import EffortMapping, TokenUsage, TurnEndReason
-from swreview.agent.settings import EfficiencySettings
+from swreview.agent.settings import EfficiencySettings, ModelViewSettings
 from swreview.findings import Finding, ReviewModel
 from swreview.ids import SequentialIdAllocator
 
@@ -451,6 +451,13 @@ class ReviewSession(ReviewModel):
     never in `required`, so a session written before the list existed round-trips to its
     own bytes. The ranking never reads it.
     """
+    model_view: ModelViewSettings | None = None
+    """What the model read of each tool result (feature 008 User Story 3): the slimmed view
+    and the pruning age. Always written by `start_review`, off when the caller gave none;
+    absent on a session written before the field existed, which means off. It changes what
+    the model read and nothing the session records: every finding, step and coverage item
+    is the same with it on or off (SC-007). Omitted when `None`, so older sessions keep
+    their bytes."""
     folded_families: list[str] = Field(default_factory=list)
     """The rule families whose findings rank and render as one group (feature 008, FR-014).
 
@@ -479,6 +486,8 @@ class ReviewSession(ReviewModel):
             data.pop("contacts", None)
         if not self.folded_families:
             data.pop("folded_families", None)
+        if self.model_view is None:
+            data.pop("model_view", None)
         return data
 
 
