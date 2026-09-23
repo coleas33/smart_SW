@@ -419,6 +419,14 @@ public sealed class PackageWriter
     {
         var scope = new DumpScope(gaps, options, tree);
         AllocateComponentIds(scope);
+
+        // A drawing root is the one drawing its own dump reads (feature 006); the open drawings
+        // a review attaches join the list after discovery (feature 011).
+        if (tree.RootDocumentKind == DocumentKind.Drawing)
+        {
+            scope.Drawings.Add(new ScopedDrawing(tree.RootDocumentPath, tree.RootDocument));
+        }
+
         return scope;
     }
 

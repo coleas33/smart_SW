@@ -154,7 +154,8 @@ existence check failed), `drawing_document_settings`, `drawing_view_state`, `dim
 | `OpenDocument` | `Dump/OpenDrawingDiscovery.cs` | one open document as discovery sees it: path, kind, the paths its views reference, and a handle for the drawing phase; built by `SwOpenDrawingReader` |
 | `IOpenDrawingSource` | `Dump/DumpContracts.cs` | `OpenDocuments()` and `FileExists(path)`, the two seams discovery needs |
 | `AttachedDrawings` | `Dump/OpenDrawingDiscovery.cs` | the ordered drawings to read (at most ten), the ones named in the limit gap, the candidates; pure `Discover(tree, documents, fileExists, options)` |
-| Drawing id allocators | `Dump/DumpContracts.cs` `DumpScope` | `dsh`, `dvw`, `ddm`, `dan`, `dnt`, `drv`, `dtb`, moved from `DrawingTraversal` |
+| Drawing id allocators | `Dump/DumpContracts.cs` `DumpScope` | `dsh`, `dvw`, `ddm`, `dan`, `dnt`, `drv`, `dtb`, moved from `DrawingTraversal`; *landed as* `DumpScope.DrawingIds` (`DrawingIdAllocators`) |
+| `ScopedDrawing`, `DumpScope.Drawings`, `ComponentTreeResult.RootDocument` | `Dump/DumpContracts.cs` | the drawings the `drawing` phase reads, each by its own document handle (T010) |
 | `IDrawingReader` changes | `Dump/DrawingDumper.cs` | `Drawing(object document)`, `PersistRef(object document, object entity)`; the new reads of section 1 |
 | `OpenDrawingDiscovery.CandidatePath` | `Dump/OpenDrawingDiscovery.cs` | `<directory>\<stem>.SLDDRW` of a model path: the one rule discovery and the confirmed open both use |
 | `DrawingOpenGuard` | `Guard/DrawingOpenGuard.cs` | the confirmed open's allowlist: `ISldWorks.DocumentVisible`, `ISldWorks.OpenDoc6`, `ISldWorks.CloseDoc` (`contracts/confirmed-open.md` section 3) |

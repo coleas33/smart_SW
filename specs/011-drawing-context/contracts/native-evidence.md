@@ -10,7 +10,12 @@ The allocators `dsh`, `dvw`, `ddm`, `dan`, `dnt`, `drv` move from `DrawingTraver
 scope's allocators and keeps every other rule it has (sheet order, `index` passed in, `was_active`
 derived once). A drawing root's single record is numbered exactly as before; a second drawing
 continues the sequences. `DrawingDumper.Dump(scope)` reads `scope.Drawings` - the root drawing, or
-the attached drawings in order - and returns one `DrawingRecord` each.
+the attached drawings in order - and returns one `DrawingRecord` each. *Landed as (T010)*: the
+seven allocators are one `DrawingIdAllocators` (`Sheets`, `Views`, `Dimensions`, `Annotations`,
+`Notes`, `RevisionTables`, `Tables`) at `DumpScope.DrawingIds`; `scope.Drawings` holds
+`ScopedDrawing(documentPath, document)`, and `PackageWriter.ScopeFor` lists a drawing root's own
+drawing through `ComponentTreeResult.RootDocument`, the handle the traversal hands over. A
+drawing with no handle is one `drawing_sheet` gap naming it, and the others are still read.
 
 ## 2. The reader seam
 

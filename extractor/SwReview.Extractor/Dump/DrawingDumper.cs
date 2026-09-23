@@ -42,11 +42,12 @@ public readonly struct RevisionTableShape
 public interface IDrawingReader
 {
     /// <summary>
-    /// The open document as an <c>IDrawingDoc</c>, or null when it is not a drawing. Nothing
-    /// is opened to produce it: the drawing phase reads the document the dump is already
-    /// attached to (FR-044).
+    /// <paramref name="document"/> as an <c>IDrawingDoc</c>, or null when it is not a drawing:
+    /// the root document for a drawing root, or an open drawing a review attached (feature
+    /// 011). A cast, nothing opened: every drawing read is one SOLIDWORKS already has open
+    /// (FR-044).
     /// </summary>
-    object? Drawing();
+    object? Drawing(object document);
 
     /// <summary>
     /// <c>IDrawingDoc.GetCurrentSheet()</c> -> <c>ISheet.GetName()</c>: which sheet was
@@ -161,11 +162,12 @@ public interface IDrawingReader
     string? Cell(object table, int row, int column);
 
     /// <summary>
-    /// The record's persistent reference, scoped to the drawing document; null when
+    /// The record's persistent reference, scoped to <paramref name="document"/> - the drawing
+    /// being read, so each drawing's references are its own (feature 011); null when
     /// SOLIDWORKS gave none, which PROBE-10 says is the likely answer for most of these
     /// kinds. Gates <c>GetPersistReference3</c> itself.
     /// </summary>
-    ScopedPersistRef? PersistRef(object entity);
+    ScopedPersistRef? PersistRef(object document, object entity);
 }
 
 /// <summary>
@@ -261,6 +263,11 @@ public sealed class DrawingDumper : IDrawingSource
             : null;
     }
 
+    /// <summary>
+    /// One record per drawing of <see cref="DumpScope.Drawings"/>, in order, every id from the
+    /// package's allocators (feature 011, T010). A drawing that cannot be read is a gap naming
+    /// it and the others are still read.
+    /// </summary>
     public IReadOnlyList<DrawingRecord> Dump(DumpScope scope)
     {
         if (scope == null)
@@ -268,23 +275,51 @@ public sealed class DrawingDumper : IDrawingSource
             throw new ArgumentNullException(nameof(scope));
         }
 
-        string documentId = scope.DocumentId(scope.Tree.RootDocumentPath);
+        var records = new List<DrawingRecord>();
+        foreach (ScopedDrawing drawing in scope.Drawings)
+        {
+            DrawingRecord? record = DumpOne(scope, drawing);
+            if (record != null)
+            {
+                records.Add(record);
+            }
+        }
 
+        return records;
+    }
+
+    private DrawingRecord? DumpOne(DumpScope scope, ScopedDrawing scoped)
+    {
+        string documentId = scope.DocumentId(scoped.DocumentPath);
+
+        if (scoped.Document == null)
+        {
+            scope.Gaps.Add(
+                GapKind.NotExtracted,
+                "drawing_sheet",
+                documentId,
+                $"No document handle was handed over for '{scoped.DocumentPath}', so no sheet, view, "
+                + "dimension, annotation, note or revision table of it was read.",
+                null);
+            return null;
+        }
+
+        object document = scoped.Document;
         object? drawing = null;
         if (!scope.Gaps.TryStep(
             "drawing_sheet",
             documentId,
             "read the open document as a drawing",
-            () => { drawing = _reader.Drawing(); }))
+            () => { drawing = _reader.Drawing(document); }))
         {
-            return new List<DrawingRecord>();
+            return null;
         }
 
         if (drawing == null)
         {
-            // The phase runs only for a drawing root, so this is the dump disagreeing with
-            // itself: recorded rather than swallowed, because an empty drawing_records[] with
-            // nothing beside it reads as a drawing with no sheets.
+            // The dump was told this document is a drawing and the cast disagreed: recorded
+            // rather than swallowed, because an empty drawing_records[] with nothing beside it
+            // reads as a drawing with no sheets.
             scope.Gaps.Add(
                 GapKind.NotExtracted,
                 "drawing_sheet",
@@ -292,7 +327,7 @@ public sealed class DrawingDumper : IDrawingSource
                 "The open document did not answer as a drawing, so no sheet, view, dimension, "
                 + "annotation, note or revision table was read.",
                 null);
-            return new List<DrawingRecord>();
+            return null;
         }
 
         string? activeSheetName = scope.Gaps.TryStep(
@@ -301,7 +336,8 @@ public sealed class DrawingDumper : IDrawingSource
             "read which sheet is active",
             () => _reader.ActiveSheetName(drawing!));
 
-        var traversal = new DrawingTraversal(documentId, activeSheetName);
+        var pass = new DrawingPass(
+            new DrawingTraversal(documentId, activeSheetName, scope.DrawingIds), document);
 
         List<string>? names = scope.Gaps.TryStep(
             "drawing_sheet",
@@ -317,16 +353,33 @@ public sealed class DrawingDumper : IDrawingSource
         // them instead of sliding up one.
         for (int index = 0; index < sheetNames.Count; index++)
         {
-            ReadSheet(scope, traversal, drawing!, sheetNames[index], index, documentId);
+            ReadSheet(scope, pass, drawing!, sheetNames[index], index, documentId);
         }
 
-        return new List<DrawingRecord> { traversal.Record };
+        return pass.Traversal.Record;
+    }
+
+    /// <summary>
+    /// One drawing's pass: the traversal that orders and numbers its records, and the document
+    /// every persistent reference of it is scoped to (feature 011).
+    /// </summary>
+    private sealed class DrawingPass
+    {
+        public DrawingPass(DrawingTraversal traversal, object document)
+        {
+            Traversal = traversal;
+            Document = document;
+        }
+
+        public DrawingTraversal Traversal { get; }
+
+        public object Document { get; }
     }
 
     /// <summary>One sheet: its own reads, then its views, then its revision-table cross-check.</summary>
     private void ReadSheet(
         DumpScope scope,
-        DrawingTraversal traversal,
+        DrawingPass pass,
         object drawing,
         string name,
         int index,
@@ -361,7 +414,7 @@ public sealed class DrawingDumper : IDrawingSource
             scope, "drawing_sheet", documentId, $"read the name of sheet '{name}'",
             "GetName", () => _reader.SheetName(sheet!)) ?? name;
 
-        DrawingSheetRecord record = traversal.AddSheet(sheetName, index);
+        DrawingSheetRecord record = pass.Traversal.AddSheet(sheetName, index);
 
         record.SheetFormatName = ReadText(
             scope, "drawing_sheet", record.Id,
@@ -372,7 +425,7 @@ public sealed class DrawingDumper : IDrawingSource
             "drawing_sheet",
             record.Id,
             $"read a persistent reference for sheet '{sheetName}'",
-            () => _reader.PersistRef(sheet!));
+            () => _reader.PersistRef(pass.Document, sheet!));
 
         record.PersistRef = reference?.Base64;
         record.PersistRefScope = reference?.ScopeDocumentId;
@@ -405,7 +458,7 @@ public sealed class DrawingDumper : IDrawingSource
 
         foreach (object view in views)
         {
-            ReadView(scope, traversal, record, view, sheetName);
+            ReadView(scope, pass, record, view, sheetName);
         }
 
         CrossCheckRevisionTable(scope, record, sheet!, sheetName);
@@ -414,12 +467,12 @@ public sealed class DrawingDumper : IDrawingSource
     /// <summary>One view, and everything it owns.</summary>
     private void ReadView(
         DumpScope scope,
-        DrawingTraversal traversal,
+        DrawingPass pass,
         DrawingSheetRecord sheet,
         object view,
         string sheetName)
     {
-        DrawingView record = traversal.AddView(sheet);
+        DrawingView record = pass.Traversal.AddView(sheet);
         string where = $"view {record.Id} of sheet '{sheetName}'";
 
         record.Name = ReadText(
@@ -450,15 +503,15 @@ public sealed class DrawingDumper : IDrawingSource
             "drawing_view",
             record.Id,
             $"read a persistent reference for {where}",
-            () => _reader.PersistRef(view));
+            () => _reader.PersistRef(pass.Document, view));
 
         record.PersistRef = reference?.Base64;
         record.PersistRefScope = reference?.ScopeDocumentId;
 
-        ReadDimensions(scope, traversal, record, view, where);
-        ReadAnnotations(scope, traversal, record, view, where);
-        ReadNotes(scope, traversal, record, view, where);
-        ReadRevisionTables(scope, traversal, sheet, view, where);
+        ReadDimensions(scope, pass, record, view, where);
+        ReadAnnotations(scope, pass, record, view, where);
+        ReadNotes(scope, pass, record, view, where);
+        ReadRevisionTables(scope, pass, sheet, view, where);
     }
 
     /// <summary>
@@ -514,7 +567,7 @@ public sealed class DrawingDumper : IDrawingSource
     }
 
     private void ReadDimensions(
-        DumpScope scope, DrawingTraversal traversal, DrawingView view, object handle, string where)
+        DumpScope scope, DrawingPass pass, DrawingView view, object handle, string where)
     {
         IReadOnlyList<object>? dimensions = scope.Gaps.TryStep(
             "dimension_override",
@@ -524,19 +577,19 @@ public sealed class DrawingDumper : IDrawingSource
 
         foreach (object dimension in dimensions ?? new List<object>())
         {
-            ReadDimension(scope, traversal, view, dimension, where);
+            ReadDimension(scope, pass, view, dimension, where);
         }
     }
 
     /// <summary>One display dimension: its identity, its override flag, and its two values.</summary>
     private void ReadDimension(
         DumpScope scope,
-        DrawingTraversal traversal,
+        DrawingPass pass,
         DrawingView view,
         object dimension,
         string where)
     {
-        DisplayDimensionRecord record = traversal.AddDimension(view);
+        DisplayDimensionRecord record = pass.Traversal.AddDimension(view);
 
         record.Name = ReadText(
             scope, "dimension_override", record.Id,
@@ -605,14 +658,14 @@ public sealed class DrawingDumper : IDrawingSource
             "dimension_override",
             record.Id,
             $"read a persistent reference for dimension {record.Id} on {where}",
-            () => _reader.PersistRef(dimension));
+            () => _reader.PersistRef(pass.Document, dimension));
 
         record.PersistRef = reference?.Base64;
         record.PersistRefScope = reference?.ScopeDocumentId;
     }
 
     private void ReadAnnotations(
-        DumpScope scope, DrawingTraversal traversal, DrawingView view, object handle, string where)
+        DumpScope scope, DrawingPass pass, DrawingView view, object handle, string where)
     {
         IReadOnlyList<object>? annotations = scope.Gaps.TryStep(
             "annotation_identity",
@@ -622,7 +675,7 @@ public sealed class DrawingDumper : IDrawingSource
 
         foreach (object annotation in annotations ?? new List<object>())
         {
-            DrawingAnnotation record = traversal.AddAnnotation(view);
+            DrawingAnnotation record = pass.Traversal.AddAnnotation(view);
 
             record.Name = ReadText(
                 scope, "annotation_identity", record.Id,
@@ -649,7 +702,7 @@ public sealed class DrawingDumper : IDrawingSource
                 "annotation_identity",
                 record.Id,
                 $"read a persistent reference for annotation {record.Id} on {where}",
-                () => _reader.PersistRef(annotation));
+                () => _reader.PersistRef(pass.Document, annotation));
 
             record.PersistRef = reference?.Base64;
             record.PersistRefScope = reference?.ScopeDocumentId;
@@ -657,7 +710,7 @@ public sealed class DrawingDumper : IDrawingSource
     }
 
     private void ReadNotes(
-        DumpScope scope, DrawingTraversal traversal, DrawingView view, object handle, string where)
+        DumpScope scope, DrawingPass pass, DrawingView view, object handle, string where)
     {
         IReadOnlyList<object>? notes = scope.Gaps.TryStep(
             "note_text",
@@ -667,7 +720,7 @@ public sealed class DrawingDumper : IDrawingSource
 
         foreach (object note in notes ?? new List<object>())
         {
-            DrawingNote record = traversal.AddNote(view);
+            DrawingNote record = pass.Traversal.AddNote(view);
 
             record.Text = ReadText(
                 scope, "note_text", record.Id,
@@ -678,7 +731,7 @@ public sealed class DrawingDumper : IDrawingSource
                 "note_text",
                 record.Id,
                 $"read a persistent reference for note {record.Id} on {where}",
-                () => _reader.PersistRef(note));
+                () => _reader.PersistRef(pass.Document, note));
 
             record.PersistRef = reference?.Base64;
             record.PersistRefScope = reference?.ScopeDocumentId;
@@ -692,7 +745,7 @@ public sealed class DrawingDumper : IDrawingSource
     /// </summary>
     private void ReadRevisionTables(
         DumpScope scope,
-        DrawingTraversal traversal,
+        DrawingPass pass,
         DrawingSheetRecord sheet,
         object view,
         string where)
@@ -720,19 +773,19 @@ public sealed class DrawingDumper : IDrawingSource
                 continue;
             }
 
-            ReadRevisionTable(scope, traversal, sheet, table, where);
+            ReadRevisionTable(scope, pass, sheet, table, where);
         }
     }
 
     /// <summary>One revision table: both revision readings, and every cell.</summary>
     private void ReadRevisionTable(
         DumpScope scope,
-        DrawingTraversal traversal,
+        DrawingPass pass,
         DrawingSheetRecord sheet,
         object table,
         string where)
     {
-        RevisionTable record = traversal.AddRevisionTable(sheet);
+        RevisionTable record = pass.Traversal.AddRevisionTable(sheet);
 
         // Verbatim, including the empty string: the macro's author recorded that this comes
         // back empty under the vault, and the check names both readings with their source
@@ -797,7 +850,7 @@ public sealed class DrawingDumper : IDrawingSource
             "revision_table_read",
             record.Id,
             $"read a persistent reference for table {record.Id} on {where}",
-            () => _reader.PersistRef(table));
+            () => _reader.PersistRef(pass.Document, table));
 
         record.PersistRef = reference?.Base64;
         record.PersistRefScope = reference?.ScopeDocumentId;

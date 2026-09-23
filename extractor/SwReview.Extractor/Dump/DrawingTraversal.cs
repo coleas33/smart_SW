@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using SwReview.Extractor.Ids;
 using SwReview.Extractor.Ir;
 
 namespace SwReview.Extractor.Dump;
@@ -26,19 +25,15 @@ namespace SwReview.Extractor.Dump;
 ///     export-control note lives, and nothing here branches on it: it is allocated, ordered
 ///     and owned exactly like any other view, and Python names the number.
 ///
-/// The six id allocators live on the instance rather than on <see cref="DumpScope"/>,
-/// which is where <c>cut:</c> lives, because one package carries at most one drawing
-/// record: the phase runs only for a drawing root and reads that one document, so one
-/// traversal IS the package's allocation order for these six prefixes.
+/// The id allocators are the package's, handed in from <see cref="DumpScope.DrawingIds"/>
+/// (feature 011, T010): a package may carry several drawing records - the root drawing, or
+/// the open drawings a review attached - and each prefix continues one sequence across them.
+/// A drawing root's single record is the first and only traversal, so it numbers exactly as
+/// it did when the allocators lived here.
 /// </summary>
 public sealed class DrawingTraversal
 {
-    private readonly IdAllocator _sheetIds = new IdAllocator("dsh");
-    private readonly IdAllocator _viewIds = new IdAllocator("dvw");
-    private readonly IdAllocator _dimensionIds = new IdAllocator("ddm");
-    private readonly IdAllocator _annotationIds = new IdAllocator("dan");
-    private readonly IdAllocator _noteIds = new IdAllocator("dnt");
-    private readonly IdAllocator _revisionTableIds = new IdAllocator("drv");
+    private readonly DrawingIdAllocators _ids;
 
     private readonly string? _activeSheetName;
 
@@ -47,8 +42,9 @@ public sealed class DrawingTraversal
     /// <paramref name="activeSheetName"/> is <c>GetCurrentSheet()</c>'s answer, or null when
     /// it could not be read - in which case no sheet is marked active, because guessing
     /// would make a sheet nobody looked at read as the one that was on screen.
+    /// <paramref name="ids"/> are the package's drawing allocators.
     /// </summary>
-    public DrawingTraversal(string documentId, string? activeSheetName)
+    public DrawingTraversal(string documentId, string? activeSheetName, DrawingIdAllocators ids)
     {
         if (string.IsNullOrWhiteSpace(documentId))
         {
@@ -56,6 +52,7 @@ public sealed class DrawingTraversal
                 "A drawing record is keyed by its document id.", nameof(documentId));
         }
 
+        _ids = ids ?? throw new ArgumentNullException(nameof(ids));
         _activeSheetName = activeSheetName;
 
         Record = new DrawingRecord
@@ -98,7 +95,7 @@ public sealed class DrawingTraversal
 
         var sheet = new DrawingSheetRecord
         {
-            Id = _sheetIds.Next(),
+            Id = _ids.Sheets.Next(),
             Source = DrawingEvidenceSource.Native,
             Name = name,
             Index = index,
@@ -123,7 +120,7 @@ public sealed class DrawingTraversal
 
         var view = new DrawingView
         {
-            Id = _viewIds.Next(),
+            Id = _ids.Views.Next(),
             SheetId = sheet.Id,
         };
 
@@ -141,7 +138,7 @@ public sealed class DrawingTraversal
 
         var dimension = new DisplayDimensionRecord
         {
-            Id = _dimensionIds.Next(),
+            Id = _ids.Dimensions.Next(),
             ViewId = view.Id,
         };
 
@@ -163,7 +160,7 @@ public sealed class DrawingTraversal
 
         var annotation = new DrawingAnnotation
         {
-            Id = _annotationIds.Next(),
+            Id = _ids.Annotations.Next(),
             OwnerId = view.Id,
         };
 
@@ -181,7 +178,7 @@ public sealed class DrawingTraversal
 
         var note = new DrawingNote
         {
-            Id = _noteIds.Next(),
+            Id = _ids.Notes.Next(),
             OwnerId = view.Id,
         };
 
@@ -204,7 +201,7 @@ public sealed class DrawingTraversal
 
         var table = new RevisionTable
         {
-            Id = _revisionTableIds.Next(),
+            Id = _ids.RevisionTables.Next(),
             SheetId = sheet.Id,
         };
 

@@ -110,6 +110,7 @@ public sealed class ComponentTreeDumper : IComponentTreeSource
             DesignName = Path.GetFileNameWithoutExtension(rootPath),
             ActiveConfiguration = gate.Call("Configuration.Name", () => _session.Configuration.Name),
             RootDocumentKind = rootKind,
+            RootDocument = document,
         };
 
         if (rootKind == null)

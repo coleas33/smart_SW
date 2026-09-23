@@ -111,6 +111,105 @@ public class DrawingDumperTests
         Assert.Equal(_scope.DocumentId(DrawingPath), gap.EntityId);
     }
 
+    // ---- several drawings in one package (feature 011 T009, FR-016) -----------------
+
+    private const string SecondDrawingPath = @"C:\vault\bracket-assy\housing.SLDDRW";
+
+    [Fact]
+    public void Dump_ReadsEveryDrawingOfTheScopeInOrder_WithIdsContinuingOneSequence()
+    {
+        ScriptOneOfEach(_reader.AddSheet("Sheet1"));
+        FakeDrawing second = _reader.AddDrawing(SecondDrawingPath);
+        ScriptOneOfEach(FakeDrawingReader.AddSheet(second, "Sheet1"));
+
+        IReadOnlyList<DrawingRecord> records = Dump();
+
+        Assert.Equal(
+            new[] { _scope.DocumentId(DrawingPath), _scope.DocumentId(SecondDrawingPath) },
+            records.Select(record => record.DocumentId));
+        Assert.Equal(new[] { "dsh:0001", "dvw:0001", "ddm:0001", "dan:0001", "dnt:0001", "drv:0001" }, IdsOf(records[0]));
+        Assert.Equal(new[] { "dsh:0002", "dvw:0002", "ddm:0002", "dan:0002", "dnt:0002", "drv:0002" }, IdsOf(records[1]));
+    }
+
+    [Fact]
+    public void Dump_AsksTheReaderForEachDrawingByItsOwnDocument()
+    {
+        _reader.AddSheet("Sheet1");
+        FakeDrawingReader.AddSheet(_reader.AddDrawing(SecondDrawingPath), "Sheet1");
+
+        Dump();
+
+        Assert.Equal(
+            new[] { _reader.RootDocument, _reader.OtherDrawings[0].Document },
+            _reader.DocumentsAsked);
+    }
+
+    [Fact]
+    public void Dump_ScopesEveryPersistentReferenceToItsOwnDrawing()
+    {
+        _reader.AddSheet("Sheet1").PersistRef = "AAAA";
+        FakeDrawingReader.AddSheet(_reader.AddDrawing(SecondDrawingPath), "Sheet1").PersistRef = "BBBB";
+
+        IReadOnlyList<DrawingRecord> records = Dump();
+
+        Assert.Equal(_scope.DocumentId(DrawingPath), records[0].Sheets[0].PersistRefScope);
+        Assert.Equal(_scope.DocumentId(SecondDrawingPath), records[1].Sheets[0].PersistRefScope);
+        Assert.Contains(_reader.OtherDrawings[0].Document, _reader.ReferenceDocumentsAsked);
+        Assert.Contains(_reader.RootDocument, _reader.ReferenceDocumentsAsked);
+    }
+
+    [Fact]
+    public void Dump_OfAScopeWithNoDrawing_RecordsNothingAndWritesNoGap()
+    {
+        _scope = NewScope();
+
+        Assert.Empty(new DrawingDumper(_gate, _reader).Dump(_scope));
+        Assert.Empty(_scope.Gaps.Gaps);
+        Assert.Empty(_reader.DocumentsAsked);
+    }
+
+    [Fact]
+    public void Dump_OfADrawingWithNoDocumentHandle_RecordsAGapAndStillReadsTheOthers()
+    {
+        _reader.ActiveSheetName = "Sheet1";
+        _reader.AddSheet("Sheet1");
+        _scope = NewScope();
+        _scope.Drawings.Add(new ScopedDrawing(SecondDrawingPath, null));
+        _scope.Drawings.Add(new ScopedDrawing(DrawingPath, _reader.RootDocument));
+
+        DrawingRecord record = Assert.Single(new DrawingDumper(_gate, _reader).Dump(_scope));
+
+        Assert.Equal(_scope.DocumentId(DrawingPath), record.DocumentId);
+        Gap gap = Assert.Single(_scope.Gaps.Gaps);
+        Assert.Equal("drawing_sheet", gap.EntityKind);
+        Assert.Equal(_scope.DocumentId(SecondDrawingPath), gap.EntityId);
+    }
+
+    /// <summary>One view with a dimension, an annotation, a note and a revision table.</summary>
+    private static void ScriptOneOfEach(FakeSheet sheet)
+    {
+        FakeView view = sheet.AddView("Drawing View1");
+        view.AddDimension("D1@Sketch1").Type2 = 2;
+        view.AddAnnotation("Note1", 6, false);
+        view.AddNote("FICTIONAL NOTE");
+        view.AddTable(3, "A").Rows = new[] { new[] { "A" } };
+    }
+
+    private static IReadOnlyList<string> IdsOf(DrawingRecord record)
+    {
+        DrawingSheetRecord sheet = Assert.Single(record.Sheets);
+        DrawingView view = Assert.Single(sheet.Views);
+        return new[]
+        {
+            sheet.Id,
+            view.Id,
+            Assert.Single(view.DisplayDimensions).Id,
+            Assert.Single(view.Annotations).Id,
+            Assert.Single(view.Notes).Id,
+            Assert.Single(sheet.RevisionTables).Id,
+        };
+    }
+
     // ---- sheets (section 3.2) ------------------------------------------------------
 
     [Fact]
@@ -805,6 +904,12 @@ public class DrawingDumperTests
     private IReadOnlyList<DrawingRecord> Dump()
     {
         _scope = NewScope();
+        _scope.Drawings.Add(new ScopedDrawing(DrawingPath, _reader.RootDocument));
+        foreach ((string path, object document) in _reader.OtherDrawings)
+        {
+            _scope.Drawings.Add(new ScopedDrawing(path, document));
+        }
+
         return new DrawingDumper(_gate, _reader).Dump(_scope);
     }
 
@@ -987,42 +1092,118 @@ public class DrawingDumperTests
     /// gap. Handles are the fake objects themselves, which is all the dumper ever treats them
     /// as.
     /// </summary>
-    private sealed class FakeDrawingReader : IDrawingReader
+    /// <summary>
+    /// One scripted drawing document: its sheets and the reads that can fail. It is also the
+    /// handle <see cref="IDrawingReader.Drawing"/> answers for its document, which is all the
+    /// dumper ever treats a handle as.
+    /// </summary>
+    private sealed class FakeDrawing
     {
-        private readonly List<FakeSheet> _sheets = new List<FakeSheet>();
-
-        public FakeDrawingReader()
+        public FakeDrawing(string path)
         {
-            Drawing = new object();
+            Path = path;
         }
 
-        public object? Drawing { get; set; }
+        public string Path { get; }
+
+        public List<FakeSheet> Sheets { get; } = new List<FakeSheet>();
 
         public string? ActiveSheetName { get; set; }
 
         public Exception? ActiveSheetFailure { get; set; }
 
         public Exception? SheetNamesFailure { get; set; }
+    }
 
-        public FakeSheet AddSheet(string name)
+    private sealed class FakeDrawingReader : IDrawingReader
+    {
+        private readonly FakeDrawing _root = new FakeDrawing(DrawingPath);
+        private readonly Dictionary<object, FakeDrawing> _byDocument = new Dictionary<object, FakeDrawing>();
+        private readonly List<(string Path, object Document)> _others = new List<(string, object)>();
+
+        public FakeDrawingReader()
+        {
+            _byDocument[RootDocument] = _root;
+            Drawing = _root;
+        }
+
+        /// <summary>The root drawing's document handle, which the scope names it by.</summary>
+        public object RootDocument { get; } = new object();
+
+        /// <summary>
+        /// What <see cref="IDrawingReader.Drawing"/> answers for the root document; null makes
+        /// the root document one that is not a drawing.
+        /// </summary>
+        public object? Drawing { get; set; }
+
+        /// <summary>The drawings added after the root, in the order the scope reads them.</summary>
+        public IReadOnlyList<(string Path, object Document)> OtherDrawings => _others;
+
+        /// <summary>Every document the dumper asked to read as a drawing, in order.</summary>
+        public List<object> DocumentsAsked { get; } = new List<object>();
+
+        /// <summary>Every document a persistent reference was asked of, in order.</summary>
+        public List<object> ReferenceDocumentsAsked { get; } = new List<object>();
+
+        public string? ActiveSheetName
+        {
+            get => _root.ActiveSheetName;
+            set => _root.ActiveSheetName = value;
+        }
+
+        public Exception? ActiveSheetFailure
+        {
+            get => _root.ActiveSheetFailure;
+            set => _root.ActiveSheetFailure = value;
+        }
+
+        public Exception? SheetNamesFailure
+        {
+            get => _root.SheetNamesFailure;
+            set => _root.SheetNamesFailure = value;
+        }
+
+        public FakeSheet AddSheet(string name) => AddSheet(_root, name);
+
+        /// <summary>A second drawing document, read after the root one.</summary>
+        public FakeDrawing AddDrawing(string path)
+        {
+            var drawing = new FakeDrawing(path);
+            var document = new object();
+            _byDocument[document] = drawing;
+            _others.Add((path, document));
+            return drawing;
+        }
+
+        public static FakeSheet AddSheet(FakeDrawing drawing, string name)
         {
             var sheet = new FakeSheet { Name = name };
-            _sheets.Add(sheet);
+            drawing.Sheets.Add(sheet);
             return sheet;
         }
 
-        object? IDrawingReader.Drawing() => Drawing;
+        object? IDrawingReader.Drawing(object document)
+        {
+            DocumentsAsked.Add(document);
+            return ReferenceEquals(document, RootDocument) ? Drawing : _byDocument[document];
+        }
 
-        string? IDrawingReader.ActiveSheetName(object drawing) =>
-            ActiveSheetFailure != null ? throw ActiveSheetFailure : ActiveSheetName;
+        string? IDrawingReader.ActiveSheetName(object drawing)
+        {
+            FakeDrawing found = Of(drawing);
+            return found.ActiveSheetFailure != null ? throw found.ActiveSheetFailure : found.ActiveSheetName;
+        }
 
-        IReadOnlyList<string> IDrawingReader.SheetNames(object drawing) =>
-            SheetNamesFailure != null
-                ? throw SheetNamesFailure
-                : _sheets.Select(sheet => sheet.Name).ToList();
+        IReadOnlyList<string> IDrawingReader.SheetNames(object drawing)
+        {
+            FakeDrawing found = Of(drawing);
+            return found.SheetNamesFailure != null
+                ? throw found.SheetNamesFailure
+                : found.Sheets.Select(sheet => sheet.Name).ToList();
+        }
 
         object? IDrawingReader.Sheet(object drawing, string name) =>
-            _sheets.FirstOrDefault(sheet => sheet.Name == name && !sheet.NotFoundByName);
+            Of(drawing).Sheets.FirstOrDefault(sheet => sheet.Name == name && !sheet.NotFoundByName);
 
         string? IDrawingReader.SheetName(object sheet) => Sheet(sheet).Name;
 
@@ -1116,17 +1297,22 @@ public class DrawingDumperTests
                 : found.Rows[row][column];
         }
 
-        ScopedPersistRef? IDrawingReader.PersistRef(object entity)
+        ScopedPersistRef? IDrawingReader.PersistRef(object document, object entity)
         {
+            ReferenceDocumentsAsked.Add(document);
             string? reference = entity is FakeSheet sheet
                 ? sheet.PersistRef
                 : entity is FakeView view ? view.PersistRef : null;
 
+            // Scoped to the document it was asked of, exactly as PersistRefService scopes a
+            // reference to the extension that produced it.
+            string path = _byDocument[document].Path;
             return reference == null
                 ? null
-                : new ScopedPersistRef(
-                    reference, DocumentIds.For(DrawingPath), DrawingPath);
+                : new ScopedPersistRef(reference, DocumentIds.For(path), path);
         }
+
+        private static FakeDrawing Of(object drawing) => (FakeDrawing)drawing;
 
         private static FakeTable Table(object table) => (FakeTable)table;
 
