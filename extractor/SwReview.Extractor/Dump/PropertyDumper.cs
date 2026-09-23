@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
+using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.Sw;
 
@@ -125,19 +126,23 @@ public sealed class PropertyDumper : IDocumentSource
             }
         }
 
-        // One CreateMassProperty2 call feeds both reads, and the override is answered FIRST,
-        // before ReadMass's volume gates: a surface-only part returns no mass properties, and
-        // standards.part.material_assigned would otherwise be unresolved for every one of
-        // them (contracts/ir-additions.md section 1).
+        // One CreateMassProperty2 call feeds the mass read and the override's fallback path, and
+        // the override is answered FIRST, before ReadMass's volume gates: a surface-only part
+        // returns no mass properties, and standards.part.material_assigned would otherwise be
+        // unresolved for every one of them (contracts/ir-additions.md section 1). The override
+        // is read through the interface that has it (feature 010 T069): CreateMassProperty()'s
+        // MassProperty first, then GetOverrideOptions() on the IMassProperty2 below.
         object? massProperty = gate.Call("CreateMassProperty2", () => model.Extension.CreateMassProperty2());
 
         document.MassOverridden = ReadMassOverridden(
+            () => model.Extension.CreateMassProperty(),
+            property => ((IMassProperty)property).OverrideMass,
             massProperty,
+            property => ((IMassPropertyOverrideOptions)((IMassProperty2)property).GetOverrideOptions()).OverrideMass,
             documentId,
             fileName,
             scope.Gaps,
-            gate,
-            property => ((IMassProperty)property).OverrideMass);
+            gate);
 
         document.Mass = ReadMass(massProperty, activeConfiguration, documentId, scope, gate);
         return document;
@@ -180,11 +185,14 @@ public sealed class PropertyDumper : IDocumentSource
         Read("rebuild_error_count", "GetWhatsWrongCount", documentId, fileName, gaps, gate, read);
 
     /// <summary>
-    /// <c>IMassProperty.OverrideMass</c>, read off the object <c>CreateMassProperty2</c>
-    /// returned (schema 1.4.0). Null plus a <c>mass_override</c> gap when the object, the cast
-    /// or the read fails: <c>IMassProperty2</c> exposes no <c>OverrideMass</c> and declares no
-    /// base interface in this interop, so the cast is the UNVERIFIED half of the read
-    /// (research R3.2) and it fails as unknown rather than as false.
+    /// The one-object form of the override read: <paramref name="read"/> over an object already
+    /// in hand, null plus a <c>mass_override</c> gap when the object is missing or the read
+    /// fails, so a failure is unknown rather than false (schema 1.4.0).
+    ///
+    /// <c>Read</c> no longer calls it: its 1.4.0 caller cast <c>CreateMassProperty2</c>'s
+    /// object to <c>IMassProperty</c>, which raised on every recorded document, and the
+    /// two-path overload below replaced that call site (feature 010 T069). It keeps its
+    /// signature and its tests, which pin the one-path policy the two-path read extends.
     /// </summary>
     public static bool? ReadMassOverridden(
         object? massProperty,
@@ -209,6 +217,151 @@ public sealed class PropertyDumper : IDocumentSource
         object property = massProperty;
         return Read(
             "mass_override", "OverrideMass", documentId, fileName, gaps, gate, () => read(property));
+    }
+
+    /// <summary>
+    /// The override, read through the interface that has it (feature 010 T069,
+    /// contracts/mass-material.md section 4). The one-object read above cast
+    /// <c>CreateMassProperty2</c>'s object to <c>IMassProperty</c>, which raised on every
+    /// document of both recorded assemblies: in the 2024 SP5 interop
+    /// <c>IMassProperty2</c> declares no <c>OverrideMass</c> and no base interface.
+    ///
+    /// Two paths, in this order:
+    ///   1. <c>IModelDocExtension.CreateMassProperty()</c>, which returns <c>MassProperty</c>
+    ///      (it implements <c>IMassProperty</c>), and its <c>OverrideMass</c>;
+    ///   2. when that fails, <c>IMassProperty2.GetOverrideOptions()</c> on the object
+    ///      <c>CreateMassProperty2</c> already returned for the mass read, whose
+    ///      <c>IMassPropertyOverrideOptions</c> has an <c>OverrideMass</c> of its own. Gated as
+    ///      the one member <c>GetOverrideOptions</c>: the options object is read in the same
+    ///      breath and has no other use.
+    ///
+    /// The first answer is kept, <c>false</c> included. When neither path answers, the result
+    /// is null plus ONE <c>mass_override</c> gap naming both paths and both errors, so the
+    /// seat run (T103) can tell which path failed how; which path answered on a seat shows in
+    /// the gate log's member set. A guard refusal or an open circuit is never taken for a
+    /// failed path: both propagate, as they do from <see cref="GapCollector.TryStep"/>.
+    /// </summary>
+    public static bool? ReadMassOverridden(
+        Func<object?> createMassProperty,
+        Func<object, bool> readOverrideMass,
+        object? massProperty2,
+        Func<object, bool> readOverrideOptions,
+        string documentId,
+        string fileName,
+        GapCollector gaps,
+        SwGate gate)
+    {
+        if (createMassProperty == null)
+        {
+            throw new ArgumentNullException(nameof(createMassProperty));
+        }
+
+        if (readOverrideMass == null)
+        {
+            throw new ArgumentNullException(nameof(readOverrideMass));
+        }
+
+        if (readOverrideOptions == null)
+        {
+            throw new ArgumentNullException(nameof(readOverrideOptions));
+        }
+
+        if (gaps == null)
+        {
+            throw new ArgumentNullException(nameof(gaps));
+        }
+
+        if (gate == null)
+        {
+            throw new ArgumentNullException(nameof(gate));
+        }
+
+        OverridePath first = TryOverridePath(() =>
+        {
+            object? property = gate.Call("CreateMassProperty", createMassProperty);
+            return property == null
+                ? OverridePath.Nothing("CreateMassProperty returned nothing")
+                : OverridePath.Answer(gate.Call("OverrideMass", () => readOverrideMass(property)));
+        });
+
+        if (first.Value != null)
+        {
+            return first.Value;
+        }
+
+        OverridePath second = massProperty2 == null
+            ? OverridePath.Nothing("CreateMassProperty2 returned nothing")
+            : TryOverridePath(() =>
+                OverridePath.Answer(gate.Call("GetOverrideOptions", () => readOverrideOptions(massProperty2))));
+
+        if (second.Value != null)
+        {
+            return second.Value;
+        }
+
+        bool threw = first.Error != null || second.Error != null;
+        gaps.Add(
+            threw ? GapKind.ToolError : GapKind.NotExtracted,
+            "mass_override",
+            documentId,
+            $"Whether the mass of '{fileName}' is overridden is unknown: "
+            + $"CreateMassProperty().OverrideMass (IMassProperty) - {first.Describe()}; "
+            + $"CreateMassProperty2().GetOverrideOptions().OverrideMass "
+            + $"(IMassPropertyOverrideOptions) - {second.Describe()}.",
+            threw ? $"CreateMassProperty: {first.Error ?? "no error"}; "
+                + $"GetOverrideOptions: {second.Error ?? "no error"}" : null);
+        return null;
+    }
+
+    /// <summary>What one override path came back with: an answer, nothing, or an error.</summary>
+    private sealed class OverridePath
+    {
+        private OverridePath(bool? value, string? nothing, string? error)
+        {
+            Value = value;
+            NothingReason = nothing;
+            Error = error;
+        }
+
+        public bool? Value { get; }
+
+        public string? NothingReason { get; }
+
+        /// <summary>The exception as <see cref="GapCollector"/> describes one, or null.</summary>
+        public string? Error { get; }
+
+        public static OverridePath Answer(bool value) => new OverridePath(value, null, null);
+
+        public static OverridePath Nothing(string reason) => new OverridePath(null, reason, null);
+
+        public static OverridePath Failed(Exception error) =>
+            new OverridePath(null, null, GapCollector.Describe(error));
+
+        public string Describe() => NothingReason ?? "failed with " + Error;
+    }
+
+    /// <summary>
+    /// Runs one override path. Every failure is the path's, except the two that are not a
+    /// property of the model: a guard refusal and an open circuit.
+    /// </summary>
+    private static OverridePath TryOverridePath(Func<OverridePath> path)
+    {
+        try
+        {
+            return path();
+        }
+        catch (CircuitOpenError)
+        {
+            throw;
+        }
+        catch (MutatingCallError)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return OverridePath.Failed(ex);
+        }
     }
 
     /// <summary>

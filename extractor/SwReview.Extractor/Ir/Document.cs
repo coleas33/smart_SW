@@ -85,9 +85,11 @@ public sealed class Document
     public int? RebuildErrorCount { get; set; }
 
     /// <summary>
-    /// IMassProperty.OverrideMass, read off the object CreateMassProperty2 returned and
-    /// <b>before</b> the volume gates, so a surface-only part still answers (schema 1.4.0);
-    /// null plus a mass_override gap when the object, the cast or the read fails.
+    /// Whether the mass is overridden, read <b>before</b> the volume gates so a surface-only
+    /// part still answers (schema 1.4.0). From feature 010 through the interface that has it:
+    /// IModelDocExtension.CreateMassProperty()'s IMassProperty.OverrideMass, else
+    /// IMassProperty2.GetOverrideOptions()'s OverrideMass; null plus one mass_override gap
+    /// naming both paths when neither answers.
     /// </summary>
     [JsonPropertyName("mass_overridden")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

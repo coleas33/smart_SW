@@ -1,5 +1,7 @@
 using System;
+using System.Runtime.InteropServices;
 using SwReview.Extractor.Dump;
+using SwReview.Extractor.Guard;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.Sw;
 using Xunit;
@@ -252,6 +254,234 @@ public class PropertyDumperTests
 
         Assert.Null(overridden);
         Assert.Equal("mass_override", Assert.Single(_gaps.Gaps).EntityKind);
+    }
+
+    // ---- OverrideMass, read two ways (feature 010 T068) ----------------------------
+    //
+    // The one-object read above cast CreateMassProperty2's object to IMassProperty, and on
+    // SOLIDWORKS 2024 that cast raised on every document of both recorded assemblies
+    // (research R2.24, analyst fact 27): IMassProperty2 has no OverrideMass. The read now
+    // goes through the interface that has it - IModelDocExtension.CreateMassProperty()
+    // returns MassProperty, which implements IMassProperty - and falls back to
+    // IMassProperty2.GetOverrideOptions(), whose IMassPropertyOverrideOptions carries an
+    // OverrideMass of its own (contracts/mass-material.md section 4). Both are reflected on
+    // the 2024 SP5 interop; which one answers on a seat is SC-008's question (T103).
+
+    private readonly object _massProperty = new object();
+    private readonly object _massProperty2 = new object();
+
+    [Fact]
+    public void ReadMassOverridden_TwoPaths_ReadsTheObjectCreateMassPropertyReturnsFirst()
+    {
+        object? seen = null;
+
+        bool? overridden = PropertyDumper.ReadMassOverridden(
+            () => _massProperty,
+            mp =>
+            {
+                seen = mp;
+                return true;
+            },
+            _massProperty2,
+            mp => throw new InvalidOperationException("the fallback must not be asked"),
+            DocumentId,
+            PartName,
+            _gaps,
+            _gate);
+
+        Assert.True(overridden);
+        Assert.Same(_massProperty, seen);
+        Assert.Equal(new[] { "CreateMassProperty", "OverrideMass" }, _observer.Members);
+        Assert.Empty(_gaps.Gaps);
+    }
+
+    [Fact]
+    public void ReadMassOverridden_TwoPaths_AFalseFromTheFirstPathIsTheAnswer()
+    {
+        // false is an answer, not a failure: the fallback is not asked to overrule it.
+        bool? overridden = PropertyDumper.ReadMassOverridden(
+            () => _massProperty,
+            mp => false,
+            _massProperty2,
+            mp => true,
+            DocumentId,
+            PartName,
+            _gaps,
+            _gate);
+
+        Assert.False(overridden);
+        Assert.DoesNotContain("GetOverrideOptions", _observer.Members);
+        Assert.Empty(_gaps.Gaps);
+    }
+
+    [Fact]
+    public void ReadMassOverridden_TwoPaths_WhenTheFirstReadThrows_AsksGetOverrideOptions()
+    {
+        object? seen = null;
+
+        bool? overridden = PropertyDumper.ReadMassOverridden(
+            () => _massProperty,
+            mp => throw new InvalidCastException("not an IMassProperty"),
+            _massProperty2,
+            mp =>
+            {
+                seen = mp;
+                return true;
+            },
+            DocumentId,
+            PartName,
+            _gaps,
+            _gate);
+
+        Assert.True(overridden);
+
+        // The fallback reads the object CreateMassProperty2 already returned for the mass
+        // read, so it costs no second creation call.
+        Assert.Same(_massProperty2, seen);
+        Assert.Equal(
+            new[] { "CreateMassProperty", "OverrideMass", "GetOverrideOptions" }, _observer.Members);
+        Assert.Empty(_gaps.Gaps);
+    }
+
+    [Fact]
+    public void ReadMassOverridden_TwoPaths_WhenCreateMassPropertyReturnsNothing_AsksGetOverrideOptions()
+    {
+        bool? overridden = PropertyDumper.ReadMassOverridden(
+            () => null,
+            mp => throw new InvalidOperationException("there is no object to read"),
+            _massProperty2,
+            mp => false,
+            DocumentId,
+            PartName,
+            _gaps,
+            _gate);
+
+        Assert.False(overridden);
+        Assert.Equal(new[] { "CreateMassProperty", "GetOverrideOptions" }, _observer.Members);
+        Assert.Empty(_gaps.Gaps);
+    }
+
+    [Fact]
+    public void ReadMassOverridden_TwoPaths_WhenCreateMassPropertyThrows_AsksGetOverrideOptions()
+    {
+        bool? overridden = PropertyDumper.ReadMassOverridden(
+            () => throw new COMException("the extension did not answer"),
+            mp => true,
+            _massProperty2,
+            mp => true,
+            DocumentId,
+            PartName,
+            _gaps,
+            _gate);
+
+        Assert.True(overridden);
+        Assert.Equal(new[] { "CreateMassProperty", "GetOverrideOptions" }, _observer.Members);
+        Assert.Empty(_gaps.Gaps);
+
+        // The fallback's success closes the breaker again: one sick path is not a sick session.
+        Assert.Equal(0, _gate.Breaker.ConsecutiveFailures);
+    }
+
+    [Fact]
+    public void ReadMassOverridden_TwoPaths_WhenBothThrow_IsNullPlusOneGapNamingBothPaths()
+    {
+        bool? overridden = PropertyDumper.ReadMassOverridden(
+            () => _massProperty,
+            mp => throw new InvalidCastException("not an IMassProperty"),
+            _massProperty2,
+            mp => throw new COMException("no override options"),
+            DocumentId,
+            PartName,
+            _gaps,
+            _gate);
+
+        Assert.Null(overridden);
+
+        Gap gap = Assert.Single(_gaps.Gaps);
+        Assert.Equal("mass_override", gap.EntityKind);
+        Assert.Equal(DocumentId, gap.EntityId);
+        Assert.Equal(GapKind.ToolError, gap.Kind);
+        Assert.Contains(PartName, gap.Reason, StringComparison.Ordinal);
+        Assert.Contains("CreateMassProperty", gap.Reason, StringComparison.Ordinal);
+        Assert.Contains("GetOverrideOptions", gap.Reason, StringComparison.Ordinal);
+        Assert.Contains("InvalidCastException: not an IMassProperty", gap.Error!, StringComparison.Ordinal);
+        Assert.Contains("COMException: no override options", gap.Error!, StringComparison.Ordinal);
+        Assert.Equal(
+            new[] { "CreateMassProperty", "OverrideMass", "GetOverrideOptions" }, _observer.Members);
+    }
+
+    [Fact]
+    public void ReadMassOverridden_TwoPaths_WhenTheFirstThrowsAndThereIsNoSecondObject_IsNullPlusOneGap()
+    {
+        bool? overridden = PropertyDumper.ReadMassOverridden(
+            () => _massProperty,
+            mp => throw new InvalidCastException("not an IMassProperty"),
+            null,
+            mp => throw new InvalidOperationException("there is no object to read"),
+            DocumentId,
+            PartName,
+            _gaps,
+            _gate);
+
+        Assert.Null(overridden);
+
+        Gap gap = Assert.Single(_gaps.Gaps);
+        Assert.Equal("mass_override", gap.EntityKind);
+        Assert.Equal(GapKind.ToolError, gap.Kind);
+        Assert.Contains("CreateMassProperty2 returned nothing", gap.Reason, StringComparison.Ordinal);
+        Assert.Contains("InvalidCastException", gap.Error!, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetOverrideOptions", _observer.Members);
+    }
+
+    [Fact]
+    public void ReadMassOverridden_TwoPaths_WhenNeitherPathHasAnObject_IsNullPlusANotExtractedGap()
+    {
+        // Nothing threw, so there is no error to record: both creation calls simply answered
+        // with nothing, which is "not extracted", as the one-object read has it.
+        bool? overridden = PropertyDumper.ReadMassOverridden(
+            () => null,
+            mp => true,
+            null,
+            mp => true,
+            DocumentId,
+            PartName,
+            _gaps,
+            _gate);
+
+        Assert.Null(overridden);
+
+        Gap gap = Assert.Single(_gaps.Gaps);
+        Assert.Equal("mass_override", gap.EntityKind);
+        Assert.Equal(GapKind.NotExtracted, gap.Kind);
+        Assert.Null(gap.Error);
+        Assert.Contains("CreateMassProperty returned nothing", gap.Reason, StringComparison.Ordinal);
+        Assert.Contains("CreateMassProperty2 returned nothing", gap.Reason, StringComparison.Ordinal);
+        Assert.Equal(new[] { "CreateMassProperty" }, _observer.Members);
+    }
+
+    [Fact]
+    public void ReadMassOverridden_TwoPaths_AGuardRefusalIsNotSwallowedAsAFailedPath()
+    {
+        // A refused member is our bug, not a property of the model (GapCollector's rule): it
+        // must surface rather than quietly fall through to the other path.
+        var refusing = new SwGate(new CircuitBreaker(), new RefuseEverythingGuard());
+
+        Assert.Throws<MutatingCallError>(() => PropertyDumper.ReadMassOverridden(
+            () => _massProperty,
+            mp => true,
+            _massProperty2,
+            mp => true,
+            DocumentId,
+            PartName,
+            _gaps,
+            refusing));
+        Assert.Empty(_gaps.Gaps);
+    }
+
+    private sealed class RefuseEverythingGuard : ICallGuard
+    {
+        public void Assert(string interopMember) =>
+            throw new MutatingCallError(interopMember, $"{interopMember} refused by the test guard.");
     }
 
     // ---- material_configuration ----------------------------------------------------
