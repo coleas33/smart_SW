@@ -171,8 +171,9 @@ elapsed time is included in session timing. Missing or invalid model text uses a
 "No model explanation was generated" fallback rather than an invented paraphrase.
 
 `AttentionRow.explanation` is optional. Ranking keys and row order are unchanged. The
-Review pane renders the same persisted text under Start here and the corresponding
-finding cards (including members of a folded row); the Markdown report renders it as
+Review pane renders the same persisted text under Start here and as the first line inside
+the fold of the corresponding finding cards (including members of a folded row; since U10,
+2026-09-22, a finding card's head is its line and title only); the Markdown report renders it as
 escaped plain text on both surfaces. Offline re-rendering and deterministic Model check /
 Standards runs make no presentation calls. Omitted optional fields preserve older session
 and attention-record shapes. Model-authored text is distinct from deterministic labels;

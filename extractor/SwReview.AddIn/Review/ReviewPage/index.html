@@ -163,10 +163,14 @@
   a class on #transcript rather than the `hidden` property because the findings, the evidence
   requests and the error cards stay visible inside it - folded, the transcript reads as the
   findings ledger. app.js writes the button's label and its counts.
+
+  Collapse all sits beside it (U10): it shuts every finding's own fold, so the ledger goes back
+  to one headline per finding however many of them an engineer opened.
 -->
 <div class="transcript-head">
   <button type="button" id="transcript-toggle" class="fold-toggle"
           aria-controls="transcript" aria-expanded="false"></button>
+  <button type="button" id="collapse-findings" class="link">Collapse all</button>
 </div>
 
 <main id="transcript" class="transcript folded" aria-live="polite"></main>

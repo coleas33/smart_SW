@@ -504,16 +504,21 @@ body.results-stale .card.evidence {
 
 /* ---- tier 3: the transcript, folded to a count ------------------------------------------- */
 
+/* The transcript's toggle takes the line; Collapse all sits at its end (U10). */
 .transcript-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   padding: 10px 12px 6px;
   border-top: 1px solid var(--hair-2);
 }
 
 .fold-toggle {
   display: flex;
+  flex: 1 1 auto;
   align-items: baseline;
   gap: 8px;
-  width: 100%;
+  min-width: 0;
   padding: 0;
   border: 0;
   background: none;
@@ -617,6 +622,21 @@ body.results-stale .card.evidence {
   font-size: var(--text);
   font-weight: 600;
   line-height: 1.35;
+}
+
+/*
+  A finding's title is a headline: two lines while its fold is shut, the whole of it once the
+  fold is open (U10). Read off the fold's own `hidden`, so no script decides anything about it.
+*/
+.card.finding .card-head .title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.card.finding:has(> .details:not([hidden])) .card-head .title {
+  -webkit-line-clamp: none;
 }
 
 .finding-id {

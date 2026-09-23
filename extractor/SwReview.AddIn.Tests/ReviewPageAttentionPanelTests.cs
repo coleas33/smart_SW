@@ -165,28 +165,54 @@ public sealed class ReviewPageAttentionPanelTests
     // ---- following a row into the transcript ---------------------------------------------------
 
     /// <summary>
-    /// A ranked row is a way into the transcript, not a sentence about one.
+    /// A ranked row is a way into the transcript, not a sentence about one - and it leads to a
+    /// headline, not to a paragraph.
     ///
-    /// The panel amplifies findings that are already below it, and until now the rows were
-    /// inert: an engineer read "F-007, interference.static, needs your judgement" and then went
-    /// looking for F-007 by eye through a whole review's transcript. Clicking the row scrolls
-    /// its card into view, opens the card's fold - label and all, so the button does not read
-    /// "Details" over an open one - and lights it for a moment so the eye lands on it after the
-    /// scroll.
+    /// U10 (docs/pane-findings-2026-09-20-review-gui.md section 3) retires what this test used
+    /// to pin: the click opened the card's fold, so every ranked row followed left one more
+    /// finding open at full length and the next click opened another. Clicking the row now
+    /// scrolls the card's head into view - from the top of a transcript long enough that it
+    /// was out of view - and lights the card, and the fold stays shut with its button still
+    /// reading "Details". Opening it is the engineer's press.
     /// </summary>
     [Fact]
-    public void ClickingARankedRowOpensAndFlashesItsFindingCard()
+    public void ClickingARankedRowScrollsToItsFindingCardAndFlashesItWithoutOpeningIt()
     {
         JsonElement clicked = Scripted.Value.AfterRowClick;
 
-        Assert.True(
-            clicked.GetProperty("beforeHidden").GetBoolean(),
-            "the finding's fold was already open before the ranked row was clicked.");
         Assert.False(
+            clicked.GetProperty("headInViewBefore").GetBoolean(),
+            "the finding's head was already in view, so the scroll proves nothing.");
+        Assert.True(
+            clicked.GetProperty("headInViewAfter").GetBoolean(),
+            "clicking the ranked row did not scroll the finding's head into view.");
+        Assert.True(
             clicked.GetProperty("afterHidden").GetBoolean(),
-            "clicking the ranked row did not open the finding's fold.");
-        Assert.Equal("Hide details", clicked.GetProperty("toggleLabel").GetString());
+            "clicking the ranked row opened the finding's fold.");
+        Assert.Equal("Details", clicked.GetProperty("toggleLabel").GetString());
         Assert.True(clicked.GetProperty("flashed").GetBoolean(), "the finding card was not lit.");
+    }
+
+    /// <summary>
+    /// Collapse all closes every finding's fold at once, and every button says so. Beside the
+    /// transcript's own toggle, because the fold of one card is the unit an engineer opens and
+    /// "put them all back to headlines" is the one move there was no control for.
+    /// </summary>
+    [Fact]
+    public void CollapseAllShutsEveryFindingsFoldAndResetsItsButton()
+    {
+        JsonElement collapsed = Scripted.Value.AfterCollapseAll;
+
+        Assert.Equal(2, collapsed.GetProperty("openBefore").GetInt32());
+        Assert.Equal(0, collapsed.GetProperty("openAfter").GetInt32());
+        Assert.True(collapsed.GetProperty("cards").GetInt32() > 2, "too few cards to prove 'all'.");
+        Assert.All(
+            collapsed.GetProperty("labels").EnumerateArray().Select(label => label.GetString()),
+            label => Assert.Equal("Details", label));
+        Assert.Equal("Collapse all", collapsed.GetProperty("buttonText").GetString());
+        Assert.True(
+            collapsed.GetProperty("besideTheToggle").GetBoolean(),
+            "Collapse all is not in the transcript's head beside its toggle.");
     }
 
     /// <summary>
@@ -331,11 +357,18 @@ public sealed class ReviewPageAttentionPanelTests
 
                 // 7. A review whose first ranked row has a card in the transcript, so the row
                 //    can be followed into it - and a second row whose finding never arrived, so
-                //    the click that goes nowhere goes nowhere quietly.
+                //    the click that goes nowhere goes nowhere quietly. Thirty unranked findings
+                //    come first, so the ranked one is far enough down that scrolling to it is
+                //    something the click has to do.
                 await page.ExecuteScriptAsync("window.__attention.fail = false;0");
                 await Body(page, AttentionSample.Json());
                 await StartReview(page);
-                await SseFrames.Push(page, "chat-6", SseFrames.Frame(20, "finding", RankedFinding));
+                for (int filler = 0; filler < Fillers; filler++)
+                {
+                    await SseFrames.Push(page, "chat-6", SseFrames.Frame(filler + 1, "finding", Filler(filler)));
+                }
+
+                await SseFrames.Push(page, "chat-6", SseFrames.Frame(Fillers + 1, "finding", RankedFinding));
                 await OffscreenReviewPage.Settled(page);
                 await EndSession(page, "chat-6");
                 run.AfterRowClick = await Evaluate(
@@ -343,6 +376,9 @@ public sealed class ReviewPageAttentionPanelTests
                     RowClick
                         .Replace("@@FOUND@@", AttentionSample.ShownFindingIds[0])
                         .Replace("@@MISSING@@", AttentionSample.ShownFindingIds[1]));
+
+                // 8. Two folds opened by their own buttons, then Collapse all.
+                run.AfterCollapseAll = await Evaluate(page, CollapseAll);
             });
 
         return run;
@@ -359,6 +395,21 @@ public sealed class ReviewPageAttentionPanelTests
         + @"""status"":""demonstrated"",""severity"":""medium"","
         + @"""component_ids"":[""cmp:0002"",""cmp:0003""],"
         + @"""observed"":""Largest overlap 0.012 mm in configuration Default.""}";
+
+    /// <summary>How many unranked findings stand in the transcript before the ranked one.</summary>
+    private const int Fillers = 30;
+
+    /// <summary>An unranked finding, so the transcript is long; its id is in no ranked row.</summary>
+    private static string Filler(int index) => JsonSerializer.Serialize(new
+    {
+        id = "F-" + (100 + index),
+        check = "rms.sketches.fully_defined",
+        title = "A sketch is not fully defined",
+        status = "demonstrated",
+        severity = "low",
+        component_ids = new[] { "cmp:0002" },
+        observed = "Sketch" + index + " has 2 under-defined entities.",
+    });
 
     private static async Task StartReview(CoreWebView2 page)
     {
@@ -538,8 +589,17 @@ public sealed class ReviewPageAttentionPanelTests
       return JSON.stringify({ ok: false, error: '@@MISSING@@ was in the transcript after all' });
     }
 
-    var beforeHidden = card.querySelector('.details').hidden;
+    var transcript = document.getElementById('transcript');
+    var headInView = function () {
+      var head = card.querySelector('.card-head').getBoundingClientRect();
+      var view = transcript.getBoundingClientRect();
+      return head.top >= view.top && head.bottom <= view.bottom;
+    };
+
+    transcript.scrollTop = 0;
+    var headInViewBefore = headInView();
     found.click();
+    var headInViewAfter = headInView();
 
     var strayRowSurvived = true;
     try { missing.click(); } catch (error) { strayRowSurvived = false; }
@@ -547,12 +607,54 @@ public sealed class ReviewPageAttentionPanelTests
     var toggle = card.querySelector('[data-action=""expand""]');
     return JSON.stringify({
       ok: true,
-      beforeHidden: beforeHidden,
+      headInViewBefore: headInViewBefore,
+      headInViewAfter: headInViewAfter,
       afterHidden: card.querySelector('.details').hidden,
       toggleLabel: toggle ? toggle.textContent : '',
       flashed: /(^|\s)flash(\s|$)/.test(card.className),
       flashedCards: document.querySelectorAll('#transcript .card.flash').length,
       strayRowSurvived: strayRowSurvived
+    });
+  } catch (error) {
+    return JSON.stringify({ ok: false, error: '' + ((error && error.message) || error) });
+  }
+}())
+";
+
+    /// <summary>
+    /// Opens two findings' folds with their own Details buttons, presses Collapse all, and
+    /// reports every fold and every button afterwards.
+    /// </summary>
+    private const string CollapseAll = @"
+(function () {
+  try {
+    var cards = document.querySelectorAll('#transcript .card.finding');
+    if (cards.length < 3) { return JSON.stringify({ ok: false, error: 'too few finding cards' }); }
+    cards[0].querySelector('[data-action=""expand""]').click();
+    cards[cards.length - 1].querySelector('[data-action=""expand""]').click();
+
+    var open = function () {
+      return document.querySelectorAll('#transcript .card.finding .details:not([hidden])').length;
+    };
+    var openBefore = open();
+
+    var button = document.getElementById('collapse-findings');
+    button.click();
+
+    var labels = [];
+    var toggles = document.querySelectorAll('#transcript .card.finding [data-action=""expand""]');
+    for (var i = 0; i < toggles.length; i++) { labels.push(toggles[i].textContent); }
+
+    var head = document.querySelector('.transcript-head');
+    return JSON.stringify({
+      ok: true,
+      openBefore: openBefore,
+      openAfter: open(),
+      cards: cards.length,
+      labels: labels,
+      buttonText: button.textContent,
+      besideTheToggle: !!(head && head.contains(button)
+        && head.contains(document.getElementById('transcript-toggle')))
     });
   } catch (error) {
     return JSON.stringify({ ok: false, error: '' + ((error && error.message) || error) });
@@ -605,5 +707,7 @@ public sealed class ReviewPageAttentionPanelTests
         public JsonElement AfterFailedRead { get; set; }
 
         public JsonElement AfterRowClick { get; set; }
+
+        public JsonElement AfterCollapseAll { get; set; }
     }
 }
