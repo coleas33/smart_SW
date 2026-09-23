@@ -85,7 +85,13 @@ from swreview.agent.runner import (
     ReviewRun,
     start_review,
 )
-from swreview.agent.settings import DEFAULT_PROVIDER, ProviderSettings, default_model, redact
+from swreview.agent.settings import (
+    DEFAULT_PROVIDER,
+    ProviderSettings,
+    default_model,
+    pane_efficiency,
+    redact,
+)
 from swreview.benchmark.timing import TIMING_INPUTS
 from swreview.bridge.client import DEFAULT_PIPE_NAME, BridgeClient, BridgeError, NamedPipeTransport
 from swreview.chat import DEFAULT_ALLOW_ORIGIN, DEFAULT_RUN_ROOT
@@ -1986,6 +1992,9 @@ class ChatServer:
                 effort=settings.effort,
                 key_source=settings.key_source,
                 retry_of=self._review_retry_of(chat),
+                # Feature 008: the pane's levers are decided in one place - checks first
+                # since 2026-09-22 - and recorded on the session like any other run's.
+                efficiency=pane_efficiency(settings.provider),
                 standards_profile=standards_profile,
                 bridge=bool(bridge),
                 pipe_name=str(bridge.get("pipe") or DEFAULT_PIPE_NAME),

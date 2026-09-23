@@ -399,3 +399,44 @@ def test_stop_after_the_final_provider_event_does_not_persist_generated_prose(
         assert run.session.usage.turns == 1
     finally:
         run.close()
+
+
+# --- feature 008 T045: the folded family is never explained ---------------------------------
+
+
+def test_a_family_row_in_the_top_five_is_never_sent_to_the_presentation_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FR-014: the model is told only a folded family's counts, and the explanation request
+    sends each row's finding evidence - so a family row never reaches it, and no fallback
+    is written against its representative either (research R2.22)."""
+    from swreview.ir.loader import save_package
+    from tests.support.prerun import CHECKS_FIRST, prerun_package
+
+    folder = tmp_path / "run"
+    save_package(prerun_package(), folder)
+    received: list[list[Any]] = []
+
+    def spy(provider: Any, rows: Sequence[Any], **kwargs: Any) -> dict[str, str]:
+        received.append(list(rows))
+        return {}
+
+    monkeypatch.setattr(runner, "generate_explanations", spy)
+    run = runner.start_review(
+        folder,
+        folder,
+        provider=ScriptedPresentationProvider(script=[ScriptedTurn(text="done")]),
+        efficiency=CHECKS_FIRST,
+        explain_findings=True,
+    )
+    try:
+        session = run.start()
+    finally:
+        run.close()
+
+    ranking = rank(session)
+    [family] = [row for row in ranking.rows[: ranking.top_n] if row.family is not None]
+    assert received, "the presentation pass ran for the other rows"
+    assert all(row.family is None for rows in received for row in rows)
+    assert family.finding_id not in session.finding_explanations
+    assert session.finding_explanations, "the non-family rows still get their fallback"

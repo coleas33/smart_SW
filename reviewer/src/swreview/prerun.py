@@ -47,17 +47,19 @@ so a digest in `system` would invalidate that prefix for the whole session
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import json
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Literal
 
-from swreview.agent.providers import ToolCallRequest, ToolCallResult, call_tool
+from swreview.agent.providers import ProviderTool, ToolCallRequest, ToolCallResult, call_tool
 from swreview.agent.settings import EfficiencySettings, checks_first
 from swreview.checks.fastener_identity import joint_map_with_fasteners
 from swreview.checks.interference import STATIC_SCOPE_LIMIT
 from swreview.checks.joints import JointMap
+from swreview.checks.rms.registry import RMS_FAMILY
 from swreview.findings import Finding
 from swreview.ir.loader import append_interference_run
 from swreview.ir.models import EvidencePackage, Gap, Interference
@@ -74,10 +76,11 @@ from swreview.report.session import Contact, CoverageItem, CoverageScope
 from swreview.tools import checks_mechanical
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import ToolContext
-from swreview.tools.model_view import count_findings
-from swreview.tools.registry import ToolDispatch
+from swreview.tools.model_view import check_digest, count_findings
+from swreview.tools.registry import ToolDispatch, record_call
 
 __all__ = [
+    "ALREADY_RUN",
     "DIGEST_HEADER",
     "DIGEST_ID_CAP",
     "EVALUATED_HEADER",
@@ -95,6 +98,7 @@ __all__ = [
     "PRERUN_CHECK_PREFIX",
     "PRERUN_INTERFERENCE_SETTINGS",
     "PRERUN_TOOLS",
+    "REPEAT_NOTE",
     "RMS_PRERUN_TOOLS",
     "STANDARDS_FAMILY_NAME",
     "STANDARDS_NOT_DUMPED",
@@ -105,6 +109,7 @@ __all__ = [
     "LiveOutcome",
     "NotEvaluated",
     "PrerunCall",
+    "PrerunGuard",
     "PrerunResult",
     "attach_standards",
     "gate_brief",
@@ -112,6 +117,7 @@ __all__ = [
     "planned_calls",
     "prerun_checks",
     "prerun_tools",
+    "repeat_key",
 ]
 
 RMS_PRERUN_TOOLS: tuple[str, ...] = (
@@ -1167,3 +1173,107 @@ def _error_of(result: ToolCallResult) -> str | None:
     if not result.is_error:
         return None
     return str(result.payload.get("error", UNNAMED_ERROR))
+
+
+# --- the re-call guard (feature 008, `contracts/checks-first.md` section 5) -------------------
+
+ALREADY_RUN = "already_run"
+"""The status a guarded repeat answers with."""
+
+REPEAT_NOTE = (
+    "Checks first ran this call before your first turn; its findings are in the session. "
+    "It was not run again."
+)
+"""What a guarded repeat says, so the model reads why it got an outcome and not a run."""
+
+
+def repeat_key(tool: str, arguments: Mapping[str, Any]) -> tuple[Any, ...] | None:
+    """What makes a model's call the same question a pre-run call already answered, or `None`.
+
+    The contract's table: an RMS part or equations call is one question whatever its
+    `document_id` - a narrowed call over a graded document would append a second finding
+    per condition, which is exactly the duplicate FR-012 forbids; the assembly, standards
+    and feature 010 argument-free checks take nothing; a group call is keyed by its group;
+    and the live call only when it is the whole assembly, keyed by its configuration and its
+    settings (as sorted JSON, so key order does not matter). A component subset, and every
+    tool not named here, is not a repeat.
+    """
+    # Deferred: see `_deferred` above.
+    from swreview.checks.standards.registry import CHECK_TOOL
+
+    if tool in (*RMS_PRERUN_TOOLS, CHECK_TOOL, *checks_mechanical.CODE_FIRST_CHECKS):
+        return (tool,)
+    if tool == INTERFERENCE_TOOL:
+        group_key = arguments.get("group_key")
+        return (tool, group_key) if isinstance(group_key, str) else None
+    if tool == LIVE_INTERFERENCE_TOOL:
+        if arguments.get("component_ids") != []:
+            return None
+        settings = json.dumps(arguments.get("settings"), sort_keys=True, default=str)
+        return (tool, arguments.get("configuration"), settings)
+    return None
+
+
+class PrerunGuard:
+    """The run's `ToolSet` with the pre-run's answers in front of it (research R2.19).
+
+    Wrapped directly around the dispatch in `start_review` when a pre-run ran - innermost,
+    so lever 7's `CoverageStopTools` and the pane's Stop wrapper see a guarded answer like
+    any other result. Its ledger holds the pre-run's **successful** calls by `repeat_key`; a
+    call that matches one is answered with the recorded outcome and recorded as one real
+    step through `registry.record_call` - status ok, no coverage, no finding - so the step
+    indices the adapters count stay the session's. Everything else goes to the dispatch.
+    Registers no tool: iterating it is iterating the dispatch.
+    """
+
+    def __init__(
+        self, tools: ToolDispatch, prerun: PrerunResult, *, folded: Sequence[str]
+    ) -> None:
+        self.tools = tools
+        self.live = prerun.live
+        self.folded = tuple(folded)
+        self._ledger: dict[tuple[Any, ...], PrerunCall] = {}
+        for call in prerun.calls:
+            key = repeat_key(call.tool, call.arguments)
+            if call.error is None and key is not None:
+                self._ledger.setdefault(key, call)
+
+    def __iter__(self) -> Iterator[ProviderTool]:
+        return iter(self.tools)
+
+    def __len__(self) -> int:
+        return len(self.tools)
+
+    def call(self, name: str, arguments: Mapping[str, Any], call_id: str = "") -> ToolCallResult:
+        """The recorded outcome for a repeat, or the dispatch's own answer for anything else."""
+        key = repeat_key(name, arguments) if isinstance(arguments, Mapping) else None
+        recorded = self._ledger.get(key) if key is not None else None
+        if recorded is None:
+            return self.tools.call(name, arguments, call_id)
+        payload = {
+            "status": ALREADY_RUN,
+            "ran_at_step": recorded.step_index,
+            "note": REPEAT_NOTE,
+            "outcome": self._outcome(recorded),
+        }
+        record_call(
+            self.tools.sink,
+            tool=name,
+            arguments=arguments,
+            payload=payload,
+            elapsed_s=0.0,
+            error=None,
+        )
+        return ToolCallResult(call_id=call_id, payload=payload, is_error=False)
+
+    def _outcome(self, recorded: PrerunCall) -> dict[str, Any]:
+        """The digest of the recorded result: counts only for a folded family (FR-014)."""
+        if recorded.tool == LIVE_INTERFERENCE_TOOL and self.live is not None:
+            return {
+                "groups": self.live.groups,
+                "rows": self.live.rows_added,
+                "configuration": self.live.configuration,
+                "settings": dict(self.live.settings),
+            }
+        counts_only = recorded.tool in RMS_PRERUN_TOOLS and RMS_FAMILY.name in self.folded
+        return check_digest(recorded.payload or {}, counts_only=counts_only)

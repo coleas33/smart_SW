@@ -49,10 +49,11 @@ from starlette.testclient import TestClient
 from swreview.agent.providers import AgentEvent, AgentProvider, ProviderName
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import PROFILE_CHECK
-from swreview.agent.settings import MASK, ProviderSettings
+from swreview.agent.settings import MASK, ProviderSettings, pane_efficiency
 from swreview.chat.server import SESSION_FILES, _sse, create_app
 from swreview.chat.sessions import ChatState
 from swreview.ir.loader import save_package
+from swreview.prerun import DIGEST_HEADER, RMS_PRERUN_TOOLS
 from swreview.report.attention import rank
 from swreview.report.attention_record import (
     ATTENTION_FILE_NAME,
@@ -527,6 +528,23 @@ def test_posting_a_session_starts_the_review_and_returns_both_ids(
     session = load_session(run_dir / "session.json")
     assert str(session.session_id) == body["review_session_id"]
     assert types_of(run_dir)[0] == "session.started"
+
+
+def test_a_pane_review_runs_checks_first(client: TestClient, app: Any, run_dir: Path) -> None:
+    """Feature 008 T047, FR-013: checks first is the pane default. The session records the
+    pane's levers, the steps begin with the pre-run's own calls, the model opens on the
+    digest, and the modelling-practice family is folded."""
+    chat_id = start_session(client, run_dir)["chat_id"]
+    settle(client, chat_id)
+
+    session = load_session(run_dir / "session.json")
+    assert session.efficiency == pane_efficiency(ProviderName.FAKE)
+    assert [step.tool for step in session.steps[: len(RMS_PRERUN_TOOLS)]] == list(
+        RMS_PRERUN_TOOLS
+    )
+    run = app.state.server.chats[UUID(chat_id)].run
+    assert DIGEST_HEADER in str(run.messages[0]["content"])
+    assert session.folded_families == ["rms"]
 
 
 def test_configured_standards_profile_reaches_review_setup_and_blank_is_absent(
@@ -1142,22 +1160,33 @@ def parse_sse(block: str) -> dict[str, Any]:
 def test_the_stream_replays_the_file_and_then_the_live_events(
     client: TestClient, app: Any, run_dir: Path, provider_control: ProviderControl
 ) -> None:
-    """The pane reconnects into a running turn: what it missed, then what happens next."""
+    """The pane reconnects into a running turn: what it missed, then what happens next.
+
+    Feature 008 T047, edited deliberately: the pane runs checks first, so setup writes the
+    pre-run's steps before the turn reaches the gate. The stream is read far enough to
+    carry every one of them and the first live text, the id-equals-seq assertion covers
+    the whole replay, and the text arrives after the last pre-run `tool.finished`."""
     provider_control.script = [turn("streamed answer")]
     provider_control.hold()
     chat_id = start_session(client, run_dir)["chat_id"]
     wait_until(provider_control.started.is_set, "the turn to reach the gate")
+    written_before_the_turn = len(events_of(run_dir))
+    count = written_before_the_turn + 2
 
     events = read_stream(
         app,
         f"/sessions/{chat_id}/events",
-        count=5,
+        count=count,
         on_open=provider_control.release,
     )
 
     assert events[0]["event"] == "session.started"
-    assert [event["id"] for event in events] == [str(index) for index in range(1, 6)]
-    assert "text.delta" in [event["event"] for event in events]
+    assert [event["id"] for event in events] == [str(index) for index in range(1, count + 1)]
+    kinds = [event["event"] for event in events]
+    assert "text.delta" in kinds
+    last_prerun_finished = max(i for i, kind in enumerate(kinds) if kind == "tool.finished")
+    assert last_prerun_finished < written_before_the_turn
+    assert kinds.index("text.delta") > last_prerun_finished
     assert events[0]["data"]["provider"] == "fake"
     assert events[0]["data"]["model"] == MODEL
 

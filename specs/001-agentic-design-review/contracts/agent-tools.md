@@ -105,6 +105,26 @@ typed by the model.
 | `check_hygiene` | none | Feature 010: `hygiene.part_number_matches_file`, `hygiene.duplicate_description`, `hygiene.duplicate_part_number`, `hygiene.revision_present` and `hygiene.component_not_resolved`, the property names read from the attached standards run's profile (skipped, naming the setting, without one), and `hygiene.coverage`. Takes no argument (`CODE_FIRST_CHECKS`); returns counts |
 | `record_drawing_finding` | `document_id`, `sheet`, `observed`, `requirement`, `source_refs: list[SourceRef]`, `status: "suspected" \| "unresolved"`, `recommended_action` | A non-numeric drawing finding. `status` may not be `demonstrated` or `checked_within_scope` from this tool. |
 
+### A check checks first already ran: `already_run` (feature 008)
+
+When the review ran its checks first (lever 5 or 11; the pane default), a call to a check the
+pre-run already ran **successfully** is answered, never run again (008 FR-012,
+`specs/008-checks-first-review/contracts/checks-first.md` section 5). The guarded calls:
+`check_rms_part` and `check_rms_equations` (whatever `document_id`), `check_rms_assembly`,
+`check_standards`, every `CODE_FIRST_CHECKS` name, `check_interference_group` with the same
+`group_key`, and `bridge_interference` with `component_ids: []`, the same configuration and the
+same settings. The answer is one recorded step (status `ok`, no finding, no coverage):
+
+```json
+{"status": "already_run", "ran_at_step": 4,
+ "note": "Checks first ran this call before your first turn; its findings are in the session. It was not run again.",
+ "outcome": {}}
+```
+
+`outcome` is the recorded result's check digest - counts only for the RMS tools when the
+modelling-practice family is folded - or `{groups, rows, configuration, settings}` for the live
+call. A call the pre-run did not make, or made and failed, runs as it always did.
+
 ## Session tools
 
 | Tool | Arguments | Effect |
