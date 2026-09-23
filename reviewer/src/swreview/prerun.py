@@ -76,6 +76,7 @@ from swreview.report.session import Contact, CoverageItem, CoverageScope
 from swreview.tools import checks_mechanical
 from swreview.tools.checks_interference import groups_of
 from swreview.tools.context import ToolContext
+from swreview.tools.drawings import DRAWINGS_TOOL, drawing_evidence
 from swreview.tools.model_view import check_digest, count_findings
 from swreview.tools.registry import RecordedTool, ToolDispatch, record_call
 
@@ -401,7 +402,22 @@ class PrerunCall:
     def line(self) -> str:
         if self.error is not None:
             return f"  {self.label} -> error: {self.error}"
+        if self.tool == DRAWINGS_TOOL and self.payload is not None:
+            return f"  {self.label} -> ok, {_drawing_counts(self.payload, self.findings)}"
         return f"  {self.label} -> ok, {_outcome_counts(self.findings, self.contacts)}"
+
+
+def _drawing_counts(payload: Mapping[str, Any], findings: Sequence[Finding]) -> str:
+    """`2 drawings, 3 candidates, 2 questions` - and the findings when there are any: what
+    `check_drawings` recorded, read off its own payload (`contracts/questions.md` section 5)."""
+    counts = [
+        _plural(int(payload.get("drawings", 0)), "drawing"),
+        _plural(int(payload.get("candidates", 0)), "candidate"),
+        _plural(int(payload.get("questions", 0)), "question"),
+    ]
+    if findings:
+        counts.append(_plural(len(findings), "finding"))
+    return ", ".join(counts)
 
 
 def _outcome_counts(findings: Sequence[Finding], contacts: Sequence[Contact]) -> str:
@@ -703,6 +719,10 @@ def planned_calls(
     planned.extend(
         (name, {}) for name in checks_mechanical.CODE_FIRST_CHECKS if name not in withheld
     )
+    # Feature 011: the drawing check, on the condition `ToolRegistry._offered` offers it on,
+    # so the plan never names a tool the dispatch does not hold (`contracts/questions.md` 2).
+    if DRAWINGS_TOOL not in withheld and drawing_evidence(context.ir):
+        planned.append((DRAWINGS_TOOL, {}))
     if CHECK_TOOL not in withheld and standards_run(context) is not None:
         planned.append((CHECK_TOOL, {}))
     return tuple(planned)
@@ -1064,6 +1084,8 @@ def withheld_tools(
     ):
         withheld.append(INTERFERENCE_TOOL)
     withheld.extend(name for name in checks_mechanical.CODE_FIRST_CHECKS if completed(name))
+    if completed(DRAWINGS_TOOL):
+        withheld.append(DRAWINGS_TOOL)
     if standards_run(context) is not None and completed(CHECK_TOOL):
         withheld.append(CHECK_TOOL)
     return tuple(withheld)
@@ -1282,7 +1304,12 @@ def repeat_key(tool: str, arguments: Mapping[str, Any]) -> tuple[Any, ...] | Non
     # Deferred: see `_deferred` above.
     from swreview.checks.standards.registry import CHECK_TOOL
 
-    if tool in (*RMS_PRERUN_TOOLS, CHECK_TOOL, *checks_mechanical.CODE_FIRST_CHECKS):
+    if tool in (
+        *RMS_PRERUN_TOOLS,
+        CHECK_TOOL,
+        *checks_mechanical.CODE_FIRST_CHECKS,
+        DRAWINGS_TOOL,
+    ):
         return (tool,)
     if tool == INTERFERENCE_TOOL:
         group_key = arguments.get("group_key")

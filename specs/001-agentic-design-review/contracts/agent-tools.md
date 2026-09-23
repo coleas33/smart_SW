@@ -112,7 +112,8 @@ pre-run already ran **successfully** is answered, never run again (008 FR-012,
 `specs/008-checks-first-review/contracts/checks-first.md` section 5). The guarded calls:
 `check_rms_part` and `check_rms_equations` (whatever `document_id`), `check_rms_assembly`,
 `check_standards`, every `CODE_FIRST_CHECKS` name (feature 010's `check_joints`,
-`check_mass_material` and `check_hygiene`, whatever arguments), `check_interference_group`
+`check_mass_material` and `check_hygiene`, whatever arguments), feature 011's `check_drawings`,
+`check_interference_group`
 with the same `group_key`, and `bridge_interference` with `component_ids: []`, the same
 configuration and the same settings. The answer is one recorded step (status `ok`, no finding, no coverage):
 
@@ -130,6 +131,21 @@ With 008's lever 13 on (the pane default since 2026-09-23), a check tool the pre
 completion is also left out of the tool array for the rest of the session (008 FR-030,
 `contracts/checks-first.md` section 7); a call to it anyway still gets this answer, never "no
 tool named".
+
+### The drawing family (feature 011, conditional)
+
+Offered only when the package carries drawing evidence - a drawing record or a drawing
+candidate (`tools/drawings.drawing_evidence`) - by `ToolRegistry._offered`, after every other
+conditional family; in none of `TOOL_FUNCTIONS`, the MCP list or the terminal profile
+(`specs/011-drawing-context/contracts/questions.md` section 1). A package without drawing
+evidence is offered exactly the tools it was offered before. Its rows carry
+"(conditional)" beside the name because they are not part of the always-registered set
+the tables above state (`test_provider_schema.py` reads only a bare name as a row of that
+set), exactly as `get_finding` and `compact_query` are described outside it.
+
+| Tool | Arguments | Produces |
+|------|-----------|----------|
+| `check_drawings` (conditional) | none | One `drawing.context` coverage item per reviewed part or assembly document (`checked`, `unresolved` or `skipped`, naming the drawings, the usable views and every unusable view's reason), and at most four questions written as ordinary evidence requests through the one writer `request_evidence` uses: one about every same-name drawing candidate, and one per document two or more drawings show usably, three at most. Planned by the pre-run after every `CODE_FIRST_CHECKS` name; returns counts: `{status, drawings, candidates, questions, findings, finding_ids, coverage}` |
 
 ## Session tools
 
