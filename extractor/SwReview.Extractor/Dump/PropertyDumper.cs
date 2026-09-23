@@ -16,9 +16,10 @@ namespace SwReview.Extractor.Dump;
 /// arrives in kg and m3 with no conversion (research R12). A surface-only model returns
 /// nothing, which becomes a null mass plus a Gap rather than a zero.
 ///
-/// <c>GetOverrideOptions</c> is recorded as a Gap when an override is in force: an
-/// overridden mass is a number an engineer typed, not one the geometry produced, and a
-/// weight check must know the difference.
+/// An overridden mass is recorded as a Gap beside the mass it qualifies: it is a number an
+/// engineer typed, not one the geometry produced, and a weight check must know the difference.
+/// The gap is decided from the override answer the document already carries
+/// (<see cref="RecordOverriddenMass"/>).
 /// </summary>
 public sealed class PropertyDumper : IDocumentSource
 {
@@ -144,7 +145,8 @@ public sealed class PropertyDumper : IDocumentSource
             scope.Gaps,
             gate);
 
-        document.Mass = ReadMass(massProperty, activeConfiguration, documentId, scope, gate);
+        document.Mass = ReadMass(
+            massProperty, activeConfiguration, documentId, document.MassOverridden, scope, gate);
         return document;
     }
 
@@ -466,14 +468,23 @@ public sealed class PropertyDumper : IDocumentSource
     /// <summary>
     /// Mass in kg and volume in m3 through <c>CreateMassProperty2</c> with
     /// <c>UseSystemUnits</c>. Null plus a Gap for a surface-only model, and a Gap whenever
-    /// the mass has been overridden.
+    /// the mass has been overridden (<paramref name="massOverridden"/>, the answer the two-path
+    /// <c>ReadMassOverridden</c> already produced).
     /// </summary>
     private static MassProperties? ReadMass(
-        object? massProperty, string configuration, string documentId, DumpScope scope, SwGate gate)
+        object? massProperty,
+        string configuration,
+        string documentId,
+        bool? massOverridden,
+        DumpScope scope,
+        SwGate gate)
     {
         // CreateMassProperty2 is called once, by Read, and its object feeds both the override
-        // read and this one; the gap below is unchanged, so the gap set of an existing dump
-        // does not move on this account (contracts/ir-additions.md, additivity rule point 5).
+        // read's fallback path and this one. The overridden-mass gap below used to be decided
+        // by a second GetOverrideOptions call whose answer was tested with `is int[]`; the call
+        // returns an IMassPropertyOverrideOptions object, so the gap never fired. A dump of a
+        // part whose mass is overridden now carries the gap this summary always promised
+        // (feature 010).
         var mass = massProperty as IMassProperty2;
 
         if (mass == null)
@@ -515,23 +526,7 @@ public sealed class PropertyDumper : IDocumentSource
             return null;
         }
 
-        if (gate.Call("GetOverrideOptions", () => mass.GetOverrideOptions()) is int[] overrides)
-        {
-            foreach (int option in overrides)
-            {
-                if (option != 0)
-                {
-                    scope.Gaps.Add(
-                        GapKind.Unsupported,
-                        "document",
-                        documentId,
-                        "The mass properties are OVERRIDDEN in SOLIDWORKS; the values recorded were "
-                        + "typed by a user, not computed from the geometry.",
-                        null);
-                    break;
-                }
-            }
-        }
+        RecordOverriddenMass(massOverridden, documentId, scope.Gaps);
 
         var centre = gate.Call("CenterOfMass", () => mass.CenterOfMass) as double[];
 
@@ -544,6 +539,33 @@ public sealed class PropertyDumper : IDocumentSource
                 : new Vec3(0, 0, 0),
             Configuration = configuration,
         };
+    }
+
+    /// <summary>
+    /// The gap that says a recorded mass was typed by a user: added when the override read
+    /// answered true, and not otherwise. False is a mass the geometry produced; null is the
+    /// override read's to report, and it already has - one <c>mass_override</c> gap - so nothing
+    /// is added beside it. Asks SOLIDWORKS nothing (feature 010).
+    /// </summary>
+    public static void RecordOverriddenMass(bool? massOverridden, string documentId, GapCollector gaps)
+    {
+        if (gaps == null)
+        {
+            throw new ArgumentNullException(nameof(gaps));
+        }
+
+        if (massOverridden != true)
+        {
+            return;
+        }
+
+        gaps.Add(
+            GapKind.Unsupported,
+            "document",
+            documentId,
+            "The mass properties are OVERRIDDEN in SOLIDWORKS; the values recorded were "
+            + "typed by a user, not computed from the geometry.",
+            null);
     }
 
     private static string? At(object[]? array, int index) =>

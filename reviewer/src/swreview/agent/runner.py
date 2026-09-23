@@ -142,6 +142,21 @@ Phases, not profile names (FR-037): a third reduced profile is read the same way
 package's rows say it ran, and needs no entry anywhere.
 """
 
+FULL_PROFILE_ONLY_PHASES: tuple[str, ...] = ("tolerance",)
+"""The phases only a `full` dump runs and no reduced-profile check reads.
+
+`tolerance` (schema 1.5.0, feature 010) reads the part documents' dimension tolerances and
+GTols for the joint checks, and every reduced profile skips it with the geometry phases
+(`PackageWriter`). What a review of a reduced package misses because of it is already named
+by the `hole` phase the sentence names - the joint checks read nothing without holes - so
+naming it as well would tell the engineer nothing new and would add a word to feature 003's
+sentence on every real package the workstation writes, which FR-037 forbids.
+
+Dropped from the answer always, where the standards-evidence phases are dropped only when the
+package ran neither: a phase that ran is never reported skipped anyway, so the condition
+would say nothing for a single phase.
+"""
+
 PHASE_WORDS: dict[str, tuple[str, str]] = {
     "cutlist": ("cut list", "cut lists"),
     "drawing": ("drawing", "drawings"),
@@ -310,9 +325,14 @@ def _skipped_phases(package: EvidencePackage) -> list[str]:
     The standards-evidence phases are dropped from the answer unless the package ran one of
     them, because every dump records a row for every phase and a `model_check` package
     therefore reports them skipped alongside the geometry four; see
-    `STANDARDS_EVIDENCE_PHASES` for why that is not this sentence's business.
+    `STANDARDS_EVIDENCE_PHASES` for why that is not this sentence's business. The full-only
+    phases are dropped always; see `FULL_PROFILE_ONLY_PHASES`.
     """
-    recorded = [phase.name for phase in package.extractor.phases if phase.status == "skipped"]
+    recorded = [
+        phase.name
+        for phase in package.extractor.phases
+        if phase.status == "skipped" and phase.name not in FULL_PROFILE_ONLY_PHASES
+    ]
     ran = {phase.name for phase in package.extractor.phases if phase.status != "skipped"}
     if ran.isdisjoint(STANDARDS_EVIDENCE_PHASES):
         recorded = [name for name in recorded if name not in STANDARDS_EVIDENCE_PHASES]

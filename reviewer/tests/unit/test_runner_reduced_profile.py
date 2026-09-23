@@ -31,10 +31,18 @@ from uuid import UUID
 
 import pytest
 
-from swreview.agent.runner import PROFILE_CHECK, REDUCED_PROFILE_SKIPPED, record_partial_evidence
+from swreview.agent.runner import (
+    FULL_PROFILE_ONLY_PHASES,
+    GEOMETRY_PHASES,
+    PROFILE_CHECK,
+    REDUCED_PROFILE_SKIPPED,
+    STANDARDS_EVIDENCE_PHASES,
+    record_partial_evidence,
+)
 from swreview.ir.models import DumpPhase, EvidencePackage
 from swreview.report.session import ReviewSession, Timing
 from tests.support.packages import build_package
+from tests.unit.test_ir_phases import PHASE_ORDER
 
 SESSION_ID = UUID("00000000-0000-4000-8000-00000000f037")
 
@@ -45,6 +53,23 @@ MODEL_CHECK_SENTENCE = (
     "evidence and review again to cover anything that depends on them (FR-022)."
 )
 """Feature 003's sentence, byte for byte. Four unedited test modules read it."""
+
+STANDARDS_PART_SENTENCE = (
+    "the evidence was written by the 'standards' dump profile: the drawing, hole, fastener, "
+    "face and body or mesh phases were never run, so drawings, holes, fasteners, faces and "
+    "bodies are empty because nothing read them - not because this design has none. Extract "
+    "full evidence and review again to cover anything that depends on them (FR-022)."
+)
+"""What a standards dump of a part rendered before the `tolerance` phase existed, byte for
+byte: feature 006's generalization of feature 003's template (FR-037)."""
+
+STANDARDS_DRAWING_SENTENCE = (
+    "the evidence was written by the 'standards' dump profile: the hole, fastener, face and "
+    "body or mesh phases were never run, so holes, fasteners, faces and bodies are empty "
+    "because nothing read them - not because this design has none. Extract full evidence and "
+    "review again to cover anything that depends on them (FR-022)."
+)
+"""What a standards dump of a drawing rendered before the `tolerance` phase existed."""
 
 
 def session() -> ReviewSession:
@@ -231,31 +256,20 @@ def test_a_failed_phase_is_not_a_skipped_one() -> None:
 
 
 def extractor_rows(ran: set[str]) -> dict[str, str]:
-    """The eleven phase rows `PackageWriter` writes, with `ran` recorded `ok`.
+    """The phase rows `PackageWriter` writes, with `ran` recorded `ok`.
 
     A real package records a row for **every** name in `PackageWriter.PhaseOrder`
-    (`extractor/SwReview.Extractor/Dump/PackageWriter.cs:57` and `PhaseLog.Rows()`): a phase
-    the dump never reached is `skipped` with no elapsed time rather than absent. Building the
+    (`extractor/SwReview.Extractor/Dump/PackageWriter.cs` and `PhaseLog.Rows()`): a phase the
+    dump never reached is `skipped` with no elapsed time rather than absent. Building the
     package any other way - with no rows at all, as `build_package()` does - exercises a shape
     no dump ever produces, which is how the sentence below can be pinned everywhere and still
     come out differently on the workstation.
+
+    The names are `test_ir_phases.PHASE_ORDER`, the Python pin of that order (the C# pin is
+    `PackageReuseTests`), so a phase the extractor adds - feature 010's `tolerance` - reaches
+    these tests the day it reaches the dump instead of being missed by a copied list.
     """
-    return {
-        name: ("ok" if name in ran else "skipped")
-        for name in (
-            "document",
-            "manifest",
-            "mate",
-            "feature",
-            "equation",
-            "cutlist",
-            "drawing",
-            "hole",
-            "fastener",
-            "face",
-            "body",
-        )
-    }
+    return {name: ("ok" if name in ran else "skipped") for name in PHASE_ORDER}
 
 
 CORE_PHASES = {"document", "manifest", "mate", "feature", "equation"}
@@ -304,3 +318,65 @@ def test_a_real_standards_package_of_a_drawing_names_only_the_geometry_phases() 
     assert "the hole, fastener, face and body or mesh phases were never run" in reason
     assert "drawing" not in reason
     assert "cut list" not in reason
+
+
+# --- 4. the tolerance phase (feature 010) keeps FR-037's wording --------------------------------
+
+
+def test_the_rows_are_the_twelve_the_extractor_writes_with_tolerance_skipped() -> None:
+    """Every reduced profile skips `tolerance` with the geometry phases (`PackageWriter`, schema
+    1.5.0), so the rows these tests hand the sentence carry it skipped, as a real package does."""
+    for rows in (
+        extractor_rows(CORE_PHASES),
+        extractor_rows(CORE_PHASES | {"cutlist"}),
+        extractor_rows(CORE_PHASES | {"cutlist", "drawing"}),
+    ):
+        assert list(rows) == PHASE_ORDER
+        assert rows["tolerance"] == "skipped"
+
+
+def test_a_real_model_check_package_is_byte_identical_with_tolerance_skipped() -> None:
+    recorded = session()
+    record_partial_evidence(recorded, package("model_check", extractor_rows(CORE_PHASES)))
+
+    assert written(recorded) == [MODEL_CHECK_SENTENCE]
+
+
+def test_a_real_standards_package_of_a_part_is_byte_identical_with_tolerance_skipped() -> None:
+    recorded = session()
+    record_partial_evidence(
+        recorded, package("standards", extractor_rows(CORE_PHASES | {"cutlist"}))
+    )
+
+    assert written(recorded) == [STANDARDS_PART_SENTENCE]
+
+
+def test_a_real_standards_package_of_a_drawing_is_byte_identical_with_tolerance_skipped() -> None:
+    recorded = session()
+    record_partial_evidence(
+        recorded, package("standards", extractor_rows(CORE_PHASES | {"cutlist", "drawing"}))
+    )
+
+    assert written(recorded) == [STANDARDS_DRAWING_SENTENCE]
+
+
+def test_a_full_package_that_ran_tolerance_is_not_a_reduced_one() -> None:
+    """A full dump ran `tolerance` with the geometry phases; the profile is `full`, so there is
+    no partial-evidence sentence to write, whatever its drawing row says."""
+    for ran in (set(PHASE_ORDER), set(PHASE_ORDER) - {"drawing"}):
+        rows = extractor_rows(ran)
+        assert rows["tolerance"] == "ok"
+
+        recorded = session()
+        record_partial_evidence(recorded, package("full", rows))
+
+        assert written(recorded) == []
+
+
+def test_the_full_profile_only_phases_are_a_named_list_of_their_own() -> None:
+    """One named tuple, dropped the way the standards-evidence phases are dropped: never one of
+    the geometry floor, never a standards-evidence phase, and a phase the extractor writes."""
+    assert FULL_PROFILE_ONLY_PHASES == ("tolerance",)
+    assert set(FULL_PROFILE_ONLY_PHASES).isdisjoint(GEOMETRY_PHASES)
+    assert set(FULL_PROFILE_ONLY_PHASES).isdisjoint(STANDARDS_EVIDENCE_PHASES)
+    assert set(FULL_PROFILE_ONLY_PHASES) <= set(PHASE_ORDER)
