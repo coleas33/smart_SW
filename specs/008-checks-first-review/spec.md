@@ -6,6 +6,8 @@
 
 **Status**: Draft
 
+**Amended**: 2026-09-23, by the planning pass; every change is listed with its reason in [research.md](research.md) R4.
+
 **Input**: Owner direction of 2026-09-22 after the pilot workstation's evening packet (`docs/pane-findings-2026-09-20-review-gui.md`) and the analysis recorded in `docs/roadmap-2026-09-22.md`: "Token usage is way too high, we gotta get more efficient." Decided the same day: model-facing payload slimming, checks first, history pruning and parallel tool calls all become pane defaults, gated by an offline replay of the recorded runs; modelling-practice findings appear in Review as one folded group.
 
 ## User Scenarios & Testing *(mandatory)*
@@ -99,7 +101,7 @@ The engineer and the owner see what a review cost in terms they can act on: how 
 - **A recorded run from older code.** Tool names or arguments in the recording that the current code does not know are replayed as estimated rounds from their recorded size and named in the output; the replay never fails silently on them.
 - **Checks-first and a model that asks anyway.** A model that calls a check the pre-run already ran gets the recorded digest, never a second run, so findings are not duplicated.
 - **Thousands of interference groups.** Live detection on a large assembly can return many groups; every group is judged in code, and the digest states the count by outcome rather than listing them.
-- **Live detection fails or times out.** The failure becomes a failed coverage row naming the reason, the review starts, and the model is told interference was not evaluated.
+- **Live detection fails.** Any failure the connection to SOLIDWORKS reports becomes a failed coverage row naming the reason, the review starts, and the model is told interference was not evaluated. A detection that never answers cannot be told apart from a slow one by the connection, which has no read timeout; the plan records it as an open item.
 - **A pruned result the model needs again.** The stub names how to fetch it; a re-fetch is an ordinary recorded step. Findings are never re-derived from a stub.
 - **Stub determinism.** The same result always produces the same stub, so the cached part of the request up to the previous result is reused.
 - **Pruning and the digest.** The opening digest and the engineer's own messages are never pruned; only tool results are.
@@ -127,11 +129,11 @@ The engineer and the owner see what a review cost in terms they can act on: how 
 **Checks first**
 
 - **FR-008**: Before the first provider request of a review, the product MUST run every argument-free check - modelling practice for every part, equations, assembly, standards when a standards run is attached, and interference when a live SOLIDWORKS connection exists - through the same dispatch the model uses, producing recorded steps, start and finish events, findings and coverage.
-- **FR-009**: With a live connection, the product MUST run interference detection once for the reviewed configuration, judge every detected group, and write the detected rows into the run folder's package.
+- **FR-009**: With a live connection, the product MUST run interference detection once for the reviewed configuration, judge every detected group, and write the detected rows into the run folder's package - in place when the run folder is the package's own folder, as in the pane, and as a merged copy in the output folder otherwise, so a folder the product was only asked to read is never written.
 - **FR-010**: A family that cannot run MUST appear in coverage and in the opening digest with its reason, and MUST NOT stop the review.
 - **FR-011**: The model's first message MUST carry a digest of the checks' outcomes by family and of what could not be evaluated, and MUST NOT carry the checks' payloads.
 - **FR-012**: A model call to a check family the pre-run already ran MUST be answered with the recorded digest and MUST NOT produce findings again.
-- **FR-013**: Checks first MUST be the pane default; the former separate pre-run settings are folded into it, and the command line keeps a way to turn it off for comparison.
+- **FR-013**: Checks first MUST be the pane default; the former separate pre-run settings are folded into it. On the command line it stays off unless turned on explicitly or by one switch that applies every pane default, so the two can be compared.
 - **FR-014**: Modelling-practice findings MUST appear in the ranking and the report as one group per rule family with the counts of findings and rules, collapsed, with every finding still present; the model MUST be told only the counts.
 
 **The model's view**
@@ -144,7 +146,7 @@ The engineer and the owner see what a review cost in terms they can act on: how 
 - **FR-020**: A tool result that has been in the model's view for more than a configured number of rounds (default 2) MUST be replaced in the request by a deterministic stub naming the tool, its arguments, its counts and the entity ids it returned, and saying how to fetch the detail again.
 - **FR-021**: The full payload of every tool result MUST be written to the run folder under the step's number, before any stub replaces it.
 - **FR-022**: Pruning MUST apply identically in both provider adapters and between turns, and MUST NOT touch the system prompt, the opening digest or the engineer's messages.
-- **FR-023**: Slimming and pruning MUST be pane defaults, each with a command-line way to turn it off for comparison.
+- **FR-023**: Slimming and pruning MUST be pane defaults. On the command line each stays off unless turned on explicitly or by the switch that applies every pane default, so each can be compared with and without.
 
 **Asking and answering**
 
@@ -154,7 +156,7 @@ The engineer and the owner see what a review cost in terms they can act on: how 
 **Cost reporting**
 
 - **FR-026**: Every recorded step MUST carry the size of its result in bytes and in estimated tokens.
-- **FR-027**: The usage line and the report MUST show new and cached input separately when the provider reports the split, and say "cache split not reported" when it does not; the report MUST name the five largest steps.
+- **FR-027**: The usage line and the report MUST show new (uncached) and cached input separately, in the same words on both, when the provider reports the split, and say "cache split not reported" when it does not; the report MUST name the five largest steps.
 
 **Compatibility**
 
@@ -176,7 +178,7 @@ The engineer and the owner see what a review cost in terms they can act on: how 
 
 - **SC-001**: With every change off, the replay of the fixtures shaped like the recorded runs reproduces the recorded per-round input tokens within 1% and the recorded finding set exactly.
 - **SC-002**: With the pane defaults on, the replay of the 830-02342-shaped fixture sends under 1.0M input tokens in total, against 12.4M recorded, and loses no recorded finding.
-- **SC-003**: With the pane defaults on, the replay of the 810-11249-shaped fixtures sends under 0.3M input tokens each, against about 1.5M recorded, and loses no recorded finding.
+- **SC-003**: With the pane defaults on, the replay's labelled regrouped estimate for each of the 810-11249-shaped fixtures is under 0.3M input tokens, against about 1.5M recorded, its strict figure over the recorded rounds is below the recorded total, and it loses no recorded finding; the 0.3M on a real review is measured by SC-010.
 - **SC-004**: A follow-up question after the 830-02342-shaped review costs under 30k input tokens, against 405k recorded.
 - **SC-005**: Answering three open questions together costs one resumed turn, not three.
 - **SC-006**: On a review with a live connection, every detected interference group is judged, against 6 of 113 on the recorded run.
