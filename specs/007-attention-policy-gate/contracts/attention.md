@@ -191,6 +191,12 @@ the no-percent-label rule above still applies to the deterministic attention wor
   check roster on the Standards tab), through `web/shared/check-page.js`, the shared row
   renderer `web/shared/attention.js` and `dom.js` only. They do not show the rows beyond
   `top_n` yet.
+- **The shared row carries its check as `data-check` and shows no check id** (amended
+  2026-09-23, feature 009 FR-025): on every tab a check id is developer vocabulary. The Review
+  tab's finding card names it as the first labelled row of its fold ("Rule"), and the check tabs'
+  rule lists name each rule's id inside that rule's own fold. On the Review tab the row's meta
+  line prints the backend's labels for status and severity and the summary's component names;
+  the check tabs pass neither and print the raw words and ids.
 - The Review page fetches the route in `endSession`, drops the response if `state.chatId` has
   moved on, renders through `render.attentionPanel(ranking)` into `<section
   id="attention-panel">`, shows `empty_reason` in words when there are no rows, and clears the

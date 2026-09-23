@@ -173,6 +173,17 @@ public sealed class ModelCheckPageTests
 
     // ---- what an engineer sees ---------------------------------------------------------------
 
+    /// <summary>
+    /// The grade header states every count and then says, in words, which rules reached no
+    /// verdict: "Not graded, evidence missing:" and each rule's statement (feature 009 FR-028,
+    /// research R2.23).
+    ///
+    /// Until feature 009 this pinned the verdict fraction ("0.50") and the unresolved rules by id.
+    /// A fraction of the rules that reached a verdict is a number only its author reads, and a
+    /// rule id is developer vocabulary: the header now names each unresolved rule by its
+    /// statement (`rule_statements`, the backend's `RULES` catalogue) and keeps the ids behind a
+    /// fold. The fraction stays in the body and in the report.
+    /// </summary>
     [Fact]
     public void TheGradeHeaderShowsEveryCountAndNamesEveryUnresolvedRule()
     {
@@ -184,11 +195,57 @@ public sealed class ModelCheckPageTests
         Assert.Contains("1 warned", text);
         Assert.Contains("3 checked", text);
 
-        // The fraction is never the only number, and the unresolved rules travel with it by
-        // name: a count alone says how much is missing without saying what (T068).
-        Assert.Contains("0.50", text);
-        Assert.Contains("rms.refs.direction", text);
-        Assert.Contains("rms.sketch.fully_defined", text);
+        Assert.Contains("Not graded, evidence missing:", text);
+        Assert.Contains(CheckResultSample.RefsDirectionStatement, text);
+        Assert.Contains(CheckResultSample.SketchFullyDefinedStatement, text);
+        Assert.DoesNotContain("0.50", text);
+    }
+
+    /// <summary>A grade whose every rule reached a verdict says so, and lists nothing.</summary>
+    [Fact]
+    public void AGradeWithNoUnresolvedRuleSaysEveryRuleReachedAVerdict()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.grade.unresolved_rule_ids = [];",
+            "return JSON.stringify({ok: true, text: document.getElementById('grade').textContent, "
+            + "folds: document.querySelectorAll('#grade details').length});");
+
+        Assert.Contains("Every rule reached a verdict.", rendered.GetProperty("text").GetString()!);
+        Assert.DoesNotContain("Not graded", rendered.GetProperty("text").GetString()!);
+        Assert.Equal(0, rendered.GetProperty("folds").GetInt32());
+    }
+
+    /// <summary>
+    /// An unresolved rule the catalogue has no statement for is named by its id - never dropped -
+    /// and a body with no `rule_statements` at all (a backend before feature 009) names every
+    /// unresolved rule by id (FR-030).
+    /// </summary>
+    [Fact]
+    public void AnUnresolvedRuleTheCatalogueLacksIsNamedByItsId()
+    {
+        JsonElement lacking = RenderMutated(
+            "delete result.rule_statements['rms.sketch.fully_defined'];",
+            "return JSON.stringify({ok: true, statements: texts('#grade .unresolved-statements li')});");
+        JsonElement older = RenderMutated(
+            "delete result.rule_statements;",
+            "return JSON.stringify({ok: true, statements: texts('#grade .unresolved-statements li')});");
+
+        Assert.Equal(
+            new[] { CheckResultSample.RefsDirectionStatement, "rms.sketch.fully_defined" },
+            Strings(lacking, "statements"));
+        Assert.Equal(new[] { "rms.refs.direction", "rms.sketch.fully_defined" }, Strings(older, "statements"));
+    }
+
+    /// <summary>A statement is the backend's text, and reaches the screen as characters (FR-029).</summary>
+    [Fact]
+    public void AHostileStatementIsLiteralText()
+    {
+        JsonElement rendered = RenderMutated(
+            "result.rule_statements['rms.refs.direction'] = " + JsonSerializer.Serialize(CheckResultSample.HostileFeatureName) + ";",
+            "return JSON.stringify(describe(document.getElementById('grade')));");
+
+        Assert.Contains(CheckResultSample.HostileFeatureName, Text(rendered));
+        Assert.Equal(0, rendered.GetProperty("injected").GetInt32());
     }
 
     [Fact]
@@ -233,19 +290,51 @@ public sealed class ModelCheckPageTests
         JsonElement rendered = Render(
             "return JSON.stringify({ok: true, "
             + "ids: attrs('#attention .attention-row', 'data-finding-id'), "
-            + "checks: texts('#attention .attention-check'), "
+            + "checks: attrs('#attention .attention-row', 'data-check'), "
+            + "visibleChecks: document.querySelectorAll('#attention .attention-check').length, "
             + "reasons: texts('#attention .attention-reason'), "
             + "heading: texts('#attention .attention-heading')[0], "
             + "text: document.getElementById('attention').textContent});");
 
         Assert.Equal(AttentionSample.ShownFindingIds, Strings(rendered, "ids"));
+
+        // The check travels on the row as `data-check` and is shown nowhere since feature 009
+        // moved check ids out of the default view on every tab (FR-025, research R2.21); the rule
+        // list below still names every rule, inside each row's fold.
         Assert.Equal(AttentionSample.ShownChecks, Strings(rendered, "checks"));
+        Assert.Equal(0, rendered.GetProperty("visibleChecks").GetInt32());
+        Assert.All(AttentionSample.ShownChecks, check => Assert.DoesNotContain(check, rendered.GetProperty("text").GetString()!));
         Assert.Equal(AttentionSample.ShownReasons, Strings(rendered, "reasons"));
         Assert.Equal(AttentionSample.Heading, rendered.GetProperty("heading").GetString());
 
         // The sixth row is beyond `top_n`: the page shows what the policy chose to amplify and
         // no more, and the rest is still in the rule list below in full.
         Assert.DoesNotContain(AttentionSample.BeyondTopN, rendered.GetProperty("text").GetString()!);
+    }
+
+    /// <summary>
+    /// Feature 009 T068: a rule row's title is its statement, and its rule id is inside the row's
+    /// own fold - every row has one now, a coverage row included, so the id is always one press
+    /// away and never on the line (FR-025).
+    /// </summary>
+    [Fact]
+    public void ARuleRowShowsItsStatementAsItsTitleAndItsRuleIdOnlyInsideItsFold()
+    {
+        JsonElement rendered = Render(SharedCheckPageTests.RuleRowsScript);
+
+        JsonElement[] rules = rendered.GetProperty("rules").EnumerateArray().ToArray();
+        Assert.True(rules.Length >= 8, "too few rule rows to prove every row.");
+        foreach (JsonElement rule in rules)
+        {
+            string id = rule.GetProperty("id").GetString()!;
+            Assert.True(rule.GetProperty("hasFold").GetBoolean(), id + " has no fold.");
+            Assert.True(rule.GetProperty("idInFold").GetBoolean(), id + "'s rule id is not inside its fold.");
+            Assert.Equal(id, rule.GetProperty("idText").GetString());
+            Assert.False(rule.GetProperty("idOutside").GetBoolean(), id + "'s rule id is on the line.");
+        }
+
+        JsonElement holes = rules.Single(rule => rule.GetProperty("id").GetString() == "rms.detail.holes_last");
+        Assert.Equal("statement", holes.GetProperty("afterHead").GetString());
     }
 
     /// <summary>
@@ -471,21 +560,25 @@ public sealed class ModelCheckPageTests
     }
 
     /// <summary>
-    /// The grade is a summary, not a headline: every count, the fraction and the unresolved ids
-    /// still read exactly as they did, and the number of each is in its own element so the
-    /// stylesheet can set it apart from its label.
+    /// The grade is a summary, not a headline: every count still reads exactly as it did, and the
+    /// number of each is in its own element so the stylesheet can set it apart from its label.
+    ///
+    /// Feature 009 (FR-028) changed the rest of what this pinned: there is no `.fraction` element
+    /// any more, and the ids of the rules that reached no verdict are inside a shut fold, in the
+    /// mono face, while their statements are on the header.
     /// </summary>
     [Fact]
     public void EveryGradeCountKeepsItsTextAndLeadsWithItsNumberInItsOwnElement()
     {
         JsonElement rendered = Render(
-            "return JSON.stringify({ok: true, "
+            "var fold = document.querySelector('#grade .unresolved-rules details');"
+            + "return JSON.stringify({ok: true, "
             + "counts: texts('#grade .counts .count'), "
             + "numbers: texts('#grade .counts .count > :first-child'), "
             + "leads: attrs('#grade .counts .count > :first-child', 'class'), "
-            + "fraction: texts('#grade .fraction'), "
-            + "fractionNumber: texts('#grade .fraction > b.fraction-n'), "
-            + "unresolved: texts('#grade .unresolved-rules > .mono')});");
+            + "fractions: document.querySelectorAll('#grade .fraction').length, "
+            + "foldOpen: fold ? fold.open : null, "
+            + "ids: fold ? texts('#grade .unresolved-rules details .mono') : []});");
 
         Assert.Equal(
             new[]
@@ -496,16 +589,11 @@ public sealed class ModelCheckPageTests
         Assert.Equal(new[] { "2", "1", "3", "0", "2", "0" }, Strings(rendered, "numbers"));
         Assert.All(Strings(rendered, "leads"), value => Assert.Equal("count-n", value));
 
-        Assert.Equal(
-            new[] { "0.50 of the rules that reached a verdict were checked" },
-            Strings(rendered, "fraction"));
-        Assert.Equal(new[] { "0.50" }, Strings(rendered, "fractionNumber"));
-
-        // The ids that reached no verdict are set in the mono face, so they read as names rather
-        // than as the end of a sentence.
+        Assert.Equal(0, rendered.GetProperty("fractions").GetInt32());
+        Assert.False(rendered.GetProperty("foldOpen").GetBoolean(), "the rule ids' fold arrived open.");
         Assert.Equal(
             new[] { "rms.refs.direction, rms.sketch.fully_defined" },
-            Strings(rendered, "unresolved"));
+            Strings(rendered, "ids"));
     }
 
     /// <summary>
@@ -555,7 +643,10 @@ public sealed class ModelCheckPageTests
             "Holes are the last features in the Detail group.",
             rendered.GetProperty("statement").GetString());
 
-        Assert.Equal(0, rendered.GetProperty("coverageFolds").GetInt32());
+        // Until feature 009 a coverage row had no fold. Every rule row has one now, holding its
+        // rule id (FR-025, T068) - and the reason still stays on the line, because folded away a
+        // coverage row would say nothing at all.
+        Assert.Equal(1, rendered.GetProperty("coverageFolds").GetInt32());
         Assert.Equal(
             "reference directions are not in the evidence package",
             rendered.GetProperty("coverageReason").GetString());
@@ -1282,6 +1373,11 @@ internal static class CheckResultSample
     /// <summary>A `not_examined.sentence`, hostile the same way a feature name can be.</summary>
     public const string HostileNotExaminedSentence = "<img src=x onerror=alert(1)>";
 
+    /// <summary>The two unresolved rules' statements, from `rule_statements` (feature 009 FR-028).</summary>
+    public const string RefsDirectionStatement = "Reference geometry follows the method's axes and planes.";
+
+    public const string SketchFullyDefinedStatement = "Every sketch is fully defined.";
+
     public static string Json(string featureName = "Cut-Extrude1", string? observed = null) =>
         JsonSerializer.Serialize(
             Build(featureName, observed ?? "2 holes are not the last features in 4-Detail"));
@@ -1434,6 +1530,20 @@ internal static class CheckResultSample
             from_run = "20260915-173001-bracket-check",
             count = 1,
             reason = (string?)null,
+        },
+
+        // Feature 009 T064: the `RULES` statement of every rule the grade names, findings and
+        // coverage rows alike; `modeling.resilience` is a checklist item, not a rule, so the
+        // catalogue has no statement for it and the map leaves it out.
+        rule_statements = new Dictionary<string, string>
+        {
+            { "rms.detail.holes_last", "Holes are the last features in the Detail group." },
+            { "rms.folders.ordered", "The group folders are in the method's order." },
+            { "rms.sketch.one_per_feature", "Each sketch is consumed by one feature." },
+            { "rms.folders.present", "All six group folders are present." },
+            { "rms.grouping", "Every content feature is in a group." },
+            { "rms.refs.direction", RefsDirectionStatement },
+            { "rms.sketch.fully_defined", SketchFullyDefinedStatement },
         },
 
         // The ranking the backend computed for this run, carried on the body so the tab renders

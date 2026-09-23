@@ -461,7 +461,10 @@ public sealed class SharedCheckPageTests
     [InlineData(".attention-rows")]
     [InlineData(".attention-row")]
     [InlineData(".attention-id")]
-    [InlineData(".attention-check")]
+
+    // `.attention-check` left this list with feature 009: the shared row carries its check as
+    // `data-check` and shows no check id on any tab (FR-025, research R2.21), so neither
+    // stylesheet has a rule for it.
     [InlineData(".attention-reason")]
     [InlineData(".attention-empty")]
     public void TheSharedRulesAreInTheSharedStylesheetAndNotInThePages(string selector)
@@ -470,11 +473,42 @@ public sealed class SharedCheckPageTests
         Assert.DoesNotContain(selector, ModelCheckPageFiles.Read("check.css"), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Every rule row of a check tab, as feature 009 T068 reads it: its id, whether it has a fold,
+    /// whether its `.rule-id` is inside that fold and what it says, whether the id appears on the
+    /// line outside the fold, and what follows the row's head. One script for both tabs, because
+    /// the row is the shared script's.
+    /// </summary>
+    internal const string RuleRowsScript = @"
+var rules = document.querySelectorAll('#rules .rule');
+var out = [];
+for (var i = 0; i < rules.length; i++) {
+  var rule = rules[i];
+  var id = rule.getAttribute('data-rule-id');
+  var fold = rule.querySelector(':scope > details.rule-fold');
+  var idNode = rule.querySelector('.rule-id');
+  var outside = '';
+  for (var c = rule.firstChild; c; c = c.nextSibling) { if (c !== fold) { outside += c.textContent; } }
+  var head = rule.querySelector(':scope > .rule-head');
+  var next = head ? head.nextElementSibling : null;
+  out.push({
+    id: id,
+    hasFold: !!fold,
+    idInFold: !!(fold && idNode && fold.contains(idNode)),
+    idText: idNode ? idNode.textContent : null,
+    idOutside: outside.indexOf(id) >= 0,
+    afterHead: next ? next.className : null
+  });
+}
+return JSON.stringify({ok: true, rules: out});";
+
     [Theory]
     [InlineData(".grade")]
     [InlineData(".grade-heading")]
     [InlineData(".counts")]
-    [InlineData(".fraction")]
+
+    // `.fraction` left this list with feature 009 (FR-028): the grade header states the
+    // unresolved rules by their statements and prints no fraction, so no stylesheet has its rule.
     [InlineData(".unresolved-rules")]
     [InlineData(".nothing-evaluated")]
     public void TheGradeRulesStayWithTheModelCheckPage(string selector)

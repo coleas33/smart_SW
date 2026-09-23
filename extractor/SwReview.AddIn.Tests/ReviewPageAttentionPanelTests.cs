@@ -81,7 +81,12 @@ public sealed class ReviewPageAttentionPanelTests
 
         Assert.False(panel.GetProperty("hidden").GetBoolean(), "the panel stayed hidden.");
         Assert.Equal(AttentionSample.ShownFindingIds, Strings(panel, "ids"));
+
+        // Each row carries its check as `data-check` and shows no check id (feature 009 FR-025):
+        // the id is on the finding card's "Rule" row, one click away.
         Assert.Equal(AttentionSample.ShownChecks, Strings(panel, "checks"));
+        Assert.Equal(0, panel.GetProperty("visibleChecks").GetInt32());
+        Assert.All(AttentionSample.ShownChecks, check => Assert.DoesNotContain(check, panel.GetProperty("text").GetString()!));
         Assert.Equal(AttentionSample.ShownReasons, Strings(panel, "reasons"));
         Assert.Equal(AttentionSample.Heading, panel.GetProperty("heading").GetString());
 
@@ -640,7 +645,8 @@ public sealed class ReviewPageAttentionPanelTests
       beyondRendered: !!beyond && beyond.getClientRects().length > 0 && beyond.checkVisibility(),
       countLine: count ? count.textContent : '',
       moreLabel: more ? more.textContent : '',
-      checks: texts(panel, '.attention-check'),
+      checks: attrs(panel, '.attention-row', 'data-check'),
+      visibleChecks: panel.querySelectorAll('.attention-check').length,
       reasons: texts(panel, '.attention-reason'),
       lists: panel.querySelectorAll('ol').length,
       injected: panel.querySelectorAll('img,script,iframe,svg,object,embed,link,style').length,
