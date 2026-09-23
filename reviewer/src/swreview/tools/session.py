@@ -451,12 +451,11 @@ def get_finding(finding_id: str) -> ToolResult:
 
     Args:
         finding_id: A finding id a check result's digest listed, such as F-001.
-
-    Notes:
-        A check tool's result lists its findings by id and counts; this returns one of
-        them with everything it carries - inputs, calculation, provenance, coverage limits.
-        It reads the session and changes nothing.
     """
+    # No `Notes:` paragraph, on purpose: every byte of this docstring rides on every
+    # request of a slimmed review, and the slimmed array must stay under `ARRAY_CEILING`
+    # (`tests/unit/test_tool_payload.py`). The digest's `detail` sentence already tells the
+    # model what this is for. It reads the session and changes nothing.
     context = current_context()
     if context.session is None:
         return error_result("get_finding reads a review session, and this context has none")

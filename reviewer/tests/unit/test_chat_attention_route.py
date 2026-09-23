@@ -104,17 +104,19 @@ def nothing_to_find_package() -> EvidencePackage:
     )
 
 
+NOTHING_FOLDER = "20260913-130000-nothing"
+"""The run folder `empty_chat` reviews, inside the run root."""
+
+
 @pytest.fixture
-def empty_chat(
-    client: TestClient, run_root: Path, provider_control: ProviderControl
-) -> tuple[str, Path]:
+def empty_chat(client: TestClient, run_root: Path, provider_control: ProviderControl) -> str:
     """A settled review that recorded nothing: the FR-024 case the panel has to say."""
-    folder = run_root / "20260913-130000-nothing"
+    folder = run_root / NOTHING_FOLDER
     save_package(nothing_to_find_package(), folder)
     provider_control.script = text_turns(3)
     chat_id = start_session(client, folder)["chat_id"]
     settle(client, chat_id)
-    return chat_id, folder
+    return chat_id
 
 
 def get(client: TestClient, chat_id: str) -> Any:
@@ -255,30 +257,30 @@ def test_it_answers_the_live_session_after_a_disposition(
 
 
 def test_a_review_that_found_nothing_answers_no_rows_and_a_reason(
-    client: TestClient, empty_chat: tuple[str, Path]
+    client: TestClient, run_root: Path, empty_chat: str
 ) -> None:
     """FR-024: the panel says there is nothing to start with, and why.
 
     Feature 008 T047, edited deliberately: the chat is started on a package in which the
     checks find nothing, and the pre-run's steps are asserted to exist, so "nothing found"
     is a statement about a review whose checks ran, not one that never ran them."""
-    chat_id, folder = empty_chat
-    response = get(client, chat_id)
+    response = get(client, empty_chat)
 
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["rows"] == []
     assert body["empty_reason"] == NOTHING_FOUND
     assert body["not_amplified"]["total"] == 0
-    steps = [step.tool for step in load_session(folder / "session.json").steps]
+    session = load_session(run_root / NOTHING_FOLDER / "session.json")
+    steps = [step.tool for step in session.steps]
     assert steps[: len(RMS_PRERUN_TOOLS)] == list(RMS_PRERUN_TOOLS)
 
 
 def test_the_empty_answer_still_carries_the_coverage_block(
-    client: TestClient, empty_chat: tuple[str, Path]
+    client: TestClient, empty_chat: str
 ) -> None:
     """What the run could not reach is the useful half of an empty panel."""
-    coverage = get(client, empty_chat[0]).json()["coverage"]
+    coverage = get(client, empty_chat).json()["coverage"]
 
     assert set(coverage) >= {
         "checked",
@@ -323,7 +325,10 @@ def test_the_body_is_the_live_ranking_plus_the_live_summary(
     assert summary == to_jsonable_python(
         review_summary(rank(run.session), run.session, run.context.ir, usage=run.usage_ledger)
     )
-    assert summary["headline"] == "1 finding in 1 issue"
+    # Feature 008 T047, edited deliberately: the pane runs checks first, so the fixture
+    # package's three modelling-practice findings are recorded before the model's drawing
+    # finding, and fold into one issue (FR-014): four findings, two issues.
+    assert summary["headline"] == "4 findings in 2 issues"
 
 
 def test_the_summary_carries_the_live_ledgers_resume_figure(
