@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using Xunit;
 
 namespace SwReview.AddIn.Tests;
@@ -117,7 +116,8 @@ public sealed class ReviewPageSessionsAcceptanceTests
                 await driver.DocumentChanged(documentB);
                 driver.Sessions.Add(b);
                 await driver.RouteAttention("chat-2", SummarySample.Json());
-                await driver.Route("GET", "/sessions/chat-2/snapshot", 200, SnapshotB());
+                await driver.Route("GET", "/sessions/chat-2/snapshot", 200,
+                    ReviewPageSessionsTests.Snapshot("20260923-221000-pin-2", PathB, new[] { "F-100" }, "ended", 3, false));
                 await driver.StartReview();
                 await driver.Push("chat-2", 1, "finding", ReviewPageSessionsTests.Finding("F-100"));
                 await driver.EndSession("chat-2");
@@ -159,22 +159,6 @@ public sealed class ReviewPageSessionsAcceptanceTests
 
         return run;
     }
-
-    /// <summary>B's snapshot: the summary sample's ranking and the one finding B streamed.</summary>
-    private static string SnapshotB() => new JsonObject
-    {
-        ["run_id"] = "20260923-221000-pin-2",
-        ["read_only"] = false,
-        ["read_only_reason"] = null,
-        ["chat_state"] = "ended",
-        ["last_seq"] = 3,
-        ["document"] = JsonNode.Parse(JsonSerializer.Serialize(new { path = PathB, configuration = "Default" })),
-        ["findings"] = new JsonArray(JsonNode.Parse(ReviewPageSessionsTests.Finding("F-100"))),
-        ["evidence_requests"] = new JsonArray(),
-        ["coverage"] = new JsonArray(),
-        ["ranking"] = SummarySample.Ranking(),
-        ["not_examined"] = null,
-    }.ToJsonString();
 
     private const string ReadState = @"
 var decisions = document.querySelectorAll('#findings [data-action=""accept""], #findings [data-action=""reject""], #findings [data-action=""defer""], #findings input.note');
