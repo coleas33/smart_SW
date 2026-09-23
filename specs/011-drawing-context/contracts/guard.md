@@ -1,0 +1,77 @@
+# Contract: The Guard, Hardened First
+
+Normative for FR-005 to FR-007 and SC-009. Lands before any new drawing read (Phase 2).
+
+## 1. The families
+
+**The 24 drawing families**, every writer of which is refused: `IDrawingDoc`, `ISheet`, `IView`,
+`IDisplayDimension`, `IDimension`, `IDimensionTolerance`, `IAnnotation`, `INote`, `IGtol`,
+`IGtolFrame`, `IDatumTag`, `ISFSymbol`, `ITableAnnotation`, `IBomTableAnnotation`, `IBomFeature`,
+`IRevisionTableAnnotation`, `IGeneralTableFeature`, `ITitleBlockTableFeature`, `ITitleBlock`,
+`IDatumTargetSym`, `ICenterMark`, `IWeldSymbol`, `IDowelSymbol`, `IMultiJogLeader`.
+
+**The shared families**, named members only:
+
+| Interface | Members refused | Beside the read |
+|---|---|---|
+| `ISldWorks` | `ActivateDoc`, `ActivateDoc2`, `ActivateDoc3`, `DocumentVisible`, `CloseAllDocuments`, `CloseAndReopen`, `CloseAndReopen2`, `QuitDoc`, `NewDocument`, `NewDrawing`, `NewDrawing2`, `NewPart`, `NewAssembly`, `OpenDoc`, `OpenDoc2`, `OpenDoc3`, `OpenDoc4`, `OpenDoc7`, `OpenDocSilent`, `OpenModelConfiguration`, `LoadFile2`, `LoadFile3`, `LoadFile4`, `RunMacro`, `RunMacro2`, `RunCommand`, `RunAttachedMacro`, `RunJournalCmd` | `GetDocuments`, `GetDocumentCount` (discovery) |
+| `IModelDocExtension` | `SetUserPreferenceInteger`, `SetUserPreferenceString`, `SetUserPreferenceDouble`, `SetUserPreferenceTextFormat` | `GetUserPreferenceInteger`, `GetUserPreferenceString` (the drawing's settings) |
+
+## 2. The writer grammar
+
+A public method of a drawing family is a **writer** when its name does not start with `get_`,
+`Get`, `IGet` or `Is`, and matches:
+
+```text
+^(set_|Set|ISet|Add|IAdd|Insert|IInsert|Delete|Remove|Edit|Modify|Change|Reset|Activate|Attach|
+  Detach|Update|Replace|Break|Hide|Show|Move|Align|Suppress|Unsuppress|Rebuild|Convert|Create|
+  ICreate|Make|Lock|Unlock|Sort|Split|Merge|Rotate|Scale|Flip|Link|Unlink|Import|Explode|Clear|
+  Apply|Restore|Save|Dissolve|Expand|Collapse|Reload|Rename|New|Paste|Copy|Cut|Drag|Close|Quit|
+  Open|Load|Unload|Regenerate|Reorder|Auto|Dimension|Reverse|Swap|Toggle|Enable|Disable|Select|
+  Purge|Relink|Resolve|Crop|Unbreak|Force|Hatch|Offset|Position|Freeze|Unfreeze)
+```
+
+On the 2024 SP5 interop (32.5.0.48) it matches 621 distinct names (reflected 2026-09-23, research
+R2.2). A false positive costs nothing: the extractor never calls a writer, and section 5's audit
+proves no read is refused.
+
+## 3. Exclusions, each with its reason
+
+| Bare name | Why it is not denied |
+|---|---|
+| `set_Name`, `Select2` (drawing families), `CloseDoc`, `SetUserPreferenceToggle` (shared) | Feature 004's stage-1 allowlist has a key with this bare name (`IFeature.set_Name`, `IFeature.Select2`, `ISldWorks.CloseDoc`, `ISldWorks.SetUserPreferenceToggle`); denying the bare name would make that key override a read-only denial and move `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive` |
+| `OpenDoc6` | The extractor's one sanctioned read-only open (`SwSession.OpenReadOnly`), for models only (`attach.md` section 4) |
+
+Names already denied (39 of the 621, from features 001, 006 and 010, or by a denied prefix) are
+listed in the table with the feature that denied them and are not added twice.
+
+## 4. The table, generated
+
+`extractor/tools/list-writer-members.ps1` loads the interop from `$SwRedist` (the path
+`Directory.Build.props` names) as metadata, applies sections 1 to 3, and prints the "Feature 011"
+section of `specs/004-resilient-remodeler/contracts/guard-allowlist.md`: one row per interface,
+`| Interface | Members refused | Already denied |`, members in ordinal order, then the shared rows,
+then the exclusion rows. **The table is regenerated, never transcribed**; the script's output is
+pasted whole, and `ReadOnlyGuard`'s feature 011 block (`Guard/ReadOnlyGuard.Drawing.cs`, a
+`partial` of the static class holding one `string[]`) is generated from the same run. Both land in
+one commit with the tests of section 5.
+
+## 5. The tests
+
+In `extractor/SwReview.Extractor.Tests/GuardTests.cs`:
+
+| Test class | Asserts |
+|---|---|
+| `DrawingFamilyDenylistTests` | parses the "Feature 011" table (`DenylistTable.Parse`, as `MechanicalChecksDenylistTests` does); every member is refused by `ReadOnlyGuard.Assert` and `ReadOnlyCallGuard.Instance.Assert` |
+| `DrawingFamilyCompletenessTests` | reflects the 24 interfaces at test time and applies the grammar: every match is refused, or is an excluded name of section 3; the shared rows are refused |
+| `DrawingFamilyReadAuditTests` | no bare name the extractor gates (every `SwGate.Call`/`CallOptional` literal in `extractor/SwReview.Extractor`, collected by a source scan) is refused, except the write-refusal tests' own names and the re-modeler's write sites |
+
+`RemodelGuardTests.ExpectedDeniedMembers` gains the table's names (it lists the guard's denials
+from both ends); the five overriding keys and `RemodelGuard.ExcludedMembers` are unchanged and
+their tests pass unedited.
+
+## 6. What an extraction's gate log shows (FR-007)
+
+For every extraction that reads a drawing: no member of this contract's denials, no
+`ActivateSheet`, `ActivateView` or `ActivateDoc*`, and no `OpenDoc*`. `PackageWriterTests` asserts
+it with the recording observer over the fake drawing reader; T062 records it at the seat.

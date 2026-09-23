@@ -1,0 +1,312 @@
+---
+
+description: "Task list for the read-only drawing context"
+---
+
+# Tasks: Drawing Context, Read Only
+
+**Input**: Design documents from `/specs/011-drawing-context/` (`spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`)
+
+**Prerequisites**: features 001 to 010 on main (008's pre-run, re-call guard, answer batch and replay; 009's questions panel; 010's resolver, joint map, profile version 2 and IR 1.5.0). Phase 11 needs the licensed seat of the next sitting. No recorded package is read by a test or enters the repository; the fixtures are synthetic.
+
+**Tests**: REQUIRED, and **strictly test-first**: every implementation task is preceded by the test task that must be written and must fail first. Every tool signature and docstring, `TOOL_FUNCTIONS`, every existing pin of `test_tool_payload.py`, the figures in `specs/005-llm-efficiency/contracts/levers.md` and `docs/llm-efficiency-options.md`, `Finding`, `CoverageItem`, `EvidenceRequest`, `InvestigationStep`, `chat-events.schema.json`, the MCP function list, the terminal profile, feature 006's sixteen checks and every golden of `render_report` do not move. The tests that go red **by design** are named in the task that lands each change (research R3) and are edited deliberately there, never loosened. A replayed finding may never be lost or become unreplayable, and the reclassified contacts stay 3, 2 and 0.
+
+**Gates before every commit** (from `reviewer/`): `SWREVIEW_REQUIRE_TOKENIZER=1 uv run pytest -q -p no:warnings -o addopts=""` and `uv run ruff check src tests`; when C# is touched, from the repository root, `dotnet build extractor/SwReview.sln -c Release --nologo -v q` (zero warnings) and `dotnet test extractor/SwReview.sln -c Release --no-build --nologo`. Payload pins and the figures in `levers.md` and `docs/llm-efficiency-options.md` are regenerated only with `python -m tests.unit.test_tool_payload --write`, in a commit of their own; `ARRAY_CEILING` stays 38,000.
+
+**Organization**: Setup (two decision records), Foundational (the guard, IR 1.6.0, package-scoped ids, the fixtures), US1 a drawing on its own, US2 open drawings attached, US3 dimensions, precision and the resolver, US4 callouts and tables, US5 the drawing check and its questions, US6 the brief, US7 conformance, Polish, and the workstation sitting.
+
+## Format: `[ID] [P?] [Story] Description`
+
+- **[P]**: can run in parallel (different files, no dependency on another unfinished task)
+- **[Story]**: `US1` to `US7`; Setup, Foundational, Polish and Workstation tasks carry no story tag
+- **[W]**: needs the licensed SOLIDWORKS seat of the next sitting; the code and fake-reader tests of every [W] read land earlier with no seat
+- **[O]**: waits on an answer only the owner can give (research R5)
+
+## Path Conventions
+
+- Python: `reviewer/src/swreview/`, tests in `reviewer/tests/`
+- C#: `extractor/SwReview.Extractor/`, `extractor/SwReview.AddIn/`, `extractor/SwReview.Extractor.Console/`; tests in `extractor/SwReview.Extractor.Tests/` and `extractor/SwReview.AddIn.Tests/`
+- Contracts: `specs/011-drawing-context/contracts/`; other features' contracts are edited in the task that changes their shape
+
+---
+
+## Phase 1: Setup
+
+**Purpose**: the two decisions that change other features' specs, recorded in their packages before any code (the repository's rule for a decision that changes a spec).
+
+- [ ] T001 Record in `specs/006-standards-check/spec.md` FR-025 and in `specs/006-standards-check/contracts/ir-additions.md` section 7 an amendment dated 2026-09-23, attributed to the owner's decision of 2026-09-22: under the `Full` (review) extraction of a part or assembly root, the drawings already open in SOLIDWORKS whose views show a document of the design are read with it (`specs/011-drawing-context/contracts/open-drawings.md`); the `Standards` and `ModelCheck` extractions are unchanged and still never discover a drawing; nothing is opened. Documents only. Acceptance: both files name the amendment, its date, the owner and the 011 contract; `test_standards_*` green (no code moved)
+- [ ] T002 Record in `specs/010-mechanical-checks/contracts/tolerances.md` section 6 and research R2.18's source table a note dated 2026-09-23: feature 011 fills source 1 as `drawing_answer(package, subject) -> DrawingAnswer` (limits, or a written precision and unit handed to the general source), per `specs/011-drawing-context/contracts/drawing-source.md` section 4, shipped behind `DRAWING_BINDING_VALIDATED`; nothing else in 010's precedence, conflict or citation rules changes. Documents only
+
+**Checkpoint**: every spec 011 changes says so, dated, before a line of code.
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: the guard hardened before any new drawing read; the schema every reader writes; identifiers that survive several drawings in one package; the fixtures every Python acceptance test reads.
+
+- [ ] T003 [P] Write, in `extractor/SwReview.Extractor.Tests/GuardTests.cs`, `DrawingFamilyDenylistTests` (parses the "Feature 011" table of `specs/004-resilient-remodeler/contracts/guard-allowlist.md` through `DenylistTable.Parse`; every member refused by `ReadOnlyGuard.Assert` and `ReadOnlyCallGuard.Instance.Assert`, the error naming it), `DrawingFamilyCompletenessTests` (reflects the 24 interfaces of `contracts/guard.md` section 1 on the referenced interop, applies the section 2 grammar, and asserts every match refused or an exclusion of section 3; the shared rows refused; `OpenDoc6` allowed) and `DrawingFamilyReadAuditTests` (collects every string literal passed to `SwGate.Call` and `CallOptional` under `extractor/SwReview.Extractor/` and asserts none is refused except the named write-refusal tests' members and the re-modeler's write sites); and **edit deliberately** `RemodelGuardTests.ExpectedDeniedMembers` to read the new table, leaving `Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive` and `RemodelGuard.ExcludedMembers`' tests unedited. Acceptance: red for want of the table
+- [ ] T004 Write `extractor/tools/list-writer-members.ps1` (loads `SolidWorks.Interop.sldworks` from `$SwRedist` as metadata only; applies `contracts/guard.md` sections 1 to 3; prints the markdown section and, with `-CSharp`, the body of the generated file); paste its output as the "Feature 011" section of `specs/004-resilient-remodeler/contracts/guard-allowlist.md` (with the sentence that it is generated and by what, and the exclusions' reasons); make `Guard/ReadOnlyGuard.cs` `partial` and add `Guard/ReadOnlyGuard.Drawing.cs` holding the generated names, merged into `DeniedMemberSet`; no other edit to the guard. **Shared** (`ReadOnlyGuard.cs`, `guard-allowlist.md`). Acceptance: T003 green; `StandardsDenylistTests`, `MechanicalChecksDenylistTests` and every `RemodelGuardTests` test green; the table regenerates byte for byte (quickstart Scenario 1); FR-005, FR-006, SC-009
+- [ ] T005 [P] Write `reviewer/tests/unit/test_ir_drawing_context.py`: every field of `data-model.md` sections 1 and 2 validates, refuses an unknown field and a bad id pattern (`dtb:`), and is omitted from the dump when null or empty, so every committed package written before 1.6.0 (the golden fixtures, `tests/fixtures/mechanical/`, the standards and replay fixtures) round-trips to its own bytes; a 1.6.0 package carrying every member round-trips; `SCHEMA_VERSION == "1.6.0"`; and **edit deliberately** the tests that pin `SCHEMA_VERSION` and `test_schema_sync.py`'s expectation of the regenerated schema
+- [ ] T006 Implement the fields of `data-model.md` sections 1 and 2 in `reviewer/src/swreview/ir/models.py` (`AttachedFace`, `DrawingTable`, `BomRow`, `DrawingCandidate`, the additions to `DrawingRecord`, `DrawingSheetRecord`, `DrawingView`, `DisplayDimensionRecord`, `DrawingAnnotation`, `EvidencePackage.drawing_candidates` in the empties of `_omit_empty_additive_arrays`), `SCHEMA_VERSION = "1.6.0"`, `Design.active_configuration`'s description ("empty for a drawing root, which has none"); regenerate `specs/001-agentic-design-review/contracts/ir.schema.json` with `ir.schema.export_schema()`. **Shared** (`ir/models.py`, `ir.schema.json`). Acceptance: T005 green; every `test_ir_*` green
+- [ ] T007 [P] Extend `extractor/SwReview.Extractor.Tests/IrSerializerTests.cs` (and `IrContract.cs` where it pins members): the C# mirrors serialize every new member with the Python names, omit them when null or empty, `EvidencePackage.CurrentSchemaVersion == "1.6.0"`, and a 1.5.0 fixture round-trips
+- [ ] T008 Implement the mirrors in `extractor/SwReview.Extractor/Ir/DrawingRecord.cs`, a new `Ir/DrawingTable.cs` (`DrawingTable`, `BomRow`, `AttachedFace`, `DrawingCandidate`) and `Ir/EvidencePackage.cs` (`DrawingCandidates`, `CurrentSchemaVersion = "1.6.0"`). Acceptance: T007 green; zero warnings
+- [ ] T009 [P] Extend `extractor/SwReview.Extractor.Tests/DrawingTraversalTests.cs` and `DrawingDumperTests.cs`: the seven drawing allocators come from `DumpScope`; two drawings dumped in one scope get disjoint `dsh`, `dvw`, `ddm`, `dan`, `dnt`, `drv` ids continuing one sequence; a single drawing root numbers exactly as today (every existing id assertion unedited); `IDrawingReader.Drawing(document)` and `PersistRef(document, entity)` receive each drawing's own document and each record's `persist_ref_scope` is its own drawing's id; and **edit deliberately** the tests that construct `DrawingTraversal` with its own allocators or call `Drawing()` with no argument (research R3)
+- [ ] T010 Move the allocators to `DumpScope` in `extractor/SwReview.Extractor/Dump/DumpContracts.cs` (with `DrawingTableIds` for `dtb`), give `DrawingTraversal` the scope's allocators, change `IDrawingReader.Drawing` and `PersistRef` in `Dump/DrawingDumper.cs` and `Dump/SwDrawingReader.cs` and the fake in `Fakes/`, and make `DrawingDumper.Dump(scope)` read `scope.Drawings` (the root drawing for a drawing root, in this task; the attached ones from T021). Acceptance: T009 green; every feature 006 drawing test green; zero warnings
+- [ ] T011 [P] Write `reviewer/tests/unit/test_support_drawings.py` (the builders produce IR 1.6.0 packages that validate; every case row of `contracts/fixtures.md` section 2 is present with its numbers; **re-running the generator reproduces every committed byte**) and `reviewer/tests/unit/test_drawing_fixtures_are_fictional.py` (every path under `C:\Fictional\`; every string from the builders' vocabulary, a number or an id; the denylist scan through `tests/support/fixture_denylist.py`, skipped naming the file when it is absent)
+- [ ] T012 Implement `reviewer/tests/support/drawings.py` on top of `tests/support/mechanical.py` and write `reviewer/tests/fixtures/drawings/generate_fixtures.py` (run from `reviewer/`; reads nothing but the builders; module docstring naming each fixture and that it holds no recorded string); commit `plate-drawing/`, `drawing-root/` and `assembly-drawings/`. Acceptance: T011 green including the regeneration assertion; `test_standards_no_company_values.py` green
+
+**Checkpoint**: every drawing writer is refused, the schema holds every field, ids survive several drawings, and the fixtures exist.
+
+---
+
+## Phase 3: User Story 1 - A Drawing Opened on Its Own Can Be Read and Graded (Priority: P1) 🎯 MVP
+
+**Goal**: extraction accepts a drawing with no configuration; the Standards tab grades a drawing live; every model-only tool still declines one.
+
+**Independent Test**: with fakes, a drawing root is extracted and the Standards run grades its four drawing checks; the model purpose still refuses a drawing with today's sentence. No licence (the live check is T062).
+
+- [ ] T013 [P] [US1] Extend `extractor/SwReview.Extractor.Tests/SwSessionAttachTests.cs` per `contracts/attach.md` sections 1, 2 and 4: `AttachRefusal(kind, path, purpose)` refuses a drawing for `Model` with today's sentence and accepts it for `Dump`; parts and assemblies are accepted for both; a configuration name passed with a drawing is refused naming both; a not-open `.slddrw` path is refused by the dump purpose with the sentence of section 4 before any open; and **edit deliberately** the three existing tests to pass `AttachPurpose.Model`, their assertions unchanged
+- [ ] T014 [US1] Implement `AttachPurpose`, `AttachForDump`, the purpose-aware `AttachRefusal`, `ISwSession.ConfigurationName` and the nullable `ISwSession.Configuration` in `extractor/SwReview.Extractor/Sw/SwSession.cs`; `OpenReadOnly` opens models only; `Sw/SwScope.cs` and every `ISwSession` consumer read `ConfigurationName`; switch `Dump/SwDump.cs`, `extractor/SwReview.AddIn/Review/SwReviewDump.cs` (`Run` only; `Prepare` keeps `Attach`) and the console's `dump` and `probe standards` in `extractor/SwReview.Extractor.Console/Program.cs` to `AttachForDump`; every other caller unchanged (`contracts/attach.md` section 3). **Shared** (`SwSession.cs`, `Program.cs`). Acceptance: T013 green; zero warnings (the nullable annotations force every consumer to decide); `ToolServiceWiringTests` unedited and green
+- [ ] T015 [P] [US1] Extend `extractor/SwReview.Extractor.Tests/ComponentTreeDumperTests.cs` and `PackageWriterTests.cs`: a drawing root whose session has no configuration is traversed as feature 006's forest - the root kind read before any configuration - with `design.active_configuration == ""`, the drawing's manifest entry `configuration == ""`, `DumpOptions.Configuration` null, and the Standards profile running the `drawing` phase over the fake reader, the gate log free of every `contracts/guard.md` denial and of `OpenDoc*`; and in `extractor/SwReview.AddIn.Tests/`, **edit deliberately** the test of `ReviewHost`'s drawing refusal to expect the clause of `contracts/attach.md` section 5
+- [ ] T016 [US1] Reorder `Dump/ComponentTreeDumper.cs` `Traverse` to read the root kind first and take `ActiveConfiguration` from `ConfigurationName ?? ""`; write the Review refusal's new clause in `extractor/SwReview.AddIn/Review/ReviewHost.cs`. Acceptance: T015 green; every existing traversal and `PackageWriter` test green
+- [ ] T017 [P] [US1] Write `reviewer/tests/unit/test_standards_drawing_root_1_6.py`: `run_standards_check` over `tests/fixtures/drawings/drawing-root/` grades the four `standards.drawing.*` checks and every referenced document once, the unenumerable sheet unresolved naming its gap, exactly as feature 006's 1.4.0 drawing fixtures are graded; every existing standards test and golden unedited. Test only. Acceptance: green on T006 and T012 with no edit to `checks/standards/`; FR-001, FR-004 on the reasoning side
+
+**Checkpoint**: a drawing root extracts and grades through the same code the seat will run.
+
+---
+
+## Phase 4: User Story 2 - The Open Drawings of a Reviewed Part or Assembly Join Its Review (Priority: P1)
+
+**Goal**: a review extraction reads the open drawings that show the design, at most ten, records candidates, opens nothing.
+
+**Independent Test**: with fakes, of three open drawings the two showing the design are read and the third is not; the block's same-name file is a candidate; a part review with no drawing open says so. No licence (the live check is T063).
+
+- [ ] T018 [P] [US2] Write `extractor/SwReview.Extractor.Tests/OpenDrawingDiscoveryTests.cs` for the pure `OpenDrawingDiscovery.Discover(tree, documents, fileExists, options)`: every row of `contracts/open-drawings.md` sections 1, 2, 3 and 5 - the profile table; a drawing referencing the root, one referencing a sub-part, one referencing only an outside document; matching by full path with case and `..` normalisation and never by file name alone; a drawing that also references an outside document attached with one `drawing_referenced_document` gap per outside path; the order with shuffled input; exactly ten attached at eleven with one `drawing_attachment_limit` gap naming the eleventh; a document whose kind or path throws, and a drawing whose views throw, each one `drawing_discovery` gap; candidates only for documents with no attached drawing, only `<folder>\<stem>.SLDDRW`, one call per document, never for a pathless document, a throwing check one `drawing_candidate` gap; a same-name path that is already open but shows none of the design never a candidate and named in its own `drawing_candidate` gap
+- [ ] T019 [US2] Implement `extractor/SwReview.Extractor/Dump/OpenDrawingDiscovery.cs` (`OpenDocument`, `AttachedDrawings`, `Discover`), `IOpenDrawingSource` in `Dump/DumpContracts.cs`, and `Dump/SwOpenDrawingReader.cs` (`GetDocuments`, `GetType`, `GetPathName`, `IDrawingDoc.GetViews`, `GetReferencedModelName`, `File.Exists`, each gated by name). Acceptance: T018 green; zero warnings
+- [ ] T020 [P] [US2] Extend `extractor/SwReview.Extractor.Tests/PackageWriterTests.cs` per `contracts/open-drawings.md` sections 4, 6 and 7: a `Full` part root with two attached drawings writes two records with disjoint ids, a `documents[]` row and a manifest entry per drawing, both in `design.drawing_document_ids`; the phase list is the same twelve names; the `Standards` and `ModelCheck` extractions of the same root attach nothing; candidates written in traversal order; the reuse key differs with and without an attached drawing and the reuse probe agrees with the full build; the three gap sentences of section 6; and **edit deliberately** the assertion of the profile sentence for a `full` part dump, which now carries "No open drawing shows this design"
+- [ ] T021 [US2] Wire discovery into `Dump/PackageWriter.cs` (`Build` and `BuildReuseProbe`, between the traversal and the `document` phase, under `Full` for a part or assembly root only), `ComponentTreeResult.AttachedDrawings`, `DocumentPaths`, `BuildDesign`, `scope.Drawings` for the `drawing` phase, `package.DrawingCandidates`, and the gap sentences; wire `SwOpenDrawingReader` in `Dump/SwDump.cs`. **Shared** (`PackageWriter.cs`). Acceptance: T020 green; every `PackageWriterTests`, `PackageReuseTests` and `ManifestBuilderTests` test green; FR-008 to FR-016
+- [ ] T022 [P] [US2] Write `reviewer/tests/unit/test_drawing_evidence.py` for `drawings/evidence.py` per `contracts/drawing-source.md` section 1: `DrawingIndex.for_package` over `plate-drawing` and `assembly-drawings` - which views show which document, in the fixed order; each usability condition failing on its own with its reason, including a null read; a part used in two configurations, a view usable for one instance and not the other; views of outside documents excluded; the root drawing derived from `design.root_assembly_document_id`; shuffled arrays give the same index
+- [ ] T023 [US2] Implement `reviewer/src/swreview/drawings/__init__.py` and `drawings/evidence.py` (`ViewEvidence`, `DrawingIndex`). Acceptance: T022 green
+- [ ] T024 [P] [US2] Write `reviewer/tests/unit/test_package_counts_native.py`: `get_package_summary` gains `native_drawing_sheet_count` and the opening package brief (`agent/package_brief.py`) gains `native_drawing_sheets=` **only when non-zero**; on every committed package without native sheets, and on 008's replay fixtures, both payloads are byte-identical to today's
+- [ ] T025 [US2] Add the two counts in `reviewer/src/swreview/tools/query.py` and `reviewer/src/swreview/agent/package_brief.py`, each omitted when zero. **Shared** (`tools/query.py`). Acceptance: T024 green; `test_prerun_digest.py` and the replay tests unedited and green
+
+**Checkpoint**: a review carries the drawings that show it, names the ones it did not read, and never opens one.
+
+---
+
+## Phase 5: User Story 3 - The Drawing's Dimensions, Tolerances and Written Precision Reach the Checks (Priority: P1)
+
+**Goal**: every dimension's text, precision, unit, tolerance and attachments are read; profile version 3 states the general tolerance's unit; the resolver's drawing source binds through usable views (disabled until T066) and hands the written precision to the general source; the model's tools read native sheets.
+
+**Independent Test**: on `plate-drawing` with the switch set in the test, the dowel hole's size is bound from drawing A, cited, with the model dimension also found; the pin hole's two-decimal untoleranced diameter binds the two-decimal band under a version 3 mm profile and nothing under an inch profile; drawing B's views are unusable with reasons; with the switch as shipped nothing binds and every answer names the seat validation. No licence.
+
+- [ ] T026 [P] [US3] Extend `extractor/SwReview.Extractor.Tests/DrawingDumperTests.cs` for every row of `contracts/native-evidence.md` section 3's drawing, sheet, view and display-dimension tables and the "Attachments" rule: each read answering, throwing (its gap kind) and answering null; the tolerance read through the mapping shared with `ToleranceDumper` (a bilateral, a symmetric, a fit with both classes, `NONE`, `BLOCK`, `GENERAL`); a hole callout with its variables; an attached face, an attached edge giving two faces `via: edge`, a vertex and an unmapped entity dropped with one `drawing_attachment` gap counting them, faces deduplicated; a view whose model is not loaded and a drawing in detailing mode attempting no attachment read, one gap each; the gate log naming only read members
+- [ ] T027 [US3] Implement the reads in `Dump/DrawingDumper.cs` and `Dump/SwDrawingReader.cs` (the `IDrawingReader` members of `contracts/native-evidence.md` section 3), extracting the dimension-tolerance read and mapping from `Dump/ToleranceDumper.cs` into one helper both dumpers call (DRY, no copy). Acceptance: T026 green; `ToleranceDumperTests` unedited and green; zero warnings; the seat run is T064
+- [ ] T028 [P] [US3] Extend `reviewer/tests/unit/test_standards_profile.py` per `contracts/profile.md` section 1: version 3 with a `drawing` section loads; version 3 missing it, or missing a version 2 section, is refused naming it; `projection` and `dimension_unit` outside their values, a repeated `sheet_formats` entry and a `drawing.general_tolerance` key are refused naming them; empty values load; versions 1 and 2 load with the section absent and a `drawing` section on them is refused; version 4 is refused naming the known versions; and **edit deliberately** the field tests of `test_standards_no_company_values.py` that go red when the example, the two fixtures and 006's contract block gain the section, and name the standards goldens that record a fixture profile's `sha256`, which T029 regenerates
+- [ ] T029 [US3] Implement version 3 in `reviewer/src/swreview/checks/standards/profile.py` (`PROFILE_VERSION = 3`, `KNOWN_VERSIONS = (1, 2, 3)`, `DrawingSection`, required on version 3 only); move `config/standards.example.yaml`, `reviewer/tests/fixtures/standards/profile-a.yaml`, `profile-b.yaml` and the block in `specs/006-standards-check/contracts/profile.md` to version 3 with fictional values that agree nowhere, as `test_the_three_profiles_differ_in_every_value_bearing_field` requires pairwise - so each three-valued setting takes a different member in each profile: the example `first_angle` and `in`, `profile-a` `third_angle` and `mm` with `sheet_formats: ["FICTIONAL-FORMAT-A"]` and `drafting_standard: "FICTIONAL-STANDARD"` (what the `plate-drawing` fixture's drawing A carries), `profile-b` every drawing setting empty (the skipped cases); add one R5 row per new value-bearing field to `specs/006-standards-check/research.md` (the two enumerations noted as such: a three-member setting is not a secret, and every profile carries a different member); regenerate the goldens T028 names with `--force-regen` and confirm each diff is the `sha256` line only. **Shared** (`profile.py`, the five profile files). Acceptance: T028 green; `test_standards_run.py` and `tests/golden/test_standards_goldens.py` green; FR-044, FR-045
+- [ ] T030 [P] [US3] Write `reviewer/tests/unit/test_native_dimension.py` per `contracts/drawing-source.md` section 2: `native_dimension` for a length, an angle, a value with no unit (the reason), each tolerance kind (`NONE`, `BLOCK` and `GENERAL` as `kind="none"`), the `SourceRef` (drawing, sheet name, view name, `ddm:` id, persistent reference) and the composed `text_as_read` ending `(composed)`; `written_precision` for own, document and unread precision; `written_unit` for mm, in, another unit and an unread one
+- [ ] T031 [US3] Implement `reviewer/src/swreview/drawings/native.py` (`native_dimension`, `written_precision`, `written_unit`, `native_sheets`). Acceptance: T030 green
+- [ ] T032 [P] [US3] Write `reviewer/tests/unit/test_drawing_binding.py` per `contracts/drawing-source.md` section 3, with `DRAWING_BINDING_VALIDATED` monkeypatched true except where named: the `attached_face` route for a size subject (a diameter, a radial, a hole callout) and for a position subject (a GTol with a position frame); an edge-derived face binds; the `model_dimension` route with the document suffix spelled differently, and an ambiguous model dimension binding nothing; a linear dimension never binding a size; an overridden dimension, and one whose override flag is unread, binding nothing; a record in an unusable view excluded with section 1's words; the fixed order under shuffling; **with the switch false, nothing binds and the reason names the seat validation**
+- [ ] T033 [US3] Implement `reviewer/src/swreview/drawings/binding.py` (`DRAWING_BINDING_VALIDATED = False`, `DrawingBinding`, `bindings_for`). Acceptance: T032 green
+- [ ] T034 [P] [US3] Extend `reviewer/tests/unit/test_tolerances.py` per `contracts/drawing-source.md` section 4, over small packages built with `tests/support/drawings.py`: the drawing binds first with the model dimension in `also_found`; two drawings with different limits give the conflict sentence; an untoleranced two-decimal dimension hands 2 decimals to the general source, which binds under a version 3 mm profile, names the unit under an inch profile, and names `drawing.dimension_unit` under a version 2 profile or an empty unit; `BLOCK` behaves as `NONE`; `GENERAL` names the table; disagreeing precisions bind nothing; `holds_any_source` true with a bindable drawing dimension only while the switch is set; with no drawing record, every answer equals today's except source 1's wording; and **edit deliberately** the rows asserting "not available before feature 011"
+- [ ] T035 [US3] Replace `drawing_tolerance` with `DrawingAnswer` and `drawing_answer` in `reviewer/src/swreview/checks/tolerances.py`, pass the written precision to the general source with the unit rule, extend `ResolverLookup.holds_any_source`, and keep every other line of 010's precedence. **Shared** (`checks/tolerances.py`). Acceptance: T034 green; every feature 010 test and golden (`test_joint_stack.py`, `test_tools_check_joints.py`, `test_general_tolerance.py`) green unedited except the rows T034 named; FR-020 to FR-024
+- [ ] T036 [P] [US3] Write `reviewer/tests/unit/test_tools_native_drawing.py` per `contracts/drawing-source.md` section 2's table: `find_dimensions` returns native dimensions filtered by document, regex and view name; `get_drawing_sheet` returns a native sheet by name, preferring it over an ingested one of the same name, with `available_sheets` as `{name, source}`; `resolve_dimension` resolves a native `SourceRef` and still refuses none or two; `check_fit` over two native dimensions records its finding citing them; for every committed package without native sheets the three payloads are byte-identical to today's (compared against a golden taken before the change)
+- [ ] T037 [US3] Read native sheets in `reviewer/src/swreview/tools/query.py` (`get_drawing_sheet`, `find_dimensions`) and `reviewer/src/swreview/tools/refs.py` (`resolve_dimension`) through `drawings/native.py`; no docstring changes. **Shared** (`tools/query.py`). Acceptance: T036 green; `test_tool_payload.py` unedited and green; FR-025
+- [ ] T038 [US3] Write `reviewer/tests/unit/test_drawing_source_acceptance.py` over `plate-drawing` with the switch monkeypatched true: `check_joints` records the dowel joint's stack with the plate hole's size from drawing A, cited by drawing, sheet, view and `ddm:` id (SC-003); the pin hole's size from the two-decimal band under `profile-a` (SC-004); drawing B's views listed unusable with their reasons and binding nothing; with the switch false, the stack equals the one feature 010's `tolerances` fixture records today. Test only. Acceptance: green on T027 to T037 with no edit to them
+
+**Checkpoint**: the drawing is the first tolerance source and the general tolerance finally has a written precision - both waiting only on the seat's validation.
+
+---
+
+## Phase 6: User Story 4 - Every Callout on the Drawing Is Read (Priority: P2)
+
+**Goal**: geometric tolerances, datums, surface finish and every table read onto the existing records; a drawing's position tolerance feeds the stack-up.
+
+**Independent Test**: with fakes, one record per callout kind and table kind, every unreadable value a gap; on `plate-drawing` the position GTol binds the dowel hole's position read in the drawing's unit. No licence.
+
+- [ ] T039 [P] [US4] Extend `extractor/SwReview.Extractor.Tests/DrawingDumperTests.cs` for `contracts/native-evidence.md` section 3's annotation and table rows: a GTol's frames and datum identifier through 010's reader members, a datum label, a surface-finish symbol and texts, each typed read failing into `drawing_symbol_read`; attachments on typed annotations; tables of types 0, 1, 2, 5 and 9 on the sheet's `tables`, type 3 still in `revision_tables` with every feature 006 revision-table test unedited; every cell read or null with its gap; a bill of materials' rows resolved to package documents with one unresolved path kept; a table returned by two views recorded once
+- [ ] T040 [US4] Implement the typed annotation reads, the shared table walk (extracted from `ReadRevisionTable`'s loop, used by both lists) and `bom_rows` in `Dump/DrawingDumper.cs`, `Dump/DrawingTraversal.cs` (`AddTable`) and `Dump/SwDrawingReader.cs`, reusing `IModelAnnotationReader`'s frame and datum members. Acceptance: T039 green; zero warnings; the seat run is T065
+- [ ] T041 [P] [US4] Write `reviewer/tests/unit/test_drawing_annotations.py`: `_frame_zone` takes a list of `GtolFrame` and 010's annotation tests stay green unedited; on `plate-drawing` with the switch set, the dowel hole's `hole_position` subject is bound from the drawing's position GTol "read in the drawing's unit, mm"; with the drawing's unit unread it binds nothing, naming why; `get_drawing_sheet` on drawing A returns the typed annotations and the tables with their kinds named (`General`, `HoleChart`, `BillOfMaterials`, `TitleBlock`, `GeneralTolerance`, others by number); notes verbatim
+- [ ] T042 [US4] Generalise `_frame_zone` and add the position rule of `contracts/drawing-source.md` section 4 item 3 in `reviewer/src/swreview/checks/tolerances.py`; name the table kinds in `drawings/native.py`. Acceptance: T041 green; FR-027 to FR-031
+
+**Checkpoint**: everything a drawing says about manufacturing is in the package, and its position tolerance reaches the stack.
+
+---
+
+## Phase 7: User Story 5 - Questions Only the Engineer Can Answer Reach the Pane (Priority: P2)
+
+**Goal**: one argument-free drawing check, offered and planned only with drawing evidence, records coverage and raises at most four questions through the existing writer.
+
+**Independent Test**: on `plate-drawing`, one candidate question; on `assembly-drawings`, one governing question; a repeat adds nothing; with no drawing evidence nothing the model sees changes. No licence.
+
+- [ ] T043 [P] [US5] Write `reviewer/tests/unit/test_session_writer.py`: `tools/session.record_evidence_request(context, what, why, entity_ids, question, options, blocks)` allocates the next `ER-` id, validates through `EvidenceRequest`, appends to the session and emits `evidence.requested` exactly as `request_evidence` does today; `request_evidence`'s refusals still come first; every existing `request_evidence` test unedited and green
+- [ ] T044 [US5] Extract `record_evidence_request` in `reviewer/src/swreview/tools/session.py` and make `request_evidence` delegate to it after its refusals; no docstring change. **Shared** (`tools/session.py`). Acceptance: T043 green; `test_tool_payload.py` unedited and green
+- [ ] T045 [P] [US5] Write `reviewer/tests/unit/test_drawing_context.py` for `run_drawing_context(package)` per `contracts/questions.md` sections 3 and 4: one `drawing.context` item per reviewed part or assembly document, each status with its reason; a drawing root's own document not a subject; the candidate question with the first ten names and a count, its options and `blocks`; a governing question per document shown by two or more drawings, three at most in traversal order, options only when at most four names each fit in 60 characters, the question shortened to 140 characters by the stem; no question when there is nothing to ask
+- [ ] T046 [US5] Implement `reviewer/src/swreview/checks/drawing_context.py` (`DocumentDrawingCoverage`, `QuestionSpec`, `DrawingContextResult`, `run_drawing_context`). Acceptance: T045 green
+- [ ] T047 [P] [US5] Write `reviewer/tests/unit/test_tools_check_drawings.py` per `contracts/questions.md` sections 1, 2, 5 and 6: `check_drawings()` takes no argument and returns the counts; the questions are `EvidenceRequest`s with `question`, `options` and `blocks`, visible in feature 009's summary (`summary.questions`); the drawing family is offered only when `drawing_evidence(package)` and is absent from `TOOL_FUNCTIONS`, `MCP_TOOL_FUNCTIONS` and the terminal profile; `planned_calls` plans it after every `CODE_FIRST_CHECKS` name and before `check_standards`, only with drawing evidence and not when withheld; the digest line; a repeat after the pre-run records one step, adds nothing and returns the recorded digest (`repeat_key` gives `(tool,)`); and with no drawing evidence the plan, the digest and the offered array are byte-identical to the tree before this feature (FR-037)
+- [ ] T048 [US5] Implement `reviewer/src/swreview/tools/drawings.py` (`drawing_evidence`, `check_drawings`), `drawing_tools()` and its condition in `ToolRegistry._offered` (`tools/registry.py`), the planned branch and the `repeat_key` entry in `reviewer/src/swreview/prerun.py`; add the tool row to `specs/001-agentic-design-review/contracts/agent-tools.md` and the key to `specs/008-checks-first-review/contracts/checks-first.md` section 5. **Shared** (`tools/registry.py`, `prerun.py`, `agent-tools.md`, `checks-first.md`). Acceptance: T047 green; `test_prerun_digest.py`, `test_code_first_registration.py`, `test_prerun_repeat_guard.py` and `test_tool_payload.py` unedited and green; FR-032 to FR-036
+- [ ] T049 [US5] Write `reviewer/tests/unit/test_replay_without_drawings.py`: replaying every recorded fixture of feature 008 with this feature registered offers no drawing tool, plans no `check_drawings`, loses no recorded finding, leaves none unreplayable, and reclassifies 3, 2 and 0 contacts on `big-assembly`, `small-assembly-a` and `small-assembly-b`; and the replayed request of each fixture - every round's tool array, opening message and payloads - is byte-identical with the drawing family registered and with it patched out (SC-007). Test only. Acceptance: green with no edit to the replay code
+
+**Checkpoint**: the pane asks the few things only the engineer knows, and a design without drawings is reviewed exactly as before.
+
+---
+
+## Phase 8: User Story 6 - A Per-Part Drawing Brief, Bounded and on Demand (Priority: P2)
+
+**Goal**: `build_brief`, its tool and its command; the drawing arm of the payload pins.
+
+**Independent Test**: the plate's brief carries the five sections from 010's functions and the drawing, at most 6,000 bytes; the pathological package's brief fits and counts what it cut. No licence.
+
+- [ ] T050 [P] [US6] Write `reviewer/tests/unit/test_drawing_brief.py` per `contracts/brief.md` sections 2 to 6 over `plate-drawing` with the switch set and a session holding one answered question: every section's content and order for the plate (its joints and partners from 010's joint map, the dowel hole's size bound by the drawing with the model dimension also found, its position budget callout from `check_nominal_alignment`, the drawing's sheets, callouts, notes and tables, the answer); the block's brief naming its candidate; a pathological package built in the test (500 notes, 300 dimensions, 60 joints) at most 6,000 bytes with `omitted` counting exactly what was cut; the same bytes under shuffled package arrays; no base64 persistent reference and no fictional profile value in the bytes; the two refusals; and `reviewer/tests/perf/test_drawing_brief_perf.py` (`-m perf`: `DrawingIndex.for_package` under 50 ms, `build_brief` under 200 ms on `plate-drawing`)
+- [ ] T051 [US6] Implement `reviewer/src/swreview/drawings/brief.py` (`BRIEF_VERSION`, `BRIEF_MAX_BYTES`, `DrawingBrief`, `build_brief`), reusing `tools/joint_context.joint_analysis` or `checks/joints.build_joint_map`, `check_nominal_alignment`'s `callout` and `ResolverLookup`. Acceptance: T050 green; FR-038 to FR-043
+- [ ] T052 [P] [US6] Write `reviewer/tests/unit/test_tools_get_drawing_brief.py`: `get_drawing_brief(document_id)` through the dispatch returns the brief built with the context's session and the attached standards run's profile (never loading one); its refusals are `error_result`s naming the valid documents; `swreview drawing brief --package ... --document ... [--run ...] [--profile ...]` prints the same JSON for the same inputs and exits 2 on a refusal
+- [ ] T053 [US6] Add `get_drawing_brief` to `reviewer/src/swreview/tools/drawings.py` and `drawing_tools()`, the `drawing` sub-application with `brief` in `reviewer/src/swreview/cli.py`, and the rows in `specs/001-agentic-design-review/contracts/agent-tools.md` and `contracts/cli.md`. **Shared** (`cli.py`, `agent-tools.md`, `cli.md`). Acceptance: T052 green
+- [ ] T054 [P] [US6] Extend `reviewer/tests/unit/test_tool_payload.py` with the drawing arm of `contracts/questions.md` section 7: `DRAWING_ARM_*` constants for the slim and pre-run arrays with the family offered, per encoding, each asserted under `ARRAY_CEILING`; `check_drawings` at most 450 bytes and `get_drawing_brief` at most 650 bytes per encoding; every existing constant recomputed with the family absent and unchanged; the `--write` helper printing the arm in rows of its own. Acceptance: red only for the new constants' values
+- [ ] T055 [US6] Regenerate the drawing-arm constants with `python -m tests.unit.test_tool_payload --write` and paste them, **in a commit of their own**; no existing constant, no `levers.md` figure and no `docs/llm-efficiency-options.md` figure moves (the family is outside every arm those documents quote). Acceptance: T054 green; FR-050
+
+**Checkpoint**: any part can be briefed in a few kilobytes, and the drawing tools fit under the ceiling.
+
+---
+
+## Phase 9: User Story 7 - The Company's Drawing Standard Is in the Profile, and Drawings Are Compared With It (Priority: P3)
+
+**Goal**: `drawing_profile.conformance`, one finding per drawing outside the release verdict and the checklist's drawing item.
+
+**Independent Test**: drawing A conforms to `profile-a`; against a version 3 profile written in the test (first angle, another sheet format) it is one finding naming the projection and the sheet format with the drawing's values; against `profile-b` every drawing setting is skipped; the checklist item stays open. No licence.
+
+- [ ] T056 [P] [US7] Write `reviewer/tests/unit/test_drawing_conformance.py` per `contracts/profile.md` sections 2 and 3: each compared setting differing on its own and together (one finding per drawing naming each, with the drawing's values and sheets, never the profile's); every setting agreeing, a `checked` item; an unread value unresolved naming its gap; an empty setting skipped; a version 2 profile or none, one skipped item naming the missing section; the templates never compared; the finding's bytes free of every fictional profile value; `check_drawings` counting the finding; the checklist's `drawing.manufacturing_inputs` still open after it (`Checklist.bucket_of`); and **edit deliberately** `test_attention_catalogue.py` for the one new id; the brief's `conformance` section filled
+- [ ] T057 [US7] Implement `compare_with_profile` in `reviewer/src/swreview/checks/drawing_context.py`, call it from `check_drawings` (`tools/drawings.py`) and the brief, and class `drawing_profile.conformance` as `manufacturing` in `reviewer/src/swreview/report/attention_policy_v1.yaml`. **Shared** (`attention_policy_v1.yaml`). Acceptance: T056 green; FR-046, FR-047
+
+**Checkpoint**: drawings are held to the company's drawing standard as soon as the owner writes it.
+
+---
+
+## Phase 10: Polish
+
+- [ ] T058 [P] Update `README.md` (a drawing on its own in the Standards tab; the open drawings read with a review; candidates never opened; the drawing check and its questions; the brief and its command; profile version 3) and `specs/007-attention-policy-gate/contracts/attention.md` (the one new class)
+- [ ] T059 [P] Run `quickstart.md` Scenarios 0 to 10 and the regression gate, including `reviewer/tests/perf/test_drawing_brief_perf.py` (`-m perf`); fix anything they surface in the task that owns it and record what was corrected in the quickstart
+- [ ] T060 [P] Re-validate `specs/011-drawing-context/checklists/requirements.md` against the spec as the tasks landed; reconcile `plan.md`'s Source Code block with what landed, marking each difference *landed as*
+- [ ] T061 [O] When the owner gives the location of the drawing-creation base repository (research R5, Q1): read it and write `specs/011-drawing-context/base-repository-evaluation.md` - which drawing operations it performs and on which part classes, which SOLIDWORKS API members it uses and whether the 2024 SP5 interop exposes them (reflection, as research R2.2 did), how it chooses views and dimensions, what inputs it expects, its licence and packaging, and how it would sit behind the product's write rules; list every brief field it needs that `brief_version: 1` lacks, as the input to feature 012's specification. Documents only
+
+---
+
+## Phase 11: The next workstation sitting
+
+- [ ] T062 [W] On a multi-sheet drawing: `swreview-extract probe drawings --probe D1,D11`, then press Standards; record the answers in research R4 and the gate log (no writer, activation, open or close member). Then run feature 006's T103, T105 and T107, now reachable, and record them in 006's research R4 (SC-001, FR-004, FR-007)
+- [ ] T063 [W] With an assembly and the drawings of two of its parts and of one unrelated part open: probes D2, D3, D12 and D13, then a review from the pane; confirm the two drawings are read and the third is not, the candidate check neither fetches nor stalls, nothing is opened; record discovery's time (SC-002; RK-3, RK-5, RK-6)
+- [ ] T064 [W] Probes D4, D5, D8 and D11 on the drawings `contracts/probes.md` names; if D4 finds `units_decimal_places_raw` governs a document-precision dimension, change the one line of `drawings/native.written_precision` and its test in the same commit (RK-8)
+- [ ] T065 [W] Probes D6, D7, D9 and D10; record every answer; confirm the typed annotations and tables of a real drawing are read or named in gaps with no value silently absent (SC-005)
+- [ ] T066 [W] On a drawing whose callouts the engineer names beforehand, confirm with D6 and D8 that every checked callout ties to the right hole on a part drawing and on an assembly drawing; only then set `DRAWING_BINDING_VALIDATED = True` in `reviewer/src/swreview/drawings/binding.py` in a commit of its own citing the probe record, and add the known case, fictionalised, as a regression row in `test_drawing_binding.py`; if any callout mismatches, leave it false and record why in research R4 (SC-010, FR-024; RK-1, RK-2)
+- [ ] T067 [W] A pane review with a candidate drawing and a doubly-drawn part: the two questions appear, answering them records the answers, and the part's brief (`get_drawing_brief` and `swreview drawing brief`) lists them; record the brief's size (SC-006, SC-008)
+- [ ] T068 [W] With the owner's version 3 profile (research R5, Q4), review a design with its drawing open: the drawing is compared, any finding names only the drawing's values, the general tolerance binds by decimal places only in the declared unit; record the outcome in the next handover document
+
+---
+
+## Dependencies & Execution Order
+
+### Phase dependencies
+
+- **Setup (Phase 1)**: none
+- **Foundational (Phase 2)**: T003-T004 first among the extractor tasks (the guard before any read); T005-T006 and T007-T008 independent of the guard and of each other; T009-T010 after T008; T011-T012 after T006
+- **US1 (Phase 3)**: after Phase 2
+- **US2 (Phase 4)**: after US1 (a review extraction's session is the model session; discovery's wiring edits `PackageWriter.cs` after T016); T022-T025 (Python) after T012 only
+- **US3 (Phase 5)**: the C# half (T026-T027) after T010; the Python half after T012 and T023; T028-T029 independent of the rest
+- **US4 (Phase 6)**: after US3's T027 (C#) and T035 (Python)
+- **US5 (Phase 7)**: after US2 (T023) and T006; independent of US3 and US4 except that T049 needs every registration in place
+- **US6 (Phase 8)**: after US3, US5 (T048: the family and the questions it reads answers of)
+- **US7 (Phase 9)**: after T029 and T048
+- **Polish (Phase 10)**: after every story chosen for the checkpoint; T061 whenever the owner answers
+- **Workstation (Phase 11)**: T062 after T016; T063 after T021; T064 after T027; T065 after T040; T066 after T064, T065 and T035; T067 after T053; T068 after T057 and the owner's profile
+
+### Task-level dependencies
+
+- T004 after T003; T006 after T005; T008 after T007; T010 after T009, T008 and T004; T012 after T011 and T006
+- T014 after T013 and T004; T016 after T015 and T014; T017 after T006 and T012
+- T019 after T018 and T004; T021 after T020, T019, T016 and T010; T023 after T022 and T012; T025 after T024
+- T027 after T026, T010 and T004; T029 after T028; T031 after T030 and T006; T033 after T032, T031 and T023; T035 after T034, T033 and T029; T037 after T036 and T031; T038 after T035 and T037
+- T040 after T039 and T027; T042 after T041 and T035
+- T044 after T043; T046 after T045 and T023; T048 after T047, T046 and T044; T049 after T048
+- T051 after T050, T035 and T048; T053 after T052 and T051; T055 after T054 and T053
+- T057 after T056, T029 and T048
+
+### Parallel opportunities, by file ownership
+
+- **Phase 2**: T003, T005, T007, T011 are four test files that can be written together; T004 (guard), T006 (Python IR), T008 (C# IR) own disjoint files and can land in parallel; T010 waits for T008.
+- **The C# line and the Python line run side by side from Phase 2 on**: T013-T021, T026-T027 and T039-T040 own `extractor/` files only; T017, T022-T025, T028-T038, T041-T057 own `reviewer/` and `specs/` files only.
+- **Test files per story that can be written together**: US2 T018, T020, T022, T024; US3 T026, T028, T030, T032, T034, T036; US4 T039, T041; US5 T043, T045, T047; US6 T050, T052, T054.
+- **The files several stories edit, sequentially and never in parallel**: `Dump/DrawingDumper.cs` and `Dump/SwDrawingReader.cs` (T010, T027, T040); `Dump/PackageWriter.cs` (T016 through the traversal only, T021); `checks/tolerances.py` (T035, T042); `tools/query.py` (T025, T037); `tools/drawings.py` (T048, T053, T057); `checks/drawing_context.py` (T046, T057); `test_tolerances.py` (T034); `test_tool_payload.py` (T054, T055); `agent-tools.md` (T048, T053).
+
+### Files shared with other features' likely changes
+
+Sequenced so no file is edited by two features at once; when another feature is in flight on the same file, the 011 task waits for it to merge, then rebases:
+
+| File | 011 tasks | Why others touch it |
+|---|---|---|
+| `extractor/SwReview.Extractor/Guard/ReadOnlyGuard.cs`, `specs/004-resilient-remodeler/contracts/guard-allowlist.md` | T004 | every feature that reads a new API family; feature 012's allowlist later |
+| `extractor/SwReview.Extractor/Sw/SwSession.cs`, `SwReview.Extractor.Console/Program.cs` | T014 | the attach and the console's commands |
+| `extractor/SwReview.Extractor/Dump/PackageWriter.cs`, `Dump/DumpContracts.cs` | T010, T016, T021 | every new dump phase |
+| `reviewer/src/swreview/ir/models.py`, `specs/001-agentic-design-review/contracts/ir.schema.json` | T006 | every IR minor |
+| `reviewer/src/swreview/checks/tolerances.py` | T035, T042 | feature 010's follow-ups |
+| `reviewer/src/swreview/checks/standards/profile.py` and the five profile files | T029 | any profile version |
+| `reviewer/src/swreview/prerun.py`, `tools/registry.py` | T048 | feature 008 and 010's registrations |
+| `reviewer/src/swreview/tools/query.py`, `tools/session.py` | T025, T037, T044 | feature 008's model view, feature 009's questions |
+| `reviewer/tests/unit/test_tool_payload.py` | T054, T055 | every tool change; regenerated with `--write` in its own commit |
+| `reviewer/src/swreview/report/attention_policy_v1.yaml`, `test_attention_catalogue.py` | T056, T057 | every new finding id |
+| `specs/006-standards-check/spec.md`, `contracts/ir-additions.md`, `contracts/profile.md`, `research.md` | T001, T029 | feature 006's seat tasks |
+| `specs/010-mechanical-checks/contracts/tolerances.md` | T002 | feature 010's follow-ups |
+| `specs/008-checks-first-review/contracts/checks-first.md` | T048 | the re-call guard's table |
+
+---
+
+## Requirement coverage
+
+Every functional requirement and success criterion has at least one task whose acceptance would fail if it were not met.
+
+| FR | Tasks | FR | Tasks |
+|---|---|---|---|
+| FR-001 | T013 to T017, T062 | FR-027 | T039, T040 |
+| FR-002 | T013, T014 | FR-028 | T039, T040 |
+| FR-003 | T013, T014 | FR-029 | T041, T042 |
+| FR-004 | T014, T017, T062 | FR-030 | T039, T041 |
+| FR-005 | T003, T004 | FR-031 | T041, T042 |
+| FR-006 | T003, T004 | FR-032 | T047, T048 |
+| FR-007 | T015, T062 | FR-033 | T045, T046 |
+| FR-008 | T018 to T021, T063 | FR-034 | T043, T044, T047 |
+| FR-009 | T018, T019 | FR-035 | T047, T048 |
+| FR-010 | T020, T021 | FR-036 | T045, T047 |
+| FR-011 | T018, T020 | FR-037 | T024, T036, T047, T049 |
+| FR-012 | T018, T019, T063 | FR-038 | T050 to T053 |
+| FR-013 | T018, T019 | FR-039 | T050, T051 |
+| FR-014 | T020, T021 | FR-040 | T050, T051 |
+| FR-015 | T015, T020, T063 | FR-041 | T050 |
+| FR-016 | T009, T010, T020 | FR-042 | T050, T051 |
+| FR-017 | T026, T027, T022 | FR-043 | T050, T061 |
+| FR-018 | T026, T027 | FR-044 | T028, T029 |
+| FR-019 | T026, T027 | FR-045 | T028, T029 |
+| FR-020 | T032 to T035 | FR-046 | T056, T057 |
+| FR-021 | T034, T035 | FR-047 | T056, T057 |
+| FR-022 | T034, T035 | FR-048 | T005 to T008 |
+| FR-023 | T034, T035 | FR-049 | T056, T057 |
+| FR-024 | T032, T033, T066 | FR-050 | T054, T055 |
+| FR-025 | T036, T037 | FR-051 | T049 |
+| FR-026 | T026, T039 | FR-052 | T003, T004, T015, T062 |
+
+| SC | Tasks | SC | Tasks |
+|---|---|---|---|
+| SC-001 | T062 | SC-006 | T050, T067 |
+| SC-002 | T063 | SC-007 | T049 |
+| SC-003 | T038 | SC-008 | T045, T067 |
+| SC-004 | T034, T038 | SC-009 | T003, T004 |
+| SC-005 | T026, T039, T065 | SC-010 | T066 |
+
+---
+
+## Notes
+
+- **The guard before the reads.** No task that adds a drawing read lands before T004; a read that needs a member the generated table refuses is a read that writes, and is redesigned, never exempted.
+- **Nothing opens a drawing.** Not the console, not a candidate, not an answer; `OpenReadOnly` opens models only.
+- **No drawing value in a calculation before T066.** Every binding test sets the switch; the shipped code does not. A task that enables it early has broken Principle III.
+- **One of each.** One tolerance mapping, one table walk, one annotation record, one conversion, one evidence-request writer, one brief built from feature 010's own functions.
+- **Nothing the model sees changes without drawing evidence.** The family is conditional, the counts are omitted at zero, the docstrings do not move; T049 is the proof.
+- **Fixtures are code.** Nothing from a recorded package or a company enters the repository; the probes print ids and numbers only.
