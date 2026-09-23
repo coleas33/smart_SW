@@ -478,6 +478,23 @@ def test_the_drawing_root_is_a_drawing_with_three_sheets_and_two_referenced_mode
     assert record.opened_by_review is None and root.drawing_candidates == []
 
 
+def test_the_drawing_root_binds_no_configuration(root: EvidencePackage) -> None:
+    """`contracts/attach.md` section 2: a drawing session has no configuration, so the design,
+    the drawing's document row and manifest entry, and the forest's root node all carry the
+    empty string; each referenced model keeps its own (feature 011 T017, corrected on T012)."""
+    root_id = root.design.root_assembly_document_id
+    document = next(item for item in root.documents if item.document_id == root_id)
+    entry = next(item for item in root.manifest.entries if item.document_id == root_id)
+    [node] = [item for item in root.components if item.parent_id is None]
+
+    assert root.design.active_configuration == ""
+    assert document.configurations == [] and document.active_configuration == ""
+    assert entry.configuration == ""
+    assert node.document_id == root_id and node.referenced_configuration == ""
+    models = [item for item in root.documents if item.kind != "drawing"]
+    assert models and all(item.active_configuration == "Default" for item in models)
+
+
 def test_every_new_record_field_is_present_on_at_least_one_record(root: EvidencePackage) -> None:
     [record] = root.drawing_records
     instances = {
