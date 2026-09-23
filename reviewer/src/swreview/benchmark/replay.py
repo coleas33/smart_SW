@@ -30,7 +30,7 @@ import re
 import shutil
 import tempfile
 from collections import Counter
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -220,6 +220,9 @@ class PlayedReview:
     """The system prompt, the tool schemas and the opening message, as `_prefix` renders them."""
     opening: str = ""
     """The first user message the review opened on: the checks-first digest, when it ran."""
+    offered: frozenset[str] = frozenset()
+    """The names on the tool array the run handed its provider - less what lever 13 withheld
+    (feature 008 FR-030) - which the adapters prune with, so the replay does too."""
 
 
 class _Stop(BaseException):
@@ -339,6 +342,7 @@ def _play(run: ReviewRun, turns: Sequence[TurnPlan]) -> PlayedReview:
         setup_steps=len(run.session.steps),
         prefix=_prefix(run),
         opening=run.opening_message,
+        offered=frozenset(tool.name for tool in run.tools),
     )
     tools = _RecordingTools(run.tools, run)
     run.tools = tools
@@ -862,6 +866,15 @@ def report_of(passes: ReplayPasses) -> ReplayReport:
     answered = _answered_from_checks(classes, second)
     pricing_first, lower = _as_recorded_pricing(recording, classes, passes.as_recorded_view)
     pricing_second = _requested_pricing(pricing_first, answered, passes.requested_view)
+    # Each pass prunes against its own tool array, as its adapter would (feature 008 FR-030).
+    # A call the replay could not run - a bridge call, a standards call without the profile -
+    # ran where the recording was made, whose adapter offered its tool; lever 13 takes off
+    # only tools a pre-run ran, and the replay runs those too.
+    unrun = frozenset(
+        item.recorded.tool for item in classes if item.class_ in ("estimated", "stored")
+    )
+    pricing_first = replace(pricing_first, offered=first.offered | unrun)
+    pricing_second = replace(pricing_second, offered=second.offered | unrun)
     prefix_difference = count_tokens(second.prefix) - count_tokens(first.prefix)
     rounds = _rounds(
         recording,
@@ -1055,21 +1068,31 @@ class _Pricing:
     view: ModelViewSettings
     estimates: Mapping[int, _Estimate]
     stored: Mapping[int, _Stored]
+    offered: frozenset[str] | None = None
+    """The pass's tool array (`PlayedReview.offered`), which its stubs are written against;
+    `None` is every tool offered."""
 
 
 def request_messages(
-    history: Sequence[Mapping[str, Any]], view: ModelViewSettings
+    history: Sequence[Mapping[str, Any]],
+    view: ModelViewSettings,
+    *,
+    offered: Collection[str] | None = None,
 ) -> list[dict[str, Any]]:
     """The messages a request built from `history` carries under `view`: the adapters' rule.
 
     Pruned by the adapters' own `prune_history` when the view prunes, pointing stubs at
-    `get_finding` only when slimming offers it, exactly as `openai_provider._visible` and
-    the Gemini adapter's `_contents` do; unchanged otherwise.
+    `get_finding` only when slimming offers it and at a tool only when `offered` carries it,
+    exactly as `openai_provider._visible` and the Gemini adapter's `_contents` do; unchanged
+    otherwise.
     """
     if not view.history_pruning:
         return [dict(message) for message in history]
     return prune_history(
-        history, view.prune_after_rounds, finding_detail=view.payload_slimming
+        history,
+        view.prune_after_rounds,
+        finding_detail=view.payload_slimming,
+        offered=offered,
     )
 
 
@@ -1113,7 +1136,7 @@ def _results_tokens(
             }
         elif estimate is not None:
             history[position] = {**history[position], "is_error": estimate.is_error}
-    sent = request_messages(history, view)
+    sent = request_messages(history, view, offered=pricing.offered)
     old = prunable(history, view.prune_after_rounds) if view.history_pruning else {}
     total = 0
     for position, call in zip(positions, played.visible, strict=True):
@@ -1123,7 +1146,11 @@ def _results_tokens(
             if position in old:
                 stub = _read_tokens(
                     result_stub(
-                        call.tool, old[position], {}, finding_detail=view.payload_slimming
+                        call.tool,
+                        old[position],
+                        {},
+                        finding_detail=view.payload_slimming,
+                        offered=pricing.offered,
                     ),
                     view,
                 )

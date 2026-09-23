@@ -181,7 +181,10 @@ The digest's `Evaluated:` block is followed by one line, `WITHHELD_LINE`:
 A stub (`model-view.md` section 7) of a tool the adapter does not offer says
 `<name> is not offered this session, so it cannot be called again`, with
 `; get_finding(<id>) reads one finding` when its content carries finding ids and `get_finding`
-is offered, instead of "call <name> again".
+is offered, instead of "call <name> again". Both adapters pass `prune_history` the names on
+the turn's array (`offered`); the replay passes each pass's array, counting a call it could not
+run (`estimated` or `stored`) as offered, since it ran where the recording was made
+(*landed as*, T114).
 
 Unchanged: `DIGEST_HEADER`, the `Evaluated:` lines, the tier sentence, FR-037's reduced-profile
 sentence, `ANSWER_MESSAGE`, and every tool description.

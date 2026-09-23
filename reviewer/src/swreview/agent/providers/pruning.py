@@ -27,10 +27,11 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
 __all__ = [
+    "NOT_OFFERED_REFETCH",
     "PRUNED_NOTE",
     "STUB_ID_CAP",
     "prunable",
@@ -45,6 +46,10 @@ STUB_ID_CAP = 20
 """How many ids a stub names; the rest are counted in `ids_omitted`. The follow-up budget
 (SC-004) rests on this cap (research R2.51)."""
 
+NOT_OFFERED_REFETCH = "{name} is not offered this session, so it cannot be called again"
+"""A stub's `refetch` for a tool the caller's array does not carry (feature 008 FR-030): a
+stub never points the model at a tool it does not have."""
+
 _FINDING_ID = re.compile(r"^F-[0-9]+$")
 
 
@@ -58,6 +63,7 @@ def result_stub(
     content: Mapping[str, Any],
     *,
     finding_detail: bool = True,
+    offered: Collection[str] | None = None,
 ) -> dict[str, Any]:
     """The stub one result becomes (data-model section 11): what it was and how to get it back.
 
@@ -66,6 +72,11 @@ def result_stub(
     `STUB_ID_CAP` with the rest counted. `refetch` says to call the tool again with the same
     arguments, and names `get_finding` when the content carries finding ids and
     `finding_detail` says the tool is offered (payload slimming on).
+
+    `offered` is the names on the caller's tool array; `None` means every tool is. A tool
+    not among them - one lever 13 withheld, answered by the re-call guard when the model
+    called it anyway (feature 008 FR-030) - cannot be called again, and its stub says so
+    instead of asking for the call.
     """
     counts: dict[str, int] = {}
     ids: list[str] = []
@@ -80,9 +91,15 @@ def result_stub(
     if isinstance(finding_ids, list):
         ids.extend(item for item in finding_ids if isinstance(item, str))
     unique = list(dict.fromkeys(ids))
-    refetch = f"call {name} again with these arguments to read it in full"
-    if finding_detail and any(_FINDING_ID.match(item) for item in unique):
-        refetch += " or get_finding(<id>) for one finding"
+    has_findings = finding_detail and any(_FINDING_ID.match(item) for item in unique)
+    if offered is None or name in offered:
+        refetch = f"call {name} again with these arguments to read it in full"
+        if has_findings:
+            refetch += " or get_finding(<id>) for one finding"
+    else:
+        refetch = NOT_OFFERED_REFETCH.format(name=name)
+        if has_findings:
+            refetch += "; get_finding(<id>) reads one finding"
     return {
         "pruned": PRUNED_NOTE,
         "tool": name,
@@ -156,6 +173,7 @@ def prune_history(
     prune_after_rounds: int,
     *,
     finding_detail: bool = True,
+    offered: Collection[str] | None = None,
 ) -> list[dict[str, Any]]:
     """The history as the next request should carry it: old results replaced by stubs.
 
@@ -166,8 +184,9 @@ def prune_history(
     opening digest, the engineer's words, the answer message - are never touched. Returns a
     new list of new dicts; `messages` and its dicts are never mutated.
 
-    `finding_detail` is whether `get_finding` is offered (payload slimming on); a stub never
-    points the model at a tool it does not have.
+    `finding_detail` is whether `get_finding` is offered (payload slimming on), and `offered`
+    the names on the caller's tool array (`None`: every tool); a stub never points the model
+    at a tool it does not have.
     """
     pruned: list[dict[str, Any]] = [dict(message) for message in messages]
     for index, arguments in prunable(messages, prune_after_rounds).items():
@@ -180,6 +199,7 @@ def prune_history(
             arguments,
             content,
             finding_detail=finding_detail,
+            offered=offered,
         )
         if len(_compact(stub)) < len(_compact(content)):
             pruned[index]["content"] = stub

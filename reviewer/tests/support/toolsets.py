@@ -9,7 +9,7 @@ unknown-name path an adapter no longer implements is then the production one.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -29,3 +29,29 @@ class RecordingList:
 def toolset(tools: Sequence[Any]) -> ToolDispatch:
     """The stub tools of an adapter test, dispatched the way the product dispatches."""
     return ToolDispatch(tools=tuple(tools), sink=RecordingList())
+
+
+@dataclass
+class Withholding:
+    """A dispatch that still answers one tool it does not offer, as `prerun.PrerunGuard`
+    answers a tool lever 13 withheld (feature 008 FR-030): not iterated, so no adapter
+    encodes it, and callable, so a model that asks for it anyway gets its answer."""
+
+    dispatch: ToolDispatch
+    withheld: Any
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter(self.dispatch)
+
+    def __len__(self) -> int:
+        return len(self.dispatch)
+
+    def call(self, name: str, arguments: Mapping[str, Any], call_id: str = "") -> Any:
+        if name == self.withheld.name:
+            return self.withheld.call(arguments, call_id)
+        return self.dispatch.call(name, arguments, call_id)
+
+
+def withholding(tools: Sequence[Any], withheld: Any) -> Withholding:
+    """`toolset(tools)`, answering `withheld` too without offering it."""
+    return Withholding(toolset(tools), withheld)

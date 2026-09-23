@@ -24,14 +24,17 @@ from swreview.agent.providers.gemini_provider import _to_contents
 from swreview.agent.providers.openai_provider import _encode_history
 from swreview.agent.providers.pruning import PRUNED_NOTE, prune_history
 from swreview.agent.settings import MODEL_VIEW_OFF, MODEL_VIEW_PANE
+from tests.support.toolsets import withholding
 from tests.unit.test_gemini_provider import (
     FakeTool,
+    Sink,
     build,
     call_part,
     chunk,
     run,
     text_part,
 )
+from tests.unit.test_openai_model_view import GUARD_ANSWER, NOT_OFFERED
 
 SIGNATURE = b"\x07\x08thought"
 
@@ -152,6 +155,44 @@ def test_the_stubs_are_the_ones_the_openai_adapter_sends_for_the_same_history() 
     )
 
     assert gemini_stub == openai_stub == prune_history(history, 2)[2]["content"]
+
+
+def test_a_withheld_tools_aged_answer_is_the_stub_the_openai_adapter_sends() -> None:
+    """Feature 008 amendment (T113): the guard answered a tool the model was not offered;
+    two rounds later Gemini gets the same stub OpenAI would, saying the tool is not offered."""
+    withheld = FakeTool(name="check_rms_part", payload=GUARD_ANSWER)
+    offered = [
+        FakeTool(name="list_components", payload=big("cmp")),
+        FakeTool(name="list_mates", payload=big("mat")),
+    ]
+    adapter, models = build(
+        [chunk(call_part("", "check_rms_part", {}))],
+        [chunk(call_part("", "list_components", {}))],
+        [chunk(call_part("", "list_mates", {}))],
+        [chunk(text_part("done"), finish_reason=types.FinishReason.STOP)],
+    )
+    adapter.use_model_view(MODEL_VIEW_PANE)
+    result = adapter.run(
+        system="you are a reviewer",
+        messages=[{"role": "user", "content": "review it"}],
+        tools=withholding(offered, withheld),
+        effort="high",
+        max_steps=10,
+        on_event=Sink(),
+    )
+
+    for call in models.calls:
+        declared = [d.name for d in call["config"].tools[0].function_declarations]
+        assert declared == ["list_components", "list_mates"]
+    gemini_stub = responses(models.calls[3]["contents"])[0]["output"]
+    assert gemini_stub["refetch"] == NOT_OFFERED
+    history = result.messages[: history_lengths(result.messages)[3]]
+    names = {"list_components", "list_mates"}
+    openai_items = _encode_history(prune_history(history, 2, offered=names), compact=True)
+    openai_stub = json.loads(
+        next(item["output"] for item in openai_items if item.get("type") == "function_call_output")
+    )
+    assert gemini_stub == openai_stub
 
 
 def test_the_signature_and_the_grouped_answers_are_in_what_was_sent() -> None:

@@ -394,6 +394,46 @@ def test_with_the_view_on_each_round_counts_its_pruned_history_compactly(
     assert report.settings.as_recorded.model_view == MODEL_VIEW_OFF
 
 
+PANE_WITH_LEVER_13 = (
+    EfficiencySettings(prerun_checks=True, withhold_prerun_tools=True),
+    MODEL_VIEW_PANE,
+)
+"""Checks first with lever 13 and the pane's view (feature 008 amendment)."""
+
+
+def test_the_requested_pass_prices_a_withheld_tools_stub_as_the_adapters_send_it(
+    tmp_path: Path, package_dir: Path
+) -> None:
+    """The recorded model called `check_rms_part`; with lever 13 the requested pass does not
+    offer it, the guard answers the call, and two rounds later the adapters send a stub that
+    says the tool is not offered. The replay prices that stub, not "call it again"
+    (`contracts/checks-first.md` section 7, T113)."""
+    run = record_scripted_review(
+        tmp_path / "run",
+        package_dir,
+        [TurnPlan(rounds=((RMS_PART,), (SUMMARY,), (COMPONENTS,), (HOLES,)), text="Done.")],
+    )
+
+    passes = replay_passes(
+        read_recording(run), tmp_path / "scratch", requested=PANE_WITH_LEVER_13
+    )
+    report = report_of(passes)
+
+    assert "check_rms_part" in passes.first.offered
+    assert "check_rms_part" not in passes.second.offered
+    played = passes.second.rounds[3]
+    sent = prune_history(
+        list(played.history), 2, finding_detail=True, offered=passes.second.offered
+    )
+    assert sent[2]["content"]["refetch"] == (
+        "check_rms_part is not offered this session, so it cannot be called again"
+    )
+    base = report.rounds[0].requested_input
+    assert report.rounds[3].requested_input == (
+        base + 3 * DEFAULT_OUTPUT_TOKENS + results_by_hand(sent, compact=True)
+    )
+
+
 def test_a_stub_crosses_into_the_next_turn(tmp_path: Path, package_dir: Path) -> None:
     """The closing answer is an assistant message, so it ages every result by one: the
     opening's one result is in full in its closing round (age 0) and in the follow-up's first

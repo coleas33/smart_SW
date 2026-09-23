@@ -42,7 +42,7 @@ two-round answer otherwise), and the `tool.started`/`tool.finished` pair around 
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, ClassVar, Protocol
@@ -339,17 +339,24 @@ class GeminiProvider:
         self._prune_after = settings.prune_after_rounds if settings.history_pruning else None
         self._finding_detail = settings.payload_slimming
 
-    def _contents(self, history: Sequence[Mapping[str, Any]]) -> list[types.Content]:
+    def _contents(
+        self, history: Sequence[Mapping[str, Any]], offered: Collection[str]
+    ) -> list[types.Content]:
         """This round's request, rebuilt from the neutral history - pruned when pruning is on.
 
         Rebuilt every round rather than appended to, so one pure function (`prune_history`)
         decides what both adapters send; the characterization in
         `tests/unit/test_gemini_model_view.py` proves the rebuild equals what the
         incremental build sent, thought signatures and grouped answers included (RK-11).
+        `offered` is this turn's tool array, so a stub of a tool it does not carry says so
+        rather than asking for the call (feature 008 FR-030).
         """
         if self._prune_after is not None:
             history = prune_history(
-                history, self._prune_after, finding_detail=self._finding_detail
+                history,
+                self._prune_after,
+                finding_detail=self._finding_detail,
+                offered=offered,
             )
         return _to_contents(history)
 
@@ -418,6 +425,7 @@ class GeminiProvider:
         """Stream rounds until the model stops asking for tools or the budget runs out."""
         mapping = self.effort_mapping(effort)
         config = self._config(system=system, tools=tools, mapping=mapping)
+        offered = frozenset(tool.name for tool in tools)
         history = [dict(message) for message in messages]
         texts: list[str] = []
         steps = 0
@@ -427,7 +435,7 @@ class GeminiProvider:
         while True:
             # Feature 008: every round's request is rebuilt from the neutral history, and
             # pruned when pruning is on, instead of appended to (research R2.29).
-            contents = self._contents(history)
+            contents = self._contents(history, offered)
             if not withdrawn and tools_withdrawn(tools):
                 # Lever 7, and the one place this adapter rebuilds `config` inside the
                 # loop: the config is built once above because nothing else in a turn

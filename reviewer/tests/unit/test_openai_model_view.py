@@ -19,9 +19,11 @@ from swreview.agent.providers.gemini_provider import GeminiProvider
 from swreview.agent.providers.openai_provider import OpenAIProvider
 from swreview.agent.providers.pruning import PRUNED_NOTE, prune_history
 from swreview.agent.settings import MODEL_VIEW_OFF, MODEL_VIEW_PANE
+from tests.support.toolsets import withholding
 from tests.unit.test_openai_provider import (
     RESPONSES_URL,
     FakeTool,
+    Sink,
     completed,
     function_call_item,
     item_done,
@@ -159,3 +161,57 @@ def test_a_follow_up_turns_first_request_already_carries_the_stubs() -> None:
         [*result.messages, {"role": "user", "content": "which holes?"}], 2
     )
     assert json.loads(sent["call_0"]) == expected[2]["content"]
+
+
+# --- a withheld tool's answer, aged (feature 008 amendment, T113) ------------------------------
+
+GUARD_ANSWER: dict[str, Any] = {
+    "status": "already_run",
+    "ran_at_step": 3,
+    "note": "Checks first ran this call before your first turn; its findings are in the "
+    "session. It was not run again.",
+    "outcome": {
+        "findings": 12,
+        "rules": 4,
+        "by_status": {"demonstrated": 8, "suspected": 4},
+        "by_severity": {"low": 4, "medium": 8},
+    },
+}
+"""What `prerun.PrerunGuard` answers a tool lever 13 withheld with, shaped as it does."""
+
+NOT_OFFERED = "check_rms_part is not offered this session, so it cannot be called again"
+
+
+def withheld_then_two_rounds() -> list[Any]:
+    return [
+        call_round(0, "check_rms_part"),
+        call_round(1, "list_components"),
+        call_round(2, "list_mates"),
+        stream_response(completed(message_item("done"))),
+    ]
+
+
+def test_a_withheld_tools_answer_ages_into_a_stub_that_does_not_ask_for_it_again() -> None:
+    """A model called a tool it was not offered, and the guard answered; two rounds later the
+    stub must not tell it to call that tool again (`contracts/checks-first.md` section 7)."""
+    withheld = FakeTool(name="check_rms_part", payload=GUARD_ANSWER)
+    with respx.mock:
+        route = respx.post(RESPONSES_URL).mock(side_effect=withheld_then_two_rounds())
+        provider = make_provider()
+        provider.use_model_view(MODEL_VIEW_PANE)
+        provider.run(
+            system="you are a design reviewer",
+            messages=[{"role": "user", "content": "review it"}],
+            tools=withholding(list(TOOLS[:2]), withheld),
+            effort="high",
+            max_steps=10,
+            on_event=Sink(),
+        )
+        bodies = request_bodies(route)
+
+    assert all("check_rms_part" not in [t["name"] for t in body["tools"]] for body in bodies)
+    assert json.loads(outputs(bodies[1])["call_0"]) == GUARD_ANSWER, "in full while young"
+    stub = json.loads(outputs(bodies[3])["call_0"])
+    assert stub["pruned"] == PRUNED_NOTE
+    assert stub["refetch"] == NOT_OFFERED
+    assert json.loads(outputs(bodies[3])["call_1"]) == big("cmp"), "one round old: in full"
