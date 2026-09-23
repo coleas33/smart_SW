@@ -76,7 +76,7 @@
         "vault_path": "C:\\Fictional\\Vault/FICT-OKTAPELIN-4000.SLDDRW",
         "vault_version": 1,
         "revision": "A",
-        "configuration": "Default",
+        "configuration": "",
         "local_modified": false,
         "export_method": "native"
       },
@@ -114,7 +114,7 @@
     "design_id": "dsn:1",
     "name": "FICT-OKTAPELIN-4000",
     "root_assembly_document_id": "doc:1",
-    "active_configuration": "Default",
+    "active_configuration": "",
     "drawing_document_ids": [
       "doc:1"
     ]
@@ -125,10 +125,8 @@
       "kind": "drawing",
       "file_name": "FICT-OKTAPELIN-4000.SLDDRW",
       "path": "C:\\Fictional\\Vault/FICT-OKTAPELIN-4000.SLDDRW",
-      "configurations": [
-        "Default"
-      ],
-      "active_configuration": "Default",
+      "configurations": [],
+      "active_configuration": "",
       "custom_properties": {},
       "config_properties": {},
       "material": null,
@@ -193,7 +191,7 @@
       "name": "FICT-OKTAPELIN-4000",
       "document_id": "doc:1",
       "parent_id": null,
-      "referenced_configuration": "Default",
+      "referenced_configuration": "",
       "transform": [
         [
           1.0,

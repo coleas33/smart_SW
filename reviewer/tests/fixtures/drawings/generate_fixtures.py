@@ -59,7 +59,8 @@ part `FICT-OKTAPELIN-4001` and the assembly `FICT-OKTAQUILL-4002` (of one part,
 control phrase of profile A), both model views, an overridden dimension, a GTol, a datum tag and
 a surface finish; `Sheet2` not active and enumerated, with a view and a bill of materials whose
 rows resolve both parts; `Sheet3` not active, listing no views, with its `drawing_sheet_views`
-gap.
+gap. The drawing binds no configuration (`contracts/attach.md` section 2): the design, its
+document row and manifest entry and the forest's root node carry `""`, the models `Default`.
 
 ## assembly-drawings
 
@@ -98,7 +99,7 @@ from tests.support.standards import (  # noqa: E402
     standards_package,
 )
 
-from swreview.ir.models import AttachedFace, BomRow, GtolFrame  # noqa: E402
+from swreview.ir.models import AttachedFace, BomRow, EvidencePackage, GtolFrame  # noqa: E402
 
 MECHANICAL = FIXTURE_DIR.parent / "mechanical" / "generate_fixtures.py"
 
@@ -293,6 +294,40 @@ SUB = "FICT-OKTAQUILL-4002"
 INNER = "FICT-OKTASORN-4003"
 
 
+def without_configuration(package: EvidencePackage, root: str) -> EvidencePackage:
+    """`package` as a drawing root's dump writes it: the drawing binds no configuration
+    (`contracts/attach.md` section 2), so the design, the drawing's document row and manifest
+    entry, and the forest's root node carry the empty string, where feature 006's builder -
+    written before a drawing could be attached - gave them the models' `Default`."""
+    return package.model_copy(
+        update={
+            "design": package.design.model_copy(update={"active_configuration": ""}),
+            "documents": [
+                document.model_copy(update={"configurations": [], "active_configuration": ""})
+                if document.document_id == root
+                else document
+                for document in package.documents
+            ],
+            "manifest": package.manifest.model_copy(
+                update={
+                    "entries": [
+                        entry.model_copy(update={"configuration": ""})
+                        if entry.document_id == root
+                        else entry
+                        for entry in package.manifest.entries
+                    ]
+                }
+            ),
+            "components": [
+                component.model_copy(update={"referenced_configuration": ""})
+                if component.document_id == root and component.parent_id is None
+                else component
+                for component in package.components
+            ],
+        }
+    )
+
+
 def build_drawing_root() -> Built:
     # Feature 006's builder lays out the documents, the synthesized forest and the extractor
     # block exactly as a standards dump of a drawing root writes them; the views below name the
@@ -318,6 +353,7 @@ def build_drawing_root() -> Built:
         ],
         vault_root=f"{FICTIONAL_ROOT}Vault",
     )
+    base = without_configuration(base, base.design.root_assembly_document_id)
     builder = DrawingBuilder(base, package_id=ROOT_ID)
     ids = {
         document.file_name.rsplit(".", 1)[0]: document.document_id for document in base.documents
