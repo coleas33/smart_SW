@@ -454,8 +454,13 @@
   }
 
   /**
-   * An evidence request: the question, why it is being asked, and a box to answer it in
-   * (FR-005). An answered request keeps the answer on the card.
+   * An evidence request, as the transcript's record of it: the question, why it is being asked,
+   * what it is about, and - once answered - the answer (FR-005).
+   *
+   * A record and no longer a form (feature 009 User Story 4, contracts/questions.md section 7):
+   * the one way to answer is the questions panel above Start here, which sends every answer the
+   * engineer gave in one submission and resumes the review once. A box on each card was a second
+   * way in, and each answer through it cost a turn of its own.
    */
   function evidenceCard(request) {
     var body = request || {};
@@ -477,19 +482,127 @@
 
     if (body.status === 'answered') {
       card.appendChild(field('Answer', body.answer));
-      return card;
+    }
+    return card;
+  }
+
+  // ---- questions for you (feature 009 User Story 4) ------------------------------------
+
+  /**
+   * One open question of the summary's list, asked on its own, with a pager over the rest
+   * (contracts/questions.md section 4).
+   *
+   * `questions` is `summary.questions` - the open requests in the backend's order; the page
+   * filters nothing, because which requests are still open is the backend's to say. `draft` is
+   * what the engineer has typed, chosen and skipped for this chat, `{answers, skipped}` keyed by
+   * request id; `position` is the question on screen. `extras` carries the two lines that are
+   * not the question's own: the backend's `resume_text`, printed beside Send (FR-016), and the
+   * sentence the last send left, if any.
+   *
+   * Pure, like every other renderer here: no handler, no state. The buttons declare what they
+   * do with `data-action` and `app.js` listens once on the panel; which of them are enabled is
+   * `app.js`'s to set, because it depends on the turn and on every question's draft.
+   */
+  function questionsPanel(questions, draft, position, extras) {
+    var asked = questions || {};
+    var items = asked.items || [];
+    var item = items[position] || {};
+    var answers = (draft && draft.answers) || {};
+    var skipped = (draft && draft.skipped) || {};
+    var more = extras || {};
+    var id = String(item.id || '');
+
+    var panel = el('div', 'questions');
+    panel.setAttribute('data-request-id', id);
+
+    var pager = el('div', 'question-pager');
+    pager.appendChild(el('span', 'question-position', 'Question ' + (position + 1) + ' of ' + scalar(asked.count)));
+    pager.appendChild(button('Previous', 'question-previous', 'action question-previous'));
+    pager.appendChild(button('Next', 'question-next', 'action question-next'));
+    panel.appendChild(pager);
+
+    panel.appendChild(el('p', 'question-text', item.question));
+    if (item.blocks_title) {
+      panel.appendChild(el('p', 'question-blocks', 'Blocks: ' + item.blocks_title));
+    }
+    var about = aboutNames(item.about);
+    if (about) {
+      panel.appendChild(el('p', 'question-about', 'About: ' + about));
     }
 
-    var row = el('div', 'row answer-row');
-    var answer = el('input', 'answer');
-    answer.setAttribute('type', 'text');
-    answer.setAttribute('placeholder', 'Your answer');
-    row.appendChild(answer);
-    row.appendChild(button('Send answer', 'answer', 'action answer-send'));
-    card.appendChild(row);
+    var chosen = ownText(answers, id);
+    var options = item.options || [];
+    if (options.length) {
+      var row = el('div', 'question-options');
+      for (var index = 0; index < options.length; index++) {
+        var option = button(options[index], 'question-option', 'action question-option');
+        option.setAttribute('data-option-index', String(index));
+        option.setAttribute('aria-pressed', chosen === String(options[index]) ? 'true' : 'false');
+        row.appendChild(option);
+      }
+      panel.appendChild(row);
+    } else {
+      var box = el('input', 'question-answer');
+      box.setAttribute('type', 'text');
+      box.setAttribute('placeholder', 'Your answer');
+      box.setAttribute('data-request-id', id);
+      box.value = chosen === null ? '' : chosen;
+      panel.appendChild(box);
+    }
 
-    card.appendChild(el('p', 'card-status', ''));
-    return card;
+    if (Object.prototype.hasOwnProperty.call(skipped, id) && skipped[id] === true) {
+      panel.appendChild(el('p', 'question-skipped', 'Skipped for now.'));
+    }
+
+    var fold = el('details', 'question-fold');
+    fold.appendChild(el('summary', 'question-fold-head', 'Details'));
+    append(fold, [
+      item.what ? field('Asked', item.what) : null,
+      item.why ? field('Why', item.why) : null,
+      aboutIds(item.about) ? field('Ids', aboutIds(item.about)) : null
+    ]);
+    panel.appendChild(fold);
+
+    var actions = el('div', 'row question-actions');
+    actions.appendChild(button('Skip for now', 'question-skip', 'action question-skip'));
+    actions.appendChild(button('Send answers', 'question-send', 'action primary question-send'));
+    if (more.resumeText) {
+      actions.appendChild(el('span', 'question-resume', more.resumeText));
+    }
+    panel.appendChild(actions);
+
+    if (more.note && more.note.text) {
+      panel.appendChild(el('p', more.note.bad ? 'question-status bad' : 'question-status', more.note.text));
+    }
+    return panel;
+  }
+
+  /** The draft answer for one request, or null: an own string property only. */
+  function ownText(answers, id) {
+    return (Object.prototype.hasOwnProperty.call(answers, id) && typeof answers[id] === 'string')
+      ? answers[id]
+      : null;
+  }
+
+  /** "Pin-A-1, Plate-1": each `about` entry by the name the backend gave it, its id where none. */
+  function aboutNames(about) {
+    var names = [];
+    var entries = about || [];
+    for (var index = 0; index < entries.length; index++) {
+      var entry = entries[index] || {};
+      names.push(entry.name ? entry.name : entry.id);
+    }
+    return list(names);
+  }
+
+  /** The ids behind the names, for the question's fold. */
+  function aboutIds(about) {
+    var ids = [];
+    var entries = about || [];
+    for (var index = 0; index < entries.length; index++) {
+      ids.push((entries[index] || {}).id);
+    }
+    return list(ids);
   }
 
   /**
@@ -965,6 +1078,7 @@
     dispositionText: dispositionText,
     dispositionClass: dispositionClass,
     evidenceCard: evidenceCard,
+    questionsPanel: questionsPanel,
     errorCard: errorCard,
     coverageSummary: coverageSummary,
     attentionPanel: attentionPanel,

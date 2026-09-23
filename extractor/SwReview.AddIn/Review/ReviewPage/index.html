@@ -143,6 +143,15 @@
 <section id="summary" class="panel summary-panel" aria-label="Review summary" hidden></section>
 
 <!--
+  Questions for you (feature 009 User Story 4): what the review cannot see and only the engineer
+  knows, asked one short question at a time, answered together in one submission that resumes the
+  review once - with the cost of resuming stated beside Send. The open questions are the summary's
+  (`summary.questions`, in its order); the page keeps only the drafts (contracts/questions.md
+  section 4). Hidden while there is no open question.
+-->
+<section id="questions" class="panel questions-panel" aria-label="Questions for you" hidden></section>
+
+<!--
   What to start with: the rows the backend ranked, read from `GET /sessions/{chat_id}/attention`
   when the session ends and pinned above the transcript, because a panel under a transcript that
   has just grown by a whole review is a panel nobody scrolls to (contracts/attention.md
