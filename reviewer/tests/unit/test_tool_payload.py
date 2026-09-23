@@ -37,11 +37,13 @@ from swreview.agent.providers.schema import ToolSpec, gemini_adapt, tool_spec
 from swreview.mcp.server import MCP_BRIDGE_TOOL_FUNCTIONS, MCP_TOOL_FUNCTIONS
 from swreview.prerun import INTERFERENCE_TOOL, prerun_tools
 from swreview.tokens import count_tokens
+from swreview.tools.drawings import DRAWINGS_TOOL
 from swreview.tools.registry import (
     BRIDGE_TOOL_FUNCTIONS,
     FINDING_DETAIL_TOOL_FUNCTIONS,
     RMS_TIER_TOOLS,
     TOOL_FUNCTIONS,
+    drawing_tools,
 )
 
 ToolFunction = Callable[..., Any]
@@ -325,6 +327,81 @@ def prerun_saving(encoding: str = "openai", *, bridge: bool = False) -> PrerunSa
     )
 
 
+# --- the drawing arm (feature 011, `contracts/questions.md` section 7, FR-050) ------------------
+
+DRAWING_FAMILY: tuple[ToolFunction, ...] = drawing_tools()
+"""The drawing family, read from the registry and never retyped. `_offered` appends it last, after
+every other group, and only when the package carries drawing evidence - so no array in `TOOLSETS`
+carries it, and every constant above is measured with the family absent."""
+
+DRAWING_FAMILY_NAMES: tuple[str, ...] = tuple(function.__name__ for function in DRAWING_FAMILY)
+
+DRAWING_FAMILY_AFTER_PRERUN: tuple[ToolFunction, ...] = without(DRAWING_FAMILY, (DRAWINGS_TOOL,))
+"""What of the family stays once checks first ran `check_drawings` to completion: lever 13 takes
+the check off the array (`prerun.withheld_tools`) and the brief stays, since nothing pre-runs it."""
+
+
+@dataclass(frozen=True)
+class DrawingArm:
+    """One array a review sends with the drawing family offered: an array of `TOOLSETS` (or the
+    bridged slim array, which has no pin of its own) with the family appended."""
+
+    label: str
+    base: tuple[ToolFunction, ...]
+    family: tuple[ToolFunction, ...]
+    asserted: bool
+    """Whether the array is asserted under `ARRAY_CEILING`. FR-050 holds the four arrays the
+    ceiling was asserted on before this feature; the two bridged arrays of a review whose
+    pre-run has not completed were over it already and are pinned only (research R2.20, R5 Q9)."""
+
+    @property
+    def functions(self) -> tuple[ToolFunction, ...]:
+        return (*self.base, *self.family)
+
+
+DRAWING_ARMS: tuple[DrawingArm, ...] = (
+    DrawingArm("review+drawings", TOOLSETS["review"], DRAWING_FAMILY, asserted=True),
+    DrawingArm("review+slim+drawings", TOOLSETS["review+slim"], DRAWING_FAMILY, asserted=True),
+    DrawingArm(
+        "review+slim+drawings-prerun",
+        TOOLSETS["review+slim-prerun"],
+        DRAWING_FAMILY_AFTER_PRERUN,
+        asserted=True,
+    ),
+    DrawingArm(
+        "review+slim+bridge+drawings-prerun",
+        TOOLSETS["review+slim+bridge-prerun"],
+        DRAWING_FAMILY_AFTER_PRERUN,
+        asserted=True,
+    ),
+    DrawingArm("review+bridge+drawings", TOOLSETS["review+bridge"], DRAWING_FAMILY, asserted=False),
+    DrawingArm(
+        "review+slim+bridge+drawings",
+        (*TOOLSETS["review+slim"], *BRIDGE_TOOL_FUNCTIONS),
+        DRAWING_FAMILY,
+        asserted=False,
+    ),
+)
+"""The drawing arm, in the order `--write` prints it: the four asserted arrays, then the two
+bridged arrays pinned so their growth shows. A pre-run arm is its pre-run array with the brief
+appended, which is the order `_offered` builds and lever 13 then filters (the family is last)."""
+
+
+def drawing_arm(label: str) -> DrawingArm:
+    """The one drawing arm labelled `label`."""
+    [arm] = [arm for arm in DRAWING_ARMS if arm.label == label]
+    return arm
+
+
+def drawing_arm_rows() -> list[PayloadRow]:
+    """Every drawing arm under every encoding, lever 2 off."""
+    return [
+        measure(arm.label, arm.functions, encoding)
+        for arm in DRAWING_ARMS
+        for encoding in ENCODINGS
+    ]
+
+
 # --- what the descriptions cost (docs/llm-efficiency-options.md reads this) ---------------
 
 
@@ -337,9 +414,15 @@ def description_bytes(*, trim: bool = False) -> dict[str, int]:
     return dict(sorted(sizes.items(), key=lambda item: (-item[1], item[0])))
 
 
-def tool_object_bytes(encoding: str = "openai", *, trim: bool = False) -> dict[str, int]:
-    """Encoded bytes of each whole tool object, largest first."""
-    specs = specs_of(TOOL_FUNCTIONS)
+def tool_object_bytes(
+    encoding: str = "openai",
+    *,
+    trim: bool = False,
+    functions: Sequence[ToolFunction] = TOOL_FUNCTIONS,
+) -> dict[str, int]:
+    """Encoded bytes of each whole tool object, largest first: the curated array's unless
+    `functions` names others (the drawing family's budgets read it that way)."""
+    specs = specs_of(functions)
     objects = ENCODINGS[encoding](specs, trim=trim)
     sizes = {spec.name: len(_compact(obj)) for spec, obj in zip(specs, objects, strict=True)}
     return dict(sorted(sizes.items(), key=lambda item: (-item[1], item[0])))
@@ -386,6 +469,8 @@ GEMINI_ARRAY_BYTES = 35_915
 asks for 34,248; this tree produces 34,217, and a pin is a measurement or it is nothing.
 Six files of the spec package still quote 34,248 (and 37,709 for the bridge, measured
 37,712); probe-log.md lists them by line for the change that is allowed to edit them."""
+BRIDGE_OPENAI_ARRAY_BYTES = 39_542
+"""The bridged review array, lever 2 off: pinned and never asserted under the ceiling."""
 TRIMMED_OPENAI_ARRAY_BYTES = 22_850
 TRIMMED_GEMINI_ARRAY_BYTES = 22_921
 TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES = 25_413
@@ -447,6 +532,46 @@ array to 36,220 bytes: about 5 percent above that. The tools the pre-run has alr
 are the next thing to leave the array (about 6,700 bytes), not a higher ceiling - and they
 did, with feature 008's lever 13 (`PRERUN_SAVED_BYTES`)."""
 
+DRAWING_ARM_TOOL_COUNTS: dict[str, int] = {
+    "review+drawings": 0,
+    "review+slim+drawings": 0,
+    "review+slim+drawings-prerun": 0,
+    "review+slim+bridge+drawings-prerun": 0,
+    "review+bridge+drawings": 0,
+    "review+slim+bridge+drawings": 0,
+}
+DRAWING_ARM_BYTES: dict[str, dict[str, int]] = {
+    "review+drawings": {"openai": 0, "gemini": 0},
+    "review+slim+drawings": {"openai": 0, "gemini": 0},
+    "review+slim+drawings-prerun": {"openai": 0, "gemini": 0},
+    "review+slim+bridge+drawings-prerun": {"openai": 0, "gemini": 0},
+    "review+bridge+drawings": {"openai": 0, "gemini": 0},
+    "review+slim+bridge+drawings": {"openai": 0, "gemini": 0},
+}
+"""The drawing arm (feature 011 FR-050): every `DRAWING_ARMS` array per encoding, lever 2 off.
+**Regenerated, never transcribed** - `--write` prints them in its Drawing arm table, in a commit
+of their own (T055). The first four are also asserted under `ARRAY_CEILING`; the two bridged
+arrays are pinned only, because they were over it before the family existed."""
+
+DRAWING_TOOL_BUDGET: dict[str, int] = {"check_drawings": 450, "get_drawing_brief": 650}
+"""The most bytes each drawing tool object may weigh, in either encoding (`contracts/questions.md`
+section 1): the two together leave the slim Gemini array under the ceiling (research R2.20)."""
+
+EXISTING_PINS: dict[tuple[str, str], int] = {
+    ("review+drawings", "openai"): OPENAI_ARRAY_BYTES,
+    ("review+drawings", "gemini"): GEMINI_ARRAY_BYTES,
+    ("review+slim+drawings", "openai"): SLIM_OPENAI_ARRAY_BYTES,
+    ("review+slim+drawings", "gemini"): SLIM_GEMINI_ARRAY_BYTES,
+    ("review+slim+drawings-prerun", "openai"): PRERUN_OPENAI_ARRAY_BYTES,
+    ("review+slim+drawings-prerun", "gemini"): PRERUN_GEMINI_ARRAY_BYTES,
+    ("review+slim+bridge+drawings-prerun", "openai"): PRERUN_BRIDGE_OPENAI_ARRAY_BYTES,
+    ("review+slim+bridge+drawings-prerun", "gemini"): PRERUN_BRIDGE_GEMINI_ARRAY_BYTES,
+    ("review+bridge+drawings", "openai"): BRIDGE_OPENAI_ARRAY_BYTES,
+}
+"""Every constant above that a drawing arm extends, by arm and encoding: the arm with the family
+taken out must measure exactly this. The bridged slim array and the bridged Gemini array had no
+pin before this feature, so they have no entry."""
+
 
 # --- the tests ---------------------------------------------------------------------------
 
@@ -480,7 +605,7 @@ def test_trimmed_array_bytes_per_encoding(encoding: str, expected: int) -> None:
 def test_the_bridge_array_is_pinned_in_both_arms() -> None:
     """The 35-tool array a bridged run sends, so a US3 session is measured too."""
     bridged = TOOLSETS["review+bridge"]
-    assert measure("review+bridge", bridged, "openai").total_bytes == 39_542
+    assert measure("review+bridge", bridged, "openai").total_bytes == BRIDGE_OPENAI_ARRAY_BYTES
     assert (
         measure("review+bridge", bridged, "openai", trim=True).total_bytes
         == TRIMMED_OPENAI_BRIDGE_ARRAY_BYTES
@@ -737,6 +862,153 @@ def test_both_encodings_are_byte_identical_across_hash_seeds() -> None:
     assert digests[0] == expected
 
 
+# --- the drawing arm (feature 011, FR-050) --------------------------------------------------------
+
+ARM_BY_ENCODING = [
+    pytest.param(arm, encoding, id=f"{arm.label}-{encoding}")
+    for arm in DRAWING_ARMS
+    for encoding in sorted(ENCODINGS)
+]
+ASSERTED_ARM_BY_ENCODING = [param for param in ARM_BY_ENCODING if param.values[0].asserted]
+
+
+def test_the_family_is_read_from_the_registry_and_no_existing_array_carries_it() -> None:
+    """Every constant pinned before feature 011 measures an array with the family absent: the
+    family is outside `REGISTRATIONS`, the MCP lists and every `TOOLSETS` array."""
+    assert DRAWING_FAMILY == drawing_tools()
+    assert DRAWING_FAMILY_NAMES == ("check_drawings", "get_drawing_brief")
+    assert DRAWING_FAMILY_AFTER_PRERUN == (DRAWING_FAMILY[1],)
+    for label, functions in TOOLSETS.items():
+        carried = {function.__name__ for function in functions} & set(DRAWING_FAMILY_NAMES)
+        assert carried == set(), f"{label} carries {sorted(carried)}"
+
+
+def test_the_arm_is_the_four_asserted_arrays_then_the_two_bridged_ones() -> None:
+    """FR-050's scope, stated once: the ceiling holds what it held before the family existed."""
+    assert [arm.label for arm in DRAWING_ARMS if arm.asserted] == [
+        "review+drawings",
+        "review+slim+drawings",
+        "review+slim+drawings-prerun",
+        "review+slim+bridge+drawings-prerun",
+    ]
+    assert [arm.label for arm in DRAWING_ARMS if not arm.asserted] == [
+        "review+bridge+drawings",
+        "review+slim+bridge+drawings",
+    ]
+    assert set(DRAWING_ARM_TOOL_COUNTS) == set(DRAWING_ARM_BYTES) == {
+        arm.label for arm in DRAWING_ARMS
+    }
+
+
+@pytest.mark.parametrize(("arm", "encoding"), ARM_BY_ENCODING)
+def test_every_existing_constant_is_its_drawing_arm_with_the_family_absent(
+    arm: DrawingArm, encoding: str
+) -> None:
+    """Recomputed with the family taken out, every constant the arm extends is unchanged: the
+    family adds its bytes and moves no existing figure (`contracts/questions.md` section 7)."""
+    absent = without(arm.functions, DRAWING_FAMILY_NAMES)
+
+    assert absent == arm.base
+    if (arm.label, encoding) in EXISTING_PINS:
+        assert measure(arm.label, absent, encoding).total_bytes == EXISTING_PINS[
+            (arm.label, encoding)
+        ]
+
+
+@pytest.mark.parametrize(("arm", "encoding"), ARM_BY_ENCODING)
+def test_each_arm_is_its_base_plus_the_family_objects_and_one_separator_each(
+    arm: DrawingArm, encoding: str
+) -> None:
+    """As for the RMS tier and lever 13: an array delta, never an object sum."""
+    sizes = tool_object_bytes(encoding, functions=arm.family)
+    base = measure(arm.label, arm.base, encoding).total_bytes
+
+    assert measure(arm.label, arm.functions, encoding).total_bytes == (
+        base + sum(sizes.values()) + len(arm.family)
+    )
+
+
+@pytest.mark.parametrize(("arm", "encoding"), ARM_BY_ENCODING)
+def test_the_drawing_arm_is_pinned(arm: DrawingArm, encoding: str) -> None:
+    """Every drawing arm, the two bridged ones included, so any growth shows."""
+    assert len(arm.functions) == DRAWING_ARM_TOOL_COUNTS[arm.label]
+    assert len(arm.functions) == len(arm.base) + len(arm.family)
+    assert (
+        measure(arm.label, arm.functions, encoding).total_bytes
+        == DRAWING_ARM_BYTES[arm.label][encoding]
+    )
+
+
+@pytest.mark.parametrize(("arm", "encoding"), ASSERTED_ARM_BY_ENCODING)
+def test_the_asserted_drawing_arms_stay_under_the_ceiling(arm: DrawingArm, encoding: str) -> None:
+    """FR-050: every array the ceiling held before feature 011 holds it with the family offered.
+    `ARRAY_CEILING` stays 38,000."""
+    assert ARRAY_CEILING == 38_000
+    assert measure(arm.label, arm.functions, encoding).total_bytes < ARRAY_CEILING
+
+
+@pytest.mark.parametrize("encoding", sorted(ENCODINGS))
+def test_each_drawing_tool_object_is_under_its_budget(encoding: str) -> None:
+    """`check_drawings` at most 450 bytes and `get_drawing_brief` at most 650, per encoding, and
+    no family tool without a budget."""
+    sizes = tool_object_bytes(encoding, functions=DRAWING_FAMILY)
+
+    assert set(sizes) == set(DRAWING_TOOL_BUDGET)
+    over = {name: size for name, size in sizes.items() if size > DRAWING_TOOL_BUDGET[name]}
+    assert over == {}, f"{encoding}: drawing tool(s) over budget: {over}"
+
+
+def test_the_pinned_drawing_arm_is_the_one_a_pane_review_offers(tmp_path: Path) -> None:
+    """The pre-run arm measures what a pane review of a package with drawing evidence really
+    hands its provider once checks first ran everything: the pre-run array, then the brief,
+    `check_drawings` withheld by lever 13 - name for name and in order."""
+    from swreview.agent.providers import ProviderName
+    from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
+    from swreview.agent.runner import start_review
+    from swreview.agent.settings import pane_defaults
+    from swreview.ir.loader import save_package
+    from tests.support.drawings import DrawingBuilder
+    from tests.support.prerun import prerun_package
+
+    base = prerun_package()
+    builder = DrawingBuilder(base)
+    builder.candidate(base.design.root_assembly_document_id)
+    # `profile="standards"` keeps the base package's dump phases, so the pre-run sees the
+    # package it always saw plus one drawing candidate.
+    save_package(builder.build(profile="standards"), tmp_path)
+    pane = pane_defaults(ProviderName.FAKE)
+    run = start_review(
+        tmp_path,
+        tmp_path,
+        provider=FakeProvider(script=[ScriptedTurn(text="done")], model="fake-scripted"),
+        efficiency=pane.efficiency,
+        model_view=pane.model_view,
+    )
+
+    assert [tool.name for tool in run.tools] == [
+        function.__name__ for function in drawing_arm("review+slim+drawings-prerun").functions
+    ]
+
+
+def test_the_write_helper_prints_the_drawing_arm_in_rows_of_its_own() -> None:
+    """One row per arm per encoding, after everything the table printed before the family, so
+    no existing line of the baseline moves."""
+    table = drawing_arm_table()
+    rows = [line for line in table.splitlines() if line.startswith("| review")]
+
+    assert baseline_table().endswith("\n\n" + table)
+    assert len(rows) == len(DRAWING_ARMS) * len(ENCODINGS)
+    for row in drawing_arm_rows():
+        ceiling = "asserted" if drawing_arm(row.label).asserted else "pinned, not asserted"
+        assert (
+            f"| {row.label} | {row.encoding} | {row.tools} | {row.total_bytes:,} | {ceiling} |"
+            in rows
+        )
+    for encoding in ENCODINGS:
+        sizes = tool_object_bytes(encoding, functions=DRAWING_FAMILY)
+        assert all(f"`{name}` {size:,}" in table for name, size in sizes.items())
+
+
 # --- the --write helper -------------------------------------------------------------------
 
 
@@ -811,6 +1083,32 @@ def baseline_table() -> str:
         lines.append(f"Largest tool objects (openai, lever 2 {arm_name(trim)}): {largest}")
     lines.append("")
     lines.append("sha256: " + ", ".join(f"{k} {v}" for k, v in encoding_digests().items()))
+    lines.append("")
+    lines.append(drawing_arm_table())
+    return "\n".join(lines)
+
+
+def drawing_arm_table() -> str:
+    """The drawing arm (feature 011), in rows of its own after every line printed before it:
+    `DRAWING_ARM_TOOL_COUNTS` and `DRAWING_ARM_BYTES` are pasted from here, and the family's
+    object sizes beside their budgets."""
+    lines = [
+        f"| Drawing arm | Encoding | Tools | Bytes | Under {ARRAY_CEILING:,} |",
+        "|---|---|---:|---:|---|",
+    ]
+    for row in drawing_arm_rows():
+        ceiling = "asserted" if drawing_arm(row.label).asserted else "pinned, not asserted"
+        lines.append(
+            f"| {row.label} | {row.encoding} | {row.tools} | {row.total_bytes:,} | {ceiling} |"
+        )
+    lines.append("")
+    for encoding in ENCODINGS:
+        sizes = tool_object_bytes(encoding, functions=DRAWING_FAMILY)
+        objects = ", ".join(
+            f"`{name}` {size:,} (budget {DRAWING_TOOL_BUDGET[name]:,})"
+            for name, size in sizes.items()
+        )
+        lines.append(f"Drawing family objects ({encoding}, lever 2 off): {objects}")
     return "\n".join(lines)
 
 
