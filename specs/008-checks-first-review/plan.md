@@ -15,7 +15,7 @@ checks that take no arguments. Five pieces, in the order they ship:
 
 1. **The replay** (User Story 1, the gate): `swreview benchmark replay RUN_DIR` re-runs a recorded
    review's calls, in their recorded rounds, through the current code with a scripted provider, and
-   prices every round with one vendored tokenizer (`o200k_base`) against what the recording billed:
+   prices every round with one tokenizer (`o200k_base`, fetched once into a per-user cache) against what the recording billed:
    within 0.023% of every recorded round on the three recorded runs. It names every finding the
    current code would lose and exits 1 if any. Three committed fixtures, generated from the recordings
    with every identifying string scrambled, carry every later story's acceptance.
@@ -46,7 +46,7 @@ schema change, no new agent stage, no change to a finding's content.
 `usageLine`; C# only in the add-in test that pins that line. No C# production change.
 
 **Primary Dependencies**: one new runtime package, `tiktoken>=0.9,<1`, with its `o200k_base`
-vocabulary vendored and hash-checked (research R2.7). Reused rather than rebuilt: `prerun.py`
+vocabulary fetched once per machine into a per-user cache and hash-checked (research R2.7). Reused rather than rebuilt: `prerun.py`
 (`prerun_checks`, `planned_calls`, `not_evaluated_families`, `PrerunCall`, `PrerunResult`,
 `attach_standards`), `tools/registry.py` (`ToolDispatch`, `RecordedTool`, `record_call`,
 `SessionSink`, `_offered`'s conditional registration), `agent/providers/fake.py`
@@ -60,7 +60,7 @@ write, `tests/golden/fixtures/rms-part/generate_package.py`'s generator conventi
 **Storage**: files only. New in a review run folder: `tool-results/step-<n>.json` (rotated to
 `tool-results.<n>` by a pane retry). Changed: `package.json` gains the live interference rows and
 gaps (in the pane; a merged copy in `--out` on the command line); `session.json` gains optional
-`model_view`, `folded_families` and step sizes. New in the package: the vendored vocabulary. New in
+`model_view`, `folded_families` and step sizes. Nothing is vendored: the vocabulary stays in a per-user cache. New in
 the repository: three generated fixtures (about 4 MB). Outside the repository: the owner's fixture
 denylist under `%LOCALAPPDATA%\SwReview\`.
 
@@ -114,7 +114,7 @@ table).*
 | Technical constraint: documents are read, not written | No SOLIDWORKS mutation | Live interference detection is the existing read-only bridge operation. The one new write is the reviewer's own `package.json` in the run folder (the file the add-in dumped, rewritten by the same merge rule the console already applies) - never a SOLIDWORKS document, and on the command line never the input folder. | PASS |
 | Technical constraint: out-of-process calls coarse, one STA thread | Bridge calls one at a time | Parallel tool calls change only the history's shape; the dispatch stays serial in response order, so SOLIDWORKS still receives one call at a time (a non-reentrant scripted bridge proves it). | PASS |
 | Technical constraint: no generic code execution exposed to the agent | Curated tools only | One new tool, `get_finding`, reads one finding from the session; offered in a review only with payload slimming. | PASS |
-| Technical constraint: third-party reuse respects licences | Licences checked | `tiktoken` is MIT-licensed. The vendored `o200k_base` vocabulary file is published by OpenAI with no stated redistribution terms; vendoring follows the design pass's recommendation and is recorded as an owner item (research R5), reversible without code changes beyond `tokens.py`'s loader. | PASS, one owner item |
+| Technical constraint: third-party reuse respects licences | Licences checked | `tiktoken` is MIT-licensed. The `o200k_base` vocabulary is published by OpenAI with no stated redistribution terms, so it is not committed: each machine fetches it once into a per-user cache (research R2.7). | PASS |
 | Development workflow: benchmark packages are the acceptance suite | Adoption measured | The pane defaults are adopted on the owner's decision of 2026-09-22, gated by the replay on the recorded designs (same findings, a token cut on every recorded run) rather than by the ledger; the held-out rule of 2026-09-19 was feature 005's adoption rule, which the owner superseded, not this file's. `benchmark run` keeps every change off, so the ledger stays comparable, and SC-010 measures the change on the real designs. | PASS |
 
 **Post-design re-check**: no exception, no Complexity Tracking row.
@@ -139,14 +139,13 @@ every check module, every IR model and every C# production file except `render.j
 are **reused unchanged**.
 
 ```text
-.gitattributes                              # CHANGED: reviewer/src/swreview/tokenizer/* -text (T002)
+.github/workflows/reviewer.yml              # CHANGED: swreview tokenizer fetch before the tests (T002)
 
 reviewer/
 ├── pyproject.toml, uv.lock                 # CHANGED: tiktoken>=0.9,<1 (T002)
 └── src/swreview/
     ├── tokens.py                           # NEW: TOKENIZER_NAME, count_tokens, TokenizerUnavailable; hash-checked,
     │                                       #      offline load (T002)
-    ├── tokenizer/fb374d41…a790             # NEW: vendored o200k_base vocabulary, 3,613,922 bytes (T002)
     ├── findings.py                         # CHANGED: ENTITY_ID, finding_subject_key (T008)
     ├── benchmark/recording.py              # NEW: Recording, read_recording and its refusals; answer batches (T016, T087)
     ├── benchmark/replay.py                 # NEW: two passes, classes, accounting, findings, ReplayReport; answered_from_checks,
@@ -325,7 +324,7 @@ size-for-size contact rule; the next workstation sitting for SC-010.
 | RK-4 | Judging every group reports every zero-volume contact as a demonstrated interference until feature 010. | Stated in research R2.17 and R5; the settings are the recorded run's so no recorded finding is lost; feature 010's contact rule is the next wave. |
 | RK-5 | Rewriting `package.json` collides with the add-in reading it, or corrupts it. | A raw parse, re-validation to model equality, a temporary file and `os.replace`; any failure leaves every file untouched and becomes an unresolved coverage row; the input folder of a command-line run is never written (T039, T041). |
 | RK-6 | A hung live detection blocks session creation. | Every failure the transport reports is handled; the hang itself is recorded as an owner item with the alternative (moving the pre-run into `ReviewRun.start()`); the latency is measured at the sitting (T104). |
-| RK-7 | The vendored vocabulary is corrupted by a CRLF checkout or changes under a tiktoken upgrade. | `-text` in `.gitattributes`, a sha256 check before loading, a version pin, and a network-blocked load test (T001). |
+| RK-7 | The cached vocabulary is missing on a machine, corrupted, or changes under a tiktoken upgrade. | `swreview tokenizer fetch` run by the update script and CI, a sha256 check before loading, a version pin, a one-sentence refusal naming the fetch command, and a network-blocked load test (T001). |
 | RK-8 | The replay and the adapters drift apart. | The replay calls the adapters' own serialization and pruning functions; the US5 acceptance asserts a step's recorded tokens equal the replay's count (T093). |
 | RK-9 | A fixture leaks a real name or path from the recordings. | The generator's self-check refuses to write; the committed hygiene test and the owner's local denylist; design ids forbidden by name; no recorded string in the generator or a commit message. |
 | RK-10 | Payload drift in current code breaks the fixtures' SC-001 lock. | That failure is the intended alarm; the generator regenerates the fixtures on this machine, and the real-recording integration test (T026) separates a replay defect from a fixture defect. |
@@ -337,6 +336,6 @@ size-for-size contact rule; the next workstation sitting for SC-010.
 ## Complexity Tracking
 
 None. This feature adds no constitution exception, no SOLIDWORKS write path, no transport, no provider
-and no agent stage. The one new runtime dependency and its vendored vocabulary are required by FR-002,
+and no agent stage. The one new runtime dependency and its cached vocabulary are required by FR-002,
 FR-003 and FR-026 together (a named tokenizer, at run time, with no network), and the alternatives are
 in research R2.7.
