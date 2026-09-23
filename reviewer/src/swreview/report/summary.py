@@ -362,15 +362,19 @@ def review_summary(
     words = load_words()
     names = _non_blank(all_component_names(package)) if package is not None else {}
     tokens = usage.last_conversation_input() if usage is not None else None
+    practice = _modelling_practice(ranking)
+    folded = set() if practice is None else set(practice.finding_ids)
     return ReviewSummary(
         version=words.version,
         headline=words.headline.of(len(session.findings), len(ranking.rows)),
         findings=len(session.findings),
         issues=len(ranking.rows),
-        groups=_groups(session.findings, words, load_policy()),
-        # TODO(009 T017): the folded family's line, once 008 T030/T032 land
-        # `session.folded_families` and the family row.
-        modelling_practice=None,
+        groups=_groups(
+            (finding for finding in session.findings if finding.id not in folded),
+            words,
+            load_policy(),
+        ),
+        modelling_practice=practice,
         questions=_questions(session.evidence_requests, words, names, package),
         not_loaded=_not_loaded(package, words),
         goals=[_goal_line(goal, session, words) for goal in words.goals],
@@ -413,7 +417,28 @@ def _non_blank(names: Mapping[str, str]) -> dict[str, str]:
     return {component: name for component, name in names.items() if name.strip()}
 
 
-# --- the groups -------------------------------------------------------------------------------
+# --- the folded family and the groups ---------------------------------------------------------
+
+
+def _modelling_practice(ranking: Ranking) -> ModellingPractice | None:
+    """The folded family's one line, from its ranking row (feature 008), or `None`.
+
+    The row is the first whose `family` is set, in rank order. The contract names one such
+    row - the review folds `rms` alone - and a second family, which no build writes, is
+    left to the groups rather than refused: its findings are counted there as if unfolded,
+    so the partition holds and no finding leaves the summary.
+    """
+    row = next((row for row in ranking.rows if row.family is not None), None)
+    if row is None:
+        return None
+    return ModellingPractice(
+        title=row.title,
+        findings=len(row.member_finding_ids),
+        # `attention._family_row` sets it on every family row; `rules` is an `int`, so a row
+        # without one is refused by the model rather than given a guessed count.
+        rules=row.rule_count,  # type: ignore[arg-type]
+        finding_ids=list(row.member_finding_ids),
+    )
 
 
 def _group_of(finding: Finding, policy: Policy) -> GroupKind:
