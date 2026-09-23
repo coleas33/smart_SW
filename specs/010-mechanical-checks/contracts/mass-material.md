@@ -69,12 +69,14 @@ from the existing `document` and `body` gaps. A run with nothing to count writes
 family with nothing to report renders no line).
 
 *Amended 2026-09-23 (T108, research R2.25): the summary row.* After its rows, the tool writes
-one `checked` item `mass.material` - the checklist item's id, `checks/mass.SUMMARY_CHECK` - with
-the reason `"<c> checked, <s> skipped coverage item(s) over <n> document(s); <f> finding(s)"`
-(the rows this call wrote, the documents it walked, the findings it recorded) and the reviewed
-configuration as its scope, through `replace_coverage`, so a repeated call leaves one. It is
-what closes the checklist item on a run with no finding. The result's `coverage` counts do not
-include it.
+one item `mass.material` - the checklist item's id, `checks/mass.SUMMARY_CHECK` - with the reason
+`"<c> checked, <s> skipped coverage item(s) over <n> document(s); <f> finding(s)"` (the rows this
+call wrote, the documents it walked, the findings it recorded) and the reviewed configuration as
+its scope. It is `checked` only when `<c>` or `<f>` is not zero, `skipped` otherwise - every part
+lightweight is a run that checked nothing, and the goal line reads "not reached" - and `failed`,
+with the refusal as its `error`, when a finding is refused (the call then writes no per-check
+row); one item across the three buckets, so a repeated call leaves one. It is what closes the
+checklist item on a run with no finding. The result's `coverage` counts do not include it.
 
 ## 4. The extractor override read (seat-validated)
 

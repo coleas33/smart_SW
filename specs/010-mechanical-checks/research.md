@@ -574,7 +574,7 @@ T108; `contracts/mass-material.md` section 3, `contracts/hygiene.md` section 2).
 `check_mass_material` and `check_hygiene` each end by writing one coverage row under their
 checklist item's id - `mass.material` and `hygiene`, each family module's `SUMMARY_CHECK` - as
 the RMS and standards families write `modeling.resilience` and `standards.release`. The row is
-`checked` (neither family writes an unresolved row; the tool ran over the package), its reason
+`checked` or `skipped` by what the call did (amended below; first written always `checked`), its reason
 counts what the call wrote and found - `"<c> checked, <s> skipped coverage item(s) over <n>
 document(s); <f> finding(s)"` - and its scope is the configuration reviewed. It is written with
 `replace_coverage`, so a repeated call leaves one row. The tools' results do not change: their
@@ -593,13 +593,31 @@ call a tool lever 13 withholds once checks first has run it (008 FR-030): the sw
 to keep matching exactly; with checks first off, the tool's own description tells the model
 what it checks, as it does for `check_standards`.
 
+**Amended 2026-09-23: the row's bucket.** As first landed the row was always `checked`, so a run
+that checked nothing - no standards profile, every part lightweight, every per-check row skipped -
+put a `checked` row under the goal's own item and the Review summary's goal line read "checked, no
+issue" instead of "not reached" (009 `contracts/review-summary.md` section 3, row 3 before row 5).
+The row is now `checked` only when the call wrote at least one `checked` per-check row or recorded
+a finding; otherwise `skipped`, with the same counts in its reason, so row 2 answers: not reached,
+"skipped", the counts as the detail. A call whose finding is refused stops before its per-check
+rows, as every check tool stops at one, and writes the row `failed` with the refusal as its
+`error` - never `checked`, whatever it recorded before the refusal - so the goal line says "a
+check failed" unless an earlier finding is an issue. It is one row across `checked`, `skipped` and
+`failed` (`checks_mechanical.SUMMARY_BUCKETS`): `replace_coverage` clears one bucket, so the other
+two are cleared first, as the rules and standards families clear theirs. Pinned by
+`tests/unit/test_mechanical_family_summaries.py` on scripted runs (all skipped, one checked,
+findings only, a refusal first, with passes and after a finding, each with its goal line) and on
+the packages it was found on. One consequence, accepted: the hygiene component check writes no row
+for its passes, so a hygiene run with no profile whose components are all resolved reads `skipped`
+- its four property checks were skipped, and the reason's counts say so.
+
 **Alternatives.**
 
 | Option | Why not |
 |---|---|
 | Match coverage by prefix in the checklist | Every per-check row of every family would close items, `mass.coverage`'s skipped row among them. |
 | Leave the item to the model's `mark_coverage` | A check tool can answer it; the system prompt's rule for the RMS item is not to mark by hand. |
-| A bucket that follows what was skipped | The hygiene component check writes no row for its passes, so "nothing checked" cannot be told from "nothing to find"; the reason carries the counts instead. |
+| A bucket that follows what was skipped | The hygiene component check writes no row for its passes, so "nothing checked" cannot be told from "nothing to find"; the reason carries the counts instead. *Taken by the amendment above* in the form "checked only on a checked row or a finding": an always-`checked` row made a run that checked nothing read "checked" on the summary, which is worse than the component check's silent passes reading `skipped`. |
 | Name the tools and add two lever 13 rewordings | Above: more exact sentences to keep matching, for words the tools' descriptions already carry. |
 
 ## R3. Verified facts the plan relies on

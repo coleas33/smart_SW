@@ -34,12 +34,15 @@ instances is one document, never a duplicate of itself; the documents are those
 `checks/documents.DocumentTree` walks, the same set the mass checks walk.
 
 *Amended 2026-09-23 (T108, research R2.25): the summary row.* After its rows, the tool writes
-one `checked` item `hygiene` - the checklist item's id, `checks/hygiene.SUMMARY_CHECK` - with
-the reason `"<c> checked, <s> skipped coverage item(s) over <n> document(s); <f> finding(s)"`
-and the reviewed configuration as its scope, through `replace_coverage`, so a repeated call
-leaves one. It closes the checklist item on a run with no finding, a run without a standards
-profile included (its reason then counts the skipped property checks). The result's
-`coverage` counts do not include it.
+one item `hygiene` - the checklist item's id, `checks/hygiene.SUMMARY_CHECK` - with the reason
+`"<c> checked, <s> skipped coverage item(s) over <n> document(s); <f> finding(s)"` and the
+reviewed configuration as its scope, in the bucket `contracts/mass-material.md` section 3 gives
+the mass row: `checked` only when `<c>` or `<f>` is not zero, `skipped` otherwise, `failed` on a
+refused finding; one item across the three, so a repeated call leaves one. It closes the
+checklist item on a run with no finding, a run without a standards profile included: with every
+component resolved that run checked nothing and the item closes `skipped` (its reason counts the
+skipped property checks); with a lightweight or suppressed component it has findings and closes
+on them. The result's `coverage` counts do not include it.
 
 ## 3. The profile names
 

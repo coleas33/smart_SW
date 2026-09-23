@@ -6,7 +6,7 @@
 
 **Status**: Draft
 
-**Amended**: 2026-09-23, with the owner's decision 3A work that lands T098-T099: the mass and hygiene families close their checklist items with one summary coverage row each, and the two items name no tool (research R2.25, T108).
+**Amended**: 2026-09-23, with the owner's decision 3A work that lands T098-T099: the mass and hygiene families close their checklist items with one summary coverage row each, and the two items name no tool (research R2.25, T108). The row is `checked` only when the call wrote at least one `checked` per-check row or recorded a finding; otherwise it is `skipped`, with the same counts in its reason, so a family run that checked nothing (no standards profile, every part lightweight) reads "not reached" on the Review summary's goal line, never "checked"; and a call whose finding is refused writes it `failed`, never `checked` (T108 as amended the same day).
 
 **Input**: Owner goal list of 2026-09-22: "Static interference; Fastener thread engagement; Hole alignment (potentially automate the tolerance stackup here too); Tool access above screw heads; Mass/material for all geometry; Hygiene checks (part numbers, etc); TOLERANCES?" Evidence: the check-by-check analysis of the recorded 830-02342 and 810-11249 reviews summarised in `docs/roadmap-2026-09-22.md`. Owner decisions: tolerances from all four sources - Hole Wizard fits and classes, model dimension tolerances and DimXpert/MBD annotations, drawing callouts, and a general tolerance block (2026-09-22); size-for-size contacts as a separate list, not findings; minimum thread engagement 1.5 x diameter into both steel and aluminium (both 2026-09-23).
 

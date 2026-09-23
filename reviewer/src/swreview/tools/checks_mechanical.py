@@ -56,6 +56,8 @@ from swreview.tools.query import ToolResult
 from swreview.tools.recording import record_result
 
 if TYPE_CHECKING:  # the standards package reaches the runner; only the type is needed here
+    from swreview.checks.hygiene import HygieneChecks
+    from swreview.checks.mass import MassChecks
     from swreview.checks.standards.profile import StandardsProfile
 
 __all__ = [
@@ -71,6 +73,11 @@ CODE_FIRST_CHECKS: tuple[str, ...] = ("check_joints", "check_mass_material", "ch
 """The argument-free check tools the pre-run calls, in order. Each must be in
 `registry.check_tools()` and take no parameter; `test_code_first_registration.py` holds it
 to both."""
+
+SUMMARY_BUCKETS: tuple[CoverageBucket, ...] = ("checked", "skipped", "failed")
+"""The buckets the mass and hygiene families' summary row can be in (T108, amended
+2026-09-23). It is one row that moves between them, which `replace_coverage` - same check,
+same bucket - cannot express on its own, so the others are cleared first."""
 
 JOINT_MAP_CHECK = "joint.map"
 """The coverage check the joint map is recorded under. Not a checklist item id, so no row
@@ -338,6 +345,23 @@ def _record_coverage(
         written[bucket] += 1
 
 
+def _summary_bucket(
+    written: Counter[CoverageBucket], findings: int, error: str | None
+) -> CoverageBucket:
+    """Where the family's summary row goes (T108, amended 2026-09-23).
+
+    `failed` when a finding was refused, whatever the call recorded before it; `checked`
+    only when the call wrote a `checked` per-check row or recorded a finding; `skipped`
+    otherwise - a run that checked nothing (no standards profile, every part lightweight)
+    must not read "checked" on the Review summary's goal line.
+    """
+    if error is not None:
+        return "failed"
+    if written["checked"] or findings:
+        return "checked"
+    return "skipped"
+
+
 def _record_summary(
     context: ToolContext,
     check: str,
@@ -345,18 +369,26 @@ def _record_summary(
     *,
     documents: int,
     findings: int,
+    error: str | None,
 ) -> None:
     """The family's one summary row, under its checklist item's id (feature 010 T108).
 
     The checklist matches coverage by id, never by prefix, and every other row these tools
     write is per check, so without this row a run with no finding would leave the item open
-    (research R2.25). `checked`, since neither family writes an unresolved row, with what the
-    call wrote and found in its reason; `replace_coverage`, so a repeated call leaves one.
+    (research R2.25). Its bucket is `_summary_bucket`'s, its reason what the call wrote and
+    found, whatever the bucket, and its `error` the refusal of a `failed` call. One row
+    across `SUMMARY_BUCKETS`, so a repeated call leaves one wherever the last call put it.
     It is not counted in `written`: the result's counts stay the per-check rows.
     """
+    bucket = _summary_bucket(written, findings, error)
+    coverage = context.require_session().coverage
+    for other in SUMMARY_BUCKETS:
+        if other != bucket:
+            items = getattr(coverage, other)
+            items[:] = [item for item in items if item.check != check]
     context.replace_coverage(
         check,
-        "checked",
+        bucket,
         CoverageItem(
             check=check,
             scope=CoverageScope(configuration=context.ir.design.active_configuration),
@@ -364,8 +396,47 @@ def _record_summary(
                 f"{written['checked']} checked, {written['skipped']} skipped coverage item(s) "
                 f"over {documents} document(s); {findings} finding(s)"
             ),
-            error=None,
+            error=error,
         ),
+    )
+
+
+def _record_family(
+    context: ToolContext,
+    check: str,
+    checks: MassChecks | HygieneChecks,
+    extra: dict[str, Any],
+) -> ToolResult:
+    """Record one family's run - its findings, its per-check rows, its summary row under
+    `check` - and return the tool's counts, or the refusal of a finding.
+
+    A refused finding stops the call before its per-check rows are written, as every check
+    tool stops at one; the summary row is still written, `failed`, so the checklist item and
+    the goal line say a check failed rather than keep what an earlier call wrote.
+    """
+    session = context.require_session()
+    findings_before = len(session.findings)
+    written: Counter[CoverageBucket] = Counter()
+    refused = _record_documents(context, checks.findings)
+    if refused is None:
+        _record_coverage(context, written, "checked", checks.checked)
+        _record_coverage(context, written, "skipped", checks.skipped)
+    findings = session.findings[findings_before:]
+    _record_summary(
+        context,
+        check,
+        written,
+        documents=checks.documents,
+        findings=len(findings),
+        error=None if refused is None else str(refused["error"]),
+    )
+    if refused is not None:
+        return refused
+    return _summary(
+        findings=[finding.id for finding in findings],
+        statuses=Counter(finding.status for finding in findings),
+        written=written,
+        extra={"documents": checks.documents, **extra},
     )
 
 
@@ -377,25 +448,7 @@ def check_mass_material() -> ToolResult:
         Takes no argument. Unread parts and bodies are counted, never assumed.
     """
     context = current_context()
-    session = context.require_session()
-    findings_before = len(session.findings)
-    checks = run_mass_checks(context.ir)
-    written: Counter[CoverageBucket] = Counter()
-    refused = _record_documents(context, checks.findings)
-    if refused is not None:
-        return refused
-    _record_coverage(context, written, "checked", checks.checked)
-    _record_coverage(context, written, "skipped", checks.skipped)
-    findings = session.findings[findings_before:]
-    _record_summary(
-        context, MASS_SUMMARY, written, documents=checks.documents, findings=len(findings)
-    )
-    return _summary(
-        findings=[finding.id for finding in findings],
-        statuses=Counter(finding.status for finding in findings),
-        written=written,
-        extra={"documents": checks.documents},
-    )
+    return _record_family(context, MASS_SUMMARY, run_mass_checks(context.ir), {})
 
 
 def check_hygiene() -> ToolResult:
@@ -411,28 +464,12 @@ def check_hygiene() -> ToolResult:
     from swreview.checks.hygiene import run_hygiene_checks
 
     context = current_context()
-    session = context.require_session()
-    findings_before = len(session.findings)
     profile = _attached_profile(context)
-    checks = run_hygiene_checks(context.ir, profile)
-    written: Counter[CoverageBucket] = Counter()
-    refused = _record_documents(context, checks.findings)
-    if refused is not None:
-        return refused
-    _record_coverage(context, written, "checked", checks.checked)
-    _record_coverage(context, written, "skipped", checks.skipped)
-    findings = session.findings[findings_before:]
-    _record_summary(
-        context, HYGIENE_SUMMARY, written, documents=checks.documents, findings=len(findings)
-    )
-    return _summary(
-        findings=[finding.id for finding in findings],
-        statuses=Counter(finding.status for finding in findings),
-        written=written,
-        extra={
-            "documents": checks.documents,
-            "profile": "absent" if profile is None else "attached",
-        },
+    return _record_family(
+        context,
+        HYGIENE_SUMMARY,
+        run_hygiene_checks(context.ir, profile),
+        {"profile": "absent" if profile is None else "attached"},
     )
 
 
