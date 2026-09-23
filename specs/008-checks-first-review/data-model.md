@@ -142,6 +142,14 @@ recorded; neither lost nor not replayable). `subject` is the printable form of
 `EfficiencySettings` keeps its twelve fields and their off defaults; `prerun_checks`'s docstring
 names it checks first. `LEVER_NAMES` and `GATED_ALONE` do not change.
 
+*Amendment 2026-09-23 (FR-030, research R2.53):* one field is appended, so there are thirteen.
+
+| Name | Definition |
+|---|---|
+| `EfficiencySettings.withhold_prerun_tools: bool = False` | Lever 13: the tools checks first ran to completion leave the array (`contracts/checks-first.md` section 7). Optional in `review-session.schema.json` and not in `required`, so older sessions validate and load with it off |
+| `pane_efficiency(provider)` | also sets `withhold_prerun_tools=True`, for every provider |
+| `efficiency_from_levers` | refuses `withhold_prerun_tools` without `prerun_checks` or `procedural_gate`; `GATED_ALONE` does not change |
+
 ## 7. The session (`report/session.py`, contract in lockstep)
 
 | Model | Field | Story | Rules |
@@ -164,6 +172,7 @@ names it checks first. `LEVER_NAMES` and `GATED_ALONE` do not change.
 | `ToolContext` (`tools/context.py`) | `tool_results_dir: Path \| None = None` | US3 | Set only by `start_review` to `out/"tool-results"` |
 | `PrerunCall` (`prerun.py`) | `payload: Mapping \| None = None` | US2 | The pre-run call's payload, for the guard's answer; defaulted so direct constructors stay valid |
 | `PrerunResult` | `live: LiveOutcome \| None = None` | US2 | |
+| `PrerunResult` | `withheld: tuple[str, ...] = ()` | Amendment 2026-09-23 | The tools lever 13 took off the array, in pre-run order; empty with the flag off. Not recorded on the session: the setting is, and the rule re-derives the set from the pre-run's steps |
 | `LiveOutcome` | NEW frozen dataclass | US2 | `step_index`, `configuration`, `settings`, `groups`, `rows_detected`, `rows_added`, `rows_collided`, `error: str \| None`, `persist_error: str \| None` |
 | `PrerunGuard` | NEW `ToolSet` wrapper | US2 | Ledger `repeat_key -> (step_index, outcome)`; `contracts/checks-first.md` section 5 |
 
@@ -208,7 +217,7 @@ groups in first-appearance order; an empty list gives `{groups: [], rows: 0}`.
 | `counts` | `{key: len(value)}` for each top-level list of the content the model read |
 | `ids` | The `id` of every object in those lists, then `finding_ids` when present; at most 20 |
 | `ids_omitted` | int |
-| `refetch` | `"call <tool> again with these arguments to read it in full"`, plus `" or get_finding(<id>) for one finding"` when the content carries finding ids |
+| `refetch` | `"call <tool> again with these arguments to read it in full"`, plus `" or get_finding(<id>) for one finding"` when the content carries finding ids; for a tool the adapter does not offer (`prune_history(..., offered=...)`, amendment 2026-09-23) `"<tool> is not offered this session, so it cannot be called again"`, plus `"; get_finding(<id>) reads one finding"` |
 
 Deterministic in `(name, arguments, content)`: identical bytes on every call and across processes.
 

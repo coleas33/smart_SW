@@ -1050,6 +1050,9 @@ change parameter names (R2.27: `test_tool_payload.py:309` and `:364-372`, regene
 `python -m tests.unit.test_tool_payload --write`, `REVIEW_BRIDGE_TOOL_COUNT` still 35), and a new
 pin covers the slimmed review array (33 tools). The guard registers no tool.
 
+*Amended 2026-09-23:* the owner's lever 13 is the thirteenth lever (R2.53); its count pins move
+deliberately in its own task (T107), and the `TOOL_FUNCTIONS` pins still do not.
+
 #### R2.48 `review-session.schema.json` changes three times, each in lockstep
 
 `folded_families` (User Story 2), `model_view` with `$defs.ModelViewSettings` (User Story 3), and
@@ -1094,6 +1097,78 @@ mechanisms: a new argument-free check joins `planned_calls` (and `PRERUN_TOOLS`)
 digest like any repeated call, is viewed through `check_digest` when its payload is a findings
 envelope (a `MODEL_VIEWS` entry), and is priced by the replay's `answered_from_checks` class with no
 replay change.
+
+### Amendment 2026-09-23: already-run tools leave the array
+
+#### R2.53 Lever 13: the tools checks first ran to completion are not offered again
+
+**Decision** (owner, 2026-09-23; FR-030, `contracts/checks-first.md` section 7). A thirteenth
+lever, `EfficiencySettings.withhold_prerun_tools`, appended last: off in the class and on the
+command line, on in `pane_efficiency` for both providers. It is read once, in `start_review`,
+after the pre-run: `prerun.withheld_tools` decides from the pre-run's own calls which check
+tools ran to completion, `PrerunResult.withheld` holds them, and `PrerunGuard` - which already
+answers their repeats - leaves them out of `__iter__`. Both adapters build their array by
+iterating the tool set, so neither encodes them; both dispatch through `call`, which still
+reaches the guard and the dispatch. The array is decided before the first request and never
+changes after it (lever 3's prefix guarantee).
+
+**Why.** The tool array is sent on every round. After checks first, a completed tool can only
+earn the model an `already_run` answer, yet the seven tools the pre-run always runs weigh about
+7,000 bytes of the slimmed pane array (about 1,700 tokens a round; the pinned figures are
+`test_tool_payload.py`'s, regenerated with `--write`), and `check_standards` another 1,500 when
+a profile is attached. The owner raised `ARRAY_CEILING` to 38,000 on the understanding that these
+tools leave next.
+
+**The rule, each clause an edge the tests pin.**
+
+- *Completed* is every pre-run call of the tool without an error and with a `repeat_key`, so the
+  guard can answer any repeat. A failed call, a `--fail-tool` call, a tier refusal and a tool
+  the pre-run never called all keep the tool.
+- *The RMS tools leave together*, and only when all three ran package-wide (no `document_id`).
+  One step of the system prompt and one checklist sentence name all three; a partial set would
+  leave a sentence naming a tool that is not there, and the tier already treats them as one.
+- *`check_interference_group`* leaves when every group `groups_of` enumerates after the pre-run
+  has a completed call for its key, no key is shared by two groups (the tool judges the active
+  configuration's only, so the other was not judged), and `bridge_interference` is not offered.
+  With a bridge the model can run detection for another configuration, or with other settings,
+  and add groups nothing has judged; without the tool it could not judge them. A bridged pane
+  review therefore keeps this one tool (about 1,200 bytes); dropping that clause is one line of
+  `withheld_tools` if the owner prefers the bytes to the edge.
+- *`check_standards`* leaves when a standards run was attached and its call completed. No
+  profile, no tool: nothing to withhold.
+- `bridge_interference` and `get_finding` never leave.
+
+**What the model is told.** Everything it is sent was searched for the eight names: the system
+prompt, the checklist (in the prompt and from `get_review_checklist`), the opening message, the
+tier and not-evaluated sentences, every tool description, and the stub's `refetch`. Four told
+it to call a withheld tool, and each changes only when that tool is withheld, from one table
+(`agent/withheld_wording.py`) or one parameter: step 3 of `system_v1.md` drops
+`check_interference_group` from its list; step 4 becomes a sentence that the modelling method was
+graded before the first turn; the `modeling.resilience` sentence "Run check_rms_part,
+check_rms_assembly and check_rms_equations." is replaced; and a stub for a tool that is not
+offered says so rather than "call it again" (the adapters and the replay pass their offered
+names to `prune_history`, as `finding_detail` already does for `get_finding`). The digest adds
+one line naming what was withheld. Reviewed and unchanged: `DIGEST_HEADER`, the `Evaluated:`
+lines (a report of what ran), the tier sentence, FR-037's reduced-profile sentence,
+`ANSWER_MESSAGE` (it names no tool; a withheld check it prompts is answered by the guard), and
+`list_equations`' description, whose mention of `check_rms_equations` explains a verdict rather
+than asking for a call - rewording it would move every array pin of every run.
+
+**Alternatives.**
+
+| Option | Why not |
+|---|---|
+| Raise the ceiling instead | Pays about 1,700 tokens every round for tools that can only answer `already_run`; the ceiling is headroom, not a target, and the owner chose the other way. |
+| Trim the descriptions of these tools | Keeps each schema's structure on the wire (lever 2's floor), leaves the tools callable for nothing, and adds a second trim path beside lever 2. |
+| Withhold only the RMS tools | The largest three, but the other four already-run tools stay on every round for no reason that separates them. |
+
+**Count pins.** A thirteenth lever moves `LEVER_NAMES` and the pins that count it
+(`test_efficiency_settings.py`'s `EXPECTED_LEVERS`, `test_no_lever_in_pane_settings.py`,
+`test_model_view_settings.py`, `test_usage_contracts.py`) from twelve to thirteen, deliberately;
+`review-session.schema.json` gains the optional field. The `TOOL_FUNCTIONS` pins do not move:
+the array is filtered per run, never in the registry. `--lever withhold_prerun_tools` without
+`prerun_checks` or `procedural_gate` is refused - without a pre-run nothing is withheld and the
+arm would measure nothing, the rule `parallel_tool_calls` with Gemini already follows.
 
 ## R3. Verified facts the plan relies on
 
@@ -1153,6 +1228,7 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 | US2 scenario 3 (007 FR-030) | 007: lever 5 writes nothing about standards without a profile | under checks first the standards family is reported with its reason; lever 5's digest and the gate's differ only by parts 2 to 6 | R2.20 |
 | FR-007 | fictional fixtures (the replay pass added a fictional profile) | the replay grades standards with `config/standards.example.yaml`, the profile the pilot ran; no new profile file | R2.10 |
 | FR-014 example (roadmap) | "85 findings across 12 rules" | 7 rules on the recording | R2.21 |
+| FR-030 (new, owner 2026-09-23) | every tool stayed in the array after checks first ran it | a tool the pre-run ran to completion leaves the array (lever 13, pane default) | R2.53 |
 
 ## R5. Open items that stay open
 

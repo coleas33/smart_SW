@@ -2,7 +2,7 @@
 
 Normative for the pre-run under the pane default, live interference and its persistence, the
 opening digest, the re-call guard and the folded modelling-practice group (FR-008 to FR-014,
-SC-006).
+SC-006), and the tools that leave the array once it ran them (FR-030, section 7).
 
 ## 1. When it runs
 
@@ -140,3 +140,48 @@ call whose pre-run attempt failed - runs normally. With checks first off there i
 
 Check folders never fold. A session without the field renders and ranks byte-identically to
 today; the existing goldens do not move (FR-029).
+
+## 7. Already-run tools leave the array (lever 13, amendment 2026-09-23)
+
+FR-030, research R2.53. `EfficiencySettings.withhold_prerun_tools` is read once, in
+`start_review`, after the pre-run; `pane_efficiency(provider)` turns it on for both providers,
+and on the command line it is `--lever withhold_prerun_tools` (refused without `prerun_checks`
+or `procedural_gate`) or `--pane-defaults`. With checks first off, or the flag off, nothing
+below happens.
+
+`prerun.withheld_tools(context, tools, calls)` returns the tools that leave, in pre-run order,
+and `PrerunResult.withheld` holds them. A call *completed* when `PrerunCall.error is None` and
+`repeat_key(tool, arguments)` is not `None`, so the guard can answer any repeat.
+
+| Tool | Leaves the array when |
+|---|---|
+| `check_rms_part`, `check_rms_equations`, `check_rms_assembly` | all three were called, every call completed and none named a `document_id`; otherwise all three stay |
+| `check_interference_group` | it was called; every call completed; every group `groups_of` enumerates after the pre-run has a completed call for its key; no key is shared by two groups; `bridge_interference` is not offered to the model |
+| each name in feature 010's `CODE_FIRST_CHECKS` | it was called and every call completed |
+| `check_standards` | a standards run is attached, it was called and the call completed |
+| `bridge_interference`, `get_finding` and every other tool | never |
+
+A tool that is not in the dispatch's offered tools (withheld by tier) is never listed.
+
+**Mechanism.** `PrerunGuard.__iter__` and `__len__` leave out `prerun.withheld`; `call` is
+unchanged, so a withheld tool called anyway reaches the guard's ledger and is answered
+`already_run` (section 5), and anything the ledger misses reaches the dispatch, which still
+holds the tool. The system prompt's tool notes (lever 2) are built from the offered tools only.
+
+**Wording.** Only when the named tools are withheld (`agent/withheld_wording.py`):
+
+| Where | Withheld | Was | Now |
+|---|---|---|---|
+| `system_v1.md` step 3 | `check_interference_group` | `` `check_hole_alignment`, `check_interference_group`) `` | `` `check_hole_alignment`) `` |
+| `system_v1.md` step 4 | the three RMS tools | the whole step ("4. Grade the modelling method ... answer it.") | "4. The modelling method was graded before your first turn: checks first ran the three RMS checks over every document, and the opening message gives their counts. Together they close out `modeling.resilience`; do not mark that item covered by hand." (wrapped as the file wraps) |
+| checklist item `modeling.resilience`, in the prompt and in `get_review_checklist` | the three RMS tools | "Run check_rms_part, check_rms_assembly and check_rms_equations." | "Checks first ran the three RMS checks before the first turn." |
+
+The digest's `Evaluated:` block is followed by one line, `WITHHELD_LINE`:
+`Not offered to you this session, because checks first ran them to completion: <names>.`
+A stub (`model-view.md` section 7) of a tool the adapter does not offer says
+`<name> is not offered this session, so it cannot be called again`, with
+`; get_finding(<id>) reads one finding` when its content carries finding ids and `get_finding`
+is offered, instead of "call <name> again".
+
+Unchanged: `DIGEST_HEADER`, the `Evaluated:` lines, the tier sentence, FR-037's reduced-profile
+sentence, `ANSWER_MESSAGE`, and every tool description.
