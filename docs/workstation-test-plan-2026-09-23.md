@@ -5,9 +5,9 @@ not need to be a developer to follow it. Every step says what to do, gives the e
 paste, says what to look at, and says what counts as a pass and what counts as a fail. Write each
 result in the **Results table** of the findings document as soon as the step ends: you start that
 document once, on day 1, at step 1.4, from `docs/workstation-results-2026-09-23.md`, the results
-sheet, which step 1.3's update brings to a checkout older than this plan. Each row is one step and
-one task id, and takes `pass`, `fail` or `blocked`, the value you observed, and notes. Step 6
-collects it.
+sheet, which step 1.3's update brings to a checkout that does not have it yet. Each row is one
+step and one task id, and takes `pass`, `fail` or `blocked`, the value you observed, and notes.
+Step 6 collects it.
 
 Each step carries the task ids it answers in square brackets, with the feature in front, for
 example **[011 T062]**: that is the row of `specs/011-drawing-context/tasks.md` the development
@@ -44,7 +44,9 @@ finding.
    `20261001-101112-A`), never its name. Copy a log line only as far as the end of its `gated=`
    list; if it has `target=`, write that it did and how many paths, never the paths; replace any
    name inside `error="..."` with its letter. From a D6 or D8 dimension line, never copy its
-   `name "..."` or `view "..."`: the dimension's id (`ddm:...`) stands for it.
+   `name "..."`, `view "..."` or `value`, nor a D6 face line's radius, which is half a hole's
+   value: the dimension's id (`ddm:...`) stands for it, and the report in `$H\probes` keeps the
+   rest for the development machine.
 6. **Do not click or type while a probe runs.** Probe D14 checks that the window in front and the
    active document do not change; your own click would fail it.
 7. **A step that fails**: record what it says to record, look the failure up in "When a step
@@ -116,8 +118,11 @@ estimate from the replay's figures, not a measurement.
 
 ### 0.1 What the owner brings, and decides
 
-1. **This plan on GitHub.** The seat updates from GitHub (`origin/main`); the commit that added
-   this plan, or a later one, has to be pushed before the sitting.
+1. **This plan on GitHub, with the build it needs.** The seat updates from GitHub
+   (`origin/main`), so the owner pushes `main` before the sitting. It must hold commit `8d308be`
+   or a later one: from that commit the probe names each dimension, which step 3.8 needs, and the
+   results sheet step 1.4 copies is older still. The commit that added this plan is not enough:
+   it came before both. Step 1.4 checks the build.
 2. **The real standards profile at version 3**, carried by hand (step 2 says what it must hold). It
    never goes into the repository or into the findings document.
 3. **The o200k_base vocabulary file** `fb374d419588a4632f3f557e76b4b70aebbca790`, from the
@@ -348,7 +353,7 @@ backend...` while the backend starts, then `Backend ready` (with or without a fu
 ## Step 1. Update the workstation
 
 The findings document starts at 1.4: its results sheet arrives with the update, so a checkout
-older than this plan does not have it before 1.3's pull. Until then, what 1.1 to 1.3 say to record
+older than the sheet does not have it before 1.3's pull. Until then, what 1.1 to 1.3 say to record
 goes in `notes\update.txt` (`notepad "$H\notes\update.txt"` opens it), and 1.2 keeps the commit in
 `notes\commit-before.txt`; at 1.4 you write 1.3's result in its row.
 
@@ -427,21 +432,24 @@ and the line `-NoPull: building what is checked out`; then each `== <step>` head
   here.
 - A refusal from the network at `== git fetch origin`, `== uv sync --all-extras` or `== dotnet
   build` (a web filter or proxy page in the output) is setup, not a defect: copy the lines into
-  `$H\notes\update.txt`, write `blocked by 1.3: network` in the Results table, and call the owner. A
-  download refused at `tokenizer fetch` is not a fail: run the third line again with
-  `-TokenizerFrom` and the owner's file.
+  `$H\notes\update.txt`, write `blocked by 1.3: network` under them (step 1.4 puts it in 1.3's
+  row), and call the owner. A download refused at `tokenizer fetch` is not a fail: run the third
+  line again with `-TokenizerFrom` and the owner's file.
 
 ### 1.4 Which build this is, and the findings document
 
 ```powershell
-git log --oneline -1; Test-Path docs\workstation-test-plan-2026-09-23.md
+git log --oneline -1; Test-Path docs\workstation-results-2026-09-23.md
+git merge-base --is-ancestor 8d308be HEAD; "holds 8d308be: $($LASTEXITCODE -eq 0)"
 git --version; dotnet --version; uv --version
 foreach ($k in 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') { if (Test-Path $k) { 'WebView2 ' + (Get-ItemProperty $k -Name pv).pv } }
 ```
 
-Pass: the second line prints `True` (the checkout holds this plan, so it is this build or a later
-one), and every other line prints a commit or a version. `False`: the update did not bring this
-plan (section 0.1, item 1): stop and call the owner. No `WebView2` line at all: write
+Pass: the second line prints `True` (the checkout holds the results sheet copied below), the
+third `holds 8d308be: True` (the probe names each dimension, as step 3.8 needs: this build or a
+later one), and every other line prints a commit or a version. `False` on either, or a line
+starting `fatal:` before the third: the update did not bring the build this plan needs (section
+0.1, item 1): stop and call the owner. No `WebView2` line at all: write
 `WebView2: not found in the registry` and go on; the pane's tabs showing at 1.6 is the real test.
 
 Then start the findings document, once:
@@ -455,8 +463,8 @@ This copies the results sheet the update brought into the handover folder as
 `pane-findings-<date>.md`, where the date is the handover folder's own date, the first day of the
 sitting, and opens it; run again, on day 2 or later, it only opens the document you are filling in.
 Pass: Notepad shows a document headed `# Workstation findings <date>`. A red `Cannot find path`
-naming `workstation-results-2026-09-23.md` means the checkout does not hold this plan: the second
-line of the block above printed `False`.
+naming `workstation-results-2026-09-23.md` means the checkout does not hold the results sheet:
+the second line of the block above printed `False`.
 
 Write 1.3's result in its row, then the commit and versions above at the top of the document
 (SOLIDWORKS's own version comes at 1.6), and anything `notes\update.txt` holds under the heading
@@ -936,11 +944,12 @@ view you clicked the callout in.
 - Exactly one line on that sheet has both your name and that value: found. Its id (`ddm:...`) is
   the callout's, and its D4, D5 and D6 lines are the ones with the same id.
 - Exactly one line on that sheet has your name, with another value: `not matched: value`, a fail.
-  Record its value.
+  Record its id; its value stays in the report (rule 5).
 - Otherwise (no line has your name, or several do and not exactly one of them has the value):
-  record every line on that sheet that has your name or that value, each by its id and value
-  (rule 5), and write `not decidable: <n> lines for callout <its number in notes\documents.txt>`.
-  Never pick one by its radius, which is the thing under test.
+  record the id of every line on that sheet that has your name or that value, never its name,
+  view or value (rule 5), and write
+  `not decidable: <n> lines for callout <its number in notes\documents.txt>`. Never pick one by
+  its radius, which is the thing under test.
 
 For a callout found:
 
@@ -959,10 +968,13 @@ that is not the one it must have, no attachment, any
 `no face the part's face phase described has this reference`, a radius that is not the named
 hole's, `FullName equal false`, `agree false`, a unit or decimals that are not the ones you named,
 or the part not read. Record: one line per callout: its number in `notes\documents.txt`, its id,
-`matched`, `not matched` or `not decidable`, and the answers that show it (never its name or view,
-rule 5). The value half of T066 is D8's `value`: the extraction's own reading of the dimension
-(`GetSystemValue3`), the nominal the product's drawing binding uses. **Change nothing**: the switch
-this decides is set on the development machine (section 3.10).
+`matched`, `not matched` or `not decidable`, and the answers that show it, each `true` or `false`:
+the value as it must be, the face a cylinder of half the named diameter, `FullName equal`,
+`agree`, the unit as named and the decimals as named. Never its name, view, value or radius
+(rule 5): the report in `$H\probes` keeps them for the development machine. The value half of
+T066 is D8's `value`: the extraction's own reading of the dimension (`GetSystemValue3`), the
+nominal the product's drawing binding uses. **Change nothing**: the switch this decides is set on
+the development machine (section 3.10).
 
 ### 3.9 The read-only open, probed [011 T077]
 

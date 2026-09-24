@@ -109,7 +109,7 @@ def test_the_runbooks_manual_steps_are_the_scripts(script: str) -> None:
 
     for step in (
         "uv run swreview tokenizer fetch",
-        "tokenizer fetch --from <file>",
+        'tokenizer fetch --from "<file>"',
         '$env:SWREVIEW_REQUIRE_TOKENIZER = "1"',
         'uv run pytest -q -m "not live"',
         "git stash push --include-untracked",

@@ -296,9 +296,10 @@ def test_the_plan_starts_the_findings_document_once_the_update_has_brought_the_s
     plan: str,
 ) -> None:
     """The engineer copies the sheet into the handover folder on day 1, under the name step 6
-    hands over, and fills it in as each step ends. A checkout older than the plan has no sheet
+    hands over, and fills it in as each step ends. A checkout older than the sheet has none
     until step 1.3's pull brings it, so the copy is made at step 1.4, after the check that the
-    checkout holds the plan; until then step 1 records in `notes\\update.txt`."""
+    checkout holds the sheet itself - the plan came first, so a checkout can hold the plan and
+    not the sheet; until then step 1 records in `notes\\update.txt`."""
     copy = r'Copy-Item "$R\docs\workstation-results-2026-09-23.md" $findings'
     step_1_4 = step(plan, "1.4")
     step_1 = plan[plan.index("## Step 1.") : plan.index("### 1.1 ")]
@@ -306,13 +307,74 @@ def test_the_plan_starts_the_findings_document_once_the_update_has_brought_the_s
     assert '$findings = "$H\\pane-findings-$(Split-Path $H -Leaf).md"' in plan
     assert plan.count(copy) == 1
     assert copy in step_1_4
-    assert step_1_4.index(r"Test-Path docs\workstation-test-plan-2026-09-23.md") < step_1_4.index(
+    assert step_1_4.index(r"Test-Path docs\workstation-results-2026-09-23.md") < step_1_4.index(
         copy
     )
+    assert r"Test-Path docs\workstation-test-plan-2026-09-23.md" not in plan
     assert plan.index("git pull --ff-only origin main") < plan.index(copy)
     assert plan.index("notepad $findings") > plan.index("### 1.4 ")
     assert r"notes\update.txt" in step_1
     assert "## Start the findings document" not in plan
+
+
+def test_steps_before_the_findings_document_record_in_the_update_notes(plan: str) -> None:
+    """Until step 1.4 starts the findings document there is no Results table to write in, so
+    what steps 1.1 to 1.3 record, a network refusal included, goes to `notes\\update.txt`."""
+    before = re.sub(r"\s+", " ", plan[plan.index("### 1.1 ") : plan.index("### 1.4 ")])
+
+    assert "Results table" not in before
+    assert r"`$H\notes\update.txt`, write `blocked by 1.3: network` under them" in before
+
+
+PROBE_NAMES_COMMIT = re.compile(r'git merge-base --is-ancestor ([0-9a-f]{7,40}) HEAD; "holds \1: ')
+"""Step 1.4's check that the build holds the commit from which the probe names each dimension."""
+
+
+def git(*args: str) -> subprocess.CompletedProcess[str]:
+    """`git` with `args`, run in the repository, its output captured."""
+    return subprocess.run(
+        ["git", *args], cwd=REPO, capture_output=True, text=True, timeout=60, check=False
+    )
+
+
+def named_dimension_line(probe_tests: str) -> list[str]:
+    """The D8 line of the fictional 10 mm hole that the extractor's probe tests expect, up to its
+    first `;`, as the report prints it; none before the probe named each dimension."""
+    expected = re.findall(
+        r'"(  ddm:0001 \(sheet 1, dvw:0002\): name \\"[^"\\]+\\", view \\"[^"\\]+\\", value '
+        r'10\.0000 mm;) "',
+        probe_tests,
+    )
+    return [line.replace('\\"', '"') for line in expected]
+
+
+PROBE_TESTS = "extractor/SwReview.Extractor.Tests/DrawingProbeTests.cs"
+
+
+def test_step_1_4_checks_for_the_first_build_whose_probe_names_each_dimension(
+    plan: str,
+) -> None:
+    """Step 3.8 finds a named callout by the name and value D6 and D8 print, and step 1.4
+    copies the results sheet; a build without either wastes the sitting. Section 0.1 names the
+    commit that has to be pushed, step 1.4 checks the seat's build holds it, and that commit is
+    the first to hold the named line, the sheet already there."""
+    [commit] = PROBE_NAMES_COMMIT.findall(step(plan, "1.4"))
+    handover = HANDOVER.read_text(encoding="utf-8")
+
+    assert f"`{commit}`" in step(plan, "0.1")
+    assert PROBE_NAMES_COMMIT.search(handover), "the handover's step 1 runs the same check"
+    if not (REPO / ".git").exists():
+        pytest.skip(f"{REPO} is not a git checkout, so {commit} cannot be read")
+    if git("cat-file", "-e", f"{commit}^{{commit}}").returncode != 0:
+        shallow = git("rev-parse", "--is-shallow-repository").stdout.strip() == "true"
+        if shallow:
+            pytest.skip(f"the checkout is shallow and does not hold {commit}")
+        pytest.fail(f"step 1.4 names {commit}, which this checkout does not hold")
+
+    assert git("merge-base", "--is-ancestor", commit, "HEAD").returncode == 0
+    assert git("cat-file", "-e", f"{commit}:docs/workstation-results-2026-09-23.md").returncode == 0
+    assert named_dimension_line(git("show", f"{commit}:{PROBE_TESTS}").stdout) != []
+    assert named_dimension_line(git("show", f"{commit}^:{PROBE_TESTS}").stdout) == []
 
 
 def test_a_blocked_item_3_at_step_3_5_costs_only_its_own_rows(plan: str, results: str) -> None:
@@ -349,20 +411,29 @@ def test_the_named_callouts_are_found_by_name_and_value_and_otherwise_not_decida
 
 def test_the_plans_named_dimension_line_is_the_probes_own(plan: str) -> None:
     """The line step 3.8 shows the engineer is D8's own line for the fictional 10 mm hole, as the
-    extractor's tests expect it, up to the first `;`; rule 5 keeps its name and view out of the
-    findings document."""
-    tests = (REPO / "extractor" / "SwReview.Extractor.Tests" / "DrawingProbeTests.cs").read_text(
-        encoding="utf-8"
-    )
-    [expected] = re.findall(
-        r'"(  ddm:0001 \(sheet 1, dvw:0002\): name \\"[^"\\]+\\", view \\"[^"\\]+\\", value '
-        r'10\.0000 mm;) "',
-        tests,
-    )
-    line = expected.replace('\\"', '"')
+    extractor's tests expect it, up to the first `;`; rule 5 keeps its name, view and value out
+    of the findings document."""
+    [line] = named_dimension_line((REPO / PROBE_TESTS).read_text(encoding="utf-8"))
 
     assert line in step(plan, "3.8")
-    assert 'never copy its `name "..."` or `view "..."`' in re.sub(r"\s+", " ", plan)
+    assert 'never copy its `name "..."`, `view "..."` or `value`' in re.sub(r"\s+", " ", plan)
+
+
+def test_no_value_of_a_named_dimension_goes_into_the_findings_document(plan: str) -> None:
+    """The owner commits the findings document to the public repository, and
+    `contracts/probes.md` section 1 lets no name or value from a D6 or D8 report into a tracked
+    file. So step 3.8 records a callout by its id and its answers as true or false - never its
+    value, nor its face's radius, which is half the value - and the handover says the same; the
+    report keeps them, in the handover folder."""
+    named = re.sub(r"\s+", " ", step(plan, "3.8"))
+    handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
+    sheet = re.sub(r"\s+", " ", RESULTS.read_text(encoding="utf-8"))
+
+    assert "Record its value" not in named
+    assert "each by its id and value" not in named
+    assert "Never its name, view, value or radius (rule 5)" in named
+    assert "never a dimension's name, view, value or radius" in handover
+    assert "never a dimension's name, view, value or radius" in sheet
 
 
 def test_the_plan_never_lets_the_update_script_pull(plan: str) -> None:
@@ -392,7 +463,8 @@ FENCED = re.compile(r"^\s*```[a-z]*\n(.*?)^\s*```", re.MULTILINE | re.DOTALL)
 INLINE_CODE = re.compile(r"`([^`]+)`")
 COMMAND = re.compile(
     r"^(?:swreview-extract |uv run |cmd /c |dotnet |git |\.\\extractor\\|New-Item |\(Get-Item |"
-    r"Get-Content |Select-String |Show-|Set-Alias |Copy-Item |Remove-Item |\$env:|if \()"
+    r"Get-Content |Select-String |Show-|Set-Alias |Copy-Item |Remove-Item |\$env:|if \(|"
+    r"powershell -|update-workstation\.ps1 -|register-addin\.ps1 -)"
 )
 PROBES = re.compile(r"--probe (D[0-9]+(?:,D[0-9]+)*)")
 
@@ -635,19 +707,20 @@ def test_the_documents_list_names_each_document_by_its_id(plan: str) -> None:
     assert f"{package.documents[-1].document_id} drawing " in lines[-1] + " "
 
 
-@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
-def test_every_powershell_block_parses(plan: str, tmp_path: Path) -> None:
-    blocks = POWERSHELL_BLOCK.findall(plan)
-    assert len(blocks) >= 20
-    for index, block in enumerate(blocks):
-        (tmp_path / f"block-{index:02d}.ps1").write_text(block, encoding="utf-8-sig")
+def powershell_parse_errors(sources: dict[str, str], folder: Path) -> str:
+    """Each parse error Windows PowerShell finds in `sources` (a file name to its script), as
+    `<file name> line <n>: <message> :: <that line>`, one per line; empty when every one
+    parses."""
+    for name, source in sources.items():
+        (folder / f"{name}.ps1").write_text(source, encoding="utf-8-sig")
     command = (
-        f"Get-ChildItem '{tmp_path}' -Filter block-*.ps1 | Sort-Object Name | ForEach-Object {{ "
+        f"Get-ChildItem '{folder}' -Filter *.ps1 | Sort-Object Name | ForEach-Object {{ "
         "$errors = $null; "
         "[void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, "
         "[ref]$null, [ref]$errors); "
         "$errors | ForEach-Object { \"$($_.Extent.File | Split-Path -Leaf) line "
-        "$($_.Extent.StartLineNumber): $($_.Message)\" } }"
+        "$($_.Extent.StartLineNumber): $($_.Message) :: $($_.Extent.StartScriptPosition.Line)\" "
+        "} }"
     )
     completed = subprocess.run(
         ["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
@@ -658,4 +731,33 @@ def test_every_powershell_block_parses(plan: str, tmp_path: Path) -> None:
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout.strip() == ""
+    return completed.stdout.strip()
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_every_powershell_block_parses(plan: str, tmp_path: Path) -> None:
+    blocks = POWERSHELL_BLOCK.findall(plan)
+    assert len(blocks) >= 20
+
+    assert powershell_parse_errors(
+        {f"block-{index:02d}": block for index, block in enumerate(blocks)}, tmp_path
+    ) == ""
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_every_command_written_in_the_text_parses(tmp_path: Path) -> None:
+    """A command written inline in the plan, the handover or the runbook is pasted as it stands,
+    so it must parse too: a placeholder outside quotes (`--from <file>`) is a parse error."""
+    documents = {
+        "plan": PLAN,
+        "handover": HANDOVER,
+        "runbook": REPO / "docs" / "workstation-runbook.md",
+    }
+    spans = {
+        f"{name}-{index:03d}": span
+        for name, path in documents.items()
+        for index, span in enumerate(inline_commands(path.read_text(encoding="utf-8")))
+    }
+    assert len(spans) >= 70
+
+    assert powershell_parse_errors(spans, tmp_path) == ""
