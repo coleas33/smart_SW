@@ -223,7 +223,7 @@ description: "Task list for checks-first review and the token budget"
 - [ ] T103 [W] [K] A pane review of the 810-11249 assembly with the defaults: input tokens at most 1.5 times the replay's estimate for `small-assembly-a` and at most 0.3M; findings at least the recorded ones (SC-010) (quickstart Scenario 13)
 - [ ] T104 [W] [K] On T102's run folder: press Retry and confirm `package.json`'s row and gap counts do not grow and the same groups are judged; record the `POST /sessions` duration and the seconds from `session.started` to the first `text.delta`, which decide research R5's setup-latency item (quickstart Scenario 14)
 - [ ] T105 [W] Copy the sitting's run folders back to the development machine (outside the repository) and replay each: pass A within 1% on every round, every unreproducible call `stored` rather than estimated; record the paid figures beside the replay's in `docs/llm-efficiency-options.md` and research R5 (quickstart Scenario 15)
-- [ ] T106 [W] [K] With a Gemini key: `tests/live/test_gemini_live_function_response.py` green after the per-round rebuild of `contents` and pruning (research R2.29)
+- [ ] T106 [W] [K] With a Gemini key: `tests/live/test_gemini_live_function_response.py` green after the per-round rebuild of `contents` and pruning (research R2.29). *Amended 2026-09-23 (T122, on review: a skip also exits 0)*: from `reviewer\`, the key set for this one shell and cleared after - `$env:GEMINI_API_KEY = '<key>'; uv run pytest tests/live/test_gemini_live_function_response.py -m live -rs -p no:warnings; Remove-Item Env:GEMINI_API_KEY` - and green means `1 passed` with no `SKIPPED` line. A skip (no key in the shell, a 401, 403, 404, 429 or 5xx, or no function call returned) proves nothing: record it as not run, with the reason the `-rs` line gives. A refused key (`API_KEY_INVALID`) or a connection the web filter blocks fails with its own sentence, not as a rejected round; only a failure beginning `the forced tool call was rejected` or `a role="tool" function response was rejected` is the protocol failure this task looks for. The key is never written to a file (runbook section 2)
 
 ---
 
@@ -274,6 +274,14 @@ Re-measured on main after the four lanes of 2026-09-23 merged (feature 008 US4 a
 
 **Checkpoint**: a deliberate change regenerates the fixtures and keeps SC-001's 1%; the real recordings prove the replay's accounting to the token whatever the code returns.
 
+
+---
+
+## Phase 11: Amendment 2026-09-23 (review of seat readiness): the sitting's tools say what they proved
+
+**Goal**: every seat task of Phase 8 has a command whose pass cannot be mistaken for a skip, and the update script's gate is the development machine's.
+
+- [x] T122 [P] *Added 2026-09-23 (review finding against T106)*: write `reviewer/tests/unit/test_gemini_live_outcomes.py` (red: `tests/support/gemini_live.py` does not exist) and `reviewer/tests/support/gemini_live.py` (`call_outcome(error, claim=)` and `Outcome`): a `400` naming `API_KEY_INVALID` in its `google.rpc.ErrorInfo` details fails as a refused key, never as the claim; any other `400`, with or without details, fails as the claim with the body quoted; `401`, `403`, `404` and `429` skip with the code; a `5xx` skips; an `httpx.TransportError` (connect, timeout, read) fails as a network that never reached the API; anything else fails naming its class. `tests/live/test_gemini_live_function_response.py` catches `errors.APIError` and `httpx.TransportError` at both calls and settles through `call_outcome`; T106 gains its command and its pass condition. Acceptance: red, then green; run once here with a deliberately invalid key, the live test failed with the refused-key sentence *Landed as* (2026-09-23): as written
 ---
 
 ## Dependencies & Execution Order
@@ -290,6 +298,7 @@ Re-measured on main after the four lanes of 2026-09-23 merged (feature 008 US4 a
 - **Phase 8**: after Polish, at the next sitting; T101 first
 - **Phase 9 (amendment)**: after US3 (the guard, the view and pruning exist); T108 after T107; T110 after T109 and T108; T112 after T111 and T110; T114 after T113; T115 after T110; T116 after T110, T112 and T114
 - **Phase 10 (amendment, decision 3A)**: after Phase 9; T118 after T117; T120 after T119; T121 after T118, T120 and feature 010 T098, T099 and T108 (the change that makes the fixtures drift)
+- **Phase 11 (amendment, seat readiness)**: before the sitting (Phase 8); T122 before T106
 
 ### Task-level dependencies
 
