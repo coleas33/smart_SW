@@ -18,6 +18,7 @@ the package the host's `PackageAppender.MergeDrawing` would leave in the run fol
 
 from __future__ import annotations
 
+import json
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -27,7 +28,7 @@ import pytest
 
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import ReviewRun, answers_message, start_review
-from swreview.bridge.client import BridgeError
+from swreview.bridge.client import BridgeClient, BridgeError
 from swreview.checks.drawing_context import CANDIDATE_CONFIRM, CANDIDATE_OPTIONS
 from swreview.ir.loader import load_package, save_package
 from swreview.ir.models import EvidencePackage
@@ -390,6 +391,61 @@ def test_a_package_that_cannot_be_reloaded_leaves_the_read_unresolved_naming_why
     assert bucket == "unresolved"
     assert reason.startswith("opened read-only, read and closed (1 sheet); but the package in the "
                              "run folder could not be reloaded:")
+
+
+class RefusingHost:
+    """The add-in's pipe as the shipped state answers it: every `drawing.read` refused with the
+    not-validated sentence (`DrawingOpenScope.SeatValidated` is false), every `ping` answered."""
+
+    def __init__(self) -> None:
+        self.commands: list[str] = []
+
+    def request(self, line: str) -> str:
+        request = json.loads(line)
+        self.commands.append(request["command"])
+        if request["command"] == "drawing.read":
+            return json.dumps({"id": request["id"], "status": "error", "result": None,
+                               "error": NOT_VALIDATED_BY_THE_HOST, "elapsed_ms": 1})
+        return json.dumps({"id": request["id"], "status": "ok", "result": {"pong": True},
+                           "error": None, "elapsed_ms": 1})
+
+    def close(self) -> None:
+        pass
+
+
+def test_refused_candidates_leave_the_real_bridge_client_working(tmp_path: Path) -> None:
+    """Four refusals through the real `BridgeClient`: each candidate is asked and records the
+    host's own sentence, and the bridge is still there for the rest of the review - a refusal is
+    a definite answer from a healthy host, never a failure the circuit breaker counts."""
+    package = candidates_package(4)
+    parts = [item.document_id for item in package.drawing_candidates]
+    folder = tmp_path / "run-0001"
+    save_package(package, folder)
+    host = RefusingHost()
+    client = BridgeClient(transport=host)
+    run = start_review(
+        folder,
+        folder,
+        provider=FakeProvider(
+            script=[
+                ScriptedTurn(text="asked", tool_calls=(ScriptedToolCall("check_drawings"),)),
+                ScriptedTurn(text="resumed"),
+            ],
+            model="fake-scripted",
+        ),
+        bridge=True,
+        bridge_factory=lambda pipe, secret: client,
+    )
+    run.start()
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    assert host.commands == ["drawing.read"] * 4
+    reasons = confirmed(run)
+    assert [reasons[part][0] for part in parts] == ["unresolved"] * 4
+    assert all(NOT_VALIDATED_BY_THE_HOST in reasons[part][1] for part in parts)
+    assert not client.circuit_open
+    assert client.ping() == {"pong": True}
 
 
 def test_the_function_acts_only_on_the_confirmed_candidate_question(tmp_path: Path) -> None:

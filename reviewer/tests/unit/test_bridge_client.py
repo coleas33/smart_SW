@@ -34,10 +34,12 @@ from swreview.bridge.client import (
     CIRCUIT_LIMIT,
     COMMANDS,
     PROTOCOL_VERSION,
+    REFUSING_COMMANDS,
     BridgeClient,
     BridgeDocumentClosedError,
     BridgeError,
     BridgeOpenError,
+    BridgeRefusedError,
     BridgeUnauthorizedError,
 )
 
@@ -551,6 +553,97 @@ def test_a_closed_document_neither_counts_nor_clears_a_solidworks_failure() -> N
     with pytest.raises(BridgeError):
         bridge.ping()
     assert bridge.circuit_open
+
+
+# --- a drawing.read the host refused (feature 011) --------------------------------------
+
+NOT_VALIDATED = (
+    "the read-only open of a confirmed drawing is not yet validated on a seat (feature 011 "
+    "probe D14)"
+)
+
+
+def test_a_refused_drawing_read_is_a_named_failure_carrying_the_hosts_sentence() -> None:
+    bridge, _ = client(failed("1", NOT_VALIDATED), secret="s")
+
+    with pytest.raises(BridgeRefusedError) as caught:
+        bridge.drawing_read("run-0001", "doc:0003")
+
+    assert isinstance(caught.value, BridgeError)
+    assert NOT_VALIDATED in str(caught.value)
+
+
+def test_refused_drawing_reads_never_open_the_circuit() -> None:
+    """Every refusal is a definite answer from a healthy host - the ten-drawing bound, the seat
+    switch, a candidate no longer beside its document - so a review whose engineer confirmed
+    four candidates still has its bridge afterwards (`contracts/confirmed-open.md` section 1:
+    nothing else in the session changes)."""
+    bridge, transport = client(
+        *[failed(str(index + 1), NOT_VALIDATED) for index in range(4)],
+        ok("5", {"pong": True}),
+        secret="s",
+    )
+
+    for number in range(4):
+        with pytest.raises(BridgeRefusedError):
+            bridge.drawing_read("run-0001", f"doc:000{number + 1}")
+
+    assert not bridge.circuit_open
+    assert bridge.ping() == {"pong": True}
+    assert len(transport.requests) == 5
+
+
+def test_a_refused_drawing_read_neither_counts_nor_clears_a_solidworks_failure() -> None:
+    bridge, _ = client(
+        failed("1", "COM failure"),
+        failed("2", "COM failure"),
+        failed("3", NOT_VALIDATED),
+        failed("4", "COM failure"),
+        secret="s",
+    )
+
+    for _ in range(2):
+        with pytest.raises(BridgeError):
+            bridge.ping()
+    with pytest.raises(BridgeRefusedError):
+        bridge.drawing_read("run-0001", "doc:0003")
+    assert not bridge.circuit_open
+
+    with pytest.raises(BridgeError):
+        bridge.ping()
+    assert bridge.circuit_open
+
+
+def test_a_drawing_read_the_host_never_answered_still_counts() -> None:
+    """Only an answer is a refusal: a dead pipe is the failure the breaker exists for."""
+    bridge, _ = client(fail_with=OSError("the pipe is broken"), secret="s")
+
+    for _ in range(CIRCUIT_LIMIT):
+        with pytest.raises(BridgeError) as caught:
+            bridge.drawing_read("run-0001", "doc:0003")
+        assert not isinstance(caught.value, BridgeRefusedError)
+
+    assert bridge.circuit_open
+
+
+def test_an_unauthorized_drawing_read_still_opens_the_circuit_at_once() -> None:
+    bridge, _ = client(failed("1", "unauthorized"), secret="general-chat")
+
+    with pytest.raises(BridgeUnauthorizedError):
+        bridge.drawing_read("run-0001", "doc:0003")
+
+    assert bridge.circuit_open
+
+
+def test_an_error_answer_to_any_other_command_is_not_a_refusal() -> None:
+    """The refusal is `drawing.read`'s alone: a failed measure still counts toward three."""
+    bridge, _ = client(failed("1", "SOLIDWORKS could not measure"), secret="s")
+
+    with pytest.raises(BridgeError) as caught:
+        bridge.measure("YWJj", "ZGVm")
+
+    assert not isinstance(caught.value, BridgeRefusedError)
+    assert REFUSING_COMMANDS == ("drawing.read",)
 
 
 def test_the_secret_is_carried_next_to_the_pipe_name() -> None:

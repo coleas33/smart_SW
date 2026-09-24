@@ -44,16 +44,18 @@ exception (`BridgeError.result`) and `swreview.tools.bridge` appends it to the p
 `gaps`: the request is visible as something extraction could not provide rather than being
 lost with the error message.
 
-## The two refusals the in-process host makes
+## The three refusals the host makes
 
-`BridgeError` has two named subclasses, so the tool layer can say which refusal happened
-instead of only that the bridge said no. Both are `BridgeError`, so a caller that catches
-the base type cannot crash on either, and both become `failed` coverage the same way.
+`BridgeError` has three named subclasses, so the tool layer can say which refusal happened
+instead of only that the bridge said no. All are `BridgeError`, so a caller that catches
+the base type cannot crash on any of them, and each becomes `failed` coverage (or, for
+`drawing.read`, an `unresolved` confirmed-open item) the same way.
 
 | Host answer | Raised | Effect on the breaker |
 |-------------|--------|-----------------------|
 | `error` whose text starts with `unauthorized` | `BridgeUnauthorizedError` | Opens the circuit at once |
 | `error` whose text contains `no longer open` | `BridgeDocumentClosedError` | None: the count is left exactly where it was |
+| any other `error` answer to `drawing.read` (`REFUSING_COMMANDS`) | `BridgeRefusedError` | None: the count is left exactly where it was |
 
 A refused secret never becomes accepted and every attempt is logged on the host side, so
 two more round trips to reach `CIRCUIT_LIMIT` would buy nothing: the circuit opens on the
@@ -67,10 +69,18 @@ failed coverage" - a breaker message in its place would hide why the bridge went
 The match is on `no longer open` as a case-insensitive substring, so the contract's
 sentence and a fuller one around it are both recognised.
 
+A refused `drawing.read` (feature 011) is the same kind of answer: the host resolves the run,
+the package and the drawing from its own records and refuses, with a sentence, whatever it
+cannot do - the seat switch, the ten-drawing bound, a candidate no longer beside its
+document. The backend asks once per confirmed candidate, so counting those sentences would
+let four refused candidates close the bridge for the rest of the review (found on review,
+2026-09-23). A `drawing.read` the host never answered - a dead pipe, a timeout, a line out of
+step - is still counted like any other.
+
 ## Circuit breaker
 
 `status: "circuit_open"` from the host, or `CIRCUIT_LIMIT` (3) consecutive failures of any
-kind, opens the circuit locally: every further call raises `BridgeOpenError` naming the
+kind but the two uncounted refusals above, opens the circuit locally: every further call raises `BridgeOpenError` naming the
 last error without touching the pipe. The host does not recover without a restart, and the
 review is better off continuing offline with honest `failed` coverage. One success resets
 the count (a local trip only - a host that answered `circuit_open` will keep doing so).
