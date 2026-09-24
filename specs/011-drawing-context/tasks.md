@@ -243,7 +243,7 @@ description: "Task list for the read-only drawing context"
 
 ## Phase 11: The next workstation sitting
 
-Every probe below is one run of `swreview-extract probe drawings --out <folder> [--doc <open drawing or model>] --probe <ids>` (T081, `contracts/probes.md` section 1): the drawing probes on the open drawing, D2 on any open document, D13 and D14 beside the part or assembly. Each run writes `drawings-probe-<UTC time>.txt` in the folder; those files are the record to bring back in the handoff, and they name no file, path or value.
+Every probe below is one run of `swreview-extract probe drawings --out <folder> [--doc <open drawing or model>] --probe <ids>` (T081, `contracts/probes.md` section 1): the drawing probes on the open drawing, D2 on any open document, D13 and D14 beside the part or assembly. Each run writes `drawings-probe-<UTC time>.txt` in the folder; those files are the record to bring back in the handoff, and they name no file or path, and no name or value but the dimension names, view names and values D6 and D8 print so that a named callout can be found (`contracts/probes.md` section 1, amended 2026-09-24), which keeps those reports out of the repository.
 
 **Who sets a switch.** The seat records and commits nothing but a findings document (`docs/workstation-runbook.md` rule 2). `DRAWING_BINDING_VALIDATED` (T066) and `DrawingOpenScope.SeatValidated` (T077) are set on the development machine once the probe records come back, each in a commit of its own whose only other edit is the one test that reads the shipped value; what can only be seen with a switch on is T095, at the sitting after that.
 

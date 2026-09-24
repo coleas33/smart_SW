@@ -26,6 +26,21 @@ the default selection is every other probe that applies, so a run nobody asked t
 opens nothing. A named document that is not open is refused before anything is read, and the
 report says so without its path; a stop's full message goes to stderr only.
 
+*Amended 2026-09-24 (T066: a named callout must be findable)*: with ids alone the engineer could
+not tell which line was "the 10 mm hole callout", so T066 would come back not decidable. D6's and
+D8's **dimension lines** now also give, after the id and the sheet, the dimension's name up to its
+feature, its view's name and its value -
+`name "D1@Sketch2", view "Drawing View1", value 10.0000 mm;` - each `unread` when the extraction
+did not read it. The name is the first two `@` segments of `IDimension.FullName`, stopping before
+any segment that is a document name, so the file the dimension belongs to is never named; the value
+is `IDimension.GetSystemValue3` in millimetres, or degrees for an angle, to four decimals. All three
+are what the Standards extraction already read through its guarded reads (`IDimension.FullName`,
+`IView.GetName2`, `GetSystemValue3`): the probe adds no read and no writer. Because those lines
+carry design names and values, a report with a D6 or D8 section stays in the handoff folder,
+outside the repository, like the run folders; the development machine copies only its ids, counts
+and answers into research R4, and no name or value from it enters a tracked file or a fixture.
+Every other line keeps the rule above.
+
 ## 2. The sections
 
 | Probe | Run on | Prints | Recorded in |
@@ -35,9 +50,9 @@ report says so without its path; a stop's full message goes to stderr only.
 | D3 | a six-sheet drawing, sheet 3 active | `IDrawingDoc.GetViews` per sheet: view count and view types; the same from `ISheet.GetViews`; the active sheet before and after | R4, 006 T103 |
 | D4 | a drawing with dimensions at their own precision and at the document's | per dimension: `GetPrimaryPrecision2`, `GetPrimaryTolPrecision2`, `GetUseDocPrecision`, `GetUnits`, `GetUseDocUnits`; the document's preferences 24, 25, 47, 49 | R4, `drawing-source.md` section 2 |
 | D5 | a drawing with a model-item and a reference dimension on one hole | per dimension: `Tolerance.Type`, min, max, fit classes; the part's own `ModelDimension` reading of the same dimension | R4 |
-| D6 | a part drawing and an assembly drawing of one part, with a diameter, a hole callout and a GTol on known holes | per annotation: the attached entity count and types; per entity the corresponding model entity's type; whether its persistent reference from the owning part equals the face phase's reference for the known face (a boolean and the face id, never the bytes) | R4, T066 |
+| D6 | a part drawing and an assembly drawing of one part, with a diameter, a hole callout and a GTol on known holes | per annotation: the attached entity count and types; per entity the corresponding model entity's type; whether its persistent reference from the owning part equals the face phase's reference for the known face (a boolean and the face id, never the bytes); per dimension also its name, view name and value (section 1, amended 2026-09-24) | R4, T066 |
 | D7 | a counterbore callout | `IsHoleCallout`, the callout variables' count and names, `GetText(1..4)` lengths, and whether any read returns the whole rendered text (its length) | R4 |
-| D8 | the D5 drawing | the model item's `FullName` shape (the part before `@`, the suffix's form) against the part's | R4, T066 |
+| D8 | the D5 drawing | per dimension its name, view name and value (section 1, amended 2026-09-24); the model item's `FullName` shape (the part before `@`, the suffix's form) against the part's | R4, T066 |
 | D9 | a drawing with GTols, datums and surface-finish symbols | frame counts, symbol and value slot counts, datum label lengths, surface-finish text slot counts | R4 |
 | D10 | a drawing with one table of each kind | per table: type, row and column counts, readable cell count; per bill-of-materials row: model path count and how many are open documents | R4 |
 | D11 | the D1 drawing | `GetProperties2` items, `GetTemplateName` present or not, preferences 13, 47, 65 answered or not | R4 |
@@ -76,7 +91,10 @@ report says so without its path; a stop's full message goes to stderr only.
   opened. D5 and D8 pair a drawing dimension with the model dimension of the same
   `dimension@feature` (the first two `@` segments; none, or several, is said); D8 prints each full
   name's shape - its segment count, `default D<n>` or `renamed (<n> characters)`, and whether the
-  last segment is a document name naming the view's document - never the name. D6 ties an attached
+  last segment is a document name naming the view's document - never the whole name. *Amended
+  2026-09-24*: D6's and D8's dimension lines also give the name up to its feature, the view's name
+  and the value (section 1; `ProbeText.DimensionName`, `ProbeText.Quoted`, `ProbeText.Nominal`),
+  never a document segment. D6 ties an attached
   face to the part's face phase by persistent reference **and** document id, printing the face id,
   its kind and a cylinder's radius; the face phase describes the faces holes, mates and fasteners
   name.

@@ -24,8 +24,10 @@ namespace SwReview.Extractor.Tests;
 /// confirmed open's own seam and drawing phase - so the seat only has to supply the answers.
 ///
 /// Three rules run through every test: a probe prints ids, counts, member answers, enum numbers
-/// and millimetres, never a name, path, note, cell or property value; a read that fails is a line
-/// and the run goes on; and nothing is opened except by D14, and only when it is named.
+/// and millimetres, never a path, note, cell or property value, and no name but the
+/// <c>dimension@feature</c>, view name and value D6 and D8 print on a dimension's line; a read that
+/// fails is a line and the run goes on; and nothing is opened except by D14, and only when it is
+/// named.
 /// </summary>
 public class DrawingProbeTests : IDisposable
 {
@@ -589,9 +591,11 @@ public class DrawingProbeTests : IDisposable
                 "D6: annotation attachments, against the part's face phase",
                 "  run on: a part drawing and an assembly drawing of one part, with a diameter, a hole callout and a GTol on known holes",
                 $"  the part's own extraction: {PartIdText} read, 2 model dimensions, 2 faces",
-                "  ddm:0001 (dimension, sheet 1, dvw:0002): attached faces 1 (via face 1, via edge 0), attachment gaps 0",
+                "  ddm:0001 (dimension, sheet 1, dvw:0002): name \"D1@Sketch1\", view \"Drawing View2\", value 10.0000 mm; "
+                    + "attached faces 1 (via face 1, via edge 0), attachment gaps 0",
                 $"    face 1 of {PartIdText}: the part's face phase fac:0001 (cylinder, radius 5.0000 mm)",
-                "  ddm:0002 (dimension, sheet 1, dvw:0002): attached faces 2 (via face 0, via edge 2), attachment gaps 1",
+                "  ddm:0002 (dimension, sheet 1, dvw:0002): name \"MyBore@Cut-Extrude1\", view \"Drawing View2\", value unread; "
+                    + "attached faces 2 (via face 0, via edge 2), attachment gaps 1",
                 $"    face 1 of {PartIdText}: the part's face phase fac:0002 (plane)",
                 $"    face 2 of {PartIdText}: no face the part's face phase described has this reference",
                 "  dan:0001 (annotation type 5, sheet 1, dvw:0002): attached faces 1 (via face 1, via edge 0), attachment gaps 0",
@@ -627,7 +631,7 @@ public class DrawingProbeTests : IDisposable
     }
 
     [Fact]
-    public void D8_PrintsEachFullNamesShapeBesideThePartsNeverTheNameItself()
+    public void D8_PrintsEachDimensionsNameViewAndValueAndItsFullNamesShapeBesideThePartsNeverItsDocument()
     {
         Assert.Equal(
             new[]
@@ -635,9 +639,11 @@ public class DrawingProbeTests : IDisposable
                 "D8: dimension full names, against the part's",
                 "  run on: the D5 drawing",
                 $"  the part's own extraction: {PartIdText} read, 2 model dimensions, 2 faces",
-                "  ddm:0001 (sheet 1, dvw:0002): FullName 3 segments, default D1, document suffix .SLDPRT naming the view's document true",
+                "  ddm:0001 (sheet 1, dvw:0002): name \"D1@Sketch1\", view \"Drawing View2\", value 10.0000 mm; "
+                    + "FullName 3 segments, default D1, document suffix .SLDPRT naming the view's document true",
                 "    the part: mdm:0001 FullName 3 segments, default D1, document suffix .SLDPRT naming the part true; FullName equal true",
-                "  ddm:0002 (sheet 1, dvw:0002): FullName 3 segments, renamed (6 characters), document suffix .SLDPRT naming the view's document true",
+                "  ddm:0002 (sheet 1, dvw:0002): name \"MyBore@Cut-Extrude1\", view \"Drawing View2\", value unread; "
+                    + "FullName 3 segments, renamed (6 characters), document suffix .SLDPRT naming the view's document true",
                 "    the part: mdm:0002 FullName 2 segments, renamed (6 characters), no document suffix; FullName equal false",
             },
             RunOnDrawing("D8"));
@@ -655,8 +661,67 @@ public class DrawingProbeTests : IDisposable
 
         IReadOnlyList<string> lines = Section(RunOnDrawing("D8"), "D8");
 
-        Assert.Contains("  ddm:0001 (sheet 1, dvw:0002): FullName unread", lines);
+        Assert.Contains("  ddm:0001 (sheet 1, dvw:0002): name unread, view \"Drawing View2\", value 10.0000 mm; FullName unread", lines);
         Assert.Contains("    the part: not compared (the dimension's name was not read)", lines);
+    }
+
+    [Fact]
+    public void D6AndD8_ADimensionWhoseNameViewAndValueWereNotReadSaysEachUnread()
+    {
+        _build = options =>
+        {
+            EvidencePackage package = DrawingPackage();
+            DrawingView view = package.DrawingRecords![0].Sheets[0].Views[1];
+            view.Name = null;
+            view.DisplayDimensions[0].Name = "   ";
+            view.DisplayDimensions[0].Value = null;
+            return package;
+        };
+
+        IReadOnlyList<string> lines = RunOnDrawing("D6", "D8");
+
+        Assert.Contains(
+            "  ddm:0001 (dimension, sheet 1, dvw:0002): name unread, view unread, value unread; "
+                + "attached faces 1 (via face 1, via edge 0), attachment gaps 0",
+            Section(lines, "D6"));
+        Assert.Contains(
+            "  ddm:0001 (sheet 1, dvw:0002): name unread, view unread, value unread; FullName unread",
+            Section(lines, "D8"));
+    }
+
+    [Fact]
+    public void D6AndD8_TheNameViewAndValueAreTheExtractionsWithNoReadOfTheirOwn()
+    {
+        RunOnDrawing("D6", "D8");
+
+        Assert.Empty(_reads.Calls);
+        Assert.Single(_builds);
+        Assert.Single(_modelBuilds);
+        Assert.Empty(_host.Seam.Calls);
+    }
+
+    [Fact]
+    public void D6AndD8_AnAngleIsInDegreesAndANameKeepsOnlyItsDimensionAndFeature()
+    {
+        _build = options =>
+        {
+            EvidencePackage package = DrawingPackage();
+            DisplayDimensionRecord dimension = package.DrawingRecords![0].Sheets[0].Views[1].DisplayDimensions[0];
+            dimension.Name = "D3@Sketch1@PRIVATE-knuckle.SLDPRT@PRIVATE-spigot.SLDASM";
+            dimension.Value = new IrMeasure(Math.PI / 2, "rad");
+            return package;
+        };
+
+        IReadOnlyList<string> lines = RunOnDrawing("D6", "D8");
+
+        Assert.Contains(
+            "  ddm:0001 (sheet 1, dvw:0002): name \"D3@Sketch1\", view \"Drawing View2\", value 90.0000 deg; "
+                + "FullName 4 segments, default D3, document suffix .SLDASM naming the view's document false",
+            Section(lines, "D8"));
+        Assert.Contains(
+            "  ddm:0001 (dimension, sheet 1, dvw:0002): name \"D3@Sketch1\", view \"Drawing View2\", value 90.0000 deg; "
+                + "attached faces 1 (via face 1, via edge 0), attachment gaps 0",
+            Section(lines, "D6"));
     }
 
     // ---- D7, D9, D10, D11, D12 -------------------------------------------------------------------
@@ -1071,7 +1136,7 @@ public class DrawingProbeTests : IDisposable
     // ---- public-repo hygiene ------------------------------------------------------------------
 
     [Fact]
-    public void NoProbePrintsAPathANameANoteACellAPropertyValueOrAReference()
+    public void NoProbePrintsAPathANoteACellAPropertyValueOrAReferenceAndOnlyD6AndD8ADimensionsName()
     {
         _open.Add(DocumentKind.Part, PartPath);
         _open.Add(DocumentKind.Drawing, DrawingPath, PartPath, OtherPartPath);
@@ -1088,6 +1153,30 @@ public class DrawingProbeTests : IDisposable
         {
             Assert.DoesNotContain(lines, line => line.IndexOf(forbidden, StringComparison.Ordinal) >= 0);
         }
+
+        // D6 and D8 print a dimension's dimension@feature and its view's name on the dimension's own
+        // line, so the engineer can find a named callout; no other line carries either.
+        string section = string.Empty;
+        var named = new List<(string Section, string Line)>();
+        foreach (string line in lines)
+        {
+            if (!line.StartsWith(" ", StringComparison.Ordinal))
+            {
+                section = line.Substring(0, line.IndexOf(':'));
+            }
+            else if (NamedOnDimensionLines().Any(name => line.IndexOf(name, StringComparison.Ordinal) >= 0))
+            {
+                named.Add((section, line));
+            }
+        }
+
+        Assert.Contains(named, row => row.Section == "D6");
+        Assert.Contains(named, row => row.Section == "D8");
+        Assert.All(named, row =>
+        {
+            Assert.Contains(row.Section, new[] { "D6", "D8" });
+            Assert.StartsWith("  ddm:", row.Line, StringComparison.Ordinal);
+        });
     }
 
     // ---- the report ---------------------------------------------------------------------------
@@ -1177,6 +1266,43 @@ public class DrawingProbeTests : IDisposable
     public void ALimitIsPrintedInMillimetresOrDegrees(double value, string unit, string expected)
     {
         Assert.Equal(expected, ProbeText.Limit(new IrMeasure(value, unit)));
+    }
+
+    [Theory]
+    [InlineData(0.01, "m", "10.0000 mm")]
+    [InlineData(10.0, "mm", "10.0000 mm")]
+    [InlineData(0.5, "in", "12.7000 mm")]
+    [InlineData(-0.002, "m", "-2.0000 mm")]
+    [InlineData(90.0, "deg", "90.0000 deg")]
+    [InlineData(Math.PI / 2, "rad", "90.0000 deg")]
+    public void ADimensionsValueIsPrintedInMillimetresOrDegreesSignedOnlyWhenNegative(
+        double value, string unit, string expected)
+    {
+        Assert.Equal(expected, ProbeText.Nominal(new IrMeasure(value, unit)));
+    }
+
+    [Theory]
+    [InlineData("D1@Sketch1@PRIVATE-knuckle.SLDPRT", "D1@Sketch1")]
+    [InlineData("MyBore@Cut-Extrude1", "MyBore@Cut-Extrude1")]
+    [InlineData("RD1@Drawing View1", "RD1@Drawing View1")]
+    [InlineData("D2@Sketch3@Sub@PRIVATE-spigot.SLDASM", "D2@Sketch3")]
+    [InlineData("D1@PRIVATE-knuckle.sldprt", "D1")]
+    [InlineData("D1", "D1")]
+    [InlineData("PRIVATE-knuckle.SLDDRW", null)]
+    [InlineData("@Sketch1", null)]
+    [InlineData("   ", null)]
+    [InlineData(null, null)]
+    public void ADimensionsNameIsItsDimensionAndFeatureNeverADocument(string? fullName, string? expected)
+    {
+        Assert.Equal(expected, ProbeText.DimensionName(fullName));
+    }
+
+    [Fact]
+    public void AQuotedNameIsInDoubleQuotesAndAnUnreadOneSaysSo()
+    {
+        Assert.Equal("\"Drawing View1\"", ProbeText.Quoted("Drawing View1"));
+        Assert.Equal("unread", ProbeText.Quoted(null));
+        Assert.Equal("unread", ProbeText.Nominal(null));
     }
 
     [Fact]
