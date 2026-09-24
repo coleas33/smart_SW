@@ -153,8 +153,8 @@ PRERUN_INTERFERENCE_SETTINGS: dict[str, Any] = {
     "fastener_folder_treatment": "include",
 }
 """The detection settings the live call states, all five: exactly what the model chose on
-the recorded 830 run, so the pre-run reproduces its groups and keeps every recorded finding
-reachable (research R2.17). Every row carries them, and the digest line prints them."""
+the big assembly's recorded run, so the pre-run reproduces its groups and keeps every recorded
+finding reachable (research R2.17). Every row carries them, and the digest line prints them."""
 
 LIVE_NO_BRIDGE = "no_bridge"
 LIVE_NOT_ASSEMBLY = "not_assembly"
