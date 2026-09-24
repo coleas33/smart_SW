@@ -85,7 +85,7 @@ a `full` part dump with nothing attached carries the "No open drawing shows this
 
 ```powershell
 uv run pytest tests/unit/test_native_dimension.py tests/unit/test_drawing_binding.py tests/unit/test_tolerances.py tests/unit/test_drawing_source_acceptance.py -q
-uv run python -c "from swreview.ir.loader import load_package; from swreview.drawings.evidence import DrawingIndex; i = DrawingIndex.for_package(load_package('$plate').package); print({d: [(v.view, v.usable) for v in vs] for d, vs in i.views_by_document.items()})"
+uv run python -c "from swreview.ir.loader import load_package; from swreview.drawings.evidence import DrawingIndex; i = DrawingIndex.for_package(load_package('$plate').package); print([(v.document_id, v.drawing_id, v.name, v.usable, v.why) for v in i.views])"
 ```
 
 Expected: with the binding switch set in the test, the plate's dowel hole size is bound from drawing
@@ -151,9 +151,11 @@ uv run pytest tests/unit/test_drawing_brief.py tests/unit/test_tools_get_drawing
 ```
 
 Expected: the brief's sections in order, at most 6,000 bytes, no persistent reference and no profile
-value; the pathological package's brief within the bound with `omitted` exact; the drawing arm of the
-payload pins under 38,000 bytes in both encodings (the bridged slim arm pinned and not held to the
-ceiling it already exceeds, research R2.20), each new tool within its budget.
+value, written as UTF-8 bytes whatever the console's encoding; the pathological package's brief
+within the bound with `omitted` exact; the drawing arm of the payload pins under 38,000 bytes in both
+encodings (the bridged slim arm pinned and not held to the ceiling it already exceeds, research
+R2.20; a standards run's arrays with checks first off are over it and wait on R5 Q10), each new tool
+within its budget.
 
 ## Scenario 10 (US7): conformance
 
@@ -174,6 +176,40 @@ $env:SWREVIEW_REQUIRE_TOKENIZER = "1"; uv run pytest -q -p no:warnings -o addopt
 uv run ruff check src tests
 cd ..; dotnet build extractor/SwReview.sln -c Release --nologo -v q; dotnet test extractor/SwReview.sln -c Release --no-build --nologo
 ```
+
+## Run of 2026-09-23 (T059): the offline scenarios
+
+Scenarios 0 to 10 and 8B, the regression gate and `tests/perf/test_drawing_brief_perf.py` (`-m perf`)
+were run on the development machine after the review fixes of the same day (no licence, no key;
+SOLIDWORKS never started). Scenarios 11 to 16 are [W] and were **not** run: they wait for the seat.
+
+| Scenario | Result |
+|---|---|
+| 0 | 235 and 38 passed: every pin, digest, golden and replay unchanged |
+| 1 | 2,705 guard tests passed; the table regenerated from the interop equals the "Feature 011" section byte for byte (after the review's four callout-variable families, 28 in all) |
+| 2 | 242 passed |
+| 3 | 120 C# passed; `swreview check standards` over `drawing-root` wrote `session.json`, `report.md` and `check.json`, exit 0 |
+| 4 | 174 C# and 30 Python passed |
+| 5 | 138 passed; the index lists drawing A's view usable and drawing B's two views unusable, each with its reason |
+| 6 | 99 passed |
+| 7 | 175 C# and 14 Python passed |
+| 8 | 51 passed |
+| 8B | 128 C# and 67 Python passed |
+| 9 | the brief of the plate is 5,141 bytes; 111 passed |
+| 10 | 193 passed |
+| perf | 2 passed (`DrawingIndex.for_package` under 50 ms, `build_brief` under 200 ms) |
+
+**Corrected by the run** (each in the task that owns it):
+
+- Scenario 9, T053: `swreview drawing brief` failed with a `UnicodeEncodeError` when its output went to
+  a Windows console or redirect in cp1252 - the plate's brief names a diameter (U+2300). The command
+  now writes the brief's own UTF-8 bytes, the ones its bound counts, and
+  `test_the_command_writes_the_briefs_utf8_bytes_whatever_the_consoles_encoding` pins it.
+- Scenario 5: the command above read `DrawingIndex.views_by_document`, which the index never had; it
+  now prints `DrawingIndex.views`, the attribute that landed.
+- Scenarios 1, 3, 4, 7 and 8B: `dotnet test` on the solution also prints "No test matches the given
+  testcase filter" for `SwReview.AddIn.Tests`, whose tests none of these filters names; the
+  extractor's line is the result.
 
 ## Scenario 11 [W] (T062): a drawing on its own, live
 

@@ -130,6 +130,24 @@ def test_the_command_prints_the_same_json_for_the_same_inputs(tmp_path: Path) ->
     ).to_json()
 
 
+def test_the_command_writes_the_briefs_utf8_bytes_whatever_the_consoles_encoding() -> None:
+    """A Windows console or redirect in cp1252 cannot spell the diameter sign every hole callout
+    carries; the command writes the brief's own UTF-8 bytes, the ones its 6,000-byte bound counts,
+    rather than failing with a `UnicodeEncodeError` (found running quickstart Scenario 9, T059)."""
+    package = load_package(PLATE_DRAWING).package
+    expected = build_brief(package, None, load_profile(PROFILE_A), "doc:0002").to_json()
+    assert "⌀" in expected, "the plate's brief names a diameter"
+
+    result = CliRunner(charset="cp1252").invoke(
+        app,
+        ["drawing", "brief", "--package", str(PLATE_DRAWING), "--document", "doc:0002",
+         "--profile", str(PROFILE_A)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout_bytes == expected.encode("utf-8") + b"\n"
+
+
 def test_the_command_needs_neither_a_run_nor_a_profile() -> None:
     result = CliRunner().invoke(
         app, ["drawing", "brief", "--package", str(PLATE_DRAWING), "--document", "doc:0003"]

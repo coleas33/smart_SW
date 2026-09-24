@@ -1436,7 +1436,10 @@ def drawing_brief_command(
     except BriefRefused as refusal:
         typer.echo(f"error: {refusal}", err=True)
         raise typer.Exit(2) from refusal
-    typer.echo(brief.to_json())
+    # The brief's own UTF-8 bytes - the ones its bound counts - written to the binary stream: a
+    # console or redirect in a narrower encoding (cp1252 on Windows) cannot spell a callout's
+    # diameter sign, and printing text there would fail rather than hand over the brief.
+    typer.echo(brief.to_json().encode("utf-8"))
 
 
 # --- rms types -------------------------------------------------------------------
