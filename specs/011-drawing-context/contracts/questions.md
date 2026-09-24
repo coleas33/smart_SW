@@ -108,7 +108,7 @@ standards profile, which offers `check_standards` before the family. With checks
 command line's default - those arrays go over the ceiling because of the family: 38,058 and 37,976
 bytes (review, OpenAI and Gemini), 38,414 and 38,281 (slim).
 
-*Amended 2026-09-23 (owner decision 9A, answering R5 Q10; T078, T079)*: `ARRAY_CEILING` (38,000,
+*Amended 2026-09-23 (owner decision 9A, answering R5 Q10; T084, T085)*: `ARRAY_CEILING` (38,000,
 unchanged) is asserted only on the arrays the pane sends by default - payload slimming, checks first
 and lever 13, the pre-run having completed, with and without a bridge and drawing evidence: 29,217,
 34,145, 29,651 and 34,579 bytes on OpenAI (a standards profile leaves the same four, `check_standards`
