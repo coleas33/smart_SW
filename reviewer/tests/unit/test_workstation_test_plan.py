@@ -16,7 +16,11 @@ promises is held in its text:
   (its Phase 13 note), character for character; and each runs against a committed fixture and
   prints the lines the plan tells the engineer to read;
 - every product sentence the plan quotes, for the engineer to compare with the screen, is still
-  the product's.
+  the product's;
+- the results sheet (`docs/workstation-results-2026-09-23.md`), which the plan copies into the
+  handover folder as the findings document, has a row for every step and task id a step heading
+  names, every row names a step the plan has, every open seat task the plan does not set aside
+  under "Not in this sitting" has a row, and it ships blank.
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ from tests.support.seat_tasks import (
 )
 
 PLAN = REPO / "docs" / "workstation-test-plan-2026-09-23.md"
+RESULTS = REPO / "docs" / "workstation-results-2026-09-23.md"
 REVIEWER = REPO / "reviewer"
 FIXTURES = REVIEWER / "tests" / "fixtures"
 REVIEW_RUN = FIXTURES / "replay" / "big-assembly"
@@ -51,7 +56,14 @@ ONE_LINER = re.compile(r'uv run python -c "([^"\n]*)" (\S+)')
 """A one-liner and the argument after it. The code stops at the first double quote, so a double
 quote inside it leaves the argument unmatched and the one-liner uncounted."""
 ONE_LINER_START = "uv run python -c \""
-POWERSHELL_BLOCK = re.compile(r"^```powershell\n(.*?)^```", re.MULTILINE | re.DOTALL)
+POWERSHELL_BLOCK = re.compile(r"^\s*```powershell\n(.*?)^\s*```", re.MULTILINE | re.DOTALL)
+TAGGED_STEP = re.compile(r"^### (\d+\.\d+) .*\[([^\]]+)\]\s*$", re.MULTILINE)
+"""A step heading with its task ids in brackets: `### 3.4 The pane review ... [011 T063; ...]`."""
+STEP_HEADING = re.compile(r"^### (\d+\.\d+) ", re.MULTILINE)
+RESULT_ROW = re.compile(
+    r"^\| (\d+\.\d+) \| ([^|]*) \|([^|]*)\|([^|]*)\|([^|]*)\|\s*$", re.MULTILINE
+)
+"""A row of the results sheet: step, task, and the three cells the engineer fills in."""
 
 QUOTED: tuple[tuple[str, str], ...] = (
     # The update script and the registration.
@@ -148,6 +160,59 @@ QUOTED: tuple[tuple[str, str], ...] = (
     # The handoff's two commands.
     ("Missing artifacts: ", "reviewer/src/swreview/cli.py"),
     ("none: no configured secret appears in", "reviewer/src/swreview/cli.py"),
+    ("could not read ", "reviewer/src/swreview/cli.py"),
+    # The update script's refusals and health lines, which step 1.3 tells apart.
+    ("SOLIDWORKS is running and holds SwReview.AddIn.dll open",
+     "extractor/tools/update-workstation.ps1"),
+    ("No SOLIDWORKS interops at", "extractor/tools/update-workstation.ps1"),
+    ("The checkout has local changes", "extractor/tools/update-workstation.ps1"),
+    ("git status failed", "extractor/tools/update-workstation.ps1"),
+    ("uv on PATH: ", "extractor/tools/update-workstation.ps1"),
+    ("swreview-extract: ", "extractor/tools/update-workstation.ps1"),
+    ("If the box is clear there", "extractor/tools/register-addin.ps1"),
+    # Where the pane is, and the buttons and badge the steps name.
+    ("SwReview evidence extractor (read-only)", "extractor/SwReview.AddIn/SwReviewAddIn.cs"),
+    ("Open check folder", "extractor/SwReview.AddIn/Standards/StandardsPage/index.html"),
+    ("Open check folder", "extractor/SwReview.AddIn/Model/ModelCheckPage/index.html"),
+    ("Standards check", "extractor/SwReview.AddIn/Standards/StandardsPage/index.html"),
+    ("Clear review", "extractor/SwReview.AddIn/Review/ReviewPage/index.html"),
+    ("Before this review", "extractor/SwReview.AddIn/Review/ReviewPage/index.html"),
+    ("Review available evidence", "extractor/SwReview.AddIn/Review/ReviewPage/index.html"),
+    ("component instances are not resolved.",
+     "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
+    ("No review tokens have been used.", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
+    ("The review is running.", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
+    ("Backend ready", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
+    ("No model list yet. Press Refresh.", "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
+    ("A key is stored for this Windows account. Leave this blank to keep it.",
+     "extractor/SwReview.AddIn/Review/ReviewPage/app.js"),
+    ("Show in SOLIDWORKS", "extractor/SwReview.AddIn/Review/ReviewPage/render.js"),
+    ("Grade: ", "extractor/SwReview.AddIn/Model/ModelCheckPage/check.js"),
+    ("Every rule reached a verdict.", "extractor/SwReview.AddIn/Model/ModelCheckPage/check.js"),
+    ("Not graded, evidence missing:", "extractor/SwReview.AddIn/Model/ModelCheckPage/check.js"),
+    ("Rule ids", "extractor/SwReview.AddIn/Model/ModelCheckPage/check.js"),
+    # The console's own lines, and the probe lines the steps count.
+    ("Attached to the running SOLIDWORKS session.",
+     "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("dump failed.", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("completed in ", "extractor/SwReview.Extractor/Probes/DrawingProbeRunner.cs"),
+    ("hole callouts in the extraction: ",
+     "extractor/SwReview.Extractor/Probes/DrawingProbeRunner.cs"),
+    ("(swDetailingLinearDimPrecision)",
+     "extractor/SwReview.Extractor/Probes/DrawingProbeRunner.cs"),
+    ("(swUnitsLinearDecimalPlaces)", "extractor/SwReview.Extractor/Probes/DrawingProbeRunner.cs"),
+    ("(swUnitsLinear)", "extractor/SwReview.Extractor/Probes/DrawingProbeRunner.cs"),
+    # The review's words the steps search for.
+    ("A drawing with the same name sits beside",
+     "reviewer/src/swreview/checks/drawing_context.py"),
+    ("Which one governs it?", "reviewer/src/swreview/checks/drawing_context.py"),
+    ("It is not the right drawing", "reviewer/src/swreview/checks/drawing_context.py"),
+    ("no tolerance source is read for this package",
+     "reviewer/src/swreview/checks/joint_alignment.py"),
+    ("standards.release", "reviewer/src/swreview/checks/standards/registry.py"),
+    ("the bridge returned status 'error': the read-only open of a confirmed drawing is not yet "
+     "validated on a seat (feature 011 probe D14)",
+     "extractor/SwReview.AddIn.Tests/Fixtures/review-drawing-questions.json"),
 )
 """Every product sentence the plan quotes, with the file that says it."""
 
@@ -200,6 +265,71 @@ def test_the_runbook_and_the_readme_link_the_plan() -> None:
     assert f"`{link}`" in runbook
     assert f"({link})" in readme
     assert f"`{link}`" in handover
+
+
+@pytest.fixture(scope="module")
+def results() -> str:
+    return RESULTS.read_text(encoding="utf-8")
+
+
+def result_rows(text: str) -> list[tuple[str, str, str, str, str]]:
+    """`(step, task, result, observed, notes)` of every row of the results table, stripped."""
+    return [tuple(cell.strip() for cell in row) for row in RESULT_ROW.findall(text)]
+
+
+def not_in_this_sitting(plan: str) -> set[tuple[str, str]]:
+    """The task ids the plan sets aside, from its last section on."""
+    return qualified_tasks(plan[plan.index("## Not in this sitting") :])
+
+
+def test_the_plan_starts_the_findings_document_from_the_results_sheet(plan: str) -> None:
+    """The engineer copies the sheet into the handover folder on day 1, under the name step 6
+    hands over, and fills it in as each step ends."""
+    assert "docs/workstation-results-2026-09-23.md" in plan
+    assert r'Copy-Item "$R\docs\workstation-results-2026-09-23.md" $findings' in plan
+    assert '$findings = "$H\\pane-findings-$(Split-Path $H -Leaf).md"' in plan
+    assert plan.index("## Start the findings document") < plan.index("## Step 1.")
+
+
+def test_the_results_sheet_has_a_row_for_every_step_and_task_a_heading_names(
+    plan: str, results: str
+) -> None:
+    rows = {(step, task) for step, cell, *_ in result_rows(results)
+            for task in qualified_tasks(cell)}
+    tagged = [(step, qualified_tasks(tags)) for step, tags in TAGGED_STEP.findall(plan)]
+
+    assert len(tagged) >= 20
+    missing = [(step, f"{package} {task}") for step, tasks in tagged
+               for package, task in sorted(tasks) if (step, (package, task)) not in rows]
+    assert missing == []
+
+
+def test_every_row_of_the_results_sheet_names_a_step_of_the_plan(
+    plan: str, results: str
+) -> None:
+    steps = set(STEP_HEADING.findall(plan))
+
+    assert [step for step, *_ in result_rows(results) if step not in steps] == []
+
+
+def test_every_open_seat_task_not_set_aside_has_a_row(plan: str, results: str) -> None:
+    rowed = set().union(*(qualified_tasks(cell) for _, cell, *_ in result_rows(results)))
+    aside = not_in_this_sitting(plan)
+
+    for package in PACKAGES:
+        number = package[:3]
+        missing = [task for task in open_seat_tasks(package)
+                   if (number, task) not in aside and (number, task) not in rowed]
+        assert missing == [], f"{package}: {missing}"
+    assert {("011", "T095"), ("008", "T105"), ("009", "T085")} <= aside
+    assert {("006", "T100"), ("006", "T103"), ("006", "T105"), ("006", "T107")} <= rowed
+
+
+def test_the_results_sheet_ships_blank(results: str) -> None:
+    rows = result_rows(results)
+
+    assert len(rows) >= 50
+    assert [row for row in rows if any(row[2:])] == []
 
 
 def test_the_plan_names_every_open_seat_task_with_its_package(plan: str) -> None:
