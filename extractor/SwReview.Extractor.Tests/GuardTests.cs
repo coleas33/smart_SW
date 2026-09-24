@@ -75,6 +75,57 @@ public class ReadOnlyGuardTests
         Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert("FEATURECUT4"));
     }
 
+    /// <summary>
+    /// Feature 011 review (2026-09-23): an interface-qualified key is judged by its member half,
+    /// so a read-only gate refuses <c>IDrawingDoc.ActivateSheet</c> exactly as it refuses
+    /// <c>ActivateSheet</c>. Only the allowlist guards (<see cref="RemodelGuard"/>,
+    /// <see cref="DrawingOpenGuard"/>) accept a qualified writer key, and they judge it before this
+    /// guard is asked; a qualified key on a read-only gate had passed whatever it named.
+    /// </summary>
+    [Theory]
+    [InlineData("IDrawingDoc.ActivateSheet")]
+    [InlineData("IModelDoc2.Save3")]
+    [InlineData("IModelDoc2.ForceRebuild3")]
+    [InlineData("IModelDoc2.FeatureCut4")]
+    [InlineData("ISldWorks.ActivateDoc3")]
+    [InlineData("IView.SetDisplayMode4")]
+    public void Assert_QualifiedKeyOfADeniedMember_Throws_NamingTheKey(string key)
+    {
+        MutatingCallError error = Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(key));
+        Assert.Equal(key, error.MemberName);
+        Assert.Contains(key, error.Message, StringComparison.Ordinal);
+        Assert.Throws<MutatingCallError>(() => ReadOnlyCallGuard.Instance.Assert(key));
+        Assert.Throws<MutatingCallError>(() => new SwReview.Extractor.Sw.SwGate(new CircuitBreaker()).Call(key, () => 0));
+    }
+
+    [Theory]
+    [InlineData("Feature.Name")]
+    [InlineData("Component.Select4")]
+    [InlineData("IDrawingDoc.GetViews")]
+    [InlineData("EquationMgr.Equation")]
+    [InlineData("drawing.read")]
+    public void Assert_QualifiedKeyOfARead_Passes(string key)
+    {
+        ReadOnlyGuard.Assert(key);
+        ReadOnlyCallGuard.Instance.Assert(key);
+    }
+
+    /// <summary>
+    /// The deliberate exclusions of contracts/guard.md section 3 stay exclusions whatever their
+    /// spelling: <c>OpenDoc6</c> is the extractor's read-only open of a model and <c>CloseDoc</c> the
+    /// bare name of feature 004's stage-1 key. What keeps a read path from closing a document is
+    /// that no read call site names it; the confirmed drawing's close goes through
+    /// <see cref="DrawingOpenGuard"/>'s allowlist.
+    /// </summary>
+    [Theory]
+    [InlineData("ISldWorks.OpenDoc6")]
+    [InlineData("ISldWorks.CloseDoc")]
+    public void Assert_QualifiedKeyOfAnExcludedMember_PassesAsItsBareNameDoes(string key)
+    {
+        ReadOnlyGuard.Assert(key);
+        ReadOnlyGuard.Assert(CallKey.BareName(key));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
@@ -446,7 +497,8 @@ public class StandardsDenylistTests
         /// <summary>
         /// The bare member names of the "Member" column. R8 writes them interface-qualified for
         /// the reader ("IDrawingDoc.ActivateSheet"); the guard entry is the bare name, so the
-        /// qualifier is dropped here exactly as `SwGate.Call` drops it.
+        /// qualifier is dropped here exactly as `ReadOnlyGuard.Assert` judges a qualified key by
+        /// its member half.
         /// </summary>
         public string[] Members { get; }
     }
@@ -793,6 +845,23 @@ public class DrawingFamilyDenylistTests
     public static IEnumerable<object[]> EveryMember() =>
         ExpectedMembers.OrderBy(member => member, StringComparer.Ordinal)
             .Select(member => new object[] { member });
+
+    public static IEnumerable<object[]> EveryQualifiedMember() =>
+        Table.SelectMany(row => row.Members.Select(member => InterfaceOf(row) + "." + member))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(key => key, StringComparer.Ordinal)
+            .Select(key => new object[] { key });
+
+    /// <summary>FR-005 and SC-009 in every spelling a call site could use: bare, or qualified with
+    /// the interface the table names (feature 011 review, 2026-09-23).</summary>
+    [Theory]
+    [MemberData(nameof(EveryQualifiedMember))]
+    public void EveryMemberOfTheTableIsRefusedQualifiedWithItsInterface(string key)
+    {
+        MutatingCallError error = Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(key));
+        Assert.Equal(key, error.MemberName);
+        Assert.Throws<MutatingCallError>(() => ReadOnlyCallGuard.Instance.Assert(key));
+    }
 
     public static IEnumerable<object[]> EveryExcludedMember() =>
         ExcludedMembers.OrderBy(member => member, StringComparer.Ordinal)
@@ -1232,12 +1301,24 @@ public class DrawingFamilyReadAuditTests
         }
     }
 
+    /// <summary>
+    /// A literal as the read-only guard judges it: its member half when it is an
+    /// interface-qualified key (feature 011 review, 2026-09-23), unless it is a key of one of the
+    /// two allowlist guards, which judge their own keys before the read-only guard is asked.
+    /// </summary>
+    private static string Judged(string literal) =>
+        CallKey.IsQualified(literal)
+            && !RemodelGuard.AllowedKeys.Contains(literal)
+            && !DrawingOpenGuard.AllowedKeys.Contains(literal)
+            ? CallKey.BareName(literal)
+            : literal;
+
     [Fact]
     public void NoLiteralOfTheProductSourceIsRefusedByTheTableExceptTheNamedOnes()
     {
         var table = new HashSet<string>(DrawingFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
         var refused = Literals()
-            .Where(literal => table.Contains(literal.Literal) && !NamedLiterals.ContainsKey(literal.Literal))
+            .Where(literal => table.Contains(Judged(literal.Literal)) && !NamedLiterals.ContainsKey(literal.Literal))
             .Select(literal => $"\"{literal.Literal}\" in {literal.Where}")
             .Distinct(StringComparer.Ordinal)
             .ToList();

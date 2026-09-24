@@ -258,6 +258,13 @@ public static partial class ReadOnlyGuard
     /// <summary>
     /// Throws <see cref="MutatingCallError"/> if the named interop member is known to
     /// modify a model. Everything else is allowed.
+    ///
+    /// An interface-qualified key (<c>IDrawingDoc.ActivateSheet</c>) is judged by its member half
+    /// as well as by the whole key, so no spelling of a denied member passes a read-only gate
+    /// (feature 011 review, 2026-09-23: a qualified key had passed whatever it named). The two
+    /// allowlist guards, <see cref="RemodelGuard"/> and <see cref="DrawingOpenGuard"/>, accept
+    /// their own qualified keys before this guard is asked, and are unchanged by this. The error
+    /// names the key as the caller wrote it.
     /// </summary>
     public static void Assert(string interopMemberName)
     {
@@ -268,8 +275,9 @@ public static partial class ReadOnlyGuard
         }
 
         string member = interopMemberName.Trim();
+        string bare = CallKey.BareName(member);
 
-        if (DeniedMemberSet.Contains(member))
+        if (DeniedMemberSet.Contains(member) || DeniedMemberSet.Contains(bare))
         {
             throw new MutatingCallError(
                 member,
@@ -278,7 +286,8 @@ public static partial class ReadOnlyGuard
 
         foreach (string prefix in DeniedPrefixArray)
         {
-            if (member.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            if (member.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                || bare.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
                 throw new MutatingCallError(
                     member,

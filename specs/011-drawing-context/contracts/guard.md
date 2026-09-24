@@ -17,6 +17,17 @@ Normative for FR-005 to FR-007 and SC-009. Lands before any new drawing read (Ph
 | `ISldWorks` | `ActivateDoc`, `ActivateDoc2`, `ActivateDoc3`, `DocumentVisible`, `CloseAllDocuments`, `CloseAndReopen`, `CloseAndReopen2`, `QuitDoc`, `NewDocument`, `NewDrawing`, `NewDrawing2`, `NewPart`, `NewAssembly`, `OpenDoc`, `OpenDoc2`, `OpenDoc3`, `OpenDoc4`, `OpenDoc7`, `OpenDocSilent`, `OpenModelConfiguration`, `LoadFile2`, `LoadFile3`, `LoadFile4`, `RunMacro`, `RunMacro2`, `RunCommand`, `RunAttachedMacro`, `RunJournalCmd` | `GetDocuments`, `GetDocumentCount` (discovery) |
 | `IModelDocExtension` | `SetUserPreferenceInteger`, `SetUserPreferenceString`, `SetUserPreferenceDouble`, `SetUserPreferenceTextFormat` | `GetUserPreferenceInteger`, `GetUserPreferenceString` (the drawing's settings) |
 
+**Every spelling.** `ReadOnlyGuard.Assert` judges an interface-qualified key
+(`IDrawingDoc.ActivateSheet`) by its member half as well as by the whole key, so a read-only gate
+refuses every spelling of a denied member, and `DrawingFamilyDenylistTests` asserts each table
+member refused qualified with its interface too. *Corrected 2026-09-23 on review*: a qualified key
+had passed a read-only gate whatever it named, and the read audit compared literals whole; it now
+judges a qualified literal by its member half unless it is a key of `RemodelGuard` or
+`DrawingOpenGuard`, the two allowlist guards, which judge their own keys first and are unchanged.
+The deliberate exclusions of section 3 (`OpenDoc6`, `CloseDoc`, ...) stay allowed in either
+spelling; what keeps a read path from closing a document is that no read call site names one, and
+the confirmed drawing's close goes through `DrawingOpenGuard`'s allowlist.
+
 ## 2. The writer grammar
 
 A public method of a drawing family is a **writer** when its name does not start with `get_`,
