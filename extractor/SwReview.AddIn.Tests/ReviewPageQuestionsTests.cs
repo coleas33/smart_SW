@@ -116,8 +116,8 @@ public sealed class ReviewPageQuestionsTests
     {
         Run run = Scripted.Value;
 
-        Assert.Equal("  Drawing 810-11281 rev B  ", run.BackToSecond.GetProperty("boxValue").GetString());
-        Assert.Equal("  Drawing 810-11281 rev B  ", run.AfterRerender.GetProperty("boxValue").GetString());
+        Assert.Equal("  Drawing FICT-1001 rev B  ", run.BackToSecond.GetProperty("boxValue").GetString());
+        Assert.Equal("  Drawing FICT-1001 rev B  ", run.AfterRerender.GetProperty("boxValue").GetString());
         Assert.Equal(new[] { "true", "false", "false" }, ReviewPageDriver.Strings(run.RerenderFirst, "pressed"));
     }
 
@@ -142,7 +142,7 @@ public sealed class ReviewPageQuestionsTests
         Assert.Equal("ER-002", answers[0].GetProperty("request_id").GetString());
         Assert.Equal("Press fit", answers[0].GetProperty("answer").GetString());
         Assert.Equal("ER-004", answers[1].GetProperty("request_id").GetString());
-        Assert.Equal("Drawing 810-11281 rev B", answers[1].GetProperty("answer").GetString());
+        Assert.Equal("Drawing FICT-1001 rev B", answers[1].GetProperty("answer").GetString());
 
         Assert.True(run.Sent.GetProperty("controlsDisabled").GetBoolean(), "the panel stayed live during the turn.");
         Assert.False(run.Sent.GetProperty("stopDisabled").GetBoolean(), "Stop is disabled while the answers run.");
@@ -257,7 +257,7 @@ public sealed class ReviewPageQuestionsTests
                 await driver.Read(Press("question-previous") + "return JSON.stringify({ok: true});");
                 run.SecondOption = await driver.Read(Option(1) + ReadPanelBody);
                 run.FirstOption = await driver.Read(Option(0) + ReadPanelBody);
-                await driver.Read(Press("question-next") + Type("  Drawing 810-11281 rev B  ") + "return JSON.stringify({ok: true});");
+                await driver.Read(Press("question-next") + Type("  Drawing FICT-1001 rev B  ") + "return JSON.stringify({ok: true});");
                 run.Third = await driver.Read(Press("question-next") + ReadPanelBody);
                 await driver.ClearCalls();
                 run.Skipped = await driver.Read(Press("question-skip") + ReadPanelBody);

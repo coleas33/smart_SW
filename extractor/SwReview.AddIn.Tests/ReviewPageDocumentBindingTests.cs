@@ -15,9 +15,9 @@ namespace SwReview.AddIn.Tests;
 /// bound to the document it is of.
 ///
 /// <b>What was wrong.</b> Opening another model only repainted the header, so the header could
-/// name 810-11281 while the body still showed the previous assembly's Start here, findings and
-/// evidence requests - with Accept, Reject, Show in SOLIDWORKS and a follow-up box all live
-/// against a model that was no longer on screen. The page now keeps `state.reviewed` from
+/// name a part of the big assembly while the body still showed the previous assembly's Start
+/// here, findings and evidence requests - with Accept, Reject, Show in SOLIDWORKS and a
+/// follow-up box all live against a model that was no longer on screen. The page now keeps `state.reviewed` from
 /// `review.started`, and when `document.changed` names anything else it hides the previous
 /// results, disables what would act on them and says, in one line, whose review it is. Going
 /// back to the reviewed document undoes it; Clear review forgets the review outright.

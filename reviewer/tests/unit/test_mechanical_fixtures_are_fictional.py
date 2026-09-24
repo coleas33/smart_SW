@@ -21,9 +21,9 @@ like two recorded customer assemblies. They are built by code from fictional str
 names above, every gap reason, group key, size and thread, and every persist ref decoded
 back to the fictional id it encodes. It does not read JSON keys, schema enum values or
 numbers, because those are the IR's own vocabulary and float digits - `counterbore`,
-`reuse_key` and `-0.0011249...` are not recorded strings whatever tokens the denylist holds
-- and a GLB's generator URL is `trimesh`'s. Nothing a fixture builder composes escapes it.
-Names and values are matched as substrings, because a name is a compound; the vector
+`reuse_key` and a coordinate's float tail are not recorded strings whatever tokens the
+denylist holds - and a GLB's generator URL is `trimesh`'s. Nothing a fixture builder composes
+escapes it. Names and values are matched as substrings, because a name is a compound; the vector
 table's `note` column is an author's English sentence and is matched by whole word, since
 a short recorded token sits inside an unrelated word ("carries") far more often than not.
 """

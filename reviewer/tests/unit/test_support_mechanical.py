@@ -1,9 +1,9 @@
 """The mechanical-check fixtures: the builders, the generator, and the shapes they reproduce
 (feature 010 T001, `contracts/fixtures.md`).
 
-Two committed packages, shaped like the recorded <redacted-design-6> and <redacted-design-5> runs, are what every
-acceptance test of feature 010 reads. They are built by code from fictional strings, so
-this module pins three things:
+Two committed packages, shaped like the recorded runs of the big assembly and the small
+assembly, are what every acceptance test of feature 010 reads. They are built by code from
+fictional strings, so this module pins three things:
 
 1. **the builders** make the shapes the recorded packages have - a Hole Wizard feature is one
    `Hole` row whose `face_ids` hold one cylinder face per instance (research R2.1), a
