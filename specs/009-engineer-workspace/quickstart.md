@@ -5,14 +5,14 @@
 Scenarios 0 to 7 run **offline** on the development machine, with no SOLIDWORKS licence and no key:
 the backend with pytest, the pane with the offscreen WebView2 suites. Scenarios 8 to 12 are marked
 **[W]** and need the next workstation sitting: a licensed seat, the two recorded assemblies
-(810-11249 and 830-02342) and, for Scenario 12, a provider key.
+(the small assembly and the big assembly) and, for Scenario 12, a provider key.
 
 ## Prerequisites
 
 Everything from features 001 to 007, and from feature 008 at least its Setup (the committed replay
 fixtures under `reviewer/tests/fixtures/replay/`, 008 T018), its family fold (008 T030, T032) and its
 answer batch (008 T083-T085). Offline: `reviewer/tests/fixtures/replay/big-assembly/` (shaped like
-the 830-02342 review, fictional throughout) and the pane fixture generated from it,
+the big assembly's review, fictional throughout) and the pane fixture generated from it,
 `extractor/SwReview.AddIn.Tests/Fixtures/review-big-assembly.json`.
 
 ```powershell
@@ -125,13 +125,13 @@ and no fraction; the Standards header unchanged; rule ids inside each rule's fol
 
 ## Scenario 8 [W]: the sitting's verdict (SC-007)
 
-Review 810-11249 and 830-02342 through the pane. With the engineer, read the summary: do the Decide
+Review the small assembly and the big assembly through the pane. With the engineer, read the summary: do the Decide
 lines name the decisions that were theirs, and do the goal lines name what the review did not reach?
 Record their words in the sitting's handover.
 
 ## Scenario 9 [W]: ten seconds (SC-002, SC-001)
 
-Show a non-developer engineer the 830-02342 summary for ten seconds; they say how many decisions are
+Show a non-developer engineer the big assembly's summary for ten seconds; they say how many decisions are
 theirs and which goals were not reached. Screenshot the docked pane at 300 by 600.
 
 ## Scenario 10 [W]: configurations and Show

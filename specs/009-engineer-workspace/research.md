@@ -118,7 +118,7 @@ partition: the five groups plus the family findings equal `len(session.findings)
 (`:423`), the status order (`:112-118`). Counting findings rather than rows avoids the ambiguity a
 folded row brings (a row folds several findings that share a status, but 008's family row mixes
 statuses, `contracts/checks-first.md` section 6). Excluding the family from the three groups keeps
-"Fix" from reading 56 on 830-02342 when 51 of them are modelling practice the owner decided to fold
+"Fix" from reading 56 on the big assembly when 51 of them are modelling practice the owner decided to fold
 away. On the recorded session (no family) the analyst counted 9 decide (6 interference, 3 hole
 coaxiality), 56 fix, 34 verify (fact 19 re-read as findings rather than rows), which the US3
 acceptance re-asserts on 008's `big-assembly` fixture.
@@ -451,7 +451,7 @@ place in `session.findings` and on the stream (`runner._reconcile_reruns`, `:555
 (`agent/events.py:102-104`).
 
 **Alternatives**: replaying `events.jsonl` from seq 0 to rebuild Results (rejected: 793,183 bytes
-and 2,256 events on 830-02342, each card forcing a layout, and today's `endSession` closes the
+and 2,256 events on the big assembly, each card forcing a layout, and today's `endSession` closes the
 stream on every turn's `session.ended`, fact 8); reading `attention.json` for the rows (rejected:
 the check route's precedent recomputes, and `rank(load_session(...))` equals the record by
 construction, `attention_record.py:11-16`).
@@ -543,7 +543,7 @@ asserts the regenerated diff touches `title:` lines only.
 
 **Why**: FR-027 and FR-012. VERIFIED the cut (`tools/recording.py:36-44`, 80 characters and an
 ellipsis) and the ten baselines (a search for the ellipsis under `tests/golden/test_golden/`); the
-analyst counted 71 of 99 titles cut on 830-02342 (fact 11). No `.md` golden holds a cut title (the
+analyst counted 71 of 99 titles cut on the big assembly (fact 11). No `.md` golden holds a cut title (the
 same search), and feature 008's replay compares findings by subject key, which ignores the title
 (`specs/008-checks-first-review/contracts/replay.md` section 5).
 
@@ -614,7 +614,7 @@ parts not loaded and the eight goals, the numbers asserted against the fixture. 
 committed file differs from a fresh generation (`--write` regenerates it, as
 `test_tool_payload.py` does). The WebView2 acceptance tests of US3 to US7 load that file.
 
-**Why**: the spec's "fixture shaped like the 830-02342 run" exists already, fictional and
+**Why**: the spec's "fixture shaped like the big assembly's run" exists already, fictional and
 hygiene-checked (008 `contracts/replay.md` section 8, its T017). One fixture for both sides means
 the page is tested against exactly what the backend produces; the drift test keeps them together.
 The recorded dumps never enter the repository.
@@ -818,7 +818,7 @@ Re-opened on 2026-09-23 at `e8b40b5`:
 | SOLIDWORKS API tokens (`swMateCONCENTRIC`, `swSelFACES`) in RMS titles come from the checks' observed strings; rewording them changes findings' evidence | owner, later | nothing |
 | `swreview attention` prints Start here with the recorded titles (cut, ids): it is a command-line reader of `attention.json`, and a CLI in the pane's terminal is often a model reading it, so it was left with the model's title (R2.28) | owner | nothing |
 | `report.md` could lead with the same summary block (one source); not done so the report goldens hold | owner | nothing |
-| The backend never evicts chats, so a night of kept reviews holds every run's package in memory (fact 25: 1.48 MB on disk for 830-02342); evicting ended chats after their snapshot is a follow-up | backlog | nothing |
+| The backend never evicts chats, so a night of kept reviews holds every run's package in memory (fact 25: 1.48 MB on disk for the big assembly); evicting ended chats after their snapshot is a follow-up | backlog | nothing |
 | Follow-up questions are not on the event stream, so pinned answers do not survive a page reload; an in-memory list on `ReviewRun` would cover the reload case | backlog | nothing |
 | A contact list delivered before 010 lands is `None`; the page's contacts fold is proven on `SummarySample`'s hand-added contacts until then | feature 010 (T020, T022) | FR-011's backend half |
 | 010's task ids were read from its `tasks.md` while it was being written; they are re-verified before T018, T034 and T062 start | this feature | nothing |

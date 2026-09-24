@@ -9,7 +9,8 @@ sitting.
 ## Prerequisites
 
 Features 001 to 007 on main. The committed fixtures `reviewer/tests/fixtures/mechanical/
-big-assembly/` (shaped like 830-02342) and `small-assembly/` (shaped like 810-11249), and, from
+big-assembly/` (shaped like the big assembly) and `small-assembly/` (shaped like the small
+assembly), and, from
 US8, `tolerances/`; the vector table `specs/010-mechanical-checks/contracts/fastener-name-vectors.json`;
 the two version 2 test profiles under `reviewer/tests/fixtures/standards/`.
 
@@ -171,12 +172,12 @@ fixture reproduces research R3's counts.
 
 ## Scenario 13 [W]: the extractor reads on the seat (SC-008)
 
-Dump 810-11249 and 830-02342 with the new build. Expected: `mass_overridden` present on every
+Dump the small assembly and the big assembly with the new build. Expected: `mass_overridden` present on every
 document with no `mass_override` tool-error gap; `Hole.wizard` filled on the Hole Wizard holes;
 `model_dimensions` present where feature dimensions carry tolerances (and an empty member with no
 gap where none do); the 68 named screws emitted as fasteners with a shank face each.
 
-## Scenario 14 [W]: a review of 830-02342
+## Scenario 14 [W]: a review of the big assembly
 
 With checks first on, expected: every interference group judged, contacts in their own list and
 not in "Start here"; the joint findings of Scenario 5 present, now with engagement computed for

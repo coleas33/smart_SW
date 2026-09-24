@@ -67,8 +67,8 @@ public sealed class ReviewPageAttentionPanelTests
     /// that sorted anything renders a different list and fails here.
     ///
     /// U12 rewrote the second half of this (docs/pane-findings-2026-09-20-review-gui.md section
-    /// 5): the sixth row, beyond `top_n`, used to be asserted absent, and on 830-02342 that hid
-    /// 94 of 99 findings with no path to them. The first `top_n` rows are still the only ones
+    /// 5): the sixth row, beyond `top_n`, used to be asserted absent, and on the big assembly that
+    /// hid 94 of 99 findings with no path to them. The first `top_n` rows are still the only ones
     /// under Start here; the rest follow them behind "Show all", in the supplied order, and are
     /// on screen only once that control is opened (contracts/attention.md section 6).
     /// </summary>

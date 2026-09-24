@@ -54,7 +54,7 @@ somewhere else, in which case test that path.
 
 ## 3. Task A: the panel matches the report (T059)
 
-With the 810-11249 dowel-pin assembly open (the one reviewed on 2026-09-18):
+With the small assembly open, the dowel-pin one (the one reviewed on 2026-09-18):
 
 1. Press **Review** and let the session run to its end. When "The session ended." appears,
    a **Start here** panel must appear above the transcript with up to five rows, each showing
@@ -106,7 +106,7 @@ session starting and the model's first word.
 
 ```powershell
 cd <repo>\reviewer
-$pkg = "<a folder holding a package.json dumped from the 810-11249 assembly>"   # a Review run folder is one
+$pkg = "<a folder holding a package.json dumped from the small assembly>"   # a Review run folder is one
 foreach ($i in 1,2,3) {
   $run = "$env:TEMP\gate-run-$i"                    # one folder per run: events.jsonl is append-only
   uv run swreview review $pkg --out $run --lever procedural_gate `

@@ -8,8 +8,8 @@ design passes in [research.md](research.md).
 
 ## Summary
 
-Make a review cost what its new information costs, without changing what it finds. The 830-02342
-review billed 12.4M input tokens for 99 findings; 95.7% of every request was earlier tool output
+Make a review cost what its new information costs, without changing what it finds. The big
+assembly's review billed 12.4M input tokens for 99 findings; 95.7% of every request was earlier tool output
 resent, one 205k-token check result was resent about thirty times, and 90 of the findings came from
 checks that take no arguments. Five pieces, in the order they ship:
 

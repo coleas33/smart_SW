@@ -47,11 +47,13 @@ All four statements are false by the time they are read. Consequences:
 
 ### Evidence
 
+Three reviews of the small assembly, named by their run folders' timestamps:
+
 | Run | Duration | Ended with | `report.md` | Pane said |
 |---|---|---|---|---|
-| `20260918-214702-810-11249` | 77 s | `session.ended` | 34,623 B | still reviewing |
-| `20260918-215624-810-11249` | ~95 s | `session.ended` | 34,630 B | still reviewing |
-| `20260918-215755-810-11249` | 97 s | `session.ended` | 41,034 B | still reviewing |
+| `20260918-214702-…` | 77 s | `session.ended` | 34,623 B | still reviewing |
+| `20260918-215624-…` | ~95 s | `session.ended` | 34,630 B | still reviewing |
+| `20260918-215755-…` | 97 s | `session.ended` | 41,034 B | still reviewing |
 
 The host side is healthy: `GET /sessions/{id}/events` returns `200`, and every event
 including `session.ended` is present in `events.jsonl`. So the break is **between the host
@@ -164,7 +166,7 @@ Recorded so the next session has a baseline rather than an impression.
 
 ### Review (agent, needs a key)
 
-`20260918-215755-810-11249`, assembly of one part plus dowel pins, `gpt-5.6-luna`, effort
+`20260918-215755-…`, the small assembly (one part plus dowel pins), `gpt-5.6-luna`, effort
 `high`: **97 s**, **8 findings**, 34 tool calls, 3 evidence requests, 41 KB report.
 Coverage: 5 checked, 11 skipped, 39 unresolved, 0 failed, 7 out of scope.
 
@@ -188,7 +190,7 @@ worth watching over more runs.
 
 ### Model check (no AI, no key)
 
-`20260918-220310-810-11249-check`, scope `part`: **3 findings**, 1 tool call, 16 KB report.
+`20260918-220310-…-check`, scope `part`: **3 findings**, 1 tool call, 16 KB report.
 Coverage: 5 checked, 11 skipped, 5 unresolved, 0 failed, 6 out of scope.
 
 `rms.folders.present` (low), `rms.grouping.all_features_in_a_group` (medium),

@@ -12,7 +12,7 @@ per-document tabs, headline-only findings, a swap between results and transcript
 **part drawings in the review context** (extract if they exist; offer to make or improve
 them once the assembly is understood; ask intelligent questions when context is missing).
 
-**Remodel on 810-11281.SLDPRT [Default] is the designed no-seat refuse.** The banner is
+**Remodel on a part of the big assembly [Default] is the designed no-seat refuse.** The banner is
 honest. It is not a remodel. It tells a SOLIDWORKS user to run a console command with no
 document open.
 
@@ -32,20 +32,23 @@ that whole folder. It is a new packet, not an update of
 | Commit | `d83ecbe` (`local` ← `codex/pretest-readiness-2026-09-20`) |
 | Provider / model / effort | openai / `gpt-5.6-luna` / high (Review). Check tabs use `gpt-5.6` in the report header only. |
 | Review tab | last review still on screen after a new document became active |
-| Remodel tab | `810-11281.SLDPRT` `[Default]`; badge `Backend ready` |
+| Remodel tab | a part of the big assembly (`.SLDPRT`, `[Default]`); badge `Backend ready` |
 | Remodel banner | `this build has no remodel seat; run swreview-extract probe remodel --acknowledge-throwaway-part with no document open.` |
 | Packet | `C:\Users\csorkness\smart_SW-handoff-2026-09-20-gui` |
 
-Tonight’s runs (copied into the packet `dumps/`):
+Tonight’s runs (copied into the packet `dumps/`), named by their folders' timestamps: the rest
+of each folder name is the design number (owner decision 11B, 2026-09-24). The replay of
+feature 008 later took `191314` and `190840` as the small assembly's two recordings and
+`192014` as the big assembly's recording.
 
 | Folder | What | Notes |
 |---|---|---|
-| `20260920-190758-810-11249` | Review, ~4 s, 0 findings | Stop / aborted. Pins still lightweight. |
-| `20260920-190840-810-11249` | Review, 7 findings, 1.47M tokens / 37 rounds | Pins still lightweight. Start here F-004…F-005. 2 beyond top five. |
-| `20260920-191314-810-11249` | Review, 13 findings, 1.58M tokens / 39 rounds | Pins **resolved**. Interference F-001 / F-002 in Start here. **8 beyond top five.** ER-002 asks for the part drawing package. No drawing sheets extracted. |
-| `20260920-192014-830-02342` | Review, **99 findings**, **12.4M tokens** / 41 rounds / 2 turns | Big assembly. Start here is five interference rows. **94 beyond top five.** 3 of 89 instances not read. No drawing graded. |
-| `20260920-192739-810-11281-standards` | Standards on the part | Verdict `not_ready`. Notes: **no drawing graded**. |
-| `20260920-192814-810-11281-check` | Model check on the part | 3 RMS findings. No drawing record. |
+| `20260920-190758-…` | Review of the small assembly, ~4 s, 0 findings | Stop / aborted. Pins still lightweight. |
+| `20260920-190840-…` | Review of the small assembly, 7 findings, 1.47M tokens / 37 rounds | Pins still lightweight. Start here F-004…F-005. 2 beyond top five. |
+| `20260920-191314-…` | Review of the small assembly, 13 findings, 1.58M tokens / 39 rounds | Pins **resolved**. Interference F-001 / F-002 in Start here. **8 beyond top five.** ER-002 asks for the part drawing package. No drawing sheets extracted. |
+| `20260920-192014-…` | Review of the big assembly, **99 findings**, **12.4M tokens** / 41 rounds / 2 turns | Big assembly. Start here is five interference rows. **94 beyond top five.** 3 of 89 instances not read. No drawing graded. |
+| `20260920-192739-…-standards` | Standards on the part | Verdict `not_ready`. Notes: **no drawing graded**. |
+| `20260920-192814-…-check` | Model check on the part | 3 RMS findings. No drawing record. |
 | `logs/tool-service-20260920-192710.log` | Remodel attach | Part opened; no remodel command; process stopped. |
 
 ---
@@ -63,7 +66,7 @@ pane matches the document now on screen.
 3. updates the header name.
 
 It does **not** call `resetTranscript()`. That helper exists, but the only live caller is
-a successful `review.start`. So the header can say `810-11281` while the body is still the
+a successful `review.start`. So the header can name the part while the body is still the
 previous assembly’s session.
 
 `ReviewHost` already keeps a `_sessions` list. The page shows one chat. There is no Clear
@@ -195,8 +198,8 @@ is **amplify, never filter**: every finding is still in the transcript and in
 `attentionPanel` slices `rows` to `top_n` and does not render a “N more” control. There
 is no findings index, search, or Show all.
 
-On 810-11249 that already hid **F-001** (`rms.folders.present`) behind the top five.
-Tonight’s resolved 810-11249 review hid **8 of 13**. The big assembly `830-02342` hid
+On the small assembly that already hid **F-001** (`rms.folders.present`) behind the top
+five. Tonight’s resolved small-assembly review hid **8 of 13**. The big assembly hid
 **94 of 99**. A larger assembly will hide interface and rebuild rows the same way.
 
 **What this means for the model.** Start here is a triage hint, not the bill of
@@ -219,12 +222,12 @@ That would make §3 worse.
 
 ---
 
-## 6. Remodel on 810-11281: no-seat copy, not a failed remodel
+## 6. Remodel on a part of the big assembly: no-seat copy, not a failed remodel
 
-**Symptom (engineer), verbatim:**
+**Symptom (engineer), verbatim but for the part's name:**
 
 ```
-810-11281.SLDPRT [Default]
+<a part of the big assembly>.SLDPRT [Default]
 Backend ready
 this build has no remodel seat; run swreview-extract probe remodel --acknowledge-throwaway-part with no document open.
 ```
@@ -239,11 +242,11 @@ The active document is a **part**, which is the only kind Feature 004 will reorg
 The tab is still a dead end because this **build** has no seat, not because the file is
 wrong.
 
-**What this means for the model.** Nothing on 810-11281 was remodeled, probed, or
+**What this means for the model.** Nothing on the part was remodeled, probed, or
 copied. The FeatureManager did not change. The banner is a build capability message
 dressed as a command the engineer should type. Following it with this part still open
 is the wrong procedure (Task F is: SOLIDWORKS running, **no** document open, console
-host). Closing the part to run a throwaway-part probe does not remodel 810-11281
+host). Closing the part to run a throwaway-part probe does not remodel the part
 either. Until a seat is wired onto the pane bridge, this tab cannot touch this model.
 
 **Recommended fix (owner):**
@@ -275,14 +278,17 @@ next suggestions.
 
 **What tonight already proved.** Both paid Reviews asked for drawings and then stopped.
 
-- `20260920-191314-810-11249` coverage: `drawing.manufacturing_inputs` — no sheets, no
+- The small assembly's resolved review (`20260920-191314-…`) coverage:
+  `drawing.manufacturing_inputs` — no sheets, no
   dimensions, drawing phase did not run. Fit and stack stayed unresolved for the same
   reason. Evidence request **ER-002** is open: the native part drawing package for
-  810-11249 and a readable dimensional spec for the two pins (notes, general
+  the small assembly and a readable dimensional spec for the two pins (notes, general
   tolerances, finish, hole/shaft limits, functional gaps).
-- `20260920-192014-830-02342`: 99 findings, still **no drawing graded**. Same gap.
-- Standards on 810-11281: `no drawing graded`.
-- The agent already called `find_dimensions` on 810-11249. There was nothing to find.
+- The big assembly's review (`20260920-192014-…`): 99 findings, still **no drawing
+  graded**. Same gap.
+- Standards on the part: `no drawing graded`.
+- The agent already called `find_dimensions` on the small assembly. There was nothing to
+  find.
 
 So the product already *wants* drawings. It cannot see them when the engineer reviews
 an assembly or a part.
@@ -294,7 +300,7 @@ an assembly or a part.
    PDF ingest (`swreview ingest --pdf`) can put exported sheets into `package.json`.
 2. Native drawing extract **only runs when the dump root is a drawing**
    (`PackageWriter`: “The dump does not go looking for the drawings of an open
-   model”). A Review of 810-11249 or 830-02342 writes the drawing-phase gap and
+   model”). A Review of the small or the big assembly writes the drawing-phase gap and
    moves on. Opening the `.SLDDRW` on the Standards tab is a different dump.
 3. `request_evidence` is the existing “ask the engineer” tool. Tonight it asked for
    the whole drawing package in one ER. That is not yet a short, guided question
@@ -331,15 +337,15 @@ annotation on every round. Feature 005’s compact-query work is the same idea.
 
 **What this means for the model.**
 
-- **810-11249:** the two pin joints and the plate holes are in the dump. Without
+- **The small assembly:** the two pin joints and the plate holes are in the dump. Without
   the part drawing, the reviewer cannot check fit, stack, finish, or thread callouts.
   It already asked for that package (ER-002) and left those checks unresolved. The
   model is only half-reviewed: geometry and RMS, not manufacture.
-- **830-02342:** 99 findings and still no drawing. A big assembly without sheets
+- **The big assembly:** 99 findings and still no drawing. A big assembly without sheets
   cannot become a drawing-improvement job; the model has no views or balloons to
   improve. Start here only showed five interference rows, so even the 3D issues
   are mostly unread (§5).
-- **810-11281:** Standards said `no drawing graded`. If this part has no drawing,
+- **The part of the big assembly:** Standards said `no drawing graded`. If this part has no drawing,
   the honest next offer is “make a drawing from the assembly context we just
   learned” — after someone has reviewed the assembly that uses it, not from the
   Remodel tab’s no-seat banner. If a drawing exists and was simply not attached,
@@ -352,7 +358,7 @@ annotation on every round. Feature 005’s compact-query work is the same idea.
 
 1. **U14 — attach drawings to a model/assembly dump** when they are already open or
    are the obvious sibling of a reviewed document. Record a gap when none are
-   found. Pin: Review of 810-11249 with its part drawing already open must put
+   found. Pin: Review of the small assembly with its part drawing already open must put
    sheets in `package.json` and must not leave `drawing.manufacturing_inputs` as
    “phase did not run.”
 2. **U15 — pane-visible questions** for the gaps that block manufacture (reuse
@@ -381,7 +387,7 @@ create/improve is a later feature.
 | **U9** | Feature | Session chips (or equivalent) keyed by document + configuration + `chat_id`, so a later document does not destroy the earlier review. | §2. Normal night is more than one file. |
 | **U10** | Bug / UX | Headline-only findings by default. Hide `observed` until Details. Collapse all. Start-here click must not force the fold open. | §3. The issue is unreadable as a list. |
 | **U11** | Feature | Results \| Transcript swap: one view owns the pane. | §4. Stacked tiers still fight the 300 px strip. |
-| **U12** | Feature | Findings index: all headlines, ranked, with “5 of N”. Do not raise `TOP_N` until that list exists. | §5. 830-02342 hid 94 of 99. |
+| **U12** | Feature | Findings index: all headlines, ranked, with “5 of N”. Do not raise `TOP_N` until that list exists. | §5. The big assembly hid 94 of 99. |
 | **U13** | Copy | Remodel banner: no CLI in the pane. Same refuse. | §6. U4 worked; the sentence is still a dead end. |
 | **U14** | Feature | Attach already-open or sibling part/assembly drawings to a model dump. Gap if none. Do not vault-walk. | §7. Tonight’s Reviews asked for sheets and had none. |
 | **U15** | Feature | Show missing-context questions in the pane (drawing, limits, fit intent, datum). Unanswered stays unresolved. | §7. ER-002 was written and not usable as a conversation. |
@@ -394,7 +400,7 @@ write drawings.
 ## Never
 
 - Flip the pane lever-6 default from this packet.
-- Treat the 810-11281 Remodel banner as a successful or failed remodel of that part.
+- Treat the part's Remodel banner as a successful or failed remodel of that part.
 - Start a review automatically when the document changes.
 - Print the full ranking as twenty Start-here cards to “fix” top five.
 - Invent a fit class, general tolerance, or view set when the drawing is missing.

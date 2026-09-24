@@ -79,8 +79,7 @@ benchmarks/**/chat-log.jsonl
 # held to that by tests/unit/test_replay_fixture_hygiene.py (feature 008 T017, T018).
 !reviewer/tests/fixtures/replay/*/events.jsonl
 
-# Local evidence imported from the 2026-09-20 pilot handoff (real-design paths).
-/dumps/20260919-184136-810-11249/
-/dumps/20260919-184738-810-11249-standards/
-/dumps/20260919-184809-810-11249-standards/
+# Local evidence imported from the 2026-09-20 pilot handoff (real-design paths). The whole
+# folder: its run folders' names carry a design number (owner decision 11B, 2026-09-24).
+/dumps/
 /logs/tool-service-20260919-184725.log

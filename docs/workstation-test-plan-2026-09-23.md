@@ -28,8 +28,10 @@ write the difference down as a finding.
    at the prompt of step 5.4. Never in a file, on a command line, in a chat or in the findings
    document.
 5. **In the findings document, call documents by their letters** (section 0.2), not by their file
-   names; the two recorded assemblies, 810-11249 and 830-02342, may be named. No vault path,
-   folder name, property name or value, sheet format or template name goes in it.
+   names; the two recorded assemblies may also be called the small assembly (A) and the big
+   assembly (B), never by their numbers: the findings document is committed, and no committed
+   file names them (the owner's decision 11B). No vault path, folder name, property name or
+   value, sheet format or template name goes in it.
 6. **Do not click or type while a probe runs.** Probe D14 checks that the window in front and the
    active document do not change; your own click would fail it.
 7. **A step that fails**: record what the step says to record, then go on to the next step,
@@ -52,8 +54,8 @@ live only as long as the SOLIDWORKS session.
 
 Most of step 3 is opening the right documents; with the documents of section 0.2 found and noted
 before the sitting it can be an hour shorter. The paid model use is roughly 3 to 4 million input
-tokens over about ten reviews, most of them small, against the 12.4 million of the one 830-02342
-review of the last sitting; this is an estimate from the replay's figures, not a measurement.
+tokens over about ten reviews, most of them small, against the 12.4 million of the one review of the
+big assembly at the last sitting; this is an estimate from the replay's figures, not a measurement.
 
 ## 0. Before the sitting
 
@@ -77,8 +79,8 @@ travels by hand; it is never pushed.
 
 | Letter | What it must be | Used by |
 |---|---|---|
-| A | the 810-11249 assembly (a machined plate and two dowel pins), and its pin and plate parts (A-pin, A-plate) | steps 3.1, 4.1, 4.4, 4.5, 5.5 |
-| B | the 830-02342 assembly | steps 3.1, 4.2, 4.3 |
+| A | the small assembly of the last sittings (a machined plate and two dowel pins), and its pin and plate parts (A-pin, A-plate); its number is not in this plan, the owner writes it in `notes\documents.txt` | steps 3.1, 4.1, 4.4, 4.5, 5.5 |
+| B | the big assembly reviewed at the last sitting; its number is not in this plan, the owner writes it in `notes\documents.txt` | steps 3.1, 4.2, 4.3 |
 | C | a drawing of six sheets with a revision table on a sheet other than the first | steps 3.2, 3.5 |
 | D | an assembly, with D-1 and D-2 the drawings of two of its parts and D-X the drawing of a part that is not in it | steps 3.3, 3.4, 3.5 |
 | E | a part opened from a vault view whose same-name drawing is not in the local cache | step 3.3 |
@@ -717,15 +719,16 @@ mismatch keeps it off, and research R4 records why.
    note the sentence beside Send, `Sending resumes the review once. Its last round sent <n> input
    tokens.` For a same-name drawing question in steps 4.1 and 4.2, answer `Review without it`.
 
-### 4.1 810-11249, the small assembly [008 T103; 009 T079]
+### 4.1 A, the small assembly [008 T103; 009 T079]
 
 Open A resolved and make it active; press Review (the box above). Note the time it started and
 finished.
 
 - 008 T103, pass: the `tokens` line's `input` is **at most 300,000** when the review first
-  finishes, before any answer is sent. The last sitting's 810-11249 reviews took 1.47 million and
-  1.58 million. Fail: above 300,000; then record the `pre-run tools called again after the first
-  model round` line, which names the checks the model repeated (a repeat fails T103 by design).
+  finishes, before any answer is sent. The last sitting's reviews of the small assembly took
+  1.47 million and 1.58 million. Fail: above 300,000; then record the `pre-run tools called
+  again after the first model round` line, which names the checks the model repeated (a repeat
+  fails T103 by design).
 - `pre-run tools:` names the checks that ran before the model's first round (checks first): the
   three `check_rms_...` checks, `bridge_interference`, `check_interference_group`, `check_joints`,
   `check_mass_material`, `check_hygiene` and `check_standards`, and `check_drawings` when the
@@ -740,7 +743,7 @@ finished.
 Record: the facts, the headline, the Decide, Fix and Verify lines, the goal lines, the drawings
 line (with letters in place of names), the usage line, and the start and end times.
 
-### 4.2 830-02342, the big assembly [008 T102; 010 T107; 009 T079; 009 T080]
+### 4.2 B, the big assembly [008 T102; 010 T107; 009 T079; 009 T080]
 
 Open B resolved and make it active; press Review. Note the start and end times.
 

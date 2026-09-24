@@ -15,7 +15,7 @@ section 6, `tool-access.md` section 5, `mass-material.md` section 5, `hygiene.md
 No name, path or property value of either recorded package is in this file or in what it
 writes; `test_mechanical_fixtures_are_fictional.py` holds the output to that.
 
-## big-assembly (shaped like 830-02342)
+## big-assembly (shaped like the big assembly)
 
 26 documents (23 parts, 3 assemblies), 89 components (86 resolved, 2 lightweight, 1
 suppressed), 27 hole rows with 132 instances, 68 screws over 9 vendor-named documents, 2 pins
@@ -65,7 +65,7 @@ have holes of their own and three on two parts that have none. The masses give d
 hygiene cases are one part number that is not its file name, two documents sharing a summary
 and one model without a revision, in profile A's fictional property names.
 
-## small-assembly (shaped like 810-11249)
+## small-assembly (shaped like the small assembly)
 
 3 documents, 4 components, 4 hole rows with 16 instances on one plate, a 3.0 mm pin face in
 a 3.0 mm hole at 0.000 mm overlapping it by 8.475 mm, two zero-volume interference rows
@@ -107,7 +107,9 @@ from swreview.ir.models import HoleWizardData, Quantity  # noqa: E402
 
 Z = (0.0, 0.0, 1.0)
 X = (1.0, 0.0, 0.0)
-TILT = (math.sin(math.radians(30.0)), 0.0, math.cos(math.radians(30.0)))
+TILT = (math.cos(math.radians(60.0)), 0.0, math.sin(math.radians(60.0)))
+"""30 degrees from z, spelled from 60 degrees: `sin(30)`'s last bit gave one bounding-box
+coordinate a float tail whose digits read like a recorded design number (decision 11B)."""
 
 PART_NUMBER, SUMMARY, REVISION = HYGIENE_PROPERTIES
 

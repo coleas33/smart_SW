@@ -108,7 +108,7 @@ candidate_margin: {angle_deg: 1.0, overlap_mm: 1.0, gap_mm: 1.0}
 
 Every value non-negative and every angle below 90 degrees, or the loader refuses naming it.
 
-## 9. The acceptance numbers (the big fixture, shaped like 830-02342)
+## 9. The acceptance numbers (the big fixture, shaped like the big assembly)
 
 The foundational map (no `fasteners`): 132 instances from 27 rows; 2 rows with no instance
 (gaps); 47 kept hole pairs; **50 joints in 11 pattern groups** - 45 screw joints from hole pairs
@@ -119,6 +119,6 @@ screw face in a lone tapped instance (`hol:0013#1`, `hol:0021#1`), 2 pin joints
 (`hol:0025#2` with a 6.75 mm cylinder); 2 candidates - `hol:0018#2`/`hol:0024#1` `overlap_near`
 (7.006 mm against 6.05 mm) and `hol:0018#2`/`hol:0027#1` `assigned_elsewhere` (0.750 mm); 13 free
 faces on parts with holes excluded; the first-instance pairs 1.576 and 3.950 mm apart are not
-joints and not candidates. The small fixture (810-11249 shape): one `pin` joint, a 3.0 mm pin in a
+joints and not candidates. The small fixture (the small assembly's shape): one `pin` joint, a 3.0 mm pin in a
 3.0 mm hole at 0.000 mm, and no hole pair. The map with `fasteners` adds the joints of section 5
 and is pinned by its own golden (US4).

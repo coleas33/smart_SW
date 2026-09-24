@@ -145,7 +145,7 @@ Read each ranking with the owner. A disagreement is an edit to `attention_policy
 
 ## Scenario 11 [W] (US3): the pane
 
-Start a review on the 810-11249 assembly; when it ends, the pinned panel's rows are identical
+Start a review on the small assembly; when it ends, the pinned panel's rows are identical
 to `report.md`'s "Start here". Press Model check and Standards: the rows sit above the chips.
 
 ## Scenario 12 [W] (US4): the gate's wall clock

@@ -274,9 +274,9 @@ slimming, history pruning after N rounds`; a round holding a `stored` call is fl
 ## 8. The fixtures
 
 `reviewer/tests/fixtures/replay/{big-assembly, small-assembly-a, small-assembly-b}/` each hold
-`package.json`, `session.json` and `events.jsonl`, shaped like the recorded 830-02342 run and the
-two 810-11249 runs, written once by `reviewer/tests/fixtures/replay/generate_fixtures.py` from a
-recording on the machine that holds the dumps (`--recorded RUN_DIR --name NAME`). The generator
+`package.json`, `session.json` and `events.jsonl`, shaped like the big assembly's recorded run
+and the small assembly's two, written once by `reviewer/tests/fixtures/replay/generate_fixtures.py`
+from a recording on the machine that holds the dumps (`--recorded RUN_DIR --name NAME`). The generator
 never contains a recorded string; it scrambles identifying strings through
 `tests/support/scramble.FictionalMap` (first-seen order, length and character class kept, ids,
 SOLIDWORKS type names, the generic feature vocabulary and property keys passed through), adds
@@ -310,21 +310,44 @@ growth; the generator's own leak check polices every replaced token of three cha
 with a letter, and every replaced number of five digits or more.
 
 The committed hygiene test checks every fixture file: document and vault paths under the
-fictional root; no drive path outside it, no email, no http(s) URL, no copyright sign; none of
-`830-02342`, `810-11249`, `810-11281`; and, when the denylist file exists, none of its lines (the
-test says why it skipped that part when the file is absent).
+fictional root; no drive path outside it, no email, no http(s) URL, no copyright sign; and, when
+the denylist file exists, none of its lines (the test says why it skipped that part when the file
+is absent).
+
+*Amended 2026-09-24 (owner decision 11B): the design numbers leave the tree.* The design numbers
+of the recorded assemblies appear in no tracked file, so the hygiene test no longer lists the
+recorded design ids: they are denylist tokens like any other, checked where the denylist exists.
+`reviewer/tests/unit/test_tracked_files_carry_no_recorded_number.py` fails when any denylist token
+of five digits or more is a whole token of any file `git ls-files` lists (binaries skipped),
+naming the file and line, never the token; for the two assemblies' numbers the owner's denylist
+also holds the spelling with no separator, which is one longer token. Documents name the recordings in words: the big assembly's recording
+(`big-assembly`), the small assembly's two (`small-assembly-a`, `small-assembly-b`).
+
+**Where the recordings are.** Their folder names carry the design numbers, so the owner keeps a
+mapping outside the repository, beside the denylist: `%LOCALAPPDATA%\SwReview\recordings.json`,
+one JSON object whose keys are the three fixture names and whose values are the recorded run
+folders' absolute paths:
+
+```json
+{"big-assembly": "<folder>", "small-assembly-a": "<folder>", "small-assembly-b": "<folder>"}
+```
+
+The generator takes the folder on its command line, as below; the real-recording test (section 10)
+reads the mapping through `reviewer/tests/support/recordings.py`, skipping, saying why, where the
+mapping or a mapped folder is absent, and failing where the mapping is there but gives no absolute
+folder for a fixture. No message names a mapped folder.
 
 *Amended 2026-09-23 (owner decision 3A; research R2.54, R2.56): the fixtures follow the code.*
 When a change to what a tool returns, or to the system prompt or the checklist, is deliberate,
 the three fixtures are regenerated, as part of that change, from `reviewer/`:
 
 ```
-uv run python tests/fixtures/replay/generate_fixtures.py --recorded <dumps>\20260920-192014-830-02342 --name big-assembly --groups 113
-uv run python tests/fixtures/replay/generate_fixtures.py --recorded <dumps>\20260920-191314-810-11249 --name small-assembly-a
-uv run python tests/fixtures/replay/generate_fixtures.py --recorded <dumps>\20260920-190840-810-11249 --name small-assembly-b
+uv run python tests/fixtures/replay/generate_fixtures.py --recorded <the big assembly's recording folder> --name big-assembly --groups 113
+uv run python tests/fixtures/replay/generate_fixtures.py --recorded <the small assembly's recording folder A> --name small-assembly-a
+uv run python tests/fixtures/replay/generate_fixtures.py --recorded <the small assembly's recording folder B> --name small-assembly-b
 ```
 
-(`<dumps>` is `%LOCALAPPDATA%\SwReview\handover\2026-09-20-gui\dumps`), and then the pane
+(each folder is the one the owner's mapping gives for that fixture name, above), and then the pane
 fixture that reads `big-assembly` (feature 009, `tests/fixtures/pane/generate_pane_fixture.py
 --write`). A fixture is never edited by hand; SC-001's 1% bar is kept against what the generator
 writes, and every figure of section 9 that moves is re-measured and says why in its test.
@@ -369,12 +392,13 @@ The rule that no recorded finding is lost or not replayable is unchanged, and ab
 
 ## 10. Real recordings
 
-`reviewer/tests/integration/test_replay_recorded_runs.py` (skipped when
-`%LOCALAPPDATA%\SwReview\handover\2026-09-20-gui\dumps` is absent; *landed without* the
+`reviewer/tests/integration/test_replay_recorded_runs.py` (skipped when the recordings are
+absent - since 2026-09-24, when the owner's mapping of section 8 or a folder it names is; *landed
+without* the
 `integration` marker, which `tests/conftest.py` skips whole when no native evidence package is
 present - as it is not on the machine holding the recordings) checks pass A within 1% on every
 round of the three recorded reviews (observed at most 0.023%) and that replayed plus
-not-replayable findings equal the recorded key set (830: 88 + 11 = 99).
+not-replayable findings equal the recorded key set (the big assembly's: 88 + 11 = 99).
 
 *Amended 2026-09-23 (owner decision 3A; research R2.55): the recordings are held to their
 drift.* The recordings can never be regenerated and the code they are replayed against changes

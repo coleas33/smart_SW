@@ -10,8 +10,8 @@ profile and a provider key.
 ## Prerequisites
 
 Everything from features 001 to 007. Offline: the three committed replay fixtures under
-`reviewer/tests/fixtures/replay/` (shaped like the recorded 830-02342 run and the two 810-11249
-runs, fictional throughout), `config/standards.example.yaml` (the profile the pilot ran), the
+`reviewer/tests/fixtures/replay/` (shaped like the big assembly's recorded run and the small
+assembly's two, fictional throughout), `config/standards.example.yaml` (the profile the pilot ran), the
 scripted review bridge in `tests/support/review_bridge.py` and the pre-run fixture package in
 `tests/support/prerun.py`.
 
@@ -176,7 +176,7 @@ review of any assembly: `check_standards` runs in the pre-run and its findings a
 
 ## Scenario 12 [W]: the big assembly, paid
 
-A pane review of 830-02342 with the defaults. Record the input tokens (at most 1.5 times the
+A pane review of the big assembly with the defaults. Record the input tokens (at most 1.5 times the
 replay's requested estimate for `big-assembly`: 995,853, from the "Requested, pane defaults"
 figure 663,902 of `docs/llm-efficiency-options.md`, counted as uncached plus cached input), the
 findings (at least the recorded 99 by subject, a contact counting for a recorded interference
@@ -186,7 +186,7 @@ report both showing uncached and cached input.
 
 ## Scenario 13 [W]: the small assembly, paid
 
-A pane review of 810-11249 with the defaults: at most 1.5 times the replay's estimate and at most
+A pane review of the small assembly with the defaults: at most 1.5 times the replay's estimate and at most
 0.3M input tokens - 300,000 is the line, being below 1.5 times every estimate of
 `small-assembly-a`; a review that repeats the checks the digest reported fails it by design (the
 replay's requested figure, 459,000, assumes the recorded calls); at least the recorded findings.

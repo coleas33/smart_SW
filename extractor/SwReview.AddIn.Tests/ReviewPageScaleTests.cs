@@ -15,7 +15,8 @@ namespace SwReview.AddIn.Tests;
 ///
 /// <b>SC-006</b>: every finding of a 99-finding review is reachable from the top of Results in
 /// at most two clicks - none for a headline card in the list (scrolling is not a click), one for
-/// a card inside the modelling-practice group. On 830-02342 94 of 99 findings had no path at all.
+/// a card inside the modelling-practice group. On the big assembly 94 of 99 findings had no path
+/// at all.
 /// The review here is generated in the shape research R2.3 gives that run - 99 findings in 18
 /// issues, 51 of them modelling practice - with and without the family's group; the same
 /// assertion on the committed big-assembly pane fixture joins the acceptance tests once the py

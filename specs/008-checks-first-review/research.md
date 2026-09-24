@@ -47,10 +47,10 @@ The recorded runs, as measured on 2026-09-23:
 
 | Run | Usage rounds | Input tokens | Cached | Uncached | Tool calls | Findings | Answers |
 |---|---|---|---|---|---|---|---|
-| `20260920-192014-830-02342` | 41 (turn 0: 40, of which the last is the presentation request; turn 1: 1) | 12,395,545 (12,393,671 without the presentation request) | 11,988,157 | 407,388 | 38 | 99 | 0 |
-| `20260920-191314-810-11249` | 39 | 1,569,692 | 1,501,667 | 68,025 | 36 | 13 | 0 |
-| `20260920-190840-810-11249` | 37 | 1,464,288 | 1,413,047 | 51,241 | 32 | 7 | 0 |
-| `20260920-190758-810-11249` | 2 (stopped) | 19,528 | 9,656 | 9,872 | 2 | 0 | 0 |
+| the big assembly's recording, `20260920-192014-…` | 41 (turn 0: 40, of which the last is the presentation request; turn 1: 1) | 12,395,545 (12,393,671 without the presentation request) | 11,988,157 | 407,388 | 38 | 99 | 0 |
+| the small assembly's recording, `20260920-191314-…` | 39 | 1,569,692 | 1,501,667 | 68,025 | 36 | 13 | 0 |
+| the small assembly's other recording, `20260920-190840-…` | 37 | 1,464,288 | 1,413,047 | 51,241 | 32 | 7 | 0 |
+| the small assembly's stopped review, `20260920-190758-…` | 2 (stopped) | 19,528 | 9,656 | 9,872 | 2 | 0 | 0 |
 
 No recording carries an answered evidence request, so the answer paths of the replay are proven
 on scripted recordings only (R2.2, R2.42).
@@ -252,7 +252,8 @@ a `function_call_output` item (`openai_provider.py:624-652`), and Gemini sends a
 #### R2.10 Fixtures: full size, generated, fictional - and graded with the example profile (Reconciled)
 
 **Decision**: three full-size fixtures under `reviewer/tests/fixtures/replay/` - `big-assembly`
-(shaped like 830-02342), `small-assembly-a` (191314) and `small-assembly-b` (190840) - each with
+(shaped like the big assembly's recording), `small-assembly-a` (191314) and `small-assembly-b`
+(190840), the small assembly's two - each with
 `package.json`, `session.json` and `events.jsonl`, written by a committed generator
 `reviewer/tests/fixtures/replay/generate_fixtures.py` that is given the path of a recording and
 never contains a recorded string. It (1) replaces the identifying package strings with fictional
@@ -306,11 +307,14 @@ guessed against the hashes).
 
 **Decision**: the committed hygiene test always checks structure: every document and vault path
 starts with the fictional root; no string is a drive path outside it, an email address, an
-http(s) URL or a copyright sign; no recorded design id (830-02342, 810-11249, 810-11281)
-appears. It also reads an owner-kept denylist outside the repository,
+http(s) URL or a copyright sign; no recorded design id appears. It also reads an owner-kept denylist outside the repository,
 `%LOCALAPPDATA%\SwReview\fixture-denylist.txt`, and skips that part, saying why, when the file is
 absent. The generator writes that file (outside the repository) from the tokens it replaced, so
-the thorough check exists on the machine that holds the recordings.
+the thorough check exists on the machine that holds the recordings. *Amended 2026-09-24 (owner
+decision 11B):* the design ids were listed by number in the test until then; no tracked file may
+name them now, so they are policed as denylist tokens only, and
+`test_tracked_files_carry_no_recorded_number.py` holds every tracked file to the denylist's
+numbers (`contracts/replay.md` section 8).
 
 **Why**: a list of real names cannot live in a public repository, in plain text or as hashes.
 

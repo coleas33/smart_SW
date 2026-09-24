@@ -5,6 +5,17 @@ Run from `reviewer/`, on the machine that holds the recordings, and commit what 
     uv run python tests/fixtures/replay/generate_fixtures.py --recorded <RUN_DIR> --name <NAME>
         [--groups N]
 
+`RUN_DIR` is a recorded run folder. Its name carries a design number, so no tracked file names
+it (the owner's decision 11B of 2026-09-24): the owner's mapping,
+`%LOCALAPPDATA%\\SwReview\\recordings.json` beside the denylist and outside the repository, says
+which folder is which - one JSON object from each fixture name to its recording's absolute
+folder path:
+
+    {"big-assembly": "<folder>", "small-assembly-a": "<folder>", "small-assembly-b": "<folder>"}
+
+`tests/support/recordings.py` reads it for the real-recording test; `contracts/replay.md`
+section 8 gives the three commands.
+
 `--groups` is how many interference groups the recording's live detection found, when that is
 more than the groups the model judged (the big recording's model wrote the count in its own
 prose; nothing else in the folder records it).

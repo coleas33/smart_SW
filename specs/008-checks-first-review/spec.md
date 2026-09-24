@@ -18,7 +18,7 @@ The owner wants to know what a change to the reviewer will do to the bill and to
 
 **Why this priority**: every other story is a claim about tokens and findings. Without an offline price, each claim needs a licensed seat and a paid review to check, and neither is available on the development machine. The replay is the gate the owner chose for making the other changes defaults.
 
-**Independent Test**: replay the committed fixture shaped like the recorded 830-02342 run with every change off: the per-round tokens match the recorded ones within 1%, and the finding set matches exactly. Replay it again with the changes on: the tokens fall and the finding set still contains every recorded finding.
+**Independent Test**: replay the committed fixture shaped like the big assembly's recorded run with every change off: the per-round tokens match the recorded ones within 1%, and the finding set matches exactly. Replay it again with the changes on: the tokens fall and the finding set still contains every recorded finding.
 
 **Acceptance Scenarios**:
 
@@ -125,7 +125,7 @@ The engineer and the owner see what a review cost in terms they can act on: how 
 - **FR-004**: A recorded call the replay cannot reproduce MUST be sized from the recorded round-over-round growth, labelled estimated, and counted in a total of estimated rounds.
 - **FR-005**: The replay MUST report the finding set (check and subject) of the recording and of the replay, name every finding lost and every finding added, and exit with failure when any recorded finding is lost.
 - **FR-006**: The replay MUST offer a machine-readable output alongside the human one, and refuse a folder that is not a review with one sentence naming what is missing.
-- **FR-007**: Committed fixtures for the replay MUST be shaped like the recorded 810-11249 and 830-02342 runs with fictional names and paths; the recorded runs themselves never enter the repository.
+- **FR-007**: Committed fixtures for the replay MUST be shaped like the recorded runs of the small assembly and the big assembly with fictional names and paths; the recorded runs themselves never enter the repository.
 
 **Checks first**
 
@@ -179,9 +179,9 @@ The engineer and the owner see what a review cost in terms they can act on: how 
 ### Measurable Outcomes
 
 - **SC-001**: With every change off, the replay of the fixtures shaped like the recorded runs reproduces the recorded per-round input tokens within 1% and the recorded finding set exactly. *Amended 2026-09-23 (owner decision 3A): the fixtures follow the code.* When a change to what a tool returns, or to the system prompt or the checklist, is deliberate, the three fixtures are regenerated from the recordings on the machine that holds them, as part of that change and never by hand, and the 1% bar is kept against the regenerated fixtures, so growth nobody intended still fails it. The real recordings, which can never be regenerated, are held instead to their drift: each round's difference from the bill equals the size change of the results that round carries, within framing noise (`contracts/replay.md` section 10).
-- **SC-002**: With the pane defaults on, the replay of the 830-02342-shaped fixture sends under 1.0M input tokens in total, against 12.4M recorded, and loses no recorded finding.
-- **SC-003**: With the pane defaults on, the replay's labelled regrouped estimate for each of the 810-11249-shaped fixtures is under 0.3M input tokens, against about 1.5M recorded, its strict figure over the recorded rounds is below the recorded total, and it loses no recorded finding; the 0.3M on a real review is measured by SC-010.
-- **SC-004**: A follow-up question after the 830-02342-shaped review costs under 30k input tokens, against 405k recorded.
+- **SC-002**: With the pane defaults on, the replay of the fixture shaped like the big assembly sends under 1.0M input tokens in total, against 12.4M recorded, and loses no recorded finding.
+- **SC-003**: With the pane defaults on, the replay's labelled regrouped estimate for each of the fixtures shaped like the small assembly is under 0.3M input tokens, against about 1.5M recorded, its strict figure over the recorded rounds is below the recorded total, and it loses no recorded finding; the 0.3M on a real review is measured by SC-010.
+- **SC-004**: A follow-up question after the review shaped like the big assembly's costs under 30k input tokens, against 405k recorded.
 - **SC-005**: Answering three open questions together costs one resumed turn, not three.
 - **SC-006**: On a review with a live connection, every detected interference group is judged, against 6 of 113 on the recorded run.
 - **SC-007**: The session's findings are identical, finding by finding, with the changes on and with them off, apart from the folded modelling-practice group's presentation.

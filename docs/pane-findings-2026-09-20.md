@@ -20,9 +20,9 @@ updates below.
 |---|---|
 | Commit | `c36f183` (`local` ← `e04c027`) |
 | Provider / model / effort | openai / `gpt-5.6-luna` / high |
-| Assembly | 810-11249. Both dowel pins **lightweight** (FeatureManager feathers). Not resolved this sitting. |
-| Review | `20260919-184136-810-11249` (18:41–18:49; follow-up at 18:49) |
-| Standards | `20260919-184738-810-11249-standards`, then `20260919-184809-810-11249-standards` |
+| Assembly | the small assembly. Both dowel pins **lightweight** (FeatureManager feathers). Not resolved this sitting. |
+| Review | `20260919-184136-…` (18:41–18:49; follow-up at 18:49) |
+| Standards | `20260919-184738-…-standards`, then `20260919-184809-…-standards` |
 | Model check | not run tonight |
 | Remodel tab | 18:47, `tool-service-20260919-184725.log` |
 | Task E resolved pair | not run |
@@ -83,7 +83,7 @@ usable client height. Do not add a native popup.
 Guessed the transcript window was too small (related to §1, but not sufficient).
 
 **What actually happened.** The POST succeeded. `events.jsonl` on
-`20260919-184136-810-11249`:
+`20260919-184136-…`:
 
 - First `session.ended` at 22:43:10Z — turn 1, 38 rounds.
 - Follow-up answer starts at seq 1076 (22:49:08Z).

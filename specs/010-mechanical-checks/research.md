@@ -5,8 +5,8 @@
 Phase 0 output from: the analyst's check-by-check pass over the two recorded evening packages
 (34 facts, 8 recommendations, 10 open questions, 2026-09-22); a second reading pass on
 2026-09-23 over every module the plan names, at tip `5530e22`; and three read-only probes run
-on 2026-09-23 over the recorded packages `20260920-192014-830-02342` and
-`20260920-191314-810-11249` (outside the repository). The probes print ids, sizes and
+on 2026-09-23 over the recorded packages of the big assembly's recording and the small
+assembly's (the one `small-assembly-a` was generated from), outside the repository. The probes print ids, sizes and
 millimetres only; no name, path or property value of either package is written anywhere in this
 package or in any file a task creates. Where this document says VERIFIED, the file was opened
 on 2026-09-23 and, where the claim is behavioural or numeric, the code or the probe was run.
@@ -37,7 +37,7 @@ smallest), and the axis of its first face. A row with no cylinder face yields no
 
 **Why**: VERIFIED that `HoleDumper.AddAxisAndFaces` adds **every** cylinder face of the feature
 to `face_ids` and takes the axis from the **first** one only
-(`extractor/SwReview.Extractor/Dump/HoleDumper.cs:351-377`). On 830-02342 the 27 hole rows are
+(`extractor/SwReview.Extractor/Dump/HoleDumper.cs:351-377`). On the big assembly the 27 hole rows are
 132 instances (`hol:0014` 15, `hol:0016` 16, `hol:0019` 15, `hol:0023` 16, `hol:0008` 9,
 `hol:0003` 8); `hol:0007` and `hol:0009` carry no cylinder face at all. The two existing
 consumers compare first-instance axes only: `check_hole_alignment` calls
@@ -47,7 +47,7 @@ why the recorded review found `hol:0004` and `hol:0010` "25.0 mm apart": per ins
 features form **three coaxial joints at 0.000 mm**.
 
 **Alternatives**: one axis per `Hole` row, as the analyst's recommendation 2 assumed (rejected:
-it finds 3 of the 50 joints on 830-02342 and pairs the wrong instances); an extractor change
+it finds 3 of the 50 joints on the big assembly and pairs the wrong instances); an extractor change
 emitting one `Hole` per instance (rejected for this feature: an IR change and a seat run to buy
 what the faces already say exactly; recorded as a possible later clean-up).
 
@@ -65,7 +65,7 @@ a tapped hole is one joint of three instances. The thresholds live in
 values it was judged on.
 
 **Why**: the spec's assumption (1 degree, overlap, a gap under 1 mm) made precise. VERIFIED on
-830-02342: 48 instance pairs pass the three gates - 35 tapped under countersink, 10 tapped under
+the big assembly: 48 instance pairs pass the three gates - 35 tapped under countersink, 10 tapped under
 counterbore, 3 clearance over clearance - including `hol:0017`/`hol:0027` at 0.000 mm and two
 `hol:0018`/`hol:0027` pairs at 0.750 mm. One `hol:0027` instance passes the gates with both a
 `hol:0017` instance (0.000 mm) and a `hol:0018` instance (0.750 mm), both on `cmp:0004`; without
@@ -101,14 +101,14 @@ the last column, `reviewer/src/swreview/ir/models.py:140-141`, VERIFIED on a sam
 within `parallel_deg`. Every placement records how it was made (`face` or `origin`); a fastener
 that neither rule places is `unplaced` and counted in coverage, never guessed.
 
-**Why**: VERIFIED 27 free cylinder faces on 18 components in 830-02342. 13 of them are on parts
+**Why**: VERIFIED 27 free cylinder faces on 18 components in the big assembly. 13 of them are on parts
 that have Hole rows of their own - among them a 4.5 mm plain bore of the clamped part over
 `hol:0013` - and the package does not say whether a face is a bore or a boss, so a face on a part
 with holes is a `JointMapGap`, never a member. A screw may be modelled anywhere between its minor
 and major diameter (3.0 mm in `hol:0021`'s 2.5 mm tapped bore), hence the tapped limit. The
 members include every case the spec names: `cmp:0018` (8.5 mm) in `hol:0006`, `cmp:0007` (3.3 mm) in `hol:0013`, `cmp:0008`
 (3.0 mm) in `hol:0021`, and an M8 head (13.0 mm) inside the 14.0 mm counterbore of `hol:0024`. In
-810-11249 the pin `cmp:0003` (3.0 mm) sits in `hol:0004` (3.0 mm) at 0.000 mm with 8.475 mm of
+the small assembly the pin `cmp:0003` (3.0 mm) sits in `hol:0004` (3.0 mm) at 0.000 mm with 8.475 mm of
 overlap. Of the 68 screws named in the vendor pattern, 11 have an extracted face; placement by
 origin places **57 of 68** on a hole-instance axis, **48** of them on a tapped instance.
 
@@ -130,7 +130,7 @@ a single instance with a non-screw cylinder member is a **pin** joint; anything 
 `size` field holds `Ø3.0` for the four dowel holes and a thread size for every clearance,
 counterbore and countersink hole in both packages (probe of `holes[].size`).
 
-**Alternatives**: classifying by hole type pairs only (rejected: misses the 810-11249 pin, which
+**Alternatives**: classifying by hole type pairs only (rejected: misses the small assembly's pin, which
 has no partner hole); treating a size disagreement (an M4 counterbore over an M5 tapped hole) as
 "not a joint" (rejected: the joint is geometric; the disagreement is the defect, and R2.7 reports
 it as a negative clearance).
@@ -165,7 +165,7 @@ bolt through clearance holes) `H_i - F` for each hole.
 **Why**: FR-007 and FR-008. The two formulas are the fixed- and floating-fastener relations of
 ASME Y14.5 at nominal sizes; stating both removes the analyst's single `(H - F)/2`, which is right
 only for a screw into a tapped hole. On the dowel pair the 3.1 mm hole allows 0.05 mm and the
-3.0 mm hole 0 mm, so the 0.750 mm offset is demonstrated against 0.050 mm allowed. On 810-11249
+3.0 mm hole 0 mm, so the 0.750 mm offset is demonstrated against 0.050 mm allowed. On the small assembly
 the 3.0 mm pin in the 3.0 mm hole at 0.000 mm passes with a budget of zero and a coverage limit
 saying the fit is line to line.
 
@@ -227,8 +227,8 @@ the findings only when the list is non-empty; the ranking never reads it.
 
 **Why**: FR-001 to FR-003 and SC-001. VERIFIED `_reported` treats any non-null volume as
 demonstrated (`reviewer/src/swreview/checks/interference.py:363-377`), which is how 5 of the 8
-interference findings across the two evenings (810-11249 F-001, F-002; 830-02342 F-092, F-095,
-F-096, all 0.0 mm3) took four of the ten Start-here slots (analyst fact 7). A list the ranking
+interference findings across the two evenings (the small assembly's F-001, F-002; the big
+assembly's F-092, F-095, F-096, all 0.0 mm3) took four of the ten Start-here slots (analyst fact 7). A list the ranking
 never reads cannot occupy a slot, by construction. The owner decided "a separate contact list,
 not findings" (2026-09-23). The epsilon is named because a float `0.0` from the host may arrive as
 a denormal; 1e-6 mm3 is a thousandth of a cubic micrometre, below any material meaning.
@@ -265,7 +265,7 @@ cross-checks it. The same cases, fictional strings only, are one JSON vector tab
 `reviewer/tests/unit/test_fastener_names.py` and by `FastenerNameParserTests.cs`, so the two
 parsers cannot drift.
 
-**Why**: FR-011 and SC-004. VERIFIED 68 of 89 instances in 830-02342 are screws by the file-name
+**Why**: FR-011 and SC-004. VERIFIED 68 of 89 instances in the big assembly are screws by the file-name
 pattern (`SHC` 32, `FHT` 35, `BHT` 1, over 9 documents and 9 size/length combinations); 48 of
 those 68 also parse from the Description; every screw document carries a material; 36 of the
 68 reference a configuration that is not `Default`. VERIFIED the C# parser needs the size as the
@@ -318,7 +318,7 @@ its thread (the tap drill), so its extent is **never** the usable depth; a throu
 thread runs the face's length, which is why the extractor leaves it null on purpose
 (`HoleDumper.cs:207-212`) and why the derived value is labelled. The mesh is supplementary
 geometry used only where no native face exists (Principle IV) and never for a thread, a
-size or a tolerance. VERIFIED on 830-02342 (tapped parts' classes from `engagement_rules`):
+size or a tolerance. VERIFIED on the big assembly (tapped parts' classes from `engagement_rules`):
 
 | Screw | Hole | Tapped class | Engaged (mm) | 1.5 x d (mm) | Outcome |
 |---|---|---|---|---|---|
@@ -381,8 +381,8 @@ while a child is unread, is suspected). Unread components and body gaps are coun
 `skipped` coverage item. The standards family's `material_assigned` is not touched.
 
 **Why**: FR-016 to FR-018. VERIFIED densities of 2700 and 7700-8000 kg/m3 on the read parts, an
-assembly of exactly 2.000 kg (effective 4068 kg/m3) whose children were never opened, and a
-810-11249 assembly whose 0.3722 kg equals its part plus two pins; `mass_overridden` absent on 26
+assembly of exactly 2.000 kg (effective 4068 kg/m3) whose children were never opened, and the
+small assembly, whose 0.3722 kg equals its part plus two pins; `mass_overridden` absent on 26
 of 26 and 3 of 3 documents, every read a `tool_error` gap (analyst facts 26, 29). VERIFIED the
 standards check is the release macro's exclusive-or with a configuration gate
 (`checks/standards/part.py:444-542`): it answers a different question and stays as it is. One
@@ -514,7 +514,7 @@ coverage item per check, as the standards family's `passed()` does.
 (`checks/fastener.py:362`, `fit.py:112`, `stack.py:151`, `hole_alignment.py:124`), and feature
 007 ranks them last and counts them in the not-amplified line. Recording passes as coverage would
 drop the calculation an engineer needs to see why a joint passed. Without the fold, 50 joints and
-up to eight checks each would be about 300 findings on 830-02342; with it, 11 pattern groups.
+up to eight checks each would be about 300 findings on the big assembly; with it, 11 pattern groups.
 
 ### R2.22 New check ids and their classes, added to policy v1
 
@@ -633,11 +633,11 @@ refusals included, keeps its one row and its goal line through finalization.
 
 ## R3. Verified facts the plan relies on
 
-**Packages** (analyst fact 1, re-checked). 830-02342: 26 documents (23 parts, 3 assemblies), 89
+**Packages** (analyst fact 1, re-checked). The big assembly: 26 documents (23 parts, 3 assemblies), 89
 components (86 resolved, 2 lightweight, 1 suppressed), 27 hole rows (132 instances), 0 fasteners,
 0 interferences on disk, 245 faces on 21 components, 141 bodies on 83 components, 23
 `mass_override` tool-error gaps, 4 parts with no material (3 unopened, 1 surface-only), part
-classes steel 15, aluminium 4, unknown 4. 810-11249: 3 documents, 4 components, 4 hole rows (16
+classes steel 15, aluminium 4, unknown 4. The small assembly: 3 documents, 4 components, 4 hole rows (16
 instances), 0 hole-to-hole joints, one pin-in-hole joint, 3 `mass_override` gaps.
 
 **The recorded review's choices.** 6 of 113 detected interference groups judged; 8 interference
@@ -646,7 +646,7 @@ findings, 5 of them 0.0 mm3; alignment pairs `hol:0004`/`hol:0010`, `hol:0010`/`
 `hol:0017`/`hol:0027` one joint at 0.000 mm; `hol:0010`/`hol:0024` are at 90 degrees and are not a
 joint.
 
-**Screws** (830-02342, probe). 68 named, 57 placed on an instance axis, 48 on a tapped instance,
+**Screws** (the big assembly, probe). 68 named, 57 placed on an instance axis, 48 on a tapped instance,
 46 agreeing in size, **2** M4 screws on M5x0.8 tapped instances (the analyst reported one); 9 on a
 counterbore or clearance axis whose tapped part has no extracted hole; 11 on no extracted axis;
 68 of 68 have a body mesh; 11 have a face.

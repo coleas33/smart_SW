@@ -306,7 +306,7 @@ every session and the owner read the result. Four decisions, all as the policy p
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | The top five on `20260918-215755-810-11249` | As previewed: the two `interference.static` rows, `rms.assembly.mates_to_reference_geometry`, `rms.sketches.fully_defined`, `rms.grouping.all_features_in_a_group`; `rms.folders.present` last of eight |
+| 1 | The top five on the small assembly's review `20260918-215755-…` | As previewed: the two `interference.static` rows, `rms.assembly.mates_to_reference_geometry`, `rms.sketches.fully_defined`, `rms.grouping.all_features_in_a_group`; `rms.folders.present` last of eight |
 | 2 | The class of `rms.assembly.first_component_fixed`, found on the 810-11450 reviews | `rebuild_breaker`: an unfixed first component leaves every mate without an anchor |
 | 3 | Grouping and the two equation rules | `discipline`, below the reference rules and above hygiene |
 | 4 | The shape of the "not reached" block | The run's own close-out sentences (R2.5), then the evidence-request and rule counts |
@@ -330,9 +330,9 @@ above records:
 
 | Folder(s) | Top of the ranking |
 |---|---|
-| `20260918-215755-810-11249` (review, eight findings) | `F-007`, `F-008` `interference.static` (needs your judgement); `rms.assembly.mates_to_reference_geometry`; `rms.sketches.fully_defined`; `rms.grouping.all_features_in_a_group`; three not amplified, `rms.folders.present` last |
-| `20260918-214702` and `-215624-810-11249` (reviews, six findings, no interference call) | mates to reference geometry, the under-defined sketch, grouping, the two equation rules; `rms.folders.present` the one not amplified |
-| `20260918-214545` and `-220310-810-11249-check` (Model check, three findings) | `rms.sketches.fully_defined`, grouping, folders |
+| `20260918-215755-…` (the small assembly's review, eight findings) | `F-007`, `F-008` `interference.static` (needs your judgement); `rms.assembly.mates_to_reference_geometry`; `rms.sketches.fully_defined`; `rms.grouping.all_features_in_a_group`; three not amplified, `rms.folders.present` last |
+| `20260918-214702` and `-215624`, the small assembly (reviews, six findings, no interference call) | mates to reference geometry, the under-defined sketch, grouping, the two equation rules; `rms.folders.present` the one not amplified |
+| `20260918-214545` and `-220310`, the small assembly (Model check, three findings) | `rms.sketches.fully_defined`, grouping, folders |
 | `20260918-204543-810-11504` and its check | grouping first (the part has no sketch or mate finding), folders last |
 | The three `20260916-*-810-11450` reviews (two findings) | `rms.assembly.first_component_fixed`, then `rms.assembly.mates_to_reference_geometry` |
 

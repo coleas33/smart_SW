@@ -11,11 +11,11 @@ lightweight is right and sometimes it silently hollows out the whole review.
 
 ## 1. Why: the evidence from this workstation
 
-`810-11249.SLDASM` is one machined part plus two dowel pins. The pins are the entire
+The small assembly is one machined part plus two dowel pins. The pins are the entire
 reason the assembly exists: they locate it. On every run today both pin instances were
 **lightweight**, and the consequences were large and almost invisible.
 
-**In the Review tab** (`20260919-135032-810-11249`): live interference detection ran and
+**In the Review tab** (run `20260919-135032-…`): live interference detection ran and
 returned nothing.
 
 ```
@@ -31,7 +31,7 @@ package carried **23 extractor gaps**, and twenty coverage rows read
 The headline said nothing. An engineer reading the verdict would not learn that the two
 components under review were never read.
 
-**In the Standards tab** (`20260919-135855-810-11249-standards`): seven of sixteen checks
+**In the Standards tab** (run `20260919-135855-…-standards`): seven of sixteen checks
 came back unresolved for the same reason, and here the wording is exemplary:
 
 > the pin document is reached only through component instances that are not resolved

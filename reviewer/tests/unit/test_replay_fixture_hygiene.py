@@ -8,7 +8,6 @@ second lock, and the one that runs everywhere:
 - every document path and vault path sits under the fictional root `C:\\FictionalVault\\`;
 - no string anywhere is a drive-letter path outside that root, an email address, an http(s)
   URL, or carries a copyright sign;
-- none of the recorded design ids appears;
 - none of the words that would rebuild a vault layout or a supplier's naming
   (`FORBIDDEN_WORDS`) appears: in a path-valued field compared whole-word and case-insensitive,
   anywhere else whole-word as written (the lower-case checklist id `fasteners` is generic, and
@@ -23,10 +22,13 @@ second lock, and the one that runs everywhere:
   (`%LOCALAPPDATA%\\SwReview\\fixture-denylist.txt`, written by the generator), none of its
   token lines appears as a whole token, and no folder between the fictional root and the file
   name equals, case-insensitively, a folder name the recorded packages carried. Where the file
-  is absent those two parts are skipped, saying why.
+  is absent those two parts are skipped, saying why. The recorded design numbers are among
+  those tokens and are policed there alone: since the owner's decision 11B of 2026-09-24 no
+  tracked file may name them, this one included, and
+  `test_tracked_files_carry_no_recorded_number.py` holds every tracked file to them.
 
-The checks that read strings - drive paths, email, URL and copyright, the design ids, the
-forbidden words and the owner's denylist - also run over the Review tab's pane fixture
+The checks that read strings - drive paths, email, URL and copyright, the forbidden words
+and the owner's denylist - also run over the Review tab's pane fixture
 (`extractor/SwReview.AddIn.Tests/Fixtures/review-big-assembly.json`, feature 009 T023). It is
 derived from big-assembly by its own generator, carries the display titles a person reads, and
 is just as public, so a later change that let text from anywhere else into it would be caught
@@ -69,7 +71,6 @@ FILES = ("package.json", "session.json", "events.jsonl")
 PANE = "pane"
 """The pane fixture's label among the committed fixtures the string checks read."""
 PANE_GENERATOR = FIXTURES.parent / "pane" / "generate_pane_fixture.py"
-RECORDED_DESIGN_IDS = ("830-02342", "810-11249", "810-11281")
 FORBIDDEN_WORDS = (
     "_LIBRARY",
     "LIBRARY",
@@ -176,13 +177,6 @@ def test_no_string_is_a_drive_path_outside_the_root_an_email_a_url_or_a_copyrigh
                 offenders.append(f"{where}: copyright sign in {text[:60]!r}")
 
     assert offenders == []
-
-
-def test_no_recorded_design_id_appears(files: tuple[Path, ...]) -> None:
-    for path in files:
-        text = path.read_text(encoding="utf-8")
-        for design_id in RECORDED_DESIGN_IDS:
-            assert design_id not in text, f"{path.parent.name}/{path.name} carries {design_id}"
 
 
 def test_the_package_has_path_values_to_check(fixture: Path) -> None:

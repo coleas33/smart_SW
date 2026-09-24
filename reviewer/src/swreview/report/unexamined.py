@@ -1,6 +1,6 @@
 """Which component instances a run never read, said once and said early.
 
-The pilot workstation graded the 810-11249 dowel-pin assembly three times on 2026-09-19
+The pilot workstation graded the small assembly, the dowel-pin one, three times on 2026-09-19
 with both pins lightweight. Live interference found nothing where the day before it had
 found two clashes, twenty coverage rows said "lightweight; tree not read", and no headline
 said that the two components the assembly exists to locate had never been examined

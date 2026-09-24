@@ -61,7 +61,7 @@ Then runbook section 6 (health checks). The five-tab check stands; the Ask tab s
 
 ## 4. Task A2: the reworked tabs
 
-With the 810-11249 assembly open, run Review, then Model check on the part, then Standards.
+With the small assembly open, run Review, then Model check on the part, then Standards.
 On each tab confirm, and say in the findings document:
 
 - "Start here" is a numbered card list with a bold headline and a coloured stripe; the

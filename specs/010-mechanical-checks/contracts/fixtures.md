@@ -12,8 +12,8 @@ reviewer/tests/support/mechanical.py              # builders: documents, compone
                                                   # naming shape, interference rows, tiny STL meshes
 reviewer/tests/fixtures/mechanical/
 ├── generate_fixtures.py                          # run from reviewer/; reads nothing but the builders
-├── big-assembly/package.json, meshes/*.stl       # shaped like 830-02342
-├── small-assembly/package.json, meshes/*.stl     # shaped like 810-11249
+├── big-assembly/package.json, meshes/*.stl       # shaped like the big assembly
+├── small-assembly/package.json, meshes/*.stl     # shaped like the small assembly
 └── tolerances/package.json, meshes/*.glb         # IR 1.5.0 (US8, T084)
 specs/010-mechanical-checks/contracts/fastener-name-vectors.json   # the parser vectors (T039)
 ```

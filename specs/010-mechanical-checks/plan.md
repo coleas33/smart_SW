@@ -12,7 +12,7 @@ Turn the owner's goal list into checks code runs on every review, with no model 
 argument, in the order they can ship before the next workstation sitting:
 
 1. **Fixtures first** (Setup): two synthetic packages built by code and shaped like the recorded
-   830-02342 and 810-11249 runs - the same counts, the same geometry cases, fictional strings -
+   runs of the big assembly and the small assembly - the same counts, the same geometry cases, fictional strings -
    with a generator that reproduces them byte for byte and a denylist test.
 2. **The joint map** (Foundational): hole *instances* exploded from Hole Wizard features (a
    `Hole` row is a feature with up to 16 instances, research R2.1), paired across parts by three
@@ -328,7 +328,7 @@ Research in [research.md](research.md) (R1 to R6). Design in [data-model.md](dat
 | 10 | **US8** (P2) | IR 1.5.0; the ISO 286 table and the general block; the resolver feeding the stack; the guard; the Hole Wizard and tolerance readers (code and fakes) | Validation only |
 | 11 | 008 integration | repeat keys; the replay's contact reclassification; the joint map over 008's replay fixture; SC-006 | No, after the named 008 tasks |
 | 12 | Polish | the two checklist items; docs; the quickstart | No |
-| 13 | Workstation | SC-008 and a review of 830-02342 | Yes |
+| 13 | Workstation | SC-008 and a review of the big assembly | Yes |
 
 **Sequencing that is not negotiable.** The fixtures before any check, because every acceptance
 test reads them. The joint map before US2 to US5. US3's stack-up before US8's resolver (the

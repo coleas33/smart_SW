@@ -8,7 +8,7 @@
 
 **Amended**: 2026-09-23, with the owner's decision 3A work that lands T098-T099: the mass and hygiene families close their checklist items with one summary coverage row each, and the two items name no tool (research R2.25, T108). The row is `checked` only when the call wrote at least one `checked` per-check row or recorded a finding; otherwise it is `skipped`, with the same counts in its reason, so a family run that checked nothing (no standards profile, every part lightweight) reads "not reached" on the Review summary's goal line, never "checked"; and a call whose finding is refused writes it `failed`, never `checked` (T108 as amended the same day).
 
-**Input**: Owner goal list of 2026-09-22: "Static interference; Fastener thread engagement; Hole alignment (potentially automate the tolerance stackup here too); Tool access above screw heads; Mass/material for all geometry; Hygiene checks (part numbers, etc); TOLERANCES?" Evidence: the check-by-check analysis of the recorded 830-02342 and 810-11249 reviews summarised in `docs/roadmap-2026-09-22.md`. Owner decisions: tolerances from all four sources - Hole Wizard fits and classes, model dimension tolerances and DimXpert/MBD annotations, drawing callouts, and a general tolerance block (2026-09-22); size-for-size contacts as a separate list, not findings; minimum thread engagement 1.5 x diameter into both steel and aluminium (both 2026-09-23).
+**Input**: Owner goal list of 2026-09-22: "Static interference; Fastener thread engagement; Hole alignment (potentially automate the tolerance stackup here too); Tool access above screw heads; Mass/material for all geometry; Hygiene checks (part numbers, etc); TOLERANCES?" Evidence: the check-by-check analysis of the recorded reviews of the big assembly and the small assembly summarised in `docs/roadmap-2026-09-22.md`. Owner decisions: tolerances from all four sources - Hole Wizard fits and classes, model dimension tolerances and DimXpert/MBD annotations, drawing callouts, and a general tolerance block (2026-09-22); size-for-size contacts as a separate list, not findings; minimum thread engagement 1.5 x diameter into both steel and aluminium (both 2026-09-23).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -18,7 +18,7 @@ An engineer reviews an assembly with SOLIDWORKS attached. Every interference gro
 
 **Why this priority**: the recorded big-assembly review judged 6 of 113 detected groups, and four of the ten "Start here" slots across the two evening runs were zero-volume contacts reported as interference.
 
-**Independent Test**: judge the interference rows of a fixture shaped like the 830-02342 detection (113 groups, some zero volume): every group has an outcome; zero-volume rows appear in the contact list and in no finding; positive-volume rows are findings with their volume.
+**Independent Test**: judge the interference rows of a fixture shaped like the big assembly's detection (113 groups, some zero volume): every group has an outcome; zero-volume rows appear in the contact list and in no finding; positive-volume rows are findings with their volume.
 
 **Acceptance Scenarios**:
 
@@ -34,7 +34,7 @@ Code finds the joints the assembly is built from, from the geometry alone: a scr
 
 **Why this priority**: the model checked unrelated hole pairs for alignment while five real candidates existed, and fastener checks never ran. Every later story depends on knowing which holes and parts go together.
 
-**Independent Test**: build the joint map of a fixture shaped like 830-02342: it holds the five near-coaxial cross-part pairs the analysis found, each classified, and none of the three unrelated pairs the recorded review checked.
+**Independent Test**: build the joint map of a fixture shaped like the big assembly: it holds the five near-coaxial cross-part pairs the analysis found, each classified, and none of the three unrelated pairs the recorded review checked.
 
 **Acceptance Scenarios**:
 
@@ -228,7 +228,7 @@ The extraction reads tolerances from every place the owner named: Hole Wizard fi
 
 ### Measurable Outcomes
 
-- **SC-001**: On the fixture shaped like 830-02342, every detected interference group is judged (against 6 of 113 in the recorded review), and zero-volume contacts occupy no "Start here" slot.
+- **SC-001**: On the fixture shaped like the big assembly, every detected interference group is judged (against 6 of 113 in the recorded review), and zero-volume contacts occupy no "Start here" slot.
 - **SC-002**: On the same fixture, the M4 screw in the M5 tapped hole is reported as a thread mismatch, with no model involved.
 - **SC-003**: On the same fixture, the five near-coaxial joints are checked for alignment and the 0.75 mm dowel offset is reported, against three unrelated pairs in the recorded review.
 - **SC-004**: At least 90% of the screws named in the recorded packages' vendor pattern are recognised as fasteners.

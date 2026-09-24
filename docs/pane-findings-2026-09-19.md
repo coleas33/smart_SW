@@ -7,18 +7,19 @@ committed. This file names folders only; it carries no vault path.
 
 **Headline: Task A Start-here rows match across pane, `report.md`, and `swreview
 attention`. Lever 6 (`parallel_tool_calls`) cut rounds ~69% and tokens ~68% on the
-dumped 810-11249 package with quality 6/0/0 on every rep. Formal adopt is still
+small assembly's dumped package with quality 6/0/0 on every rep. Formal adopt is still
 blocked (`SET TOO SMALL`). Do not flip the pane default.**
 
 ---
 
 ## 1. Task A: the panel matches the report
 
-Full review of the dowel-pin assembly, all levers off, `gpt-5.6-luna` / `high`:
+Full review of the dowel-pin assembly (the small assembly), all levers off, `gpt-5.6-luna` /
+`high`. Run folders are named by their timestamps; the rest of each name is the design number:
 
 | Surface | Folder | Start-here ids in order |
 |---|---|---|
-| Pane, `report.md`, `swreview attention` | `20260919-135032-810-11249` | F-004, F-003, F-002, F-005, F-006 |
+| Pane, `report.md`, `swreview attention` | `20260919-135032-…` | F-004, F-003, F-002, F-005, F-006 |
 
 The three surfaces agreed. `attention.json` was written. `swreview attention` did not
 change folder files.
@@ -27,15 +28,15 @@ Checks on the same document (deterministic; no provider):
 
 | Tab | Folder | Start-here ids in order |
 |---|---|---|
-| Model check | `20260919-140852-810-11249-check` | F-003, F-002, F-001 |
-| Standards | `20260919-135855-810-11249-standards` | F-001 (`standards.part.sketches_fully_defined`) |
+| Model check | `20260919-140852-…-check` | F-003, F-002, F-001 |
+| Standards | `20260919-135855-…-standards` | F-001 (`standards.part.sketches_fully_defined`) |
 
 Expected 2026-09-18 order for this assembly included two `interference.static` rows. This
 run had none: the dowel pins were lightweight, so interference and fit stayed unresolved.
 That is a different finding set, not a panel/report mismatch.
 
-Stop control (Task A step 5): `20260919-140138-810-11249` and
-`20260919-140906-810-11249` each lasted ~2 s, wrote "Nothing to start with: no findings
+Stop control (Task A step 5): `20260919-140138-…` and
+`20260919-140906-…` each lasted ~2 s, wrote "Nothing to start with: no findings
 were recorded", and the ended-session panel showed that empty state. The earlier full-run
 panel is gone once the new session ends.
 
@@ -43,7 +44,7 @@ panel is gone once the new session ends.
 
 ## 2. Token baseline (why lever 6 is first)
 
-From `20260919-135032-810-11249` `session.json`. All efficiency flags false. 32 tool
+From `20260919-135032-…` `session.json`. All efficiency flags false. 32 tool
 calls, 32 rounds (one call per round, which is the lever-6-off shape).
 
 | Field | Tokens | Share |
@@ -101,8 +102,8 @@ and wall clock.
 
 **Not an adoption gate.** Both arms of pair 1 scored `0 / 2 / 9` (nine false alarms, both
 keyed defects missed). Owner agreed 2026-09-19: finish the six fixture runs for the
-rounds/tokens distribution only. A quality-valid A/B is a later study on the dumped
-`810-11249` package (or a built `rms-part`), not another `cover-blind-tap`.
+rounds/tokens distribution only. A quality-valid A/B is a later study on the small
+assembly's dumped package (or a built `rms-part`), not another `cover-blind-tap`.
 
 ---
 
@@ -153,10 +154,11 @@ because the set is too small.
 
 Do not turn the pane default on from this study.
 
-## 6. Lever 6 quality A/B on dumped 810-11249 (complete)
+## 6. Lever 6 quality A/B on the small assembly's dump (complete)
 
 Same protocol, same model/effort, outside the repo:
-`%LOCALAPPDATA%\SwReview\handover\2026-09-19\studies\lever06-810-11249`.
+`%LOCALAPPDATA%\SwReview\handover\2026-09-19\studies\lever06-…` (named for the small
+assembly).
 `audit-secrets` printed `none:`. `compare` exit 1 / `SET TOO SMALL` is expected.
 `ledger.md` names this machine's absolute paths.
 

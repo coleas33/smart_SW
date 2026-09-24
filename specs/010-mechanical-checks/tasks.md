@@ -260,11 +260,11 @@ uv run python -c "import sys; from collections import Counter; from swreview.ir.
 
 The last line of `extract.log` is the dump's gate log (T109): `gated=` and every interop member the dump asked about. It names `GetOverrideOptions` only when the first mass-override path (`CreateMassProperty().OverrideMass`) gave no answer on some document; with no `mass_override` gap, the second path answered there.
 
-- [ ] T103 [W] Dump 810-11249 and 830-02342 with the new build: `mass_overridden` present on every document and no `mass_override` tool-error gap; record which read path answered in `research.md` - `extract.log`'s `gated=` line, as the phase's note says (SC-008)
+- [ ] T103 [W] Dump the small assembly and the big assembly with the new build: `mass_overridden` present on every document and no `mass_override` tool-error gap; record which read path answered in `research.md` - `extract.log`'s `gated=` line, as the phase's note says (SC-008)
 - [ ] T104 [W] The same dumps: `Hole.wizard` filled on every Hole Wizard hole, every field or a named gap; record the raw fit and thread classes seen, so `iso286.yaml`'s coverage and `fastener_names.yaml` can be checked against them (SC-008)
 - [ ] T105 [W] The same dumps: `model_dimensions` and `model_annotations` present where the models carry them, or empty with no gap where they do not; record whether the team uses DimXpert or MBD (research R5) (SC-008)
 - [ ] T106 [W] The same dumps: the 68 named screws emitted as fasteners, each with a shank face; the joint checks then compute engagement for screws that had no face before; no non-fastener emitted (RK-10)
-- [ ] T107 [W] With feature 008 on main: a pane review of 830-02342 with checks first judges every interference group, lists contacts apart and outside "Start here", records the joint, mass and hygiene findings before the first model turn, and spends no model round on them (SC-001, SC-006); the result is recorded in the next handover document
+- [ ] T107 [W] With feature 008 on main: a pane review of the big assembly with checks first judges every interference group, lists contacts apart and outside "Start here", records the joint, mass and hygiene findings before the first model turn, and spends no model round on them (SC-001, SC-006); the result is recorded in the next handover document
 
 ---
 

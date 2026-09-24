@@ -50,7 +50,7 @@ At the top of the results the engineer reads one short summary, in plain words, 
 
 **Why this priority**: a non-developer engineer needs the verdict and the decisions that are theirs before anything else. Everything below the summary is detail they can open.
 
-**Independent Test**: render a review of the fixture shaped like the 830-02342 run: the summary reads, in order, the finding and issue counts, the three groups with their counts, the questions, the parts not loaded, and one line per check goal with its state; the modelling-practice findings are one collapsed group; the zero-volume contacts are one folded list; no component id appears where a component name exists.
+**Independent Test**: render a review of the fixture shaped like the big assembly's run: the summary reads, in order, the finding and issue counts, the three groups with their counts, the questions, the parts not loaded, and one line per check goal with its state; the modelling-practice findings are one collapsed group; the zero-volume contacts are one folded list; no component id appears where a component name exists.
 
 **Acceptance Scenarios**:
 
@@ -204,7 +204,7 @@ Everywhere in the engineer's default view, internal vocabulary gives way to word
 
 ### Measurable Outcomes
 
-- **SC-001**: On the fixture shaped like the 830-02342 review, the summary, the three decision groups and the not-reached goals are readable without scrolling in a 300 by 600 pane.
+- **SC-001**: On the fixture shaped like the big assembly's review, the summary, the three decision groups and the not-reached goals are readable without scrolling in a 300 by 600 pane.
 - **SC-002**: A non-developer engineer shown that review can say, within ten seconds, how many decisions are theirs and which check goals were not reached.
 - **SC-003**: The default Results view of that review contains no component id where a name exists, no raw status token, no check id outside a fold, and no error class name.
 - **SC-004**: Answering three questions costs one resumed review turn.

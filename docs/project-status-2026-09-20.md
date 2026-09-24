@@ -149,18 +149,21 @@ the new findings record what actually ran and what remains missing.
 ## Imported files and evidence
 
 All 18 files from the ZIP were copied without content changes, removing only its
-outer `smart_SW-handoff-2026-09-20/` directory so the original relative paths work.
+outer `smart_SW-handoff-2026-09-20/` directory so the original relative paths work. (Since
+the owner's decision 11B of 2026-09-24 the tracked ones name the assemblies in words - the
+small assembly, the big assembly - instead of by design number.)
 
 - [Original handoff overview](../README-START-HERE.md).
 - [Detailed findings and U1–U7 recommendations](pane-findings-2026-09-20.md).
-- [Review report](../dumps/20260919-184136-810-11249/report.md), with the package,
-  session, attention record, and event stream alongside it.
-- [First Standards report](../dumps/20260919-184738-810-11249-standards/report.md)
-  and [later Standards report](../dumps/20260919-184809-810-11249-standards/report.md),
-  each with its package, session, attention record, and check result.
+- The small assembly's Review report, `report.md` in `dumps/20260919-184136-…/`, with
+  the package, session, attention record, and event stream alongside it.
+- The first and the later Standards reports, in `dumps/20260919-184738-…-standards/` and
+  `dumps/20260919-184809-…-standards/`, each with its package, session, attention record,
+  and check result.
 - [Remodel refusal log](../logs/tool-service-20260919-184725.log).
 
 The three dump directories and the log are local, Git-ignored evidence because
-they contain real-design paths. Their links work in this imported checkout; a
-fresh clone needs the original packet. Documentation remains available to track.
+they contain real-design paths. Their folder names end in the assembly's design number, so
+they are named here by their timestamps (decision 11B); a fresh clone needs the original
+packet. Documentation remains available to track.
 API keys, pane settings, and the real standards profile were not in the ZIP.

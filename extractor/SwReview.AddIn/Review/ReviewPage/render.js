@@ -786,8 +786,9 @@
    * the Start-here cards, built by `web/shared/attention.js` exactly as the check tabs build
    * them. Every other row follows them behind "Show all", one line each, in the same supplied
    * order (U12, docs/pane-findings-2026-09-20-review-gui.md section 5; contracts/attention.md
-   * section 6): on 830-02342 the five cards were the only way in to 99 findings. Nothing here
-   * reads a severity, compares two rows or sorts; the counts are the backend's numbers.
+   * section 6): on the big assembly the five cards were the only way in to 99 findings.
+   * Nothing here reads a severity, compares two rows or sorts; the counts are the backend's
+   * numbers.
    * `PageRuleScanTests` is the test that keeps it that way.
    */
   function attentionPanel(ranking, labels) {

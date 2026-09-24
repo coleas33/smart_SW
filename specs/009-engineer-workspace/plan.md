@@ -67,7 +67,7 @@ words and the goal table), the generated pane fixture
 written by this feature: the two new routes read and write nothing. Page state lives in page memory.
 
 **Testing**: pytest and xUnit with the offscreen WebView2 harness, strictly test-first. Each story
-ends with an acceptance on one fixture shaped like the 830-02342 run: the backend summarizes 008's
+ends with an acceptance on one fixture shaped like the big assembly's run: the backend summarizes 008's
 `big-assembly` fixture (T022) and the page renders the snapshot of that same fixture (T032, T045,
 T058, T065), kept in step by a byte-for-byte drift test (T023). A scan of the default view (SC-003),
 a layout test at 300 by 600 (SC-001), a two-click reachability test (SC-006) and a 1,000-finding
@@ -114,7 +114,7 @@ table).*
 | Technical constraint: out-of-process calls coarse, one STA thread | COM on the application thread | The configuration event arrives on the SOLIDWORKS thread and only posts a message, as `ActiveDocChangeNotify` does; Show's lookup gains a folder argument and no new COM call. | PASS |
 | Technical constraint: no generic code execution exposed to the agent | Curated tools only | No new tool; `request_evidence` gains three optional arguments. | PASS |
 | Technical constraint: third-party reuse respects licences | Licences checked | No new dependency. | PASS |
-| Development workflow: benchmark packages are the acceptance suite | Measured per design | The acceptance runs on the fixture shaped like the 830-02342 review; SC-007 and SC-002 are judged by an engineer on both recorded assemblies at the next sitting (Phase 9). | PASS |
+| Development workflow: benchmark packages are the acceptance suite | Measured per design | The acceptance runs on the fixture shaped like the big assembly's review; SC-007 and SC-002 are judged by an engineer on both recorded assemblies at the next sitting (Phase 9). | PASS |
 
 **Post-design re-check**: no exception, no Complexity Tracking row.
 

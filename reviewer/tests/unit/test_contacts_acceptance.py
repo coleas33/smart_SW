@@ -1,9 +1,9 @@
 """User Story 1 on the shaped fixtures: every group judged, contacts listed apart (T025).
 
-SC-001: on the fixture shaped like 830-02342 every detected interference group is judged -
-against 6 of 113 in the recorded review - and no zero-volume contact occupies a "Start here"
-slot. The small fixture, shaped like 810-11249, carries the pin whose two zero-volume rows
-took two of those slots in the recorded evening run.
+SC-001: on the fixture shaped like the big assembly every detected interference group is
+judged - against 6 of 113 in the recorded review - and no zero-volume contact occupies a
+"Start here" slot. The small fixture, shaped like the small assembly, carries the pin whose two
+zero-volume rows took two of those slots in the recorded evening run.
 """
 
 from __future__ import annotations

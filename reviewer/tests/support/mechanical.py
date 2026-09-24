@@ -1,9 +1,9 @@
 """Builders for the mechanical-check fixtures of feature 010 (T002, `contracts/fixtures.md`).
 
 `tests/fixtures/mechanical/generate_fixtures.py` builds two packages shaped like the recorded
-830-02342 and 810-11249 runs out of these builders, and the unit tests of feature 010 build
-their small hand-made packages out of the same ones, so there is one definition of what a
-hole feature, a screw or an interference row looks like in a package.
+runs of the big assembly and the small assembly out of these builders, and the unit tests of
+feature 010 build their small hand-made packages out of the same ones, so there is one
+definition of what a hole feature, a screw or an interference row looks like in a package.
 
 **The shapes are the recorded packages' shapes** (research R2.1, R2.3, R3):
 

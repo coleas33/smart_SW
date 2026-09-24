@@ -4,7 +4,7 @@
 
 You are picking this up with **no prior context**. This folder is what the
 pilot seat learned after absorbing your 2026-09-20 handover (`e04c027`) and
-running the reworked tabs on 810-11249.
+running the reworked tabs on the small assembly.
 
 **Do not treat this as a git branch to merge.** Findings packet only. The
 workstation stays on `local` and does not push.
@@ -27,9 +27,12 @@ machine. The punch list is below and in
 
 1. `docs/pane-findings-2026-09-20.md` — the whole sitting, token table, and
    **What the other machine should update** (U1–U7). Start there.
-2. `dumps/20260919-184136-810-11249/` — the Review run (hidden follow-up in
+2. `dumps/20260919-184136-…/` — the small assembly's Review run (hidden follow-up in
    `events.jsonl` after the first `session.ended`).
-3. `dumps/20260919-184809-810-11249-standards/` — later Standards run.
+3. `dumps/20260919-184809-…-standards/` — the small assembly's later Standards run.
+
+(The run folders' names end in the assembly's design number, which the repository no longer
+carries: owner decision 11B, 2026-09-24.)
 4. `logs/tool-service-20260919-184725.log` — Remodel-tab refusal
    (`remodel.probe_scope`).
 

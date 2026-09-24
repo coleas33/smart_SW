@@ -12,7 +12,7 @@ namespace SwReview.AddIn.Tests;
 /// Feature 009 T026: the modelling-practice findings are one collapsed group (FR-010, the
 /// owner's decision of 2026-09-22, contracts/review-summary.md section 5).
 ///
-/// On 830-02342, 51 of the 56 findings "to fix" were modelling practice - sketches not fully
+/// On the big assembly, 51 of the 56 findings "to fix" were modelling practice - sketches not fully
 /// defined, features in no folder - and they stood one headline each between the engineer and
 /// the six interferences. The backend names the family's findings (`summary.modelling_practice
 /// .finding_ids`, from feature 008's family row); once the ranking arrives the page moves those
