@@ -647,6 +647,7 @@ public static class Program
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static int ExecuteDump(DumpOptions options, string? documentPath, bool allowStart, bool reuse)
     {
+        var observer = new RecordingGateObserver();
         using (var log = new ExtractLog(options.OutputDirectory))
         {
             try
@@ -662,7 +663,10 @@ public static class Program
 
                 // The extraction's attach (feature 011, contracts/attach.md section 3): a drawing
                 // is read with no configuration, and one that is not open is refused, not opened.
-                ISwSession session = SwSession.AttachForDump(swApp, documentPath, options.Configuration);
+                // The gate is watched, so the log's last line names every member the dump asked
+                // about (feature 010 T109).
+                ISwSession session = SwSession.AttachForDump(
+                    swApp, documentPath, options.Configuration, DumpGate(observer));
                 log.Write($"Document: {session.Document.GetPathName()}");
                 log.Write("Configuration: "
                     + (session.ConfigurationName() ?? "none (a drawing has no configuration)"));
@@ -682,6 +686,7 @@ public static class Program
                     + $"{result.Package.Faces.Count} faces, "
                     + $"{result.Package.Bodies.Count} bodies, "
                     + $"{result.Gaps.Count} gaps");
+                log.Write(DumpGateLogLine(observer.Members));
 
                 Out.WriteLine(result.PackageFilePath);
                 return ExitSuccess;
@@ -689,10 +694,28 @@ public static class Program
             catch (Exception error)
             {
                 log.WriteError("dump failed.", error);
+                log.Write(DumpGateLogLine(observer.Members));
                 return ExitError;
             }
         }
     }
+
+    /// <summary>
+    /// The gate <c>dump</c> runs on (feature 010 T109, the seat-readiness review of 2026-09-23):
+    /// the READ-ONLY guard, as <c>SwSession</c>'s default gate has, watched by a recorder so
+    /// <c>extract.log</c> ends with every interop member the dump asked about. That set is how a
+    /// seat sees which mass-override path answered: <c>PropertyDumper.ReadMassOverridden</c> asks
+    /// <c>GetOverrideOptions</c> only when <c>CreateMassProperty</c>'s path gave no answer.
+    /// </summary>
+    internal static SwGate DumpGate(RecordingGateObserver observer) =>
+        new SwGate(new CircuitBreaker(), ReadOnlyCallGuard.Instance) { Observer = observer };
+
+    /// <summary>
+    /// The dump's gate-log line: <c>gated=</c> and every member once, in first-seen order - the
+    /// shape of the tool service's own <c>gated=</c> field.
+    /// </summary>
+    internal static string DumpGateLogLine(IReadOnlyList<string> members) =>
+        "gated=" + string.Join(",", members);
 
     /// <summary>
     /// Dumps, or - with <c>--reuse</c> - copies an earlier run's package into this run's
