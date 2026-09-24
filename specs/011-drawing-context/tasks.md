@@ -273,7 +273,8 @@ Every probe below is one run of `swreview-extract probe drawings --out <folder> 
 - T044 after T043; T046 after T045 and T023; T048 after T047, T046 and T044; T049 after T048
 - T069 after T004; T070 after T069; T071 after T070, T008, T010, T019 and T021; T072 after T071; T073 after T072; T074 after T073; T075 after T048 and T072; T076 after T075; T078 after T072; T079 after T078
 - T080 after T027, T040 and T070; T081 after T080 and T072
-- T051 after T050, T035 and T048; T053 after T052 and T051; T055 after T054 and T053
+- T051 after T050, T035 and T048; T053 after T052 and T051; T055 after T054 and T053; T078 after T055; T079 after T078
+- T081 after T080, T076 and T023 (added 2026-09-23, decision 10A)
 - T057 after T056, T029 and T048
 
 ### Parallel opportunities, by file ownership
@@ -299,7 +300,8 @@ Sequenced so no file is edited by two features at once; when another feature is 
 | `reviewer/src/swreview/checks/standards/profile.py` and the five profile files | T029 | any profile version |
 | `reviewer/src/swreview/prerun.py`, `tools/registry.py` | T048 | feature 008 and 010's registrations |
 | `reviewer/src/swreview/tools/query.py`, `tools/session.py` | T025, T037, T044 | feature 008's model view, feature 009's questions |
-| `reviewer/tests/unit/test_tool_payload.py` | T054, T055 | every tool change; regenerated with `--write` in its own commit |
+| `reviewer/tests/unit/test_tool_payload.py` | T054, T055, T078, T079 | every tool change; regenerated with `--write` in its own commit |
+| `reviewer/src/swreview/report/summary.py`, `review_words_v1.yaml`, `specs/009-engineer-workspace/contracts/review-summary.md`, the pane fixture | T080, T081 | feature 009's summary; the add-in's page renders the line |
 | `reviewer/src/swreview/report/attention_policy_v1.yaml`, `test_attention_catalogue.py` | T056, T057 | every new finding id |
 | `specs/006-standards-check/spec.md`, `contracts/ir-additions.md`, `contracts/profile.md`, `research.md` | T001, T029 | feature 006's seat tasks |
 | `specs/010-mechanical-checks/contracts/tolerances.md` | T002 | feature 010's follow-ups |
@@ -336,7 +338,7 @@ Every functional requirement and success criterion has at least one task whose a
 | FR-021 | T034, T035 | FR-047 | T056, T057 |
 | FR-022 | T034, T035 | FR-048 | T005 to T008 |
 | FR-023 | T034, T035 | FR-049 | T056, T057 |
-| FR-024 | T032, T033, T036, T037, T066 | FR-050 | T054, T055 |
+| FR-024 | T032, T033, T036, T037, T066 | FR-050 | T054, T055, T078, T079 |
 | FR-025 | T036, T037 | FR-051 | T049 |
 | FR-026 | T026, T039 | FR-052 | T003, T004, T015, T062 |
 | FR-053 | T069 to T072 | FR-055 | T069, T070, T071, T077 |

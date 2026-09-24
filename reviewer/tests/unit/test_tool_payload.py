@@ -388,9 +388,9 @@ class ArrayShape:
     its `prerun=True` one - so those two bound it. Outside the space, each for its reason: lever 2
     changes descriptions and not membership (`lever_two_rows` weighs both of its arms); lever 4's
     tier withholds on a package with no feature tree (`tier_delta` weighs it); lever 12's compact
-    queries are an experimental opt-in no surface turns on; the remodel tools belong to a remodel
-    run, not a review. A new conditional group in `_offered` is a new switch here, and every array
-    it makes must then be classified in `ARRAY_KINDS` and pinned.
+    queries are an experimental opt-in that no default turns on; the remodel tools belong to a
+    remodel run, not a review. A new conditional group in `_offered` is a new switch here, and
+    every array it makes must then be classified in `ARRAY_KINDS` and pinned.
     """
 
     slim: bool
@@ -1080,8 +1080,9 @@ def test_both_encodings_are_byte_identical_across_hash_seeds() -> None:
 
 def test_every_array_a_review_can_send_is_classified() -> None:
     """Decision 9A, stated once: every array the five switches make has a kind, and nothing else
-    has one. A new switch, or a new group `_offered` adds under one, makes arrays `ARRAY_KINDS`
-    does not name, and this fails until each is classified."""
+    has one. A new switch makes arrays `ARRAY_KINDS` does not name, and this fails until each is
+    classified; a new group `_offered` adds under an existing switch fails
+    `test_each_shape_offers_what_the_registry_offers` instead."""
     assert len(SHAPES) == 32
     assert len(REVIEW_ARRAYS) == 24
     assert set(ARRAY_KINDS) == set(REVIEW_ARRAYS)
@@ -1188,17 +1189,10 @@ def test_each_pinned_array_measures_its_pin(label: str, encoding: str) -> None:
     assert measure(label, array, encoding).total_bytes == REVIEW_ARRAY_BYTES[label][encoding]
 
 
-def test_the_pin_tables_hold_arrays_of_the_space_in_its_order() -> None:
-    pinned = list(REVIEW_ARRAY_BYTES)
-
-    assert list(REVIEW_ARRAY_TOOL_COUNTS) == pinned
-    assert pinned == [label for label in ARRAY_KINDS if label in REVIEW_ARRAY_BYTES]
-    assert all(set(pins) <= set(ENCODINGS) for pins in REVIEW_ARRAY_BYTES.values())
-
-
 def test_every_array_a_review_can_send_is_pinned_for_both_providers() -> None:
-    """Decision 9A: whatever its kind, every array is pinned in both encodings (T079)."""
-    assert list(REVIEW_ARRAY_BYTES) == list(ARRAY_KINDS)
+    """Decision 9A: whatever its kind, every array is pinned in both encodings (T079), in the
+    order `ARRAY_KINDS` and the `--write` table give."""
+    assert list(REVIEW_ARRAY_TOOL_COUNTS) == list(REVIEW_ARRAY_BYTES) == list(ARRAY_KINDS)
     assert all(set(pins) == set(ENCODINGS) for pins in REVIEW_ARRAY_BYTES.values())
 
 
