@@ -69,6 +69,37 @@ internal static class ConfirmedDrawingPackage
         return package;
     }
 
+    /// <summary>
+    /// The package of a review whose extraction read no drawing (feature 011 T078): no drawing
+    /// record, the <c>drawing</c> phase row <c>skipped</c> between the <c>cutlist</c> and
+    /// <c>hole</c> rows that ran, and the dump's standing drawing gap - <paramref name="standing"/>,
+    /// one of <see cref="PackageWriter"/>'s own sentences - between two gaps of other phases, so
+    /// a merge that moved or dropped the wrong one is seen.
+    /// </summary>
+    public static EvidencePackage BuildWithNoDrawingRead(string standing)
+    {
+        EvidencePackage package = Build(drawings: 0);
+        package.DrawingRecords = null;
+        package.Extractor.Profile = DumpProfile.Full;
+        package.Extractor.Phases.Add(new DumpPhase { Name = "cutlist", ElapsedMs = 4, Status = DumpPhaseStatus.Ok });
+        package.Extractor.Phases.Add(new DumpPhase { Name = "drawing", ElapsedMs = null, Status = DumpPhaseStatus.Skipped });
+        package.Extractor.Phases.Add(new DumpPhase { Name = "hole", ElapsedMs = 9, Status = DumpPhaseStatus.Ok });
+        package.Gaps.Add(new Gap
+        {
+            Kind = GapKind.NotExtracted,
+            EntityKind = "feature_tree_unavailable",
+            Reason = "The part feature trees were not read: the dump was run with --features none.",
+        });
+        package.Gaps.Add(new Gap { Kind = GapKind.Unsupported, EntityKind = "drawing", Reason = standing });
+        package.Gaps.Add(new Gap
+        {
+            Kind = GapKind.NotExtracted,
+            EntityKind = "equations",
+            Reason = "The part equations were not read: the dump was run with --equations off.",
+        });
+        return package;
+    }
+
     /// <summary>One drawing record numbered <paramref name="n"/> in every drawing id prefix.</summary>
     public static DrawingRecord Record(string documentId, int n)
     {

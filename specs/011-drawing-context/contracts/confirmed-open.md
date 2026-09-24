@@ -95,6 +95,25 @@ row and manifest entry (`open-drawings.md` section 4), its id appended to
 `design.drawing_document_ids`, its gaps appended, and the document's `drawing_candidates[]` row
 removed.
 
+*Amended 2026-09-23 (T078, T079)*: a review whose extraction read no drawing carries the dump's
+standing drawing gap (`open-drawings.md` section 6: "No open drawing shows this design, so no
+drawing was read natively...", or the listing or the profile sentence) beside a `drawing` phase
+row `skipped`. Once a confirmed drawing is merged that sentence is false, and the row is not: the
+dump did skip. So `MergeDrawing` leaves the row exactly as the dump wrote it and rewords the gap in
+its own place - found by its shape (kind `unsupported`, entity kind `drawing`, no entity,
+`PackageWriter.IsDrawingPhaseGap`), never by its words - to what stays true of the dump and every
+drawing read afterwards, in the order merged:
+
+```text
+The extraction read no drawing natively: its drawing phase did not run. Read afterwards, when the
+engineer confirmed the candidate question: 'housing.SLDDRW' (opened read-only by the review) and
+'pin.SLDDRW' (already open, read as it stood).
+```
+
+Every drawing record of such a package is a later read, since the dump writes the gap only when
+the phase did not run; a package whose phase ran has no such gap and nothing is reworded. The
+reworded gap keeps its kind, so every gap count the backend shows is unchanged.
+
 ```json
 {"document_id": "doc:0007", "drawing_document_id": "doc:0012", "opened": true, "closed": true,
  "sheets": 2, "gaps": 1}

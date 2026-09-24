@@ -222,6 +222,8 @@ public static class PackageAppender
         package.Manifest.Entries.Add(entry);
         package.Design.DrawingDocumentIds.Add(record.DocumentId);
 
+        RewordDrawingPhaseGap(package);
+
         if (gaps != null)
         {
             package.Gaps.AddRange(gaps);
@@ -236,6 +238,44 @@ public static class PackageAppender
                 package.DrawingCandidates = null;
             }
         }
+    }
+
+    /// <summary>
+    /// Feature 011 T079 (contracts/confirmed-open.md section 2, 2026-09-23). A review whose
+    /// extraction read no drawing carries the dump's standing gap - "No open drawing shows this
+    /// design, so no drawing was read natively...", or the listing or profile sentence - beside a
+    /// <c>drawing</c> phase row <c>skipped</c>. Once a confirmed drawing is merged the sentence is
+    /// false and the row is not: the dump did skip. So the row is left as the dump wrote it, and the
+    /// gap is reworded in its own place to say what stays true of the dump and to name every drawing
+    /// read afterwards. Every drawing record of such a package is a later read, because
+    /// <see cref="PackageWriter"/> writes the gap only when the phase did not run. A package whose
+    /// phase ran has no such gap, and nothing is reworded.
+    /// </summary>
+    private static void RewordDrawingPhaseGap(EvidencePackage package)
+    {
+        int index = package.Gaps.FindIndex(PackageWriter.IsDrawingPhaseGap);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var readAfterwards = new List<(string FileName, bool OpenedByReview)>();
+        foreach (DrawingRecord record in package.DrawingRecords ?? new List<DrawingRecord>())
+        {
+            Document? document = package.Documents.Find(
+                row => string.Equals(row.DocumentId, record.DocumentId, StringComparison.Ordinal));
+            readAfterwards.Add((document?.FileName ?? record.DocumentId, record.OpenedByReview == true));
+        }
+
+        Gap standing = package.Gaps[index];
+        package.Gaps[index] = new Gap
+        {
+            Kind = standing.Kind,
+            EntityKind = standing.EntityKind,
+            EntityId = standing.EntityId,
+            Reason = PackageWriter.DrawingsReadAfterExtractionGapSentence(readAfterwards),
+            Error = standing.Error,
+        };
     }
 
     /// <summary>Merges one capture into <paramref name="package"/>. Captures are purely additive.</summary>
