@@ -49,6 +49,17 @@ questions:
 not_loaded:
   text: "{count} of {total} parts not loaded"
 
+# One line naming the drawings the review read and the same-name drawings it found beside a
+# reviewed file but did not open (owner, 2026-09-23, decision 10A). `{names}` is the file names
+# joined as a sentence joins them; past ten names, `more` names the first ten and counts the
+# rest. The two parts are joined with ". ", and a part with no name is left out.
+drawings:
+  read_one: "Drawing read: {names}"
+  read_many: "Drawings read: {names}"
+  candidates_one: "Same-name drawing found but not open: {names}"
+  candidates_many: "Same-name drawings found but not open: {names}"
+  more: "{names} and {n} more"
+
 contacts:
   one: "1 size-for-size contact"
   many: "{n} size-for-size contacts"

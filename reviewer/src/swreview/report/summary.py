@@ -2,7 +2,8 @@
 
 The Review tab prints a summary above everything else - how many findings in how many
 issues, which of them are the engineer's to decide, to fix and to verify, the questions
-waiting, the parts not loaded, and one line per check goal - and **computes none of it**
+waiting, the parts not loaded, the drawings read and found, and one line per check goal -
+and **computes none of it**
 (FR-009). This module is where it is computed, from the ranking, the session and the
 package, in words read from `review_words_v1.yaml` (research R2.5).
 
@@ -40,6 +41,7 @@ from typing import TYPE_CHECKING, Literal
 
 import yaml
 
+from swreview.drawings.evidence import file_name, id_order
 from swreview.findings import Finding, FindingStatus, ReviewModel, Severity
 from swreview.ir.models import EvidencePackage
 from swreview.report.attention import (
@@ -61,9 +63,11 @@ if TYPE_CHECKING:  # pragma: no cover - imported for annotations only, never at 
 
 __all__ = [
     "COVERAGE_BUCKETS",
+    "DRAWINGS_NAMED",
     "WORDS_FILE",
     "ContactList",
     "ContactView",
+    "DrawingsLine",
     "EntityName",
     "Goal",
     "GoalCount",
@@ -78,6 +82,7 @@ __all__ = [
     "SummaryGroup",
     "Words",
     "contacts_of",
+    "drawings_of",
     "goal_of",
     "load_words",
     "review_ranking",
@@ -106,6 +111,15 @@ OWNER_GROUPS: tuple[GroupKind, ...] = ("decide", "fix", "verify")
 """Always listed, in this order, at zero too (the owner's decision of 2026-09-23)."""
 SHOWN_WHEN_HELD: tuple[GroupKind, ...] = ("decided", "within_scope")
 """Listed after the owner's three, and only when they hold a finding."""
+
+DRAWINGS_NAMED = 10
+"""How many file names each part of the drawings line names; the rest are counted. The
+candidate question's bound (`checks/drawing_context.CANDIDATES_NAMED`), copied because that
+module reaches the session module (see the module docstring); `tests/unit/test_review_summary.py`
+asserts the two are one number."""
+
+DRAWINGS_SEPARATOR = ". "
+"""What joins the drawings line's two parts, each a sentence of its own."""
 
 GoalState = Literal["issues", "checked", "not_reached", "not_applicable"]
 GoalReason = Literal["unresolved", "skipped", "failed", "out_of_scope", "no_check"]
@@ -149,6 +163,38 @@ class NotLoadedWords(ReviewModel):
     text: str
 
 
+class DrawingsWords(ReviewModel):
+    """The drawings line's words (decision 10A): a sentence for one name and for several, per
+    part, and the tail that counts the names past the bound."""
+
+    read_one: str
+    read_many: str
+    candidates_one: str
+    candidates_many: str
+    more: str
+
+    def named(self, names: Sequence[str]) -> str:
+        """`names` as a sentence lists them; past `DRAWINGS_NAMED`, the first that many and how
+        many more."""
+        if len(names) <= DRAWINGS_NAMED:
+            return and_list(names)
+        return self.more.format(
+            names=", ".join(names[:DRAWINGS_NAMED]), n=len(names) - DRAWINGS_NAMED
+        )
+
+    def of(self, read: Sequence[str], candidates: Sequence[str]) -> str:
+        """The line: the drawings read, then the candidates, each part only when it names one."""
+        parts = [
+            (one if len(names) == 1 else many).format(names=self.named(names))
+            for names, one, many in (
+                (read, self.read_one, self.read_many),
+                (candidates, self.candidates_one, self.candidates_many),
+            )
+            if names
+        ]
+        return DRAWINGS_SEPARATOR.join(parts)
+
+
 class ResumeWords(ReviewModel):
     with_tokens: str
     without: str
@@ -187,6 +233,7 @@ class Words(ReviewModel):
     groups: dict[GroupKind, GroupWords]
     questions: CountWords
     not_loaded: NotLoadedWords
+    drawings: DrawingsWords
     contacts: CountWords
     resume: ResumeWords
     read_only: str
@@ -259,6 +306,15 @@ class NotLoaded(ReviewModel):
     text: str
 
 
+class DrawingsLine(ReviewModel):
+    """The drawings the review read and the same-name drawings it found but did not open, by
+    file name (decision 10A), and the one line the page prints."""
+
+    read: list[str]
+    candidates: list[str]
+    text: str
+
+
 class ModellingPractice(ReviewModel):
     title: str
     findings: int
@@ -292,6 +348,7 @@ class ReviewSummary(ReviewModel):
     modelling_practice: ModellingPractice | None
     questions: QuestionList
     not_loaded: NotLoaded | None
+    drawings: DrawingsLine | None
     goals: list[GoalLine]
     contacts: ContactList | None
     component_names: dict[str, str]
@@ -363,9 +420,9 @@ def review_summary(
 ) -> ReviewSummary:
     """The summary of one review (contracts/review-summary.md sections 2 to 4).
 
-    `package` is `None` when there is none to read; the names, the parts not loaded and the
-    "about" names are then empty. `usage` is the live run's ledger, and the resume cost is
-    unknown without one (the disk route passes none).
+    `package` is `None` when there is none to read; the names, the parts not loaded, the
+    drawings line and the "about" names are then empty. `usage` is the live run's ledger, and
+    the resume cost is unknown without one (the disk route passes none).
     """
     words = load_words()
     names = _non_blank(all_component_names(package)) if package is not None else {}
@@ -385,6 +442,7 @@ def review_summary(
         modelling_practice=practice,
         questions=_questions(session.evidence_requests, words, names, package),
         not_loaded=_not_loaded(package, words),
+        drawings=drawings_of(package),
         goals=[_goal_line(goal, session, words) for goal in words.goals],
         contacts=contacts_of(session, names),
         component_names=names,
@@ -599,6 +657,56 @@ def _blocks_title(blocks: str | None, goals: Sequence[Goal]) -> str | None:
         return None
     goal = next((goal for goal in goals if blocks in goal.items), None)
     return None if goal is None else goal.title
+
+
+def drawings_of(package: EvidencePackage | None) -> DrawingsLine | None:
+    """The drawings line (contracts/review-summary.md section 4, decision 10A), or `None` when
+    there is no package, or it holds no drawing read and no candidate.
+
+    A drawing is **read** when the package holds its native record or a PDF-ingested sheet of
+    it: named by its document's file name, its id where the package has no row for it, once, in
+    document-id order. A **candidate** is a same-name drawing file beside a reviewed document
+    that nothing opened: named by its path's file name, in its document's id order, once per
+    file - a part and an assembly of one stem share one - and never a file the review read. A
+    candidate the engineer confirmed, which the product then opened and read (feature 011
+    `contracts/confirmed-open.md`), is read, whether or not the package still holds its row.
+    """
+    if package is None:
+        return None
+    documents = {document.document_id: document for document in package.documents}
+    read_ids = sorted(
+        {record.document_id for record in package.drawing_records}
+        | {sheet.document_id for sheet in package.drawings},
+        key=lambda document_id: (id_order(document_id), document_id),
+    )
+    files_named = {
+        _file_key(documents[document_id].path)
+        for document_id in read_ids
+        if document_id in documents
+    }
+    candidates: list[str] = []
+    for candidate in sorted(
+        package.drawing_candidates, key=lambda item: id_order(item.document_id)
+    ):
+        key = _file_key(candidate.path)
+        if key not in files_named:
+            files_named.add(key)
+            candidates.append(file_name(candidate.path))
+    read = [
+        documents[document_id].file_name if document_id in documents else document_id
+        for document_id in read_ids
+    ]
+    if not read and not candidates:
+        return None
+    return DrawingsLine(
+        read=read, candidates=candidates, text=load_words().drawings.of(read, candidates)
+    )
+
+
+def _file_key(path: str) -> str:
+    """One file however its path is spelled: case and the separator ignored, as the extractor's
+    discovery compares two paths."""
+    return path.replace("/", "\\").casefold()
 
 
 def _not_loaded(package: EvidencePackage | None, words: Words) -> NotLoaded | None:
