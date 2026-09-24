@@ -43,7 +43,7 @@ cd reviewer
 ```
 
 Expected: zero warnings; every generated denial refused; the completeness test finds no writer of the
-24 families outside the table and its exclusions; no gated read refused; the re-modeler's five
+28 families outside the table and its exclusions; no gated read refused; the re-modeler's five
 overriding keys unchanged. The regenerated table equals the "Feature 011" section of
 `specs/004-resilient-remodeler/contracts/guard-allowlist.md` byte for byte.
 

@@ -5,7 +5,7 @@
 namespace SwReview.Extractor.Guard;
 
 /// <summary>
-/// Feature 011 (T004, contracts/guard.md): every writer of the 24 drawing families and the named
+/// Feature 011 (T004, contracts/guard.md): every writer of the 28 drawing families and the named
 /// members of the shared families, generated from the 2024 SP5 interop and merged into
 /// <see cref="ReadOnlyGuard"/>'s denied set by its static constructor. The "Feature 011" table of
 /// guard-allowlist.md is the same run's markdown; DrawingFamilyDenylistTests parses it and
@@ -535,6 +535,9 @@ public static partial class ReadOnlyGuard
         "set_ExtensionLineUseDocumentDisplay",
         "set_FilledTriangle",
         "set_FitDisplayStyle",
+        "set_FitTextHeight",
+        "set_FitTextScale",
+        "set_FitUseTextScale",
         "set_FlipView",
         "set_Flipped",
         "set_FocusLocked",
@@ -582,6 +585,7 @@ public static partial class ReadOnlyGuard
         "set_PartConfigurationGrouping",
         "set_Position",
         "set_PositionLocked",
+        "set_Precision",
         "set_ProjectedDimensions",
         "set_PromptText",
         "set_PropertyLinkedText",
@@ -599,6 +603,7 @@ public static partial class ReadOnlyGuard
         "set_ScaleRatio",
         "set_SeparateRequirement",
         "set_SequenceStartNumber",
+        "set_ShaftFit",
         "set_SheetFormatVisible",
         "set_ShortenedRadius",
         "set_Shoulder",
@@ -618,18 +623,25 @@ public static partial class ReadOnlyGuard
         "set_SuppressState",
         "set_TableType",
         "set_TagName",
+        "set_TextHeight",
         "set_TextHorizontalJustification",
         "set_TextRightToLeft",
+        "set_TextScale",
         "set_TextVerticalJustification",
         "set_Title",
         "set_TitleVisible",
         "set_ToBoundingBox",
+        "set_ToleranceMax",
+        "set_ToleranceMin",
+        "set_TolerancePrecision",
+        "set_ToleranceType",
         "set_UpperCase",
         "set_UseDocDispFrame",
         "set_UseDocDispLeader",
         "set_UseDocDisplaySettings",
         "set_UseParentScale",
         "set_UseSheetScale",
+        "set_UseTextScale",
         "set_VerticalJustification",
         "set_WatermarkBehindGeometry",
         "set_WatermarkNote",

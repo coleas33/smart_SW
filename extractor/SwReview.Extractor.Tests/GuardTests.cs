@@ -789,7 +789,7 @@ public class MechanicalChecksDenylistTests
 }
 
 /// <summary>
-/// Feature 011 T003. Every writer of the 24 drawing families and the named members of the two
+/// Feature 011 T003. Every writer of the 28 drawing families and the named members of the two
 /// shared families (<c>011-drawing-context/contracts/guard.md</c>), refused before any new drawing
 /// read lands (FR-005, SC-009).
 ///
@@ -1041,7 +1041,7 @@ public class DrawingFamilyDenylistTests
 }
 
 /// <summary>
-/// Feature 011 T003. The table is complete: the 24 drawing families of contracts/guard.md section
+/// Feature 011 T003. The table is complete: the 28 drawing families of contracts/guard.md section
 /// 1 are reflected on the interop the extractor is built against, the writer grammar of section 2
 /// is applied, and every match is refused or is a name the exclusion table states. The shared
 /// rows are each declared on their interface and refused.
@@ -1053,7 +1053,11 @@ public class DrawingFamilyDenylistTests
 /// </summary>
 public class DrawingFamilyCompletenessTests
 {
-    /// <summary>contracts/guard.md section 1: the 24 drawing families.</summary>
+    /// <summary>
+    /// contracts/guard.md section 1: the 28 drawing families. The last four, the hole callout's
+    /// variables, joined on review (2026-09-23): <c>SwDrawingReader.HoleCalloutVariables</c> reads
+    /// them (T026), and a family a drawing read touches is a family whose every writer is refused.
+    /// </summary>
     internal static readonly string[] DrawingFamilies =
     {
         "IDrawingDoc", "ISheet", "IView", "IDisplayDimension", "IDimension", "IDimensionTolerance",
@@ -1061,6 +1065,7 @@ public class DrawingFamilyCompletenessTests
         "IBomTableAnnotation", "IBomFeature", "IRevisionTableAnnotation", "IGeneralTableFeature",
         "ITitleBlockTableFeature", "ITitleBlock", "IDatumTargetSym", "ICenterMark", "IWeldSymbol",
         "IDowelSymbol", "IMultiJogLeader",
+        "ICalloutVariable", "ICalloutLengthVariable", "ICalloutAngleVariable", "ICalloutStringVariable",
     };
 
     /// <summary>contracts/guard.md section 1: the two shared families, named members only.</summary>
@@ -1113,9 +1118,9 @@ public class DrawingFamilyCompletenessTests
         }
     }
 
-    /// <summary>The heart of SC-009: no writer of the 24 families is left callable by accident.</summary>
+    /// <summary>The heart of SC-009: no writer of the 28 families is left callable by accident.</summary>
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
-    public void EveryWriterOfTheTwentyFourFamiliesIsRefusedOrANamedExclusion()
+    public void EveryWriterOfTheDrawingFamiliesIsRefusedOrANamedExclusion()
     {
         var excluded = new HashSet<string>(DrawingFamilyDenylistTests.ExcludedMembers, StringComparer.OrdinalIgnoreCase);
         var callable = new List<string>();

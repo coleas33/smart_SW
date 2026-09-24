@@ -3,7 +3,7 @@
 | Contract | File | Producer → Consumer |
 |----------|------|---------------------|
 | The attach: `AttachForDump`, the purpose-aware refusal, a drawing session with no configuration, the console's refusal to open a drawing | `attach.md` | `Sw/SwSession.cs` → every extraction path; the tool service, terminal and bridge unchanged |
-| The guard: the 24 drawing families, the writer grammar, the named shared members, the exclusions, the generated table and its two tests | `guard.md` | `Guard/ReadOnlyGuard.cs`, `extractor/tools/list-writer-members.ps1` → every drawing read, feature 012's future allowlist |
+| The guard: the 28 drawing families, the writer grammar, the named shared members, the exclusions, the generated table and its two tests | `guard.md` | `Guard/ReadOnlyGuard.cs`, `extractor/tools/list-writer-members.ps1` → every drawing read, feature 012's future allowlist |
 | Open drawings and candidates: discovery, matching, order, the ten-drawing bound, candidates, the gaps, profiles, the reuse key | `open-drawings.md` | `Dump/OpenDrawingDiscovery.cs`, `Dump/PackageWriter.cs` → `drawing_records[]`, `documents[]`, the manifest, `drawing_candidates[]` |
 | Native evidence at IR 1.6.0: every new read, its interop member, its field and the gap it writes when it fails | `native-evidence.md` | `Dump/DrawingDumper.cs`, `Dump/SwDrawingReader.cs` → `package.json` |
 | The drawing source: the native conversion, the binding rule, the resolver's drawing answer, the precision to the general tolerance, the existing tools on native sheets | `drawing-source.md` | `drawings/native.py`, `drawings/binding.py`, `checks/tolerances.py`, `tools/refs.py`, `tools/query.py` → feature 010's stack-up, `check_fit`, `check_axial_stack`, the model |
