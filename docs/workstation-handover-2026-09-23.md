@@ -105,8 +105,9 @@ row per step and task id. The development machine moves each answer into the res
    findings document.
 2. **010 T103 to T106: the dumps.** For each recorded assembly, active in SOLIDWORKS:
    `swreview-extract dump --out "<handover folder>\dumps\A" --meshes none` (then `B`), never under
-   the run root, where step 16's exporter would take a dump for a review, then the check
-   command in the Phase 13 note of `specs/010-mechanical-checks/tasks.md` on that folder. Pass:
+   the run root, where the test plan's exporter (its step 6.2, `swreview handoff` on every folder
+   there) would take a dump for a review, then the check command in the Phase 13 note of
+   `specs/010-mechanical-checks/tasks.md` on that folder. Pass:
    `mass_overridden read` equals `documents` and `mass_override gaps` is 0 (T103); every Hole
    Wizard hole has `Hole.wizard` and the fit and thread classes printed are recorded (T104);
    `model_dimensions` and `model_annotations` present where the models carry them, or 0 with no

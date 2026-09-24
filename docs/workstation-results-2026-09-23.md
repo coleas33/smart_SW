@@ -52,8 +52,9 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 3.4 | 011 T063: the review reads D-1 and D-2, not D-X, opens nothing | | | |
 | 3.4 | 011 T068: the drawing compared; the seat validation named | | | |
 | 3.4 | 008 T101: `check_standards` in the pre-run, `standards.release` in the report (health check 5) | | | |
-| 3.5 | 011 T063: D3 on sheet 3, D12 out of date on the copy, detailing mode | | | |
-| 3.5 | 006 T107: a model not loaded is a gap and unresolved | | | |
+| 3.5 | 011 T063: D3 on sheet 3, D12 out of date on the copy (items 1 and 2) | | | |
+| 3.5 | 011 T063: D12 in detailing mode (item 3) | | | |
+| 3.5 | 006 T107: a model not loaded is a gap and unresolved (item 3) | | | |
 | 3.5 | real files unchanged after 3.5 | | | |
 | 3.6 | 011 T064: D4, D5, D8 and D11 on F; preference 24 or 49 | | | |
 | 3.7 | 011 T065: D1, D6, D7, D9 and D10 on G, counts against yours | | | |
