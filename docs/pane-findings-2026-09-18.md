@@ -86,7 +86,7 @@ In the pane's DevTools **Network** tab, look for a request to
 The Standards tab reported:
 
 ```
-the standards profile at 'C:\Users\csorkness\AppData\Local\SwReview\standards.yaml' could
+the standards profile at 'C:\Users\<you>\AppData\Local\SwReview\standards.yaml' could
 not be opened (Could not find file ...). Check `StandardsProfilePath`.
 ```
 

@@ -718,7 +718,7 @@ var indexShape = function (value) {
         disposition = new
         {
             decision = "accepted",
-            by = "C. Sorkness",
+            by = "A. Engineer",
             at = "2026-09-18T22:04:00Z",
             note = "intended press fit per drawing note 4",
         },

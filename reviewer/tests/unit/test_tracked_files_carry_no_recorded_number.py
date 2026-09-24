@@ -1,5 +1,5 @@
 """No tracked file carries a recorded design number or a forbidden identifier (the owner's
-decisions 11B and 13A of 2026-09-24).
+decisions 11B, 13A and 16A of 2026-09-24).
 
 The repository is public. While the replay was built, the numbers of the designs the pilot
 recorded - the big assembly, the small assembly, and parts inside them - were written into
@@ -24,6 +24,11 @@ letter-and-digit runs in order, each a whole token, joined by nothing or by up t
 `MAX_SEPARATOR` characters that are neither, ignoring case (`identifier_pattern`): `999-13579`
 is caught as `999_13579`, `999 13579`, `99913579` or inside a run folder's name, and a name
 listed as its words (`Osprey Harness Tray`) is caught spaced, joined or cased any way.
+
+Decision 16A puts people on the same list: the owner's surname and every Windows username the
+tree once carried (in a `C:\\Users\\<name>\\...` path or a test's drawn-by value). A user
+folder is written `%USERPROFILE%`, `%LOCALAPPDATA%` or `C:\\Users\\<you>`, and a person by role or
+by a fictional name; the public GitHub handle in the remote URL is not listed and stays.
 
 A binary file (a NUL byte, and no UTF-16 byte-order mark) is skipped; any other file is read
 as text, bytes that are not UTF-8 replaced, since the digits are ASCII in every encoding the
@@ -196,9 +201,10 @@ def test_no_tracked_file_or_path_carries_an_identifier_of_the_owners_list() -> N
     offenders = identifier_offenders(tracked_texts(), identifier_pattern(identifiers))
 
     assert offenders == [], (
-        f"{len(offenders)} places carry an identifier of the owner's list (decision 13A); name "
-        "the design in words instead (a pin part, an earlier assembly review), or use a "
-        "FICT- value in a test: " + ", ".join(offenders)
+        f"{len(offenders)} places carry an identifier of the owner's list (decisions 13A and "
+        "16A); name the design in words instead (a pin part, an earlier assembly review), a "
+        "person by role, a user folder as %USERPROFILE% or %LOCALAPPDATA%, or use a FICT- "
+        "value in a test: " + ", ".join(offenders)
     )
 
 
@@ -335,6 +341,34 @@ def test_an_identifier_is_caught_in_any_separator_form_and_any_case(line: str) -
 )
 def test_an_identifier_is_only_caught_as_whole_tokens_close_together(line: str) -> None:
     assert lines_matching(line, identifier_pattern(FICTIONAL_IDENTIFIERS)) == []
+
+
+FICTIONAL_PEOPLE = ["Kestrel", "jkestrel", "Jo"]
+"""A fictional surname and two fictional Windows usernames, as decision 16A lists real ones."""
+
+
+@pytest.mark.parametrize(
+    ("line", "caught"),
+    [
+        ("C:\\Users\\jkestrel\\smart_SW-handoff-2099-01-01", True),
+        ("the profile at 'C:\\Users\\jkestrel\\AppData\\Local\\SwReview\\standards.yaml'", True),
+        ("C:\\Users\\Jo\\source\\repos\\smart_SW\\specs\\spec.md", True),
+        ("C--Users-Jo-source-repos-smart-SW", True),
+        ('by = "J. Kestrel",', True),
+        ("https://github.com/jokestrel9/smart_SW.git", False),
+        ("%USERPROFILE%\\source\\repos\\smart_SW", False),
+        ("C:\\Users\\<you>\\AppData\\Local\\SwReview\\standards.yaml", False),
+    ],
+)
+def test_a_listed_person_is_caught_in_a_user_folder_or_a_name_but_not_inside_a_handle(
+    line: str, caught: bool
+) -> None:
+    """Decision 16A: a surname or username on the list is caught in a user folder (either
+    separator) and in a drawn-by value; a handle that runs on past it is another token, so the
+    public GitHub handle can stay while the name it starts with is listed."""
+    pattern = identifier_pattern(FICTIONAL_PEOPLE)
+
+    assert (lines_matching(line, pattern) == [1]) is caught
 
 
 def test_an_identifier_broken_across_a_line_is_caught_on_the_line_it_starts() -> None:

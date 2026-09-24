@@ -19,7 +19,7 @@ document open.
 This seat is still not the place to implement these. The owner machine decides the
 surfaces below.
 
-**Ship packet (not git):** `C:\Users\csorkness\smart_SW-handoff-2026-09-20-gui`. Transfer
+**Ship packet (not git):** `%USERPROFILE%\smart_SW-handoff-2026-09-20-gui`. Transfer
 that whole folder. It is a new packet, not an update of
 `smart_SW-handoff-2026-09-20` (that one was the morning U1–U7 sitting).
 
@@ -34,7 +34,7 @@ that whole folder. It is a new packet, not an update of
 | Review tab | last review still on screen after a new document became active |
 | Remodel tab | a part of the big assembly (`.SLDPRT`, `[Default]`); badge `Backend ready` |
 | Remodel banner | `this build has no remodel seat; run swreview-extract probe remodel --acknowledge-throwaway-part with no document open.` |
-| Packet | `C:\Users\csorkness\smart_SW-handoff-2026-09-20-gui` |
+| Packet | `%USERPROFILE%\smart_SW-handoff-2026-09-20-gui` |
 
 Tonight’s runs (copied into the packet `dumps/`), named by their folders' timestamps: the rest
 of each folder name is the design number (owner decision 11B, 2026-09-24). The replay of

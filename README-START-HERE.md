@@ -1,6 +1,6 @@
 # smart_SW handoff — 2026-09-20 (pilot → owner)
 
-**Location on the pilot machine:** `C:\Users\csorkness\smart_SW-handoff-2026-09-20`
+**Location on the pilot machine:** `%USERPROFILE%\smart_SW-handoff-2026-09-20`
 
 You are picking this up with **no prior context**. This folder is what the
 pilot seat learned after absorbing your 2026-09-20 handover (`e04c027`) and
