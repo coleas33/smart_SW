@@ -26,15 +26,15 @@ SOLIDWORKS
 
 ```
 [20:47:04] listening on \\.\pipe\swreview-<guid>
-[20:47:04] attached to C:\...\TopDeckCableManagement\810-10068.SLDASM [Default], 6 components
+[20:47:04] attached to C:\...\<an assembly's folder>\<an assembly>.SLDASM [Default], 6 components
 [20:51:00] id=1 command=remodel.probe_scope status=error elapsed_ms=2
            gated=GetOpenDocumentByName
            error="document no longer open: the model the tool service attached to was closed"
 ```
 
 The tool service bound to whichever document was open when the add-in started
-(`810-10068.SLDASM`). The engineer then switched to a different part
-(`810-11450.SLDPRT`). The service never re-attached, so every bridge command afterwards
+(an assembly, `.SLDASM`). The engineer then switched to a different part
+(`.SLDPRT`). The service never re-attached, so every bridge command afterwards
 asked about a document that no longer exists.
 
 `POST /remodel/probe` reaching the backend and returning `502` is consistent with this: the

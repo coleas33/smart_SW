@@ -487,7 +487,7 @@ public sealed class InProcPipeServerTests
     // ---- the document goes away --------------------------------------------------------------
 
     /// <summary>The document the tool service attached to, which the message has to name.</summary>
-    private const string AttachedDocument = @"C:\models\TopDeckCableManagement\810-10068.SLDASM";
+    private const string AttachedDocument = @"C:\models\FICT-FRAME\FICT-FRAME-1000.SLDASM";
 
     [Fact]
     public void ARequestWhoseDocumentIsGoneAnswersTheDocumentClosedError()

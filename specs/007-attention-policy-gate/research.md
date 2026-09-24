@@ -307,7 +307,7 @@ every session and the owner read the result. Four decisions, all as the policy p
 | # | Question | Decision |
 |---|---|---|
 | 1 | The top five on the small assembly's review `20260918-215755-…` | As previewed: the two `interference.static` rows, `rms.assembly.mates_to_reference_geometry`, `rms.sketches.fully_defined`, `rms.grouping.all_features_in_a_group`; `rms.folders.present` last of eight |
-| 2 | The class of `rms.assembly.first_component_fixed`, found on the 810-11450 reviews | `rebuild_breaker`: an unfixed first component leaves every mate without an anchor |
+| 2 | The class of `rms.assembly.first_component_fixed`, found on another assembly's three 2026-09-16 reviews | `rebuild_breaker`: an unfixed first component leaves every mate without an anchor |
 | 3 | Grouping and the two equation rules | `discipline`, below the reference rules and above hygiene |
 | 4 | The shape of the "not reached" block | The run's own close-out sentences (R2.5), then the evidence-request and rule counts |
 
@@ -315,13 +315,14 @@ What the folders also showed, each recorded so nobody rediscovers it: the real
 `mates_to_reference_geometry` finding is bound to the root assembly's component id with the
 part and the pin in its `inputs`, so its reach is one, and T003's fixture mirrors that; on
 that run the two interference findings sat **fifth and sixth** of six mediums in tool-call
-order, not third and fourth as the workstation record said; the 810-11504 review carries a
-`failed` coverage row from `get_drawing_sheet` on a document with no sheets; the three
-`20260916-2050xx-810-11450-check` folders hold only a `package.json`, the Model check having
-never reached the backend that evening (the web-filter problem `docs/pane-findings-2026-09-16.md`
-records); `20260916-003612-810-10068` is a review cut off mid-turn with no error event, from
-the same evening; and every session carries `efficiency` all-off and no baseline minutes,
-which is User Story 1's premise measured rather than assumed.
+order, not third and fourth as the workstation record said; the review of a single part
+(`20260918-204543-…`) carries a `failed` coverage row from `get_drawing_sheet` on a document
+with no sheets; the other assembly's three `20260916-2050xx-…-check` folders hold only a
+`package.json`, the Model check having never reached the backend that evening (the web-filter
+problem `docs/pane-findings-2026-09-16.md` records); `20260916-003612-…` is an earlier
+assembly review, cut off mid-turn with no error event, from the same evening; and every
+session carries `efficiency` all-off and no baseline minutes, which is User Story 1's premise
+measured rather than assumed.
 
 **The confirmation run (T022), 2026-09-19, with the shipped command.** `swreview attention`
 was run over the ten handover folders that hold a `session.json`, each folder hashed before
@@ -333,10 +334,10 @@ above records:
 | `20260918-215755-…` (the small assembly's review, eight findings) | `F-007`, `F-008` `interference.static` (needs your judgement); `rms.assembly.mates_to_reference_geometry`; `rms.sketches.fully_defined`; `rms.grouping.all_features_in_a_group`; three not amplified, `rms.folders.present` last |
 | `20260918-214702` and `-215624`, the small assembly (reviews, six findings, no interference call) | mates to reference geometry, the under-defined sketch, grouping, the two equation rules; `rms.folders.present` the one not amplified |
 | `20260918-214545` and `-220310`, the small assembly (Model check, three findings) | `rms.sketches.fully_defined`, grouping, folders |
-| `20260918-204543-810-11504` and its check | grouping first (the part has no sketch or mate finding), folders last |
-| The three `20260916-*-810-11450` reviews (two findings) | `rms.assembly.first_component_fixed`, then `rms.assembly.mates_to_reference_geometry` |
+| `20260918-204543-…` (the single part) and its check | grouping first (the part has no sketch or mate finding), folders last |
+| The other assembly's three reviews, `20260916-204757-…`, `-210303-…` and `-210754-…` (two findings) | `rms.assembly.first_component_fixed`, then `rms.assembly.mates_to_reference_geometry` |
 
-One thing the preview had not made visible: on the 810-11450 reviews the two rows tie on all
+One thing the preview had not made visible: on the other assembly's reviews the two rows tie on all
 seven leading keys (both rebuild breakers, demonstrated, medium, reach two, not carried), so
 the check-id key decides and the unfixed first component prints first. That is the contract's
 eighth key doing its job, not a class question; T022's acceptance sentence, which had guessed

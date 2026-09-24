@@ -142,7 +142,7 @@ From `%LOCALAPPDATA%\SwReview\logs\addin.log`:
 
 ```
 [2026-09-18T21:30:13] The SwReview tool service did not start.
-System.InvalidOperationException: 'C:\...\810-11471.SLDDRW' reports no active configuration.
+System.InvalidOperationException: 'C:\...\<a drawing>.SLDDRW' reports no active configuration.
    at SwReview.Extractor.Sw.SwSession.ActiveConfiguration(IModelDoc2 document, SwGate gate)
    at SwReview.Extractor.Sw.SwSession.Attach(ISldWorks swApp, String documentPath, ...)
    at SwReview.AddIn.ToolService.ToolServiceHost.Attach(...)

@@ -22,7 +22,7 @@ namespace SwReview.Extractor.Tests;
 /// </summary>
 public class SwSessionAttachTests
 {
-    private const string Drawing = @"C:\vault\810-11471.SLDDRW";
+    private const string Drawing = @"C:\vault\FICT-PLATE-2001.SLDDRW";
 
     [Fact]
     public void AttachRefusal_ADrawingIsRefusedByNameWithTheDocumentToOpenInstead()
@@ -53,7 +53,7 @@ public class SwSessionAttachTests
     {
         // The refusal is one document kind wide. A part or an assembly that reports no
         // configuration is a different failure and keeps its own message.
-        Assert.Null(SwSession.AttachRefusal(kind, @"C:\vault\810-11471.SLDPRT", AttachPurpose.Model));
+        Assert.Null(SwSession.AttachRefusal(kind, @"C:\vault\FICT-PLATE-2001.SLDPRT", AttachPurpose.Model));
     }
 }
 
