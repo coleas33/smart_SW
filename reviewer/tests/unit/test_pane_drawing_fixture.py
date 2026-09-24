@@ -31,6 +31,7 @@ from typing import Any
 import pytest
 
 from swreview.checks.drawing_context import ALL_APPLY, CANDIDATE_CONFIRM, CANDIDATE_OPTIONS
+from swreview.report.summary import drawings_of
 from swreview.tools.drawings import CONFIRMED_OPEN_CHECK
 from tests.support.drawings import drawing_fictional_offences
 from tests.support.fixture_denylist import (
@@ -107,8 +108,15 @@ def test_it_is_written_where_the_page_tests_load_it(generator: ModuleType) -> No
 def test_it_holds_the_asked_questions_the_answers_the_coverage_and_what_stays_open(
     fixture: dict[str, Any],
 ) -> None:
+    """Edited deliberately for T090 (2026-09-23): `summary_drawings`, the summary's drawings line
+    after the first turn, which `SummarySample` in the add-in's tests prints."""
     assert list(fixture) == [
-        "run_id", "questions_asked", "answers", "coverage", "questions_open_after"
+        "run_id",
+        "questions_asked",
+        "summary_drawings",
+        "answers",
+        "coverage",
+        "questions_open_after",
     ]
 
 
@@ -221,15 +229,31 @@ def test_the_three_confirmed_reads_each_leave_one_coverage_item(
     ]
 
 
+def test_the_summarys_drawings_line_is_the_backends_for_the_package_it_plays(
+    fixture: dict[str, Any], generator: ModuleType
+) -> None:
+    """Feature 011 T090: the page's sample of decision 10A's line is `report/summary.drawings_of`
+    over the review's package - both halves of the line, the drawings read and the same-name
+    drawings found but not open - so the page is tested on words the backend writes."""
+    line = drawings_of(generator.drawing_review_package())
+
+    assert line is not None
+    assert fixture["summary_drawings"] == line.model_dump(mode="json")
+    assert len(line.read) == len(generator.PLATE_DRAWINGS) + len(generator.LONG_PART_DRAWINGS)
+    assert line.candidates == [f"{stem}.SLDDRW" for stem in generator.BLOCKS]
+
+
 # --- public-repository hygiene ------------------------------------------------------------------
 
 
 def package_names(fixture: dict[str, Any]) -> list[str]:
-    """The file names the package contributed: every question's `about` names and every file
-    name a governing question offers. The rest is the backend's own words."""
+    """The file names the package contributed: every question's `about` names, every file name
+    a governing question offers, and every file name the summary's drawings line names. The rest
+    is the backend's own words."""
     asked = items(fixture["questions_asked"])
     names = [about["name"] for question in asked for about in question["about"]]
     names += [option for question in asked[1:] for option in question["options"]]
+    names += [*fixture["summary_drawings"]["read"], *fixture["summary_drawings"]["candidates"]]
     return [name for name in names if name != ALL_APPLY]
 
 

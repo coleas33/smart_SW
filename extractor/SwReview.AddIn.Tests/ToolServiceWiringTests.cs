@@ -1189,6 +1189,96 @@ public sealed class ToolServiceWiringTests
         }
     }
 
+    /// <summary>
+    /// Feature 011 T089 (2026-09-23): part B end to end with the fakes - the backend's
+    /// <c>drawing.read</c>, then the host, then the extractor's seam, then the package merge. The
+    /// line is replayed byte for byte as <c>BridgeClient</c> writes it (compact JSON, the id, the
+    /// command, the two parameters, the secret last); `reviewer/tests/unit/test_bridge_client.py`'s
+    /// `test_drawing_read_writes_the_line_the_add_ins_end_to_end_test_replays` pins the same
+    /// literal. The review's extraction read no drawing, so its package carries the dump's
+    /// standing drawing gap; after the merge the backend reloads a package that names the drawing
+    /// as read, with the gap reworded in its own place (T079, in T088's words) and the dump's
+    /// <c>drawing</c> row left <c>skipped</c>.
+    /// </summary>
+    [Fact]
+    public void TheBackendsDrawingReadLineIsReadThroughTheHostAndTheSeamAndMergedIntoTheReviewsPackage()
+    {
+        const string BackendLine =
+            "{\"id\":\"1\",\"command\":\"drawing.read\",\"params\":{\"run_id\":\"20260923-101500-chat-1\","
+            + "\"document_id\":\"doc:0007\"},\"secret\":\"review-secret-0123456789\"}";
+
+        using (var world = new DrawingReadWorld(seatValidated: true, housingId: "doc:0007", extractionReadNoDrawing: true))
+        {
+            string run = world.ReviewRun("chat-1");
+            Assert.Equal("20260923-101500-chat-1", Path.GetFileName(run));
+            Assert.Equal("review-secret-0123456789", DrawingReadWorld.ReviewSecret);
+            EvidencePackage before = PackageAppender.Load(run);
+            int standing = before.Gaps.FindIndex(PackageWriter.IsDrawingPhaseGap);
+            Assert.True(standing > 0 && standing < before.Gaps.Count - 1, "the standing gap sits between two others");
+
+            BridgeResponse response = world.Answer(BackendLine);
+
+            // The answer, as the pipe writes it: the request's id and the six members the
+            // backend reads, in the host's order.
+            using (JsonDocument written = JsonDocument.Parse(BridgeCodec.WriteResponse(response)))
+            {
+                JsonElement root = written.RootElement;
+                Assert.Equal("1", root.GetProperty("id").GetString());
+                Assert.Equal(BridgeStatus.Ok, root.GetProperty("status").GetString());
+                JsonElement result = root.GetProperty("result");
+                Assert.Equal(
+                    new[] { "document_id", "drawing_document_id", "opened", "closed", "sheets", "gaps" },
+                    result.EnumerateObject().Select(member => member.Name).ToArray());
+                Assert.Equal("doc:0007", result.GetProperty("document_id").GetString());
+                Assert.Equal(DocumentIds.For(world.CandidatePath), result.GetProperty("drawing_document_id").GetString());
+                Assert.True(result.GetProperty("opened").GetBoolean());
+                Assert.True(result.GetProperty("closed").GetBoolean());
+                Assert.Equal(1, result.GetProperty("sheets").GetInt32());
+            }
+
+            Assert.Equal(new[] { "20260923-101500-chat-1" }, world.LookupRunIds.ToArray());
+            // The seam opened the closed candidate once and closed it last; the order of its
+            // calls between is the extractor's rule (DrawingOpenTests).
+            Assert.Single(world.Seat.Calls, call => call == "OpenDoc6");
+            Assert.Equal("CloseDoc", world.Seat.Calls.Last());
+
+            // What the backend reloads from the run folder.
+            string drawingId = DocumentIds.For(world.CandidatePath);
+            EvidencePackage after = PackageAppender.Load(run);
+            DrawingRecord record = Assert.Single(after.DrawingRecords!);
+            Assert.Equal(drawingId, record.DocumentId);
+            Assert.True(record.OpenedByReview);
+            Document row = Assert.Single(after.Documents, document => document.DocumentId == drawingId);
+            Assert.Equal(DocumentKind.Drawing, row.Kind);
+            Assert.Equal("housing.SLDDRW", row.FileName);
+            Assert.Contains(after.Manifest.Entries, entry => entry.DocumentId == drawingId);
+            Assert.Contains(drawingId, after.Design.DrawingDocumentIds);
+            Assert.DoesNotContain(
+                after.DrawingCandidates ?? new List<DrawingCandidate>(), candidate => candidate.DocumentId == "doc:0007");
+
+            Assert.Equal(before.Gaps.Count, after.Gaps.Count);
+            Assert.Equal(standing, after.Gaps.FindIndex(PackageWriter.IsDrawingPhaseGap));
+            Gap reworded = after.Gaps[standing];
+            Assert.Equal(GapKind.Unsupported, reworded.Kind);
+            Assert.Equal(PackageWriter.DrawingPhase, reworded.EntityKind);
+            Assert.Null(reworded.EntityId);
+            Assert.Equal(
+                PackageWriter.DrawingsReadAfterExtractionGapSentence(new[] { ("housing.SLDDRW", true) }),
+                reworded.Reason);
+            for (int index = 0; index < before.Gaps.Count; index++)
+            {
+                if (index != standing)
+                {
+                    Assert.Equal(before.Gaps[index].Reason, after.Gaps[index].Reason);
+                }
+            }
+
+            DumpPhase drawingRow = Assert.Single(after.Extractor.Phases, phase => phase.Name == PackageWriter.DrawingPhase);
+            Assert.Equal(DumpPhaseStatus.Skipped, drawingRow.Status);
+            Assert.Null(drawingRow.ElapsedMs);
+        }
+    }
+
     // ---- the remodel observer's helpers ---------------------------------------------------------
 
     /// <summary>
@@ -1377,13 +1467,24 @@ public sealed class ToolServiceWiringTests
         private readonly object _lookupLock = new object();
         private readonly List<string> _lookupRunIds = new List<string>();
         private readonly List<int> _lookupThreads = new List<int>();
+        private readonly string? _housingId;
+        private readonly bool _extractionReadNoDrawing;
 
         /// <param name="seatValidated">The switch the source's seam is built with; the add-in
         /// passes <see cref="DrawingOpenScope.SeatValidated"/>.</param>
         /// <param name="reviewRecords">False gives the host no review records, as a
         /// <see cref="ToolServiceOptions"/> left at its default does.</param>
-        public DrawingReadWorld(bool seatValidated, bool reviewRecords = true)
+        /// <param name="housingId">The housing's document id in the review's package; null gives
+        /// it the extractor's path-derived id. The end-to-end test names it as the backend's line
+        /// does (feature 011 T089).</param>
+        /// <param name="extractionReadNoDrawing">True writes the package of a review whose
+        /// extraction read no drawing: the dump's standing drawing gap between two gaps of other
+        /// phases, and the <c>drawing</c> phase row <c>skipped</c> between two that ran.</param>
+        public DrawingReadWorld(
+            bool seatValidated, bool reviewRecords = true, string? housingId = null, bool extractionReadNoDrawing = false)
         {
+            _housingId = housingId;
+            _extractionReadNoDrawing = extractionReadNoDrawing;
             _root = Path.Combine(Path.GetTempPath(), "swreview-drawing-read", Guid.NewGuid().ToString("N"));
             string models = Path.Combine(_root, "models");
             _runRoot = Path.Combine(_root, "runs");
@@ -1446,7 +1547,7 @@ public sealed class ToolServiceWiringTests
 
         public string CandidatePath { get; }
 
-        public string HousingId => DocumentIds.For(HousingPath);
+        public string HousingId => _housingId ?? DocumentIds.For(HousingPath);
 
         public SwGateRecorder Recorder { get; }
 
@@ -1504,13 +1605,16 @@ public sealed class ToolServiceWiringTests
 
         /// <summary>One <c>drawing.read</c> line, answered through the whole request path.</summary>
         public BridgeResponse Read(string runId, string documentId, string secret) =>
-            _server.Answer(JsonSerializer.Serialize(new Dictionary<string, object>
+            Answer(JsonSerializer.Serialize(new Dictionary<string, object>
             {
                 { "id", "7" },
                 { "command", BridgeCommands.DrawingRead },
                 { "secret", secret },
                 { "params", new Dictionary<string, string> { { "run_id", runId }, { "document_id", documentId } } },
             }));
+
+        /// <summary>One request line exactly as written, answered through the whole request path.</summary>
+        public BridgeResponse Answer(string line) => _server.Answer(line);
 
         public void Dispose()
         {
@@ -1567,14 +1671,40 @@ public sealed class ToolServiceWiringTests
                 },
             };
 
-            AddDocument(package, AssemblyPath, DocumentKind.Assembly);
-            AddDocument(package, HousingPath, DocumentKind.Part);
+            AddDocument(package, AssemblyPath, DocumentKind.Assembly, DocumentIds.For(AssemblyPath));
+            AddDocument(package, HousingPath, DocumentKind.Part, HousingId);
+            if (_extractionReadNoDrawing)
+            {
+                package.DrawingRecords = null;
+                package.Extractor.Phases.Add(new DumpPhase { Name = "cutlist", ElapsedMs = 4, Status = DumpPhaseStatus.Ok });
+                package.Extractor.Phases.Add(
+                    new DumpPhase { Name = PackageWriter.DrawingPhase, ElapsedMs = null, Status = DumpPhaseStatus.Skipped });
+                package.Extractor.Phases.Add(new DumpPhase { Name = "hole", ElapsedMs = 9, Status = DumpPhaseStatus.Ok });
+                package.Gaps.Add(new Gap
+                {
+                    Kind = GapKind.NotExtracted,
+                    EntityKind = "equations",
+                    Reason = "The part equations were not read: the dump was run with --equations off.",
+                });
+                package.Gaps.Add(new Gap
+                {
+                    Kind = GapKind.Unsupported,
+                    EntityKind = PackageWriter.DrawingPhase,
+                    Reason = PackageWriter.NoOpenDrawingGapSentence,
+                });
+                package.Gaps.Add(new Gap
+                {
+                    Kind = GapKind.NotExtracted,
+                    EntityKind = "feature_tree_unavailable",
+                    Reason = "The part feature trees were not read: the dump was run with --features none.",
+                });
+            }
+
             return package;
         }
 
-        private static void AddDocument(EvidencePackage package, string path, DocumentKind kind)
+        private static void AddDocument(EvidencePackage package, string path, DocumentKind kind, string id)
         {
-            string id = DocumentIds.For(path);
             package.Documents.Add(new Document
             {
                 DocumentId = id,

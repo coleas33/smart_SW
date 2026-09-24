@@ -60,6 +60,25 @@ public sealed class ReviewPageSummaryTests
     }
 
     /// <summary>
+    /// Feature 011 T090 (2026-09-23): the sample's drawing line is the backend's, not words written
+    /// for the page - the summary's `drawings` block of the review
+    /// `reviewer/tests/fixtures/pane/generate_drawing_questions.py` plays, as
+    /// `report/summary.drawings_of` returned it, member for member.
+    /// </summary>
+    [Fact]
+    public void TheSamplesDrawingLineIsTheBackendsFromTheGeneratedFixture()
+    {
+        JsonNode? sample = SummarySample.Summary()["drawings"];
+        JsonNode? backend = JsonNode.Parse(DrawingQuestionsFixture.Value.GetProperty("summary_drawings").GetRawText());
+
+        Assert.True(
+            JsonNode.DeepEquals(backend, sample),
+            "SummarySample's drawings member differs from the generated fixture's summary_drawings: "
+            + sample?.ToJsonString() + " against " + backend?.ToJsonString());
+        Assert.Equal(backend!["text"]!.GetValue<string>(), SummarySample.DrawingsText);
+    }
+
+    /// <summary>
     /// Feature 009 T086 (the owner's decision 10A): the summary's one line about drawings is the
     /// backend's text, printed as sent - the page counts no drawing and composes no word of it.
     /// </summary>

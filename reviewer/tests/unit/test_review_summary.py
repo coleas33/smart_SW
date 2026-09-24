@@ -36,8 +36,8 @@ from pydantic import ValidationError
 from pydantic_core import to_jsonable_python
 
 from swreview.checks.drawing_context import CANDIDATE_CONFIRM, CANDIDATES_NAMED
-from swreview.ir.loader import load_package, save_package
-from swreview.ir.models import DrawingCandidate, EvidencePackage, Gap
+from swreview.ir.loader import load_package
+from swreview.ir.models import DrawingCandidate, EvidencePackage
 from swreview.report.attention import AttentionRow, rank
 from swreview.report.session import (
     Contact,
@@ -74,7 +74,10 @@ from tests.support.attention import (
 )
 from tests.unit.test_attention import STEPS, disposition, spec
 from tests.unit.test_confirmed_drawing_read import (
+    NO_DRAWING_GAP,
+    StaleGap,
     candidates_package,
+    drawings_read_afterwards,
     merged,
     question_id,
     reviewed,
@@ -1018,56 +1021,38 @@ def test_after_a_confirmed_read_the_drawing_is_read_and_no_longer_a_candidate(
     assert drawings_of(load_package(tmp_path / "run-0001").package) == after
 
 
-NO_DRAWING_GAP = Gap(
-    kind="unsupported",
-    entity_kind="drawing",
-    entity_id=None,
-    reason=(
-        "No open drawing shows this design, so no drawing was read natively. Open its drawing "
-        "in SOLIDWORKS and extract again to include it."
-    ),
-    error=None,
+@pytest.mark.parametrize(
+    "stale_gap",
+    ["reworded", "left", "dropped"],
+    ids=["gap-reworded", "gap-left", "gap-dropped"],
 )
-"""The package-level gap the extractor writes when no open drawing showed the design
-(`PackageWriter.DrawingGap`): stale once a confirmed candidate is read into the package."""
-
-
-def without_the_no_drawing_gap(folder: Path) -> None:
-    """What a host that drops the stale gap on a confirmed read leaves in the run folder."""
-    loaded = load_package(folder).package
-    save_package(
-        loaded.model_copy(
-            update={"gaps": [gap for gap in loaded.gaps if gap != NO_DRAWING_GAP]}
-        ),
-        folder,
-    )
-
-
-@pytest.mark.parametrize("host_drops_the_gap", [False, True], ids=["gap-left", "gap-dropped"])
-def test_a_confirmed_read_is_said_the_same_whether_the_stale_gap_stays_or_goes(
-    tmp_path: Path, host_drops_the_gap: bool
+def test_a_confirmed_read_is_said_the_same_whether_the_stale_gap_is_reworded_stays_or_goes(
+    tmp_path: Path, stale_gap: StaleGap
 ) -> None:
     """No reason the backend writes reads the package-level drawing gap: the drawings line, the
-    restated drawing check and every goal line say the drawing was read, whether the host
-    leaves the gap that says none was or drops it."""
+    restated drawing check and every goal line say the drawing was read, whether the host rewords
+    the gap that says none was - as `PackageAppender.MergeDrawing` has since feature 011 T079
+    (T088) - leaves it, as a host before T079 did, or drops it."""
     package = candidates_package(1)
     package = package.model_copy(update={"gaps": [*package.gaps, NO_DRAWING_GAP]})
     [part] = [candidate.document_id for candidate in package.drawing_candidates]
+    reworded = NO_DRAWING_GAP.model_copy(
+        update={"reason": drawings_read_afterwards([("FICT-KALO-8001.SLDDRW", True)])}
+    )
+    left_by_the_host = {"reworded": [reworded], "left": [NO_DRAWING_GAP], "dropped": []}
 
-    def answers(folder: Path) -> dict[str, Any]:
-        read = merged(folder, part)
-
-        def read_then_drop() -> dict[str, Any]:
-            result = read()
-            without_the_no_drawing_gap(folder)
-            return result
-
-        return {part: read_then_drop if host_drops_the_gap else read}
-
-    run, _, _ = reviewed(tmp_path, package, answers)
+    run, _, _ = reviewed(
+        tmp_path, package, lambda folder: {part: merged(folder, part, stale_gap=stale_gap)}
+    )
     run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
 
-    assert (NO_DRAWING_GAP in run.context.ir.gaps) is not host_drops_the_gap
+    standing = [gap for gap in run.context.ir.gaps if gap in (reworded, NO_DRAWING_GAP)]
+    assert standing == left_by_the_host[stale_gap]
+    if stale_gap == "reworded":
+        # Reworded, not removed: the gap count `get_package_summary` reports and the brief's
+        # counts by kind are the same after the read as before it, the gap in its own place.
+        assert len(run.context.ir.gaps) == len(package.gaps)
+        assert run.context.ir.gaps.index(reworded) == package.gaps.index(NO_DRAWING_GAP)
     summary = review_ranking(run.session, run.context.ir).summary
     assert summary.drawings is not None
     assert (summary.drawings.read, summary.drawings.candidates) == (kalo(1), [])
@@ -1088,6 +1073,7 @@ def test_a_confirmed_read_is_said_the_same_whether_the_stale_gap_stays_or_goes(
         for item in getattr(run.session.coverage, bucket)
     ]
     assert not any("no drawing was read" in reason for reason in reasons)
+    assert not any("Read afterwards" in reason for reason in reasons)
 
 
 @pytest.mark.parametrize(

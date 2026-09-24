@@ -58,11 +58,13 @@ class FakeTransport:
         self.responses = list(responses)
         self.fail_with = fail_with
         self.requests: list[dict[str, Any]] = []
+        self.lines: list[str] = []
         self.closed = False
 
     def request(self, line: str) -> str:
         if self.fail_with is not None:
             raise self.fail_with
+        self.lines.append(line)
         self.requests.append(json.loads(line))
         response = self.responses.pop(0)
         return response if isinstance(response, str) else json.dumps(response)
@@ -262,6 +264,38 @@ def test_drawing_read_sends_the_run_and_the_document_and_never_a_path() -> None:
         "document_id": "doc:0007",
     }
     assert result["drawing_document_id"] == "doc:0012"
+
+
+def test_drawing_read_writes_the_line_the_add_ins_end_to_end_test_replays() -> None:
+    """Feature 011 T089: the cross-language pin of part B's first hop.
+
+    `extractor/SwReview.AddIn.Tests/ToolServiceWiringTests.cs`
+    (`TheBackendsDrawingReadLineIsReadThroughTheHostAndTheSeamAndMergedIntoTheReviewsPackage`)
+    replays this literal byte for byte through the add-in's request path, the extractor's seam
+    and the package merge; this test holds the line the backend writes to it, so the two ends
+    cannot drift apart unseen.
+    """
+    bridge, transport = client(
+        ok(
+            "1",
+            {
+                "document_id": "doc:0007",
+                "drawing_document_id": "doc:0012",
+                "opened": True,
+                "closed": True,
+                "sheets": 1,
+                "gaps": 0,
+            },
+        ),
+        secret="review-secret-0123456789",
+    )
+
+    bridge.drawing_read("20260923-101500-chat-1", "doc:0007")
+
+    assert transport.lines == [
+        '{"id":"1","command":"drawing.read","params":{"run_id":"20260923-101500-chat-1",'
+        '"document_id":"doc:0007"},"secret":"review-secret-0123456789"}'
+    ]
 
 
 def test_capture_defaults_to_the_fit_view() -> None:
