@@ -186,7 +186,9 @@ backend - is restored **read-only** from its run folder, with the reason shown a
 and dispositions disabled. The contracts are `specs/009-engineer-workspace/contracts/`.
 
 Installing, updating and checking the add-in on the pilot workstation, including where the
-per-machine files live and how findings come back: `docs/workstation-runbook.md`.
+per-machine files live and how findings come back: `docs/workstation-runbook.md`. The next
+licensed-seat sitting, in plain steps for the engineer who runs it:
+[the workstation test plan](docs/workstation-test-plan-2026-09-23.md).
 
 ## Resilient Modeling checks
 

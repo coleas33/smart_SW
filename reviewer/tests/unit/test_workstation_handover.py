@@ -9,37 +9,15 @@ seat task added later fails here until the handover says where it goes in the si
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[3]
+from tests.support.seat_tasks import PACKAGES, REPO, named_tasks, open_seat_tasks
+
 DOCS = REPO / "docs"
-PACKAGES = (
-    "008-checks-first-review",
-    "009-engineer-workspace",
-    "010-mechanical-checks",
-    "011-drawing-context",
-)
-OPEN_SEAT_TASK = re.compile(r"^- \[ \] (T\d{3}) \[W\]", re.MULTILINE)
-TASK_ID = re.compile(r"\bT(\d{3})\b")
-TASK_RANGE = re.compile(r"\bT(\d{3}) to T(\d{3})\b")
 
 
 def newest_handover() -> Path:
     return max(DOCS.glob("workstation-handover-*.md"), key=lambda path: path.name)
-
-
-def open_seat_tasks(package: str) -> list[str]:
-    text = (REPO / "specs" / package / "tasks.md").read_text(encoding="utf-8")
-    return OPEN_SEAT_TASK.findall(text)
-
-
-def named_tasks(text: str) -> set[str]:
-    """Every task id the text names, a range `T103 to T106` counting each id in it."""
-    named = {f"T{number}" for number in TASK_ID.findall(text)}
-    for first, last in TASK_RANGE.findall(text):
-        named |= {f"T{number:03d}" for number in range(int(first), int(last) + 1)}
-    return named
 
 
 def test_the_runbook_points_at_the_newest_handover() -> None:
