@@ -175,8 +175,9 @@ public sealed class ReviewPageDrawingQuestionsTests
     /// What the review's checks and the confirmed opens found is the backend's coverage, and the
     /// page prints it verbatim, in the order it arrived within each bucket: the drawing context of
     /// each reviewed document, then each confirmed candidate - read and closed, refused while the
-    /// seam is off (in the bridge's words), read as it stood. The checked bucket arrives out of
-    /// sorted order, so a page that sorted it would fail here.
+    /// seam is off (in the bridge's words), read as it stood - then the drawing context the backend
+    /// restates after a read. The checked bucket arrives out of sorted order, so a page that
+    /// sorted it would fail here.
     /// </summary>
     [Fact]
     public void TheCoverageIsPrintedVerbatimInTheBackendsOrder()
@@ -262,9 +263,9 @@ public sealed class ReviewPageDrawingQuestionsTests
                 await driver.Settle();
                 run.SentCalls = await driver.Calls();
 
-                // The review's coverage as the backend emitted it, the confirmed opens last: the
-                // backend opened, read and closed before resuming; the answered questions are no
-                // longer open.
+                // The review's coverage as the backend emitted it, the confirmed opens and the
+                // restated drawing check last: the backend opened, read and closed before resuming;
+                // the answered questions are no longer open.
                 int seq = 10;
                 foreach (JsonElement row in Coverage)
                 {

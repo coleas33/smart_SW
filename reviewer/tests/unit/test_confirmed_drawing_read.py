@@ -28,12 +28,19 @@ import pytest
 
 from swreview.agent.providers.fake import FakeProvider, ScriptedToolCall, ScriptedTurn
 from swreview.agent.runner import ReviewRun, answers_message, start_review
+from swreview.agent.settings import EfficiencySettings
 from swreview.bridge.client import BridgeClient, BridgeError
-from swreview.checks.drawing_context import CANDIDATE_CONFIRM, CANDIDATE_OPTIONS
+from swreview.checks.drawing_context import (
+    CANDIDATE_CONFIRM,
+    CANDIDATE_OPTIONS,
+    CONFORMANCE_CHECK,
+    CONTEXT_CHECK,
+)
 from swreview.ir.loader import load_package, save_package
 from swreview.ir.models import EvidencePackage
 from swreview.tools.drawings import (
     CONFIRMED_OPEN_CHECK,
+    DRAWINGS_TOOL,
     MAX_DRAWINGS,
     NO_CONNECTION,
     TEN_DRAWINGS,
@@ -43,6 +50,7 @@ from tests.support.drawings import DrawingBuilder
 from tests.support.mechanical import PackageBuilder
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "drawings"
+PROFILE_A = Path(__file__).resolve().parents[1] / "fixtures" / "standards" / "profile-a.yaml"
 NOT_VALIDATED_BY_THE_HOST = (
     "the read-only open of a confirmed drawing is not yet validated on a seat (feature 011 "
     "probe D14)"
@@ -391,6 +399,132 @@ def test_a_package_that_cannot_be_reloaded_leaves_the_read_unresolved_naming_why
     assert bucket == "unresolved"
     assert reason.startswith("opened read-only, read and closed (1 sheet); but the package in the "
                              "run folder could not be reloaded:")
+
+
+# --- 3. the drawing check is restated over the drawing just read ---------------------------------
+
+
+def prerun_reviewed(
+    tmp_path: Path,
+    answers: Callable[[Path], dict[str, Answer]],
+    resumed: tuple[ScriptedToolCall, ...] = (),
+) -> tuple[ReviewRun, FakeHost]:
+    """A pane review of `plate-drawing`: checks first and lever 13 on (the pane's defaults), a
+    version 3 profile attached, so the pre-run's `check_drawings` asks the candidate question and
+    then leaves the array."""
+    folder = tmp_path / "run-0001"
+    shutil.copytree(FIXTURES / "plate-drawing", folder)
+    host = FakeHost(folder, answers(folder))
+    run = start_review(
+        folder,
+        folder,
+        provider=FakeProvider(
+            script=[ScriptedTurn(text="asked"), ScriptedTurn(text="resumed", tool_calls=resumed)],
+            model="fake-scripted",
+        ),
+        efficiency=EfficiencySettings(prerun_checks=True, withhold_prerun_tools=True),
+        standards_profile=PROFILE_A,
+        bridge=True,
+        bridge_factory=lambda pipe, secret: host,
+    )
+    host.run = run
+    run.start()
+    return run, host
+
+
+def context_items(run: ReviewRun, check: str) -> list[tuple[str, tuple[str, ...], str]]:
+    """`(bucket, document ids, reason)` of every coverage item of `check`, in bucket order."""
+    return [
+        (bucket, tuple(item.scope.document_ids), item.reason)
+        for bucket in ("checked", "skipped", "unresolved")
+        for item in getattr(run.session.coverage, bucket)
+        if item.check == check
+    ]
+
+
+def test_with_checks_first_the_drawing_check_is_restated_over_the_drawing_just_read(
+    tmp_path: Path,
+) -> None:
+    """The pre-run's `check_drawings` described the package before the read; after it, the
+    candidate's document is drawn and the new drawing is compared with the profile (FR-046), as
+    one recorded step, before the resumed turn - so the session never holds both "opened
+    read-only, read and closed" and "a drawing with its name sits beside it (candidate)"."""
+    run, _ = prerun_reviewed(tmp_path, lambda folder: {"doc:0003": merged(folder, "doc:0003")})
+    [prerun_step] = [step for step in run.session.steps if step.tool == DRAWINGS_TOOL]
+    before = context_items(run, CONTEXT_CHECK)
+    assert ("skipped", ("doc:0003",)) in [(bucket, ids) for bucket, ids, _ in before]
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    drawn = [step for step in run.session.steps if step.tool == DRAWINGS_TOOL]
+    assert len(drawn) == 2, "the pre-run's call, and the one restated after the read"
+    restated = drawn[1]
+    assert restated.index > prerun_step.index and restated.status == "ok"
+    after = context_items(run, CONTEXT_CHECK)
+    assert len(after) == len(before), "restated, not added to"
+    [plate_block] = [item for item in after if item[1] == ("doc:0003",)]
+    assert plate_block[0] == "checked"
+    assert "candidate" not in plate_block[2]
+    new_drawing = next(
+        record.document_id for record in run.context.ir.drawing_records if record.opened_by_review
+    )
+    compared = {ids for _, ids, _ in context_items(run, CONFORMANCE_CHECK)}
+    assert (new_drawing,) in compared, "the drawing just read is compared with the profile"
+    assert [step.index for step in run.session.steps] == list(range(len(run.session.steps)))
+
+
+def test_a_repeat_after_the_read_is_answered_from_the_restated_run(tmp_path: Path) -> None:
+    """The re-call guard answers the model's `check_drawings` from the restated call, not from
+    the pre-run's outcome over the package as it stood before the read."""
+    run, _ = prerun_reviewed(
+        tmp_path,
+        lambda folder: {"doc:0003": merged(folder, "doc:0003")},
+        resumed=(ScriptedToolCall("check_drawings"),),
+    )
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    restated, repeat = [step for step in run.session.steps if step.tool == DRAWINGS_TOOL][1:]
+    [message] = [
+        item["content"] for item in run.messages
+        if item.get("role") == "tool" and item.get("name") == DRAWINGS_TOOL
+    ]
+    assert message["status"] == "already_run"
+    assert message["ran_at_step"] == restated.index
+    assert (message["outcome"]["drawings"], message["outcome"]["candidates"]) == (3, 0)
+    assert repeat.index == restated.index + 1, "the model's call is numbered after the restated one"
+
+
+def test_without_checks_first_the_drawing_check_is_restated_too(tmp_path: Path) -> None:
+    run, _, _ = reviewed(tmp_path, None, lambda folder: {"doc:0003": merged(folder, "doc:0003")})
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    assert len([step for step in run.session.steps if step.tool == DRAWINGS_TOOL]) == 2
+    [plate_block] = [item for item in context_items(run, CONTEXT_CHECK) if item[1] == ("doc:0003",)]
+    assert plate_block[0] == "checked"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [BridgeError(f"the bridge returned status 'error': {NOT_VALIDATED_BY_THE_HOST}"), None],
+    ids=["refused", "no-bridge"],
+)
+def test_nothing_is_restated_when_nothing_was_read(tmp_path: Path, answer: Answer | None) -> None:
+    run, _, _ = reviewed(
+        tmp_path,
+        None,
+        None if answer is None else (lambda folder: {"doc:0003": answer}),
+        bridge=answer is not None,
+    )
+    steps = len(run.session.steps)
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    assert len(run.session.steps) == steps
+    assert ("skipped", ("doc:0003",)) in [
+        (bucket, ids) for bucket, ids, _ in context_items(run, CONTEXT_CHECK)
+    ]
 
 
 class RefusingHost:

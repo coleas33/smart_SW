@@ -281,6 +281,131 @@
         "reason": "read as it stood; it was already open, so it was left open",
         "error": null
       }
+    },
+    {
+      "bucket": "skipped",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0001"
+          ]
+        },
+        "reason": "no open drawing shows it",
+        "error": null
+      }
+    },
+    {
+      "bucket": "checked",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0002"
+          ]
+        },
+        "reason": "read from FICT-TULMKALO-7001.SLDDRW and FICT-TULMKALO-7001-B.SLDDRW; 2 views usable",
+        "error": null
+      }
+    },
+    {
+      "bucket": "checked",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0003"
+          ]
+        },
+        "reason": "read from FICT-OKTAKALO-7002-A.SLDDRW, FICT-OKTAKALO-7002-B.SLDDRW, FICT-OKTAKALO-7002-C.SLDDRW, FICT-OKTAKALO-7002-D.SLDDRW and FICT-OKTAKALO-7002-E.SLDDRW; 5 views usable",
+        "error": null
+      }
+    },
+    {
+      "bucket": "skipped",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0004"
+          ]
+        },
+        "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+        "error": null
+      }
+    },
+    {
+      "bucket": "skipped",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0005"
+          ]
+        },
+        "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+        "error": null
+      }
+    },
+    {
+      "bucket": "skipped",
+      "item": {
+        "check": "drawing.context",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0006"
+          ]
+        },
+        "reason": "no open drawing shows it; a drawing with its name sits beside it (candidate)",
+        "error": null
+      }
+    },
+    {
+      "bucket": "skipped",
+      "item": {
+        "check": "drawing_profile.conformance",
+        "scope": {
+          "component_ids": [],
+          "pairs": [],
+          "configuration": null,
+          "positions": [],
+          "document_ids": [
+            "doc:0007",
+            "doc:0008",
+            "doc:0009",
+            "doc:0010",
+            "doc:0011",
+            "doc:0012",
+            "doc:0013"
+          ]
+        },
+        "reason": "the standards profile is absent, which has no drawing section",
+        "error": null
+      }
     }
   ],
   "questions_open_after": {

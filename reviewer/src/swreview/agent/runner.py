@@ -93,6 +93,7 @@ from swreview.prerun import (
     attach_standards,
     gate_brief,
     prerun_checks,
+    recorded_call,
 )
 from swreview.report.attention import rank
 from swreview.report.attention_record import write_attention_record
@@ -113,9 +114,14 @@ from swreview.report.session import (
     save_session,
 )
 from swreview.tools.context import ToolContext, build_context
-from swreview.tools.drawings import read_confirmed_candidates
+from swreview.tools.drawings import DRAWINGS_TOOL, read_confirmed_candidates
 from swreview.tools.query import package_summary
-from swreview.tools.registry import TOOL_RESULTS_DIR_NAME, RecordedTool, ToolRegistry
+from swreview.tools.registry import (
+    TOOL_RESULTS_DIR_NAME,
+    RecordedTool,
+    ToolDispatch,
+    ToolRegistry,
+)
 
 SYSTEM_PROMPT_FILE = Path(__file__).parent / "prompts" / "system_v1.md"
 SESSION_FILE_NAME = "session.json"
@@ -754,6 +760,8 @@ class ReviewRun:
         opening_message: str = OPENING_MESSAGE,
         bridge: Any | None = None,
         redact: Callable[[str], str] = no_redaction,
+        dispatch: ToolDispatch | None = None,
+        prerun_guard: PrerunGuard | None = None,
     ) -> None:
         self.context = context
         self.provider = provider
@@ -800,6 +808,13 @@ class ReviewRun:
         first turn runs, so no round can arrive before it is listening.
         """
         sink.add_listener(self.usage_ledger)
+        self._dispatch = dispatch
+        """The registry's own dispatch, beneath every wrapper `tools` may carry (the re-call
+        guard, lever 7, the pane's Stop): feature 011 restates the drawing check through it
+        after a confirmed read (`_restate_drawing_check`). `None` restates nothing."""
+        self._prerun_guard = prerun_guard
+        """The pre-run's re-call guard when checks first ran, held by identity for the reason
+        `_coverage_stop` is; told to answer a repeat from the restated drawing check."""
         self._explanation_allowed = False
         self._pending_turn_end: str | None = None
         self.check_presentation_cancelled: Callable[[], None] = lambda: None
@@ -870,15 +885,43 @@ class ReviewRun:
             request.answered_at = utc_now()
             self.sink.emit("evidence.answered", {"request_id": request_id, "answer": answer})
 
+        before = len(self.session.findings)
         # Feature 011 (owner, 2026-09-23): a confirmed drawing candidate is read read-only by
         # the host before the review resumes, so the resumed turn sees it. Every other answer
-        # does nothing here (`contracts/confirmed-open.md` section 1).
+        # does nothing here (`contracts/confirmed-open.md` section 1). A read reloads the
+        # package, and the drawing check is restated over it before the turn resumes.
+        package = self.context.package
         read_confirmed_candidates(self.context, requests, self.out_dir)
-        before = len(self.session.findings)
+        if self.context.package is not package:
+            self._restate_drawing_check()
         self._ask(answers_message(answers))
         for finding in _reconcile_reruns(self.session, before):
             self.sink.emit("finding", self.context.finding_body(finding))
         return self.finalize()
+
+    def _restate_drawing_check(self) -> None:
+        """Run `check_drawings` again over the package a confirmed read just reloaded.
+
+        The call that asked the candidate question described the package before the read: its
+        `drawing.context` items still name the candidate, and the drawing just read was never
+        compared with the profile (FR-046). With checks first on, the re-call guard would also
+        answer the model's repeat from that outcome, and lever 13 has taken the check off the
+        array. So the check is restated here, as one recorded step through the registry's own
+        dispatch - exactly as the pre-run calls it, its coverage restated rather than added to
+        and its findings citing this step - the guard answers a repeat from it, and the
+        adapter numbers the resumed turn's calls after it (`contracts/confirmed-open.md`
+        section 1; found on review, 2026-09-23).
+        """
+        if self._dispatch is None or not isinstance(
+            self._dispatch.get(DRAWINGS_TOOL), RecordedTool
+        ):
+            return
+        call = recorded_call(
+            self.context, self._dispatch, DRAWINGS_TOOL, {}, call_id="confirmed_drawings"
+        )
+        if self._prerun_guard is not None:
+            self._prerun_guard.answer_repeats_with(call)
+        self.provider.start_steps_at(len(self.session.steps))
 
     def finalize(self) -> ReviewSession:
         """Close the session out, write `session.json` and `attention.json`, and say so.
@@ -1252,8 +1295,9 @@ def start_review(
         # The array the adapter encodes, and so the one the prompt's tool notes describe:
         # read from the one filter that builds it (lever 13's lives in the guard).
         array: Iterable[RecordedTool] = tools
+        guard: PrerunGuard | None = None
         if prerun is not None:
-            offered = array = PrerunGuard(tools, prerun, folded=session.folded_families)
+            offered = array = guard = PrerunGuard(tools, prerun, folded=session.folded_families)
         # Lever 13 (feature 008 FR-030): the tools the pre-run ran to completion, which the
         # guard leaves off the array; empty with the lever or checks first off. The checklist
         # the model reads - in the system prompt and from `get_review_checklist` - stops
@@ -1296,6 +1340,8 @@ def start_review(
         ),
         bridge=bridge_client,
         redact=redact,
+        dispatch=tools,
+        prerun_guard=guard,
     )
 
 
