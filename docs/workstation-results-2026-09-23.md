@@ -9,7 +9,9 @@ ever pasted into a chat.
 Documents by letter only (the list is `notes\documents.txt` in the handover folder). No vault path,
 folder name, property name or value, sheet format or template name, and no key. A run folder is
 written as its time stamp and letter (`20261001-101112-A`), never its name. From a D6 or D8 line of
-a probe report, its id only: never a dimension's name, view, value or radius.
+a probe report, its id only: never a dimension's name, view, value or radius. From a Standards
+probe report, a component's id only (`cmp:` and four digits), never its name, and no
+configuration's or view's name.
 
 | | |
 |---|---|
@@ -43,6 +45,8 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 3.1 | 010 T104: Hole Wizard holes (provisional) | | | |
 | 3.1 | 010 T105: model dimensions and annotations | | | |
 | 3.1 | 010 T106: the 68 screws with their shank faces | | | |
+| 3.1 | 006 T101: PROBE-1 and PROBE-3 on A and B, the Standards probe clean | | | |
+| 3.1 | 006 T102: PROBE-2 on A and B, the three appearance kinds | | | |
 | 3.1 | real files fingerprinted (the `fingerprint-before` line) | | | |
 | 3.2 | 011 T062: D1 and D11 on C, gate log | | | |
 | 3.2 | 011 T064: D11 on C | | | |
@@ -63,6 +67,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 3.9 | 011 T077: D14 with J's drawing closed, then open | | | |
 | 4.1 | 008 T103: the small assembly's input tokens | | | |
 | 4.1 | 009 T079: the small assembly's summary, the engineer's words | | | |
+| 4.1 | 007 T059: the Start here panel against `report.md`'s | | | |
 | 4.2 | 009 T080: the ten-second read | | | |
 | 4.2 | 009 T080: the 300 by 600 screenshot | | | |
 | 4.2 | 008 T102: the big assembly's input tokens, groups judged | | | |
@@ -73,13 +78,16 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 4.3 | 008 T104: Retry | | | |
 | 4.4 | 009 T081: configuration switch on a part and an assembly | | | |
 | 4.5 | 009 T083: chips, the restart, the deleted folder | | | |
+| 4.5 | 007 T060: A's review timed, its baseline in `session.json` | | | |
 | 4.6 | 011 T067: the two questions, at most four, the brief | | | |
 | 4.6 | 009 T084: three or more answers in one send | | | |
 | 4.6 | 011 T077: the pane half, switch off | | | |
 | 4.6 | 011 T101: parts 1 and 3, a candidate left closed | | | |
 | 4.7 | 011 T101: parts 2, 3 and 4, a candidate opened first | | | |
 | 5.1 | Model check on J | | | |
+| 5.1 | 007 T059: Start here above the chips on Model check, against `report.md`'s | | | |
 | 5.2 | Standards on J and on A | | | |
+| 5.2 | 007 T059: Start here above the chips on Standards, against `report.md`'s | | | |
 | 5.3 | Remodel leaves J unchanged | | | |
 | 5.4 | 008 T106: the live Gemini test | | | |
 | 5.5 | 009 T082: Show before and after the fix | | | |
@@ -96,7 +104,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 
 ### 2. Profile and key
 
-### 3.1 Dumps
+### 3.1 Dumps and the Standards probe
 
 ### 3.2 A multi-sheet drawing
 
@@ -108,7 +116,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 
 ### 4.1 and 4.2 The two recorded assemblies
 
-### 4.3 to 4.5 Retry, configurations, chips
+### 4.3 to 4.5 Retry, configurations, chips, the timing of A's review
 
 ### 4.6 and 4.7 Drawing questions and the confirmed candidate
 
