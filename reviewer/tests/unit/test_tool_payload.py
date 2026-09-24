@@ -626,11 +626,24 @@ REVIEW_ARRAY_TOOL_COUNTS: dict[str, int] = {
     "review+slim+bridge+drawings-prerun": 34,
     "review": 35,
     "review+drawings": 37,
+    "review+standards": 36,
+    "review+standards+drawings": 38,
     "review+bridge": 38,
     "review+bridge+drawings": 40,
+    "review+bridge+standards": 39,
+    "review+bridge+standards+drawings": 41,
     "review+slim": 36,
     "review+slim+drawings": 38,
+    "review+slim+standards": 37,
+    "review+slim+standards+drawings": 39,
+    "review+slim+bridge": 39,
     "review+slim+bridge+drawings": 41,
+    "review+slim+bridge+standards": 40,
+    "review+slim+bridge+standards+drawings": 42,
+    "review-prerun": 28,
+    "review+drawings-prerun": 29,
+    "review+bridge-prerun": 32,
+    "review+bridge+drawings-prerun": 33,
 }
 REVIEW_ARRAY_BYTES: dict[str, dict[str, int]] = {
     "review+slim-prerun": {"openai": 29_217, "gemini": 29_552},
@@ -639,11 +652,24 @@ REVIEW_ARRAY_BYTES: dict[str, dict[str, int]] = {
     "review+slim+bridge+drawings-prerun": {"openai": 34_579, "gemini": 34_630},
     "review": {"openai": 35_844, "gemini": 35_915},
     "review+drawings": {"openai": 36_570, "gemini": 36_539},
-    "review+bridge": {"openai": 39_542},
+    "review+standards": {"openai": 37_332, "gemini": 37_352},
+    "review+standards+drawings": {"openai": 38_058, "gemini": 37_976},
+    "review+bridge": {"openai": 39_542, "gemini": 39_431},
     "review+bridge+drawings": {"openai": 40_268, "gemini": 40_055},
+    "review+bridge+standards": {"openai": 41_030, "gemini": 40_868},
+    "review+bridge+standards+drawings": {"openai": 41_756, "gemini": 41_492},
     "review+slim": {"openai": 36_200, "gemini": 36_220},
     "review+slim+drawings": {"openai": 36_926, "gemini": 36_844},
+    "review+slim+standards": {"openai": 37_688, "gemini": 37_657},
+    "review+slim+standards+drawings": {"openai": 38_414, "gemini": 38_281},
+    "review+slim+bridge": {"openai": 39_898, "gemini": 39_736},
     "review+slim+bridge+drawings": {"openai": 40_624, "gemini": 40_360},
+    "review+slim+bridge+standards": {"openai": 41_386, "gemini": 41_173},
+    "review+slim+bridge+standards+drawings": {"openai": 42_112, "gemini": 41_797},
+    "review-prerun": {"openai": 28_861, "gemini": 29_247},
+    "review+drawings-prerun": {"openai": 29_295, "gemini": 29_630},
+    "review+bridge-prerun": {"openai": 33_789, "gemini": 33_942},
+    "review+bridge+drawings-prerun": {"openai": 34_223, "gemini": 34_325},
 }
 """Every array a review can send, pinned per encoding with lever 2 off, in `ARRAY_KINDS` order
 (decision 9A): the one place an array's tool count and bytes are written, which the named
@@ -1168,6 +1194,12 @@ def test_the_pin_tables_hold_arrays_of_the_space_in_its_order() -> None:
     assert list(REVIEW_ARRAY_TOOL_COUNTS) == pinned
     assert pinned == [label for label in ARRAY_KINDS if label in REVIEW_ARRAY_BYTES]
     assert all(set(pins) <= set(ENCODINGS) for pins in REVIEW_ARRAY_BYTES.values())
+
+
+def test_every_array_a_review_can_send_is_pinned_for_both_providers() -> None:
+    """Decision 9A: whatever its kind, every array is pinned in both encodings (T079)."""
+    assert list(REVIEW_ARRAY_BYTES) == list(ARRAY_KINDS)
+    assert all(set(pins) == set(ENCODINGS) for pins in REVIEW_ARRAY_BYTES.values())
 
 
 def test_a_standards_pane_review_sends_the_pane_default_array(tmp_path: Path) -> None:
