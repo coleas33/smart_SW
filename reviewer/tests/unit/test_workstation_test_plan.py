@@ -326,6 +326,30 @@ def test_steps_before_the_findings_document_record_in_the_update_notes(plan: str
     assert r"`$H\notes\update.txt`, write `blocked by 1.3: network` under them" in before
 
 
+def test_the_answer_to_a_before_this_review_panel_is_the_owners_decision(plan: str) -> None:
+    """Decision 14A (2026-09-24): when the panel appears, the engineer writes down its first
+    line, presses Review available evidence, and never resolves or unsuppresses a part. It is
+    the owner's decision, no longer a default the owner may override in `notes\\documents.txt`,
+    in each place that says what to do: section 0.1, step 3.4, step 4's box and the handover."""
+    box = plan[plan.index("## Step 4.") : plan.index("### 4.1 ")]
+    places = {
+        "0.1": step(plan, "0.1"),
+        "3.4": step(plan, "3.4"),
+        "step 4's box": box,
+        "the handover": HANDOVER.read_text(encoding="utf-8"),
+    }
+
+    for name, text in places.items():
+        flat = re.sub(r"\s+", " ", text)
+        assert "decision 14A" in flat, name
+        assert "first line" in flat, name
+        assert "Review available evidence" in flat, name
+        assert "never resolve or unsuppress a part" in flat, name
+    assert "unless the owner wrote otherwise" not in plan
+    assert "the default is **Review available evidence**" not in plan
+    assert "Two decisions" not in step(plan, "0.1")
+
+
 PROBE_NAMES_COMMIT = re.compile(r'git merge-base --is-ancestor ([0-9a-f]{7,40}) HEAD; "holds \1: ')
 """Step 1.4's check that the build holds the commit from which the probe names each dimension."""
 

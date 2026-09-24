@@ -135,9 +135,11 @@ estimate from the replay's figures, not a measurement.
    who knows A, at step 4.1 and again at 4.2 (about 10 minutes each); a colleague who has not seen
    the result, at the end of B's review in step 4.2 (1 minute). Their names stay out of the
    findings document.
-6. **Two decisions, written in `notes\documents.txt`**: the input-token cap at which B's review is
-   stopped (step 4.2; if none is written, 3,000,000), and what to press when a **Before this
-   review** panel appears (step 4's box, item 1; the default is **Review available evidence**).
+6. **One decision, written in `notes\documents.txt`**: the input-token cap at which B's review is
+   stopped (step 4.2; if none is written, 3,000,000). What to do when a **Before this review**
+   panel appears is already the owner's decision 14A (2026-09-24), not a default to confirm:
+   write down its first line, press **Review available evidence**, and never resolve or
+   unsuppress a part (step 4's box, item 1).
 
 ### 0.2 The documents, named before the sitting
 
@@ -783,10 +785,11 @@ behind another (SOLIDWORKS stacks them; do not tile them).
 
 This is the sitting's first paid review; step 2 must be complete. Keep D, D-1, D-2 and D-X open,
 and click D's window so the assembly is the active document. Note the documents SOLIDWORKS's Window
-menu lists. On the Review tab press **Review**; if a **Before this review** panel appears, step 4's
-box, item 1, says what to press. Wait for `The review has finished.` or `Waiting for your
-answers.`; if it ends on `The review stopped`, step 4's box, item 6. Copy the run folder (Open run
-folder), then:
+menu lists. On the Review tab press **Review**; if a **Before this review** panel appears, write
+down its first line, press **Review available evidence**, and never resolve or unsuppress a part
+(the owner's decision 14A; step 4's box, item 1). Wait for `The review has finished.` or `Waiting
+for your answers.`; if it ends on `The review stopped`, step 4's box, item 6. Copy the run folder
+(Open run folder), then:
 
 ```powershell
 $run = '<paste the run folder>'
@@ -1096,10 +1099,12 @@ mismatch keeps it off, and research R4 records why.
 
 1. Press **Review** with the document active. If a panel headed **Before this review** appears
    instead (`<n> of <n> component instances are not resolved. <n> gaps were recorded while reading
-   the tree. No review tokens have been used.`), copy its first line into your notes, change
-   nothing in SOLIDWORKS (do not resolve or unsuppress anything: that would change the design
-   under review), and press **Review available evidence**, unless the owner wrote otherwise in
-   `notes\documents.txt`. The same panel can appear after Retry. The Results view then shows
+   the tree. No review tokens have been used.`), do what the owner decided (decision 14A,
+   2026-09-24; not a default, and nothing in `notes\documents.txt` changes it): write down its
+   first line under the step's heading in the findings document, press **Review available
+   evidence**, and never resolve or unsuppress a part, whatever the panel counts: that would
+   change the design under review. Change nothing else in SOLIDWORKS either. The same panel can
+   appear after Retry, and gets the same answer. The Results view then shows
    `The review is running.` Wait for `The review has finished.` or `Waiting for your answers.`
 2. Copy the run folder (Open run folder) and run `Show-ReviewFacts` on it:
 
