@@ -743,16 +743,17 @@ notepad "$H\probes\probe-standards-A.txt"
 ```
 
 For B, the same three lines with `B` in place of `A`. The second line prints the probe's gate log;
-Notepad opens the whole report. Copy any line printed above the report (it went to the screen,
-not the file) into your notes, after checking it names no path. In Notepad look at the first
-three probes, the ones the two tasks ask about (the report's other seven sections are not read
-here; the development machine keeps them):
+Notepad opens the whole report. Any line printed before `exit code:` went to the screen, not the
+file: besides the time-stamped `Attached to the running SOLIDWORKS session.`, which is normal,
+copy it into your notes, after checking it names no path. In Notepad look at the first three
+probes, the ones the two tasks ask about (the report's other seven sections are not read here;
+the development machine keeps them):
 
 - `probe-1 exploded_state:` (006 T101): the `open document:` line gives two answers,
-  `IModelDoc2.IsExploded()=<True or False>` and `IModelDocExtension.IsExploded(out name)=<True or
-  False> view=<a name or null>`; then one line per configuration ending `explode_steps=<n>`, read
-  without activating any; then, under `sub-assembly documents:`, one line per sub-assembly
-  (`(none)` if there is none).
+  `IModelDoc2.IsExploded()=<True or False>` and
+  `IModelDocExtension.IsExploded(out name)=<True or False> view=<a name, (blank) or null>`; then
+  one line per configuration ending `explode_steps=<n>`, read without activating any; then,
+  under `sub-assembly documents:`, one line per sub-assembly (`(none)` if there is none).
 - `probe-2 appearance_overrides:` (006 T102): one line per component, starting with its id
   (`cmp:` and four digits) and its name, then `HasMaterialPropertyValues=<True or False>` and
   `GetMaterialPropertyValues2(1, null)=` with the slots it read (normally `9 slots [0]=... [8]=...`).
