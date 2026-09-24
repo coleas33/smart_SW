@@ -217,3 +217,14 @@ which still opens no drawing (FR-003).
 - **The merge** (`PackageAppender.MergeDrawing`) is as section 2 says; the candidate member is
   omitted once its last row is removed, and a drawing whose record or document row is already in
   the package is refused with the package unchanged.
+
+## 8. Landed as (T073, T074, 2026-09-23)
+
+- **The add-in's source** (`ToolService/ToolServiceHost.cs`): `ToolServiceOptions.ReviewRunDirectory`,
+  set by `SwReviewAddIn` to `ReviewHost.ReviewRunDirectory`, is section 2 item 1's lookup. `Attach`,
+  on the application thread, sets `BridgeServices.ConfirmedDrawings` from
+  `ToolServiceHost.ConfirmedDrawingSource`: null with no lookup (the dispatcher's sentence), otherwise
+  section 7's seven seams - the seam's gate observed by the tool service's plain recorder, so its
+  three keys are on the request's `gated=` line and no `target=` is written (`CloseDoc` is on the
+  remodel allowlist, whose observer would have recorded one), and the switch
+  `DrawingOpenScope.SeatValidated`, still false.

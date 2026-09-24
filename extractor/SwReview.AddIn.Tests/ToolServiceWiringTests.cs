@@ -3,13 +3,20 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using SolidWorks.Interop.sldworks;
 using SwReview.AddIn.Review;
 using SwReview.AddIn.Settings;
 using SwReview.AddIn.ToolService;
 using SwReview.Extractor.Bridge;
+using SwReview.Extractor.Capture;
+using SwReview.Extractor.Dump;
 using SwReview.Extractor.Guard;
+using SwReview.Extractor.Ids;
+using SwReview.Extractor.Interference;
+using SwReview.Extractor.Ir;
+using SwReview.Extractor.Measure;
 using SwReview.Extractor.Sw;
 using Xunit;
 
@@ -936,6 +943,252 @@ public sealed class ToolServiceWiringTests
             "command=" + RemodelCommands.ProbeScope, service.ToolServiceLog, StringComparison.Ordinal);
     }
 
+    // ---- drawing.read: the confirmed drawing's source (feature 011 T073) ------------------------
+    //
+    // specs/011-drawing-context/contracts/confirmed-open.md section 2. The backend names the review
+    // a confirmed candidate belongs to by `run_id`, the run folder's own name, and the add-in
+    // resolves it through the review host's own session records - never as a path - before
+    // anything is opened, on the application thread every other command runs on. What is under
+    // test is the request path the host builds (`ToolServiceHost.RequestChain`) around the source
+    // it builds (`ToolServiceHost.ConfirmedDrawingSource`), behind a real ReviewHost, the real
+    // secret policy and the real in-process server; SOLIDWORKS is faked behind the four seams the
+    // confirmed read is given. Every rule of the read itself is the extractor's
+    // (`ConfirmedDrawingReadTests`, `DrawingOpenTests`); these pin the wiring.
+
+    /// <summary>
+    /// Null review records - <c>ToolServiceOptions.ReviewRunDirectory</c>'s default - build no
+    /// source, and the command then answers the dispatcher's sentence rather than reading from
+    /// records the host does not keep.
+    /// </summary>
+    [Fact]
+    public void AHostGivenNoReviewRecordsBuildsNoSourceAndDrawingReadSaysSo()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: true, reviewRecords: false))
+        {
+            string name = Path.GetFileName(world.ReviewRun("chat-1"));
+            world.Seat.AlreadyOpen(world.CandidatePath);
+
+            BridgeResponse response = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+
+            Assert.Null(world.Source);
+            Assert.Equal(BridgeStatus.Error, response.Status);
+            Assert.StartsWith("This bridge cannot read a drawing", response.Error, StringComparison.Ordinal);
+            Assert.Empty(world.Seat.Calls);
+        }
+    }
+
+    /// <summary>
+    /// A review this host started, named by its folder's name: the id reaches the review host's
+    /// own lookup exactly as sent, the candidate is read into that review's package, and the
+    /// lookup and every SOLIDWORKS call run on the application thread. A drawing the engineer has
+    /// open is read as it stands - no visibility, open or close call - which is also why this path
+    /// works with the seat's switch off.
+    /// </summary>
+    [Fact]
+    public void AReviewsCandidateIsReadThroughTheReviewHostsOwnRecordOnTheApplicationThread()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: false))
+        {
+            string run = world.ReviewRun("chat-1");
+            string name = Path.GetFileName(run);
+            world.Seat.AlreadyOpen(world.CandidatePath);
+
+            BridgeResponse response = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+
+            Assert.Equal(BridgeStatus.Ok, response.Status);
+            ConfirmedDrawingResult result = Assert.IsType<ConfirmedDrawingResult>(response.Result);
+            Assert.Equal(world.HousingId, result.DocumentId);
+            Assert.Equal(DocumentIds.For(world.CandidatePath), result.DrawingDocumentId);
+            Assert.False(result.Opened);
+            Assert.False(result.Closed);
+
+            Assert.Equal(new[] { name }, world.LookupRunIds.ToArray());
+            EvidencePackage package = PackageAppender.Load(run);
+            Assert.Contains(package.DrawingRecords!, record => record.DocumentId == result.DrawingDocumentId);
+            Assert.DoesNotContain(
+                package.DrawingCandidates ?? new List<DrawingCandidate>(),
+                row => row.DocumentId == world.HousingId);
+
+            Assert.Equal(new[] { world.ApplicationThreadId }, world.LookupThreads.Distinct().ToArray());
+            Assert.Equal(new[] { world.ApplicationThreadId }, world.Seat.Threads.Distinct().ToArray());
+            Assert.Equal(new[] { "OpenDocument" }, world.Seat.Calls.Distinct().ToArray());
+        }
+    }
+
+    /// <summary>
+    /// Section 2, item 1: an id that names no review of this host - unknown, a Model check's or a
+    /// remodel run's record (both tracked through <c>TrackCheck</c>, each folder holding a
+    /// package), or the review's own folder spelt as a path - is refused naming it, and nothing
+    /// is opened or read, although the seat's switch is on.
+    /// </summary>
+    [Theory]
+    [InlineData("an unknown run")]
+    [InlineData("a Model check record")]
+    [InlineData("a remodel record")]
+    [InlineData("the review's folder spelt as a path")]
+    public void ARunIdThatIsNotOneOfThisHostsReviewsIsRefusedNamingItAndOpensNothing(string which)
+    {
+        using (var world = new DrawingReadWorld(seatValidated: true))
+        {
+            string review = world.ReviewRun("chat-1");
+            string runId =
+                which == "an unknown run" ? "20260923-101500-chat-404"
+                : which == "a Model check record" ? Path.GetFileName(world.CheckRun("bracket-check"))
+                : which == "a remodel record" ? Path.GetFileName(world.CheckRun("bracket-remodel"))
+                : review;
+
+            BridgeResponse response = world.Read(runId, world.HousingId, DrawingReadWorld.ReviewSecret);
+
+            Assert.Equal(BridgeStatus.Error, response.Status);
+            Assert.Equal(
+                "'" + runId + "' is not a review this SOLIDWORKS session started, so no drawing was opened.",
+                response.Error);
+            Assert.Equal(new[] { runId }, world.LookupRunIds.ToArray());
+            Assert.Empty(world.Seat.Calls);
+            Assert.Equal(0, world.Seat.Reads);
+        }
+    }
+
+    /// <summary>
+    /// A review this host did start, whose run folder no longer holds a readable package - the
+    /// file deleted, or cut short - is answered with an error on the request, never an exception
+    /// that would reach the pipe, and nothing is opened or read.
+    /// </summary>
+    [Theory]
+    [InlineData("deleted")]
+    [InlineData("cut short")]
+    public void AReviewWhosePackageCannotBeReadIsAnsweredWithAnErrorAndOpensNothing(string what)
+    {
+        using (var world = new DrawingReadWorld(seatValidated: true))
+        {
+            string run = world.ReviewRun("chat-1");
+            string package = PackageAppender.PathIn(run);
+            if (what == "deleted")
+            {
+                File.Delete(package);
+            }
+            else
+            {
+                File.WriteAllText(package, "{\"package_id\": ");
+            }
+
+            BridgeResponse response = world.Read(Path.GetFileName(run), world.HousingId, DrawingReadWorld.ReviewSecret);
+
+            Assert.Equal(BridgeStatus.Error, response.Status);
+            Assert.False(string.IsNullOrWhiteSpace(response.Error));
+            if (what == "deleted")
+            {
+                Assert.Equal(
+                    "The review '" + Path.GetFileName(run) + "' has no package in its run folder, so no drawing was opened.",
+                    response.Error);
+            }
+
+            Assert.Empty(world.Seat.Calls);
+            Assert.Equal(0, world.Seat.Reads);
+            Assert.Single(world.LogLines);
+        }
+    }
+
+    /// <summary>
+    /// Review scope only (section 2): the general-chat and remodel secrets are answered
+    /// `unauthorized` before the review host is asked or SOLIDWORKS touched, and the review
+    /// secret reaches the command. No secret reaches the log.
+    /// </summary>
+    [Fact]
+    public void TheReviewSecretReachesDrawingReadAndTheGeneralChatAndRemodelSecretsDoNot()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: true))
+        {
+            string name = Path.GetFileName(world.ReviewRun("chat-1"));
+            world.Seat.AlreadyOpen(world.CandidatePath);
+
+            foreach (string refused in new[] { DrawingReadWorld.ChatSecret, DrawingReadWorld.RemodelSecret })
+            {
+                BridgeResponse response = world.Read(name, world.HousingId, refused);
+                Assert.Equal(SwBridgeDispatcher.UnauthorizedError, response.Error);
+                Assert.Null(response.Result);
+            }
+
+            Assert.Empty(world.LookupRunIds);
+            Assert.Empty(world.Seat.Calls);
+
+            BridgeResponse allowed = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+            Assert.Equal(BridgeStatus.Ok, allowed.Status);
+            Assert.Equal(new[] { name }, world.LookupRunIds.ToArray());
+
+            foreach (string secret in new[]
+                     {
+                         DrawingReadWorld.ReviewSecret, DrawingReadWorld.ChatSecret, DrawingReadWorld.RemodelSecret,
+                     })
+            {
+                Assert.DoesNotContain(secret, world.Log, StringComparison.Ordinal);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The SC-004 artifact: a confirmed read's line carries the seam's three qualified keys and
+    /// the reads beside them on the request's own <c>gated=</c> field, and no <c>target=</c>.
+    /// The drawing gate is observed by the plain recorder, and that matters: <c>CloseDoc</c> is
+    /// on the remodel allowlist, so the remodel gate's observer would have recorded the close as a
+    /// write to the run's copy.
+    /// </summary>
+    [Fact]
+    public void AConfirmedReadsGatedKeysAreOnItsOwnLogLineAndNoTargetIsRecorded()
+    {
+        Assert.Contains(DrawingOpenGuard.CloseDocKey, RemodelGuard.AllowedKeys);
+
+        using (var world = new DrawingReadWorld(seatValidated: true))
+        {
+            string name = Path.GetFileName(world.ReviewRun("chat-1"));
+
+            BridgeResponse response = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+
+            Assert.Equal(BridgeStatus.Ok, response.Status);
+            ConfirmedDrawingResult result = Assert.IsType<ConfirmedDrawingResult>(response.Result);
+            Assert.True(result.Opened);
+            Assert.True(result.Closed);
+
+            string line = Assert.Single(world.LogLines);
+            Assert.Contains(" command=" + BridgeCommands.DrawingRead + " ", line, StringComparison.Ordinal);
+            Assert.Contains(" status=ok ", line, StringComparison.Ordinal);
+            Assert.Equal(
+                new[]
+                {
+                    "GetOpenDocumentByName",
+                    DrawingOpenGuard.DocumentVisibleKey,
+                    DrawingOpenGuard.OpenDocKey,
+                    DrawingReadWorld.PhaseRead,
+                    DrawingOpenGuard.CloseDocKey,
+                },
+                GatedOf(line));
+            Assert.DoesNotContain(" target=", line, StringComparison.Ordinal);
+            Assert.DoesNotContain(" refused=", line, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// While the seat is unvalidated (T077 has not run), a closed candidate is refused with the
+    /// seam's sentence and the only key on its line is the lookup that found it closed: nothing
+    /// was hidden, opened or closed.
+    /// </summary>
+    [Fact]
+    public void WhileTheSeatIsUnvalidatedAClosedCandidateIsRefusedAndOnlyTheLookupIsGated()
+    {
+        using (var world = new DrawingReadWorld(seatValidated: false))
+        {
+            string name = Path.GetFileName(world.ReviewRun("chat-1"));
+
+            BridgeResponse response = world.Read(name, world.HousingId, DrawingReadWorld.ReviewSecret);
+
+            Assert.Equal(BridgeStatus.Error, response.Status);
+            Assert.Equal(DrawingOpenScope.NotValidatedSentence, response.Error);
+            Assert.Equal(new[] { "GetOpenDocumentByName" }, GatedOf(Assert.Single(world.LogLines)));
+            Assert.Equal(new[] { "OpenDocument" }, world.Seat.Calls.ToArray());
+            Assert.Equal(0, world.Seat.Reads);
+        }
+    }
+
     // ---- the remodel observer's helpers ---------------------------------------------------------
 
     /// <summary>
@@ -1094,6 +1347,376 @@ public sealed class ToolServiceWiringTests
             Work?.Invoke();
             return BridgeResponse.Ok(request.Id, null);
         }
+    }
+
+    // ---- drawing.read's world (T073) ------------------------------------------------------------
+
+    /// <summary>
+    /// The add-in's side of <c>drawing.read</c>, composed as <see cref="ToolServiceHost"/> composes
+    /// it: a real <see cref="ReviewHost"/> whose session records the lookup reads, the source
+    /// <see cref="ToolServiceHost.ConfirmedDrawingSource"/> builds on them, the real dispatcher and
+    /// secret policy inside <see cref="ToolServiceHost.RequestChain"/>, and the real in-process
+    /// server posting every request to a <see cref="FakeAppThread"/>. The review is of a fictional
+    /// assembly under a temporary folder, whose housing has a candidate drawing on disk beside it.
+    /// </summary>
+    private sealed class DrawingReadWorld : IDisposable
+    {
+        public const string ReviewSecret = "review-secret-0123456789";
+        public const string ChatSecret = "general-chat-secret-abcdefghij";
+        public const string RemodelSecret = "remodel-secret-klmnopqrstuv";
+
+        /// <summary>The bare-name read the fake drawing phase gates, as the real one gates its reads.</summary>
+        public const string PhaseRead = "GetSheetNames";
+
+        private readonly string _root;
+        private readonly string _runRoot;
+        private readonly FakeAppThread _app = new FakeAppThread();
+        private readonly ReviewHost _host;
+        private readonly InProcPipeServer _server;
+        private readonly StringWriter _log = new StringWriter();
+        private readonly object _lookupLock = new object();
+        private readonly List<string> _lookupRunIds = new List<string>();
+        private readonly List<int> _lookupThreads = new List<int>();
+
+        /// <param name="seatValidated">The switch the source's seam is built with; the add-in
+        /// passes <see cref="DrawingOpenScope.SeatValidated"/>.</param>
+        /// <param name="reviewRecords">False gives the host no review records, as a
+        /// <see cref="ToolServiceOptions"/> left at its default does.</param>
+        public DrawingReadWorld(bool seatValidated, bool reviewRecords = true)
+        {
+            _root = Path.Combine(Path.GetTempPath(), "swreview-drawing-read", Guid.NewGuid().ToString("N"));
+            string models = Path.Combine(_root, "models");
+            _runRoot = Path.Combine(_root, "runs");
+            Directory.CreateDirectory(models);
+            Directory.CreateDirectory(_runRoot);
+
+            AssemblyPath = Path.Combine(models, "bracket-assy.SLDASM");
+            HousingPath = Path.Combine(models, "housing.SLDPRT");
+            CandidatePath = Path.Combine(models, "housing.SLDDRW");
+            File.WriteAllBytes(CandidatePath, new byte[0]);
+
+            UserSettings settings = UserSettings.Defaults();
+            settings.RunRoot = _runRoot;
+            string settingsPath = Path.Combine(_root, "settings.json");
+            settings.Save(settingsPath);
+            _host = new ReviewHost(new ReviewHostOptions(new SilentChannel(), new UnusedBackend(), settingsPath)
+            {
+                BuildMode = BuildMode.Development,
+                LogFolder = Path.Combine(_root, "logs"),
+                Environment = _ => null,
+            });
+
+            Recorder = new SwGateRecorder();
+            Seat = new FakeDrawingSeat(new SwGate { Observer = Recorder });
+            Source = ToolServiceHost.ConfirmedDrawingSource(
+                reviewRecords ? Lookup : (Func<string, string?>?)null,
+                AssemblyPath,
+                Recorder,
+                Seat,
+                seatValidated,
+                Seat,
+                Seat,
+                Seat);
+
+            var services = new BridgeServices(
+                new NoViews(), new NoViews(), new NoViews(), new ComponentIndex(new ComponentTreeResult()), _root)
+            {
+                DocumentPath = AssemblyPath,
+                Configuration = "Default",
+                ConfirmedDrawings = Source,
+            };
+
+            _server = new InProcPipeServer(new InProcPipeServerOptions(
+                PipeNames.NewToolServiceName(),
+                ToolServiceHost.RequestChain(
+                    new SwBridgeDispatcher(services, new ScopedSecretPolicy(ReviewSecret, ChatSecret, RemodelSecret)),
+                    () => true,
+                    AssemblyPath,
+                    Recorder,
+                    _log.Write),
+                _app)
+            {
+                InvokeTimeout = TimeSpan.FromSeconds(30),
+            });
+        }
+
+        public string AssemblyPath { get; }
+
+        public string HousingPath { get; }
+
+        public string CandidatePath { get; }
+
+        public string HousingId => DocumentIds.For(HousingPath);
+
+        public SwGateRecorder Recorder { get; }
+
+        public FakeDrawingSeat Seat { get; }
+
+        /// <summary>What <see cref="ToolServiceHost.ConfirmedDrawingSource"/> built, or null.</summary>
+        public IConfirmedDrawingSource? Source { get; }
+
+        public int ApplicationThreadId => _app.ThreadId;
+
+        /// <summary>The tool-service log as written: one line per request.</summary>
+        public string Log => _log.ToString();
+
+        public string[] LogLines =>
+            Log.Split(new[] { System.Environment.NewLine }, StringSplitOptions.RemoveEmptyEntries);
+
+        /// <summary>Every run id the review host's lookup was asked about, in order.</summary>
+        public IReadOnlyList<string> LookupRunIds
+        {
+            get
+            {
+                lock (_lookupLock)
+                {
+                    return _lookupRunIds.ToArray();
+                }
+            }
+        }
+
+        public IReadOnlyList<int> LookupThreads
+        {
+            get
+            {
+                lock (_lookupLock)
+                {
+                    return _lookupThreads.ToArray();
+                }
+            }
+        }
+
+        /// <summary>A review this host started: its run folder, holding the package, tracked for a chat.</summary>
+        public string ReviewRun(string chatId)
+        {
+            string folder = RunFolder("20260923-101500-" + chatId);
+            _host.TrackSession(chatId, folder);
+            return folder;
+        }
+
+        /// <summary>A Model check's, a Standards run's or a remodel run's folder, tracked as one.</summary>
+        public string CheckRun(string name)
+        {
+            string folder = RunFolder("20260923-101500-" + name);
+            _host.TrackCheck(folder);
+            return folder;
+        }
+
+        /// <summary>One <c>drawing.read</c> line, answered through the whole request path.</summary>
+        public BridgeResponse Read(string runId, string documentId, string secret) =>
+            _server.Answer(JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                { "id", "7" },
+                { "command", BridgeCommands.DrawingRead },
+                { "secret", secret },
+                { "params", new Dictionary<string, string> { { "run_id", runId }, { "document_id", documentId } } },
+            }));
+
+        public void Dispose()
+        {
+            _server.Dispose();
+            _app.Dispose();
+            _host.Dispose();
+            try
+            {
+                Directory.Delete(_root, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        /// <summary>The add-in's lookup, <see cref="ReviewHost.ReviewRunDirectory"/>, watched.</summary>
+        private string? Lookup(string runId)
+        {
+            lock (_lookupLock)
+            {
+                _lookupRunIds.Add(runId);
+                _lookupThreads.Add(Thread.CurrentThread.ManagedThreadId);
+            }
+
+            return _host.ReviewRunDirectory(runId);
+        }
+
+        private string RunFolder(string name)
+        {
+            string folder = Path.Combine(_runRoot, name);
+            Directory.CreateDirectory(folder);
+            PackageAppender.Save(folder, Package());
+            return folder;
+        }
+
+        /// <summary>The package `review.start` wrote: the assembly, its housing, and the housing's candidate.</summary>
+        private EvidencePackage Package()
+        {
+            var package = new EvidencePackage
+            {
+                PackageId = Guid.NewGuid(),
+                CreatedAt = DateTimeOffset.Now,
+                Design = new Design
+                {
+                    DesignId = DocumentIds.DesignId(AssemblyPath),
+                    Name = "bracket-assy",
+                    RootAssemblyDocumentId = DocumentIds.For(AssemblyPath),
+                    ActiveConfiguration = "Default",
+                },
+                DrawingRecords = new List<DrawingRecord>(),
+                DrawingCandidates = new List<DrawingCandidate>
+                {
+                    new DrawingCandidate { DocumentId = HousingId, Path = CandidatePath },
+                },
+            };
+
+            AddDocument(package, AssemblyPath, DocumentKind.Assembly);
+            AddDocument(package, HousingPath, DocumentKind.Part);
+            return package;
+        }
+
+        private static void AddDocument(EvidencePackage package, string path, DocumentKind kind)
+        {
+            string id = DocumentIds.For(path);
+            package.Documents.Add(new Document
+            {
+                DocumentId = id,
+                Kind = kind,
+                FileName = Path.GetFileName(path),
+                Path = path,
+                ActiveConfiguration = "Default",
+            });
+            package.Manifest.Entries.Add(new ManifestEntry
+            {
+                DocumentId = id,
+                VaultPath = path,
+                Configuration = "Default",
+                ExportMethod = ExportMethod.Native,
+            });
+        }
+    }
+
+    /// <summary>
+    /// SOLIDWORKS behind the four seams <see cref="ConfirmedDrawingRead"/> is given: which
+    /// drawings are open and what an open does (<see cref="IDrawingOpenHost"/>), and the drawing,
+    /// document and manifest phases. Records each open-host call by name and the thread it ran on;
+    /// the drawing phase gates one bare-name read through the host's recorder, as the real phase
+    /// reads through the session's gate.
+    /// </summary>
+    private sealed class FakeDrawingSeat : IDrawingOpenHost, IDrawingSource, IDocumentSource, IManifestSource
+    {
+        private readonly Dictionary<string, object> _open = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        private readonly SwGate _readGate;
+
+        public FakeDrawingSeat(SwGate readGate)
+        {
+            _readGate = readGate;
+        }
+
+        /// <summary>The open-host calls, by member name, in order.</summary>
+        public List<string> Calls { get; } = new List<string>();
+
+        /// <summary>The thread each open-host call ran on.</summary>
+        public List<int> Threads { get; } = new List<int>();
+
+        /// <summary>How many times the drawing phase read a drawing.</summary>
+        public int Reads { get; private set; }
+
+        public void AlreadyOpen(string path) => _open[path] = new object();
+
+        public object? OpenDocument(string path)
+        {
+            Record(nameof(OpenDocument));
+            return _open.TryGetValue(path, out object? document) ? document : null;
+        }
+
+        public void DocumentVisible(bool visible, int documentType) => Record(nameof(DocumentVisible));
+
+        public object? OpenDoc6(string path, int documentType, int options, string configuration, out int errors, out int warnings)
+        {
+            Record(nameof(OpenDoc6));
+            errors = 0;
+            warnings = 0;
+            var document = new object();
+            _open[path] = document;
+            return document;
+        }
+
+        public void CloseDoc(string path)
+        {
+            Record(nameof(CloseDoc));
+            _open.Remove(path);
+        }
+
+        public IReadOnlyList<DrawingRecord> Dump(DumpScope scope)
+        {
+            Reads++;
+            _readGate.Call(DrawingReadWorld.PhaseRead, () => 0);
+            return scope.Drawings.Select(drawing =>
+            {
+                var record = new DrawingRecord { DocumentId = scope.DocumentId(drawing.DocumentPath), ActiveSheetName = "Sheet1" };
+                record.Sheets.Add(new DrawingSheetRecord
+                {
+                    Id = scope.DrawingIds.Sheets.Next(),
+                    Name = "Sheet1",
+                    Index = 0,
+                    WasActive = true,
+                });
+                return record;
+            }).ToList();
+        }
+
+        public IReadOnlyList<Document> Dump(DumpScope scope, IReadOnlyList<string> documentPaths) =>
+            documentPaths.Select(path => new Document
+            {
+                DocumentId = scope.DocumentId(path),
+                Kind = DocumentKind.Drawing,
+                FileName = Path.GetFileName(path),
+                Path = path,
+                ActiveConfiguration = string.Empty,
+            }).ToList();
+
+        public Manifest Build(DumpScope scope, IReadOnlyList<Document> documents)
+        {
+            var manifest = new Manifest();
+            foreach (Document document in documents)
+            {
+                manifest.Entries.Add(new ManifestEntry
+                {
+                    DocumentId = document.DocumentId,
+                    VaultPath = document.Path,
+                    Configuration = document.ActiveConfiguration,
+                    ExportMethod = ExportMethod.Native,
+                });
+            }
+
+            return manifest;
+        }
+
+        private void Record(string member)
+        {
+            Calls.Add(member);
+            Threads.Add(Thread.CurrentThread.ManagedThreadId);
+        }
+    }
+
+    /// <summary>Capture, measure and interference: <c>drawing.read</c> touches none of them.</summary>
+    private sealed class NoViews : ICaptureView, IMeasureSource, IInterferenceSource
+    {
+        private const string Untouched = "drawing.read touches no capture, measure or interference source.";
+
+        public bool TrySelect(string persistRef, string? scopeDocumentPath, out string reason) =>
+            throw new NotSupportedException(Untouched);
+
+        public IReadOnlyList<string> SelectedComponentIds() => throw new NotSupportedException(Untouched);
+
+        public void ZoomToSelection() => throw new NotSupportedException(Untouched);
+
+        public void ShowNamedView(string namedView) => throw new NotSupportedException(Untouched);
+
+        public bool SaveImage(string pngPath) => throw new NotSupportedException(Untouched);
+
+        public MeasureReading Measure(string persistRefA, string? scopeA, string persistRefB, string? scopeB) =>
+            throw new NotSupportedException(Untouched);
+
+        public IInterferenceDetector Open() => throw new NotSupportedException(Untouched);
     }
 
     // ---- fakes ---------------------------------------------------------------------------------
