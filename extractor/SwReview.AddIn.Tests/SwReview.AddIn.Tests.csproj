@@ -129,6 +129,14 @@
     <Content Include="..\..\specs\002-task-pane-assistant\contracts\event-stream.sample.sse" Link="event-stream.sample.sse">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!--
+      And for PageRuleScanTests' coverage identity (feature 011 T082), which reads the fields of a
+      coverage item's scope out of the session schema, so the Review page's key cannot miss one the
+      backend sends.
+    -->
+    <Content Include="..\..\specs\001-agentic-design-review\contracts\review-session.schema.json" Link="review-session.schema.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

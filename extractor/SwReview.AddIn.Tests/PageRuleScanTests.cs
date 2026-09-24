@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Xunit;
 
@@ -280,6 +282,59 @@ public sealed class PageRuleScanTests
                 + string.Join("; ", AllowedComparisons.Select(entry => entry.Value)));
     }
 
+    // ---- rule 4: a coverage item's identity is what it covered ------------------------------
+
+    /// <summary>
+    /// Feature 011 T082. The Review page keeps one coverage item per identity, a later event
+    /// replacing an earlier one of the same identity. That is keyed replacement and not a rank
+    /// only while the key says what was covered and nothing about what became of it: so
+    /// `coverageKey` in the Review page reads the item's `check` and every field of its `scope`
+    /// that the session schema names, and none of the item's other fields, its bucket, or a
+    /// status or severity. A scope field the backend adds later without the page keying on it
+    /// would fold two different items into one, which is why the fields come from the schema.
+    /// </summary>
+    [Fact]
+    public void TheCoverageIdentityIsTheCheckAndEveryScopeFieldAndNothingThatRanks()
+    {
+        string key = FunctionBody(ReviewScript("app.js"), "coverageKey");
+
+        JsonElement item = CoverageItemSchema();
+        string[] scopeFields = item.GetProperty("properties").GetProperty("scope").GetProperty("properties")
+            .EnumerateObject().Select(field => field.Name).ToArray();
+        string[] otherFields = item.GetProperty("properties").EnumerateObject()
+            .Select(field => field.Name)
+            .Where(name => name != "check" && name != "scope")
+            .ToArray();
+
+        Assert.NotEmpty(scopeFields);
+        Assert.NotEmpty(otherFields);
+        foreach (string field in new[] { "check" }.Concat(scopeFields))
+        {
+            Assert.True(Word(field).IsMatch(key), "coverageKey does not read '" + field + "'.");
+        }
+
+        foreach (string field in otherFields.Concat(new[] { "bucket", "status", "severity" }))
+        {
+            Assert.False(Word(field).IsMatch(key), "coverageKey reads '" + field + "', which is not what an item covered.");
+        }
+    }
+
+    /// <summary>
+    /// And no coverage reaches the panel's state around the key: the one append is inside
+    /// `recordCoverage`, which the live event and a restored snapshot both go through.
+    /// </summary>
+    [Fact]
+    public void EveryCoverageItemReachesThePanelThroughTheKeyedRecord()
+    {
+        string app = ReviewScript("app.js");
+        string record = FunctionBody(app, "recordCoverage");
+
+        Assert.Equal(1, Occurrences(app, "state.coverage.push("));
+        Assert.Contains("state.coverage.push(", record, StringComparison.Ordinal);
+        Assert.Contains("coverageKey(", record, StringComparison.Ordinal);
+        Assert.DoesNotContain("snapshot.coverage || []).slice()", app, StringComparison.Ordinal);
+    }
+
     // ---- the allowlists are live ------------------------------------------------------------
 
     /// <summary>
@@ -350,6 +405,75 @@ public sealed class PageRuleScanTests
 
     /// <summary>The Windows path separator the collector reports, as the contracts write it.</summary>
     private static string Normalize(string path) => path.Replace('\\', '/');
+
+    /// <summary>One of the Review page's own scripts, comments out of the way.</summary>
+    private static string ReviewScript(string fileName) =>
+        Strip(Scripts().Single(script => script.Key == "Review/ReviewPage/" + fileName).Value);
+
+    /// <summary>
+    /// The body of <c>function {name}(...)</c>, from its opening brace to the one that closes it,
+    /// quoted text skipped so a brace inside a string neither opens nor closes; the test fails
+    /// when the page has no such function, so a scan of it is never vacuous.
+    /// </summary>
+    private static string FunctionBody(string source, string name)
+    {
+        int at = source.IndexOf("function " + name + "(", StringComparison.Ordinal);
+        Assert.True(at >= 0, "the Review page has no function " + name + ".");
+
+        int open = source.IndexOf('{', at);
+        int depth = 0;
+        for (int index = open; index >= 0 && index < source.Length; index++)
+        {
+            char character = source[index];
+            if (character == '\'' || character == '"' || character == '`')
+            {
+                index = EndOfString(source, index);
+                continue;
+            }
+
+            if (character == '{')
+            {
+                depth++;
+            }
+            else if (character == '}' && --depth == 0)
+            {
+                return source.Substring(open, index - open + 1);
+            }
+        }
+
+        Assert.Fail("function " + name + " never closes.");
+        return string.Empty;
+    }
+
+    /// <summary><c>CoverageItem</c> as the session schema states it, copied next to the test assembly.</summary>
+    private static JsonElement CoverageItemSchema()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "review-session.schema.json");
+        Assert.True(
+            File.Exists(path),
+            "review-session.schema.json was not copied next to the test assembly; check the Content item in the csproj.");
+
+        using (JsonDocument schema = JsonDocument.Parse(File.ReadAllText(path)))
+        {
+            return schema.RootElement.GetProperty("$defs").GetProperty("CoverageItem").Clone();
+        }
+    }
+
+    /// <summary>The name as a whole word: <c>check</c> in <c>item.check</c>, not in <c>checked</c>.</summary>
+    private static Regex Word(string name) => new Regex(@"\b" + Regex.Escape(name) + @"\b", RegexOptions.CultureInvariant);
+
+    private static int Occurrences(string text, string value)
+    {
+        int count = 0;
+        for (int at = text.IndexOf(value, StringComparison.Ordinal);
+            at >= 0;
+            at = text.IndexOf(value, at + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
 
     /// <summary>
     /// Every array literal in the source, as the text between a `[` and the `]` that closes it.
