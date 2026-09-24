@@ -1123,7 +1123,8 @@ o200k tokens a round; the pinned figures are `test_tool_payload.py`'s `PRERUN_SA
 `PRERUN_SAVED_TOKENS`, regenerated with `--write`; the spec commit's estimate of about 1,700
 tokens predated T115's measurement), and `check_standards` another 1,500 when a profile is
 attached. The owner raised `ARRAY_CEILING` to 38,000 on the understanding that these
-tools leave next.
+tools leave next (the ceiling's history, and decision 9A scoping it to the pane's defaults, are
+R2.57).
 
 **The rule, each clause an edge the tests pin.**
 
@@ -1285,6 +1286,53 @@ is unchanged, and absolute.
 | Keep the recorded findings in the fixture's session beside the contacts | The session would hold what no build records, and its event log would disagree with it. |
 | A hand-kept list of keys the check may miss | The replay's rule already says which recorded findings became contacts; a list beside it drifts. |
 | Copy the matching into the generator | Two copies of one rule; the task that owns the replay's would not know the other exists. |
+
+### Amendment 2026-09-23 (owner decision 9A): what the array ceiling holds
+
+#### R2.57 The ceiling's history, and the arrays it is asserted on
+
+**Decision** (owner, 2026-09-23, decision 9A; feature 011 research R5 Q10, its T078 and T079).
+`ARRAY_CEILING` (`reviewer/tests/unit/test_tool_payload.py`, 38,000 bytes, unchanged) is asserted
+only on the tool arrays the pane sends by default. Every other array a review can send is pinned
+for both providers, so its growth shows in review, and is not asserted.
+
+**The history, in order.**
+
+1. **36,000**, from feature 005 (FR-016's whole-array ceiling, "roughly 5 percent above today"):
+   asserted on the review array, and on each array added beside it later - the slimmed review
+   array (T062) and the two pre-run arrays (T115) - in either encoding. The bridged review array
+   was pinned on OpenAI and never asserted.
+2. **38,000**, raised by the owner on 2026-09-23 when feature 010's check tools and this feature's
+   `get_finding` took the slimmed pane array to 36,200 and 36,220 bytes: about 5 percent above
+   that, on the understanding that the tools checks first has already run leave the array next
+   rather than the ceiling rising again. They did, with lever 13 (R2.53): 29,217 and 29,552 bytes.
+3. **Decision 9A**, the same day, when feature 011's review found two arrays of a standards run
+   with checks first off over 38,000 because of the drawing family (38,058 and 37,976 bytes, the
+   slimmed ones 38,414 and 38,281; 011 research R2.20), after Q9 had already left the bridged
+   arrays unasserted. The ceiling is scoped to the pane's defaults - payload slimming, checks first
+   and lever 13, the pre-run having completed, with and without a bridge and drawing evidence (a
+   standards profile leaves the same arrays) - and every other array is measured.
+
+**What changes in the test module.** It enumerates the arrays instead of listing them: five
+switches (slimming, a bridge, a standards run, drawing evidence, a completed pre-run) make
+twenty-four arrays (`REVIEW_ARRAYS`), each shape's offered half is checked against
+`ToolRegistry.functions_for`, the hand-written `ARRAY_KINDS` says which arrays are `pane_default`
+and which `measured` and is held to `pane_defaults`, and a new array fails a test until it is
+classified. The review array and the slimmed review array are no longer asserted under the ceiling
+(both are checks-first-off arrays); the per-tool ceiling still holds every tool object.
+
+**Why.** The ceiling guards what a review costs on every round, and the rounds that are paid for
+at scale are the pane's. The arrays checks first off sends are the command line's A/B baselines and
+feature 008's own "off" arm: holding them to the pane's ceiling would trim the pane's evidence for
+arrays no engineer's default sends. Pinning them still makes every byte of growth a reviewed change.
+
+**Alternatives.**
+
+| Option | Why not |
+|---|---|
+| Raise the ceiling again to hold a standards run's arrays | The same answer as R2.53's: the ceiling is headroom, not a target, and the bridged arrays would still sit above any figure a standards run needs (feature 011 R5 Q9). |
+| Keep asserting every array and trim tools to fit | Tool docstrings are frozen (feature 011), and the bytes would come off the pane's arrays too, which are at least 3,370 bytes under the ceiling. |
+| Leave the unmodelled arrays unpinned | Their growth would be invisible in review, which is what feature 005's pins exist to prevent. |
 
 ## R3. Verified facts the plan relies on
 

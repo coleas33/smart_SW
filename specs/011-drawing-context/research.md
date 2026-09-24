@@ -590,6 +590,24 @@ the family is what crosses 38,000. Neither is pinned or asserted today. Whether 
 standards run's arrays, as Q9 asked for the bridged ones, is the owner's question (R5 Q10);
 `ARRAY_CEILING` stays 38,000 and no array was trimmed to fit (tool docstrings do not move).
 
+**Answered 2026-09-23 (owner decision 9A, R5 Q10; T078, T079).** The ceiling is asserted only on
+the arrays the pane sends by default: payload slimming, checks first and lever 13 (`pane_defaults`),
+the pre-run having completed, with and without a bridge and drawing evidence - 29,217, 34,145,
+29,651 and 34,579 bytes on OpenAI, 29,552, 34,247, 29,935 and 34,630 on Gemini. A standards profile
+leaves the same four arrays, since lever 13 withholds `check_standards` once it ran. Every other
+array a review can send is pinned per provider, so its growth shows in review, and not asserted:
+checks first off, a standards run with checks first off (38,058 and 37,976 bytes with the family),
+the bridged arrays (40,268 and 40,624 on OpenAI with it) and the pre-run without payload slimming.
+`test_tool_payload.py` now enumerates the space rather than listing arrays by hand: five switches
+(slimming, a bridge, a standards run, drawing evidence, a completed pre-run) make thirty-two shapes
+and twenty-four arrays (`REVIEW_ARRAYS`), each shape's offered half is checked against
+`ToolRegistry.functions_for`, and `ARRAY_KINDS` says which kind each array is, so an array a new
+switch or group makes fails a test until it is classified. What stays out of the space, each for its
+reason, is in `ArrayShape`'s docstring: lever 2 (descriptions, not membership), lever 4's tier (its
+own delta), lever 12's experimental compact queries, the remodel tools, and a pre-run that completed
+only some tools (bounded by the shape's two arms). This scopes FR-050 (amended) and
+`contracts/questions.md` section 7; `ARRAY_CEILING` stays 38,000 and no docstring moves.
+
 ### R2.21 Fixtures: synthetic, built by code, fictional
 
 **Decision**: `reviewer/tests/support/drawings.py` builds drawing records on top of feature 010's
@@ -778,14 +796,19 @@ requirement or task moves for it.
 | Q6 | A geometric tolerance value written on a drawing with no unit: read in the drawing's unit? | **Yes** (the default accepted): read in the drawing's unit and cited so | nothing (FR-029 as shipped) |
 | Q7 | Does the company use SOLIDWORKS' general tolerance table (an ISO 2768 class), or only the decimal-place convention? | **Decimal places only.** A dimension governed by the ISO 2768 table is recorded word for word and binds nothing. The real band values are still to come; `config/standards.example.yaml` keeps its clearly labelled example bands | nothing (FR-021, R2.9 as shipped) |
 | Q8 | Should `rms.drawing.model_items_preferred` be evaluated now that the extraction records model items? | **No** (the default accepted): it stays out of scope | nothing |
-| Q9 | Does `ARRAY_CEILING` hold the bridged review arrays? | **No** (the default accepted): the bridged arrays are pinned and not asserted | nothing (FR-050, T054 as shipped) |
+| Q9 | Does `ARRAY_CEILING` hold the bridged review arrays? | **No** (the default accepted): the bridged arrays are pinned and not asserted. *Follow-up 2026-09-23 (decision 9A, Q10)*: every bridged array is now pinned for both providers - the bridged review array's Gemini figure (39,431) and the bridged slim array without the family (39,898 / 39,736), which had no pin, included - and none is asserted | nothing (FR-050, T054 as shipped); T078, T079 |
+
+**Answered by the owner on 2026-09-23, after the review** (Q10, decision 9A):
+
+| # | Question | Answer (owner, 2026-09-23) | Moves |
+|---|---|---|---|
+| Q10 | Does `ARRAY_CEILING` hold a standards run's review arrays (`--standards-profile` with checks first off), which the drawing family takes to 38,058 / 37,976 bytes (review) and 38,414 / 38,281 (slim), OpenAI / Gemini (R2.20)? *Raised 2026-09-23 on review* | **No, and the ceiling holds only the pane's defaults** (decision 9A): `ARRAY_CEILING` (38,000) is asserted only on the arrays the pane sends by default. Every other array is pinned, so growth is visible in review, but not asserted: checks first off, a standards run with checks first off (38,058 and 37,976 bytes with the drawing family), and the bridged arrays (40,268 and 40,624). The standards arrays are pinned beside the bridged ones, as the default foresaw, and so is every other array a review can send, each named with its kind | FR-050 (amended), `contracts/questions.md` section 7, R2.20, T078, T079; feature 005's `contracts/levers.md` and feature 008's research R2.57 record the decision and the ceiling's history |
 
 **Still open:**
 
 | # | Question | Default | Blocks |
 |---|---|---|---|
 | Q1 | Where is the drawing-creation base repository? | The brief ships the roadmap's five sections at `brief_version: 1`; when the location is given, its expected inputs are evaluated (T061) and the brief is extended additively, in 012 if not before | the brief's final content, feature 012 |
-| Q10 | Does `ARRAY_CEILING` hold a standards run's review arrays (`--standards-profile` with checks first off), which the drawing family takes to 38,058 / 37,976 bytes (review) and 38,414 / 38,281 (slim), OpenAI / Gemini (R2.20)? *Raised 2026-09-23 on review* | As shipped: neither pinned nor asserted. If the answer is Q9's ("no"), the two arms `review+standards+drawings` and `review+slim+standards+drawings` are pinned beside the bridged ones, unasserted, with `--write` in a commit of their own; if "yes", something must leave those arrays before the family can be offered on them, because the ceiling does not move and tool docstrings are frozen | FR-050's scope; the drawing arm's pins |
 
 ## R6. Relation to the features around it
 

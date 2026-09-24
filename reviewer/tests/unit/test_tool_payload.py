@@ -26,24 +26,38 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
+from itertools import combinations, product
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import pytest
 from google.genai import types
 
+from swreview.agent.providers import ProviderName
 from swreview.agent.providers.openai_provider import tool_param
 from swreview.agent.providers.schema import ToolSpec, gemini_adapt, tool_spec
+from swreview.agent.settings import (
+    EfficiencySettings,
+    ModelViewSettings,
+    checks_first,
+    pane_defaults,
+)
+from swreview.checks.standards.registry import CHECK_TOOL as STANDARDS_TOOL
+from swreview.ir.models import EvidencePackage
 from swreview.mcp.server import MCP_BRIDGE_TOOL_FUNCTIONS, MCP_TOOL_FUNCTIONS
 from swreview.prerun import INTERFERENCE_TOOL, prerun_tools
 from swreview.tokens import count_tokens
+from swreview.tools.context import context_for
 from swreview.tools.drawings import DRAWINGS_TOOL
 from swreview.tools.registry import (
     BRIDGE_TOOL_FUNCTIONS,
     FINDING_DETAIL_TOOL_FUNCTIONS,
     RMS_TIER_TOOLS,
+    STANDARDS_RUN_ATTRIBUTE,
     TOOL_FUNCTIONS,
+    ToolRegistry,
     drawing_tools,
+    standards_tools,
 )
 
 ToolFunction = Callable[..., Any]
@@ -341,50 +355,194 @@ DRAWING_FAMILY_AFTER_PRERUN: tuple[ToolFunction, ...] = without(DRAWING_FAMILY, 
 the check off the array (`prerun.withheld_tools`) and the brief stays, since nothing pre-runs it."""
 
 
-@dataclass(frozen=True)
-class DrawingArm:
-    """One array a review sends with the drawing family offered: an array of `TOOLSETS` (or the
-    bridged slim array, which has no pin of its own) with the family appended."""
+# --- every array a review can send, and its kind (owner decision 9A, 2026-09-23) ------------------
 
-    label: str
-    base: tuple[ToolFunction, ...]
-    family: tuple[ToolFunction, ...]
-    asserted: bool
-    """Whether the array is asserted under `ARRAY_CEILING`. FR-050 holds the four arrays the
-    ceiling was asserted on before this feature; the two bridged arrays of a review whose
-    pre-run has not completed were over it already and are pinned only (research R2.20, R5 Q9)."""
+STANDARDS_FAMILY: tuple[ToolFunction, ...] = standards_tools()
+"""The standards run's one review tool, read from the registry and never retyped: `_offered`
+appends it after the bridge and before the drawing family when the context carries a standards
+run, and lever 13 takes it off once checks first ran it to completion."""
+
+ArrayKind = Literal["pane_default", "measured"]
+"""What decision 9A makes of an array. `pane_default`: one the pane sends by default, asserted
+under `ARRAY_CEILING` and pinned for both providers. `measured`: pinned for both providers, so its
+growth shows in review, and never asserted under the ceiling."""
+
+
+@dataclass(frozen=True)
+class ArrayShape:
+    """One point of the space a review's tool array varies over (decision 9A).
+
+    Five switches decide which tools `ToolRegistry._offered` puts on a review's array and which
+    lever 13 then takes off; each is a fact of the run, not of the tree:
+
+    - `slim`: payload slimming (`ModelViewSettings.payload_slimming`) adds `get_finding`;
+    - `bridge`: `--bridge`, or the pane with SOLIDWORKS attached, adds the three bridge tools;
+    - `standards`: a standards profile attaches a standards run, which adds `check_standards`;
+    - `drawings`: a package with drawing evidence adds the drawing family;
+    - `prerun`: checks first ran every tool it runs to completion and lever 13 took them off
+      (`prerun.withheld_tools`) - the seven, less the interference tool while live detection is
+      offered, plus `check_drawings` and `check_standards` when they are offered.
+
+    `prerun` is the fullest withholding. A pre-run that completed only some of its tools sends an
+    array between the shape's two arms - a subset of its `prerun=False` array and a superset of
+    its `prerun=True` one - so those two bound it. Outside the space, each for its reason: lever 2
+    changes descriptions and not membership (`lever_two_rows` weighs both of its arms); lever 4's
+    tier withholds on a package with no feature tree (`tier_delta` weighs it); lever 12's compact
+    queries are an experimental opt-in no surface turns on; the remodel tools belong to a remodel
+    run, not a review. A new conditional group in `_offered` is a new switch here, and every array
+    it makes must then be classified in `ARRAY_KINDS` and pinned.
+    """
+
+    slim: bool
+    bridge: bool
+    standards: bool
+    drawings: bool
+    prerun: bool
+
+    @property
+    def offered(self) -> tuple[ToolFunction, ...]:
+        """What `_offered` builds for this shape, in its order: the curated list, then
+        `get_finding`, the bridge, the standards tool and the drawing family."""
+        return (
+            *TOOL_FUNCTIONS,
+            *(FINDING_DETAIL_TOOL_FUNCTIONS if self.slim else ()),
+            *(BRIDGE_TOOL_FUNCTIONS if self.bridge else ()),
+            *(STANDARDS_FAMILY if self.standards else ()),
+            *(DRAWING_FAMILY if self.drawings else ()),
+        )
+
+    @property
+    def withheld(self) -> tuple[str, ...]:
+        """What lever 13 takes off once the pre-run completed every tool it runs; nothing
+        without a pre-run."""
+        if not self.prerun:
+            return ()
+        return (
+            *(PRERUN_WITHHELD_WITH_BRIDGE if self.bridge else PRERUN_WITHHELD),
+            *((DRAWINGS_TOOL,) if self.drawings else ()),
+            *((STANDARDS_TOOL,) if self.standards else ()),
+        )
 
     @property
     def functions(self) -> tuple[ToolFunction, ...]:
-        return (*self.base, *self.family)
+        """The array this shape sends: what is offered, less what lever 13 withheld."""
+        return without(self.offered, self.withheld)
+
+    @property
+    def label(self) -> str:
+        """`review`, then `+slim`, `+bridge`, `+standards` and `+drawings` for each switch on, then
+        `-prerun`: the labels `TOOLSETS` and the drawing arm already use.
+
+        A standards run's pre-run shape is labelled without `+standards`: lever 13 took
+        `check_standards` off, so it sends the same array as the pre-run shape with no profile,
+        and one array has one label (`test_one_label_names_one_array`).
+        """
+        switches = (
+            ("slim", self.slim),
+            ("bridge", self.bridge),
+            ("standards", self.standards and not self.prerun),
+            ("drawings", self.drawings),
+        )
+        tail = "".join(f"+{name}" for name, on in switches if on)
+        return f"review{tail}{'-prerun' if self.prerun else ''}"
 
 
-DRAWING_ARMS: tuple[DrawingArm, ...] = (
-    DrawingArm("review+drawings", TOOLSETS["review"], DRAWING_FAMILY, asserted=True),
-    DrawingArm("review+slim+drawings", TOOLSETS["review+slim"], DRAWING_FAMILY, asserted=True),
-    DrawingArm(
-        "review+slim+drawings-prerun",
-        TOOLSETS["review+slim-prerun"],
-        DRAWING_FAMILY_AFTER_PRERUN,
-        asserted=True,
-    ),
-    DrawingArm(
-        "review+slim+bridge+drawings-prerun",
-        TOOLSETS["review+slim+bridge-prerun"],
-        DRAWING_FAMILY_AFTER_PRERUN,
-        asserted=True,
-    ),
-    DrawingArm("review+bridge+drawings", TOOLSETS["review+bridge"], DRAWING_FAMILY, asserted=False),
-    DrawingArm(
-        "review+slim+bridge+drawings",
-        (*TOOLSETS["review+slim"], *BRIDGE_TOOL_FUNCTIONS),
-        DRAWING_FAMILY,
-        asserted=False,
-    ),
+SHAPES: tuple[ArrayShape, ...] = tuple(
+    ArrayShape(slim=slim, bridge=bridge, standards=standards, drawings=drawings, prerun=prerun)
+    for prerun, slim, bridge, standards, drawings in product((False, True), repeat=5)
 )
-"""The drawing arm, in the order `--write` prints it: the four asserted arrays, then the two
-bridged arrays pinned so their growth shows. A pre-run arm is its pre-run array with the brief
-appended, which is the order `_offered` builds and lever 13 then filters (the family is last)."""
+"""Every combination of the five switches: thirty-two, checks first off before on."""
+
+REVIEW_ARRAYS: dict[str, tuple[ToolFunction, ...]] = {
+    shape.label: shape.functions for shape in SHAPES
+}
+"""Every array a review can send, by label: twenty-four, because a standards run's eight pre-run
+shapes send the arrays of the eight without one (`ArrayShape.label`)."""
+
+ARRAY_KINDS: dict[str, ArrayKind] = {
+    # What the pane sends by default - payload slimming, checks first and lever 13
+    # (`pane_defaults`), the pre-run having completed - with and without SOLIDWORKS attached and
+    # drawing evidence, and with or without a standards profile (the same four arrays).
+    "review+slim-prerun": "pane_default",
+    "review+slim+bridge-prerun": "pane_default",
+    "review+slim+drawings-prerun": "pane_default",
+    "review+slim+bridge+drawings-prerun": "pane_default",
+    # Checks first off: the command line's and `benchmark run`'s default, `--payload-slimming`,
+    # `--bridge` and `--standards-profile` as they are given, and a pane review whose pre-run
+    # completed nothing.
+    "review": "measured",
+    "review+drawings": "measured",
+    "review+standards": "measured",
+    "review+standards+drawings": "measured",
+    "review+bridge": "measured",
+    "review+bridge+drawings": "measured",
+    "review+bridge+standards": "measured",
+    "review+bridge+standards+drawings": "measured",
+    "review+slim": "measured",
+    "review+slim+drawings": "measured",
+    "review+slim+standards": "measured",
+    "review+slim+standards+drawings": "measured",
+    "review+slim+bridge": "measured",
+    "review+slim+bridge+drawings": "measured",
+    "review+slim+bridge+standards": "measured",
+    "review+slim+bridge+standards+drawings": "measured",
+    # Checks first and lever 13 without payload slimming: `--lever prerun_checks --lever
+    # withhold_prerun_tools` on the command line.
+    "review-prerun": "measured",
+    "review+drawings-prerun": "measured",
+    "review+bridge-prerun": "measured",
+    "review+bridge+drawings-prerun": "measured",
+}
+"""Every array a review can send and its kind, in the order `--write` prints them (decision 9A).
+Written by hand, because the kind is a decision: `test_every_array_a_review_can_send_is_classified`
+fails until a new array has one, and `test_the_pane_defaults_decide_which_arrays_are_pane_default`
+holds the table to `pane_defaults`."""
+
+PANE_DEFAULT_ARRAYS: tuple[str, ...] = tuple(
+    label for label, kind in ARRAY_KINDS.items() if kind == "pane_default"
+)
+"""The arrays `ARRAY_CEILING` is asserted on: the pane's defaults, and nothing else."""
+
+KIND_WORDS: dict[ArrayKind, str] = {
+    "pane_default": "pane default: asserted",
+    "measured": "measured: pinned, not asserted",
+}
+"""What the `--write` table says of each kind."""
+
+
+@dataclass(frozen=True)
+class DrawingArm:
+    """One array a review sends with the drawing family offered, as its base - the same shape
+    with no drawing evidence - and the part of the family it adds: the whole family, or only the
+    brief once checks first ran `check_drawings` to completion."""
+
+    label: str
+    base_label: str
+    family: tuple[ToolFunction, ...]
+
+    @property
+    def base(self) -> tuple[ToolFunction, ...]:
+        return REVIEW_ARRAYS[self.base_label]
+
+    @property
+    def functions(self) -> tuple[ToolFunction, ...]:
+        return REVIEW_ARRAYS[self.label]
+
+
+DRAWING_ARMS: tuple[DrawingArm, ...] = tuple(
+    {
+        shape.label: DrawingArm(
+            label=shape.label,
+            base_label=replace(shape, drawings=False).label,
+            family=DRAWING_FAMILY_AFTER_PRERUN if shape.prerun else DRAWING_FAMILY,
+        )
+        for shape in SHAPES
+        if shape.drawings
+    }.values()
+)
+"""The drawing arm: every array of `REVIEW_ARRAYS` with the family offered, twelve, each beside
+the array it extends. Before decision 9A it was six arrays written out by hand; the other six -
+the standards runs' and the pre-run without slimming - were not modelled (research R2.20)."""
 
 
 def drawing_arm(label: str) -> DrawingArm:
@@ -393,11 +551,11 @@ def drawing_arm(label: str) -> DrawingArm:
     return arm
 
 
-def drawing_arm_rows() -> list[PayloadRow]:
-    """Every drawing arm under every encoding, lever 2 off."""
+def review_array_rows() -> list[PayloadRow]:
+    """Every array a review can send under every encoding, lever 2 off, in `ARRAY_KINDS` order."""
     return [
-        measure(arm.label, arm.functions, encoding)
-        for arm in DRAWING_ARMS
+        measure(label, REVIEW_ARRAYS[label], encoding)
+        for label in ARRAY_KINDS
         for encoding in ENCODINGS
     ]
 
@@ -461,15 +619,47 @@ def encoding_digests() -> dict[str, str]:
 
 # --- the pinned baseline ----------------------------------------------------------------
 
-REVIEW_TOOL_COUNT = 35
-REVIEW_BRIDGE_TOOL_COUNT = 38
-OPENAI_ARRAY_BYTES = 35_844
-GEMINI_ARRAY_BYTES = 35_915
+REVIEW_ARRAY_TOOL_COUNTS: dict[str, int] = {
+    "review+slim-prerun": 29,
+    "review+slim+bridge-prerun": 33,
+    "review+slim+drawings-prerun": 30,
+    "review+slim+bridge+drawings-prerun": 34,
+    "review": 35,
+    "review+drawings": 37,
+    "review+bridge": 38,
+    "review+bridge+drawings": 40,
+    "review+slim": 36,
+    "review+slim+drawings": 38,
+    "review+slim+bridge+drawings": 41,
+}
+REVIEW_ARRAY_BYTES: dict[str, dict[str, int]] = {
+    "review+slim-prerun": {"openai": 29_217, "gemini": 29_552},
+    "review+slim+bridge-prerun": {"openai": 34_145, "gemini": 34_247},
+    "review+slim+drawings-prerun": {"openai": 29_651, "gemini": 29_935},
+    "review+slim+bridge+drawings-prerun": {"openai": 34_579, "gemini": 34_630},
+    "review": {"openai": 35_844, "gemini": 35_915},
+    "review+drawings": {"openai": 36_570, "gemini": 36_539},
+    "review+bridge": {"openai": 39_542},
+    "review+bridge+drawings": {"openai": 40_268, "gemini": 40_055},
+    "review+slim": {"openai": 36_200, "gemini": 36_220},
+    "review+slim+drawings": {"openai": 36_926, "gemini": 36_844},
+    "review+slim+bridge+drawings": {"openai": 40_624, "gemini": 40_360},
+}
+"""Every array a review can send, pinned per encoding with lever 2 off, in `ARRAY_KINDS` order
+(decision 9A): the one place an array's tool count and bytes are written, which the named
+constants below read. **Regenerated, never transcribed** - `--write` prints them in its review
+array table, in a commit of their own. The four pane-default arrays are also asserted under
+`ARRAY_CEILING`; the others are pinned so their growth shows in review, and never asserted."""
+
+REVIEW_TOOL_COUNT = REVIEW_ARRAY_TOOL_COUNTS["review"]
+REVIEW_BRIDGE_TOOL_COUNT = REVIEW_ARRAY_TOOL_COUNTS["review+bridge"]
+OPENAI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review"]["openai"]
+GEMINI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review"]["gemini"]
 """**Deviation from T001, recorded in `specs/005-llm-efficiency/probe-log.md`.** The task
 asks for 34,248; this tree produces 34,217, and a pin is a measurement or it is nothing.
 Six files of the spec package still quote 34,248 (and 37,709 for the bridge, measured
 37,712); probe-log.md lists them by line for the change that is allowed to edit them."""
-BRIDGE_OPENAI_ARRAY_BYTES = 39_542
+BRIDGE_OPENAI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review+bridge"]["openai"]
 """The bridged review array, lever 2 off: pinned and never asserted under the ceiling."""
 TRIMMED_OPENAI_ARRAY_BYTES = 22_850
 TRIMMED_GEMINI_ARRAY_BYTES = 22_921
@@ -494,19 +684,19 @@ RMS_TIER_DELTA_BYTES = 8_093
 RMS_TIER_DELTA_PERCENT = 22.6
 STRUCTURAL_FLOOR_BYTES = 16_042
 
-SLIM_REVIEW_TOOL_COUNT = 36
-SLIM_OPENAI_ARRAY_BYTES = 36_200
-SLIM_GEMINI_ARRAY_BYTES = 36_220
+SLIM_REVIEW_TOOL_COUNT = REVIEW_ARRAY_TOOL_COUNTS["review+slim"]
+SLIM_OPENAI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review+slim"]["openai"]
+SLIM_GEMINI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review+slim"]["gemini"]
 """The review array with payload slimming on (feature 008 T062): `TOOL_FUNCTIONS` plus
 `get_finding`, which only a slimmed review offers. **Regenerated, never transcribed** -
 `--write` prints them in its `review+slim` rows."""
 
-PRERUN_REVIEW_TOOL_COUNT = 29
-PRERUN_OPENAI_ARRAY_BYTES = 29_217
-PRERUN_GEMINI_ARRAY_BYTES = 29_552
-PRERUN_BRIDGE_TOOL_COUNT = 33
-PRERUN_BRIDGE_OPENAI_ARRAY_BYTES = 34_145
-PRERUN_BRIDGE_GEMINI_ARRAY_BYTES = 34_247
+PRERUN_REVIEW_TOOL_COUNT = REVIEW_ARRAY_TOOL_COUNTS["review+slim-prerun"]
+PRERUN_OPENAI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review+slim-prerun"]["openai"]
+PRERUN_GEMINI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review+slim-prerun"]["gemini"]
+PRERUN_BRIDGE_TOOL_COUNT = REVIEW_ARRAY_TOOL_COUNTS["review+slim+bridge-prerun"]
+PRERUN_BRIDGE_OPENAI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review+slim+bridge-prerun"]["openai"]
+PRERUN_BRIDGE_GEMINI_ARRAY_BYTES = REVIEW_ARRAY_BYTES["review+slim+bridge-prerun"]["gemini"]
 """The pane arrays once checks first has run every pre-run tool to completion (feature 008
 lever 13): the slimmed review array less the seven, and with a bridge less six, the
 interference tool staying. **Regenerated, never transcribed** - `--write` prints them in its
@@ -524,53 +714,24 @@ TOOL_OBJECT_CEILING = {"openai": 3_000, "gemini": 3_500}
 """No single tool may weigh more than this. Headroom, not a target."""
 
 ARRAY_CEILING = 38_000
-"""The ceiling for every array a review sends, in either encoding: headroom, not a target.
+"""The ceiling for the arrays the pane sends by default, in either encoding: headroom, not a
+target, and asserted on `PANE_DEFAULT_ARRAYS` only.
 
-Raised from 36,000 (feature 005, "roughly 5 percent above today") on 2026-09-23 by the
-owner, when feature 010's check tools and feature 008's `get_finding` took the slimmed pane
-array to 36,220 bytes: about 5 percent above that. The tools the pre-run has already run
-are the next thing to leave the array (about 6,700 bytes), not a higher ceiling - and they
-did, with feature 008's lever 13 (`PRERUN_SAVED_BYTES`)."""
-
-DRAWING_ARM_TOOL_COUNTS: dict[str, int] = {
-    "review+drawings": 37,
-    "review+slim+drawings": 38,
-    "review+slim+drawings-prerun": 30,
-    "review+slim+bridge+drawings-prerun": 34,
-    "review+bridge+drawings": 40,
-    "review+slim+bridge+drawings": 41,
-}
-DRAWING_ARM_BYTES: dict[str, dict[str, int]] = {
-    "review+drawings": {"openai": 36_570, "gemini": 36_539},
-    "review+slim+drawings": {"openai": 36_926, "gemini": 36_844},
-    "review+slim+drawings-prerun": {"openai": 29_651, "gemini": 29_935},
-    "review+slim+bridge+drawings-prerun": {"openai": 34_579, "gemini": 34_630},
-    "review+bridge+drawings": {"openai": 40_268, "gemini": 40_055},
-    "review+slim+bridge+drawings": {"openai": 40_624, "gemini": 40_360},
-}
-"""The drawing arm (feature 011 FR-050): every `DRAWING_ARMS` array per encoding, lever 2 off.
-**Regenerated, never transcribed** - `--write` prints them in its Drawing arm table, in a commit
-of their own (T055). The first four are also asserted under `ARRAY_CEILING`; the two bridged
-arrays are pinned only, because they were over it before the family existed."""
+Its history (feature 008 research R2.57). 36,000 from feature 005 ("roughly 5 percent above
+today"), asserted on the review array and then on each array added beside it. Raised to 38,000
+on 2026-09-23 by the owner, when feature 010's check tools and feature 008's `get_finding` took
+the slimmed pane array to 36,220 bytes: about 5 percent above that. The tools the pre-run has
+already run were to be the next thing to leave the array (about 6,700 bytes), not a higher
+ceiling - and they did, with feature 008's lever 13 (`PRERUN_SAVED_BYTES`). Scoped the same day
+by the owner's decision 9A to the arrays the pane sends by default: every other array a review
+can send is pinned in `REVIEW_ARRAY_BYTES`, so its growth shows in review, and is not asserted -
+checks first off, a standards run with checks first off (38,058 and 37,976 bytes with the
+drawing family), and the bridged arrays (40,268 and 40,624 on OpenAI with it)."""
 
 DRAWING_TOOL_BUDGET: dict[str, int] = {"check_drawings": 450, "get_drawing_brief": 650}
 """The most bytes each drawing tool object may weigh, in either encoding (`contracts/questions.md`
-section 1): the two together leave the slim Gemini array under the ceiling (research R2.20)."""
-
-EXISTING_PINS: dict[tuple[str, str], int] = {
-    ("review+drawings", "openai"): OPENAI_ARRAY_BYTES,
-    ("review+drawings", "gemini"): GEMINI_ARRAY_BYTES,
-    ("review+slim+drawings", "openai"): SLIM_OPENAI_ARRAY_BYTES,
-    ("review+slim+drawings", "gemini"): SLIM_GEMINI_ARRAY_BYTES,
-    ("review+slim+drawings-prerun", "openai"): PRERUN_OPENAI_ARRAY_BYTES,
-    ("review+slim+drawings-prerun", "gemini"): PRERUN_GEMINI_ARRAY_BYTES,
-    ("review+slim+bridge+drawings-prerun", "openai"): PRERUN_BRIDGE_OPENAI_ARRAY_BYTES,
-    ("review+slim+bridge+drawings-prerun", "gemini"): PRERUN_BRIDGE_GEMINI_ARRAY_BYTES,
-    ("review+bridge+drawings", "openai"): BRIDGE_OPENAI_ARRAY_BYTES,
-}
-"""Every constant above that a drawing arm extends, by arm and encoding: the arm with the family
-taken out must measure exactly this. The bridged slim array and the bridged Gemini array had no
-pin before this feature, so they have no entry."""
+section 1): the two together left the slim Gemini array under the ceiling (research R2.20), and
+they keep the pane's arrays under it."""
 
 
 # --- the tests ---------------------------------------------------------------------------
@@ -617,14 +778,14 @@ def test_the_bridge_array_is_pinned_in_both_arms() -> None:
     [("openai", SLIM_OPENAI_ARRAY_BYTES), ("gemini", SLIM_GEMINI_ARRAY_BYTES)],
 )
 def test_the_slimmed_review_array_is_pinned(encoding: str, expected: int) -> None:
-    """Feature 008 T062: the array a pane review sends - one tool more than the review's,
-    `get_finding`, and still under the ceiling."""
+    """Feature 008 T062: one tool more than the review's, `get_finding`. What a pane review sends
+    when its pre-run completed nothing; since decision 9A it is measured, not asserted under the
+    ceiling (`ARRAY_KINDS`)."""
     slim = TOOLSETS["review+slim"]
     total = measure("review+slim", slim, encoding).total_bytes
 
     assert len(slim) == SLIM_REVIEW_TOOL_COUNT == REVIEW_TOOL_COUNT + 1
     assert total == expected
-    assert total < ARRAY_CEILING
 
 
 @pytest.mark.parametrize(
@@ -632,13 +793,13 @@ def test_the_slimmed_review_array_is_pinned(encoding: str, expected: int) -> Non
     [("openai", PRERUN_OPENAI_ARRAY_BYTES), ("gemini", PRERUN_GEMINI_ARRAY_BYTES)],
 )
 def test_the_pane_array_without_the_pre_runs_tools_is_pinned(encoding: str, expected: int) -> None:
-    """Feature 008 lever 13: the array a pane review sends once checks first ran all seven."""
+    """Feature 008 lever 13: the array a pane review sends once checks first ran all seven. A
+    pane default, so also under the ceiling (`test_every_array_the_pane_sends_by_default_...`)."""
     array = TOOLSETS["review+slim-prerun"]
     total = measure("review+slim-prerun", array, encoding).total_bytes
 
     assert len(array) == PRERUN_REVIEW_TOOL_COUNT == SLIM_REVIEW_TOOL_COUNT - len(PRERUN_WITHHELD)
     assert total == expected
-    assert total < ARRAY_CEILING
 
 
 @pytest.mark.parametrize(
@@ -649,14 +810,13 @@ def test_the_bridged_pane_array_without_the_pre_runs_tools_is_pinned(
     encoding: str, expected: int
 ) -> None:
     """With a bridge the interference tool stays: live detection can add groups only it
-    judges (`prerun.withheld_tools`)."""
+    judges (`prerun.withheld_tools`). A pane default, so also under the ceiling."""
     array = TOOLSETS["review+slim+bridge-prerun"]
     total = measure("review+slim+bridge-prerun", array, encoding).total_bytes
 
     assert INTERFERENCE_TOOL in {function.__name__ for function in array}
     assert len(array) == PRERUN_BRIDGE_TOOL_COUNT
     assert total == expected
-    assert total < ARRAY_CEILING
 
 
 @pytest.mark.usefixtures("vocabulary")
@@ -685,29 +845,62 @@ def test_the_saving_is_the_withheld_objects_plus_one_separator_each() -> None:
     )
 
 
+def names_of(functions: Iterable[ToolFunction]) -> tuple[str, ...]:
+    """The tool names of `functions`, in order."""
+    return tuple(function.__name__ for function in functions)
+
+
+PANE = pane_defaults(ProviderName.FAKE)
+"""What a pane review runs with; the scripted provider records parallel calls off."""
+
+
+def offered_by_a_review(
+    folder: Path,
+    package: EvidencePackage,
+    *,
+    efficiency: EfficiencySettings | None = None,
+    model_view: ModelViewSettings | None = None,
+    standards_profile: Path | None = None,
+) -> tuple[str, ...]:
+    """The names of the array a review of `package` hands its provider, in order: every lever
+    off, as the command line has them, unless the pane's or others are given."""
+    from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
+    from swreview.agent.runner import start_review
+    from swreview.ir.loader import save_package
+
+    save_package(package, folder)
+    run = start_review(
+        folder,
+        folder,
+        provider=FakeProvider(script=[ScriptedTurn(text="done")], model="fake-scripted"),
+        efficiency=efficiency,
+        model_view=model_view,
+        standards_profile=standards_profile,
+    )
+    return tuple(tool.name for tool in run.tools)
+
+
+def with_a_drawing_candidate(package: EvidencePackage) -> EvidencePackage:
+    """`package` with one drawing candidate beside its root, which is drawing evidence.
+    `profile="standards"` keeps the package's dump phases, so the pre-run sees the package it
+    always saw plus one candidate."""
+    from tests.support.drawings import DrawingBuilder
+
+    builder = DrawingBuilder(package)
+    builder.candidate(package.design.root_assembly_document_id)
+    return builder.build(profile="standards")
+
+
 def test_the_pinned_array_is_the_one_a_pane_review_offers(tmp_path: Path) -> None:
     """The pin measures what lever 13 really leaves: the array a pane review of the pre-run
     fixture hands its provider, name for name and in order."""
-    from swreview.agent.providers import ProviderName
-    from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
-    from swreview.agent.runner import start_review
-    from swreview.agent.settings import pane_defaults
-    from swreview.ir.loader import save_package
     from tests.support.prerun import prerun_package
 
-    save_package(prerun_package(), tmp_path)
-    pane = pane_defaults(ProviderName.FAKE)
-    run = start_review(
-        tmp_path,
-        tmp_path,
-        provider=FakeProvider(script=[ScriptedTurn(text="done")], model="fake-scripted"),
-        efficiency=pane.efficiency,
-        model_view=pane.model_view,
+    offered = offered_by_a_review(
+        tmp_path, prerun_package(), efficiency=PANE.efficiency, model_view=PANE.model_view
     )
 
-    assert [tool.name for tool in run.tools] == [
-        function.__name__ for function in TOOLSETS["review+slim-prerun"]
-    ]
+    assert offered == names_of(TOOLSETS["review+slim-prerun"])
 
 
 @pytest.mark.parametrize("encoding", sorted(ENCODINGS))
@@ -754,12 +947,6 @@ def test_largest_tool_object_is_check_axial_stack() -> None:
     """Named because `docs/llm-efficiency-options.md` quotes it and lever 2 targets it."""
     row = measure("review", TOOL_FUNCTIONS, "openai")
     assert (row.largest_tool, row.largest_tool_bytes) == (LARGEST_TOOL, LARGEST_TOOL_BYTES)
-
-
-@pytest.mark.parametrize("encoding", sorted(ENCODINGS))
-def test_whole_array_under_ceiling(encoding: str) -> None:
-    """A guard on the array itself, so 32 small additions cannot pass the per-tool one."""
-    assert measure("review", TOOL_FUNCTIONS, encoding).total_bytes < ARRAY_CEILING
 
 
 def test_rms_tier_row_is_the_array_delta_not_the_object_sum() -> None:
@@ -862,14 +1049,183 @@ def test_both_encodings_are_byte_identical_across_hash_seeds() -> None:
     assert digests[0] == expected
 
 
-# --- the drawing arm (feature 011, FR-050) --------------------------------------------------------
+# --- every array a review can send, and its kind (decision 9A) -----------------------------------
+
+
+def test_every_array_a_review_can_send_is_classified() -> None:
+    """Decision 9A, stated once: every array the five switches make has a kind, and nothing else
+    has one. A new switch, or a new group `_offered` adds under one, makes arrays `ARRAY_KINDS`
+    does not name, and this fails until each is classified."""
+    assert len(SHAPES) == 32
+    assert len(REVIEW_ARRAYS) == 24
+    assert set(ARRAY_KINDS) == set(REVIEW_ARRAYS)
+    assert PANE_DEFAULT_ARRAYS == (
+        "review+slim-prerun",
+        "review+slim+bridge-prerun",
+        "review+slim+drawings-prerun",
+        "review+slim+bridge+drawings-prerun",
+    )
+
+
+@pytest.mark.parametrize("provider", [ProviderName.OPENAI, ProviderName.GEMINI])
+def test_the_pane_defaults_decide_which_arrays_are_pane_default(provider: ProviderName) -> None:
+    """An array is a pane default exactly when its shape has the pane's model view and levers
+    (`pane_defaults`): payload slimming, and checks first with lever 13, for either provider -
+    whatever SOLIDWORKS, the profile and the package add. A change to the pane's defaults
+    reclassifies arrays here, and the table must follow it."""
+    pane = pane_defaults(provider)
+    slim = pane.model_view.payload_slimming
+    prerun = checks_first(pane.efficiency) and pane.efficiency.withhold_prerun_tools
+    decided = {
+        shape.label: "pane_default" if (shape.slim, shape.prerun) == (slim, prerun) else "measured"
+        for shape in SHAPES
+    }
+
+    assert decided == ARRAY_KINDS
+
+
+def test_one_label_names_one_array() -> None:
+    """Two shapes share a label exactly when they send the same array: the eight standards runs
+    whose pre-run completed, which lever 13 leaves with the array of no profile."""
+    pairs = list(combinations(SHAPES, 2))
+    for first, second in pairs:
+        same_array = names_of(first.functions) == names_of(second.functions)
+        assert (first.label == second.label) == same_array, (first, second)
+    shared = {first.label for first, second in pairs if first.label == second.label}
+    assert shared == {shape.label for shape in SHAPES if shape.standards and shape.prerun}
+    assert len(shared) == 8
+
+
+@pytest.mark.parametrize(
+    "shape", [shape for shape in SHAPES if not shape.prerun], ids=lambda shape: shape.label
+)
+def test_each_shape_offers_what_the_registry_offers(shape: ArrayShape) -> None:
+    """The offered half of the space is `ToolRegistry.functions_for`'s own answer, name for name
+    and in order, for a context carrying exactly the shape's switches: a group `_offered` adds
+    under one of them, and this module does not, fails here."""
+    from tests.support.prerun import prerun_package
+
+    package = with_a_drawing_candidate(prerun_package()) if shape.drawings else prerun_package()
+    context = context_for(package)
+    if shape.bridge:
+        context.bridge = object()
+    if shape.standards:
+        setattr(context, STANDARDS_RUN_ATTRIBUTE, object())
+    view = ModelViewSettings(payload_slimming=shape.slim, history_pruning=False)
+
+    assert names_of(ToolRegistry().functions_for(context, model_view=view)) == names_of(
+        shape.offered
+    )
+
+
+def test_the_standards_tool_is_read_from_the_registry_and_withheld_by_its_own_name() -> None:
+    assert names_of(STANDARDS_FAMILY) == (STANDARDS_TOOL,) == ("check_standards",)
+    for label, functions in REVIEW_ARRAYS.items():
+        carried = STANDARDS_TOOL in names_of(functions)
+        assert carried == ("+standards" in label), label
+
+
+def test_the_toolsets_review_arrays_are_the_spaces_under_the_same_labels() -> None:
+    """`TOOLSETS` composes its review arrays by hand; each is the space's array of that label, and
+    the Ask tab's are not arrays a review sends."""
+    for label, functions in TOOLSETS.items():
+        if label.startswith("mcp"):
+            assert label not in REVIEW_ARRAYS
+        else:
+            assert names_of(functions) == names_of(REVIEW_ARRAYS[label]), label
+
+
+@pytest.mark.parametrize("encoding", sorted(ENCODINGS))
+@pytest.mark.parametrize("label", PANE_DEFAULT_ARRAYS)
+def test_every_array_the_pane_sends_by_default_stays_under_the_ceiling(
+    label: str, encoding: str
+) -> None:
+    """Decision 9A: the ceiling is asserted on these arrays and no others, so a tool that adds
+    its bytes to every round of every pane review goes red here. `ARRAY_CEILING` stays 38,000."""
+    assert ARRAY_CEILING == 38_000
+    assert measure(label, REVIEW_ARRAYS[label], encoding).total_bytes < ARRAY_CEILING
+
+
+PINNED = [
+    pytest.param(label, encoding, id=f"{label}-{encoding}")
+    for label, pins in REVIEW_ARRAY_BYTES.items()
+    for encoding in pins
+]
+
+
+@pytest.mark.parametrize(("label", "encoding"), PINNED)
+def test_each_pinned_array_measures_its_pin(label: str, encoding: str) -> None:
+    """A pinned array's growth shows here, whatever its kind."""
+    array = REVIEW_ARRAYS[label]
+
+    assert len(array) == REVIEW_ARRAY_TOOL_COUNTS[label]
+    assert measure(label, array, encoding).total_bytes == REVIEW_ARRAY_BYTES[label][encoding]
+
+
+def test_the_pin_tables_hold_arrays_of_the_space_in_its_order() -> None:
+    pinned = list(REVIEW_ARRAY_BYTES)
+
+    assert list(REVIEW_ARRAY_TOOL_COUNTS) == pinned
+    assert pinned == [label for label in ARRAY_KINDS if label in REVIEW_ARRAY_BYTES]
+    assert all(set(pins) <= set(ENCODINGS) for pins in REVIEW_ARRAY_BYTES.values())
+
+
+def test_a_standards_pane_review_sends_the_pane_default_array(tmp_path: Path) -> None:
+    """A pane review with a standards profile, whose pre-run ran `check_standards` and
+    `check_drawings` to completion, hands its provider the pre-run array with the brief - the
+    array of no profile - name for name and in order."""
+    from tests.support.prerun import STANDARDS_PROFILE, standards_prerun_package
+
+    offered = offered_by_a_review(
+        tmp_path,
+        with_a_drawing_candidate(standards_prerun_package()),
+        efficiency=PANE.efficiency,
+        model_view=PANE.model_view,
+        standards_profile=STANDARDS_PROFILE,
+    )
+
+    assert offered == names_of(REVIEW_ARRAYS["review+slim+drawings-prerun"])
+
+
+def test_a_standards_run_with_checks_first_off_sends_its_measured_array(tmp_path: Path) -> None:
+    """`swreview review --standards-profile P` of a package with drawing evidence, every lever off:
+    the array of research R2.20's correction (38,058 bytes on OpenAI), pinned and not asserted."""
+    from tests.support.prerun import STANDARDS_PROFILE, standards_prerun_package
+
+    offered = offered_by_a_review(
+        tmp_path,
+        with_a_drawing_candidate(standards_prerun_package()),
+        standards_profile=STANDARDS_PROFILE,
+    )
+
+    assert offered == names_of(REVIEW_ARRAYS["review+standards+drawings"])
+    assert ARRAY_KINDS["review+standards+drawings"] == "measured"
+
+
+def test_checks_first_without_the_view_sends_the_pre_run_array_without_get_finding(
+    tmp_path: Path,
+) -> None:
+    """`--lever prerun_checks --lever withhold_prerun_tools` with payload slimming off."""
+    from tests.support.prerun import prerun_package
+
+    both = EfficiencySettings(prerun_checks=True, withhold_prerun_tools=True)
+    offered = offered_by_a_review(
+        tmp_path,
+        prerun_package(),
+        efficiency=both,
+        model_view=ModelViewSettings(payload_slimming=False, history_pruning=False),
+    )
+
+    assert offered == names_of(REVIEW_ARRAYS["review-prerun"])
+
+
+# --- the drawing arm (feature 011, FR-050 as amended by decision 9A) ------------------------------
 
 ARM_BY_ENCODING = [
     pytest.param(arm, encoding, id=f"{arm.label}-{encoding}")
     for arm in DRAWING_ARMS
     for encoding in sorted(ENCODINGS)
 ]
-ASSERTED_ARM_BY_ENCODING = [param for param in ARM_BY_ENCODING if param.values[0].asserted]
 
 
 def test_the_family_is_read_from_the_registry_and_no_existing_array_carries_it() -> None:
@@ -883,36 +1239,31 @@ def test_the_family_is_read_from_the_registry_and_no_existing_array_carries_it()
         assert carried == set(), f"{label} carries {sorted(carried)}"
 
 
-def test_the_arm_is_the_four_asserted_arrays_then_the_two_bridged_ones() -> None:
-    """FR-050's scope, stated once: the ceiling holds what it held before the family existed."""
-    assert [arm.label for arm in DRAWING_ARMS if arm.asserted] == [
-        "review+drawings",
-        "review+slim+drawings",
+def test_the_drawing_arm_is_every_array_with_the_family() -> None:
+    """Every array of the space that carries a drawing tool is a drawing arm, and every drawing
+    arm's base is an array of the space that carries none. Decision 9A: two arms are the pane's,
+    asserted under the ceiling; the other ten are pinned, not asserted (FR-050 as amended)."""
+    carrying = [
+        label
+        for label, functions in REVIEW_ARRAYS.items()
+        if set(names_of(functions)) & set(DRAWING_FAMILY_NAMES)
+    ]
+
+    assert [arm.label for arm in DRAWING_ARMS] == carrying
+    assert len(DRAWING_ARMS) == 12
+    assert all(arm.base_label not in carrying for arm in DRAWING_ARMS)
+    assert [arm.label for arm in DRAWING_ARMS if ARRAY_KINDS[arm.label] == "pane_default"] == [
         "review+slim+drawings-prerun",
         "review+slim+bridge+drawings-prerun",
     ]
-    assert [arm.label for arm in DRAWING_ARMS if not arm.asserted] == [
-        "review+bridge+drawings",
-        "review+slim+bridge+drawings",
-    ]
-    assert set(DRAWING_ARM_TOOL_COUNTS) == set(DRAWING_ARM_BYTES) == {
-        arm.label for arm in DRAWING_ARMS
-    }
 
 
-@pytest.mark.parametrize(("arm", "encoding"), ARM_BY_ENCODING)
-def test_every_existing_constant_is_its_drawing_arm_with_the_family_absent(
-    arm: DrawingArm, encoding: str
-) -> None:
-    """Recomputed with the family taken out, every constant the arm extends is unchanged: the
-    family adds its bytes and moves no existing figure (`contracts/questions.md` section 7)."""
-    absent = without(arm.functions, DRAWING_FAMILY_NAMES)
-
-    assert absent == arm.base
-    if (arm.label, encoding) in EXISTING_PINS:
-        assert measure(arm.label, absent, encoding).total_bytes == EXISTING_PINS[
-            (arm.label, encoding)
-        ]
+@pytest.mark.parametrize("arm", DRAWING_ARMS, ids=lambda arm: arm.label)
+def test_each_drawing_arm_is_its_base_with_the_family_appended(arm: DrawingArm) -> None:
+    """The family adds its tools at the end and moves nothing else: taken out, the arm is the array
+    it extends, whose own pin is unchanged (`contracts/questions.md` section 7)."""
+    assert arm.functions == (*arm.base, *arm.family)
+    assert without(arm.functions, DRAWING_FAMILY_NAMES) == arm.base
 
 
 @pytest.mark.parametrize(("arm", "encoding"), ARM_BY_ENCODING)
@@ -926,25 +1277,6 @@ def test_each_arm_is_its_base_plus_the_family_objects_and_one_separator_each(
     assert measure(arm.label, arm.functions, encoding).total_bytes == (
         base + sum(sizes.values()) + len(arm.family)
     )
-
-
-@pytest.mark.parametrize(("arm", "encoding"), ARM_BY_ENCODING)
-def test_the_drawing_arm_is_pinned(arm: DrawingArm, encoding: str) -> None:
-    """Every drawing arm, the two bridged ones included, so any growth shows."""
-    assert len(arm.functions) == DRAWING_ARM_TOOL_COUNTS[arm.label]
-    assert len(arm.functions) == len(arm.base) + len(arm.family)
-    assert (
-        measure(arm.label, arm.functions, encoding).total_bytes
-        == DRAWING_ARM_BYTES[arm.label][encoding]
-    )
-
-
-@pytest.mark.parametrize(("arm", "encoding"), ASSERTED_ARM_BY_ENCODING)
-def test_the_asserted_drawing_arms_stay_under_the_ceiling(arm: DrawingArm, encoding: str) -> None:
-    """FR-050: every array the ceiling held before feature 011 holds it with the family offered.
-    `ARRAY_CEILING` stays 38,000."""
-    assert ARRAY_CEILING == 38_000
-    assert measure(arm.label, arm.functions, encoding).total_bytes < ARRAY_CEILING
 
 
 @pytest.mark.parametrize("encoding", sorted(ENCODINGS))
@@ -962,48 +1294,30 @@ def test_the_pinned_drawing_arm_is_the_one_a_pane_review_offers(tmp_path: Path) 
     """The pre-run arm measures what a pane review of a package with drawing evidence really
     hands its provider once checks first ran everything: the pre-run array, then the brief,
     `check_drawings` withheld by lever 13 - name for name and in order."""
-    from swreview.agent.providers import ProviderName
-    from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
-    from swreview.agent.runner import start_review
-    from swreview.agent.settings import pane_defaults
-    from swreview.ir.loader import save_package
-    from tests.support.drawings import DrawingBuilder
     from tests.support.prerun import prerun_package
 
-    base = prerun_package()
-    builder = DrawingBuilder(base)
-    builder.candidate(base.design.root_assembly_document_id)
-    # `profile="standards"` keeps the base package's dump phases, so the pre-run sees the
-    # package it always saw plus one drawing candidate.
-    save_package(builder.build(profile="standards"), tmp_path)
-    pane = pane_defaults(ProviderName.FAKE)
-    run = start_review(
+    offered = offered_by_a_review(
         tmp_path,
-        tmp_path,
-        provider=FakeProvider(script=[ScriptedTurn(text="done")], model="fake-scripted"),
-        efficiency=pane.efficiency,
-        model_view=pane.model_view,
+        with_a_drawing_candidate(prerun_package()),
+        efficiency=PANE.efficiency,
+        model_view=PANE.model_view,
     )
 
-    assert [tool.name for tool in run.tools] == [
-        function.__name__ for function in drawing_arm("review+slim+drawings-prerun").functions
-    ]
+    assert offered == names_of(drawing_arm("review+slim+drawings-prerun").functions)
 
 
-def test_the_write_helper_prints_the_drawing_arm_in_rows_of_its_own() -> None:
-    """One row per arm per encoding, after everything the table printed before the family, so
-    no existing line of the baseline moves."""
-    table = drawing_arm_table()
+def test_the_write_helper_prints_every_array_with_its_kind_in_rows_of_its_own() -> None:
+    """One row per array per encoding, after everything the table printed before the space, then
+    the family's objects beside their budgets."""
+    table = review_array_table()
     rows = [line for line in table.splitlines() if line.startswith("| review")]
 
     assert baseline_table().endswith("\n\n" + table)
-    assert len(rows) == len(DRAWING_ARMS) * len(ENCODINGS)
-    for row in drawing_arm_rows():
-        ceiling = "asserted" if drawing_arm(row.label).asserted else "pinned, not asserted"
-        assert (
-            f"| {row.label} | {row.encoding} | {row.tools} | {row.total_bytes:,} | {ceiling} |"
-            in rows
-        )
+    assert len(rows) == len(REVIEW_ARRAYS) * len(ENCODINGS)
+    for row in review_array_rows():
+        kind = KIND_WORDS[ARRAY_KINDS[row.label]]
+        line = f"| {row.label} | {row.encoding} | {row.tools} | {row.total_bytes:,} | {kind} |"
+        assert line in rows
     for encoding in ENCODINGS:
         sizes = tool_object_bytes(encoding, functions=DRAWING_FAMILY)
         assert all(f"`{name}` {size:,}" in table for name, size in sizes.items())
@@ -1084,22 +1398,22 @@ def baseline_table() -> str:
     lines.append("")
     lines.append("sha256: " + ", ".join(f"{k} {v}" for k, v in encoding_digests().items()))
     lines.append("")
-    lines.append(drawing_arm_table())
+    lines.append(review_array_table())
     return "\n".join(lines)
 
 
-def drawing_arm_table() -> str:
-    """The drawing arm (feature 011), in rows of its own after every line printed before it:
-    `DRAWING_ARM_TOOL_COUNTS` and `DRAWING_ARM_BYTES` are pasted from here, and the family's
-    object sizes beside their budgets."""
+def review_array_table() -> str:
+    """Every array a review can send, with its kind (decision 9A), in rows of their own after
+    every line printed before them: `REVIEW_ARRAY_TOOL_COUNTS` and `REVIEW_ARRAY_BYTES` are pasted
+    from here. Then the drawing family's object sizes beside their budgets."""
     lines = [
-        f"| Drawing arm | Encoding | Tools | Bytes | Under {ARRAY_CEILING:,} |",
+        f"| Review array | Encoding | Tools | Bytes | Kind (ceiling {ARRAY_CEILING:,}) |",
         "|---|---|---:|---:|---|",
     ]
-    for row in drawing_arm_rows():
-        ceiling = "asserted" if drawing_arm(row.label).asserted else "pinned, not asserted"
+    for row in review_array_rows():
+        kind = KIND_WORDS[ARRAY_KINDS[row.label]]
         lines.append(
-            f"| {row.label} | {row.encoding} | {row.tools} | {row.total_bytes:,} | {ceiling} |"
+            f"| {row.label} | {row.encoding} | {row.tools} | {row.total_bytes:,} | {kind} |"
         )
     lines.append("")
     for encoding in ENCODINGS:

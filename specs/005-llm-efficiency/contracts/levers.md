@@ -488,6 +488,27 @@ OpenAI (29,552 on Gemini), **6,983 bytes and about 1,496 o200k tokens less on ev
 34,145 bytes, 5,753 bytes and about 1,230 tokens less. Lever 13 is a thirteenth lever: the
 lever-count pins move to thirteen, and no pane control exists (`test_no_lever_in_pane_settings.py`).
 
+### The array ceiling: what it is asserted on (owner decision 9A, 2026-09-23)
+
+FR-016's whole-array ceiling, `ARRAY_CEILING` in `tests/unit/test_tool_payload.py` (38,000 bytes,
+unchanged), is asserted **only on the tool arrays the pane sends by default**: payload slimming,
+checks first and lever 13 on (`pane_defaults`), the pre-run having completed every tool it runs,
+with and without a bridge and with and without drawing evidence - 29,217, 34,145, 29,651 and 34,579
+bytes on OpenAI. A standards profile leaves the same four arrays, because lever 13 withholds
+`check_standards` once it ran.
+
+Every other array a review can send is **pinned for both providers**, so its growth shows in
+review, and **not asserted**: checks first off (the command line's and `benchmark run`'s default,
+the "off" arm of every A/B here), a standards run with checks first off (38,058 and 37,976 bytes
+with feature 011's drawing family), the bridged arrays (40,268 and 40,624 bytes on OpenAI with the
+family), and the pre-run without payload slimming. The test module names every array from five
+switches - payload slimming, a bridge, a standards run, drawing evidence and a completed pre-run -
+and `ARRAY_KINDS` says which kind each is, so a new array fails a test until it is classified. The
+per-tool ceiling (`TOOL_OBJECT_CEILING`) still holds every tool object, and levers 2 and 4 keep
+their own measurements (`lever_two_rows`, `tier_delta`). The ceiling's history - 36,000 from this
+feature, 38,000 when lever 13 was decided, then this decision - is feature 008's research R2.57;
+the answer it gives is feature 011's research R5 Q10.
+
 ### Lever 6: parallel tool calls, meaning round-trip batching only
 
 **Flag**: `parallel_tool_calls`. **Default**: off. **Scope**: **OpenAI only** as an A/B. **Read**:
