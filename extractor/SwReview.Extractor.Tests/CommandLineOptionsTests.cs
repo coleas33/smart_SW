@@ -489,6 +489,38 @@ public class CommandLineOptionsTests
     }
 
     [Fact]
+    public void Dump_BuildsAnObservedGateWithTheReadOnlyGuard()
+    {
+        // Feature 010 T109 (seat-readiness review, 2026-09-23): the dump's gate is watched, so
+        // extract.log can name every member the dump asked about - which is how the seat sees
+        // which mass-override path answered (PropertyDumper.ReadMassOverridden asks
+        // GetOverrideOptions only when CreateMassProperty's path did not answer). Built here
+        // rather than left to SwSession's default, and still the READ-ONLY guard.
+        var observer = new RecordingGateObserver();
+        SwGate gate = Program.DumpGate(observer);
+
+        Assert.Same(observer, gate.Observer);
+        Assert.Equal("ok", gate.Call("CreateMassProperty", () => "ok"));
+        Assert.Throws<MutatingCallError>(() => gate.Call("SetSuppression2", () => "no"));
+        Assert.Throws<MutatingCallError>(() => gate.Call("Save3", () => "no"));
+        Assert.Equal(new[] { "CreateMassProperty", "SetSuppression2", "Save3" }, observer.Members);
+        Assert.Equal(2, observer.Refusals.Count);
+    }
+
+    [Fact]
+    public void Dump_GateLogLineNamesEveryMemberOnceInFirstSeenOrder()
+    {
+        var observer = new RecordingGateObserver();
+        SwGate gate = Program.DumpGate(observer);
+        gate.Call("CreateMassProperty", () => 0);
+        gate.Call("GetOverrideOptions", () => 0);
+        gate.Call("CreateMassProperty", () => 0);
+
+        Assert.Equal("gated=CreateMassProperty,GetOverrideOptions", Program.DumpGateLogLine(observer.Members));
+        Assert.Equal("gated=", Program.DumpGateLogLine(new string[0]));
+    }
+
+    [Fact]
     public void StandardsProbe_NamesEveryInteropMemberItReadsToTheGuard()
     {
         // The ten probes of research.md R4 read members the shipped readers leave ungated on
