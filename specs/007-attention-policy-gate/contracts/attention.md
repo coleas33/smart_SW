@@ -58,6 +58,17 @@ feature's own were.
 
 A contact (010 `contracts/contacts.md`) is not a finding and never reaches a ranking.
 
+**The one class feature 011 added (2026-09-23).** Feature 011's drawing check emits one new finding
+id, classed in `attention_policy_v1.yaml` without a version change, for the reason the twelve above
+were. A drawing that differs from the profile's drawing standard is a manufacturing input to
+correct, never a release-verdict failure (011 research R5 Q5); `drawing_profile.` is not one of key
+2's needs-judgement prefixes. The check's other two ids, `drawing.context` and
+`drawing.confirmed_open`, are coverage and never findings, so they reach no ranking.
+
+| Check id | Class | Emitted by |
+|---|---|---|
+| `drawing_profile.conformance` | `manufacturing` | `check_drawings` (011 US7) |
+
 ## 2. Folding
 
 Before ranking, findings that share `check`, `status` and `severity`, whose `component_ids`

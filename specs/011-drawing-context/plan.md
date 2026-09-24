@@ -223,6 +223,29 @@ config/standards.example.yaml, reviewer/tests/fixtures/standards/profile-{a,b}.y
 README.md                                                                  # CHANGED
 ```
 
+#### Landed as (T060, reconciled 2026-09-23)
+
+The block above is the plan. What landed differs as follows; every other line of it landed as
+written. The file list is `git diff 62a9b2e~1 HEAD` over the product trees on the day, feature 011's
+commits only.
+
+| Plan | Landed as |
+|---|---|
+| `agent/runner.py` reused unchanged | *landed as* CHANGED: `answer_evidence_batch` calls `read_confirmed_candidates` before the resumed turn (T076), and restates `check_drawings` over a package a read reloaded (`_restate_drawing_check`, review 2026-09-23); `ReviewRun` takes the dispatch and the pre-run guard |
+| `checks/joint_alignment.py` reused unchanged | *landed as* CHANGED: `tolerance_subjects(joint, package)` extracted, so the brief and the stack-up name the same subjects (FR-042, T051) |
+| (not named) | *landed as* CHANGED: `tools/context.py` (`reload_package`, T076); `bridge/client.py` and `bridge/PROTOCOL.md` (`drawing.read`, protocol 1.3, T072; `BridgeRefusedError`, review); `report/review_words_v1.yaml` (`drawing_profile.` joins the drawings goal's prefixes, T057); `report/names.py` and `tools/checks_mechanical.py` (one `plural`, review DRY) |
+| `prerun.py`: the drawing branch and `repeat_key` | *landed as* also `recorded_call` and `PrerunGuard.answer_repeats_with` (review 2026-09-23) |
+| `Dump/ToleranceDumper.cs` shares the tolerance read | *landed as* NEW `Dump/DimensionTolerance.cs` (`IDimensionToleranceReads`, `DimensionTolerance.Read`), called by both dumpers (T027) |
+| `Dump/DrawingDumper.cs` typed annotations | *landed as* also NEW `Dump/AnnotationSymbols.cs` (`IAnnotationSymbolReads`, `GtolFrames.Read`, T040) |
+| `Dump/ConfirmedDrawingRead.cs`; `PackageAppender.MergeDrawing` | *landed as* written, with `Dump/PackageAppender.cs` CHANGED and `Ir/Enums.cs` CHANGED (T008's new enumerations) |
+| `Bridge/*` | *landed as* written, and `extractor/SwReview.Extractor.Console/Serve/PROTOCOL.md` CHANGED (1.3) |
+| `Guard/ReadOnlyGuard.cs`: `partial`, nothing else | *landed as* `partial` (T004), and on review a qualified key is judged by its member half too (2026-09-23); `ReadOnlyGuard.Drawing.cs` holds the writers of 28 families, the four callout-variable interfaces joining on review |
+| `SwReview.AddIn/ToolService/ToolServiceHost.cs` CHANGED (Q2) | **not landed**: T074 is partial - `ReviewHost.ReviewRunDirectory` is in, `ToolServiceHost`'s source is not, so `drawing.read` has no source in the add-in yet |
+| `SwReview.AddIn/Review/ReviewHost.cs`: the sentence | *landed as* also `ReviewRunDirectory(run_id)` (T074's half) |
+| `SwReview.AddIn.Tests/`: the Review refusal sentence | *landed as* also `ReviewHostTests`' run-directory section and `ReviewPageDrawingQuestionsTests` over the generated `Fixtures/review-drawing-questions.json` (`reviewer/tests/fixtures/pane/generate_drawing_questions.py`, `test_pane_drawing_fixture.py`) |
+| extractor tests | *landed as* also NEW `DrawingOpenTests.cs`, `ConfirmedDrawingReadTests.cs`, `Fakes/DrawingOpenFakes.cs`, `Fakes/ConfirmedDrawingFakes.cs`, and CHANGED `BridgeDispatcherTests.cs`, `BridgeSecretPolicyTests.cs`, `PackageAppenderTests.cs`, `StandardsGateLogTests.cs`, `RemodelInteropManifestTests.cs` |
+| reviewer tests | *landed as* also NEW `test_confirmed_drawing_read.py`, `test_pane_drawing_fixture.py`, and CHANGED `test_bridge_client.py`, `test_general_tolerance.py`, `test_report_names.py`, the `test_ir_*` schema pins, `test_support_*` and `tests/support/{mechanical,review_bridge,fixture_denylist}.py`; the replay fixtures' `events.jsonl` regenerated with their generator (008 `contracts/replay.md` section 8) |
+
 **Structure Decision**: both trees extended in place, as every feature since 002. The drawing
 evidence readers form a new `drawings/` package because they are neither checks nor tools: the index,
 the conversion, the binding and the brief are pure readings of the package that `checks/`, `tools/`

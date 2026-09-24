@@ -12,8 +12,9 @@ and the Model check tab in `specs/003-resilient-modeling/`, the Standards check 
 `specs/006-standards-check/`, the ranking and the procedural gate in
 `specs/007-attention-policy-gate/`, checks first and the token budget in
 `specs/008-checks-first-review/`, the Review tab's summary, questions and kept reviews in
-`specs/009-engineer-workspace/`, the mechanical checks in `specs/010-mechanical-checks/`, and
-the governing rules in `.specify/memory/constitution.md`. `README-complete.md` is the original
+`specs/009-engineer-workspace/`, the mechanical checks in `specs/010-mechanical-checks/`, the
+read-only drawing context in `specs/011-drawing-context/`, and the governing rules in
+`.specify/memory/constitution.md`. `README-complete.md` is the original
 pilot proposal and `sw-review-architecture-proposal.md` the architecture decision record.
 
 ## Current status and next steps
@@ -68,11 +69,11 @@ dotnet test  extractor\SwReview.sln -c Release
 See `specs/001-agentic-design-review/quickstart.md` for the validation scenarios and
 `specs/002-task-pane-assistant/quickstart.md` for the Task Pane ones. The main entry points
 are `swreview` (Python CLI: `validate`, `ingest`, `review`, `report`, `disposition`,
-`timing`, `attention`, `check`, `rms`, `benchmark`, plus `chat serve` for the Task Pane
-backend, `mcp` for the read-only toolset an external CLI connects to, and `audit-secrets`)
-and `swreview-extract`
+`timing`, `attention`, `check`, `rms`, `drawing brief`, `benchmark`, plus `chat serve` for the
+Task Pane backend, `mcp` for the read-only toolset an external CLI connects to, and
+`audit-secrets`) and `swreview-extract`
 (C# console: `dump`, `interference`, `capture`, `resolve`, `serve`, `probe rms`,
-`suppress-test`).
+`probe standards`, `probe drawings`, `suppress-test`).
 
 The review loop runs on OpenAI by default, or on Gemini with `--provider gemini`. It needs
 `OPENAI_API_KEY`, or `GOOGLE_API_KEY` (`GEMINI_API_KEY` is read second) for Gemini. Inside SOLIDWORKS the key comes from the pane's settings instead,
@@ -133,10 +134,40 @@ for confirmation; `check_hygiene` compares the part-number property with the fil
 shared descriptions and part numbers and missing revisions, and flags suppressed and lightweight
 components. A zero-volume interference row is a **contact**, kept in its own list beside the
 findings and never in "Start here". The part-number and description properties the hygiene checks
-read, and the general tolerance by decimal places, come from standards profile **version 2**
-(`config/standards.example.yaml`); a version 1 profile still loads, with the two property checks
-skipped naming the setting and no general tolerance applied, so the owner's real profile has to be
-regenerated at version 2 before they grade a real run.
+read, and the general tolerance by decimal places, come from standards profile **version 2** or
+later (`config/standards.example.yaml` is version 3); a version 1 profile still loads, with the two
+property checks skipped naming the setting and no general tolerance applied, so the owner's real
+profile has to be regenerated at version 2 or 3 before they grade a real run.
+
+**Drawings in a review** (feature 011). A review extraction of a part or assembly reads, with it,
+the drawings **already open** in SOLIDWORKS whose views show the design - at most ten, matched by
+full path - into the same package; the extraction opens nothing, and the Standards and Model check
+extractions still read no drawing but the one they were pressed on. A same-name drawing beside a
+reviewed part that is not open is recorded as a **candidate**, never opened by the extraction.
+Every dimension's value, tolerance, written precision and unit, the callouts (geometric
+tolerances, datums, surface finish, hole callouts), the notes and every table are read, and the
+model's `find_dimensions` and `get_drawing_sheet` show them. `check_drawings`, argument-free and
+offered only when the package carries drawing evidence, runs in checks first: one coverage line per
+reviewed document saying which drawings show it and which views could not be used and why; each
+drawing compared with the profile's drawing section (profile **version 3**: sheet formats, drafting
+standard, projection, the dimension unit), a difference being one manufacturing-class finding naming
+the drawing's values and never a release-verdict failure; and at most four **questions** for the
+pane - whether a candidate is the part's drawing, and which drawing governs a document two or more
+show. Answering "Yes, open it read-only and read it" has the product open the candidate itself,
+read-only and hidden through its own three-key allowlist, read it into the run's package and close
+it again - only what it opened - before the review resumes; this ships **off** until a seat probe
+validates the open (probe D14), and until then the candidate is refused with that sentence, while a
+candidate the engineer has since opened is still read. The drawing is the first tolerance source
+for the stack-up, and an untoleranced dimension hands its written precision to the profile's
+general tolerance in the profile's declared unit (a radius's band doubled for the diameter); that
+binding also ships **off** until the seat confirms callouts tie to the right holes
+(`DRAWING_BINDING_VALIDATED`), and until then every answer names the seat validation. A per-part
+**brief** of at most 6,000 bytes - the part, its joints, the interfaces needing a callout, what its
+drawings cover, the engineer's answers and the drawing standard - comes from `get_drawing_brief`
+and from `swreview drawing brief --package <dir> --document <id> [--run <run dir>] [--profile
+<yaml>]`, the input a drawing creator (feature 012) will read. Every writer of the drawing API is
+refused by the read-only guard, generated from the interop. The contracts are
+`specs/011-drawing-context/contracts/`.
 
 **The Review tab** (feature 009) opens its Results with a summary the backend computes and the
 page prints as supplied: how many findings in how many issues; the findings to **Decide**, **Fix**
@@ -197,7 +228,8 @@ built but hidden until the terminal is part of the pilot (`TaskPaneControl.AskTa
 Press Standards on a part, an assembly or a drawing and it dumps the active document with
 `--profile standards`
 (the model check phases plus cut lists, and the drawing sheets when the document is a
-drawing), grades it against sixteen checks, and shows a release verdict with every check
+drawing - a drawing attaches with no configuration, feature 011, so a drawing open on its own is
+graded live; the drawings attached to a part's review are not), grades it against sixteen checks, and shows a release verdict with every check
 accounted for as checked, skipped, unresolved or out of scope. Like the Model check tab it
 **needs no language model and no API key**: no provider is constructed and no key is read
 on any standards path, and the only host it reaches is the loopback backend. What it grades
