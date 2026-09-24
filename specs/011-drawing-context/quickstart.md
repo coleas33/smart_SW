@@ -213,14 +213,18 @@ SOLIDWORKS never started). Scenarios 11 to 16 are [W] and were **not** run: they
 
 ## Scenario 11 [W] (T062): a drawing on its own, live
 
-Open a multi-sheet drawing; run `swreview-extract probe drawings --probe D1,D11`; press Standards.
+Open a multi-sheet drawing; run `swreview-extract probe drawings --out <folder> --probe D1,D11`
+(every run writes `drawings-probe-<UTC time>.txt` in the folder, the record to bring back); press
+Standards.
 Expected: the drawing and every model its views show are graded; the gate log holds no writer,
 activation, open or close member (SC-001). Then run feature 006's T103, T105 and T107.
 
 ## Scenario 12 [W] (T063): attaching, live
 
-Open an assembly and the drawings of two of its parts and of one unrelated part; run probes D2, D3,
-D12, D13; start a review. Expected: the two drawings are read and the third is not; nothing is opened;
+Open an assembly and the drawings of two of its parts and of one unrelated part; run probes D2 and
+D13 with `--doc` naming the assembly (D13 again naming the vault-view part) and D3 and D12 with
+`--doc` naming a drawing, each `swreview-extract probe drawings --out <folder> --doc <path> --probe
+...`; start a review. Expected: the two drawings are read and the third is not; nothing is opened;
 the candidate check on a vault path neither fetches nor stalls (SC-002).
 
 ## Scenario 13 [W] (T064, T065): the reads, live
@@ -235,8 +239,9 @@ right hole (SC-010); only then is `DRAWING_BINDING_VALIDATED` set, in its own co
 
 ## Scenario 16 [W] (T077): the confirmed open, live
 
-Run `swreview-extract probe drawings --probe D14` beside a reviewed part whose same-name drawing is
-closed, then again with it open. Expected (SC-011): options 3, type 3; the active document
+Run `swreview-extract probe drawings --out <folder> --doc <part> --probe D14` beside a reviewed part
+whose same-name drawing is closed, then again with it open; the report's last D14 line is the
+probe's own reading against `contracts/confirmed-open.md`. Expected (SC-011): options 3, type 3; the active document
 unchanged and the engineer's window in front; the hidden drawing's views read; the file
 byte-identical, no save flag raised, not locked after the close; with the drawing already open,
 no visibility, open or close key gated. Only then set `DrawingOpenScope.SeatValidated`, in its own
