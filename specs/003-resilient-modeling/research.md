@@ -273,7 +273,7 @@ fixture parts.
 
 ## R10. The Model check tab (User Story 6)
 
-Phase 0 input for User Story 6 is the design brief at `C:\Users\<user>\AppData\Local\Temp\claude\C--Users-<user>-source-repos-smart-SW\ffaad261-c3fe-41db-902a-57b83fd7414b\scratchpad\research-004\design-brief.md`, Part B (sections B1 to B9) together with its cross-cutting
+Phase 0 input for User Story 6 is the design brief at `%LOCALAPPDATA%\Temp\claude\C--Users-<you>-source-repos-smart-SW\ffaad261-c3fe-41db-902a-57b83fd7414b\scratchpad\research-004\design-brief.md`, Part B (sections B1 to B9) together with its cross-cutting
 section 1 and its API ledger in sections D1 and D2. Six points the story rests on, each with
 the section that argues it:
 
