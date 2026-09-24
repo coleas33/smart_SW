@@ -103,11 +103,23 @@ its budget of section 1. The bridged slim array with the family is pinned in the
 (T055); every existing constant is untouched, which a test asserts by recomputing them with the
 family absent.
 
-*Found on review, 2026-09-23, and open (research R2.20, R5 Q10)*: the arm does not model a review
-run with a standards profile, which offers `check_standards` before the family. With checks first
-off - the command line's default - those arrays go over the ceiling because of the family: 38,058
-and 37,976 bytes (review, OpenAI and Gemini), 38,414 and 38,281 (slim). They are neither pinned nor
-asserted until the owner says whether the ceiling holds them; `ARRAY_CEILING` stays 38,000.
+*Found on review, 2026-09-23 (research R2.20, R5 Q10)*: the arm did not model a review run with a
+standards profile, which offers `check_standards` before the family. With checks first off - the
+command line's default - those arrays go over the ceiling because of the family: 38,058 and 37,976
+bytes (review, OpenAI and Gemini), 38,414 and 38,281 (slim).
+
+*Amended 2026-09-23 (owner decision 9A, answering R5 Q10; T078, T079)*: `ARRAY_CEILING` (38,000,
+unchanged) is asserted only on the arrays the pane sends by default - payload slimming, checks first
+and lever 13, the pre-run having completed, with and without a bridge and drawing evidence: 29,217,
+34,145, 29,651 and 34,579 bytes on OpenAI (a standards profile leaves the same four, `check_standards`
+withheld). Every other array a review can send is pinned per provider, so its growth shows in review,
+and not asserted: checks first off, a standards run with checks first off, the bridged arrays and the
+pre-run without slimming. `test_tool_payload.py` names all twenty-four (`REVIEW_ARRAYS`, from five
+switches: slimming, a bridge, a standards run, drawing evidence, a completed pre-run), and
+`ARRAY_KINDS` says which kind each is, so a new array fails a test until it is classified. The
+drawing arm is every array with the family, twelve, each still its base array with the family
+appended; the claims above about the four asserted arrays and the unasserted bridged ones are
+superseded for the review and slim arrays with the family, which are pinned and no longer asserted.
 
 ## 8. The tests
 

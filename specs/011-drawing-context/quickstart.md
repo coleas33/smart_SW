@@ -152,10 +152,10 @@ uv run pytest tests/unit/test_drawing_brief.py tests/unit/test_tools_get_drawing
 
 Expected: the brief's sections in order, at most 6,000 bytes, no persistent reference and no profile
 value, written as UTF-8 bytes whatever the console's encoding; the pathological package's brief
-within the bound with `omitted` exact; the drawing arm of the payload pins under 38,000 bytes in both
-encodings (the bridged slim arm pinned and not held to the ceiling it already exceeds, research
-R2.20; a standards run's arrays with checks first off are over it and wait on R5 Q10), each new tool
-within its budget.
+within the bound with `omitted` exact; every array a review can send pinned in both encodings and
+classified, the pane's default arrays - the drawing arm's two pre-run arrays among them - under
+38,000 bytes, and every other array pinned and not held to the ceiling (owner decision 9A, research
+R2.20, R5 Q10), each new tool within its budget.
 
 ## Scenario 10 (US7): conformance
 
