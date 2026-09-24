@@ -6,7 +6,9 @@ assistant operating the seat. `docs/workstation-runbook.md` is the standing manu
 and keep its three rules: never commit or push per-machine state, never push `main`, close
 SOLIDWORKS before building or registering. This document replaces the 2026-09-20 round-2
 handover as the current work; it is one ordered list of every seat task of features 008, 009, 010
-and 011, each with its command, what decides pass or fail, and where its record goes. The task
+and 011, and of four earlier ones the owner added (decision 15A, 2026-09-24: 006 T101 and T102 in
+step 2, 007 T059 and T060 in step 13), each with its command, what decides pass or fail, and
+where its record goes. The task
 texts in `specs/00N-*/tasks.md` stay the source of truth: where this document and a task
 disagree, the task wins and the difference is a finding. The engineer who runs the sitting follows
 `docs/workstation-test-plan-2026-09-23.md` (011 T100): the same sitting in plain, numbered steps,
@@ -121,7 +123,17 @@ row per step and task id. The development machine moves each answer into the res
    gap (T105); the named screws are fasteners, each with a shank face, and nothing else is (T106).
    The last line of each `extract.log`, `gated=...`, says which mass-override path answered:
    `GetOverrideOptions` in it means the first path failed somewhere. Record: the printed lines
-   and the `gated=` line, for 010 `research.md`.
+   and the `gated=` line, for 010 `research.md`. **006 T101 and T102** run on the same two
+   assemblies, each right after its dump and still active: `swreview-extract probe standards`
+   into `probe-standards-A.txt` (then `-B`) in the probe folder, which prints PROBE-1 (the
+   exploded reads, per configuration and per sub-assembly), PROBE-2 (the nine appearance slots)
+   and PROBE-3 (the visibility reads beside the suppression) for every component. The engineer
+   notes beforehand which components are transparent, overridden, hidden, suppressed or hidden in
+   a display state, and finds each by its name; a kind neither assembly has is blocked, never
+   made. Pass: the probe's gate log (no mutating member, refusal, activation, open or display
+   change) and every kind found and read (the test plan's step 3.1). Record: component ids and
+   answers only; the development machine moves the answers into 006 research R4 and flips
+   `TRANSPARENCY_POLARITY`.
 3. **011 T062: a multi-sheet drawing.** Every probe run writes its report in
    `<handover folder>\probes`, which the test plan's setup block makes, and never overwrites one.
    Open the drawing, then
@@ -222,7 +234,16 @@ row per step and task id. The development machine moves each answer into the res
     estimate of `small-assembly-a`, so it is the line); the finding and contact counts recorded as
     in step 11. The replay's requested figure, 459,000, assumes the model makes the recorded
     calls; the 0.3M assumes it does not repeat what the digest reported (the regrouped estimate),
-    so a review that repeats checks fails T103 by design - record which calls repeated.
+    so a review that repeats checks fails T103 by design - record which calls repeated. The same
+    review is **007 T059**'s: when it ends, the pinned Start here panel's rows are the finding ids
+    `report.md`'s "Start here" lists, in its order (`Show-StartHere $run`, the test plan's step
+    4.1); Model check and Standards on part J show their Start here block above the chips, with
+    the ids of their own folders' reports (its steps 5.1 and 5.2). And it is **007 T060**'s timed
+    run: the engineer who knows the design gives the baseline, the seat notes supervision,
+    verification and false-alarm minutes, and `swreview timing` records the four on its run
+    folder only after a backend restart (the test plan's step 4.5, item 4), since a backend still
+    holding the review could save over them; its `session.json` carrying the baseline is the
+    evidence.
 14. **009 T081, T083, T084.** Configuration switch (T081), chips and restore (T083), three open
     questions answered in one send (T084), each as its task text says; T084's resumed turn's
     first round input goes beside the pane's resume sentence.

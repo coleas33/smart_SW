@@ -12,7 +12,9 @@ Step 6 collects it.
 Each step carries the task ids it answers in square brackets, with the feature in front, for
 example **[011 T062]**: that is the row of `specs/011-drawing-context/tasks.md` the development
 machine ticks from your result. The plan was built from what is on `main` with it: every seat task
-(`[W]`) of features 008, 009, 010 and 011, and `docs/workstation-runbook.md`. The assistant's
+(`[W]`) of features 008, 009, 010 and 011, four earlier ones the owner added (decision 15A,
+2026-09-24: 006 T101 and T102 at step 3.1, 007 T059 and T060 at steps 4.1, 4.5, 5.1 and 5.2),
+and `docs/workstation-runbook.md`. The assistant's
 version of the same sitting, with the reasons for its order, is
 `docs/workstation-handover-2026-09-23.md`; **where this plan and the handover differ, follow this
 plan.** Where this plan and a task text disagree, the task wins; write the difference down as a
@@ -46,7 +48,9 @@ finding.
    name inside `error="..."` with its letter. From a D6 or D8 dimension line, never copy its
    `name "..."`, `view "..."` or `value`, nor a D6 face line's radius, which is half a hole's
    value: the dimension's id (`ddm:...`) stands for it, and the report in `$H\probes` keeps the
-   rest for the development machine.
+   rest for the development machine. From a Standards probe report (steps 3.1 and 3.2), a
+   component is its id (`cmp:` and four digits), never its name; never copy its `document:` line
+   or a configuration's or exploded view's name.
 6. **Do not click or type while a probe runs.** Probe D14 checks that the window in front and the
    active document do not change; your own click would fail it.
 7. **A step that fails**: record what it says to record, look the failure up in "When a step
@@ -70,6 +74,7 @@ running SOLIDWORKS directly and need neither the add-in nor the pane.
 | A key refused, no quota, or no connection at the first paid review | Step 4's box, item 6 | every paid step: `blocked: provider` |
 | A lettered document cannot be found (section 0.2) | Mark its steps blocked, using the table's "Used by" column | those steps: `blocked: no document <letter>` |
 | A dump at 3.1 fails | Retry once as 3.1 says, then go on: 4.2 still runs, because the pane extracts for itself | 010 T103 to T106 for that assembly |
+| The Standards probe at 3.1 fails (an exit code other than 0, or a gate log word other than `none`) | Record the lines, after checking they hold no path, write `fail` in 006 T101's and T102's rows, and go on: nothing else in the sitting needs it | nothing more |
 | A D14 report at 3.9 ends `against confirmed-open.md: not as required: ...` | Go on: the switch stays off | nothing more |
 | 6.1 or 6.5 names a leaked file | **Stop and send nothing**; call the owner | the handoff |
 
@@ -94,18 +99,20 @@ running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 ## How long it takes
 
-About **10 hours at the seat**, best planned as two days: day 1 steps 1 to 3, day 2 steps 4 to 6.
-Keep SOLIDWORKS open from step 4.1 to step 4.5 on day 2: the review chips of steps 4.4 and 4.5
-live only as long as the SOLIDWORKS session. Before the sitting, allow **half a day** to find and
-note documents C to M (section 0.2); a new machine (section 0.3) adds about an hour.
+About **10 hours 30 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
+steps 4 to 6. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
+inside steps 3.1, 4.1, 4.5, 5.1 and 5.2. Keep SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
+the review chips of steps 4.4 and 4.5 live only as long as the SOLIDWORKS session. Before the
+sitting, allow **half a day** to find and note documents C to M, and the components of A and B
+step 3.1 asks about (section 0.2); a new machine (section 0.3) adds about an hour.
 
 | Step | What | Estimate |
 |---|---|---|
 | 1 | Update, gates, health checks (registration only on a new machine) | 50 min |
 | 2 | Profile and key | 20 min |
-| 3 | Dumps, probes D1 to D14 and one pane review, with the fingerprints | 3 h 45 min |
-| 4 | The pane reviews | 3 h |
-| 5.1 to 5.4 | Model check, Standards, Remodel, the Gemini test | 30 min |
+| 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
+| 4 | The pane reviews, with the Start here panel and the timing of A's review | 3 h 10 min |
+| 5.1 to 5.4 | Model check, Standards (each with its Start here block), Remodel, the Gemini test | 35 min |
 | 5.5 | The older build and back: two builds, two SOLIDWORKS restarts, two reviews of A | 1 h |
 | 6 | Handoff | 45 min |
 
@@ -132,7 +139,8 @@ estimate from the replay's figures, not a measurement.
    recorded runs used `gpt-5.6-luna` at `high`), and **a Gemini key** for step 5.4. The owner writes
    the model and effort, never a key, in `notes\documents.txt`.
 5. **People**: the owner reachable by phone on both days (steps 1.3, 2.2 to 2.4, 6.1); the engineer
-   who knows A, at step 4.1 and again at 4.2 (about 10 minutes each); a colleague who has not seen
+   who knows A, at step 4.1 (about 15 minutes, with the minutes 007 T060 records) and again at
+   4.2 (about 10 minutes); a colleague who has not seen
    the result, at the end of B's review in step 4.2 (1 minute). Their names stay out of the
    findings document.
 6. **One decision, written in `notes\documents.txt`**: the input-token cap at which B's review is
@@ -163,6 +171,21 @@ handover folder and travel by hand; they are never pushed.
 | K | an assembly in which one part's same-name drawing sits closed beside it (K-1), and two other parts (K-2, K-3) are each shown by two drawings you will open | step 4.6 |
 | L | a weldment or sheet-metal part, if one exists (006 T105's cut-list item) | step 3.2 |
 | M | a part and an assembly that each have at least two configurations (A-pin and A will do if they have) | step 4.4 |
+
+For step 3.1's Standards probe (006 T101 and T102), also write in `notes\documents.txt`, under A
+and under B, what SOLIDWORKS shows in them as they stand:
+
+- **configurations** (ConfigurationManager): how many, which one is active, and which of them
+  have an exploded view; whether the active one is shown exploded;
+- **sub-assemblies**: whether the assembly has any;
+- **components**, each by the name the FeatureManager tree shows: one of each kind the assembly
+  has among these six: a plain visible one; a hidden one; a suppressed one; one hidden only in a
+  display state (visible in another display state); one you can see is transparent; and one with
+  an appearance override that is not transparent (a colour or appearance given to the component
+  in the assembly, shown in the Display Pane).
+
+Write `none` for a kind the assembly does not have. Change nothing to make one: the probe reads A
+and B as they stand, and a kind neither has is recorded as blocked (step 3.1).
 
 ### 0.3 A new machine only: install and clone
 
@@ -251,6 +274,22 @@ function Show-DrawingReadLog {
         Select-Object -Last 3 | ForEach-Object { $_.Line }
 }
 
+function Show-StartHere {
+    param([string] $run)
+    $run = $run.TrimEnd('\')
+    $report = Get-Content -LiteralPath "$run\report.md" -Raw -Encoding UTF8
+    $start = $report.IndexOf('## Start here')
+    if ($start -lt 0) { 'report.md has no Start here section'; return }
+    $end = $report.IndexOf("`n## ", $start)
+    if ($end -lt 0) { $end = $report.Length }
+    $section = $report.Substring($start, $end - $start)
+    $ids = @([regex]::Matches($section, '(?m)^\d+\. \*\*([^*]+)\*\*') | ForEach-Object { $_.Groups[1].Value })
+    $nothing = [regex]::Match($section, '(?m)^Nothing to start with[^\r\n]*').Value
+    if ($ids.Count -gt 0) { 'Start here in report.md: ' + ($ids -join ', ') }
+    elseif ($nothing) { $nothing }
+    else { 'Start here in report.md: no row and no Nothing to start with line' }
+}
+
 function Get-SeatHash {
     param([string] $path)
     $stream = [IO.File]::Open($path, 'Open', 'Read', 'ReadWrite, Delete')
@@ -320,6 +359,9 @@ What the commands do, so you know what you are running (each only reads):
 - `Show-SetupTime '<run folder>'` reads the backend log for how long the review's setup took.
 - `Show-DrawingReadLog` prints the last three `drawing.read` lines of the tool-service logs; the
   last line printed is the newest.
+- `Show-StartHere '<run folder>'` prints the finding ids the run folder's `report.md` lists under
+  **Start here**, in its order (`Start here in report.md: F-003, F-001, ...`), or its
+  `Nothing to start with: ...` line; it works on a review's folder and on a check folder alike.
 - `Get-SeatHash "<full path>"` prints a file's SHA-256 while SOLIDWORKS may hold it open.
 - `Save-Fingerprint '<name>'` records the size, write time and SHA-256 of every lettered file and of
   every document the dumps list, in `notes\fingerprint-<name>.csv`; `Compare-Fingerprint '<name>'`
@@ -653,11 +695,12 @@ answer on this release, and recording it is half the point of the probes. A repo
 means the document named after `--doc` is not open, or its path was mistyped: open it and run the
 command again.
 
-### 3.1 The dumps of the two recorded assemblies [010 T103 to T106]
+### 3.1 The dumps and the Standards probe of the two recorded assemblies [010 T103 to T106; 006 T101; 006 T102]
 
 For A, then for B: open the assembly **resolved** (File > Open, Mode: Resolved), and click its
-window so it is the active document. Do not add `--doc` to this command: the active document is
-the one it dumps.
+window so it is the active document. Run its dump, then, with it still active, its Standards probe
+(further down), and only then open the other. Do not add `--doc` to either command: the active
+document is the one they read.
 
 ```powershell
 swreview-extract dump --out "$H\dumps\A" --meshes none; "exit code: $LASTEXITCODE"
@@ -689,7 +732,64 @@ Record: the four lines and the `gated=` line for A and for B. Say whether `GetOv
 appears in the `gated=` line: it appears only when the first way of reading a mass override gave
 no answer on some document.
 
-Then, with both dumps done, fingerprint your files:
+**The Standards probe of the same assembly (006 T101 and T102).** Right after each dump, with that
+assembly still the active document (A's probe after A's dump, B's after B's), and touching
+nothing in SOLIDWORKS while it runs (B's may take several minutes, like its dump):
+
+```powershell
+swreview-extract probe standards | Out-File -FilePath "$H\probes\probe-standards-A.txt" -Encoding utf8; "exit code: $LASTEXITCODE"
+Get-Content "$H\probes\probe-standards-A.txt" -Tail 7
+notepad "$H\probes\probe-standards-A.txt"
+```
+
+For B, the same three lines with `B` in place of `A`. The second line prints the probe's gate log;
+Notepad opens the whole report. Copy any line printed above the report (it went to the screen,
+not the file) into your notes, after checking it names no path. In Notepad look at the first
+three probes, the ones the two tasks ask about (the report's other seven sections are not read
+here; the development machine keeps them):
+
+- `probe-1 exploded_state:` (006 T101): the `open document:` line gives two answers,
+  `IModelDoc2.IsExploded()=<True or False>` and `IModelDocExtension.IsExploded(out name)=<True or
+  False> view=<a name or null>`; then one line per configuration ending `explode_steps=<n>`, read
+  without activating any; then, under `sub-assembly documents:`, one line per sub-assembly
+  (`(none)` if there is none).
+- `probe-2 appearance_overrides:` (006 T102): one line per component, starting with its id
+  (`cmp:` and four digits) and its name, then `HasMaterialPropertyValues=<True or False>` and
+  `GetMaterialPropertyValues2(1, null)=` with the slots it read (normally `9 slots [0]=... [8]=...`).
+- `probe-3 component_visibility:` (006 T101): one line per component, id and name first, then
+  `Visible=<n>`, `GetVisibility(1, null)=<n>` and `suppression=<state>`.
+
+Find each component you noted for A or B in section 0.2 by its name (Ctrl+F): its lines in probes
+2 and 3 start with its id. A read that failed prints `!` and the error's name in place of its
+value: that is SOLIDWORKS's answer on this release, not a fail of the sitting; record it.
+
+- Both tasks, the probe itself, on A and on B: `exit code: 0`, and the gate log reads
+  `mutating members: none`, `refusals: none`, `sheet activation: none`, `document opening: none`
+  and `display state: none` (the last three each followed by what they watched for).
+  Otherwise it is a **fail** of both: copy the lines, after checking they hold no path.
+- 006 T101, pass: on A or B, every kind PROBE-1 and PROBE-3 ask for was there and read: the open
+  document's two exploded answers; a second configuration, with its `explode_steps`; a
+  sub-assembly, with its line; and a component of each of the four kinds, visible, hidden,
+  suppressed and hidden only in a display state, each with its probe 3 line. Note beside the
+  answers what you saw (section 0.2): whether the active configuration is shown exploded, and
+  which configurations have an exploded view.
+- 006 T102, pass: on A or B, a component of each of the three kinds, transparent, an opaque
+  appearance override and no override, each with its probe 2 line.
+- A kind neither A nor B has: `blocked: no <kind> in A or B`, the probe itself still passing.
+  Nothing is changed to make one: a later sitting can prepare it on a copy.
+
+Record, per assembly: the report's file name; the two exploded answers as `True` or `False`, and
+whether a view name followed (`yes` or `no`, never the name); each configuration by its place in
+the list (1, 2, ...) with its `explode_steps` and whether it is the active one; how many
+sub-assembly lines answered and how many say `(no loaded document...)`; and, for each kind you
+noted, the component's id with its `Visible`, `GetVisibility`, `suppression` and
+`HasMaterialPropertyValues` answers. Never a component's, configuration's or view's name (rule 5).
+The slot values stay in the report: the development machine reads PROBE-1 to PROBE-3 out of it
+into `specs/006-standards-check/research.md` R4, adjusts `Document.is_exploded` and
+`ComponentInstance.visibility_raw` if the answers differ from the assumption, and flips
+`TRANSPARENCY_POLARITY` (T102's one edit). None of that is done here.
+
+Then, with both dumps and both probes done, fingerprint your files:
 
 ```powershell
 Save-Fingerprint 'before'
@@ -1151,7 +1251,7 @@ chip's document active first (SOLIDWORKS's Window menu); the pane then shows its
 itself, or press its chip. Pressing the chip of the review already on screen does nothing: press
 **Clear review** first.
 
-### 4.1 A, the small assembly [008 T103; 009 T079]
+### 4.1 A, the small assembly [008 T103; 009 T079; 007 T059]
 
 Open A resolved and make it active; press Review (the box above). Note the time it started and
 finished.
@@ -1175,6 +1275,28 @@ finished.
   reach. Record their words.
 - If the review asked questions, answer them all in one send (box, item 5) and run
   `Show-ReviewFacts $run` again: record both `tokens` lines, before and after.
+- 007 T059, the Review half: once the review has ended (after the answers' turn, if it asked
+  questions), the **Start here** panel is pinned in Results, below the summary and the questions
+  and above the findings: a count line (`Start here: <n> of <n> issues ...`), then numbered rows,
+  each beginning with its finding id (`F-001` and so on). Write down the ids of those rows, top to
+  bottom (not the ones behind **Show all**), then:
+
+  ```powershell
+  Show-StartHere $run
+  ```
+
+  Pass: it prints `Start here in report.md: ` and the same ids, in the same order, as many as the
+  panel's rows; or the panel and the line both say there is nothing to start with. Fail: an id
+  missing, extra or out of order. Record the printed line and the panel's count line.
+- 007 T060, the minutes (the command that records them runs at step 4.5, item 4, once the backend
+  no longer holds this review). Before the engineer who knows A leaves, ask them how many minutes
+  a review of A by hand, without SwReview, takes them: the **baseline**. Then write down three
+  more, in whole minutes: **supervision**, the minutes you spent on A's review while it ran
+  (pressing, watching the Transcript, answering its questions; if you watched throughout, its
+  start-to-end minutes); **verification**, the minutes you and the engineer spent checking
+  findings they judged right; and **false alarms**, the minutes spent on findings they judged
+  wrong. The last two together are the whole time spent checking the findings; count no minute
+  twice. Write the four numbers under this step's heading in the findings document.
 
 Record: the facts, the headline, the Decide, Fix and Verify lines, the goal lines, the drawings
 line (with letters in place of names), the usage line, and the start and end times.
@@ -1275,7 +1397,7 @@ have; otherwise review M's part and assembly the same way first).
 
 Record: each pass or fail. Save no configuration change.
 
-### 4.5 The review chips [009 T083]
+### 4.5 The review chips, and the timing of A's review [009 T083; 007 T060]
 
 1. Press **Transcript** and note the usage lines of A, A-pin and A-plate: for each, make its
    document active in SOLIDWORKS (Window menu); its review shows by itself, or press its chip. Then
@@ -1301,8 +1423,34 @@ Record: each pass or fail. Save no configuration change.
    Pass: `kept and deleted`. Any other line: nothing was lost; fix the cause (the pasted path, free
    space) and run it again. Then press **Clear review**, then A-pin's chip. Pass:
    `This review can no longer be restored.` with a **Remove** button; Remove takes the chip away.
+4. **007 T060: record the timing of A's review**, with the four minutes you wrote at step 4.1.
+   It is done here because since item 2's restart the backend no longer holds A's review, so
+   nothing can save over what this writes; it writes only in A's run folder (`session.json`, then
+   `report.md` and `attention.json` rendered again). Make A active and press its chip, press
+   **Open run folder**, copy the address bar, and close that Explorer window. Then replace each
+   `'<...>'` of the second line with its number of minutes (the quotes may stay):
 
-Record: each pass or fail. From here on SOLIDWORKS may be closed and reopened.
+   ```powershell
+   $run = '<paste the run folder of A, from step 4.1>'
+   cd "$R\reviewer"; uv run swreview timing $run --baseline '<baseline minutes>' --supervision '<supervision minutes>' --verification '<verification minutes>' --false-alarms '<false-alarm minutes>'; "exit code: $LASTEXITCODE"; cd $R
+   Select-String -LiteralPath "$run\report.md" -SimpleMatch 'Net saved minutes:' | ForEach-Object { $_.Line }
+   (Get-Content -LiteralPath "$run\session.json" -Raw -Encoding UTF8 | ConvertFrom-Json).timing.baseline_minutes
+   ```
+
+   Pass: the command prints `baseline <b>, supervision <s>, verification <v>, false alarms <f>`
+   with your four numbers (written with `.0`), `net saved: <n>` with `<n>` the baseline less the
+   other three, and a line `report: ...`, which holds a path (never copy it); then
+   `exit code: 0`; then `- Net saved minutes: <n>` (the report's Timing section); and last the
+   baseline again: the run's `session.json` now carries it, which is the evidence 007 T060
+   names. A message `Invalid value for '--baseline'` (or another input) with `exit code: 2` means a
+   `'<...>'` was left as it was: put the number in and run the line again. Fail: `exit code: 1`
+   (copy its message, with any path replaced by `<run folder>`), or any number other than the
+   ones you typed. With no baseline from the engineer, write `blocked: no baseline` and run
+   nothing. From here on the owner times each pilot run the same way; at this sitting, A's review
+   is the one timed.
+
+Record: each pass or fail; for 007 T060 the four minutes, the net saved and A's run folder stamp
+(`<stamp>-A`). From here on SOLIDWORKS may be closed and reopened.
 
 ### 4.6 Drawing questions, three answers in one send, and a confirmed candidate left closed [011 T067; 009 T084; 011 T077; 011 T101]
 
@@ -1389,7 +1537,7 @@ would change (it would go in `review_words_v1.yaml` on the development machine).
 
 ## Step 5. The other tabs, the live Gemini test, and the older build
 
-### 5.1 Model check
+### 5.1 Model check [007 T059]
 
 Open part J; on the Model check tab press **Model check**. Pass: a grade within seconds, headed
 `Grade: <J's file name> [<configuration>]`, with its counts; under the counts either
@@ -1399,12 +1547,31 @@ selects its feature in J; and **Open check folder** opens a new folder ending `-
 `session.json`, `report.md` and `check.json`. Record: the counts, the line under them, and the
 folder's stamp (never its name).
 
-### 5.2 Standards
+007 T059, the Model check half: below the grade, a **Start here** block (its heading, then numbered
+rows each beginning with a finding id, or a sentence saying why there is nothing to start with)
+sits **above** the row of filter chips (the buttons that show or hide the rules by bucket). Write
+down its rows' ids, top to bottom, then copy the `-check` folder (Open check folder) and:
+
+```powershell
+$run = '<paste the -check folder>'
+Show-StartHere $run
+```
+
+Pass: the block is above the chips, and the printed ids are its rows' ids in the same order (or
+both say there is nothing to start with). Fail: the block below the chips or missing, or the ids
+differ. Record: pass or fail, and the printed line.
+
+### 5.2 Standards [007 T059]
 
 On the Standards tab press **Standards check** on part J and then on assembly A. Pass for each: a
 verdict with every check in a bucket; `ready to release` only when there are no errors **and** no
 unresolved checks; no banner about a missing profile; on A, the verdict notes `no drawing graded`.
 Record: both verdict lines.
+
+007 T059, the Standards half, on J's result (before you press Standards check on A): as in step
+5.1, a **Start here** block sits below the verdict and above the list of sixteen checks and the
+bucket chips. Copy J's `-standards` folder (Open check folder) into `$run` as in step 5.1 and run
+`Show-StartHere $run`. Pass and fail as in step 5.1. Record: pass or fail, and the printed line.
 
 ### 5.3 Remodel
 
@@ -1639,6 +1806,7 @@ For the development machine, once the folder comes back:
 | 009 | 009 T085 | the development machine restores this sitting's run folders offline |
 | 006 | 006 T100, the audit half | the development machine scans the returned run folders for the owner's profile values before 008 T101 is ticked; the seat does the profile entry (steps 2.2 and 2.4) |
 | 010, 011 | setting either switch; 010 T104's and T106's counts | the development machine, as sections 3.10, 3.1 and 4.2 say |
+| 006 | PROBE-1 to PROBE-3 into research R4; `TRANSPARENCY_POLARITY`'s flip | the development machine, from step 3.1's two Standards probe reports |
 
 Open seat or key tasks of earlier features, not asked this time:
 
@@ -1657,9 +1825,7 @@ Open seat or key tasks of earlier features, not asked this time:
 | 005 | 005 T085a | the workstation A/B harness: not built |
 | 005 | 005 T050, 005 T058, 005 T063, 005 T068, 005 T073, 005 T078, 005 T084 | lever A/B runs: need the harness of 005 T085a |
 | 005 | 005 T086, 005 T092, 005 T093, 005 T095, 005 T100, 005 T101, 005 T103, 005 T108 | lever 9 to 11 probes and A/B runs: need the harness, or wait on their levers |
-| 006 | 006 T101, 006 T102 | not asked; one `swreview-extract probe standards` line on A or B during step 3.1 would record PROBE-1, PROBE-3 and part of PROBE-2 at almost no cost: the owner's call for a later sitting |
 | 006 | 006 T104 | PROBE-8 and PROBE-9 on a weldment and a sheet-metal part, graded end to end: not asked (step 3.2 only probes L) |
 | 006 | 006 T106, 006 T108 | the tab end to end and its timing on a 40-component assembly: not asked |
 | 006 | 006 T109, 006 T110 | read-only proved on a standards dump, and agreement with the macro on copies: not asked |
-| 007 | 007 T059, 007 T060 | the pinned panel against `report.md`, and `swreview timing` after each run: not asked, though both would fit step 4.1: the owner's call |
 | 007 | 007 T061 to T063 | the procedural gate's study runs: need the lever study set-up |

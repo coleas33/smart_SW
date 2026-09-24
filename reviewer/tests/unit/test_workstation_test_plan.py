@@ -20,7 +20,12 @@ promises is held in its text:
 - the results sheet (`docs/workstation-results-2026-09-23.md`), which the plan copies into the
   handover folder as the findings document, has a row for every step and task id a step heading
   names, every row names a step the plan has, every open seat task the plan does not set aside
-  under "Not in this sitting" has a row, and it ships blank.
+  under "Not in this sitting" has a row, and it ships blank;
+- the four earlier seat tasks the owner added (decision 15A: 006 T101 and T102, 007 T059 and
+  T060) each have a step where their documents are already open and a row, and are gone from
+  the table of earlier tasks not asked; `Show-StartHere` prints a committed report's Start here
+  rows in their order, the timing line passes `swreview timing`'s four inputs, and the headline
+  time is the steps' sum.
 """
 
 from __future__ import annotations
@@ -33,8 +38,13 @@ import sys
 from pathlib import Path
 
 import pytest
+from typer.main import get_command
+from typer.testing import CliRunner
 
+from swreview.cli import app
 from swreview.ir.loader import load_package
+from swreview.report.attention import rank
+from swreview.report.rerender import rerender_run_folder
 from swreview.report.session import load_session
 from swreview.tools.checks_interference import groups_of
 from tests.support.seat_tasks import (
@@ -215,6 +225,28 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("the bridge returned status 'error': the read-only open of a confirmed drawing is not yet "
      "validated on a seat (feature 011 probe D14)",
      "extractor/SwReview.AddIn.Tests/Fixtures/review-drawing-questions.json"),
+    # The Standards probe's first three sections, which step 3.1 reads (006 T101 and T102).
+    ("probe-1 exploded_state:", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("open document:", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("IModelDoc2.IsExploded()=", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("IModelDocExtension.IsExploded(out name)=", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("explode_steps=", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("sub-assembly documents:", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("(no loaded document", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("probe-2 appearance_overrides:", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("HasMaterialPropertyValues=", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("GetMaterialPropertyValues2(1, null)=", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("probe-3 component_visibility:", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("Visible=", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("GetVisibility(1, null)=", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("suppression=", "extractor/SwReview.Extractor.Console/Program.cs"),
+    # The Start here rows and the timing, which steps 4.1, 4.5, 5.1 and 5.2 read (007).
+    ("Start here", "extractor/SwReview.AddIn/web/shared/attention.js"),
+    ("Show all", "extractor/SwReview.AddIn/Review/ReviewPage/render.js"),
+    ("Nothing to start with", "reviewer/src/swreview/report/attention.py"),
+    ("net saved: ", "reviewer/src/swreview/cli.py"),
+    ("report: ", "reviewer/src/swreview/cli.py"),
+    ("Net saved minutes: ", "reviewer/src/swreview/report/markdown.py"),
 )
 """Every product sentence the plan quotes, with the file that says it."""
 
@@ -729,6 +761,214 @@ def test_the_documents_list_names_each_document_by_its_id(plan: str) -> None:
         document.document_id for document in package.documents
     ]
     assert f"{package.documents[-1].document_id} drawing " in lines[-1] + " "
+
+
+EARLIER_TASKS = frozenset({("006", "T101"), ("006", "T102"), ("007", "T059"), ("007", "T060")})
+"""The four seat tasks of features 006 and 007 the owner added to this sitting (decision 15A,
+2026-09-24)."""
+EARLIER_PACKAGES = {"006": "006-standards-check", "007": "007-attention-policy-gate"}
+
+
+def test_the_four_earlier_seat_tasks_the_owner_added_are_in_this_sitting(
+    plan: str, results: str
+) -> None:
+    """Decision 15A: 006 T101 and T102 and 007 T059 and T060 each have a step that names them,
+    a row of the results sheet, and are gone from the table of earlier tasks not asked; each is
+    still an open seat task of its package, so the plan asks for work that is there to do."""
+    tagged = set().union(*(qualified_tasks(tags) for _, tags in TAGGED_STEP.findall(plan)))
+    rowed = set().union(*(qualified_tasks(cell) for _, cell, *_ in result_rows(results)))
+    earlier = plan[plan.index("Open seat or key tasks of earlier features") :]
+
+    assert EARLIER_TASKS <= tagged
+    assert EARLIER_TASKS <= rowed
+    assert EARLIER_TASKS.isdisjoint(qualified_tasks(earlier))
+    for number, task in EARLIER_TASKS:
+        assert task in open_seat_tasks(EARLIER_PACKAGES[number]), f"{number} {task}"
+    assert "decision 15A" in re.sub(r"\s+", " ", plan[: plan.index("## The rules")])
+
+
+def test_each_earlier_task_is_read_where_its_documents_are_already_open(
+    plan: str, results: str
+) -> None:
+    """006 T101 and T102 read A and B while step 3.1 has them open; 007 T059 reads the review
+    of A (step 4.1) and the Model check and Standards results of part J (steps 5.1 and 5.2);
+    007 T060 times A's review (step 4.5)."""
+    places = {
+        ("006", "T101"): {"3.1"},
+        ("006", "T102"): {"3.1"},
+        ("007", "T059"): {"4.1", "5.1", "5.2"},
+        ("007", "T060"): {"4.5"},
+    }
+    headings = {number: qualified_tasks(tags) for number, tags in TAGGED_STEP.findall(plan)}
+    rows = [(number, qualified_tasks(cell)) for number, cell, *_ in result_rows(results)]
+
+    for task, steps in places.items():
+        assert {number for number, tasks in headings.items() if task in tasks} == steps, task
+        assert {number for number, tasks in rows if task in tasks} == steps, task
+
+
+def test_the_standards_probe_reads_each_recorded_assembly_right_after_its_dump(plan: str) -> None:
+    """Step 3.1 runs `probe standards` on the active assembly, as its dump does (no `--doc`),
+    into its own report in the probe folder, after the dump and before the fingerprint, so the
+    fingerprint also covers whatever the probe might have touched; the report is read by
+    component id and never copied by name."""
+    dumps = step(plan, "3.1")
+    flat = re.sub(r"\s+", " ", dumps)
+    [probe] = [line for line in dumps.splitlines() if "swreview-extract probe standards" in line]
+
+    assert "--doc" not in probe
+    assert '"$H\\probes\\probe-standards-A.txt"' in probe
+    assert "the same three lines with `B` in place of `A`" in flat
+    assert dumps.index("swreview-extract dump") < dumps.index(probe)
+    assert dumps.index(probe) < dumps.index("Save-Fingerprint 'before'")
+    for section in ("probe-1 exploded_state:", "probe-2 appearance_overrides:",
+                    "probe-3 component_visibility:"):
+        assert section in dumps
+    for gate in ("mutating members: none", "refusals: none", "sheet activation: none",
+                 "document opening: none", "display state: none"):
+        assert gate in flat
+    assert "blocked: no <kind> in A or B" in flat
+    assert "Never a component's, configuration's or view's name (rule 5)" in flat
+    assert "a component is its id (`cmp:` and four digits), never its name" in re.sub(
+        r"\s+", " ", plan[plan.index("## The rules") : plan.index("## When a step fails")]
+    )
+
+
+def test_the_components_step_3_1_reads_are_noted_before_the_sitting(plan: str) -> None:
+    """The engineer finds the kinds PROBE-1 to PROBE-3 ask about in A and B beforehand, and
+    changes nothing to make a missing one."""
+    documents = re.sub(r"\s+", " ", step(plan, "0.2"))
+
+    for kind in ("hidden", "suppressed", "hidden only in a display state", "transparent",
+                 "appearance override", "exploded view", "sub-assemblies"):
+        assert kind in documents, kind
+    assert "Change nothing to make one" in documents
+
+
+def test_the_timing_is_recorded_once_the_backend_no_longer_holds_the_review(plan: str) -> None:
+    """007 T060. A live review's session is saved again at the end of every turn
+    (`chat.sessions.record_timing_live`), so minutes written to its folder while the backend
+    holds it can be lost to a later turn - step 4.4 sends one. Step 4.1 takes the minutes; the
+    command runs in step 4.5 after the restart that leaves A's review read-only, and only
+    there."""
+    chips = step(plan, "4.5")
+    restart = chips.index("The backend restarted, so this review is shown from its run folder.")
+
+    assert plan.count("uv run swreview timing") == 1
+    assert restart < chips.index("uv run swreview timing")
+    assert "baseline" in step(plan, "4.1") and "uv run swreview timing" not in step(plan, "4.1")
+    sessions = (REVIEWER / "src" / "swreview" / "chat" / "sessions.py").read_text(encoding="utf-8")
+    assert "minutes written only to disk would be gone" in re.sub(r"\s+", " ", sessions)
+
+
+def test_the_timing_line_passes_the_four_inputs_swreview_timing_takes(
+    plan: str, tmp_path: Path
+) -> None:
+    """The line step 4.5 pastes names each of the command's four inputs once, each a quoted
+    placeholder, and a placeholder left unreplaced is refused with the message the step
+    quotes, writing nothing."""
+    [line] = [line for line in plan.splitlines() if "uv run swreview timing" in line]
+    given = re.findall(r"(--[a-z-]+) '<[^'<>]+>'", line)
+    timing = get_command(app).commands["timing"]
+    inputs = {opt for param in timing.params for opt in param.opts if opt.startswith("--")}
+
+    assert sorted(given) == sorted(inputs - {"--json"})
+    run = tmp_path / "run"
+    shutil.copytree(FIXTURES / "attention" / "review-folder", run)
+    before = (run / "session.json").read_bytes()
+    refused = CliRunner().invoke(app, ["timing", str(run), "--baseline", "<baseline minutes>"])
+
+    assert refused.exit_code == 2
+    assert "Invalid value for '--baseline'" in refused.output
+    assert "Invalid value for '--baseline'" in step(plan, "4.5")
+    assert (run / "session.json").read_bytes() == before
+
+
+def plan_function(text: str, name: str) -> str:
+    """The whole PowerShell function `name` as the plan's setup block defines it."""
+    start = text.index(f"function {name} ")
+    return text[start : text.index("\n}\n", start) + 2]
+
+
+def run_powershell(script: str, folder: Path) -> list[str]:
+    """Run `script` in Windows PowerShell and answer the lines it printed."""
+    path = folder / "run.ps1"
+    path.write_text(script, encoding="utf-8-sig")
+    completed = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+         str(path)],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stderr == "", completed.stderr
+    return completed.stdout.splitlines()
+
+
+def show_start_here(plan: str, run: Path, folder: Path) -> list[str]:
+    """What the plan's `Show-StartHere` prints for the run folder `run`."""
+    quoted = str(run).replace("'", "''")
+    return run_powershell(f"{plan_function(plan, 'Show-StartHere')}\nShow-StartHere '{quoted}'\n",
+                          folder)
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+@pytest.mark.parametrize("fixture", ["review-folder", "check-folder"])
+def test_show_start_here_prints_the_reports_rows_in_its_order(
+    plan: str, tmp_path: Path, fixture: str
+) -> None:
+    """007 T059 compares the pane's Start here rows with `report.md`'s: the helper prints the
+    finding ids the report's own section lists, in its order and no more (the first `top_n` of
+    the ranking), for a review's folder and a check folder alike."""
+    run = tmp_path / fixture
+    shutil.copytree(FIXTURES / "attention" / fixture, run)
+    rerender_run_folder(run)
+    ranking = rank(load_session(run / "session.json"))
+    expected = [row.finding_id for row in ranking.rows[: ranking.top_n]]
+
+    lines = show_start_here(plan, run, tmp_path)
+
+    assert expected
+    assert lines == ["Start here in report.md: " + ", ".join(expected)]
+    assert plan.index("function Show-StartHere ") < plan.index("Set-Location $R")
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_show_start_here_prints_the_nothing_to_start_with_line(plan: str, tmp_path: Path) -> None:
+    run = tmp_path / "run"
+    shutil.copytree(FIXTURES / "attention" / "review-folder", run)
+    session = json.loads((run / "session.json").read_text(encoding="utf-8"))
+    session["findings"] = []
+    (run / "session.json").write_text(json.dumps(session), encoding="utf-8")
+    rerender_run_folder(run)
+    [nothing] = [line for line in (run / "report.md").read_text(encoding="utf-8").splitlines()
+                 if line.startswith("Nothing to start with")]
+
+    assert show_start_here(plan, run, tmp_path) == [nothing]
+
+
+TIME = re.compile(r"(?:(\d+) h)?\s*(?:(\d+) min)?")
+
+
+def minutes(estimate: str) -> int:
+    """`3 h 55 min`, `3 h` or `50 min` as minutes."""
+    match = TIME.fullmatch(estimate.strip())
+    assert match, estimate
+    hours, mins = match.groups()
+    return int(hours or 0) * 60 + int(mins or 0)
+
+
+def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
+    """The headline figure is the table's steps added up, to the nearest quarter hour, so a
+    step that grows (decision 15A added about 25 minutes) moves the headline too."""
+    section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
+    rows = re.findall(r"^\| [^|]+ \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
+    [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
+
+    assert len(rows) == 7
+    assert abs(sum(minutes(row) for row in rows) - (int(hours) * 60 + int(mins or 0))) <= 7
 
 
 def powershell_parse_errors(sources: dict[str, str], folder: Path) -> str:
