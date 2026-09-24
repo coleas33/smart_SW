@@ -24,6 +24,10 @@ namespace SwReview.AddIn.Tests;
 /// <b>The three questions are the three shapes</b> contracts/questions.md names: a short form
 /// with offered answers and the goal it blocks, a short form answered in free text, and an older
 /// request with only its long `what`.
+///
+/// <b>The drawing line is there</b> (feature 009 T086, the owner's decision 10A, 2026-09-23): a
+/// summary from this build carries one line about drawings, and a test of an older backend
+/// removes it.
 /// </summary>
 internal static class SummarySample
 {
@@ -32,6 +36,12 @@ internal static class SummarySample
     public const string QuestionsText = "3 questions for you";
 
     public const string NotLoadedText = "3 of 89 parts not loaded";
+
+    /// <summary>
+    /// The summary's one line about drawings (feature 009 T086, the owner's decision 10A): the
+    /// backend's words, which no page could compose from the ranking beside them.
+    /// </summary>
+    public const string DrawingsText = "2 drawings read with this review; 1 drawing beside a part was not opened";
 
     public const string ResumeText =
         "Sending resumes the review once. Its last round sent 405,861 input tokens.";
@@ -112,6 +122,7 @@ internal static class SummarySample
         }));
         summary["questions"] = JsonNode.Parse(@"{""count"":0,""text"":null,""items"":[]}");
         summary["not_loaded"] = null;
+        summary["drawings"] = null;
         ranking["summary"] = summary;
         return ranking.ToJsonString();
     }
@@ -220,6 +231,10 @@ internal static class SummarySample
             }
         },
         { "not_loaded", new { count = 3, total = 89, text = NotLoadedText } },
+
+        // The page reads `text` alone, as it reads `questions` and `not_loaded`: the other members
+        // of the line are the backend's (contracts/review-summary.md section 4).
+        { "drawings", new { text = DrawingsText } },
         {
             "goals", Array.ConvertAll(Goals, line => (object)new Dictionary<string, object?>
             {

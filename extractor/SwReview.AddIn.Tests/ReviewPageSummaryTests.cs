@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -23,6 +24,9 @@ namespace SwReview.AddIn.Tests;
 /// </summary>
 public sealed class ReviewPageSummaryTests
 {
+    /// <summary>A drawing line that carries markup: the backend's text travels verbatim, so this is characters.</summary>
+    private const string HostileDrawings = "<img src=x onerror=alert(3)><script>alert(4)</script> 2 drawings read";
+
     private static readonly Lazy<Run> Scripted = new Lazy<Run>(Drive);
 
     [Fact]
@@ -39,7 +43,8 @@ public sealed class ReviewPageSummaryTests
     /// <summary>
     /// The block reads in the order of the Independent Test: the headline, the three groups
     /// (and decided, which the backend sent because it is non-zero), the questions, the parts not
-    /// loaded, then one line per goal.
+    /// loaded, the one line about drawings (T086, edited deliberately: the owner's decision 10A),
+    /// then one line per goal.
     /// </summary>
     [Fact]
     public void TheSummaryReadsTheHeadlineTheGroupsTheQuestionsTheMissingPartsAndTheGoalsInOrder()
@@ -47,11 +52,53 @@ public sealed class ReviewPageSummaryTests
         JsonElement first = Scripted.Value.First;
 
         Assert.Equal(
-            new[] { "summary-headline", "summary-groups", "summary-questions", "summary-not-loaded", "summary-goals" },
+            new[] { "summary-headline", "summary-groups", "summary-questions", "summary-not-loaded", "summary-drawings", "summary-goals" },
             ReviewPageDriver.Strings(first, "children"));
         Assert.Equal(SummarySample.Headline, first.GetProperty("headline").GetString());
         Assert.Equal(SummarySample.QuestionsText, first.GetProperty("questions").GetString());
         Assert.Equal(SummarySample.NotLoadedText, first.GetProperty("notLoaded").GetString());
+    }
+
+    /// <summary>
+    /// Feature 009 T086 (the owner's decision 10A): the summary's one line about drawings is the
+    /// backend's text, printed as sent - the page counts no drawing and composes no word of it.
+    /// </summary>
+    [Fact]
+    public void TheDrawingLineIsTheBackendsTextPrintedVerbatim()
+    {
+        JsonElement first = Scripted.Value.First;
+
+        Assert.Equal(SummarySample.DrawingsText, first.GetProperty("drawings").GetString());
+        Assert.Equal(1, first.GetProperty("drawingLines").GetInt32());
+    }
+
+    /// <summary>The backend's line is characters, never an element or a handler (FR-029).</summary>
+    [Fact]
+    public void AHostileDrawingLineRendersAsLiteralTextAndAddsNoElement()
+    {
+        JsonElement hostile = Scripted.Value.HostileDrawings;
+
+        Assert.Equal(HostileDrawings, hostile.GetProperty("drawings").GetString());
+        Assert.Equal(0, hostile.GetProperty("injected").GetInt32());
+        Assert.Equal(0, hostile.GetProperty("handlers").GetInt32());
+    }
+
+    /// <summary>
+    /// No drawing line where the backend sent none: `drawings` null - as the zero-findings summary
+    /// sends it - and a summary with no `drawings` member at all, from a backend older than the
+    /// line, both leave the block exactly as it was before it.
+    /// </summary>
+    [Fact]
+    public void ANullOrAbsentDrawingLineRendersNothing()
+    {
+        JsonElement older = Scripted.Value.Older;
+
+        Assert.Equal(0, Scripted.Value.Second.GetProperty("drawingLines").GetInt32());
+        Assert.Equal(0, older.GetProperty("drawingLines").GetInt32());
+        Assert.Equal(
+            new[] { "summary-headline", "summary-groups", "summary-questions", "summary-not-loaded", "summary-goals" },
+            ReviewPageDriver.Strings(older, "children"));
+        Assert.Equal(SummarySample.Headline, older.GetProperty("headline").GetString());
     }
 
     [Fact]
@@ -171,6 +218,16 @@ public sealed class ReviewPageSummaryTests
                 await driver.EndSession("chat-1");
                 run.Second = await driver.Read(ReadSummary);
 
+                // A backend older than the drawing line sends no `drawings` member at all.
+                await driver.RouteAttention("chat-1", SummarySample.Json(summary => summary.Remove("drawings")));
+                await driver.EndSession("chat-1");
+                run.Older = await driver.Read(ReadSummary);
+
+                await driver.RouteAttention(
+                    "chat-1", SummarySample.Json(summary => summary["drawings"] = new JsonObject { ["text"] = HostileDrawings }));
+                await driver.EndSession("chat-1");
+                run.HostileDrawings = await driver.Read(ReadSummary);
+
                 await driver.StartReview();
                 await driver.RouteAttention("chat-2", AttentionSample.Json());
                 await driver.EndSession("chat-2");
@@ -219,6 +276,8 @@ return JSON.stringify({
   groupGoals: groupGoals,
   questions: h.text(section, '.summary-questions'),
   notLoaded: h.text(section, '.summary-not-loaded'),
+  drawings: h.text(section, '.summary-drawings'),
+  drawingLines: section.querySelectorAll('.summary-drawings').length,
   goalClasses: Array.prototype.map.call(goals, function (g) { return g.className; }),
   goalTitles: h.texts(section, '.summary-goal .goal-title'),
   goalStates: h.texts(section, '.summary-goal .goal-state'),
@@ -240,6 +299,10 @@ return JSON.stringify({
         public JsonElement Back { get; set; }
 
         public JsonElement Second { get; set; }
+
+        public JsonElement Older { get; set; }
+
+        public JsonElement HostileDrawings { get; set; }
 
         public JsonElement NoSummary { get; set; }
     }
