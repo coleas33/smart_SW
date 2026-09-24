@@ -54,6 +54,16 @@ A package with no native sheet returns exactly today's payloads (FR-037). Showin
 (`get_drawing_sheet`, `find_dimensions`) is not computing with one; only `resolve_dimension`, the
 reference every calculating tool takes, is gated.
 
+*Corrected 2026-09-23 on review*: an ingested sheet of the same document and name as a native one
+is hidden from `find_dimensions` and `resolve_dimension` (`native.shadowed_sheets`) **only once
+`DRAWING_BINDING_VALIDATED` is set**. While it is false the native dimension cannot be computed
+with, so hiding the PDF sheet left nothing on that sheet a calculating tool could use and refused a
+PDF reference that resolved before this feature; the PDF sheet's dimensions are now listed first
+and resolve, as the spec's edge case ("a dimension read from a PDF is taken as today") requires.
+With the switch set, a reference into a hidden sheet is refused naming the native sheet that
+replaces it. `get_drawing_sheet`'s preference for the native sheet by name is display only and
+unchanged.
+
 ## 3. The binding (`drawings/binding.py`)
 
 ```python
