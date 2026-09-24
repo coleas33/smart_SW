@@ -559,6 +559,74 @@ def test_a_radial_dimensions_limits_are_doubled() -> None:
 
 
 @pytest.mark.usefixtures("validated")
+def test_an_untoleranced_radius_gets_the_general_band_doubled(profile: StandardsProfile) -> None:
+    """The band tolerances the value written, a radius: R2.25 at two decimals is 2.25 +/- 0.15,
+    so the diameter spans 4.2 to 4.8 - the limits an explicit R2.25 +/- 0.15 gives (step 1
+    doubles those), never the 4.35 to 4.65 a diameter written to two decimals gets."""
+    drawn = Drawn()
+    drawn.dimension(drawn.view(), "fac:0002", 2.25, type_raw=5, prefix="R", precision=2)
+    package = drawn.package()
+
+    answer = drawing_answer(package, BORE)
+    bound = resolved(resolve_tolerance(package, profile, BORE))
+
+    assert (answer.decimal_places, answer.unit, answer.radial) == (2, "mm", True)
+    assert answer.why == (
+        "ddm:0001 states no tolerance of its own and writes 2 decimals in mm as a radius, which "
+        "the general tolerance reads, doubled for the diameter"
+    )
+    assert bound.source_kind == "general"
+    assert bound.cited.endswith("the 2-decimal band, doubled: the drawing writes it as a radius")
+    limits = limits_mm(bound.dimension)
+    assert (limits.min_mm, limits.max_mm) == (4.2, 4.8)
+
+
+@pytest.mark.usefixtures("validated")
+def test_an_explicit_radius_tolerance_and_the_doubled_band_agree(
+    profile: StandardsProfile,
+) -> None:
+    """One rule for a radius, whichever step binds it."""
+    explicit = Drawn()
+    explicit.dimension(explicit.view(), "fac:0002", 2.25, type_raw=5, prefix="R",
+                       tolerance=("symmetric", 0.15, None), tolerance_type_raw=4)
+    general = Drawn()
+    general.dimension(general.view(), "fac:0002", 2.25, type_raw=5, prefix="R", precision=2)
+
+    by_drawing = limits_mm(resolved(resolve_tolerance(explicit.package(), profile, BORE)).dimension)
+    by_band = limits_mm(resolved(resolve_tolerance(general.package(), profile, BORE)).dimension)
+
+    assert (by_drawing.min_mm, by_drawing.max_mm) == (by_band.min_mm, by_band.max_mm) == (4.2, 4.8)
+
+
+@pytest.mark.usefixtures("validated")
+@pytest.mark.parametrize("radius_first", [True, False])
+def test_a_radius_and_a_diameter_at_one_precision_bind_nothing_and_say_so(
+    profile: StandardsProfile, radius_first: bool
+) -> None:
+    """The band gives a radius twice the diameter's tolerance, so the two disagree."""
+    drawn = Drawn()
+    radius = {"type_raw": 5, "prefix": "R", "precision": 2}
+    if radius_first:
+        drawn.dimension(drawn.view(), "fac:0002", 2.25, **radius)
+        drawn.dimension(drawn.view(), "fac:0002", 4.5, precision=2)
+    else:
+        drawn.dimension(drawn.view(), "fac:0002", 4.5, precision=2)
+        drawn.dimension(drawn.view(), "fac:0002", 2.25, **radius)
+    package = drawn.package()
+
+    answer = drawing_answer(package, BORE)
+    why = searched(resolve_tolerance(package, profile, BORE))
+
+    radius_id, diameter_id = ("ddm:0001", "ddm:0002") if radius_first else ("ddm:0002", "ddm:0001")
+    assert (answer.decimal_places, answer.unit, answer.radial) == (None, None, False)
+    assert answer.why == (
+        f"{radius_id} is written as a radius and {diameter_id} as a diameter, so the general "
+        "tolerance's band would give the size two different tolerances"
+    )
+    assert why["general"].startswith("the precision its dimension is written to is not recorded")
+
+
+@pytest.mark.usefixtures("validated")
 def test_a_fit_class_on_the_drawing_binds_through_iso_286() -> None:
     drawn = Drawn()
     drawn.dimension(drawn.view(), "fac:0001", 3.0, tolerance_type_raw=7, fit_hole_class="H8")
@@ -677,6 +745,37 @@ def test_general_names_the_table_and_supplies_nothing() -> None:
     assert answer.why == (
         "ddm:0001 is governed by the drawing's general tolerance table, which is not converted"
     )
+
+
+@pytest.mark.usefixtures("validated")
+@pytest.mark.parametrize("general_first", [True, False])
+def test_a_general_table_binding_beside_a_written_precision_binds_nothing(
+    profile: StandardsProfile, general_first: bool
+) -> None:
+    """One dimension says an ISO 2768 class governs the size, another that the company band of
+    its written precision does: the drawing disagrees with itself (FR-023), so no precision is
+    handed to the general block and the reason names both, whichever comes first."""
+    drawn = Drawn()
+    if general_first:
+        drawn.dimension(drawn.view(), "fac:0002", 4.5, precision=2, tolerance_type_raw=11)
+        drawn.dimension(drawn.view(), "fac:0002", 4.5, precision=2)
+    else:
+        drawn.dimension(drawn.view(), "fac:0002", 4.5, precision=2)
+        drawn.dimension(drawn.view(), "fac:0002", 4.5, precision=2, tolerance_type_raw=11)
+    package = drawn.package()
+
+    answer = drawing_answer(package, BORE)
+    why = searched(resolve_tolerance(package, profile, BORE))
+
+    governed, written = ("ddm:0001", "ddm:0002") if general_first else ("ddm:0002", "ddm:0001")
+    assert (answer.decimal_places, answer.unit, answer.conflict) == (None, None, None)
+    assert answer.why == (
+        f"{governed} is governed by the drawing's general tolerance table, which is not "
+        f"converted, and {written} writes 2 decimals; the two disagree, so no precision is "
+        "handed to the general tolerance"
+    )
+    assert why["drawing"] == answer.why
+    assert why["general"].startswith("the precision its dimension is written to is not recorded")
 
 
 @pytest.mark.usefixtures("validated")

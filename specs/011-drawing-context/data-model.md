@@ -199,7 +199,8 @@ existence check failed), `drawing_document_settings`, `drawing_view_state`, `dim
 |---|---|---|
 | `dimension` | `Dimension` \| None | the first binding with an explicit tolerance |
 | `cited` | str \| None | "drawing {document}, sheet {name}, view {name}, {ddm id}" |
-| `decimal_places`, `unit` | int \| None, str \| None | from the first untoleranced or block-toleranced binding, when every such binding agrees |
+| `decimal_places`, `unit` | int \| None, str \| None | from the first untoleranced or block-toleranced binding, when every such binding agrees and no `GENERAL` (11) binding is beside them |
+| `radial` | bool | the written precision is a radius's (type 5 or 14): the general band is doubled for the diameter; every supplying binding agrees on it (*added 2026-09-23 on review*) |
 | `conflict` | str \| None | a later binding with different limits or a different precision |
 | `why` | str | why nothing bound, when nothing did |
 

@@ -386,6 +386,11 @@ class DrawingAnswer:
     unit: Literal["mm", "in"] | None = None
     """The written precision and unit every untoleranced or block-toleranced binding agrees on,
     when no binding states limits (step 2)."""
+    radial: bool = False
+    """Whether that written precision is a radius's (`swDimensionType_e` 5 or 14): the general
+    band tolerances the value written, so the diameter's band is doubled, as step 1 doubles a
+    radius's stated limits. Every binding that supplies the precision agrees on it, or none
+    supplies it."""
     conflict: str | None = None
     """A later binding with different limits: the drawing source's own conflict."""
     why: str | None = None
@@ -564,12 +569,16 @@ def _drawing_size(
     if limited:
         return _first_bound(limited, subject)
 
-    written: list[tuple[str, int, Literal["mm", "in"]]] = []
+    from swreview.drawings.binding import RADIAL_DIMENSION_TYPES
+
+    written: list[tuple[str, int, Literal["mm", "in"], bool]] = []
+    governed: list[str] = []
     for binding in bindings:
         record = binding.record
         assert isinstance(record, DisplayDimensionRecord)
         raw = record.tolerance_type_raw
         if raw == GENERAL_TABLE_TYPE:
+            governed.append(record.id)
             reasons.append(
                 f"{record.id} is governed by the drawing's general tolerance table, which is "
                 "not converted"
@@ -587,25 +596,47 @@ def _drawing_size(
         unit = written_unit(record, binding.view.record)
         if unit is None:
             return DrawingAnswer(why=written_unit_reason(record, binding.view.record))
-        written.append((record.id, places, unit))
+        written.append(
+            (record.id, places, unit, record.dimension_type_raw in RADIAL_DIMENSION_TYPES)
+        )
     if not written:
         return DrawingAnswer(why="; ".join(reasons))
-    (first, places, unit), *rest = written
-    for other, other_places, other_unit in rest:
+    (first, places, unit, radial), *rest = written
+    if governed:
+        # One binding says an ISO 2768 class governs, another the band of its written
+        # precision: the drawing disagrees with itself (FR-023), so neither is handed on.
+        return DrawingAnswer(
+            why=(
+                f"{governed[0]} is governed by the drawing's general tolerance table, which is "
+                f"not converted, and {first} writes {places} decimals; the two disagree, so no "
+                "precision is handed to the general tolerance"
+            )
+        )
+    for other, other_places, other_unit, other_radial in rest:
         if other_places != places:
             return DrawingAnswer(why=f"{first} writes {places} decimals and {other} writes "
                                      f"{other_places}")
         if other_unit != unit:
             return DrawingAnswer(why=f"{first} is written in {unit} and {other} in {other_unit}")
+        if other_radial != radial:
+            radius, diameter = (first, other) if radial else (other, first)
+            return DrawingAnswer(
+                why=(
+                    f"{radius} is written as a radius and {diameter} as a diameter, so the "
+                    "general tolerance's band would give the size two different tolerances"
+                )
+            )
     ids, several = _plural_ids([item[0] for item in written])
     return DrawingAnswer(
         decimal_places=places,
         unit=unit,
+        radial=radial,
         record_id=first,
         why=(
             f"{ids} {'state' if several else 'states'} no tolerance of "
             f"{'their' if several else 'its'} own and {'write' if several else 'writes'} "
-            f"{places} decimals in {unit}, which the general tolerance reads"
+            f"{places} decimals in {unit}{' as a radius' if radial else ''}, which the general "
+            f"tolerance reads{', doubled for the diameter' if radial else ''}"
         ),
     )
 
@@ -921,7 +952,8 @@ def _general_for(
     Only when the subject carries no precision of its own and the drawing's unit is the one the
     profile's bands are counted in (FR-022): a version 2 profile, or an empty
     `drawing.dimension_unit`, says which setting is missing; another unit names both units. A
-    missing profile or general block keeps feature 010's own reasons.
+    missing profile or general block keeps feature 010's own reasons. A precision written on a
+    radius gets the band doubled for the diameter, as a radius's stated limits are (step 1).
     """
     if subject.decimal_places is not None or drawing.decimal_places is None:
         return _general_answer(profile, subject)
@@ -935,7 +967,14 @@ def _general_for(
             f"the drawing writes {subject.label} in {drawing.unit} and the profile's bands are "
             f"counted in {declared}"
         )
-    return _general_answer(profile, replace(subject, decimal_places=drawing.decimal_places))
+    answer = _general_answer(profile, replace(subject, decimal_places=drawing.decimal_places))
+    if isinstance(answer, str) or not drawing.radial:
+        return answer
+    dimension, cited = answer
+    return (
+        dimension.model_copy(update={"tolerance": _doubled(dimension.tolerance)}),
+        f"{cited}, doubled: the drawing writes it as a radius",
+    )
 
 
 @dataclass(frozen=True)

@@ -92,6 +92,15 @@ research R2.8)".
    supply `decimal_places` and `unit` when every one of them agrees; disagreement supplies neither and
    says "{a} writes {n} decimals and {b} writes {m}". A `GENERAL` (11) binding supplies nothing:
    "{record} is governed by the drawing's general tolerance table, which is not converted".
+   *Corrected 2026-09-23 on review*: a `GENERAL` binding beside one that writes a precision is the
+   drawing disagreeing with itself, so neither supplies anything: "{g} is governed by the drawing's
+   general tolerance table, which is not converted, and {w} writes {n} decimals; the two disagree,
+   so no precision is handed to the general tolerance" (it had been dropped without a word, and the
+   company band bound). A precision written on a radius (type 5 or 14) sets `radial`, and source 5
+   doubles its band for the diameter, as step 1 doubles a radius's stated limits (cited "...,
+   doubled: the drawing writes it as a radius"); a radius and a diameter at one precision disagree
+   ("{r} is written as a radius and {d} as a diameter, so the general tolerance's band would give the
+   size two different tolerances") and supply nothing.
 3. **Position.** For `hole_position`, the first bound frame's zone through 010's `_frame_zone`
    (generalised to take a list of `GtolFrame`); a value without a unit is read in the drawing's
    `length_unit_raw`, cited "read in the drawing's unit, {mm|in}"; an unread unit binds nothing.
