@@ -925,6 +925,11 @@
     if (body.not_loaded && body.not_loaded.text) {
       block.appendChild(el('p', 'summary-not-loaded', body.not_loaded.text));
     }
+    // The one line about drawings (feature 009 T087, the owner's decision 10A): the backend's
+    // text as sent, and nothing where a backend sends none.
+    if (body.drawings && body.drawings.text) {
+      block.appendChild(el('p', 'summary-drawings', body.drawings.text));
+    }
 
     var goals = el('ul', 'summary-goals');
     var goalRows = body.goals || [];

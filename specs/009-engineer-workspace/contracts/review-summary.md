@@ -88,7 +88,10 @@ nothing (no standards profile, every part lightweight) reads `not_reached` by ro
 one line per group (`label` in the lead face, `text`, then each `by_goal` as "title count"); the
 questions `text`; the `not_loaded` `text`; the `drawings` `text`, verbatim, when `drawings` is not
 `None` (*added 2026-09-23, decision 10A*); one line per goal (`title`, `state_label`, `reason`) with
-`detail` behind a shut `<details>`. Class names interpolate `kind` and `state` (`group-decide`,
+`detail` behind a shut `<details>`. *Amended 2026-09-23 (the owner's decision 10A; the page's half,
+009 T086 and T087)*: the one line about drawings is printed verbatim from `drawings.text`, in the
+second tier of ink (`--ink-2`), and nothing is printed when `drawings` is null or its `text` is
+empty; the field itself is section 4's, the backend's. Class names interpolate `kind` and `state` (`group-decide`,
 `goal-not_reached`) and the stylesheet colours them from `tokens.css`: decide `--judge`, fix
 `--critical`, verify `--warn`, issues `--critical`, checked `--good`, not reached `--warn`, not
 applicable `--quiet`. The page prints and never counts, groups or orders: every number and word is
@@ -110,7 +113,8 @@ print `component_names[id]` where present and the id where not; the id itself is
 
 A ranking with no `summary` renders exactly as before this feature: no summary block, no empty
 section, the Start-here panel where it was. A summary with no `drawings` key (a backend before
-decision 10A), or with `drawings: null`, has no drawings line. A summary with zero findings shows the headline "No
+decision 10A), or with `drawings: null`, has no drawings line and renders every other line as
+before it. A summary with zero findings shows the headline "No
 findings were recorded", the three groups at zero, and every goal line.
 
 ## 7. SC-001

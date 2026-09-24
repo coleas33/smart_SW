@@ -414,9 +414,15 @@ body.results-stale .card.evidence {
 }
 
 .summary-questions,
-.summary-not-loaded {
+.summary-not-loaded,
+.summary-drawings {
   margin: 0;
   font-size: var(--text-small);
+}
+
+/* The one line about drawings: information, so the second tier of ink rather than a state colour. */
+.summary-drawings {
+  color: var(--ink-2);
 }
 
 .summary-questions {
