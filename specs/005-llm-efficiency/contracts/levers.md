@@ -507,7 +507,7 @@ and `ARRAY_KINDS` says which kind each is, so a new array fails a test until it 
 *Amended 2026-09-23 (011 T096)*: a sixth switch - whether the pre-run judged an interference group,
 without which lever 13 leaves `check_interference_group` on - adds two pane-default arrays (the
 slim pre-run array without a bridge, with and without drawing evidence, the interference tool
-kept) and two measured ones, twenty-eight in all (011 `contracts/questions.md` section 7). The
+kept: 30,447 and 30,881 bytes on OpenAI) and two measured ones, twenty-eight in all (011 `contracts/questions.md` section 7). The
 per-tool ceiling (`TOOL_OBJECT_CEILING`) still holds every tool object, and levers 2 and 4 keep
 their own measurements (`lever_two_rows`, `tier_delta`). The ceiling's history - 36,000 from this
 feature, 38,000 when lever 13 was decided, then this decision - is feature 008's research R2.57;
