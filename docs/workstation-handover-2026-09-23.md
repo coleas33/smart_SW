@@ -40,8 +40,10 @@ the sitting's runs) and 009 T085 (restore them offline).
    `%LOCALAPPDATA%\SwReview\tokenizer\` (runbook section 2).
 3. **A provider key** for the pane's Settings (the paid reviews), with the model and effort to use,
    and **a Gemini key** for 008 T106, which is set for one shell only, at a hidden prompt. The
-   people, the cap for the big assembly's review and the answer to a "Before this review" panel
-   are in the test plan's section 0.1.
+   people and the cap for the big assembly's review are in the test plan's section 0.1. A
+   "Before this review" panel is answered as the owner decided (decision 14A, 2026-09-24, not a
+   default awaiting confirmation): write down its first line, press "Review available evidence",
+   and never resolve or unsuppress a part (the test plan's step 4, item 1).
 4. **The documents the probes and reviews need**, named by the engineer before the sitting (the
    test plan's section 0.2 gives each a letter and says what it must carry): the
    two recorded assemblies (008 T102 and T103 name them); a multi-sheet drawing with a revision
