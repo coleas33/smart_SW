@@ -538,6 +538,38 @@ public class PackageAppenderTests : IDisposable
             new Gap { Kind = GapKind.Unsupported, EntityKind = "drawing", EntityId = null, Reason = "x" }));
     }
 
+    /// <summary>
+    /// Feature 011 T088 (2026-09-23): the cross-language pin. The backend's tests play this host
+    /// - `reviewer/tests/unit/test_confirmed_drawing_read.py`'s fake host rewords the standing gap
+    /// on a read, and its `test_the_fake_host_words_the_stale_gap_as_the_extractor_does` asserts
+    /// these same three literals - so neither the extractor's words nor the fake's can change
+    /// without the other side failing.
+    /// </summary>
+    [Fact]
+    public void TheStandingAndRewordedSentencesAreTheOnesTheBackendsFakeHostPlays()
+    {
+        Assert.Equal(
+            "No open drawing shows this design, so no drawing was read natively. Open its drawing "
+            + "in SOLIDWORKS and extract again to include it.",
+            PackageWriter.NoOpenDrawingGapSentence);
+        Assert.Equal(
+            "The extraction read no drawing natively: its drawing phase did not run. Read afterwards, "
+            + "when the engineer confirmed the candidate question: 'FICT-KALO-8001.SLDDRW' (opened "
+            + "read-only by the review).",
+            PackageWriter.DrawingsReadAfterExtractionGapSentence(new[] { ("FICT-KALO-8001.SLDDRW", true) }));
+        Assert.Equal(
+            "The extraction read no drawing natively: its drawing phase did not run. Read afterwards, "
+            + "when the engineer confirmed the candidate question: 'FICT-KALO-8001.SLDDRW' (opened "
+            + "read-only by the review), 'FICT-KALO-8002.SLDDRW' (already open, read as it stood) and "
+            + "'FICT-KALO-8003.SLDDRW' (opened read-only by the review).",
+            PackageWriter.DrawingsReadAfterExtractionGapSentence(new[]
+            {
+                ("FICT-KALO-8001.SLDDRW", true),
+                ("FICT-KALO-8002.SLDDRW", false),
+                ("FICT-KALO-8003.SLDDRW", true),
+            }));
+    }
+
     private static EvidencePackage NewPackage() => new EvidencePackage
     {
         PackageId = Guid.NewGuid(),

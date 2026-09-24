@@ -44,25 +44,19 @@ public sealed class ReviewPageDrawingQuestionsTests
     /// <summary>`checks/drawing_context.CANDIDATE_CONFIRM` (contracts/questions.md section 4).</summary>
     public const string CandidateConfirm = "Yes, open it read-only and read it";
 
-    public const string FileName = "review-drawing-questions.json";
-
-    private const string WriteCommand = "uv run python tests/fixtures/pane/generate_drawing_questions.py --write";
-
-    private static readonly Lazy<JsonElement> Fixture = new Lazy<JsonElement>(ReadFixture);
-
     private static readonly Lazy<Run> Scripted = new Lazy<Run>(Drive);
 
-    private static JsonElement[] Asked => Items(Fixture.Value.GetProperty("questions_asked"));
+    private static JsonElement[] Asked => Items(DrawingQuestionsFixture.Value.GetProperty("questions_asked"));
 
-    private static JsonElement[] OpenAfter => Items(Fixture.Value.GetProperty("questions_open_after"));
+    private static JsonElement[] OpenAfter => Items(DrawingQuestionsFixture.Value.GetProperty("questions_open_after"));
 
     private static (string RequestId, string Answer)[] Answers =>
-        Fixture.Value.GetProperty("answers").EnumerateArray()
+        DrawingQuestionsFixture.Value.GetProperty("answers").EnumerateArray()
             .Select(pair => (pair[0].GetString()!, pair[1].GetString()!))
             .ToArray();
 
     /// <summary>Every `coverage` event body of the review, in the order the backend emitted it.</summary>
-    private static JsonElement[] Coverage => Fixture.Value.GetProperty("coverage").EnumerateArray().ToArray();
+    private static JsonElement[] Coverage => DrawingQuestionsFixture.Value.GetProperty("coverage").EnumerateArray().ToArray();
 
     // ---- the fixture is the one these tests are about -----------------------------------------
 
@@ -289,17 +283,7 @@ public sealed class ReviewPageDrawingQuestionsTests
 
     /// <summary>The summary's questions replaced by the fixture's block of that name.</summary>
     private static void Ask(JsonObject summary, string block) =>
-        summary["questions"] = JsonNode.Parse(Fixture.Value.GetProperty(block).GetRawText());
-
-    private static JsonElement ReadFixture()
-    {
-        string path = Path.Combine(AppContext.BaseDirectory, "Fixtures", FileName);
-        Assert.True(
-            File.Exists(path),
-            FileName + " was not copied next to the test assembly; check the Content item in the csproj, "
-            + "and regenerate it with `" + WriteCommand + "` from reviewer/.");
-        return JsonDocument.Parse(File.ReadAllText(path)).RootElement.Clone();
-    }
+        summary["questions"] = JsonNode.Parse(DrawingQuestionsFixture.Value.GetProperty(block).GetRawText());
 
     private static JsonElement[] Items(JsonElement block) => block.GetProperty("items").EnumerateArray().ToArray();
 

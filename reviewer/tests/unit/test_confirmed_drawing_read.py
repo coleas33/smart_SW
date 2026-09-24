@@ -13,16 +13,17 @@ opens nothing; a review with no bridge calls nothing and says why.
 
 The fake bridge here plays the host (the add-in, extractor lane T072-T074): it answers with the
 result shape of section 2, or raises `BridgeError` with the host's refusal, and on a read writes
-the package the host's `PackageAppender.MergeDrawing` would leave in the run folder.
+the package the host's `PackageAppender.MergeDrawing` would leave in the run folder - including,
+since T079, the dump's standing drawing gap reworded in its own place (section 4 below, T088).
 """
 
 from __future__ import annotations
 
 import json
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 
@@ -37,7 +38,7 @@ from swreview.checks.drawing_context import (
     CONTEXT_CHECK,
 )
 from swreview.ir.loader import load_package, save_package
-from swreview.ir.models import EvidencePackage
+from swreview.ir.models import EvidencePackage, Gap
 from swreview.tools.drawings import (
     CONFIRMED_OPEN_CHECK,
     DRAWINGS_TOOL,
@@ -57,6 +58,24 @@ NOT_VALIDATED_BY_THE_HOST = (
 )
 
 Answer = dict[str, Any] | BridgeError | Callable[[], dict[str, Any]]
+
+StaleGap = Literal["reworded", "left", "dropped"]
+"""What a host does with the dump's standing drawing gap on a read: rewords it, as
+`PackageAppender.MergeDrawing` has since feature 011 T079; leaves it, as a host before T079 did;
+or drops it."""
+
+NO_DRAWING_GAP = Gap(
+    kind="unsupported",
+    entity_kind="drawing",
+    entity_id=None,
+    reason=(
+        "No open drawing shows this design, so no drawing was read natively. Open its drawing "
+        "in SOLIDWORKS and extract again to include it."
+    ),
+    error=None,
+)
+"""The package-level gap the extractor writes when no open drawing showed the design
+(`PackageWriter.NoOpenDrawingGapSentence`): stale once a confirmed candidate is read."""
 
 
 class FakeHost:
@@ -84,8 +103,53 @@ class FakeHost:
         pass
 
 
-def merged(folder: Path, document_id: str) -> Callable[[], dict[str, Any]]:
-    """What the host does on a read: append the drawing and drop the candidate row, then say so."""
+def is_drawing_phase_gap(gap: Gap) -> bool:
+    """`PackageWriter.IsDrawingPhaseGap`: the dump's standing drawing gap by its shape - kind
+    `unsupported`, entity kind `drawing`, naming no entity - never by its words."""
+    return gap.kind == "unsupported" and gap.entity_kind == "drawing" and gap.entity_id is None
+
+
+def drawings_read_afterwards(read: Sequence[tuple[str, bool]]) -> str:
+    """`PackageWriter.DrawingsReadAfterExtractionGapSentence`, word for word: every drawing read
+    after the extraction, as `(file name, opened by the review)`, in the order it was merged."""
+    named = [
+        f"'{name}' ("
+        + ("opened read-only by the review" if opened else "already open, read as it stood")
+        + ")"
+        for name, opened in read
+    ]
+    listed = named[0] if len(named) == 1 else ", ".join(named[:-1]) + " and " + named[-1]
+    return (
+        "The extraction read no drawing natively: its drawing phase did not run. Read afterwards, "
+        f"when the engineer confirmed the candidate question: {listed}."
+    )
+
+
+def host_gaps(package: EvidencePackage, stale_gap: StaleGap) -> list[Gap]:
+    """`package.gaps` as the host leaves them after a merge (`PackageAppender.MergeDrawing`): the
+    standing drawing gap reworded in its own place from every drawing record, by file name and by
+    how it was read - or left, or dropped, as `stale_gap` says. A package with no standing gap
+    (its drawing phase ran) keeps its gaps as they are."""
+    gaps = list(package.gaps)
+    index = next((number for number, gap in enumerate(gaps) if is_drawing_phase_gap(gap)), None)
+    if index is None or stale_gap == "left":
+        return gaps
+    if stale_gap == "dropped":
+        return gaps[:index] + gaps[index + 1 :]
+    names = {document.document_id: document.file_name for document in package.documents}
+    read = [
+        (names.get(record.document_id, record.document_id), record.opened_by_review is True)
+        for record in package.drawing_records
+    ]
+    gaps[index] = gaps[index].model_copy(update={"reason": drawings_read_afterwards(read)})
+    return gaps
+
+
+def merged(
+    folder: Path, document_id: str, *, stale_gap: StaleGap = "reworded"
+) -> Callable[[], dict[str, Any]]:
+    """What the host does on a read: append the drawing, drop the candidate row and treat the
+    standing drawing gap as `stale_gap` says (the host as built rewords it), then say so."""
 
     def read() -> dict[str, Any]:
         package = load_package(folder).package
@@ -108,6 +172,7 @@ def merged(folder: Path, document_id: str) -> Callable[[], dict[str, Any]]:
                 ],
             }
         )
+        after = after.model_copy(update={"gaps": host_gaps(after, stale_gap)})
         save_package(after, folder)
         return {"document_id": document_id, "drawing_document_id": drawing, "opened": True,
                 "closed": True, "sheets": 1, "gaps": 0}
@@ -590,3 +655,135 @@ def test_the_function_acts_only_on_the_confirmed_candidate_question(tmp_path: Pa
     read_confirmed_candidates(run.context, [request], run.out_dir)
 
     assert host.calls == [], "an open request is not a confirmation"
+
+
+# --- 4. the fake host rewords the stale drawing gap as the host does (T088) ----------------------
+#
+# Since feature 011 T079 the host's `PackageAppender.MergeDrawing` rewords the dump's standing
+# drawing gap - written when the extraction's drawing phase did not run - in its own place, once a
+# confirmed drawing is read into the package. `merged` plays that, and the words are pinned in both
+# languages: `extractor/SwReview.Extractor.Tests/PackageAppenderTests.cs`
+# (`TheStandingAndRewordedSentencesAreTheOnesTheBackendsFakeHostPlays`) asserts these same
+# literals against `PackageWriter`, so neither side can change them alone.
+
+REWORDED_ONE = (
+    "The extraction read no drawing natively: its drawing phase did not run. Read afterwards, "
+    "when the engineer confirmed the candidate question: 'FICT-KALO-8001.SLDDRW' (opened "
+    "read-only by the review)."
+)
+REWORDED_THREE = (
+    "The extraction read no drawing natively: its drawing phase did not run. Read afterwards, "
+    "when the engineer confirmed the candidate question: 'FICT-KALO-8001.SLDDRW' (opened "
+    "read-only by the review), 'FICT-KALO-8002.SLDDRW' (already open, read as it stood) and "
+    "'FICT-KALO-8003.SLDDRW' (opened read-only by the review)."
+)
+OTHER_GAPS = (
+    Gap(
+        kind="not_extracted",
+        entity_kind="feature_tree_unavailable",
+        entity_id=None,
+        reason="The part feature trees were not read: the dump was run with --features none.",
+        error=None,
+    ),
+    Gap(
+        kind="not_extracted",
+        entity_kind="equations",
+        entity_id=None,
+        reason="The part equations were not read: the dump was run with --equations off.",
+        error=None,
+    ),
+)
+"""Two gaps of other phases, set either side of the standing one, so a merge that moved or
+reworded the wrong gap is seen."""
+
+
+def test_the_fake_host_words_the_stale_gap_as_the_extractor_does() -> None:
+    assert NO_DRAWING_GAP.reason == (
+        "No open drawing shows this design, so no drawing was read natively. Open its drawing "
+        "in SOLIDWORKS and extract again to include it."
+    )
+    assert drawings_read_afterwards([("FICT-KALO-8001.SLDDRW", True)]) == REWORDED_ONE
+    assert drawings_read_afterwards(
+        [
+            ("FICT-KALO-8001.SLDDRW", True),
+            ("FICT-KALO-8002.SLDDRW", False),
+            ("FICT-KALO-8003.SLDDRW", True),
+        ]
+    ) == REWORDED_THREE
+
+
+def test_the_standing_gap_is_found_by_its_shape_never_its_words() -> None:
+    assert is_drawing_phase_gap(NO_DRAWING_GAP)
+    assert is_drawing_phase_gap(NO_DRAWING_GAP.model_copy(update={"reason": REWORDED_ONE}))
+    assert not is_drawing_phase_gap(NO_DRAWING_GAP.model_copy(update={"entity_id": "doc:0009"}))
+    assert not is_drawing_phase_gap(NO_DRAWING_GAP.model_copy(update={"kind": "not_extracted"}))
+    assert not is_drawing_phase_gap(
+        NO_DRAWING_GAP.model_copy(update={"entity_kind": "drawing_sheet"})
+    )
+
+
+def stale_gap_package(count: int) -> EvidencePackage:
+    """`candidates_package(count)` as a review whose extraction read no drawing leaves it: the
+    standing gap between two gaps of other phases."""
+    package = candidates_package(count)
+    return package.model_copy(
+        update={"gaps": [*package.gaps, OTHER_GAPS[0], NO_DRAWING_GAP, OTHER_GAPS[1]]}
+    )
+
+
+def test_a_confirmed_read_rewords_the_stale_gap_in_its_own_place(tmp_path: Path) -> None:
+    package = stale_gap_package(2)
+    parts = [item.document_id for item in package.drawing_candidates]
+    before = list(package.gaps)
+    run, _, _ = reviewed(
+        tmp_path, package, lambda folder: {part: merged(folder, part) for part in parts}
+    )
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    after = run.context.ir.gaps
+    index = before.index(NO_DRAWING_GAP)
+    assert len(after) == len(before)
+    assert [gap for number, gap in enumerate(after) if number != index] == [
+        gap for number, gap in enumerate(before) if number != index
+    ]
+    assert after[index] == NO_DRAWING_GAP.model_copy(
+        update={
+            "reason": drawings_read_afterwards(
+                [("FICT-KALO-8001.SLDDRW", True), ("FICT-KALO-8002.SLDDRW", True)]
+            )
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("stale_gap", "expected"),
+    [("left", NO_DRAWING_GAP), ("dropped", None)],
+    ids=["a-host-before-T079", "a-host-that-drops-it"],
+)
+def test_the_fake_host_can_play_a_host_that_leaves_or_drops_the_gap(
+    tmp_path: Path, stale_gap: StaleGap, expected: Gap | None
+) -> None:
+    package = stale_gap_package(1)
+    [part] = [item.document_id for item in package.drawing_candidates]
+    others = [gap for gap in package.gaps if not is_drawing_phase_gap(gap)]
+    run, _, _ = reviewed(
+        tmp_path, package, lambda folder: {part: merged(folder, part, stale_gap=stale_gap)}
+    )
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    standing = [gap for gap in run.context.ir.gaps if is_drawing_phase_gap(gap)]
+    assert standing == ([] if expected is None else [expected])
+    assert [gap for gap in run.context.ir.gaps if not is_drawing_phase_gap(gap)] == others
+
+
+def test_a_package_with_no_stale_gap_gains_none(tmp_path: Path) -> None:
+    """The plate fixture's extraction ran its drawing phase: no standing gap, nothing reworded."""
+    run, _, _ = reviewed(tmp_path, None, lambda folder: {"doc:0003": merged(folder, "doc:0003")})
+    gaps_before = list(run.context.ir.gaps)
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    assert run.context.ir.gaps == gaps_before
+    assert not any(is_drawing_phase_gap(gap) for gap in run.context.ir.gaps)

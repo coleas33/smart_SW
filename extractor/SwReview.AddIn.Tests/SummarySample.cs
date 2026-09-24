@@ -27,7 +27,9 @@ namespace SwReview.AddIn.Tests;
 ///
 /// <b>The drawing line is there</b> (feature 009 T086, the owner's decision 10A, 2026-09-23): a
 /// summary from this build carries one line about drawings, and a test of an older backend
-/// removes it.
+/// removes it. It is the one line no page could compose, so it is the backend's own: the
+/// `summary_drawings` block of the generated `Fixtures/review-drawing-questions.json`
+/// (<see cref="DrawingQuestionsFixture"/>, feature 011 T091), member for member.
 /// </summary>
 internal static class SummarySample
 {
@@ -39,9 +41,13 @@ internal static class SummarySample
 
     /// <summary>
     /// The summary's one line about drawings (feature 009 T086, the owner's decision 10A): the
-    /// backend's words, which no page could compose from the ranking beside them.
+    /// backend's words, which no page could compose from the ranking beside them - the generated
+    /// fixture's (feature 011 T091).
     /// </summary>
-    public const string DrawingsText = "2 drawings read with this review; 1 drawing beside a part was not opened";
+    public static string DrawingsText => DrawingsLine.GetProperty("text").GetString()!;
+
+    /// <summary>`{read, candidates, text}` as `report/summary.drawings_of` returned it.</summary>
+    private static JsonElement DrawingsLine => DrawingQuestionsFixture.Value.GetProperty("summary_drawings");
 
     public const string ResumeText =
         "Sending resumes the review once. Its last round sent 405,861 input tokens.";
@@ -232,9 +238,9 @@ internal static class SummarySample
         },
         { "not_loaded", new { count = 3, total = 89, text = NotLoadedText } },
 
-        // The page reads `text` alone, as it reads `questions` and `not_loaded`: the other members
-        // of the line are the backend's (contracts/review-summary.md section 4).
-        { "drawings", new { text = DrawingsText } },
+        // The backend's whole block; the page reads `text` alone, as it reads `questions` and
+        // `not_loaded` (contracts/review-summary.md sections 4 and 5).
+        { "drawings", DrawingsLine },
         {
             "goals", Array.ConvertAll(Goals, line => (object)new Dictionary<string, object?>
             {

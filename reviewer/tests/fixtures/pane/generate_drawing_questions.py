@@ -22,6 +22,9 @@ It writes, to `extractor/SwReview.AddIn.Tests/Fixtures/review-drawing-questions.
   route answers it (`report/summary.review_ranking`): the candidate question, the plate's
   governing question with its offered file names, and the long-named part's governing question
   with its stem shortened and no offered answers;
+- `summary_drawings`: the summary's `drawings` block after the first turn (decision 10A): the
+  seven drawings read and the three same-name drawings found but not open, and the one line the
+  page prints - the drawing line of the add-in tests' `SummarySample` (feature 011 T090, T091);
 - `answers`: the batch the engineer sends - the candidate question confirmed with
   `CANDIDATE_CONFIRM` and the plate's question answered `They all apply` - each the offered
   words exactly;
@@ -163,10 +166,10 @@ class HostLines:
         pass
 
 
-def questions_block(run: Any) -> dict[str, Any]:
-    """The summary's `questions` block, as the attention route answers it right now."""
-    summary = review_ranking(run.session, run.context.ir).summary
-    return summary.questions.model_dump(mode="json")
+def summary_block(run: Any, block: str) -> Any:
+    """One block of the summary - `questions` or `drawings` - as the attention route answers it
+    right now."""
+    return review_ranking(run.session, run.context.ir).summary.model_dump(mode="json")[block]
 
 
 def drawing_questions_fixture() -> dict[str, Any]:
@@ -192,14 +195,16 @@ def drawing_questions_fixture() -> dict[str, Any]:
             bridge_factory=lambda pipe, secret: BridgeClient(pipe, secret, transport=host),
         )
         run.start()
-        asked = questions_block(run)
+        asked = summary_block(run, "questions")
+        drawings = summary_block(run, "drawings")
         candidate, plate, _ = asked["items"]
         answers = [[candidate["id"], CANDIDATE_CONFIRM], [plate["id"], ALL_APPLY]]
         run.answer_evidence_batch([(request_id, answer) for request_id, answer in answers])
-        after = questions_block(run)
+        after = summary_block(run, "questions")
     return {
         "run_id": RUN_ID,
         "questions_asked": asked,
+        "summary_drawings": drawings,
         "answers": answers,
         "coverage": [body for kind, body in events if kind == "coverage"],
         "questions_open_after": after,
