@@ -77,6 +77,7 @@ nothing (no standards profile, every part lightweight) reads `not_reached` by ro
 | `headline` | "{n} findings in {m} issues" from `findings_*` and `issues_*`; "No findings were recorded" at zero |
 | `questions` | open evidence requests in session order (`questions.md` section 3); `text` `None` at zero |
 | `not_loaded` | `not_examined(package)`: `{count, total, text}`; `None` when every instance was read or no package |
+| `drawings` | *Added 2026-09-23 (owner decision 10A; feature 011 T080, T081).* `drawings_of(package)`: one line naming the drawings the review read and the same-name drawings it found but did not open, `{read, candidates, text}`; `None` when neither exists, or no package. `read`: the file name (`documents[].file_name`, the document id where the package has no row) of every drawing document with a native record (`drawing_records[]`) or a PDF-ingested sheet (`drawings[]`), once each, in document-id order - a drawing root's own drawing included. `candidates`: the file name of every `drawing_candidates[]` path, in its reviewed document's id order, once per file (a part and an assembly of one stem share one), and never a file the review read: a candidate the engineer confirmed and the product opened and read (feature 011 `contracts/confirmed-open.md`) is read, not a candidate, whether or not the package still holds its candidate row (paths compared ignoring case and the separator). `text`: "Drawing read: {names}" or "Drawings read: {names}", then ". ", then "Same-name drawing found but not open: {names}" or "Same-name drawings found but not open: {names}", each part only when its list is non-empty; `{names}` joins the file names with commas and a final "and", and past ten names the first ten with commas and "and {n} more" (the candidate question's bound). The words are `drawings` in the words file. Counted in no group, goal or headline |
 | `contacts` | `contacts_of(session, names)`: feature 010's `ReviewSession.contacts` in its order, each part named from the summary's `component_names` (its id in `text` and `None` in `names` where it has none), `kind_label` from `labels.contact_kind`, ids `C-001` as 010 allocates them; `None` when absent or empty. Counted in no group, goal or headline |
 | `component_names` | non-blank names of every package component |
 | `resume_input_tokens`, `resume_text` | `questions.md` section 5 |
@@ -85,7 +86,8 @@ nothing (no standards profile, every part lightweight) reads `not_reached` by ro
 
 `render.summaryBlock(summary)` builds `<section id="summary">` at the top of Results: the headline;
 one line per group (`label` in the lead face, `text`, then each `by_goal` as "title count"); the
-questions `text`; the `not_loaded` `text`; one line per goal (`title`, `state_label`, `reason`) with
+questions `text`; the `not_loaded` `text`; the `drawings` `text`, verbatim, when `drawings` is not
+`None` (*added 2026-09-23, decision 10A*); one line per goal (`title`, `state_label`, `reason`) with
 `detail` behind a shut `<details>`. Class names interpolate `kind` and `state` (`group-decide`,
 `goal-not_reached`) and the stylesheet colours them from `tokens.css`: decide `--judge`, fix
 `--critical`, verify `--warn`, issues `--critical`, checked `--good`, not reached `--warn`, not
@@ -107,7 +109,8 @@ print `component_names[id]` where present and the id where not; the id itself is
 ## 6. An older backend, and no findings
 
 A ranking with no `summary` renders exactly as before this feature: no summary block, no empty
-section, the Start-here panel where it was. A summary with zero findings shows the headline "No
+section, the Start-here panel where it was. A summary with no `drawings` key (a backend before
+decision 10A), or with `drawings: null`, has no drawings line. A summary with zero findings shows the headline "No
 findings were recorded", the three groups at zero, and every goal line.
 
 ## 7. SC-001

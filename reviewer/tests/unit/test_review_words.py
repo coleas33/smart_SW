@@ -54,6 +54,11 @@ PLACEHOLDERS: dict[str, set[str]] = {
     "questions.one": set(),
     "questions.many": {"n"},
     "not_loaded.text": {"count", "total"},
+    "drawings.read_one": {"names"},
+    "drawings.read_many": {"names"},
+    "drawings.candidates_one": {"names"},
+    "drawings.candidates_many": {"names"},
+    "drawings.more": {"names", "n"},
     "contacts.one": set(),
     "contacts.many": {"n"},
     "resume.with_tokens": {"tokens"},
@@ -110,7 +115,15 @@ def test_the_words_are_loaded_once() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [(), ("headline",), ("groups", "decide"), ("resume",), ("labels",), ("goals", 0)],
+    [
+        (),
+        ("headline",),
+        ("groups", "decide"),
+        ("drawings",),
+        ("resume",),
+        ("labels",),
+        ("goals", 0),
+    ],
 )
 def test_an_extra_key_anywhere_is_refused(path: tuple[object, ...]) -> None:
     data = raw_words()

@@ -27,6 +27,7 @@ Loaded once per process by `summary.load_words() -> Words` (`functools.cache`, l
 | `groups` | map `decide \| fix \| verify \| decided \| within_scope` → `{label, one, many}` | labels "Decide", "Fix", "Verify" (owner, 2026-09-23), "Decided", "Within limits"; templates such as "{n} needs your decision" / "{n} need your decision" |
 | `questions` | `{one, many}` | "1 question for you", "{n} questions for you" |
 | `not_loaded` | `{text}` | "{count} of {total} parts not loaded" |
+| `drawings` | `{read_one, read_many, candidates_one, candidates_many, more}` | "Drawing read: {names}", "Drawings read: {names}", "Same-name drawing found but not open: {names}", "Same-name drawings found but not open: {names}", "{names} and {n} more" (*added 2026-09-23, decision 10A*) |
 | `contacts` | `{one, many}` | "1 size-for-size contact", "{n} size-for-size contacts" |
 | `resume` | `{with_tokens, without}` | "Sending resumes the review once. Its last round sent {tokens} input tokens." / "Sending resumes the review once." |
 | `read_only` | str | "The backend restarted, so this review is shown from its run folder. Follow-ups, decisions and answers are off." |
@@ -58,6 +59,7 @@ the words file; imports no provider and no settings; writes nothing.
 | `modelling_practice` | `ModellingPractice \| None` | from the ranking row with `family` set (feature 008); `None` without one |
 | `questions` | `QuestionList` | the open evidence requests in session order |
 | `not_loaded` | `NotLoaded \| None` | from `unexamined.not_examined(package)`; `None` when every instance was read or there is no package |
+| `drawings` | `DrawingsLine \| None` | from `drawings_of(package)` (*added 2026-09-23, decision 10A*): the drawings read and the same-name drawings found but not open; `None` when neither exists or there is no package |
 | `goals` | list[`GoalLine`] | one per goal, in the words file's order |
 | `contacts` | `ContactList \| None` | from `contacts_of(session)` (feature 010's list); `None` when absent or empty |
 | `component_names` | dict[str, str] | every component with a non-blank name, `{cmp id: name}` |
@@ -101,6 +103,14 @@ finding_ids: list[str] (the row's member_finding_ids, in the row's order)}`.
 ### `NotLoaded`
 
 `{count: int, total: int, text: str}`.
+
+### `DrawingsLine`
+
+*Added 2026-09-23 (owner decision 10A).* `{read: list[str], candidates: list[str], text: str}`:
+`read` the file names of the drawings the review read (a native record or a PDF-ingested sheet), in
+document-id order; `candidates` the file names of the same-name drawings found beside a reviewed file
+but not open, in document-id order, once per file and never one the review read (a confirmed and read
+candidate is read); `text` the one line the page prints (`contracts/review-summary.md` section 4).
 
 ### `GoalLine`
 
@@ -270,5 +280,6 @@ session.json + package.json ──rank()──▶ Ranking ──review_summary()
                                                                                    ▲
 host SessionRecord{Document, StartedAt} ──sessions.list──▶ chips ─────────────────┘
 feature 010: ReviewSession.contacts ──contacts_of()──▶ summary.contacts ──▶ the contacts fold
+feature 011: package drawing_records, drawings, drawing_candidates ──drawings_of()──▶ summary.drawings ──▶ the drawings line
 GET /labels ──▶ status, severity, bucket, evidence and error words on every card
 ```

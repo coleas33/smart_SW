@@ -13,7 +13,10 @@ the engineer reads in the first ten seconds is decided here. The rules this pins
 - **a folded family is its own line** (T016): its findings are in no group, the
   modelling-practice line is its ranking row, and the partition still holds;
 - **the ranking is untouched**: `ReviewRanking` serializes `rank(session)` byte for byte
-  plus one `summary` key, and the ranking module does not even import this one.
+  plus one `summary` key, and the ranking module does not even import this one;
+- **one drawings line** (feature 011, owner decision 10A): the drawings read and the same-name
+  drawings found but not open, by file name, nothing when neither exists, and a candidate the
+  product opened and read is read, not a candidate.
 
 The goal lines (section 3) are `test_review_goals.py`'s.
 """
@@ -32,8 +35,9 @@ import pytest
 from pydantic import ValidationError
 from pydantic_core import to_jsonable_python
 
-from swreview.ir.loader import load_package
-from swreview.ir.models import EvidencePackage
+from swreview.checks.drawing_context import CANDIDATE_CONFIRM, CANDIDATES_NAMED
+from swreview.ir.loader import load_package, save_package
+from swreview.ir.models import DrawingCandidate, EvidencePackage, Gap
 from swreview.report.attention import AttentionRow, rank
 from swreview.report.session import (
     Contact,
@@ -45,10 +49,13 @@ from swreview.report.session import (
 )
 from swreview.report.summary import (
     COVERAGE_BUCKETS,
+    DRAWINGS_NAMED,
+    DrawingsLine,
     ModellingPractice,
     ReviewRanking,
     ReviewSummary,
     contacts_of,
+    drawings_of,
     load_words,
     review_ranking,
     review_summary,
@@ -66,11 +73,23 @@ from tests.support.attention import (
     build_attention_session,
 )
 from tests.unit.test_attention import STEPS, disposition, spec
+from tests.unit.test_confirmed_drawing_read import (
+    candidates_package,
+    merged,
+    question_id,
+    reviewed,
+)
 
 NAMESPACE = UUID("7a1e6d64-1f2b-4c3a-9d5e-000000000009")
 
 BIG_ASSEMBLY = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "big-assembly"
 """Feature 008's committed, fictional replay fixture of a big assembly review (its T018)."""
+
+DRAWING_FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "drawings"
+"""Feature 011's three synthetic drawing packages (its T012)."""
+
+GOLDEN_FIXTURES = Path(__file__).resolve().parents[1] / "golden" / "fixtures"
+"""Feature 001's and 006's golden packages, some with PDF-ingested drawing sheets."""
 
 
 def session_of(
@@ -785,3 +804,343 @@ def test_the_summarys_bucket_names_are_the_sessions() -> None:
     """Copied so the summary need not import the session module (see its docstring)."""
     assert get_args(CoverageBucket) == COVERAGE_BUCKETS
     assert tuple(Coverage.model_fields) == COVERAGE_BUCKETS
+
+
+# --- 9. the drawings line (feature 011, owner decision 10A) ----------------------------------
+
+
+def drawing_fixture(name: str) -> EvidencePackage:
+    return load_package(DRAWING_FIXTURES / name).package
+
+
+PLATE_READ = ["FICT-TULMKALO-3001.SLDDRW", "FICT-TULMKALO-3001-B.SLDDRW"]
+"""The plate fixture's two drawings, read because they were open (doc:0006, doc:0007)."""
+PLATE_CANDIDATE = "FICT-TULMSORN-3002.SLDDRW"
+"""The same-name drawing beside the block (doc:0003), not open."""
+
+
+def kalo(count: int) -> list[str]:
+    """The candidate file names `candidates_package(count)` holds, in its order."""
+    return [f"FICT-KALO-{8001 + number}.SLDDRW" for number in range(count)]
+
+
+def with_candidates(package: EvidencePackage, *extra: DrawingCandidate) -> EvidencePackage:
+    return package.model_copy(
+        update={"drawing_candidates": [*package.drawing_candidates, *extra]}
+    )
+
+
+def test_no_package_or_no_drawing_evidence_has_no_drawings_line() -> None:
+    session = session_of("no-drawings", [])
+
+    assert summary_of(session, None).drawings is None
+    assert summary_of(session, attention_package()).drawings is None
+    assert drawings_of(attention_package()) is None
+
+
+def test_the_plate_names_its_two_drawings_read_and_its_candidate() -> None:
+    assert drawings_of(drawing_fixture("plate-drawing")) == DrawingsLine(
+        read=PLATE_READ,
+        candidates=[PLATE_CANDIDATE],
+        text=(
+            "Drawings read: FICT-TULMKALO-3001.SLDDRW and FICT-TULMKALO-3001-B.SLDDRW. "
+            "Same-name drawing found but not open: FICT-TULMSORN-3002.SLDDRW"
+        ),
+    )
+
+
+def test_the_line_is_the_one_the_routes_answer() -> None:
+    package = drawing_fixture("plate-drawing")
+
+    summary = review_ranking(session_of("drawings-route", []), package).summary
+
+    assert summary.drawings == drawings_of(package)
+
+
+def test_a_drawing_root_names_its_one_drawing_in_the_singular() -> None:
+    line = drawings_of(drawing_fixture("drawing-root"))
+
+    assert line is not None
+    assert (line.read, line.candidates, line.text) == (
+        ["FICT-OKTAPELIN-4000.SLDDRW"],
+        [],
+        "Drawing read: FICT-OKTAPELIN-4000.SLDDRW",
+    )
+
+
+def test_four_drawings_read_are_listed_with_a_final_and() -> None:
+    line = drawings_of(drawing_fixture("assembly-drawings"))
+
+    assert line is not None
+    assert line.text == (
+        "Drawings read: FICT-OKTAVEN-5000.SLDDRW, FICT-OKTAKALO-5001.SLDDRW, "
+        "FICT-OKTAKALO-5001-B.SLDDRW and FICT-OKTAKALO-5001-C.SLDDRW"
+    )
+    assert line.candidates == []
+
+
+def test_candidates_alone_have_no_read_part() -> None:
+    line = drawings_of(candidates_package(3))
+
+    assert line is not None
+    assert (line.read, line.candidates) == ([], kalo(3))
+    assert line.text == (
+        "Same-name drawings found but not open: FICT-KALO-8001.SLDDRW, FICT-KALO-8002.SLDDRW "
+        "and FICT-KALO-8003.SLDDRW"
+    )
+
+
+def test_one_candidate_is_said_in_the_singular() -> None:
+    line = drawings_of(candidates_package(1))
+
+    assert line is not None
+    assert line.text == "Same-name drawing found but not open: FICT-KALO-8001.SLDDRW"
+
+
+def test_ten_names_are_all_named() -> None:
+    line = drawings_of(candidates_package(DRAWINGS_NAMED))
+
+    assert line is not None
+    names = kalo(DRAWINGS_NAMED)
+    assert line.text == (
+        f"Same-name drawings found but not open: {', '.join(names[:-1])} and {names[-1]}"
+    )
+
+
+def test_past_ten_names_the_first_ten_and_counts_the_rest() -> None:
+    line = drawings_of(candidates_package(DRAWINGS_NAMED + 2))
+
+    assert line is not None
+    names = kalo(DRAWINGS_NAMED + 2)
+    assert line.candidates == names, "the list keeps every name; only the sentence is bounded"
+    assert line.text == (
+        f"Same-name drawings found but not open: {', '.join(names[:DRAWINGS_NAMED])} and 2 more"
+    )
+
+
+def test_the_bound_is_the_candidate_questions() -> None:
+    """Copied, because `checks/drawing_context.py` reaches the session module and the summary
+    imports no provider (see its docstring): the question and the line name the same ten."""
+    assert DRAWINGS_NAMED == CANDIDATES_NAMED == 10
+
+
+def test_both_lists_follow_the_packages_ids_not_its_arrays() -> None:
+    plate = drawing_fixture("plate-drawing")
+    candidates = candidates_package(3)
+
+    shuffled_plate = plate.model_copy(
+        update={
+            "drawing_records": list(reversed(plate.drawing_records)),
+            "documents": list(reversed(plate.documents)),
+        }
+    )
+    shuffled_candidates = candidates.model_copy(
+        update={"drawing_candidates": list(reversed(candidates.drawing_candidates))}
+    )
+
+    assert drawings_of(shuffled_plate) == drawings_of(plate)
+    assert drawings_of(shuffled_candidates) == drawings_of(candidates)
+
+
+def test_a_record_with_no_document_row_is_named_by_its_id() -> None:
+    plate = drawing_fixture("plate-drawing")
+    rowless = plate.model_copy(
+        update={"documents": [row for row in plate.documents if row.document_id != "doc:0007"]}
+    )
+
+    line = drawings_of(rowless)
+
+    assert line is not None
+    assert line.read == [PLATE_READ[0], "doc:0007"]
+
+
+def test_one_candidate_file_beside_two_documents_is_named_once() -> None:
+    """A part and an assembly of one stem in one folder share their same-name drawing."""
+    plate = drawing_fixture("plate-drawing")
+    [candidate] = plate.drawing_candidates
+    twin = candidate.model_copy(update={"document_id": "doc:0005"})
+
+    line = drawings_of(with_candidates(plate, twin))
+
+    assert line is not None
+    assert line.candidates == [PLATE_CANDIDATE]
+
+
+def test_pdf_ingested_sheets_are_drawings_read() -> None:
+    line = drawings_of(load_package(GOLDEN_FIXTURES / "cover-blind-tap").package)
+
+    assert line == DrawingsLine(
+        read=["housing.SLDDRW", "cover.SLDDRW"],
+        candidates=[],
+        text="Drawings read: housing.SLDDRW and cover.SLDDRW",
+    )
+
+
+def test_a_drawing_read_natively_and_from_its_pdf_is_named_once() -> None:
+    package = load_package(
+        GOLDEN_FIXTURES / "standards-drawings" / "standards-drawings-ingested"
+    ).package
+    [record] = package.drawing_records
+    assert {sheet.document_id for sheet in package.drawings} == {record.document_id}
+
+    line = drawings_of(package)
+
+    assert line is not None
+    assert line.read == [
+        row.file_name for row in package.documents if row.document_id == record.document_id
+    ]
+
+
+# --- 9b. a confirmed candidate, once read, is read (011 contracts/confirmed-open.md) ------------
+
+
+def test_after_a_confirmed_read_the_drawing_is_read_and_no_longer_a_candidate(
+    tmp_path: Path,
+) -> None:
+    """The host reads the confirmed candidate into the run folder's package and drops its row;
+    the live route reads the reloaded package and the disk route the run folder's."""
+    run, _, _ = reviewed(tmp_path, None, lambda folder: {"doc:0003": merged(folder, "doc:0003")})
+    before = review_ranking(run.session, run.context.ir).summary.drawings
+    assert before is not None
+    assert (before.read, before.candidates) == (PLATE_READ, [PLATE_CANDIDATE])
+
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    after = review_ranking(run.session, run.context.ir).summary.drawings
+    assert after == DrawingsLine(
+        read=[*PLATE_READ, PLATE_CANDIDATE],
+        candidates=[],
+        text=(
+            "Drawings read: FICT-TULMKALO-3001.SLDDRW, FICT-TULMKALO-3001-B.SLDDRW and "
+            "FICT-TULMSORN-3002.SLDDRW"
+        ),
+    )
+    assert drawings_of(load_package(tmp_path / "run-0001").package) == after
+
+
+NO_DRAWING_GAP = Gap(
+    kind="unsupported",
+    entity_kind="drawing",
+    entity_id=None,
+    reason=(
+        "No open drawing shows this design, so no drawing was read natively. Open its drawing "
+        "in SOLIDWORKS and extract again to include it."
+    ),
+    error=None,
+)
+"""The package-level gap the extractor writes when no open drawing showed the design
+(`PackageWriter.DrawingGap`): stale once a confirmed candidate is read into the package."""
+
+
+def without_the_no_drawing_gap(folder: Path) -> None:
+    """What a host that drops the stale gap on a confirmed read leaves in the run folder."""
+    loaded = load_package(folder).package
+    save_package(
+        loaded.model_copy(
+            update={"gaps": [gap for gap in loaded.gaps if gap != NO_DRAWING_GAP]}
+        ),
+        folder,
+    )
+
+
+@pytest.mark.parametrize("host_drops_the_gap", [False, True], ids=["gap-left", "gap-dropped"])
+def test_a_confirmed_read_is_said_the_same_whether_the_stale_gap_stays_or_goes(
+    tmp_path: Path, host_drops_the_gap: bool
+) -> None:
+    """No reason the backend writes reads the package-level drawing gap: the drawings line, the
+    restated drawing check and every goal line say the drawing was read, whether the host
+    leaves the gap that says none was or drops it."""
+    package = candidates_package(1)
+    package = package.model_copy(update={"gaps": [*package.gaps, NO_DRAWING_GAP]})
+    [part] = [candidate.document_id for candidate in package.drawing_candidates]
+
+    def answers(folder: Path) -> dict[str, Any]:
+        read = merged(folder, part)
+
+        def read_then_drop() -> dict[str, Any]:
+            result = read()
+            without_the_no_drawing_gap(folder)
+            return result
+
+        return {part: read_then_drop if host_drops_the_gap else read}
+
+    run, _, _ = reviewed(tmp_path, package, answers)
+    run.answer_evidence_batch([(question_id(run), CANDIDATE_CONFIRM)])
+
+    assert (NO_DRAWING_GAP in run.context.ir.gaps) is not host_drops_the_gap
+    summary = review_ranking(run.session, run.context.ir).summary
+    assert summary.drawings is not None
+    assert (summary.drawings.read, summary.drawings.candidates) == (kalo(1), [])
+    [context] = [
+        item for item in run.session.coverage.checked if item.check == "drawing.context"
+    ]
+    assert context.scope.document_ids == [part]
+    assert context.reason.startswith("read from FICT-KALO-8001.SLDDRW")
+    reasons = [
+        text
+        for line in summary.goals
+        for text in (line.reason, line.detail)
+        if text is not None
+    ]
+    reasons += [
+        item.reason
+        for bucket in COVERAGE_BUCKETS
+        for item in getattr(run.session.coverage, bucket)
+    ]
+    assert not any("no drawing was read" in reason for reason in reasons)
+
+
+@pytest.mark.parametrize(
+    "spelled",
+    [
+        pytest.param(lambda path: path, id="as-written"),
+        pytest.param(str.lower, id="another-case"),
+        pytest.param(lambda path: path.replace("\\", "/"), id="forward-slashes"),
+    ],
+)
+def test_a_candidate_row_left_for_a_file_the_review_read_is_not_named_again(
+    spelled: Any,
+) -> None:
+    """Were a merge to leave the candidate row of a drawing it read, the line still names the
+    drawing once, as read: the paths are compared as discovery compares them."""
+    plate = drawing_fixture("plate-drawing")
+    read_path = next(row.path for row in plate.documents if row.document_id == "doc:0006")
+    left = DrawingCandidate(
+        document_id="doc:0002", path=spelled(read_path), reason="same_name_beside_model"
+    )
+
+    line = drawings_of(with_candidates(plate, left))
+
+    assert line is not None
+    assert (line.read, line.candidates) == (PLATE_READ, [PLATE_CANDIDATE])
+
+
+def test_a_read_drawing_whose_row_mixes_separators_still_hides_its_candidate_row() -> None:
+    """The drawing root fixture writes its paths with both separators."""
+    root = drawing_fixture("drawing-root")
+    [drawing] = [row for row in root.documents if row.kind == "drawing"]
+    assert "/" in drawing.path and "\\" in drawing.path
+    left = DrawingCandidate(
+        document_id="doc:2", path=drawing.path.replace("/", "\\"), reason="same_name_beside_model"
+    )
+
+    line = drawings_of(with_candidates(root, left))
+
+    assert line is not None
+    assert line.candidates == []
+
+
+def test_the_drawings_line_moves_nothing_else_in_the_summary() -> None:
+    """Counted in no group, goal or headline: the same session over the same package with its
+    drawing evidence taken out differs in the line alone."""
+    plate = drawing_fixture("plate-drawing")
+    bare = plate.model_copy(update={"drawing_records": [], "drawing_candidates": []})
+    specs = [spec("interference.static"), spec("rms.folders.present", status="suspected")]
+    session = session_of("drawings-move-nothing", specs)
+
+    with_line = summary_of(session, plate)
+    without = summary_of(session, bare)
+
+    assert with_line.drawings is not None
+    assert without.drawings is None
+    assert with_line.model_copy(update={"drawings": None}) == without
