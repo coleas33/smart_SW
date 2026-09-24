@@ -3,7 +3,7 @@
 The plan's performance goals: `build_joint_map` alone under 200 ms, and `check_joints` -
 the map, every joint and fastener check, and the mesh loads engagement and tool access
 need - under 2 s on the development machine, both on the big fixture shaped like the
-recorded 830 assembly (132 hole instances, about 8,700 candidate pairs). The pairing is
+recorded big assembly (132 hole instances, about 8,700 candidate pairs). The pairing is
 quadratic in instances and is measured here rather than optimized until a package makes it
 matter; the printed seconds are the trend that says when.
 

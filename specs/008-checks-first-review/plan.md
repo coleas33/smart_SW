@@ -91,7 +91,7 @@ SOLIDWORKS licence and no key.
 **Performance Goals**: the replay of the big fixture completes in seconds (a pass is about 0.08 s after
 a 0.5 s import on the recorded run); the tokenizer loads once in about 0.13 s and counts 504 KB in
 about 0.02 s; the pre-run judges 1,000 interference groups within 30 s (a marked test); live detection
-took 4.44 s on the 830 assembly and runs before the first model turn.
+took 4.44 s on the big assembly and runs before the first model turn.
 
 **Constraints**: the constitution's Principles I to VI verbatim (below); the replay needs no key, no
 network and no SOLIDWORKS and writes nothing into the folder it reads; the recordings never enter the

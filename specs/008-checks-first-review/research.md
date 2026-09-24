@@ -98,7 +98,7 @@ round's `usage` before it runs that round's calls (`openai_provider.py:390-400`,
 (`runner.py:745-756`, `events.py:162-164`), so only position tells it apart - true in all four
 dumps; `evidence.answered` carries `request_id` and `answer` (`runner.py:720`); the 190758 dump
 ends `stopped` with a `tool.started` and no `tool.finished`. `tool_result_ids` is empty on all
-nine interference and hole findings of the 830 run, so the event bracket is the only tie from a
+nine interference and hole findings of the big assembly's run, so the event bracket is the only tie from a
 finding to its step, and it ties all 99.
 
 **Alternatives**: telling presentation rounds apart by `round_index` (rejected: it follows on);
@@ -140,7 +140,7 @@ divergence after an estimated call is exactly the `bridge_interference` case: th
 added its rows to the in-memory package only (`tools/bridge.py:438-450`), the run folder's
 package has 0 interferences, and `list_interferences` and `get_package_summary` read
 `context.ir.interferences` (`tools/query.py:78, 600`), so a simple offline replay missed the 1%
-target (2.38% worst round on 830, 6.57% on 191314) until that rule was added. It needs no
+target (2.38% worst round on the big assembly, 6.57% on 191314) until that rule was added. It needs no
 hand-kept list of bridge-dependent tools.
 
 **Alternatives**: one pass (rejected: a checks-first digest would read as a divergence); a
@@ -158,7 +158,7 @@ round prints three numbers - recorded, pass A, pass B - with its class.
 **Why**: VERIFIED the provider bills a constant wrapper per tool result: recorded growth minus
 the replayed `json.dumps` count is 11 to 14 tokens (median 12) on all 87 replayable results
 across the three OpenAI runs; with 12 framing tokens and the divergence rule, the replay matches
-every recorded round within 0.023% (worst: 0.008% on 830, 0.015% on 191314, 0.023% on 190840)
+every recorded round within 0.023% (worst: 0.008% on the big assembly, 0.015% on 191314, 0.023% on 190840)
 against the 1% target. The provider renders tool schemas and reasoning items in ways the replay
 cannot see - counting the literal request is about 20% high at round 0 (13,151 counted against
 11,006 billed) - so the prefix is calibrated to the recording and only results are counted
@@ -225,7 +225,7 @@ finding is **lost** only when its producing step was reproduced, changed or (fro
 answered from checks and the replay does not produce its key; findings of estimated steps are
 listed as **not replayable offline** with the step and the reason, never counted lost or kept.
 
-**Why**: VERIFIED unique on every recorded session (99/99 on 830); `check + component_ids` gives
+**Why**: VERIFIED unique on every recorded session (99/99 on the big assembly); `check + component_ids` gives
 98/99 because two `hole.coaxiality` findings share both components and differ only by hole ids
 (`checks/hole_alignment.py:78-83, 105`), and `check + title` gives 47/99; every IR entity id has
 the `^<prefix>:[0-9]{4,}$` shape (`ir/models.py:367, 487, 865, 911, 933, 973, 1020, 1066,
@@ -283,7 +283,7 @@ standards findings were graded against `config/standards.example.yaml`, which is
 census set. The replay therefore grades standards with `--standards-profile
 config/standards.example.yaml`, and no new profile file is added.
 
-**Reconciled - the interference rows**: the checks pass noted that the 830 recording persisted
+**Reconciled - the interference rows**: the checks pass noted that the big assembly's recording persisted
 no rows, so its interference findings would have to be estimated or carried. The fixture package
 carries the rows as FR-009 would have written them, so pass A reproduces every call but
 `bridge_interference` (which stays estimated: the replay has no bridge), and pass B under checks
@@ -291,7 +291,7 @@ first judges every one of the 113 groups offline - an offline acceptance for SC-
 
 **Why**: FR-007. VERIFIED the budgets are absolute and the fixed prefix of about 9.7k to 11k
 tokens per round does not scale, so a scaled-down fixture cannot carry SC-002 or SC-003. The
-payload shapes the fixtures keep (830 package: 1,153 features, 89 components, 26 documents, 55
+payload shapes the fixtures keep (the big assembly's package: 1,153 features, 89 components, 26 documents, 55
 mates with 110 mate entities whose persist refs total 85,868 characters, mean 781, max 1,656)
 are what make the model-view savings measurable. Regenerating session and events with current
 code avoids hunting names embedded in the model's prose. The convention for committed fixtures is
@@ -326,7 +326,7 @@ numbers (`contracts/replay.md` section 8).
 **Decision**: `tests/integration/test_replay_recorded_runs.py`, under the existing
 `integration` marker and skipped when the dumps are absent, checks pass A within 1% on every
 round of the three recorded reviews and that replayed plus not-replayable findings equal the
-recorded key set (on 830: 88 replayed plus 11 not replayable - 6 interference, 5 standards
+recorded key set (on the big assembly: 88 replayed plus 11 not replayable - 6 interference, 5 standards
 without a profile - equals 99). The fixture tests are regression locks that always run.
 
 **Why**: only the real recordings measure fidelity independently; the fixtures' usage is derived
@@ -439,7 +439,7 @@ has no rows (rejected: Retry would judge stale rows).
 `treat_subassemblies_as_components=true`, `include_multibody=true`, `ignore_hidden=false`,
 `fastener_folder_treatment="include"`. The digest line states them and every row carries them.
 
-**Why**: VERIFIED these are exactly what the model chose on the recorded 830 run (step 12, 4.44 s,
+**Why**: VERIFIED these are exactly what the model chose on the big assembly's recorded run (step 12, 4.44 s,
 113 groups); they reproduce the recorded groups and keep SC-010's "at least the recorded
 findings" reachable, including the zero-volume F-092, F-095 and F-096. The constitution wants
 the engineering judgement stated, not assumed (`tools/bridge.py:389-395`).
@@ -553,7 +553,7 @@ pruned, so it caps ids at 20; a tool digest is pruned after two rounds, so it ca
 ids at 200.
 
 **Why**: FR-011, FR-012, FR-014 (the model reads counts only), FR-018, the thousands-of-groups
-edge case and US2 scenario 3. VERIFIED: on 830 the lever-5 opening message is 2,810 tokens over
+edge case and US2 scenario 3. VERIFIED: on the big assembly the lever-5 opening message is 2,810 tokens over
 77 lines, of which the seven per-rule RMS id lines cost 431 tokens and one counts line about 41,
 bringing it to about 2,420; the current digest lists every finding id per check and status with
 no cap (`prerun.py:279-304`), which at 113 groups the edge case forbids; a clean live result is a
@@ -578,11 +578,11 @@ family's findings once, in one `### Modelling practice: N findings across M rule
 wrapped in `<details>`, after the severity sections, and leaves them out of those sections.
 
 **Why**: FR-014 and the roadmap's single folded group. VERIFIED the existing fold already
-collapses RMS findings to one row per rule id (the 830 ranking has 18 rows, 7 of them RMS,
+collapses RMS findings to one row per rule id (the big assembly's ranking has 18 rows, 7 of them RMS,
 `report/attention.py:335-377`), so "one group per rule family" can only mean one row per
-`CheckFamily`, whose RMS name is `rms` (`checks/rms/registry.py:356-384`). The 830 session holds
+`CheckFamily`, whose RMS name is `rms` (`checks/rms/registry.py:356-384`). The big assembly's session holds
 85 RMS findings across **7** rules (51 demonstrated/medium, 34 suspected/low), not the roadmap
-example's 12. Simulated on the three recordings: 830 goes from 18 to 12 rows with Start here
+example's 12. Simulated on the three recordings: the big assembly goes from 18 to 12 rows with Start here
 unchanged (five interference rows) and the family row tenth; 191314 from 10 to 4; 190840 from 7
 to 2; the relative order of non-family rows is unchanged in all three. `report/attention.py` must
 import no settings module (`:27-35`, `test_attention.py:914`), so the fold reads a plain session
@@ -609,7 +609,7 @@ detail to the model, breaking FR-014's counts only.
 digest is still built there.
 
 **Why**: the smallest change; the lever tests and the replay read `run.opening_message` and
-`session.steps` straight after `start_review`. Live detection took 4.44 s on 830.
+`session.steps` straight after `start_review`. Live detection took 4.44 s on the big assembly.
 
 **Consequence stated plainly**: VERIFIED the named-pipe transport reads with no timeout
 (`bridge/client.py:150-199`; the module docstring names it a known limitation and leaves a read
@@ -670,7 +670,7 @@ keys and inline inside finding input strings in both the RMS and the standards f
 372-378`), so key-only stripping would leave refs that `get_finding` would then hand the model.
 One table is readable by the owner and lets a test prove no check tool escapes the digest. A
 value-based sweep (no package persist-ref value appears in any view) is stronger than a key-based
-one. Measured on 830 with a prototype: `check_rms_part` view 738 tokens against 204,857;
+one. Measured on the big assembly with a prototype: `check_rms_part` view 738 tokens against 204,857;
 `list_mates` 4,402 against 55,464; `list_gaps` 6,249 against 15,582.
 
 **Alternatives**: per-tool view callables on `ToolSpec` (rejected: the spec cache is
@@ -832,7 +832,7 @@ pass put `compact` on `_encode_history` with its own `json.dumps` call. Two seri
 thing would let the adapter and the replay drift, which is exactly what R2.9 exists to prevent;
 the keyword lives on the one function.
 
-**Why**: FR-017; separators alone measured -8.5% on 830; the keyword-only default keeps
+**Why**: FR-017; separators alone measured -8.5% on the big assembly; the keyword-only default keeps
 `test_prefix_stability.py:147` and the all-off bytes unchanged.
 
 #### R2.35 Lever 7's stop sentence reaches the view
@@ -850,7 +850,7 @@ single-quoted substrings replaced by "…")`; each group is `{kind, entity_kind,
 row's full text), rows: n, entity_ids: first 5, entity_ids_omitted}`, in first-appearance order,
 under `{groups, rows}`.
 
-**Why**: FR-019; measured 15,582 to 6,249 tokens on 830; the model still reads one verbatim reason
+**Why**: FR-019; measured 15,582 to 6,249 tokens on the big assembly; the model still reads one verbatim reason
 per group; MCP and the package keep every row. Grouping by literal reason groups little, because
 reasons embed document names.
 
@@ -861,7 +861,7 @@ reasons embed document names.
 
 **Why**: the spec chose two as the safer. VERIFIED under the prompt-cache model a result is billed
 uncached once per round it sits in front of a changed stub, so N=2 bills each result uncached
-twice and N=1 once (830 serial with slimming: 137,065 uncached at N=2 against 77,577 at N=1;
+twice and N=1 once (the big assembly, serial with slimming: 137,065 uncached at N=2 against 77,577 at N=1;
 totals 0.72M against 0.67M). Which to prefer is the owner's call (R5).
 
 #### R2.38 MCP general chat is not slimmed in this feature
@@ -960,7 +960,7 @@ estimate** (under 0.3M for each small fixture) with the strict figure required b
 total, and SC-010 measures real behaviour at the next sitting.
 
 **Reconciled**: the replay pass found SC-003 unreachable under recorded rounds - modelled defaults
-give 0.56M to 0.59M for each 810 run, because the fixed prefix of about 9.66k tokens times 36 to
+give 0.56M to 0.59M for each of the small assembly's two runs, because the fixed prefix of about 9.66k tokens times 36 to
 38 recorded rounds is 350k to 367k on its own - and offered (a) amend SC-003, (b) a labelled
 regrouped estimate, (c) leave it red. The view pass reached the same conclusion from its own
 model (0.45M to 0.51M with slimming and pruning alone; the difference is the checks-first digest
@@ -1088,7 +1088,7 @@ reader and one bridge double, not a second copy in the generator.
 
 #### R2.51 The follow-up budget is reachable, narrowly
 
-Computed on 2026-09-23 from the 830 recording: `R0` = 11,006; turn 0's output tokens total 8,054,
+Computed on 2026-09-23 from the big assembly's recording: `R0` = 11,006; turn 0's output tokens total 8,054,
 of which 519 are the presentation request's, so 7,535 ride in the conversation; the checks-first
 opening is about 2,420 (R2.20); 38 results as stubs of 48 to 159 tokens plus 12 framing each is
 about 2.3k to 6.5k; the follow-up text is 13 tokens. The follow-up request is therefore about 23k
@@ -1387,7 +1387,7 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 
 | Where | Was | Now | Why |
 |---|---|---|---|
-| SC-003 | under 0.3M for each 810-shaped fixture | under 0.3M on the replay's labelled regrouped estimate, with the strict recorded-rounds figure reported and below the recorded total; real behaviour measured by SC-010 | R2.43 |
+| SC-003 | under 0.3M for each fixture shaped like the small assembly | under 0.3M on the replay's labelled regrouped estimate, with the strict recorded-rounds figure reported and below the recorded total; real behaviour measured by SC-010 | R2.43 |
 | FR-013, FR-023 | "the command line keeps a way to turn it off" | the command line defaults every change off and turns each on explicitly, or all four with `--pane-defaults` | R2.15 |
 | FR-009, US2 scenario 2 | "written into the run folder's package" | into `<out>/package.json`: in place in the pane, where the run folder is the package folder; a merged copy on a command-line run, whose input folder is never written | R2.18 |
 | Edge case "Live detection fails or times out" | "or times out" | fails in any way the transport can report; a hang is not detectable by the pipe transport and is an R5 item | R2.23 |

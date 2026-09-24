@@ -1,11 +1,11 @@
 """Recorded rounds in the scripted provider (008 T005, research R2.3).
 
 The replay plays a recorded review back through `FakeProvider`, and a recorded turn is not
-one round: the 830 recording's opening turn is 39 main rounds, each with its own usage and its
-own calls. `ScriptedTurn.rounds` scripts exactly that - one assistant message per round
-holding that round's calls, its tool messages after it, one `usage` event per round before its
-calls run - while a turn scripted the old way plays byte-identically to before, which the
-first test pins against a stream captured from the code as it was.
+one round: the big assembly's recording opens with a turn of 39 main rounds, each with its own
+usage and its own calls. `ScriptedTurn.rounds` scripts exactly that - one assistant message per
+round holding that round's calls, its tool messages after it, one `usage` event per round
+before its calls run - while a turn scripted the old way plays byte-identically to before,
+which the first test pins against a stream captured from the code as it was.
 """
 
 from __future__ import annotations

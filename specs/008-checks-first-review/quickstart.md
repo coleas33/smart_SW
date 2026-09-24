@@ -70,9 +70,9 @@ uv run pytest tests/integration/test_replay_recorded_runs.py -q
 Expected on the development machine: every round of the three recorded reviews drifts from its
 bill by exactly the size change of the results it carries - a zero residual on every round,
 none outside the rule (`contracts/replay.md` section 10; since feature 010's checklist items the
-drift reaches 1.55%, 1.75% and 1.75%, which the old 1% bar would have failed for good); on 830,
-88 findings replayed and 11 not replayable offline (six interference, five standards without a
-profile). Skipped with a reason anywhere the dumps are absent.
+drift reaches 1.55%, 1.75% and 1.75%, which the old 1% bar would have failed for good); on the
+big assembly's recording, 88 findings replayed and 11 not replayable offline (six interference,
+five standards without a profile). Skipped with a reason anywhere the dumps are absent.
 
 ## Scenario 4 (US2): checks first on the fixtures
 
