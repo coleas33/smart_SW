@@ -286,6 +286,33 @@ public class ConfirmedDrawingReadTests : IDisposable
         Assert.Equal(DocumentIds.For(HousingDrawingPath), gap.EntityId);
     }
 
+    /// <summary>
+    /// The backend reloads the run folder's package right after <c>drawing.read</c> answers
+    /// (reviewer tools/drawings.read_confirmed_candidates), through the Python models that
+    /// contracts/ir.schema.json is generated from. So the package every successful read leaves -
+    /// opened and closed, read as it stood, or with its close refused - must satisfy the contract,
+    /// or the engineer's confirmed drawing would be read and then lost to a reload error.
+    /// </summary>
+    [Theory]
+    [InlineData("opened and closed")]
+    [InlineData("already open")]
+    [InlineData("close refused")]
+    public void ThePackageEverySuccessfulReadLeavesSatisfiesTheIrContract(string outcome)
+    {
+        if (outcome == "already open")
+        {
+            _host.AlreadyOpen(HousingDrawingPath);
+        }
+        else if (outcome == "close refused")
+        {
+            _host.AfterOpenAnswer = new object();
+        }
+
+        Read(RunId, HousingId);
+
+        IrContract.AssertValid(File.ReadAllText(PackageAppender.PathIn(_runFolder)));
+    }
+
     [Fact]
     public void ASecondReadOfTheSameCandidateIsRefusedAndOpensNothing()
     {
