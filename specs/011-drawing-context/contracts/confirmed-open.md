@@ -162,7 +162,10 @@ answers "the read-only open of a confirmed drawing is not yet validated on a sea
 probe D14)"; an already-open candidate is still read, since reading it opens nothing. Probe D14
 (`probes.md`) runs the seam from `swreview-extract probe drawings --out <folder> --probe D14` with the switch
 overridden for that one command. T077 sets it true in a commit of its own citing the probe record,
-or leaves it false and records why in research R4.
+or leaves it false and records why in research R4. *Amended 2026-09-23 (T094)*: the seat records;
+the development machine makes that commit (`SeatValidated => false` to `=> true`), whose only other
+edit is `DrawingOpenScopeTests.TheSeamShipsOffUntilTheSeatConfirmsIt`, the one test that reads the
+shipped value; a pane review that opens a confirmed candidate end to end is then T095.
 
 ## 5. What does not move
 

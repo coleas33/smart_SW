@@ -44,11 +44,6 @@ POSITION = ToleranceSubject(
 )
 
 
-@pytest.fixture
-def validated(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(binding, "DRAWING_BINDING_VALIDATED", True)
-
-
 @pytest.fixture(scope="module")
 def plate() -> EvidencePackage:
     return load_package(PLATE_DRAWING).package
@@ -187,6 +182,7 @@ def test_two_drawings_with_different_zones_are_the_drawing_sources_conflict() ->
                                     "dan:0001 (frame 1), read in the drawing's unit, mm is used")
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_with_the_switch_off_the_position_is_feature_010s(plate: EvidencePackage) -> None:
     answer = resolve_tolerance(plate, None, POSITION)
 
@@ -194,6 +190,7 @@ def test_with_the_switch_off_the_position_is_feature_010s(plate: EvidencePackage
     assert dict(answer.searched)["drawing"].startswith("drawing callouts are read but not yet")
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_a_bindable_drawing_zone_is_a_source_only_while_the_switch_is_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

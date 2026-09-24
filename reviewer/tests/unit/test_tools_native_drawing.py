@@ -113,11 +113,6 @@ def payloads(package: EvidencePackage) -> list[Any]:
     return out
 
 
-@pytest.fixture
-def validated(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(binding, "DRAWING_BINDING_VALIDATED", True)
-
-
 @pytest.fixture(scope="module")
 def plate() -> EvidencePackage:
     return load_package(DRAWINGS / "plate-drawing").package
@@ -238,6 +233,7 @@ def test_a_native_sheet_hides_an_ingested_sheet_of_the_same_name_from_find(
     assert labels[0] == "PDF-B"
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_with_the_switch_off_find_lists_the_ingested_sheet_beside_the_native_one(
     plate: EvidencePackage,
 ) -> None:
@@ -253,6 +249,7 @@ def test_with_the_switch_off_find_lists_the_ingested_sheet_beside_the_native_one
     assert "ddm:0001" in labels
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_with_the_switch_off_a_pdf_reference_on_a_natively_read_sheet_resolves(
     plate: EvidencePackage,
 ) -> None:
@@ -353,6 +350,7 @@ def test_a_document_with_no_sheet_of_either_kind_is_refused_as_today(
 # --- 3. resolve_dimension and the calculating tools -----------------------------------------------
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_with_the_switch_off_a_native_reference_is_refused_naming_the_seat_validation(
     plate: EvidencePackage,
 ) -> None:
@@ -411,6 +409,7 @@ def test_resolve_dimension_still_refuses_none_and_two(plate: EvidencePackage) ->
         resolve_dimension(doubled, native_ref("ddm:0001"))
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_with_the_switch_off_check_fit_refuses_native_references_and_records_nothing() -> None:
     context = run(fit_package())
     with use_context(context):
@@ -420,6 +419,7 @@ def test_with_the_switch_off_check_fit_refuses_native_references_and_records_not
     assert context.session is not None and context.session.findings == []
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_with_the_switch_off_check_axial_stack_refuses_a_native_reference() -> None:
     context = run(fit_package())
     with use_context(context):
@@ -429,6 +429,7 @@ def test_with_the_switch_off_check_axial_stack_refuses_a_native_reference() -> N
     assert context.session is not None and context.session.findings == []
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_with_the_switch_off_check_hole_alignment_refuses_a_native_tolerance() -> None:
     context = run(fit_package())
     with use_context(context):

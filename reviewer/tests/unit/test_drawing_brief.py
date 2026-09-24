@@ -22,7 +22,6 @@ from typing import Any
 import pytest
 
 from swreview.checks.standards.profile import StandardsProfile, load_profile
-from swreview.drawings import binding
 from swreview.drawings.brief import (
     BRIEF_MAX_BYTES,
     BRIEF_VERSION,
@@ -52,11 +51,6 @@ KEYS = [
     "conformance",
     "omitted",
 ]
-
-
-@pytest.fixture
-def validated(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(binding, "DRAWING_BINDING_VALIDATED", True)
 
 
 @pytest.fixture(scope="module")
@@ -179,6 +173,7 @@ def test_the_interfaces_name_each_subject_its_tolerance_its_drawing_and_its_call
     assert by_subject["the position of hol:0002#1"]["drawing"]["why"]
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_with_the_switch_off_the_interfaces_say_the_drawing_is_not_validated(
     plate: EvidencePackage, profile: StandardsProfile
 ) -> None:
