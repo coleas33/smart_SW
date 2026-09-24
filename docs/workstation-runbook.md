@@ -133,10 +133,14 @@ checked out: on a checkout that may be behind (any seat not updated since 2026-0
 script lacks `-TokenizerFrom`, `-SolidWorksRoot` and the `swreview-extract:` health line), pull
 first and build with the script that arrived: `git pull --ff-only origin main`, then
 `.\extractor\tools\update-workstation.ps1 -NoPull` (the test plan's step 1.3 does exactly this).
-It pulls only on `main`. A seat that keeps its own documentation commits on a lane (the pilot
-workstation's `local`) merges GitHub in by hand, `git fetch origin` then `git merge origin/main`,
-and runs the script with `-NoPull` to build and gate what is checked out; on a lane without
-`-NoPull` the script stops and says so rather than failing a fast-forward.
+`-NoPull` skips the pull, not the fetch: every version of the script starts with `git fetch
+origin` to show what is arriving, so a refused fetch stops it even then. The script pulls only on
+`main`. A seat that keeps its own documentation commits on a lane (the pilot workstation's
+`local`) merges GitHub in by hand, `git fetch origin` then `git merge origin/main`, and runs the
+script with `-NoPull` to build and gate what is checked out; on a lane without `-NoPull` the script
+stops and says so rather than failing a fast-forward, and with `-NoPull` it says
+`on '<branch>' with -NoPull: building what is checked out` and builds, a detached checkout
+included.
 
 Then start SOLIDWORKS and run the health checks (section 6).
 
@@ -268,9 +272,10 @@ the versions from section 2, so the owner can reproduce the machine's state.
 ## 9. Quick reference
 
 ```powershell
-# update (SOLIDWORKS closed, non-elevated); the script is the same steps as the lines after it
-.\extractor\tools\update-workstation.ps1          # -TokenizerFrom <file>, -SolidWorksRoot <root> as needed
+# update (SOLIDWORKS closed, non-elevated): pull first, then build with the script that arrived (section 4)
 cd '<repo>'; git status --porcelain; git pull --ff-only origin main
+.\extractor\tools\update-workstation.ps1 -NoPull  # -TokenizerFrom <file>, -SolidWorksRoot <root> as needed
+# or, instead of the script, the same build and gates by hand
 cd reviewer; uv sync --all-extras; uv run swreview tokenizer fetch
 $env:SWREVIEW_REQUIRE_TOKENIZER = "1"; uv run pytest -q -m "not live"; Remove-Item Env:SWREVIEW_REQUIRE_TOKENIZER; cd ..
 dotnet build extractor\SwReview.sln -c Release; dotnet test extractor\SwReview.sln -c Release

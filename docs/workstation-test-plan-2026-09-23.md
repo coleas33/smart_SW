@@ -393,9 +393,11 @@ Windows says running scripts is disabled, run
 `powershell -ExecutionPolicy Bypass -File .\extractor\tools\update-workstation.ps1 -NoPull`
 instead, with the same additions.
 
-Look at: `pull exit code: 0`, then each `== <step>` heading as it passes (fetch, `uv sync`,
-`tokenizer fetch`, `pytest`, `ruff`, `dotnet build`, `dotnet test`), then the `== health` block at
-the end.
+Look at: `pull exit code: 0`; then the script's first heading, `== git fetch origin` (every
+version of the script fetches, even with `-NoPull`: it shows what is arriving and pulls nothing),
+and the line `-NoPull: building what is checked out`; then each `== <step>` heading as it passes
+(`uv sync`, `tokenizer fetch`, `pytest`, `ruff`, `dotnet build`, `dotnet test`), then the
+`== health` block at the end.
 
 - Pass: `pull exit code: 0`; the script reaches `== health`; the pytest line says `passed` with no
   `failed`; `dotnet test` says `Passed!` for both test projects; the health block prints
@@ -413,11 +415,15 @@ the end.
     do 1.1 again.
   - `No SOLIDWORKS interops at ...`: add `-SolidWorksRoot`.
   - `The checkout has local changes`: go back to step 1.2.
-  - `The checkout is on '<branch>', not main`: stop and call the owner. This seat keeps its own
-    lane; do not merge here.
   - `git status failed`: the `$R` line of the setup block is wrong.
   - `A parameter cannot be found that matches parameter name`: the third line ran an older script;
     run the first two lines, then the third again.
+- The line `on '<branch>' with -NoPull: building what is checked out` in place of
+  `-NoPull: building what is checked out` means the checkout is not on `main` (`on 'HEAD'` means it
+  is detached, as "Going back to the build you had" leaves it); step 1.2 should have stopped you.
+  With `-NoPull` the script does not refuse: it goes on and builds what is checked out. Press
+  Ctrl+C, stop, and call the owner. This seat keeps its own lane; do not merge or switch branches
+  here.
 - A refusal from the network at `== git fetch origin`, `== uv sync --all-extras` or `== dotnet
   build` (a web filter or proxy page in the output) is setup, not a defect: copy the lines into
   `$H\notes\update.txt`, write `blocked by 1.3: network` in the Results table, and call the owner. A
@@ -830,8 +836,9 @@ Answer any questions the review asks (step 4's box, item 5, says how), then go o
    Look: `IsModelOutOfDate true` on that view. Close both copies (Don't Save).
 3. Detailing mode, and a model that is not loaded. With nothing else open (Window > Close All,
    Don't Save), File > Open D-1 with Mode **Detailing**. If Detailing is not offered, write
-   `blocked: no detailing data in D-1` in both rows of this item and go on. Otherwise run the D12
-   line with D-1's own path: `detailing mode true`. Then, with D-1 still active in Detailing mode,
+   `blocked: no detailing data in D-1` in the two item 3 rows of 3.5 (011 T063's detailing mode
+   and 006 T107's model not loaded) and go on; items 1 and 2 keep their own row. Otherwise run the
+   D12 line with D-1's own path: `detailing mode true`. Then, with D-1 still active in Detailing mode,
    on the Standards tab press **Standards check** (006 T107, the not-loaded half). Pass: the model
    D-1 shows appears as a gap and as an unresolved check, no window opens (the Window menu is
    unchanged), and **Open report** says `nothing was rebuilt`. Close D-1.
@@ -1414,10 +1421,12 @@ git prints `You are in 'detached HEAD' state` and a few lines of advice: that is
 is the build before the fix (`3e86d47`); `-SkipTests` only here, because this build is only looked
 at. If Windows says running scripts is disabled, run
 `powershell -ExecutionPolicy Bypass -File .\extractor\tools\update-workstation.ps1 -NoPull -SkipTests`.
-The older script has no `-SolidWorksRoot`, and it runs `git fetch origin` even with `-NoPull`. If
-SOLIDWORKS is not in its usual folder, or the older script stops at `== git fetch origin`, build
-directly instead (the Python side needs nothing: its lock file is the same on both builds, and the
-backend runs from the checkout):
+Like the current script, the older one starts with `== git fetch origin` even with `-NoPull` (the
+fetch changes nothing checked out), then prints `on 'HEAD' with -NoPull: building what is checked
+out`, because the checkout is detached: both are expected here. The older script has no
+`-SolidWorksRoot`. If SOLIDWORKS is not in its usual folder, or the script stops at
+`== git fetch origin` (the network refused the fetch), build directly instead (the Python side
+needs nothing: its lock file is the same on both builds, and the backend runs from the checkout):
 
 ```powershell
 $sw = "C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS"   # or "<SOLIDWORKS install folder>"
@@ -1442,8 +1451,11 @@ git log --oneline -1; (Get-Item "$R\extractor\SwReview.AddIn\bin\x64\Release\net
 ```
 
 Pass: the script reaches `== health` as in step 1.3, the log line names the commit of step 1.4,
-and the add-in's time is after the return build started. If the return stops at pytest or ruff
-(both passed on this commit at 1.3), run it once more. If it stops again, run
+and the add-in's time is after the return build started. The return fetches first too: if it stops
+at `== git fetch origin`, build directly with the same two lines as above (`$sw` and
+`dotnet build`), which pass when `dotnet build` ends `Build succeeded.` (the gates passed on this
+commit at 1.3), then run the third line. If the return stops at pytest or ruff (both passed on this
+commit at 1.3), run it once more. If it stops again, run
 `.\extractor\tools\update-workstation.ps1 -NoPull -SkipTests`, so the current add-in is at least
 built, and record the failing test. If `dotnet build` fails, clear SwReview's two boxes (Active and
 Start Up) in Tools > Add-ins and call the owner. **Never leave the seat on the older add-in.**
@@ -1562,9 +1574,14 @@ git checkout --detach $previous; git log --oneline -1
 .\extractor\tools\update-workstation.ps1 -NoPull
 ```
 
-Pass: the log line names the commit in `commit-before.txt`, and the script reaches `== health`. The
-checkout is now detached: the next update starts with `git checkout main`, and the script says so
-if you forget. If the new profile is the problem, put the old one back with
+Pass: the log line names the commit in `commit-before.txt`, and the script reaches `== health`; on
+the way it prints `on 'HEAD' with -NoPull: building what is checked out`, which is expected here.
+If it stops at `== git fetch origin` (the script fetches even with `-NoPull`, and the network
+refused), build directly with step 5.5's two lines (`$sw` and `dotnet build`). The checkout is now
+detached. The next update starts with `git checkout main`, and nothing does it for you: with
+`-NoPull` the script does not refuse a detached checkout, it builds it again. Step 1.2's second
+line, which prints nothing instead of `main` while the checkout is detached, is the check that stops
+you. If the new profile is the problem, put the old one back with
 `Copy-Item "$H\notes\standards.yaml.before" "$env:LOCALAPPDATA\SwReview\standards.yaml"`. If going
 back fails too, or this is a new machine with no earlier build, clear both SwReview boxes (Active
 and Start Up) in SOLIDWORKS under Tools > Add-ins: SOLIDWORKS then runs without the add-in until the

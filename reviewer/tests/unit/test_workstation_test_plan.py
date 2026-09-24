@@ -169,6 +169,8 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("git status failed", "extractor/tools/update-workstation.ps1"),
     ("uv on PATH: ", "extractor/tools/update-workstation.ps1"),
     ("swreview-extract: ", "extractor/tools/update-workstation.ps1"),
+    ("-NoPull: building what is checked out", "extractor/tools/update-workstation.ps1"),
+    (" with -NoPull: building what is checked out", "extractor/tools/update-workstation.ps1"),
     ("If the box is clear there", "extractor/tools/register-addin.ps1"),
     # Where the pane is, and the buttons and badge the steps name.
     ("SwReview evidence extractor (read-only)", "extractor/SwReview.AddIn/SwReviewAddIn.cs"),
@@ -311,6 +313,52 @@ def test_the_plan_starts_the_findings_document_once_the_update_has_brought_the_s
     assert plan.index("notepad $findings") > plan.index("### 1.4 ")
     assert r"notes\update.txt" in step_1
     assert "## Start the findings document" not in plan
+
+
+def test_a_blocked_item_3_at_step_3_5_costs_only_its_own_rows(plan: str, results: str) -> None:
+    """3.5's item 3 needs D-1 saved with detailing data; when it cannot run, only the two rows it
+    feeds are blocked, and 011 T063's items 1 and 2 keep the row that holds their result."""
+    rows = [cell for step, cell, *_ in result_rows(results) if step == "3.5"]
+    item_3 = [cell for cell in rows if cell.endswith("(item 3)")]
+    t063 = [cell for cell in rows if ("011", "T063") in qualified_tasks(cell)]
+
+    assert set().union(*(qualified_tasks(cell) for cell in item_3)) == {
+        ("011", "T063"), ("006", "T107"),
+    }
+    assert [cell for cell in t063 if cell not in item_3] != []
+    assert "the two item 3 rows of 3.5" in step(plan, "3.5")
+    assert "both rows of this item" not in plan
+
+
+def test_the_plan_never_lets_the_update_script_pull(plan: str) -> None:
+    """Every run of the script in the plan builds what is checked out: the pull is step 1.3's own
+    line, before it, so the script that runs is the one that arrived."""
+    runs = re.findall(r"\.\\extractor\\tools\\update-workstation\.ps1[^`\n]*", plan)
+
+    assert len(runs) >= 6
+    assert [run for run in runs if " -NoPull" not in run] == []
+
+
+def test_the_update_script_fetches_before_it_decides_not_to_pull() -> None:
+    """The plan says every run of the script, `-NoPull` included, starts at `== git fetch origin`,
+    and that `-NoPull` on a branch other than main - a detached checkout included - builds rather
+    than refuses. Both are the script's order."""
+    script = (REPO / "extractor" / "tools" / "update-workstation.ps1").read_text(encoding="utf-8")
+    fetch = script.index('Invoke-Step "git fetch origin"')
+    not_main = script.index("if ($branch -ne 'main')")
+    refusal = script.index("if (-not $NoPull)", not_main)
+    builds = script.index("with -NoPull: building what is checked out", not_main)
+
+    assert fetch < not_main < refusal < builds
+
+
+def test_the_runbooks_quick_reference_pulls_before_it_runs_the_script() -> None:
+    runbook = (REPO / "docs" / "workstation-runbook.md").read_text(encoding="utf-8")
+    quick = runbook[runbook.index("## 9. Quick reference") :]
+    [run] = [line for line in quick.splitlines() if "update-workstation.ps1" in line]
+
+    assert quick.index("git pull --ff-only origin main") < quick.index(run)
+    assert "-NoPull" in run
 
 
 def test_the_results_sheet_has_a_row_for_every_step_and_task_a_heading_names(
