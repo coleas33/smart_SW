@@ -241,19 +241,20 @@ research R2.53).
 The replay's figures, requested input tokens counted with o200k_base, copied from
 `swreview benchmark replay` on the three committed fixtures (run from `reviewer/`, each with
 `--standards-profile ../config/standards.example.yaml`, 2026-09-23, on the fixtures the current
-code regenerated, 008 decision 3A; the figures of 008 `contracts/replay.md` section 9's
-re-measured row). The fixtures record the scripted provider, whose pane runs checks first,
-lever 13, slimming and pruning but no parallel calls; `--lever parallel_tool_calls` gives the
-OpenAI pane, on which SC-003's regrouped estimate is read. The regrouped estimate assumes the
-model does not repeat a check the digest reported and batches consecutive calls to one tool
-(008 `contracts/replay.md` section 6); the requested figure assumes the model makes the
-recorded calls in the recorded rounds.
+code regenerated, 008 decision 3A; the figures of 008 `contracts/replay.md` section 9's last
+re-measured row, feature 011's integration, where the version-3 example profile's hash moved
+the recorded and as-recorded columns and no requested figure). The fixtures record the scripted
+provider, whose pane runs checks first, lever 13, slimming and pruning but no parallel calls;
+`--lever parallel_tool_calls` gives the OpenAI pane, on which SC-003's regrouped estimate is
+read. The regrouped estimate assumes the model does not repeat a check the digest reported and
+batches consecutive calls to one tool (008 `contracts/replay.md` section 6); the requested
+figure assumes the model makes the recorded calls in the recorded rounds.
 
 | Fixture | Recorded | As recorded | Requested, pane defaults | Regrouped estimate, pane defaults (rule R) | Regrouped estimate, OpenAI pane (rules R and M) | Requested, `--prune-after 1` | Regrouped estimate, OpenAI pane, `--prune-after 1` |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| big-assembly | 12,411,209 | 12,411,080 | 663,902 | 486,940 | 277,361 | 619,092 | 233,746 |
-| small-assembly-a | 1,598,717 | 1,598,817 | 459,000 | 381,853 | 245,289 | 444,881 | 231,665 |
-| small-assembly-b | 1,505,494 | 1,505,562 | 453,564 | 389,232 | 244,277 | 440,841 | 231,776 |
+| big-assembly | 12,412,329 | 12,412,200 | 663,902 | 486,940 | 277,361 | 619,092 | 233,746 |
+| small-assembly-a | 1,598,829 | 1,598,929 | 459,000 | 381,853 | 245,289 | 444,881 | 231,665 |
+| small-assembly-b | 1,505,638 | 1,505,706 | 453,564 | 389,232 | 244,277 | 440,841 | 231,776 |
 
 Commands, in column order: `--no-pane-defaults` (recorded and as recorded), the default, the
 default's `regrouped estimate` line, `--lever parallel_tool_calls`, `--prune-after 1`, and
@@ -261,6 +262,6 @@ default's `regrouped estimate` line, `--lever parallel_tool_calls`, `--prune-aft
 replayable and none is reclassified in any run: the recordings' 3, 2 and 0 touching groups are
 recorded in the fixtures as the contacts feature 010's code judges them, and every requested
 pass holds them; 62, 7 and 5 findings are added by feature 010's checks in the pre-run. The big
-fixture's follow-up round is 22,719 requested against 405,280 recorded (22,099 at
+fixture's follow-up round is 22,719 requested against 405,320 recorded (22,099 at
 `--prune-after 1`). These are replay figures, not bills: the paid figures of the next workstation
 sitting go beside them (008 T102 to T105).
