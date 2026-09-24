@@ -10,8 +10,11 @@ namespace SwReview.Extractor.Probes;
 /// <summary>
 /// How <c>probe drawings</c> writes what it read (contracts/probes.md section 1): ids, counts,
 /// member answers, enum numbers and millimetres - never a file name, path, property value, note
-/// text or cell text - so its report can be pasted into the research of a public repository. Every
-/// line the probes print goes through these, so the rule is kept in one place.
+/// text or cell text. The one exception is a dimension's line in D6 and D8, which also gives the
+/// dimension's <see cref="DimensionName"/>, its view's name and its <see cref="Nominal"/> value, so
+/// the engineer can find a callout named in advance; those reports travel in the handoff folder,
+/// and only their ids, counts and answers go into the research of the public repository. Every line
+/// the probes print goes through these, so the rule is kept in one place.
 /// </summary>
 public static class ProbeText
 {
@@ -97,6 +100,44 @@ public static class ProbeText
         (double value, string unit) = Normalised(measure);
         return (value >= 0 ? "+" : "-") + Math.Abs(value).ToString("F4", CultureInfo.InvariantCulture) + " " + unit;
     }
+
+    /// <summary>
+    /// A dimension's own value, as the one a callout shows: a length in millimetres (from metres,
+    /// millimetres or inches), an angle in degrees, to four decimals, with a sign only when negative.
+    /// </summary>
+    public static string Nominal(IrMeasure? measure)
+    {
+        if (measure == null)
+        {
+            return Unread;
+        }
+
+        (double value, string unit) = Normalised(measure);
+        return value.ToString("F4", CultureInfo.InvariantCulture) + " " + unit;
+    }
+
+    /// <summary>
+    /// A dimension's name as SOLIDWORKS shows it beside the value (<c>D1@Sketch2</c>): its first two
+    /// <c>@</c> segments, the dimension and its feature, stopping before any segment that is a
+    /// document name, so the name of the file it belongs to is never printed. Null when there is no
+    /// dimension segment to print.
+    /// </summary>
+    public static string? DimensionName(string? fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName))
+        {
+            return null;
+        }
+
+        List<string> kept = fullName!.Split('@')
+            .Take(2)
+            .TakeWhile(segment => KindByExtension(segment) == "other")
+            .ToList();
+        return kept.Count == 0 || kept[0].Length == 0 ? null : string.Join("@", kept);
+    }
+
+    /// <summary>A name in double quotes, since a view's name or a feature's may hold spaces and commas; unread when null.</summary>
+    public static string Quoted(string? text) => text == null ? Unread : "\"" + text + "\"";
 
     /// <summary>A length in metres, in millimetres to four decimals, unsigned.</summary>
     public static string Millimetres(double metres) =>

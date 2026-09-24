@@ -12,9 +12,12 @@ namespace SwReview.Extractor.Tests.Fakes;
 /// <summary>
 /// The fictional design <c>probe drawings</c> is tested on (feature 011 T080): a two-sheet drawing
 /// of one part, with every kind of record the probes print, and the part's own extraction. Every
-/// string the report must never carry - a path, a file or sheet name, a note, a cell, a property
-/// value, a persistent reference - carries the <see cref="Private"/> marker or is listed in
-/// <see cref="Forbidden"/>, so one scan of the report proves it printed ids and numbers only.
+/// string the report must never carry - a path, a file or sheet name, a document segment of a
+/// dimension's name, a note, a cell, a property value, a persistent reference - carries the
+/// <see cref="Private"/> marker or is listed in <see cref="Forbidden"/>, so one scan of the report
+/// proves it. The few names D6 and D8 print on a dimension's line, so the engineer can find a named
+/// callout, are listed in <see cref="NamedOnDimensionLines"/>, and the same scan proves no other line
+/// carries them.
 /// </summary>
 internal static class ProbeFixture
 {
@@ -28,6 +31,7 @@ internal static class ProbeFixture
     public const string UnmatchedReference = "Tk8tTUFUQ0gtUkVG";
     public const string SheetA = "PRIVATE-SHEET-A";
     public const string SheetB = "PRIVATE-SHEET-B";
+    public const string ViewName = "Drawing View2";
 
     public static string DrawingId => DocumentIds.For(DrawingPath);
 
@@ -39,7 +43,16 @@ internal static class ProbeFixture
     public static IReadOnlyList<string> Forbidden() => new[]
     {
         Private, "Fictional", "FICTIONAL", "knuckle", "spigot", ".slddrt", FaceReference, EdgeFaceReference,
-        UnmatchedReference, "Sketch1", "Cut-Extrude", "MyBore",
+        UnmatchedReference,
+    };
+
+    /// <summary>
+    /// The dimensions' <c>dimension@feature</c> names and their view's name: printed on D6's and D8's
+    /// dimension lines, and on no other line.
+    /// </summary>
+    public static IReadOnlyList<string> NamedOnDimensionLines() => new[]
+    {
+        "Sketch1", "Cut-Extrude", "MyBore", ViewName,
     };
 
     /// <summary>The drawing's Standards extraction: phases, gaps and one drawing record.</summary>
@@ -110,7 +123,7 @@ internal static class ProbeFixture
         var formatView = new DrawingView { Id = "dvw:0001", SheetId = "dsh:0001", ViewTypeRaw = 1 };
         var partView = new DrawingView
         {
-            Id = "dvw:0002", SheetId = "dsh:0001", Name = "PRIVATE-VIEW", ViewTypeRaw = 7,
+            Id = "dvw:0002", SheetId = "dsh:0001", Name = ViewName, ViewTypeRaw = 7,
             ReferencedDocumentId = PartId, ReferencedModelPath = PartPath, ReferencedConfiguration = "PRIVATE-CONFIG",
             IsModelOutOfDate = false, IsModelLoaded = true, ScaleDecimal = 0.5,
         };

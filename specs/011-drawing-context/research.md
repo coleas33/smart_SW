@@ -751,7 +751,9 @@ every recorded review.
 ## R4. Seat probes
 
 Each is a section of `swreview-extract probe drawings` (`contracts/probes.md`), read-only, printing
-ids, counts, member answers and millimetres - never a name, path or property value. The four
+ids, counts, member answers and millimetres - never a name, path or property value, except the
+dimension names, view names and values of D6's and D8's dimension lines (amended 2026-09-24), which
+stay in the report: only its ids, counts and answers are recorded here. The four
 feature 006 probes the attach made unreachable run at the same sitting, unchanged (006 T103, T105,
 T107).
 

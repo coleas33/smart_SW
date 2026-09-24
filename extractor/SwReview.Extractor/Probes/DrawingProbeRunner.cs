@@ -20,8 +20,10 @@ namespace SwReview.Extractor.Probes;
 /// D11 add the few reads the extraction does not record, D13 times the candidate check, and D14 runs
 /// the confirmed open's own seam (<see cref="DrawingOpenProbe"/>).
 ///
-/// Every line is ids, counts, member answers, enum numbers and millimetres (<see cref="ProbeText"/>);
-/// a read that fails is printed and the run carries on; nothing is opened except by D14.
+/// Every line is ids, counts, member answers, enum numbers and millimetres (<see cref="ProbeText"/>),
+/// except that D6's and D8's dimension lines also give the dimension's name, its view's name and its
+/// value, as the extraction read them, so a callout named in advance can be found; a read that fails
+/// is printed and the run carries on; nothing is opened except by D14.
 /// </summary>
 public static class DrawingProbeRunner
 {
@@ -441,10 +443,10 @@ public static class DrawingProbeRunner
             foreach ((DrawingSheetRecord sheet, DrawingView view) in ViewsOf(record))
             {
                 var attached = view.DisplayDimensions
-                    .Select(dimension => (dimension.Id, What: "dimension", Faces: dimension.AttachedFaces))
+                    .Select(dimension => (dimension.Id, What: "dimension", Named: Named(view, dimension) + "; ", Faces: dimension.AttachedFaces))
                     .Concat(view.Annotations.Select(annotation =>
-                        (annotation.Id, What: $"annotation type {ProbeText.Int(annotation.TypeRaw)}", Faces: annotation.AttachedFaces)));
-                foreach ((string id, string what, List<AttachedFace>? faces) in attached)
+                        (annotation.Id, What: $"annotation type {ProbeText.Int(annotation.TypeRaw)}", Named: string.Empty, Faces: annotation.AttachedFaces)));
+                foreach ((string id, string what, string named, List<AttachedFace>? faces) in attached)
                 {
                     List<AttachedFace> list = faces ?? new List<AttachedFace>();
                     int attachmentGaps = gaps.Count(gap =>
@@ -456,7 +458,7 @@ public static class DrawingProbeRunner
                     }
 
                     owners++;
-                    lines.Add($"  {id} ({what}, sheet {sheet.Index + 1}, {view.Id}): attached faces {list.Count} "
+                    lines.Add($"  {id} ({what}, sheet {sheet.Index + 1}, {view.Id}): {named}attached faces {list.Count} "
                         + $"(via face {list.Count(face => face.Via == AttachedVia.Face)}, "
                         + $"via edge {list.Count(face => face.Via == AttachedVia.Edge)}), attachment gaps {attachmentGaps}");
                     for (int i = 0; i < list.Count; i++)
@@ -576,7 +578,7 @@ public static class DrawingProbeRunner
             {
                 foreach (DisplayDimensionRecord dimension in view.DisplayDimensions)
                 {
-                    lines.Add($"  {dimension.Id} {Where(sheet, view)}: FullName "
+                    lines.Add($"  {dimension.Id} {Where(sheet, view)}: {Named(view, dimension)}; FullName "
                         + (string.IsNullOrWhiteSpace(dimension.Name)
                             ? ProbeText.Unread
                             : Shape(dimension.Name!, FileNameOf(view.ReferencedModelPath), "the view's document")));
@@ -863,6 +865,16 @@ public static class DrawingProbeRunner
             record.Sheets.SelectMany(sheet => sheet.Views.Select(view => (sheet, view)));
 
         private static string Where(DrawingSheetRecord sheet, DrawingView view) => $"(sheet {sheet.Index + 1}, {view.Id})";
+
+        /// <summary>
+        /// What lets the engineer find a callout named in advance on the sheet (D6 and D8, for T066):
+        /// the dimension's <c>dimension@feature</c>, its view's name and its value, each as the
+        /// Standards extraction read it (<c>IDimension.FullName</c>, <c>IView.GetName2</c>,
+        /// <c>IDimension.GetSystemValue3</c>), so the probe makes no read of its own.
+        /// </summary>
+        private static string Named(DrawingView view, DisplayDimensionRecord dimension) =>
+            $"name {ProbeText.Quoted(ProbeText.DimensionName(dimension.Name))}, view {ProbeText.Quoted(view.Name)}, "
+            + $"value {ProbeText.Nominal(dimension.Value)}";
 
         /// <summary>
         /// The part documents the drawing shows or its annotations attach to, in the order first met,
