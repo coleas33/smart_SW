@@ -8,7 +8,9 @@ SOLIDWORKS before building or registering. This document replaces the 2026-09-20
 handover as the current work; it is one ordered list of every seat task of features 008, 009, 010
 and 011, each with its command, what decides pass or fail, and where its record goes. The task
 texts in `specs/00N-*/tasks.md` stay the source of truth: where this document and a task
-disagree, the task wins and the difference is a finding.
+disagree, the task wins and the difference is a finding. The engineer who runs the sitting follows
+`docs/workstation-test-plan-2026-09-23.md` (011 T100): the same sitting in plain, numbered steps,
+each with its exact command and what counts as pass or fail.
 
 **What the seat does not do.** It commits nothing but a findings document (runbook rule 2). Two
 switches wait on this sitting's probe records - `DRAWING_BINDING_VALIDATED` (011 T066) and
@@ -120,7 +122,12 @@ section 8); the development machine moves each answer into the research file nam
    unchanged, no save flag, released after the close, the counts). Then a pane review with the
    candidate, confirmed: the pane shows the host's refusal ("the read-only open of a confirmed
    drawing is not yet validated on a seat") and nothing opens - which is right while the switch
-   is off. Record: the report file and the pane's sentence.
+   is off. Record: the report file and the pane's sentence. In the same pane reviews, 011 T101:
+   the lanes' live checks of part B with the switch off - the `drawing.read` line of the
+   tool-service log, the `drawing.confirmed_open` coverage for a candidate left closed and for one
+   the engineer opened before confirming, the summary's drawings line before and after, one
+   `drawing.context` line per document, and the pane at 300 by 600 (the test plan's steps 4.6
+   and 4.7).
 9. **011 T067: the questions.** A pane review of the design with a candidate drawing and a
    doubly-drawn part: the two questions appear, answering them records the answers, and the part's
    brief lists them. The brief's size:
@@ -141,10 +148,13 @@ section 8); the development machine moves each answer into the research file nam
     (T105). The same run is 010 T107's (contacts apart and outside "Start here", the joint, mass
     and hygiene findings before the first model turn, no model round spent on them) and the
     summary 009 T079 and T080 read.
-12. **008 T104: Retry.** On step 11's run folder press Retry: `package.json`'s row and gap counts
-    do not grow and the same groups are judged. Record the `POST /sessions` duration from the
-    pane's DevTools Network tab, and the seconds from `session.started` to the first
-    `text.delta`:
+12. **008 T104: Retry.** Retry is on the error card ("The review stopped") only; with none, T104 is
+    not reachable and is recorded so. When there is one, press it: the add-in makes a new run
+    folder and extracts again, and its `package.json`'s row and gap counts do not grow and the
+    same groups are judged. Record the setup time - the add-in, not the page, sends
+    `POST /sessions`, so the pane's DevTools never shows it: from `session.started` to that
+    request's `201` line in the backend log (the test plan's `Show-SetupTime`, step 4.3) - and the
+    seconds from `session.started` to the first `text.delta`:
     `Get-Content <run folder>\events.jsonl | ConvertFrom-Json | Where-Object { $_.type -in 'session.started','text.delta' } | Select-Object seq,type,at`
     (the pair after the Retry's `session.started`).
 13. **008 T103 and 009 T079: the small assembly, paid.** A pane review with the defaults. Pass: the
