@@ -68,7 +68,8 @@ if (-not (Test-Path "$H\notes\commit-before.txt")) { git rev-parse --short HEAD 
 git fetch origin; git log --oneline HEAD..origin/main
 git pull --ff-only origin main; "pull exit code: $LASTEXITCODE"
 .\extractor\tools\update-workstation.ps1 -NoPull      # add -TokenizerFrom "<file>" or -SolidWorksRoot "<root>" as section 2 says
-git log --oneline -1; Test-Path docs\workstation-test-plan-2026-09-23.md   # this document's commit or a later one, then True
+git log --oneline -1; Test-Path docs\workstation-results-2026-09-23.md   # the commit, then True: the results sheet is there
+git merge-base --is-ancestor 8d308be HEAD; "holds 8d308be: $($LASTEXITCODE -eq 0)"   # True: the probe names each dimension (T066)
 Select-String -Path "$env:LOCALAPPDATA\SwReview\standards.yaml" -Pattern '^version:'   # after step 1 below
 ```
 
@@ -157,7 +158,8 @@ row per step and task id. The development machine moves each answer into the res
    keeps the switch off. Pass: every named callout found, with the value it must have, and tied
    to the right hole (D6's face is a cylinder of half the named hole's diameter); D8 reads
    `FullName equal true`, D5 `; agree true`, and D4's unit and decimals are the ones the engineer
-   named. Record the verdict and every mismatch, never a dimension's name or view; do **not**
+   named. Record the verdict and every mismatch as the check that failed, never a dimension's
+   name, view, value or radius (the probe report keeps them, in the handover folder); do **not**
    change the switch.
 8. **011 T077: the read-only open.** Beside the reviewed part whose same-name drawing is closed
    (the test plan's part J):

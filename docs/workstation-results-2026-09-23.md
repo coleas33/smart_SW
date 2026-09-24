@@ -8,7 +8,8 @@ ever pasted into a chat.
 
 Documents by letter only (the list is `notes\documents.txt` in the handover folder). No vault path,
 folder name, property name or value, sheet format or template name, and no key. A run folder is
-written as its time stamp and letter (`20261001-101112-A`), never its name.
+written as its time stamp and letter (`20261001-101112-A`), never its name. From a D6 or D8 line of
+a probe report, its id only: never a dimension's name, view, value or radius.
 
 | | |
 |---|---|
