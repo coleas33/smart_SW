@@ -4,9 +4,10 @@ Written 2026-09-23 for the engineer who runs the next sitting on a licensed SOLI
 not need to be a developer to follow it. Every step says what to do, gives the exact command to
 paste, says what to look at, and says what counts as a pass and what counts as a fail. Write each
 result in the **Results table** of the findings document as soon as the step ends: you start that
-document once, on day 1, right after the setup block ("Start the findings document"), from
-`docs/workstation-results-2026-09-23.md`, the results sheet. Each row is one step and one task id,
-and takes `pass`, `fail` or `blocked`, the value you observed, and notes. Step 6 collects it.
+document once, on day 1, at step 1.4, from `docs/workstation-results-2026-09-23.md`, the results
+sheet, which step 1.3's update brings to a checkout older than this plan. Each row is one step and
+one task id, and takes `pass`, `fail` or `blocked`, the value you observed, and notes. Step 6
+collects it.
 
 Each step carries the task ids it answers in square brackets, with the feature in front, for
 example **[011 T062]**: that is the row of `specs/011-drawing-context/tasks.md` the development
@@ -332,28 +333,6 @@ included. Every file or folder placeholder in this plan is written in double quo
 reason; only the run folder placeholders (`$run`, `$package`, `$pin`), copied from the Explorer
 address bar, are in single quotes.
 
-## Start the findings document (day 1, once)
-
-```powershell
-if (-not (Test-Path $findings)) { Copy-Item "$R\docs\workstation-results-2026-09-23.md" $findings }
-notepad $findings
-```
-
-This copies the results sheet into the handover folder as `pane-findings-<date>.md`, where the
-date is the handover folder's own date, the first day of the sitting, and opens it. Keep it open
-and fill in the Results table as each step ends (Ctrl+S saves). Each result is one word:
-
-- `pass`: every pass condition the step gives for this task held.
-- `fail`: the step ran and a condition did not hold. Quote the line that shows it in Observed.
-- `blocked`: the step could not run, or the case it needs did not arise. Name the step, letter or
-  condition in Notes, for example `blocked by 2.3: profile version 1`, `blocked: no document K` or
-  `blocked: B ended without an error card`.
-
-A task spread over several rows passes only if every row passed, fails if any row failed, and
-otherwise is blocked. Observed holds a count, a report file name, a run folder's stamp and letter,
-or a quoted line: never a path or a name. What a step says to record in more detail goes under
-that step's heading further down the document.
-
 ## The pane
 
 SwReview's pane is in SOLIDWORKS's **Task Pane** on the right: the SwReview icon, whose tooltip is
@@ -366,6 +345,11 @@ backend...` while the backend starts, then `Backend ready` (with or without a fu
 `Error`. **Settings** is at the top of the Review tab.
 
 ## Step 1. Update the workstation
+
+The findings document starts at 1.4: its results sheet arrives with the update, so a checkout
+older than this plan does not have it before 1.3's pull. Until then, what 1.1 to 1.3 say to record
+goes in `notes\update.txt` (`notepad "$H\notes\update.txt"` opens it), and 1.2 keeps the commit in
+`notes\commit-before.txt`; at 1.4 you write 1.3's result in its row.
 
 ### 1.1 SOLIDWORKS is closed
 
@@ -440,7 +424,7 @@ the end.
   download refused at `tokenizer fetch` is not a fail: run the third line again with
   `-TokenizerFrom` and the owner's file.
 
-### 1.4 Which build this is
+### 1.4 Which build this is, and the findings document
 
 ```powershell
 git log --oneline -1; Test-Path docs\workstation-test-plan-2026-09-23.md
@@ -449,9 +433,39 @@ foreach ($k in 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F301722
 ```
 
 Pass: the second line prints `True` (the checkout holds this plan, so it is this build or a later
-one), and every other line prints a commit or a version. No `WebView2` line at all: write
+one), and every other line prints a commit or a version. `False`: the update did not bring this
+plan (section 0.1, item 1): stop and call the owner. No `WebView2` line at all: write
 `WebView2: not found in the registry` and go on; the pane's tabs showing at 1.6 is the real test.
-Record all of it at the top of the findings document (SOLIDWORKS's own version comes at 1.6).
+
+Then start the findings document, once:
+
+```powershell
+if (-not (Test-Path $findings)) { Copy-Item "$R\docs\workstation-results-2026-09-23.md" $findings }
+notepad $findings
+```
+
+This copies the results sheet the update brought into the handover folder as
+`pane-findings-<date>.md`, where the date is the handover folder's own date, the first day of the
+sitting, and opens it; run again, on day 2 or later, it only opens the document you are filling in.
+Pass: Notepad shows a document headed `# Workstation findings <date>`. A red `Cannot find path`
+naming `workstation-results-2026-09-23.md` means the checkout does not hold this plan: the second
+line of the block above printed `False`.
+
+Write 1.3's result in its row, then the commit and versions above at the top of the document
+(SOLIDWORKS's own version comes at 1.6), and anything `notes\update.txt` holds under the heading
+of step 1. Keep the document open and fill in the Results table as each step ends (Ctrl+S saves).
+Each result is one word:
+
+- `pass`: every pass condition the step gives for this task held.
+- `fail`: the step ran and a condition did not hold. Quote the line that shows it in Observed.
+- `blocked`: the step could not run, or the case it needs did not arise. Name the step, letter or
+  condition in Notes, for example `blocked by 2.3: profile version 1`, `blocked: no document K` or
+  `blocked: B ended without an error card`.
+
+A task spread over several rows passes only if every row passed, fails if any row failed, and
+otherwise is blocked. Observed holds a count, a report file name, a run folder's stamp and letter,
+or a quoted line: never a path or a name. What a step says to record in more detail goes under
+that step's heading further down the document.
 
 ### 1.5 Registration, only when needed
 

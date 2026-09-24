@@ -93,8 +93,9 @@ shell it runs in; every `uv run` command runs from `<repo>\reviewer`.
 Each step: the task, what to run, what decides it, and where the record goes. "The findings
 document" is `pane-findings-<date>.md` in `%LOCALAPPDATA%\SwReview\handover\<date>\` (runbook
 section 8), where the date is the handover folder's, the sitting's first day: the test plan copies
-`docs/workstation-results-2026-09-23.md` there on day 1, and its Results table takes one row per
-step and task id. The development machine moves each answer into the research file named.
+`docs/workstation-results-2026-09-23.md` there at its step 1.4, on day 1, once the update has
+brought it (an older checkout has no such file before the pull), and its Results table takes one
+row per step and task id. The development machine moves each answer into the research file named.
 
 1. **008 T101 and 006 T100: the real profile.** Place the owner's file at
    `%LOCALAPPDATA%\SwReview\standards.yaml`; `Select-String` shows `version: 3`; runbook section
