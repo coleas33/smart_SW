@@ -158,8 +158,8 @@ _BUCKET_BY_OUTCOME: dict[str, CoverageBucket] = {
 
 SUMMARY_BUCKETS: tuple[CoverageBucket, ...] = ("checked", "unresolved")
 """The two buckets a family's summary item can be in. It is one item that moves between
-them, which `replace_coverage` - same check, same bucket - cannot express on its own, so
-the other bucket is cleared first.
+them: `replace_coverage(..., across=` this pair) withdraws it from both before recording it
+in one (feature 011 T093).
 
 Public because a family that writes its own summary item **over** this one clears the same
 pair, and a second copy of "which two buckets a summary moves between" is one that a third
@@ -600,11 +600,5 @@ def _write_summary(
         ),
         error=None,
     )
-    for bucket in SUMMARY_BUCKETS:
-        if bucket != target:
-            items = getattr(session.coverage, bucket)
-            items[:] = [
-                existing for existing in items if existing.check != family.summary_check
-            ]
-    context.replace_coverage(family.summary_check, target, item)
+    context.replace_coverage(family.summary_check, target, item, across=SUMMARY_BUCKETS)
     return {"bucket": target, "check": family.summary_check}

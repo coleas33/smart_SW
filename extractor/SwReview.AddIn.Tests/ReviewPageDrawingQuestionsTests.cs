@@ -21,7 +21,8 @@ namespace SwReview.AddIn.Tests;
 /// test (`test_pane_drawing_fixture.py`) keeps it equal to a fresh generation (research R2.24):
 /// the summary's three drawing questions - the candidate question, a governing question offering
 /// the drawings by file name, and one whose stem the backend shortened and which offers nothing -
-/// the engineer's batch, every coverage event of the review in the order the backend emitted it,
+/// the engineer's batch, every coverage event and withdrawal of the review in the order the
+/// backend emitted them,
 /// and the questions still open after the resumed turn. (The page lane first wrote these tests on
 /// hand-built samples from the contract; at integration the backend's `what`, `about`, "read from"
 /// lists and the bridge's wording of a host refusal differed from them, so the samples became the
@@ -55,8 +56,11 @@ public sealed class ReviewPageDrawingQuestionsTests
             .Select(pair => (pair[0].GetString()!, pair[1].GetString()!))
             .ToArray();
 
-    /// <summary>Every `coverage` event body of the review, in the order the backend emitted it.</summary>
-    private static JsonElement[] Coverage => DrawingQuestionsFixture.Value.GetProperty("coverage").EnumerateArray().ToArray();
+    /// <summary>
+    /// Every `coverage` and `coverage.withdrawn` event of the review, each its `type` and `body`, in
+    /// the order the backend emitted them (feature 011 T092).
+    /// </summary>
+    private static JsonElement[] CoverageEvents => DrawingQuestionsFixture.Value.GetProperty("coverage_events").EnumerateArray().ToArray();
 
     // ---- the fixture is the one these tests are about -----------------------------------------
 
@@ -170,29 +174,31 @@ public sealed class ReviewPageDrawingQuestionsTests
     /// page prints it verbatim, in the order it arrived within each bucket: the drawing context of
     /// each reviewed document, then each confirmed candidate - read and closed, refused while the
     /// seam is off (in the bridge's words), read as it stood - then the drawing context the backend
-    /// restates after a read, which replaces the items it restates rather than standing beside them
-    /// (T082, edited deliberately): one line per check and scope, the last the backend sent, where
-    /// it sent it - as the session holds them. The checked bucket arrives out of sorted order, so a
-    /// page that sorted it would fail here.
+    /// restates after a read, whose withdrawal of the items it restates comes first (T092, edited
+    /// deliberately from T082's keyed replacement): every item the stream appended and no withdrawal
+    /// dropped, where the backend sent it - as the session holds them. The checked bucket arrives out
+    /// of sorted order, so a page that sorted it would fail here.
     /// </summary>
     [Fact]
     public void TheCoverageIsPrintedVerbatimInTheBackendsOrder()
     {
         JsonElement coverage = Scripted.Value.Coverage;
-        JsonElement[] latest = LatestPerIdentity(Coverage);
-        Assert.True(latest.Length < Coverage.Length, "the pane fixture no longer restates a check.");
+        (string Bucket, JsonElement Item)[] held = Mirrored(CoverageEvents);
+        Assert.True(
+            CoverageEvents.Any(row => row.GetProperty("type").GetString() == "coverage.withdrawn"),
+            "the pane fixture no longer restates a check.");
 
         foreach (string bucket in new[] { "checked", "unresolved", "skipped" })
         {
-            string[] expected = latest
-                .Where(row => row.GetProperty("bucket").GetString() == bucket)
-                .Select(row => Line(row.GetProperty("item")))
+            string[] expected = held
+                .Where(row => row.Bucket == bucket)
+                .Select(row => Line(row.Item))
                 .ToArray();
             Assert.NotEmpty(expected);
             Assert.Equal(expected, ReviewPageDriver.Strings(coverage, bucket));
         }
 
-        Assert.Equal(latest.Length, ReviewPageDriver.Strings(coverage, "all").Length);
+        Assert.Equal(held.Length, ReviewPageDriver.Strings(coverage, "all").Length);
         Assert.Equal(0, coverage.GetProperty("injected").GetInt32());
     }
 
@@ -263,13 +269,13 @@ public sealed class ReviewPageDrawingQuestionsTests
                 run.SentCalls = await driver.Calls();
 
                 // The review's coverage as the backend emitted it, the confirmed opens and the
-                // restated drawing check last: the backend opened, read and closed before resuming;
-                // the answered questions are no longer open.
+                // restated drawing check last, its withdrawal before it: the backend opened, read
+                // and closed before resuming; the answered questions are no longer open.
                 int seq = 10;
-                foreach (JsonElement row in Coverage)
+                foreach (JsonElement row in CoverageEvents)
                 {
                     // One line per SSE frame: the fixture is indented, the frame's data is not.
-                    await driver.Push("chat-1", seq++, "coverage", JsonSerializer.Serialize(row));
+                    await driver.Push("chat-1", seq++, row.GetProperty("type").GetString()!, JsonSerializer.Serialize(row.GetProperty("body")));
                 }
 
                 await driver.RouteAttention("chat-1", SummarySample.Json(summary => Ask(summary, "questions_open_after")));
@@ -306,27 +312,29 @@ public sealed class ReviewPageDrawingQuestionsTests
     }
 
     /// <summary>
-    /// The last event of each identity - its item's `check` and `scope`, the scope as the backend
-    /// dumped it - in the order those last events arrived: what the session holds after the
-    /// backend's restatement, and so what the panel must list.
+    /// What the session holds after the stream, by the events contract (chat-events.schema.json,
+    /// feature 011 T092): each `coverage` event appends its item to its bucket, and each
+    /// `coverage.withdrawn` drops the items whose check it names from the buckets it names. The
+    /// items in arrival order, each with its bucket; so what the panel must list.
     /// </summary>
-    private static JsonElement[] LatestPerIdentity(JsonElement[] events)
+    private static (string Bucket, JsonElement Item)[] Mirrored(JsonElement[] events)
     {
-        var latest = new List<JsonElement>();
+        var held = new List<(string Bucket, JsonElement Item)>();
         foreach (JsonElement row in events)
         {
-            string identity = Identity(row);
-            latest.RemoveAll(kept => Identity(kept) == identity);
-            latest.Add(row);
+            JsonElement body = row.GetProperty("body");
+            if (row.GetProperty("type").GetString() == "coverage")
+            {
+                held.Add((body.GetProperty("bucket").GetString()!, body.GetProperty("item")));
+                continue;
+            }
+
+            string[] checks = body.GetProperty("checks").EnumerateArray().Select(check => check.GetString()!).ToArray();
+            string[] buckets = body.GetProperty("buckets").EnumerateArray().Select(bucket => bucket.GetString()!).ToArray();
+            held.RemoveAll(kept => checks.Contains(kept.Item.GetProperty("check").GetString()) && buckets.Contains(kept.Bucket));
         }
 
-        return latest.ToArray();
-    }
-
-    private static string Identity(JsonElement row)
-    {
-        JsonElement item = row.GetProperty("item");
-        return item.GetProperty("check").GetString() + "|" + item.GetProperty("scope").GetRawText();
+        return held.ToArray();
     }
 
     /// <summary>The shared scripts the Review page's index.html loads beside its own.</summary>

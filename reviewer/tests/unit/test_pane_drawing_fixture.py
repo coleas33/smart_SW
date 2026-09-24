@@ -33,6 +33,7 @@ import pytest
 from swreview.checks.drawing_context import ALL_APPLY, CANDIDATE_CONFIRM, CANDIDATE_OPTIONS
 from swreview.report.summary import drawings_of
 from swreview.tools.drawings import CONFIRMED_OPEN_CHECK
+from tests.support.coverage_stream import mirror
 from tests.support.drawings import drawing_fictional_offences
 from tests.support.fixture_denylist import (
     DENYLIST_PATH,
@@ -73,6 +74,11 @@ def items(block: dict[str, Any]) -> list[dict[str, Any]]:
     return list(block["items"])
 
 
+def coverage_rows(fixture: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every `coverage` event body of the review, in the order the backend emitted it."""
+    return [event["body"] for event in fixture["coverage_events"] if event["type"] == "coverage"]
+
+
 def strings(value: Any) -> Iterator[str]:
     if isinstance(value, str):
         yield value
@@ -109,13 +115,14 @@ def test_it_holds_the_asked_questions_the_answers_the_coverage_and_what_stays_op
     fixture: dict[str, Any],
 ) -> None:
     """Edited deliberately for T090 (2026-09-23): `summary_drawings`, the summary's drawings line
-    after the first turn, which `SummarySample` in the add-in's tests prints."""
+    after the first turn, which `SummarySample` in the add-in's tests prints; and for T092: the
+    coverage is `coverage_events`, the withdrawals among the appends, each with its type."""
     assert list(fixture) == [
         "run_id",
         "questions_asked",
         "summary_drawings",
         "answers",
-        "coverage",
+        "coverage_events",
         "questions_open_after",
     ]
 
@@ -207,7 +214,7 @@ def test_only_the_skipped_question_stays_open(fixture: dict[str, Any]) -> None:
 
 def test_the_checked_bucket_arrives_out_of_sorted_order(fixture: dict[str, Any]) -> None:
     """So a page that sorted a bucket by its check would fail the page test."""
-    checked = [row["item"]["check"] for row in fixture["coverage"] if row["bucket"] == "checked"]
+    checked = [row["item"]["check"] for row in coverage_rows(fixture) if row["bucket"] == "checked"]
 
     assert checked != sorted(checked)
     assert checked.index("drawing.context") < checked.index(CONFIRMED_OPEN_CHECK)
@@ -218,7 +225,7 @@ def test_the_three_confirmed_reads_each_leave_one_coverage_item(
 ) -> None:
     confirmed = [
         (row["bucket"], row["item"]["reason"])
-        for row in fixture["coverage"]
+        for row in coverage_rows(fixture)
         if row["item"]["check"] == CONFIRMED_OPEN_CHECK
     ]
 
@@ -227,6 +234,34 @@ def test_the_three_confirmed_reads_each_leave_one_coverage_item(
         ("unresolved", f"the bridge returned status 'error': {generator.NOT_VALIDATED}"),
         ("checked", "read as it stood; it was already open, so it was left open"),
     ]
+
+
+def test_the_restated_drawing_check_is_withdrawn_before_it_is_restated(
+    fixture: dict[str, Any],
+) -> None:
+    """Feature 011 T092: the drawing check the runner restates after a confirmed read withdraws
+    its items first, so the page, which identifies no item with another, lists each reviewed
+    document's drawing context once - as the session does - and every confirmed open's item."""
+    events = [(event["type"], event["body"]) for event in fixture["coverage_events"]]
+    withdrawn = [body for kind, body in events if kind == "coverage.withdrawn"]
+    assert withdrawn == [
+        {"checks": ["drawing.context", "drawing_profile.conformance"],
+         "buckets": ["checked", "skipped"]}
+    ]
+
+    shown = mirror(events)
+    contexts = [
+        item["scope"]["document_ids"]
+        for bucket in shown.values()
+        for item in bucket
+        if item["check"] == "drawing.context"
+    ]
+    assert contexts and len(contexts) == len({tuple(ids) for ids in contexts})
+    assert len(contexts) < sum(1 for row in coverage_rows(fixture)
+                               if row["item"]["check"] == "drawing.context")
+    assert [item["check"] for bucket in shown.values() for item in bucket].count(
+        CONFIRMED_OPEN_CHECK
+    ) == 3
 
 
 def test_the_summarys_drawings_line_is_the_backends_for_the_package_it_plays(

@@ -190,9 +190,11 @@ def test_replace_coverage_appends_when_that_check_is_not_in_the_bucket_yet(
     ]
 
 
-def test_replace_coverage_emits_one_coverage_event(
+def test_replace_coverage_emits_the_withdrawal_then_one_coverage_event(
     make_package: MakePackage, tmp_path: Path
 ) -> None:
+    """Edited deliberately on 2026-09-23 (feature 011 T092): the dropped item is announced too,
+    as `coverage.withdrawn` before the restated item's `coverage`, so the pane drops it."""
     context, events = context_with_events(make_package, tmp_path)
     context.record_coverage("checked", coverage_item("rms.part.grouping", "first pass"))
     events.clear()
@@ -201,8 +203,11 @@ def test_replace_coverage_emits_one_coverage_event(
         "rms.part.grouping", "checked", coverage_item("rms.part.grouping", "second pass")
     )
 
-    assert len(events) == 1
-    event_type, body = events[0]
+    assert len(events) == 2
+    assert events[0] == (
+        "coverage.withdrawn", {"checks": ["rms.part.grouping"], "buckets": ["checked"]}
+    )
+    event_type, body = events[1]
     assert event_type == "coverage"
     assert body["bucket"] == "checked"
     assert body["item"]["check"] == "rms.part.grouping"

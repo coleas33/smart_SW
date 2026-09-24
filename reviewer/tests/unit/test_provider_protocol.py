@@ -150,6 +150,8 @@ def valid_bodies() -> dict[str, dict[str, Any]]:
             },
         },
         "coverage": {"bucket": "checked", "item": coverage_item_body()},
+        # Feature 011 T092: what a restating check withdrew before it restated.
+        "coverage.withdrawn": {"checks": ["drawing.context"], "buckets": ["checked", "skipped"]},
         # The worked example of contracts/usage.md section 5, written out rather than
         # built through `usage_body`: this table's job is to say independently what the
         # schema says, so a builder that drifted from the contract would pass.

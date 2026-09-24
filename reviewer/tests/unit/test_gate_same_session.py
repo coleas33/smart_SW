@@ -17,8 +17,9 @@ Three things are asserted here that the lever 5 module has no reason to:
 - **Lever 4 still filters.** `planned_calls` drops a withheld tool, and it must keep doing
   so with the gate on: calling it would write the tier's refusal against a request the model
   never made, and the tier's own sentence goes into the digest instead.
-- **No new event type.** FR-032. The gate adds a message, not a protocol; the fourteen types
-  of `chat-events.schema.json` are what a gated run emits and nothing else.
+- **No new event type.** FR-032. The gate adds a message, not a protocol; the types of
+  `chat-events.schema.json` (fifteen since feature 011 T092) are what a gated run emits and
+  nothing else.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ from tests.support.tiers import full_assembly_without_tree
 SCHEMA_EVENT_TYPES: frozenset[str] = frozenset(
     load_any_contract("chat-events.schema.json")["properties"]["type"]["enum"]
 )
-"""The fourteen event types the contract carries, read from the contract (FR-032)."""
+"""The event types the contract carries, read from the contract (FR-032)."""
 
 GATE_AND_TIERS = EfficiencySettings(procedural_gate=True, tool_tiers=True)
 """Levers 11 and 4 together. `efficiency_from_levers` refuses 11 with 5 and 11 with 7, and
@@ -197,12 +198,16 @@ def test_the_stream_still_opens_with_session_started(tmp_path: Any) -> None:
 # --- 3. no new event type ---------------------------------------------------------------------
 
 
-def test_a_gated_run_emits_no_event_type_outside_the_fourteen(tmp_path: Any) -> None:
-    """FR-032. The gate is a message, not a protocol."""
+def test_a_gated_run_emits_no_event_type_outside_the_fifteen(tmp_path: Any) -> None:
+    """FR-032. The gate is a message, not a protocol.
+
+    Edited deliberately on 2026-09-23 (feature 011 T092): the contract's fifteenth type,
+    `coverage.withdrawn`, is the coverage a restating check withdrew - not the gate's - and the
+    gate still adds none."""
     gated(tmp_path)
 
     emitted = {event["type"] for event in events_of(tmp_path, "gated")}
 
     assert emitted
     assert emitted <= SCHEMA_EVENT_TYPES
-    assert len(SCHEMA_EVENT_TYPES) == 14
+    assert len(SCHEMA_EVENT_TYPES) == 15

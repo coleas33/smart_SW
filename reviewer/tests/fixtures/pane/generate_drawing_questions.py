@@ -28,8 +28,9 @@ It writes, to `extractor/SwReview.AddIn.Tests/Fixtures/review-drawing-questions.
 - `answers`: the batch the engineer sends - the candidate question confirmed with
   `CANDIDATE_CONFIRM` and the plate's question answered `They all apply` - each the offered
   words exactly;
-- `coverage`: every `coverage` event body of the review, in the order the backend emitted it,
-  both turns - the confirmed opens, then the restated drawing check's items;
+- `coverage_events`: every `coverage` and `coverage.withdrawn` event of the review, each its
+  `type` and `body`, in the order the backend emitted them, both turns - the confirmed opens,
+  then the drawing check's withdrawal of its items and its restated items (feature 011 T092);
 - `questions_open_after`: the summary's `questions` block after the resumed turn.
 
 `extractor/SwReview.AddIn.Tests/ReviewPageDrawingQuestionsTests.cs` loads it, so the page is
@@ -64,6 +65,9 @@ from swreview.checks.drawing_context import ALL_APPLY, CANDIDATE_CONFIRM  # noqa
 from swreview.ir.loader import save_package  # noqa: E402
 from swreview.ir.models import DrawingCandidate, EvidencePackage  # noqa: E402
 from swreview.report.summary import review_ranking  # noqa: E402
+
+COVERAGE_EVENT_TYPES = ("coverage", "coverage.withdrawn")
+"""The two events the page's coverage panel is built from (002 `chat-events.schema.json`)."""
 
 TARGET = (
     REVIEWER.parent
@@ -206,7 +210,9 @@ def drawing_questions_fixture() -> dict[str, Any]:
         "questions_asked": asked,
         "summary_drawings": drawings,
         "answers": answers,
-        "coverage": [body for kind, body in events if kind == "coverage"],
+        "coverage_events": [
+            {"type": kind, "body": body} for kind, body in events if kind in COVERAGE_EVENT_TYPES
+        ],
         "questions_open_after": after,
     }
 
