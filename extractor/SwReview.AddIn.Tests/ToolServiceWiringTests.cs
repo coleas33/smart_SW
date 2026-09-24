@@ -198,7 +198,7 @@ public sealed class ToolServiceWiringTests
         var options = new ReviewHostOptions(
             new SilentChannel(), new UnusedBackend(), UserSettings.DefaultPath);
 
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         world.Publish = service => options.Bridge = service?.ReviewBridge;
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
@@ -314,12 +314,12 @@ public sealed class ToolServiceWiringTests
     [Fact]
     public void AChangeToAnotherDocumentReattachesTheToolServiceToIt()
     {
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
 
         FakeToolService first = world.Services[0];
-        Assert.Equal(@"C:\models\deck.SLDASM", gate.DocumentPath);
+        Assert.Equal(@"C:\models\frame.SLDASM", gate.DocumentPath);
 
         // The engineer opens a different part. EnsureStarted alone leaves the bridge attached
         // to the assembly, which is the whole of the finding.
@@ -351,13 +351,13 @@ public sealed class ToolServiceWiringTests
     [Fact]
     public void TheSameDocumentSpeltDifferentlyDoesNotRestartAnything()
     {
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
 
-        gate.FollowDocument(@"C:\models\deck.SLDASM");
-        gate.FollowDocument(@"c:\MODELS\DECK.sldasm");
-        gate.FollowDocument(@"C:\models\sub\..\deck.SLDASM");
+        gate.FollowDocument(@"C:\models\frame.SLDASM");
+        gate.FollowDocument(@"c:\MODELS\FRAME.sldasm");
+        gate.FollowDocument(@"C:\models\sub\..\frame.SLDASM");
 
         Assert.Equal(1, world.Starts);
         Assert.False(world.Services[0].Disposed);
@@ -371,7 +371,7 @@ public sealed class ToolServiceWiringTests
     [Fact]
     public void ABusyBridgeIsNotRestartedAndTheLogSaysWhyNamingBothDocuments()
     {
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM", Busy = true };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM", Busy = true };
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
 
@@ -379,12 +379,12 @@ public sealed class ToolServiceWiringTests
 
         Assert.Equal(1, world.Starts);
         Assert.False(world.Services[0].Disposed);
-        Assert.Equal(@"C:\models\deck.SLDASM", gate.DocumentPath);
+        Assert.Equal(@"C:\models\frame.SLDASM", gate.DocumentPath);
 
         string line = Assert.Single(world.Services[0].LogLines);
         Assert.Contains("not re-attaching", line, StringComparison.Ordinal);
         Assert.Contains(@"C:\models\bracket.SLDPRT", line, StringComparison.Ordinal);
-        Assert.Contains(@"C:\models\deck.SLDASM", line, StringComparison.Ordinal);
+        Assert.Contains(@"C:\models\frame.SLDASM", line, StringComparison.Ordinal);
 
         // The turn ends. The next ActiveDocChangeNotify - or the next tab switch - follows it.
         world.Busy = false;
@@ -403,7 +403,7 @@ public sealed class ToolServiceWiringTests
     [Fact]
     public void ABusyPredicateThatThrowsIsTreatedAsBusyAndReported()
     {
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         world.BusyFailure = new InvalidOperationException("the backend did not answer");
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
@@ -423,7 +423,7 @@ public sealed class ToolServiceWiringTests
     [Fact]
     public void NothingOpenLeavesTheAttachedServiceAlone()
     {
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
 
@@ -434,7 +434,7 @@ public sealed class ToolServiceWiringTests
         Assert.Equal(1, world.Starts);
         Assert.False(world.Services[0].Disposed);
         Assert.NotNull(gate.GeneralChatBridge);
-        Assert.Equal(@"C:\models\deck.SLDASM", gate.DocumentPath);
+        Assert.Equal(@"C:\models\frame.SLDASM", gate.DocumentPath);
     }
 
     [Fact]
@@ -444,7 +444,7 @@ public sealed class ToolServiceWiringTests
         ToolServiceGate gate = world.Gate();
 
         // Starting is EnsureStarted's job, and it has its own rule about when it may.
-        gate.FollowDocument(@"C:\models\deck.SLDASM");
+        gate.FollowDocument(@"C:\models\frame.SLDASM");
 
         Assert.Equal(0, world.Starts);
         Assert.Null(gate.GeneralChatBridge);
@@ -453,7 +453,7 @@ public sealed class ToolServiceWiringTests
     [Fact]
     public void DisposeDuringAPendingRestartStartsNothingAndStopsWhatWasThere()
     {
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         Action? pending = null;
         ToolServiceGate gate = world.Gate(schedule: work => pending = work);
 
@@ -494,7 +494,7 @@ public sealed class ToolServiceWiringTests
     [Fact]
     public void MidRestartTheGateAnswersNullRatherThanNamingAClosingPipe()
     {
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
         FakeToolService first = world.Services[0];
@@ -521,7 +521,7 @@ public sealed class ToolServiceWiringTests
     [Fact]
     public void ARestartWhoseAttachFailsIsReportedAndTheNextDocumentTriesAgain()
     {
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
 
@@ -604,7 +604,7 @@ public sealed class ToolServiceWiringTests
     [Fact]
     public void GlancingAtADrawingLeavesAWorkingBridgeExactlyAsItWas()
     {
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
 
@@ -612,7 +612,7 @@ public sealed class ToolServiceWiringTests
 
         Assert.Equal(1, world.Starts);
         Assert.False(world.Services[0].Disposed);
-        Assert.Equal(@"C:\models\deck.SLDASM", gate.DocumentPath);
+        Assert.Equal(@"C:\models\frame.SLDASM", gate.DocumentPath);
         Assert.Same(world.Services[0].ReviewBridge, world.Published);
         Assert.Contains(
             @"C:\models\sheet.SLDDRW", Assert.Single(world.Reports), StringComparison.Ordinal);
@@ -621,7 +621,7 @@ public sealed class ToolServiceWiringTests
     [Fact]
     public void ADrawingPassedOnTheWayDoesNotStopTheNextModelBeingFollowed()
     {
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         ToolServiceGate gate = world.Gate();
         gate.EnsureStarted();
         FakeToolService first = world.Services[0];
@@ -646,7 +646,7 @@ public sealed class ToolServiceWiringTests
     [Theory]
     [InlineData(@"C:\parts\bracket.sldprt", true)]
     [InlineData(@"C:\parts\bracket.SLDPRT", true)]
-    [InlineData(@"C:\parts\deck assy.SLDASM", true)]
+    [InlineData(@"C:\parts\frame assy.SLDASM", true)]
     [InlineData(@"C:\parts\sheet.slddrw", false)]
     [InlineData(@"C:\parts\sheet.SLDDRW", false)]
     [InlineData(@"C:\parts\bracket.step", false)]
@@ -703,7 +703,7 @@ public sealed class ToolServiceWiringTests
         int prober = caller;
         int starter = caller;
 
-        var world = new GateWorld { DocumentPath = @"C:\models\deck.SLDASM" };
+        var world = new GateWorld { DocumentPath = @"C:\models\frame.SLDASM" };
         world.Publish = _ =>
         {
             if (world.Services.Count > 1)
