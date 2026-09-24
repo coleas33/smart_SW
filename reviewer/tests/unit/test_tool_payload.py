@@ -666,6 +666,8 @@ REVIEW_ARRAY_TOOL_COUNTS: dict[str, int] = {
     "review+slim+bridge-prerun": 33,
     "review+slim+drawings-prerun": 30,
     "review+slim+bridge+drawings-prerun": 34,
+    "review+slim-prerun-no-groups": 30,
+    "review+slim+drawings-prerun-no-groups": 31,
     "review": 35,
     "review+drawings": 37,
     "review+standards": 36,
@@ -686,12 +688,16 @@ REVIEW_ARRAY_TOOL_COUNTS: dict[str, int] = {
     "review+drawings-prerun": 29,
     "review+bridge-prerun": 32,
     "review+bridge+drawings-prerun": 33,
+    "review-prerun-no-groups": 29,
+    "review+drawings-prerun-no-groups": 30,
 }
 REVIEW_ARRAY_BYTES: dict[str, dict[str, int]] = {
     "review+slim-prerun": {"openai": 29_217, "gemini": 29_552},
     "review+slim+bridge-prerun": {"openai": 34_145, "gemini": 34_247},
     "review+slim+drawings-prerun": {"openai": 29_651, "gemini": 29_935},
     "review+slim+bridge+drawings-prerun": {"openai": 34_579, "gemini": 34_630},
+    "review+slim-prerun-no-groups": {"openai": 30_447, "gemini": 30_731},
+    "review+slim+drawings-prerun-no-groups": {"openai": 30_881, "gemini": 31_114},
     "review": {"openai": 35_844, "gemini": 35_915},
     "review+drawings": {"openai": 36_570, "gemini": 36_539},
     "review+standards": {"openai": 37_332, "gemini": 37_352},
@@ -712,11 +718,13 @@ REVIEW_ARRAY_BYTES: dict[str, dict[str, int]] = {
     "review+drawings-prerun": {"openai": 29_295, "gemini": 29_630},
     "review+bridge-prerun": {"openai": 33_789, "gemini": 33_942},
     "review+bridge+drawings-prerun": {"openai": 34_223, "gemini": 34_325},
+    "review-prerun-no-groups": {"openai": 30_091, "gemini": 30_426},
+    "review+drawings-prerun-no-groups": {"openai": 30_525, "gemini": 30_809},
 }
 """Every array a review can send, pinned per encoding with lever 2 off, in `ARRAY_KINDS` order
 (decision 9A): the one place an array's tool count and bytes are written, which the named
 constants below read. **Regenerated, never transcribed** - `--write` prints them in its review
-array table, in a commit of their own. The four pane-default arrays are also asserted under
+array table, in a commit of their own. The six pane-default arrays are also asserted under
 `ARRAY_CEILING`; the others are pinned so their growth shows in review, and never asserted."""
 
 REVIEW_TOOL_COUNT = REVIEW_ARRAY_TOOL_COUNTS["review"]
@@ -1235,22 +1243,10 @@ def test_each_pinned_array_measures_its_pin(label: str, encoding: str) -> None:
     assert measure(label, array, encoding).total_bytes == REVIEW_ARRAY_BYTES[label][encoding]
 
 
-UNPINNED_UNTIL_T097: tuple[str, ...] = (
-    "review+slim-prerun-no-groups",
-    "review+slim+drawings-prerun-no-groups",
-    "review-prerun-no-groups",
-    "review+drawings-prerun-no-groups",
-)
-"""The four arrays T096's switch adds, pinned by T097 with `--write` in a commit of its own - the
-T084/T085 split. T097 empties this and the test below then holds every array pinned."""
-
-
 def test_every_array_a_review_can_send_is_pinned_for_both_providers() -> None:
-    """Decision 9A: whatever its kind, every array is pinned in both encodings (T085), in the
-    order `ARRAY_KINDS` and the `--write` table give - but for the arrays T097 pins."""
-    pinned = [label for label in ARRAY_KINDS if label not in UNPINNED_UNTIL_T097]
-    assert set(UNPINNED_UNTIL_T097) <= set(ARRAY_KINDS)
-    assert list(REVIEW_ARRAY_TOOL_COUNTS) == list(REVIEW_ARRAY_BYTES) == pinned
+    """Decision 9A: whatever its kind, every array is pinned in both encodings (T085, and T097 for
+    011 T096's four), in the order `ARRAY_KINDS` and the `--write` table give."""
+    assert list(REVIEW_ARRAY_TOOL_COUNTS) == list(REVIEW_ARRAY_BYTES) == list(ARRAY_KINDS)
     assert all(set(pins) == set(ENCODINGS) for pins in REVIEW_ARRAY_BYTES.values())
 
 

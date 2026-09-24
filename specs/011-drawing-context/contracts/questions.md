@@ -127,7 +127,8 @@ drawing opened first or a package reviewed while the tool service is down has no
 two groups - leaves `check_interference_group` on the array. That is a sixth switch, `groups`,
 varied only for a pre-run without a bridge: twenty-eight arrays, of which six are the pane's
 defaults (the four above, and without a bridge the slim pre-run array with and without the family
-and with the interference tool kept), asserted under the ceiling; the drawing arm is fourteen.
+and with the interference tool kept: 30,447 and 30,881 bytes on OpenAI, 30,731 and 31,114 on
+Gemini, from `--write`), asserted under the ceiling; the drawing arm is fourteen.
 
 ## 8. The tests
 
