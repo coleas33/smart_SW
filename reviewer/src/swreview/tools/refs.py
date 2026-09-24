@@ -53,27 +53,37 @@ def resolve_dimension(package: EvidencePackage, source_ref: RefArg) -> Dimension
     `pydantic.ValidationError` when it is not a well-formed `SourceRef`.
 
     Feature 011 matches the natively read sheets too, through the one conversion
-    (`drawings/native.native_matches`), and an ingested sheet of the same document and name
-    as a native one is not read beside it. **A native match is refused while
+    (`drawings/native.native_matches`). **A native match is refused while
     `DRAWING_BINDING_VALIDATED` is false**, with a `LookupError` naming the seat validation, so
     every check that takes a reference returns its error result and computes nothing (FR-024,
-    research R2.11); a PDF-ingested match resolves whatever the switch.
+    research R2.11); a PDF-ingested match resolves whatever the switch. Once the switch is set,
+    an ingested sheet of the same document and name as a native one is not read beside it
+    (`shadowed_sheets`), and a reference into it is refused naming the native sheet that
+    replaces it.
     """
     source = as_source_ref(source_ref)
     shadowed = shadowed_sheets(package)
-    matches = [
-        dimension
-        for sheet in package.drawings
-        if (sheet.document_id, sheet.sheet_name) not in shadowed
-        for dimension in sheet.dimensions
-        if (
-            dimension.source.document_id == source.document_id
-            and dimension.source.sheet == source.sheet
-            and dimension.source.annotation == source.annotation
-        )
-    ]
+    matches: list[Dimension] = []
+    hidden: list[Dimension] = []
+    for sheet in package.drawings:
+        found = [
+            dimension
+            for dimension in sheet.dimensions
+            if (
+                dimension.source.document_id == source.document_id
+                and dimension.source.sheet == source.sheet
+                and dimension.source.annotation == source.annotation
+            )
+        ]
+        (hidden if (sheet.document_id, sheet.sheet_name) in shadowed else matches).extend(found)
     native = native_matches(package, source)
     count = len(matches) + len(native)
+    if not count and hidden:
+        raise LookupError(
+            f"no drawing dimension at {cite(source)}; the PDF-ingested sheet {source.sheet} of "
+            f"{source.document_id} is read natively, so its PDF dimensions are not used - pass "
+            "a native reference from find_dimensions"
+        )
     if not count:
         raise LookupError(f"no drawing dimension at {cite(source)}")
     if count > 1:

@@ -313,10 +313,21 @@ def every_native_sheet(package: EvidencePackage) -> list[NativeSheet]:
 
 
 def shadowed_sheets(package: EvidencePackage) -> frozenset[tuple[str, str]]:
-    """`(document id, sheet name)` of every native sheet: an ingested sheet of the same
-    document and name is not read beside it, because native evidence wins over a PDF's
-    (Principle IV, `contracts/drawing-source.md` section 2). Empty for a package with no
-    native sheet, whose tools therefore answer exactly as before (FR-037)."""
+    """`(document id, sheet name)` of every native sheet, once `DRAWING_BINDING_VALIDATED` is
+    set: an ingested sheet of the same document and name is then not read beside it, because
+    native evidence wins over a PDF's (Principle IV, `contracts/drawing-source.md` section 2).
+
+    Empty while the switch is false: a native dimension cannot be computed with before the seat
+    validates it, so hiding the PDF sheet would leave nothing on that sheet a calculating tool
+    could use, and a dimension read from a PDF is taken as today (spec, edge cases; corrected
+    2026-09-23 on review). Empty too for a package with no native sheet, whose tools therefore
+    answer exactly as before (FR-037).
+    """
+    # Deferred: `binding` imports the resolver, which imports this module.
+    from swreview.drawings import binding
+
+    if not binding.DRAWING_BINDING_VALIDATED:
+        return frozenset()
     return frozenset(
         (item.drawing.document_id, item.sheet.name) for item in every_native_sheet(package)
     )

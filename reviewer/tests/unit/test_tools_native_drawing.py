@@ -2,8 +2,9 @@
 
 `contracts/drawing-source.md` section 2's table is normative. `find_dimensions`,
 `get_drawing_sheet` and `refs.resolve_dimension` read the natively dumped sheets through the one
-conversion (`drawings/native.py`) beside the PDF-ingested ones, and a native sheet wins over an
-ingested sheet of the same name. **Showing a native value is not computing with one**: while
+conversion (`drawings/native.py`) beside the PDF-ingested ones, and - once the seat has validated
+the native evidence - a native sheet wins over an ingested sheet of the same name. **Showing a
+native value is not computing with one**: while
 `DRAWING_BINDING_VALIDATED` is false, `resolve_dimension` - the reference every calculating tool
 takes - refuses a native dimension with a `LookupError` naming the seat validation, so
 `check_fit`, `check_axial_stack` and `check_hole_alignment` return an error result and record no
@@ -220,9 +221,11 @@ def test_find_dimensions_filters_by_document_regex_and_view_name(plate: Evidence
     assert [entry["source"]["annotation"] for entry in both] == ["ddm:0003", "ddm:0006"]
 
 
+@pytest.mark.usefixtures("validated")
 def test_a_native_sheet_hides_an_ingested_sheet_of_the_same_name_from_find(
     plate: EvidencePackage,
 ) -> None:
+    """Once the seat has validated the native evidence it wins over a PDF's (Principle IV)."""
     package = with_ingested(
         plate, ingested("doc:0006", "Sheet1", "PDF-A"), ingested("doc:0006", "Page2", "PDF-B")
     )
@@ -233,6 +236,53 @@ def test_a_native_sheet_hides_an_ingested_sheet_of_the_same_name_from_find(
     labels = [entry["source"]["annotation"] for entry in found]
     assert "PDF-A" not in labels, "the native Sheet1 wins over the ingested Sheet1"
     assert labels[0] == "PDF-B"
+
+
+def test_with_the_switch_off_find_lists_the_ingested_sheet_beside_the_native_one(
+    plate: EvidencePackage,
+) -> None:
+    """Until then the PDF sheet is still the one a calculating tool can use, so it is not
+    hidden: its dimensions come first, as they always have, and the native ones follow."""
+    package = with_ingested(plate, ingested("doc:0006", "Sheet1", "PDF-A"))
+
+    with use_context(run(package)):
+        found = find_dimensions("doc:0006")
+
+    labels = [entry["source"]["annotation"] for entry in found]
+    assert labels[0] == "PDF-A"
+    assert "ddm:0001" in labels
+
+
+def test_with_the_switch_off_a_pdf_reference_on_a_natively_read_sheet_resolves(
+    plate: EvidencePackage,
+) -> None:
+    """A dimension read from a PDF is taken as today (spec, edge cases), even when the same
+    sheet was also read natively: before T066 the native one cannot be computed with, so hiding
+    the PDF one would leave nothing on the sheet to compute with."""
+    package = with_ingested(plate, ingested("doc:0006", "Sheet1", "PDF-A"))
+
+    dimension = resolve_dimension(package, native_ref("PDF-A"))
+
+    assert dimension.source.annotation == "PDF-A"
+    assert dimension.nominal == Quantity(value=3.0, unit="mm")
+    with pytest.raises(LookupError, match="not yet validated on a seat"):
+        resolve_dimension(package, native_ref("ddm:0001"))
+
+
+@pytest.mark.usefixtures("validated")
+def test_with_the_switch_set_a_hidden_pdf_reference_is_refused_naming_the_native_sheet(
+    plate: EvidencePackage,
+) -> None:
+    package = with_ingested(plate, ingested("doc:0006", "Sheet1", "PDF-A"))
+
+    with pytest.raises(LookupError) as raised:
+        resolve_dimension(package, native_ref("PDF-A"))
+
+    assert str(raised.value) == (
+        "no drawing dimension at doc:0006 sheet Sheet1 annotation PDF-A; the PDF-ingested sheet "
+        "Sheet1 of doc:0006 is read natively, so its PDF dimensions are not used - pass a native "
+        "reference from find_dimensions"
+    )
 
 
 # --- 2. get_drawing_sheet -------------------------------------------------------------------------
