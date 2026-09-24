@@ -414,9 +414,9 @@ public sealed class PackageWriter
         // sheets, so the old unconditional gap would have sat beside the very evidence it
         // said was missing; and a reader who does see it is told which extract to run again
         // rather than a fact about the extractor that is no longer true (FR-024).
-        if (!phases.Ran("drawing"))
+        if (!phases.Ran(DrawingPhase))
         {
-            gaps.Add(GapKind.Unsupported, "drawing", null, DrawingGap(scope.Tree, options, discovered), null);
+            gaps.Add(GapKind.Unsupported, DrawingPhase, null, DrawingGap(scope.Tree, options, discovered), null);
         }
 
         // Last, because the key is taken over the manifest and the component instances and
@@ -440,16 +440,72 @@ public sealed class PackageWriter
     {
         if (discovered && tree.AttachedDrawings.Drawings.Count == 0)
         {
-            return tree.AttachedDrawings.Listed
-                ? "No open drawing shows this design, so no drawing was read natively. Open its "
-                    + "drawing in SOLIDWORKS and extract again to include it."
-                : "The drawings open in SOLIDWORKS could not be listed, so no drawing was read "
-                    + "natively. Extract again to include them.";
+            return tree.AttachedDrawings.Listed ? NoOpenDrawingGapSentence : OpenDrawingsNotListedGapSentence;
         }
 
-        return "Drawing sheets were not read natively: the drawing phase did not run under "
-            + $"the '{PackageSerializer.EnumToJsonName(options.Profile)}' profile. Any "
-            + "sheets in this package came from the PDF ingest.";
+        return ProfileSkippedDrawingGapSentence(options.Profile);
+    }
+
+    /// <summary>The <c>drawing</c> phase's name: its row, and the entity kind of its standing gap.</summary>
+    public const string DrawingPhase = "drawing";
+
+    /// <summary>The standing gap of a review that listed the open drawings and found none showing the design.</summary>
+    public const string NoOpenDrawingGapSentence =
+        "No open drawing shows this design, so no drawing was read natively. Open its "
+        + "drawing in SOLIDWORKS and extract again to include it.";
+
+    /// <summary>The standing gap of a review whose listing of the open drawings failed.</summary>
+    public const string OpenDrawingsNotListedGapSentence =
+        "The drawings open in SOLIDWORKS could not be listed, so no drawing was read "
+        + "natively. Extract again to include them.";
+
+    /// <summary>The standing gap of every other build that did not run the drawing phase, naming its profile.</summary>
+    public static string ProfileSkippedDrawingGapSentence(DumpProfile profile) =>
+        "Drawing sheets were not read natively: the drawing phase did not run under "
+        + $"the '{PackageSerializer.EnumToJsonName(profile)}' profile. Any "
+        + "sheets in this package came from the PDF ingest.";
+
+    /// <summary>
+    /// Whether <paramref name="gap"/> is the standing gap <see cref="Finish"/> writes when the drawing
+    /// phase did not run: kind <c>unsupported</c>, entity kind <c>drawing</c>, naming no entity.
+    /// Structural, never by its words, so the confirmed read (feature 011 T079) finds it whichever
+    /// of the three sentences it carries - or the sentence an earlier confirmed read reworded it to.
+    /// </summary>
+    public static bool IsDrawingPhaseGap(Gap gap) =>
+        gap != null
+        && gap.Kind == GapKind.Unsupported
+        && string.Equals(gap.EntityKind, DrawingPhase, StringComparison.Ordinal)
+        && gap.EntityId == null;
+
+    /// <summary>
+    /// What the standing drawing gap says once confirmed drawings were read into the package after
+    /// the extraction (feature 011 T079, contracts/confirmed-open.md section 2): what stays true of
+    /// the dump - it read no drawing natively, its phase did not run - and every drawing read
+    /// afterwards, in the order it was merged, by file name and by how it was read. The dump's
+    /// <c>drawing</c> row is left <c>skipped</c>; this sentence is the record of the later reads.
+    /// </summary>
+    public static string DrawingsReadAfterExtractionGapSentence(
+        IReadOnlyList<(string FileName, bool OpenedByReview)> drawings)
+    {
+        if (drawings == null || drawings.Count == 0)
+        {
+            throw new ArgumentException("At least one drawing read after the extraction is named.", nameof(drawings));
+        }
+
+        var named = new List<string>(drawings.Count);
+        foreach ((string fileName, bool openedByReview) in drawings)
+        {
+            named.Add($"'{fileName}' ("
+                + (openedByReview ? "opened read-only by the review" : "already open, read as it stood")
+                + ")");
+        }
+
+        string list = named.Count == 1
+            ? named[0]
+            : string.Join(", ", named.GetRange(0, named.Count - 1)) + " and " + named[named.Count - 1];
+
+        return "The extraction read no drawing natively: its drawing phase did not run. Read afterwards, "
+            + $"when the engineer confirmed the candidate question: {list}.";
     }
 
     /// <summary>

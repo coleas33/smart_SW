@@ -364,6 +364,180 @@ public class PackageAppenderTests : IDisposable
         Assert.Same(drawing.Record, Assert.Single(package.DrawingRecords!));
     }
 
+    // ---- the dump's drawing gap after a confirmed read (feature 011 T078, 2026-09-23) --------
+    //
+    // A review whose extraction read no drawing carries the dump's standing gap ("No open drawing
+    // shows this design, so no drawing was read natively...") and a `drawing` phase row
+    // `skipped`. Once a confirmed drawing is merged the sentence is false; the row is not - the
+    // dump did skip - so the gap is reworded to say so and to name the later read, and the row is
+    // left exactly as the dump wrote it (contracts/confirmed-open.md section 2).
+
+    /// <summary>Every sentence <see cref="PackageWriter"/> writes its standing drawing gap with.</summary>
+    public static TheoryData<string> StandingDrawingGaps() => new TheoryData<string>
+    {
+        PackageWriter.NoOpenDrawingGapSentence,
+        PackageWriter.OpenDrawingsNotListedGapSentence,
+        PackageWriter.ProfileSkippedDrawingGapSentence(DumpProfile.Full),
+    };
+
+    [Theory]
+    [MemberData(nameof(StandingDrawingGaps))]
+    public void MergeDrawing_AfterAnExtractionThatReadNoDrawing_RewordsTheStandingGapInPlace(string standing)
+    {
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.BuildWithNoDrawingRead(standing);
+        int index = package.Gaps.FindIndex(PackageWriter.IsDrawingPhaseGap);
+        var drawing = ConfirmedDrawing();
+
+        PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: true);
+
+        // Still one drawing-phase gap, where it was, of the same kind: reworded, never duplicated.
+        Gap gap = Assert.Single(package.Gaps, PackageWriter.IsDrawingPhaseGap);
+        Assert.Equal(index, package.Gaps.IndexOf(gap));
+        Assert.Equal(GapKind.Unsupported, gap.Kind);
+        Assert.Equal("drawing", gap.EntityKind);
+        Assert.Null(gap.EntityId);
+
+        // The claim that no drawing was read, and the advice to extract again, are gone.
+        Assert.NotEqual(standing, gap.Reason);
+        Assert.DoesNotContain("No open drawing shows this design", gap.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("extract again", gap.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PDF ingest", gap.Reason, StringComparison.Ordinal);
+
+        // What stays true about the dump, and the later read, named.
+        Assert.Equal(
+            "The extraction read no drawing natively: its drawing phase did not run. Read afterwards, "
+            + "when the engineer confirmed the candidate question: 'housing.SLDDRW' (opened read-only "
+            + "by the review).",
+            gap.Reason);
+
+        // The other phases' gaps are untouched.
+        Assert.Equal(
+            new[] { "feature_tree_unavailable", "drawing", "equations" },
+            package.Gaps.Select(row => row.EntityKind));
+    }
+
+    [Fact]
+    public void MergeDrawing_AfterAnExtractionThatReadNoDrawing_LeavesTheSkippedPhaseRowAsTheDumpWroteIt()
+    {
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.BuildWithNoDrawingRead(
+            PackageWriter.NoOpenDrawingGapSentence);
+        var drawing = ConfirmedDrawing();
+
+        PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: true);
+
+        // History is not rewritten: the dump did skip, so the row says so, with no elapsed time.
+        Assert.Equal(new[] { "cutlist", "drawing", "hole" }, package.Extractor.Phases.Select(row => row.Name));
+        DumpPhase row = package.Extractor.Phases.Single(phase => phase.Name == "drawing");
+        Assert.Equal(DumpPhaseStatus.Skipped, row.Status);
+        Assert.Null(row.ElapsedMs);
+    }
+
+    [Fact]
+    public void MergeDrawing_OfADrawingAlreadyOpen_RewordsTheGapToSayItWasReadAsItStood()
+    {
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.BuildWithNoDrawingRead(
+            PackageWriter.NoOpenDrawingGapSentence);
+        var drawing = ConfirmedDrawing();
+
+        PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: false);
+
+        Assert.EndsWith(
+            "confirmed the candidate question: 'housing.SLDDRW' (already open, read as it stood).",
+            Assert.Single(package.Gaps, PackageWriter.IsDrawingPhaseGap).Reason,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TwoConfirmedMerges_NameBothLaterReadsInTheOrderTheyWereMerged()
+    {
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.BuildWithNoDrawingRead(
+            PackageWriter.NoOpenDrawingGapSentence);
+        var housing = ConfirmedDrawing();
+        PackageAppender.MergeDrawing(
+            package, housing.Record, housing.Document, housing.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: true);
+
+        string pinId = Ids.DocumentIds.For(Fakes.ConfirmedDrawingPackage.PinDrawingPath);
+        var pinDocument = new Document
+        {
+            DocumentId = pinId,
+            Kind = DocumentKind.Drawing,
+            FileName = "pin.SLDDRW",
+            Path = Fakes.ConfirmedDrawingPackage.PinDrawingPath,
+            ActiveConfiguration = string.Empty,
+        };
+        var pinEntry = new ManifestEntry
+        {
+            DocumentId = pinId,
+            VaultPath = Fakes.ConfirmedDrawingPackage.PinDrawingPath,
+            Configuration = string.Empty,
+            ExportMethod = ExportMethod.Native,
+        };
+        PackageAppender.MergeDrawing(
+            package, Fakes.ConfirmedDrawingPackage.Record(pinId, 3), pinDocument, pinEntry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.PinId, openedByReview: false);
+
+        Assert.Equal(
+            "The extraction read no drawing natively: its drawing phase did not run. Read afterwards, "
+            + "when the engineer confirmed the candidate question: 'housing.SLDDRW' (opened read-only "
+            + "by the review) and 'pin.SLDDRW' (already open, read as it stood).",
+            Assert.Single(package.Gaps, PackageWriter.IsDrawingPhaseGap).Reason);
+        Assert.Null(package.DrawingCandidates);
+    }
+
+    [Fact]
+    public void MergeDrawing_IntoAPackageWhoseDrawingPhaseRan_WritesNoDrawingPhaseGap()
+    {
+        // The dump read the root's drawing, so it wrote no standing gap and there is nothing to
+        // reword: the merge adds the read's own gaps and nothing else.
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.Build();
+        var drawing = ConfirmedDrawing();
+
+        PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, new[] { drawing.Gap },
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: true);
+
+        Assert.DoesNotContain(package.Gaps, PackageWriter.IsDrawingPhaseGap);
+        Assert.Same(drawing.Gap, Assert.Single(package.Gaps));
+    }
+
+    [Fact]
+    public void ARefusedMerge_LeavesTheStandingGapAsItWas()
+    {
+        EvidencePackage package = Fakes.ConfirmedDrawingPackage.BuildWithNoDrawingRead(
+            PackageWriter.NoOpenDrawingGapSentence);
+        var drawing = ConfirmedDrawing();
+        package.Documents.Add(drawing.Document);
+
+        Assert.Throws<InvalidOperationException>(() => PackageAppender.MergeDrawing(
+            package, drawing.Record, drawing.Document, drawing.Entry, Array.Empty<Gap>(),
+            Fakes.ConfirmedDrawingPackage.HousingId, openedByReview: true));
+
+        Assert.Equal(
+            PackageWriter.NoOpenDrawingGapSentence,
+            Assert.Single(package.Gaps, PackageWriter.IsDrawingPhaseGap).Reason);
+    }
+
+    [Theory]
+    [InlineData(GapKind.NotExtracted, "drawing", null)]
+    [InlineData(GapKind.Unsupported, "drawing_sheet", null)]
+    [InlineData(GapKind.Unsupported, "drawing", "doc:0123456789ab")]
+    public void OnlyTheDumpsStandingGapIsTheDrawingPhaseGap(GapKind kind, string entityKind, string? entityId)
+    {
+        // The rule is structural - the gap Finish writes, and no other - so a drawing gap of
+        // another kind, another entity kind or naming an entity is never reworded.
+        Assert.False(PackageWriter.IsDrawingPhaseGap(
+            new Gap { Kind = kind, EntityKind = entityKind, EntityId = entityId, Reason = "x" }));
+        Assert.True(PackageWriter.IsDrawingPhaseGap(
+            new Gap { Kind = GapKind.Unsupported, EntityKind = "drawing", EntityId = null, Reason = "x" }));
+    }
+
     private static EvidencePackage NewPackage() => new EvidencePackage
     {
         PackageId = Guid.NewGuid(),

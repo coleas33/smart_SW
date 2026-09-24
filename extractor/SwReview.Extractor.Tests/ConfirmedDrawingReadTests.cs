@@ -287,6 +287,41 @@ public class ConfirmedDrawingReadTests : IDisposable
     }
 
     /// <summary>
+    /// T078 (2026-09-23): the review's extraction read no drawing, so its package says "No open
+    /// drawing shows this design..." beside a <c>drawing</c> row <c>skipped</c>. After the
+    /// confirmed read the package the backend reloads names the later read in that gap's place,
+    /// and the row still says the dump skipped - which it did.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AfterAnExtractionThatReadNoDrawing_TheReloadedPackageNamesTheLaterReadAndKeepsTheSkippedRow(bool alreadyOpen)
+    {
+        PackageAppender.Save(
+            _runFolder, ConfirmedDrawingPackage.BuildWithNoDrawingRead(PackageWriter.NoOpenDrawingGapSentence));
+        if (alreadyOpen)
+        {
+            _host.AlreadyOpen(HousingDrawingPath);
+        }
+
+        Read(RunId, HousingId);
+
+        EvidencePackage package = Reloaded();
+        Gap gap = Assert.Single(package.Gaps, PackageWriter.IsDrawingPhaseGap);
+        Assert.EndsWith(
+            alreadyOpen
+                ? "'housing.SLDDRW' (already open, read as it stood)."
+                : "'housing.SLDDRW' (opened read-only by the review).",
+            gap.Reason,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(package.Gaps, row => row.Reason == PackageWriter.NoOpenDrawingGapSentence);
+        DumpPhase row = package.Extractor.Phases.Single(phase => phase.Name == "drawing");
+        Assert.Equal(DumpPhaseStatus.Skipped, row.Status);
+        Assert.Null(row.ElapsedMs);
+        IrContract.AssertValid(File.ReadAllText(PackageAppender.PathIn(_runFolder)));
+    }
+
+    /// <summary>
     /// The backend reloads the run folder's package right after <c>drawing.read</c> answers
     /// (reviewer tools/drawings.read_confirmed_candidates), through the Python models that
     /// contracts/ir.schema.json is generated from. So the package every successful read leaves -

@@ -13,7 +13,7 @@ description: "Task list for the read-only drawing context"
 
 **Gates before every commit** (from `reviewer/`): `SWREVIEW_REQUIRE_TOKENIZER=1 uv run pytest -q -p no:warnings -o addopts=""` and `uv run ruff check src tests`; when C# is touched, from the repository root, `dotnet build extractor/SwReview.sln -c Release --nologo -v q` (zero warnings) and `dotnet test extractor/SwReview.sln -c Release --no-build --nologo`. Payload pins and the figures in `levers.md` and `docs/llm-efficiency-options.md` are regenerated only with `python -m tests.unit.test_tool_payload --write`, in a commit of their own; `ARRAY_CEILING` stays 38,000.
 
-**Organization**: Setup (two decision records), Foundational (the guard, IR 1.6.0, package-scoped ids, the fixtures), US1 a drawing on its own, US2 open drawings attached, US3 dimensions, precision and the resolver, US4 callouts and tables, US5 the drawing check and its questions, US5 part B the read-only open of a confirmed candidate (Phase 7B, the owner's answer of 2026-09-23 to research R5 Q2), US6 the brief, US7 conformance, Polish, and the workstation sitting.
+**Organization**: Setup (two decision records), Foundational (the guard, IR 1.6.0, package-scoped ids, the fixtures), US1 a drawing on its own, US2 open drawings attached, US3 dimensions, precision and the resolver, US4 callouts and tables, US5 the drawing check and its questions, US5 part B the read-only open of a confirmed candidate (Phase 7B, the owner's answer of 2026-09-23 to research R5 Q2), US6 the brief, US7 conformance, Polish, the probe command the sitting runs (Phase 10B, added 2026-09-23), and the workstation sitting.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -169,6 +169,9 @@ description: "Task list for the read-only drawing context"
 - [x] T075 [P] [US5] Write `reviewer/tests/unit/test_confirmed_drawing_read.py` per `contracts/confirmed-open.md` section 1: answering `CANDIDATE_CONFIRM` through `ReviewRunner.answer_evidence_batch` calls a fake bridge's `drawing_read(run_id, document_id)` once per candidate, in the question's order and before the resumed turn starts, stopping when the package holds ten drawing records (the rest `unresolved` naming the bound); afterwards `context.ir` has been reloaded from the run folder and holds the new records; one `drawing.confirmed_open` coverage item per candidate with each status and reason of section 1 (read and closed; read as it stood; the host's refusal verbatim; a `BridgeError`; the not-validated sentence); `Review without it`, `It is not the right drawing`, free text, and a request carrying the same options but another `question` or other `entity_ids` call nothing; a review with no bridge calls nothing and records the no-connection reason; the other answers of the same batch are recorded exactly as today; every existing runner and batch-route test unedited; `TOOL_FUNCTIONS`, the offered arrays and every payload pin unmoved (no model tool); the replay of feature 008's fixtures unchanged. Acceptance: red for want of the trigger
 - [x] T076 [US5] Implement `CANDIDATE_CONFIRM` and the candidate options in `reviewer/src/swreview/checks/drawing_context.py` (if T046 has not already written them from `contracts/questions.md` section 4), `read_confirmed_candidates` in `reviewer/src/swreview/tools/drawings.py`, its call in `reviewer/src/swreview/agent/runner.py` `answer_evidence_batch` after the answers are marked and before the resumed turn, and the package reload on the tool context. **Shared** (`agent/runner.py`, `tools/drawings.py`). Acceptance: T075 green; `test_tool_payload.py`, `test_prerun_digest.py` and the replay tests unedited and green; FR-036, FR-056
 
+- [x] T078 [P] [US5] *Added 2026-09-23*: extend `extractor/SwReview.Extractor.Tests/PackageAppenderTests.cs` and `ConfirmedDrawingReadTests.cs` for the dump's standing drawing gap after a confirmed read. A review whose extraction read no drawing carries "No open drawing shows this design, so no drawing was read natively..." (or the listing or the profile sentence) beside a `drawing` phase row `skipped` (the fixture `ConfirmedDrawingPackage.BuildWithNoDrawingRead`); after `PackageAppender.MergeDrawing` that gap - found structurally (`PackageWriter.IsDrawingPhaseGap`: kind `unsupported`, entity kind `drawing`, no entity), never by its words - is reworded in its own place with its kind and entity kind, drops the false claim and the "extract again" advice, and names every drawing read afterwards in the order merged and how each was read (`opened read-only by the review`, or `already open, read as it stood`); the `drawing` row stays `skipped` with no elapsed time, because the dump did skip; a package whose drawing phase ran gains no such gap; a refused merge leaves the gap as it was; the package the backend reloads satisfies the IR contract. Acceptance: red for want of the members, then for the stale sentence
+- [x] T079 [US5] *Added 2026-09-23*: name the standing sentences in `extractor/SwReview.Extractor/Dump/PackageWriter.cs` (`NoOpenDrawingGapSentence`, `OpenDrawingsNotListedGapSentence`, `ProfileSkippedDrawingGapSentence`, every one byte for byte as before, `IsDrawingPhaseGap` and `DrawingsReadAfterExtractionGapSentence`), reword the gap in `Dump/PackageAppender.cs` `MergeDrawing`, and amend `contracts/confirmed-open.md` section 2 and `contracts/open-drawings.md` section 6. **Shared** (`PackageWriter.cs`, `PackageAppender.cs`). Acceptance: T078 green; every `PackageWriterTests` sentence assertion unedited and green; zero warnings. No backend change is needed: nothing on the reasoning side matches the sentence (the drawing check reads records and candidates, `record_partial_evidence` returns for a `full` package, and the standards run asks for the drawing row only of a drawing root); `list_gaps` shows the reworded sentence, and every gap count is unchanged
+
 **Checkpoint**: a candidate the engineer confirms is read without the engineer opening it, and nothing the engineer had open is touched.
 
 ---
@@ -212,6 +215,17 @@ description: "Task list for the read-only drawing context"
 
 ---
 
+## Phase 10B: The Probe Command the Sitting Runs (added 2026-09-23)
+
+**Purpose**: T062 to T066 and T077 run `swreview-extract probe drawings` - probes D1 to D14 of `contracts/probes.md` - and no task implemented it. It lands here, test-first over the existing fakes, before the sitting; every run writes a report the owner brings back in the handoff.
+
+- [ ] T080 [P] *Added 2026-09-23*: write `extractor/SwReview.Extractor.Tests/DrawingProbeTests.cs` (with `Fakes/DrawingProbeFakes.cs`) per `contracts/probes.md`: the catalog is D1 to D14 in order, each with the kind it runs on; `--probe` takes comma lists in any case, refuses an unknown or empty id naming the known ones, and runs the named probes in catalog order once each; the default is every probe that applies to the open document's kind **except D14**, which runs only when named; a probe named for the other kind prints why and the run goes on; each section's lines over packages built in the test and the existing fakes, a read that throws printed as its exception type and HRESULT and the run going on; D5, D6 and D8 against the part's own extraction, a part that is not open reported and never opened; D13 over the file seam (the answer, the time, the directory entry before and after); D14 over `FakeDrawingOpenHost` and `FakeConfirmedDrawingPhase` through `DrawingOpenScope` with the switch overridden: the open-mode integers as passed, the active document and the foreground window unchanged before, during and after, the hidden drawing's counts, the file's size, write time and SHA-256 unchanged, every save flag before and after, the close, the exclusive read open after it, the open-document counts and the models left loaded, and with the drawing already open no visibility, open or close key gated; a refused open, a read that throws and a refused close; the report holds no path, file name, sheet name, note or cell text or property value of the fixtures; the report file is written in `--out` and never overwrites one; the command's option list and its read-only gate. Acceptance: red for want of the types
+- [ ] T081 *Added 2026-09-23*: implement the probes in `extractor/SwReview.Extractor/Probes/` (the catalog, the report, the runner and its sections, `DrawingOpenProbe` for D14, the file seam) and their interop sides (`SwDrawingProbeReads`, `SwDrawingOpenProbeHost`, compiled and not unit tested, like the other interop readers), the `drawings` subject of `probe` in `extractor/SwReview.Extractor.Console/Program.cs` with its option list and usage, and amend `contracts/probes.md` (the report file, `--out`, D14 only when named). **Shared** (`Program.cs`). Acceptance: T080 green; every `CommandLineOptionsTests` test green, `StandardsProbe_IsTheSecondSubjectOfProbe` edited deliberately for the fourth subject; zero warnings; the seat run is T062 to T066 and T077
+
+**Checkpoint**: the sitting has one command for every drawing probe, and every run leaves a report to bring back.
+
+---
+
 ## Phase 11: The next workstation sitting
 
 - [ ] T062 [W] On a multi-sheet drawing: `swreview-extract probe drawings --probe D1,D11`, then press Standards; record the answers in research R4 and the gate log (no writer, activation, open or close member). Then run feature 006's T103, T105 and T107, now reachable, and record them in 006's research R4 (SC-001, FR-004, FR-007)
@@ -240,7 +254,8 @@ description: "Task list for the read-only drawing context"
 - **US6 (Phase 8)**: after US3, US5 (T048: the family and the questions it reads answers of)
 - **US7 (Phase 9)**: after T029 and T048
 - **Polish (Phase 10)**: after every story chosen for the checkpoint; T061 whenever the owner answers
-- **Workstation (Phase 11)**: T062 after T016; T063 after T021; T064 after T027; T065 after T040; T066 after T064, T065 and T035; T067 after T053; T068 after T057 and the owner's profile; T077 after T074 and T076
+- **Probe command (Phase 10B)**: after T027, T040, T070 and T072, whose reads and seam it prints
+- **Workstation (Phase 11)**: T062 after T016 and T081; T063 after T021 and T081; T064 after T027 and T081; T065 after T040 and T081; T066 after T064, T065 and T035; T067 after T053; T068 after T057 and the owner's profile; T077 after T074, T076 and T081
 
 ### Task-level dependencies
 
@@ -250,7 +265,8 @@ description: "Task list for the read-only drawing context"
 - T027 after T026, T010 and T004; T029 after T028; T031 after T030 and T006; T033 after T032, T031 and T023; T035 after T034, T033 and T029; T037 after T036, T031 and T033; T038 after T035 and T037
 - T040 after T039 and T027; T042 after T041 and T035
 - T044 after T043; T046 after T045 and T023; T048 after T047, T046 and T044; T049 after T048
-- T069 after T004; T070 after T069; T071 after T070, T008, T010, T019 and T021; T072 after T071; T073 after T072; T074 after T073; T075 after T048 and T072; T076 after T075
+- T069 after T004; T070 after T069; T071 after T070, T008, T010, T019 and T021; T072 after T071; T073 after T072; T074 after T073; T075 after T048 and T072; T076 after T075; T078 after T072; T079 after T078
+- T080 after T027, T040 and T070; T081 after T080 and T072
 - T051 after T050, T035 and T048; T053 after T052 and T051; T055 after T054 and T053
 - T057 after T056, T029 and T048
 
@@ -270,8 +286,8 @@ Sequenced so no file is edited by two features at once; when another feature is 
 | `extractor/SwReview.Extractor/Guard/ReadOnlyGuard.cs`, `specs/004-resilient-remodeler/contracts/guard-allowlist.md` | T004, T070 | every feature that reads a new API family; feature 012's allowlist later |
 | `extractor/SwReview.Extractor/Bridge/*`, both `PROTOCOL.md`, `reviewer/src/swreview/bridge/client.py` | T072 | every bridge command (one additive minor per command) |
 | `reviewer/src/swreview/agent/runner.py` | T076 | feature 008's answer batch, feature 009's session |
-| `extractor/SwReview.Extractor/Sw/SwSession.cs`, `SwReview.Extractor.Console/Program.cs` | T014 | the attach and the console's commands |
-| `extractor/SwReview.Extractor/Dump/PackageWriter.cs`, `Dump/DumpContracts.cs` | T010, T016, T021 | every new dump phase |
+| `extractor/SwReview.Extractor/Sw/SwSession.cs`, `SwReview.Extractor.Console/Program.cs` | T014, T081 | the attach and the console's commands |
+| `extractor/SwReview.Extractor/Dump/PackageWriter.cs`, `Dump/DumpContracts.cs` | T010, T016, T021, T079 | every new dump phase |
 | `reviewer/src/swreview/ir/models.py`, `specs/001-agentic-design-review/contracts/ir.schema.json` | T006 | every IR minor |
 | `reviewer/src/swreview/checks/tolerances.py` | T035, T042 | feature 010's follow-ups |
 | `reviewer/src/swreview/checks/standards/profile.py` and the five profile files | T029 | any profile version |
@@ -318,7 +334,7 @@ Every functional requirement and success criterion has at least one task whose a
 | FR-025 | T036, T037 | FR-051 | T049 |
 | FR-026 | T026, T039 | FR-052 | T003, T004, T015, T062 |
 | FR-053 | T069 to T072 | FR-055 | T069, T070, T071, T077 |
-| FR-054 | T069, T070, T077 | FR-056 | T071, T072, T075, T076 |
+| FR-054 | T069, T070, T077 | FR-056 | T071, T072, T075, T076, T078, T079 |
 
 | SC | Tasks | SC | Tasks |
 |---|---|---|---|
@@ -327,7 +343,7 @@ Every functional requirement and success criterion has at least one task whose a
 | SC-003 | T038 | SC-008 | T045, T067 |
 | SC-004 | T034, T038 | SC-009 | T003, T004 |
 | SC-005 | T026, T039, T065 | SC-010 | T066 |
-| | | SC-011 | T069, T071, T077 |
+| | | SC-011 | T069, T071, T080, T081, T077 |
 
 ---
 

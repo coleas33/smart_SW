@@ -83,6 +83,12 @@ design, so it was not read". It raises no question.
 | `Full`, part or assembly root, nothing attached | "No open drawing shows this design, so no drawing was read natively. Open its drawing in SOLIDWORKS and extract again to include it." |
 | Any other profile that skipped it | today's: "Drawing sheets were not read natively: the drawing phase did not run under the '{profile}' profile. Any sheets in this package came from the PDF ingest." |
 
+*Amended 2026-09-23 (T079)*: the sentences are `PackageWriter`'s named constants
+(`NoOpenDrawingGapSentence`, `OpenDrawingsNotListedGapSentence`,
+`ProfileSkippedDrawingGapSentence`), unchanged byte for byte. When a confirmed candidate is later
+merged into the package (`confirmed-open.md` section 2), the gap is reworded in its place to name
+the drawings read afterwards, and the `drawing` row stays `skipped`.
+
 ## 7. Identity and reuse
 
 The reuse key changes when the set of attached drawings changes, because their manifest entries
