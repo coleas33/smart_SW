@@ -51,11 +51,11 @@ report says so without its path; a stop's full message goes to stderr only.
 |---|---|
 | D3: non-active sheets' views come back | nothing; otherwise the per-sheet gap of 006 FR-024 stands for attached drawings too |
 | D4: a document-precision dimension reports -1 or the default | `drawings/native.written_precision` reads `dimension_precision_raw` (expected) or `units_decimal_places_raw` - one line, T064 |
-| D6 and D8: every known callout ties to the right face | T066 sets `DRAWING_BINDING_VALIDATED = True` and adds the known case, fictionalised, as a regression row in `test_drawing_binding.py`; any mismatch leaves it false and records why |
+| D6 and D8: every known callout ties to the right face | T066 sets `DRAWING_BINDING_VALIDATED = True` (on the development machine, editing only the pin `test_the_switch_ships_off` beside it, T094) and adds the known case, fictionalised, as a regression row in `test_drawing_binding.py`; any mismatch leaves it false and records why |
 | D7: a whole rendered text is readable | a later task may record it; `text_as_read` stays composed until then |
 | D12: out-of-date views read reliably | nothing; an unreliable read keeps such views unusable (their evidence is unused, never guessed) |
 | D13: the check fetches the file or takes over a second | discovery skips the candidate check under a vault view and writes one `drawing_candidate` gap saying so - one rule in `OpenDrawingDiscovery`, recorded in research and `open-drawings.md` section 5 |
-| D14: every answer as `confirmed-open.md` requires | T077 sets `DrawingOpenScope.SeatValidated = true` in its own commit citing the record; the drawing activated, took focus, was written, stayed locked, or its hidden views did not read: the switch stays false and research R4 records why; models left loaded after the close are recorded, never closed by the product |
+| D14: every answer as `confirmed-open.md` requires | T077 sets `DrawingOpenScope.SeatValidated => true` in its own commit citing the record (on the development machine, editing only the pin `TheSeamShipsOffUntilTheSeatConfirmsIt` beside it, T094); the drawing activated, took focus, was written, stayed locked, or its hidden views did not read: the switch stays false and research R4 records why; models left loaded after the close are recorded, never closed by the product |
 
 ## 4. Landed as (T080, T081, 2026-09-23)
 

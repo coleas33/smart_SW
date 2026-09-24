@@ -108,6 +108,29 @@ def vocabulary() -> Path:
 
 
 @pytest.fixture
+def validated(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Feature 011's drawing binding switch on, as T066 will set it once a seat validates it.
+
+    `drawings/binding.DRAWING_BINDING_VALIDATED` ships false (FR-024). The binding's tests set
+    it with this fixture, and the tests of the switch-off behaviour set it off with
+    `not_validated` rather than reading the shipped value, so T066's flip is one edit that turns
+    exactly one test red by design: `test_drawing_binding.test_the_switch_ships_off`, the pin
+    (011 T096; `tests/unit/test_binding_switch_flip.py` holds the rule).
+    """
+    from swreview.drawings import binding
+
+    monkeypatch.setattr(binding, "DRAWING_BINDING_VALIDATED", True)
+
+
+@pytest.fixture
+def not_validated(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Feature 011's drawing binding switch off, whatever the shipped value (see `validated`)."""
+    from swreview.drawings import binding
+
+    monkeypatch.setattr(binding, "DRAWING_BINDING_VALIDATED", False)
+
+
+@pytest.fixture
 def make_package() -> Callable[..., EvidencePackage]:
     """Build a minimal valid `EvidencePackage`; keyword arguments replace top-level fields."""
     return build_package

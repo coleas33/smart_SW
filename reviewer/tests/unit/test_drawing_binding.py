@@ -11,7 +11,8 @@ bore's); a position subject a geometric tolerance with a position or coaxiality 
 dimension whose displayed value is overridden, or whose override flag is unread, binds nothing.
 
 **The binding ships disabled** (research R2.8, FR-024): with `DRAWING_BINDING_VALIDATED` as
-shipped nothing binds and the reason names the seat validation. Every other test here sets it.
+shipped nothing binds and the reason names the seat validation. Every other test here sets it,
+on or off, and never reads the shipped value.
 """
 
 from __future__ import annotations
@@ -68,11 +69,6 @@ PIN = ToleranceSubject(
 POSITION_FRAME = GtolFrame(number=1, symbols_raw=["<GTOL-POSI>"], values_raw=["0.05"])
 
 
-@pytest.fixture
-def validated(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(binding, "DRAWING_BINDING_VALIDATED", True)
-
-
 @pytest.fixture(scope="module")
 def plate() -> EvidencePackage:
     return load_package(FIXTURES / "plate-drawing").package
@@ -110,9 +106,14 @@ def found_for(package: EvidencePackage, subject: ToleranceSubject) -> tuple[Draw
 
 
 def test_the_switch_ships_off() -> None:
+    """The one test that reads the shipped value (011 T096): T066's commit, which sets the switch
+    once a seat has validated the binding, edits this pin deliberately and nothing else - every
+    other test sets the switch itself (`validated`, `not_validated`), which
+    `test_binding_switch_flip.py` holds."""
     assert binding.DRAWING_BINDING_VALIDATED is False
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_with_the_switch_off_nothing_binds_and_the_reason_names_the_seat_validation(
     plate: EvidencePackage,
 ) -> None:

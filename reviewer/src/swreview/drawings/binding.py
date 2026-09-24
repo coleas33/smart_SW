@@ -57,7 +57,9 @@ __all__ = [
 ]
 
 DRAWING_BINDING_VALIDATED: bool = False
-"""T066 sets True, one edit in a commit of its own, citing probes D4, D5, D6 and D8."""
+"""T066 sets True, one edit in a commit of its own on the development machine, citing probes D4,
+D5, D6 and D8; the same commit edits `test_drawing_binding.test_the_switch_ships_off`, the one
+test that reads this value (T096)."""
 
 NOT_VALIDATED = (
     "drawing callouts are read but not yet validated on a seat against a drawing whose "

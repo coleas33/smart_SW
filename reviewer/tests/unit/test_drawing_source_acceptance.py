@@ -27,7 +27,6 @@ import pytest
 from swreview.checks.standards.profile import load_profile
 from swreview.checks.standards.traversal import graded_documents
 from swreview.checks.tolerances import ToleranceSubject, drawing_answer
-from swreview.drawings import binding
 from swreview.drawings.binding import NOT_VALIDATED, search_bindings
 from swreview.drawings.evidence import DrawingIndex
 from swreview.findings import Finding
@@ -65,11 +64,6 @@ def stacks(context: ToolContext) -> dict[str, Finding]:
         for finding in context.require_session().findings
         if finding.check == "hole.position_stack"
     }
-
-
-@pytest.fixture
-def validated(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(binding, "DRAWING_BINDING_VALIDATED", True)
 
 
 # --- SC-003 -------------------------------------------------------------------------------------
@@ -187,6 +181,7 @@ def _as_feature_010(finding: Finding) -> dict[str, Any]:
     )
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_with_the_switch_off_both_stacks_are_feature_010s() -> None:
     drawn, bare = stacks(reviewed(PLATE_DRAWING)), stacks(reviewed(TOLERANCES))
 

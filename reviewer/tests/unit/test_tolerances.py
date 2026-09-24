@@ -446,11 +446,6 @@ BORE = ToleranceSubject(
 )
 
 
-@pytest.fixture
-def validated(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(drawing_binding, "DRAWING_BINDING_VALIDATED", True)
-
-
 def tolerances_package() -> EvidencePackage:
     return load_generator(MECHANICAL).build_tolerances_assembly().package  # type: ignore[no-any-return]
 
@@ -841,6 +836,7 @@ def test_explicit_limits_win_over_a_written_precision() -> None:
     assert answer.decimal_places is None
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_with_the_switch_off_the_drawing_binds_nothing_and_says_why(
     profile: StandardsProfile,
 ) -> None:
@@ -868,6 +864,7 @@ def _only_the_drawing(package: EvidencePackage) -> EvidencePackage:
     )
 
 
+@pytest.mark.usefixtures("not_validated")
 def test_holds_any_source_counts_a_bindable_drawing_dimension_only_while_the_switch_is_set(
     monkeypatch: pytest.MonkeyPatch, profile: StandardsProfile
 ) -> None:
