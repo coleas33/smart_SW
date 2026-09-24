@@ -124,7 +124,14 @@ recorder:
   refusal "SOLIDWORKS could not open '{file name}' read-only ({FileLoadErrors})".
 - **Close**: in a `finally` around the read, when and only when `OpenedByReview`, with the
   identity check above. The seam never closes any other document, and never a model the drawing
-  loaded.
+  loaded. *Corrected 2026-09-23 on review*: once `OpenDoc6` has returned a document its close is
+  unconditional. A restore that throws after a successful open closes the drawing without reading
+  it, and the refusal names the restore failure, whether the drawing was closed, and that drawings
+  opened afterwards may stay hidden until SOLIDWORKS is restarted (a raw `COMException` had escaped
+  with the hidden drawing left open); a restore that throws after a failed open is named in the
+  open's refusal. A lookup or `CloseDoc` that SOLIDWORKS fails is the close's reason
+  (`CloseRefusal`), never an exception that would hide the read's own; a read that throws while
+  the close is refused is one refusal carrying both, the read's exception inside it.
 - Nothing the seam calls activates, rebuilds, saves or selects: no `ActivateDoc*`, `Save*`,
   `ForceRebuild*` or selection member appears in its gate log, and `OpenDoc6` and `CloseDoc`
   appear only under their qualified keys.

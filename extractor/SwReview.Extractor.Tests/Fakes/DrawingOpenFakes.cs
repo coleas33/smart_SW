@@ -47,6 +47,15 @@ internal sealed class FakeDrawingOpenHost : IDrawingOpenHost
 
     public bool AfterOpenAnswersNothing { get; set; }
 
+    /// <summary>Thrown by <c>DocumentVisible(true, ...)</c>, the restore, when set.</summary>
+    public Exception? RestoreFailure { get; set; }
+
+    /// <summary>Thrown by the lookup once the seam opened the drawing (the close's identity check), when set.</summary>
+    public Exception? AfterOpenLookupFailure { get; set; }
+
+    /// <summary>Thrown by <c>CloseDoc</c>, when set.</summary>
+    public Exception? CloseFailure { get; set; }
+
     public object AlreadyOpen(string path)
     {
         var document = new object();
@@ -64,14 +73,25 @@ internal sealed class FakeDrawingOpenHost : IDrawingOpenHost
 
         if (ReferenceEquals(document, Opened))
         {
+            if (AfterOpenLookupFailure != null)
+            {
+                throw AfterOpenLookupFailure;
+            }
+
             return AfterOpenAnswersNothing ? null : AfterOpenAnswer ?? document;
         }
 
         return document;
     }
 
-    public void DocumentVisible(bool visible, int documentType) =>
+    public void DocumentVisible(bool visible, int documentType)
+    {
         Calls.Add(new FakeOpenCall("DocumentVisible", visible, documentType));
+        if (visible && RestoreFailure != null)
+        {
+            throw RestoreFailure;
+        }
+    }
 
     public object? OpenDoc6(string path, int documentType, int options, string configuration, out int errors, out int warnings)
     {
@@ -95,6 +115,11 @@ internal sealed class FakeDrawingOpenHost : IDrawingOpenHost
     public void CloseDoc(string path)
     {
         Calls.Add(new FakeOpenCall("CloseDoc", path));
+        if (CloseFailure != null)
+        {
+            throw CloseFailure;
+        }
+
         _open.Remove(path);
     }
 }

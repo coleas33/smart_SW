@@ -74,9 +74,11 @@ public sealed class DrawingOpenRefused : InvalidOperationException
 ///   * <b>Not open</b>: <c>DocumentVisible(false, 3)</c>, <c>OpenDoc6(path, 3, 3, "")</c>, and
 ///     <c>DocumentVisible(true, 3)</c> in a <c>finally</c>, also when the open throws or answers
 ///     null - each of those a refusal naming the file and its load errors.
-///   * <b>Close</b>: in a <c>finally</c> around the read, only when this seam opened the drawing,
-///     and only after <c>GetOpenDocumentByName(path)</c> answers the same COM identity the open
-///     returned; otherwise nothing is closed and the result says why. No other document is ever
+///   * <b>Close</b>: whenever <c>OpenDoc6</c> returned a document - after the read, when the read
+///     throws, and when the restore throws (the drawing is then not read) - and only after
+///     <c>GetOpenDocumentByName(path)</c> answers the same COM identity the open returned;
+///     otherwise nothing is closed and the result says why. A close that SOLIDWORKS fails is a
+///     reason too, never an exception that would hide the read's own. No other document is ever
 ///     closed, and never a model the drawing loaded.
 ///
 /// Every call goes through a gate built on <see cref="DrawingOpenGuard"/>, so the three keys are
@@ -135,7 +137,8 @@ public sealed class DrawingOpenScope
     /// Reads the drawing at <paramref name="path"/> with <paramref name="read"/>, opening it
     /// read-only and hidden when it is not open and closing it again only when this seam opened
     /// it. A refusal is a <see cref="DrawingOpenRefused"/> with the sentence to show; an exception
-    /// from <paramref name="read"/> propagates after the close.
+    /// from <paramref name="read"/> propagates after the close, as it is when the close succeeded,
+    /// or inside a <see cref="DrawingOpenRefused"/> that also says the drawing was not closed.
     /// </summary>
     public DrawingOpenResult<T> Read<T>(string path, Func<object, T> read)
     {
@@ -163,29 +166,41 @@ public sealed class DrawingOpenScope
 
         object opened = Open(path);
 
-        bool closed = false;
-        string? closeRefusal = null;
         T value;
         try
         {
             value = read(opened);
         }
-        finally
+        catch (Exception readFailure)
         {
-            closeRefusal = Close(path, opened);
-            closed = closeRefusal == null;
+            string? refusedClose = Close(path, opened);
+            if (refusedClose == null)
+            {
+                throw;
+            }
+
+            throw new DrawingOpenRefused(
+                $"reading '{Path.GetFileName(path)}' failed ({Described(readFailure)}), and {refusedClose}",
+                readFailure);
         }
 
-        return new DrawingOpenResult<T>(value, openedByReview: true, closed, closeRefusal);
+        string? closeRefusal = Close(path, opened);
+        return new DrawingOpenResult<T>(value, openedByReview: true, closed: closeRefusal == null, closeRefusal);
     }
 
-    /// <summary>Hide, open read-only, restore: the restore in a <c>finally</c>, whatever the open did.</summary>
+    /// <summary>
+    /// Hide, open read-only, restore - the restore in a <c>finally</c>, whatever the open did -
+    /// and return the open drawing. A drawing the open returned while the restore failed is not
+    /// handed on: it is closed here, and the refusal says the restore failed and whether it closed.
+    /// </summary>
     private object Open(string path)
     {
         string fileName = Path.GetFileName(path);
         int errors = 0;
         int warnings = 0;
-        object? opened;
+        object? opened = null;
+        Exception? openFailure = null;
+        string? restoreFailure = null;
 
         _gate.Call(DrawingOpenGuard.DocumentVisibleKey, () => _host.DocumentVisible(false, DrawingDocumentType));
         try
@@ -196,38 +211,80 @@ public sealed class DrawingOpenScope
         }
         catch (Exception error) when (!(error is MutatingCallError) && !(error is CircuitOpenError))
         {
-            throw new DrawingOpenRefused(
-                $"SOLIDWORKS could not open '{fileName}' read-only ({FileLoadErrors.Describe(errors, warnings)}): "
-                + error.Message,
-                error);
+            openFailure = error;
         }
         finally
         {
-            _gate.Call(DrawingOpenGuard.DocumentVisibleKey, () => _host.DocumentVisible(true, DrawingDocumentType));
+            restoreFailure = Restore();
         }
 
-        return opened ?? throw new DrawingOpenRefused(
-            $"SOLIDWORKS could not open '{fileName}' read-only ({FileLoadErrors.Describe(errors, warnings)})");
+        if (opened == null)
+        {
+            string refusal = $"SOLIDWORKS could not open '{fileName}' read-only ({FileLoadErrors.Describe(errors, warnings)})"
+                + (openFailure == null ? string.Empty : ": " + openFailure.Message)
+                + (restoreFailure == null ? string.Empty : "; it also " + RestoreSentence(restoreFailure));
+            throw openFailure == null ? new DrawingOpenRefused(refusal) : new DrawingOpenRefused(refusal, openFailure);
+        }
+
+        if (restoreFailure != null)
+        {
+            string? closeRefusal = Close(path, opened);
+            throw new DrawingOpenRefused(
+                $"SOLIDWORKS opened '{fileName}' read-only but {RestoreSentence(restoreFailure)}, so it was not read; "
+                + (closeRefusal ?? "it was closed again.")
+                + " Drawings opened from now on may stay hidden until SOLIDWORKS is restarted.");
+        }
+
+        return opened;
     }
+
+    /// <summary>Shows new drawings again; returns why it could not, or null when it did.</summary>
+    private string? Restore()
+    {
+        try
+        {
+            _gate.Call(DrawingOpenGuard.DocumentVisibleKey, () => _host.DocumentVisible(true, DrawingDocumentType));
+            return null;
+        }
+        catch (Exception error) when (!(error is MutatingCallError))
+        {
+            return Described(error);
+        }
+    }
+
+    private static string RestoreSentence(string failure) =>
+        $"could not restore the visibility of new drawings ({failure})";
+
+    private static string Described(Exception error) => error.GetType().Name + ": " + error.Message;
 
     /// <summary>
     /// Closes what this seam opened, after checking SOLIDWORKS still answers the path with the
-    /// very document the open returned; returns why it did not close, or null when it closed.
+    /// very document the open returned; returns why it did not close, or null when it closed. A
+    /// lookup or close SOLIDWORKS fails is returned as a reason, never thrown: the caller may be
+    /// unwinding from the read's own exception, which must not be hidden.
     /// </summary>
     private string? Close(string path, object opened)
     {
-        object? current = _gate.Call(LookupMember, () => _host.OpenDocument(path));
-        if (!ReferenceEquals(current, opened))
+        string fileName = Path.GetFileName(path);
+        try
         {
-            return current == null
-                ? $"'{Path.GetFileName(path)}' was not closed: SOLIDWORKS no longer answers its path with the "
-                    + "same document the review opened, so nothing was closed."
-                : $"'{Path.GetFileName(path)}' was not closed: SOLIDWORKS answers its path with a document "
-                    + "that is not the same document the review opened, so nothing was closed.";
-        }
+            object? current = _gate.Call(LookupMember, () => _host.OpenDocument(path));
+            if (!ReferenceEquals(current, opened))
+            {
+                return current == null
+                    ? $"'{fileName}' was not closed: SOLIDWORKS no longer answers its path with the "
+                        + "same document the review opened, so nothing was closed."
+                    : $"'{fileName}' was not closed: SOLIDWORKS answers its path with a document "
+                        + "that is not the same document the review opened, so nothing was closed.";
+            }
 
-        _gate.Call(DrawingOpenGuard.CloseDocKey, () => _host.CloseDoc(path));
-        return null;
+            _gate.Call(DrawingOpenGuard.CloseDocKey, () => _host.CloseDoc(path));
+            return null;
+        }
+        catch (Exception error) when (!(error is MutatingCallError))
+        {
+            return $"'{fileName}' was not closed: SOLIDWORKS failed while the review was closing it ({Described(error)}).";
+        }
     }
 }
 
