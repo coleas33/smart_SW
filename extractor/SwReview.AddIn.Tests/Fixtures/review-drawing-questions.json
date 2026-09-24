@@ -262,7 +262,7 @@
           ]
         },
         "reason": "the bridge returned status 'error': the read-only open of a confirmed drawing is not yet validated on a seat (feature 011 probe D14)",
-        "error": "BridgeError"
+        "error": "BridgeRefusedError"
       }
     },
     {

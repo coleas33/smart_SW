@@ -32,6 +32,14 @@ document id:
 | `checked` | the host read it | "opened read-only, read and closed ({k} sheets)", or "read as it stood; it was already open, so it was left open" |
 | `unresolved` | anything else | the host's refusal (section 2), the bridge error, "no SOLIDWORKS connection in this review, so the drawing was not opened; open it and review again", "the package already holds ten drawings, so this one was not opened", or section 4's not-validated sentence |
 
+A refusal the host answers is a definite answer from a healthy host: the client raises
+`BridgeRefusedError` for it (`bridge/client.REFUSING_COMMANDS`) and its circuit breaker never
+counts it, so any number of refused candidates leaves the bridge working for the rest of the
+review. A `drawing.read` the host never answered (a dead pipe, a timeout) is counted like any
+other failure. *Corrected 2026-09-23 on review*: every refusal had counted, so the third refused
+candidate opened the client's circuit and the fourth, and every later bridge call, got the
+breaker's sentence instead.
+
 ## 2. The bridge command, `drawing.read` (protocol 1.3, additive)
 
 ```json

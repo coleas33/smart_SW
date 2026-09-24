@@ -14,10 +14,11 @@ module adds around the wire format is the three guarantees the tool layer depend
 - **one failure type.** A non-`ok` status, an unreadable line, a response for another
   request, a dead pipe and a timeout are all `BridgeError`, which carries the host's
   `result` when it sent one (a failed `capture` carries a `Gap`). Callers have one thing
-  to catch, and the tool layer turns it into an error result and `failed` coverage. Two
-  refusals the in-process host makes are named subclasses so the tool layer can say which
-  one happened - `BridgeUnauthorizedError` and `BridgeDocumentClosedError` - but they are
-  still `BridgeError`, so a caller that only catches the base type cannot crash on them.
+  to catch, and the tool layer turns it into an error result and `failed` coverage. Three
+  refusals the host makes are named subclasses so the tool layer can say which one
+  happened - `BridgeUnauthorizedError`, `BridgeDocumentClosedError` and, for `drawing.read`,
+  `BridgeRefusedError` - but they are still `BridgeError`, so a caller that only catches the
+  base type cannot crash on them.
 - **a per-launch secret.** The in-process tool service of feature 002 requires
   `"secret"` on every request line and answers `unauthorized` without it
   (`specs/002-task-pane-assistant/contracts/README.md`). The client sends the secret it
@@ -28,7 +29,8 @@ module adds around the wire format is the three guarantees the tool layer depend
   consecutive failures, stops the client calling: every further call raises
   `BridgeOpenError` instead. A SOLIDWORKS session that has begun failing COM calls does
   not recover by being asked again, and the review is better off continuing offline with
-  honest `failed` coverage.
+  honest `failed` coverage. A definite answer from a healthy host - a closed document, a
+  refused `drawing.read` - is not such a failure and is never counted.
 
 The transport is injectable. The default is a named pipe; the tests use a fake, and a
 workstation that needs a real read timeout can supply a `pywin32` transport without
@@ -49,11 +51,13 @@ __all__ = [
     "DEFAULT_TIMEOUT_S",
     "DOCUMENT_CLOSED_MARKER",
     "PROTOCOL_VERSION",
+    "REFUSING_COMMANDS",
     "UNAUTHORIZED_MARKER",
     "BridgeClient",
     "BridgeDocumentClosedError",
     "BridgeError",
     "BridgeOpenError",
+    "BridgeRefusedError",
     "BridgeUnauthorizedError",
     "NamedPipeTransport",
     "Transport",
@@ -89,6 +93,17 @@ session tools accept, so a view outside it is reported, never silently substitut
 
 CIRCUIT_LIMIT = 3
 """Consecutive failures after which the client stops calling (research R4)."""
+
+REFUSING_COMMANDS: tuple[str, ...] = ("drawing.read",)
+"""The commands whose answered `status: "error"` is a refusal, not a SOLIDWORKS failure.
+
+`drawing.read` (feature 011) resolves everything from the host's own records and refuses, with
+a sentence, whatever it cannot do - the seat switch, the ten-drawing bound, a candidate no longer
+beside its document (`specs/011-drawing-context/contracts/confirmed-open.md` section 2). Those
+answers come from a healthy host, so they raise `BridgeRefusedError` and are never counted
+toward `CIRCUIT_LIMIT`: an engineer who confirms four candidates on a seat where the open is
+not validated keeps the bridge for the rest of the review. A request the host never answered -
+a dead pipe, a timeout, a line out of step - is still counted, for this command as for any."""
 
 UNAUTHORIZED_MARKER = "unauthorized"
 """How the host refuses a wrong, missing or out-of-scope secret (contracts/README.md).
@@ -139,6 +154,15 @@ class BridgeDocumentClosedError(BridgeError):
     further live call keeps getting this sentence rather than a breaker message that hides
     why the bridge went quiet (spec.md, "the engineer closes the document while a review
     runs").
+    """
+
+
+class BridgeRefusedError(BridgeError):
+    """The host answered a `REFUSING_COMMANDS` request by refusing it, with its sentence.
+
+    Like `BridgeDocumentClosedError`, a definite answer from a healthy host: it does **not**
+    count toward the circuit breaker, and it neither trips it nor clears failures that came
+    before it (`_fail`).
     """
 
 
@@ -283,7 +307,7 @@ class BridgeClient:
             request["secret"] = self.secret
         line = json.dumps(request, separators=(",", ":"))
         try:
-            response = self._exchange(request_id, line)
+            response = self._exchange(request_id, line, command)
         except BridgeError as exc:
             # The message is `str(exc)`, which is built from the host's own error text and
             # never from the request line: the secret stays out of `last_error` and out of
@@ -291,13 +315,13 @@ class BridgeClient:
             self._fail(
                 str(exc),
                 opened=isinstance(exc, BridgeOpenError | BridgeUnauthorizedError),
-                counted=not isinstance(exc, BridgeDocumentClosedError),
+                counted=not isinstance(exc, BridgeDocumentClosedError | BridgeRefusedError),
             )
             raise
         self._consecutive_failures = 0
         return response
 
-    def _exchange(self, request_id: str, line: str) -> Any:
+    def _exchange(self, request_id: str, line: str, command: str) -> Any:
         try:
             raw = self.transport.request(line)
         except BridgeError:
@@ -346,6 +370,8 @@ class BridgeClient:
                 )
             if DOCUMENT_CLOSED_MARKER in text.lower():
                 raise BridgeDocumentClosedError(message, result)
+            if command in REFUSING_COMMANDS:
+                raise BridgeRefusedError(message, result)
             raise BridgeError(message, result)
         return payload.get("result")
 
@@ -355,9 +381,10 @@ class BridgeClient:
         `opened` opens the circuit at once - the host's own `circuit_open`, which will not
         answer anything else until it is restarted, and a refused secret, which will not
         start being accepted; counting either to three would be pointless round trips.
-        `counted=False` leaves the count exactly where it was: a closed document is a
-        definite answer from a healthy host, not a SOLIDWORKS failure, so it neither trips
-        the breaker on its own nor clears failures that came before it.
+        `counted=False` leaves the count exactly where it was: a closed document, and a
+        refused `drawing.read`, are definite answers from a healthy host, not SOLIDWORKS
+        failures, so neither trips the breaker on its own nor clears failures that came
+        before it.
         """
         if opened:
             self._consecutive_failures = CIRCUIT_LIMIT
@@ -453,7 +480,8 @@ class BridgeClient:
         read-only and hidden when it is not open, reads it with ids continuing the package's,
         and closes it again when it opened it; no path is ever sent. The result is
         `{document_id, drawing_document_id, opened, closed, sheets, gaps}`; a refusal is a
-        `BridgeError` carrying the host's sentence, and nothing was opened.
+        `BridgeRefusedError` carrying the host's sentence, nothing was opened, and the circuit
+        breaker does not count it (`REFUSING_COMMANDS`).
         """
         return self.call("drawing.read", {"run_id": run_id, "document_id": document_id})
 
