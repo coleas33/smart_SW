@@ -1008,6 +1008,26 @@ def test_every_powershell_block_parses(plan: str, tmp_path: Path) -> None:
     ) == ""
 
 
+RUNBOOK = REPO / "docs" / "workstation-runbook.md"
+FLAG_WITH_BARE_PLACEHOLDER = re.compile(r"(?<![\w-])-{1,2}[A-Za-z][\w-]* <[^<>\n]+>")
+"""A flag followed by a placeholder outside quotes: `--from <file>`, `-SolidWorksRoot <root>`."""
+
+
+def test_no_flag_is_given_a_bare_placeholder_even_in_a_comment() -> None:
+    """The plan's rule quotes every placeholder, since Windows PowerShell refuses `<` outside
+    quotes. The parse tests read commands and code lines, not a block's comments or a table's
+    hint, and an engineer copies from those too: the runbook's first-install and quick-reference
+    comments and its `--out` hint kept `<file>`, `<root>` and `<new folder>` bare after the
+    inline commands were quoted."""
+    for path in (PLAN, HANDOVER, RUNBOOK):
+        text = path.read_text(encoding="utf-8")
+
+        assert FLAG_WITH_BARE_PLACEHOLDER.findall(text) == [], path.name
+    assert FLAG_WITH_BARE_PLACEHOLDER.findall("# -TokenizerFrom <file>, --out <new folder>") == [
+        "-TokenizerFrom <file>", "--out <new folder>"
+    ]
+
+
 @pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
 def test_every_command_written_in_the_text_parses(tmp_path: Path) -> None:
     """A command written inline in the plan, the handover or the runbook is pasted as it stands,
