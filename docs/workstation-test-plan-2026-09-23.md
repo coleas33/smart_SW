@@ -178,7 +178,8 @@ and under B, what SOLIDWORKS shows in them as they stand:
 - **configurations** (ConfigurationManager): how many, which one is active, and which of them
   have an exploded view; whether the active one is shown exploded;
 - **sub-assemblies**: whether the assembly has any;
-- **components**, each by the name the FeatureManager tree shows: one of each kind the assembly
+- **components**, each by the name the FeatureManager tree shows (`bracket<3>`), and, for one
+  inside a sub-assembly, the name of each sub-assembly above it: one of each kind the assembly
   has among these six: a plain visible one; a hidden one; a suppressed one; one hidden only in a
   display state (visible in another display state); one you can see is transparent; and one with
   an appearance override that is not transparent (a colour or appearance given to the component
@@ -755,14 +756,22 @@ the development machine keeps them):
   one line per configuration ending `explode_steps=<n>`, read without activating any; then,
   under `sub-assembly documents:`, one line per sub-assembly (`(none)` if there is none).
 - `probe-2 appearance_overrides:` (006 T102): one line per component, starting with its id
-  (`cmp:` and four digits) and its name, then `HasMaterialPropertyValues=<True or False>` and
-  `GetMaterialPropertyValues2(1, null)=` with the slots it read (normally `9 slots [0]=... [8]=...`).
-- `probe-3 component_visibility:` (006 T101): one line per component, id and name first, then
+  (`cmp:` and four digits) and its path (below), then `HasMaterialPropertyValues=<True or False>`
+  and `GetMaterialPropertyValues2(1, null)=` with the slots it read (normally
+  `9 slots [0]=... [8]=...`).
+- `probe-3 component_visibility:` (006 T101): one line per component, id and path first, then
   `Visible=<n>`, `GetVisibility(1, null)=<n>` and `suppression=<state>`.
 
-Find each component you noted for A or B in section 0.2 by its name (Ctrl+F): its lines in probes
-2 and 3 start with its id. A read that failed prints `!` and the error's name in place of its
-value: that is SOLIDWORKS's answer on this release, not a fail of the sitting; record it.
+Find each component you noted for A or B in section 0.2 (Ctrl+F) by its path. The report does
+not write a component's name as the tree shows it: it leaves out the tree's `(f)` or `(-)` in
+front and the configuration in brackets behind, writes the instance number `<3>` as `-3`, and puts
+in front of it each sub-assembly above it, written the same way and followed by `/`. So the tree's
+`bracket<3>` is `bracket-3` at the top of the assembly, and `sub-2/bracket-3` inside sub-assembly
+`sub<2>`. In probes 2 and 3 each line starts with the component's id (`cmp:` and four digits), a
+space, the path and a space, so type a space, the path and a space in the search box: that finds
+its probe 2 line, F3 its probe 3 line, and neither `bracket-30` nor another sub-assembly's
+`bracket-3`. A read that failed prints `!` and the error's name in place of its value: that is
+SOLIDWORKS's answer on this release, not a fail of the sitting; record it.
 
 - Both tasks, the probe itself, on A and on B: `exit code: 0`, and the gate log reads
   `mutating members: none`, `refusals: none`, `sheet activation: none`, `document opening: none`
@@ -1642,9 +1651,11 @@ $sw = "C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS"   # or "<SOLIDWORKS install 
 dotnet build extractor\SwReview.sln -c Release "-p:SwRedist=$sw\api\redist"
 ```
 
-Then start SOLIDWORKS, open A and part J, and:
+Then start SOLIDWORKS, open A resolved and part J, and:
 
-1. With A active, press Review (the key is still in Settings) and wait for it to finish.
+1. With A active, press Review (the key is still in Settings); if a **Before this review** panel
+   appears, write down its first line, press **Review available evidence**, and never resolve or
+   unsuppress a part (the owner's decision 14A; step 4's box, item 1). Wait for it to finish.
 2. Make J active and on the Model check tab press **Model check**.
 3. Make A active again, and in the Review tab press **Show in SOLIDWORKS** on one of A's findings.
    Record what SOLIDWORKS selected: something in A, something in J, nothing, or an error.
@@ -1669,7 +1680,8 @@ commit at 1.3), run it once more. If it stops again, run
 built, and record the failing test. If `dotnet build` fails, clear SwReview's two boxes (Active and
 Start Up) in Tools > Add-ins and call the owner. **Never leave the seat on the older add-in.**
 
-Start SOLIDWORKS and repeat the three presses. Pass: this time Show in SOLIDWORKS selects A's own
+Start SOLIDWORKS, open A resolved and part J, and repeat the three presses, a **Before this
+review** panel answered as in item 1. Pass: this time Show in SOLIDWORKS selects A's own
 entity. Record: both answers. The registration survives both builds; nothing to register. If
 Settings now shows a different provider, model or no key, close SOLIDWORKS and put the copy back:
 `Copy-Item "$env:APPDATA\SwReview\settings.json.before-5.5" "$env:APPDATA\SwReview\settings.json"`.
