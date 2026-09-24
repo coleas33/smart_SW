@@ -330,6 +330,41 @@ def test_a_blocked_item_3_at_step_3_5_costs_only_its_own_rows(plan: str, results
     assert "both rows of this item" not in plan
 
 
+def test_the_named_callouts_are_found_by_name_and_value_and_otherwise_not_decidable(
+    plan: str,
+) -> None:
+    """011 T066 is decidable only if the engineer can find the callout named in advance: row H
+    asks for its name as SOLIDWORKS shows it, and step 3.8 finds its line by that name and its
+    value, keeping "record every line and write not decidable" for a callout still not found."""
+    row_h = next(line for line in plan.splitlines() if line.startswith("| H |"))
+    named = re.sub(r"\s+", " ", step(plan, "3.8"))
+
+    assert "Primary Value" in row_h and "D1@Sketch2" in row_h
+    assert "name and value" in named
+    assert "not decidable: <n> lines for callout" in named
+    assert "Never pick one by its radius" in named
+    assert "the only display dimension on their sheet" not in plan
+    assert "No probe prints a dimension's value" not in plan
+
+
+def test_the_plans_named_dimension_line_is_the_probes_own(plan: str) -> None:
+    """The line step 3.8 shows the engineer is D8's own line for the fictional 10 mm hole, as the
+    extractor's tests expect it, up to the first `;`; rule 5 keeps its name and view out of the
+    findings document."""
+    tests = (REPO / "extractor" / "SwReview.Extractor.Tests" / "DrawingProbeTests.cs").read_text(
+        encoding="utf-8"
+    )
+    [expected] = re.findall(
+        r'"(  ddm:0001 \(sheet 1, dvw:0002\): name \\"[^"\\]+\\", view \\"[^"\\]+\\", value '
+        r'10\.0000 mm;) "',
+        tests,
+    )
+    line = expected.replace('\\"', '"')
+
+    assert line in step(plan, "3.8")
+    assert 'never copy its `name "..."` or `view "..."`' in re.sub(r"\s+", " ", plan)
+
+
 def test_the_plan_never_lets_the_update_script_pull(plan: str) -> None:
     """Every run of the script in the plan builds what is checked out: the pull is step 1.3's own
     line, before it, so the script that runs is the one that arrived."""

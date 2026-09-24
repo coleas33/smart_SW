@@ -48,9 +48,9 @@ the sitting's runs) and 009 T085 (restore them offline).
    table off its first sheet (011 T062, 006 T103); an assembly with the drawings of two of its
    parts and of one unrelated part (T063); the drawings `specs/011-drawing-context/contracts/probes.md`
    names (T064, T065); a part drawing and an assembly drawing whose callouts the engineer names
-   beforehand (T066); a reviewed part whose same-name drawing exists and is closed (T077); a
-   design with a candidate drawing and a part drawn twice (T067); a design with its drawing open
-   (T068).
+   beforehand, each with its SOLIDWORKS name (T066); a reviewed part whose same-name drawing
+   exists and is closed (T077); a design with a candidate drawing and a part drawn twice (T067); a
+   design with its drawing open (T068).
 
 ## 1. Install or update, then check
 
@@ -151,10 +151,14 @@ row per step and task id. The development machine moves each answer into the res
    gap of that kind; a count below it with no such gap is a value silently absent, a fail.
 7. **011 T066: the named callouts.** On the part drawing and on the assembly drawing whose
    callouts the engineer named, each with its part open, one run each: `--probe D4,D5,D6,D8`
-   (the test plan's step 3.8). Pass: every named callout ties to the right hole (D6's face is a
-   cylinder of half the named hole's diameter), D8 reads `FullName equal true`, D5 `; agree true`,
-   and D4's unit and decimals are the ones the engineer named. Record the verdict and every
-   mismatch; do **not** change the switch.
+   (the test plan's step 3.8). Each named callout is found by the name and value D6 and D8 print
+   on its line (`contracts/probes.md` section 1, amended 2026-09-24; the value is the nominal
+   `native_dimension` uses); one found on no line, or on several, is recorded `not decidable` and
+   keeps the switch off. Pass: every named callout found, with the value it must have, and tied
+   to the right hole (D6's face is a cylinder of half the named hole's diameter); D8 reads
+   `FullName equal true`, D5 `; agree true`, and D4's unit and decimals are the ones the engineer
+   named. Record the verdict and every mismatch, never a dimension's name or view; do **not**
+   change the switch.
 8. **011 T077: the read-only open.** Beside the reviewed part whose same-name drawing is closed
    (the test plan's part J):
    `swreview-extract probe drawings --out "<handover folder>\probes" --doc "<part J>" --probe D14`,

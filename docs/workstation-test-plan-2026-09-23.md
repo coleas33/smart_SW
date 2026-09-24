@@ -43,7 +43,8 @@ finding.
    A run folder is named after its document: write it as its time stamp and letter (for example
    `20261001-101112-A`), never its name. Copy a log line only as far as the end of its `gated=`
    list; if it has `target=`, write that it did and how many paths, never the paths; replace any
-   name inside `error="..."` with its letter.
+   name inside `error="..."` with its letter. From a D6 or D8 dimension line, never copy its
+   `name "..."` or `view "..."`: the dimension's id (`ddm:...`) stands for it.
 6. **Do not click or type while a probe runs.** Probe D14 checks that the window in front and the
    active document do not change; your own click would fail it.
 7. **A step that fails**: record what it says to record, look the failure up in "When a step
@@ -150,7 +151,7 @@ handover folder and travel by hand; they are never pushed.
 | E | a part opened from a vault view whose same-name drawing is not in the local cache | step 3.3 |
 | F | a drawing with some dimensions at their own precision and some at the document's, and a model dimension and a reference dimension on one hole; the part it shows. Best: a drawing whose document dimension precision (Document Properties > Dimensions) differs from its units decimal places (Document Properties > Units) | step 3.6 |
 | G | drawings that between them carry: a diameter, a hole callout and a geometric tolerance on known holes, on a part drawing (G-1) and on an assembly drawing of the same part (G-2); a counterbore callout; geometric tolerances, datums and surface-finish symbols; one table of each kind (bill of materials, revision, hole, general) | step 3.7 |
-| H | a part drawing (H-part) and an assembly drawing (H-asm) whose callouts you name in advance: for each, the sheet, what it is, the hole it is on, that hole's diameter in millimetres, the unit it is written in (mm or in) and how many decimals it shows. Choose callouts that are **the only display dimension on their sheet**, so the sheet number alone identifies their lines in the report | step 3.8 |
+| H | a part drawing (H-part) and an assembly drawing (H-asm) whose callouts you name in advance: for each, the sheet, what it is, the hole it is on, that hole's diameter in millimetres, the unit it is written in (mm or in), how many decimals it shows, and **its name**: click the callout, and the Dimension PropertyManager's Primary Value box shows the name, for example `D1@Sketch2` (write only the part before any second `@`), then press Esc. Step 3.8 finds each callout in the report by its name and value, so choose callouts that no other dimension on the same sheet matches in both | step 3.8 |
 | J | a part whose drawing of exactly the same name sits in the same folder | steps 3.9, 4.7, 5.1, 5.2, 5.3, 5.5 |
 | K | an assembly in which one part's same-name drawing sits closed beside it (K-1), and two other parts (K-2, K-3) are each shown by two drawings you will open | step 4.6 |
 | L | a weldment or sheet-metal part, if one exists (006 T105's cut-list item) | step 3.2 |
@@ -614,8 +615,10 @@ is read at the first review, step 3.4.
 
 **How to read every probe run in this step.** Each `swreview-extract probe drawings` run prints
 its report and writes the same lines to a new file `drawings-probe-<time>.txt` in `$H\probes`; it
-never overwrites one. It prints ids, counts, answers and millimetres only, never a name or a
-value. After each run look at:
+never overwrites one. It prints ids, counts, answers and millimetres, never a file name, path or
+property value. The one exception is D6's and D8's dimension lines, which also give the
+dimension's name, its view's name and its value, so you can find a callout you named (step 3.8);
+rule 5 says what to copy from them. After each run look at:
 
 - the `exit code:` line: `0` means the run completed; `1` means it was refused, stopped, or could
   not write its report. Any other number (often a large negative one) means the console itself
@@ -917,14 +920,33 @@ Open H-part, then H-asm, each with its part open, and run on each:
 swreview-extract probe drawings --out "$H\probes" --doc "<full path of H-part>" --probe D4,D5,D6,D8; "exit code: $LASTEXITCODE"
 ```
 
-For each callout you named in `notes\documents.txt`, find its lines **by its sheet number**: each
-dimension's line names its id and `sheet <n>`. D4 prints one line per dimension, so if D4 shows
-more than one dimension id (`ddm:...`) on that sheet, record every line for that sheet and write
-`not decidable: <n> dimensions on sheet <s>`; never pick one by its radius, which is the thing
-under test.
+**Find each callout by its name and value.** D6 and D8 give each dimension's line, after its id
+and sheet, the name, view and value the extraction read. For the fictional 10 mm hole of the
+product's own tests, D8's line begins:
 
-- D6: the face line must read `the part's face phase fac:<n> (cylinder, radius <r> mm)` with `<r>`
-  half the named hole's diameter (a 10 mm hole reads `radius 5.0000 mm`).
+```text
+  ddm:0001 (sheet 1, dvw:0002): name "D1@Sketch1", view "Drawing View2", value 10.0000 mm; FullName ...
+```
+
+For each callout you named in `notes\documents.txt`, look at the D8 lines of its sheet for the
+name you wrote and the value it must have: a diameter or a hole callout normally reads the hole's
+diameter (`value 10.0000 mm` for a 10 mm hole), a radius half of it. The `view` is a check: the
+view you clicked the callout in.
+
+- Exactly one line on that sheet has both your name and that value: found. Its id (`ddm:...`) is
+  the callout's, and its D4, D5 and D6 lines are the ones with the same id.
+- Exactly one line on that sheet has your name, with another value: `not matched: value`, a fail.
+  Record its value.
+- Otherwise (no line has your name, or several do and not exactly one of them has the value):
+  record every line on that sheet that has your name or that value, each by its id and value
+  (rule 5), and write `not decidable: <n> lines for callout <its number in notes\documents.txt>`.
+  Never pick one by its radius, which is the thing under test.
+
+For a callout found:
+
+- D6: the face line under its id must read `the part's face phase fac:<n> (cylinder, radius <r> mm)`
+  with `<r>` half the named hole's diameter (a 10 mm hole reads `radius 5.0000 mm`). No D6 line
+  for its id means it carries no attachment: `not matched: no attachment`.
 - D8: `FullName equal true`. D5: `; agree true`.
 - D4, the unit and decimals: the unit is the callout's `GetUnits` when it reads `GetUseDocUnits
   false`, or the `document:` line's `47 (swUnitsLinear)` when it reads `GetUseDocUnits true`; 0 is
@@ -932,14 +954,15 @@ under test.
   false`, or the preference step 3.6 found governing (24, unless 3.6 found 49) when it reads
   `GetUseDocPrecision true`. Both must equal what you named.
 
-Pass: every named callout ties to its hole that way, on both drawings. Fail: any
+Pass: every named callout found and tied to its hole that way, on both drawings. Fail: a value
+that is not the one it must have, no attachment, any
 `no face the part's face phase described has this reference`, a radius that is not the named
 hole's, `FullName equal false`, `agree false`, a unit or decimals that are not the ones you named,
-or the part not read. Record: one line per callout, matched, not matched or not decidable, with
-the line that shows it. No probe prints a dimension's value, so the value half of T066 rests on the
-radius tie alone: that difference from the task text is itself a finding, and it is already
-written here. **Change nothing**: the switch this decides is set on the development machine
-(section 3.10).
+or the part not read. Record: one line per callout: its number in `notes\documents.txt`, its id,
+`matched`, `not matched` or `not decidable`, and the answers that show it (never its name or view,
+rule 5). The value half of T066 is D8's `value`: the extraction's own reading of the dimension
+(`GetSystemValue3`), the nominal the product's drawing binding uses. **Change nothing**: the switch
+this decides is set on the development machine (section 3.10).
 
 ### 3.9 The read-only open, probed [011 T077]
 
@@ -1035,11 +1058,12 @@ from the pane, is then 011 T095, at the sitting after.
 1. The reports of steps 3.6 (F) and 3.8 (H-part and H-asm) exist, each with exit code 0, no
    `stopped:` inside the D4, D5, D6 or D8 sections, and the part's own extraction read (no `is not
    open, so it was not read`).
-2. Every callout named in advance ties to the right hole on both H drawings: its D6 face line is
-   a cylinder whose radius is half the named hole's diameter, never
-   `no face the part's face phase described has this reference`. A callout recorded `not decidable`
-   keeps the switch off.
-3. Each named dimension reads `FullName equal true` in D8 and `; agree true` in D5.
+2. Every callout named in advance was found by its name and value (step 3.8) and ties to the right
+   hole on both H drawings: its D6 face line is a cylinder whose radius is half the named hole's
+   diameter, never `no face the part's face phase described has this reference`. A callout
+   recorded `not decidable` or `not matched` keeps the switch off.
+3. Each named dimension reads `FullName equal true` in D8 and `; agree true` in D5, and its D8
+   `value` is the one it must have (the hole's diameter, or half of it for a radius).
 4. For every dimension with `GetUseDocPrecision true`, the decimals shown on the sheet equal
    preference 24 as D4 reads it, and preference 24 is not `-1` or unread. If they equal preference
    49 instead, T064's one-line change to `drawings/native.written_precision` lands first, in its own
