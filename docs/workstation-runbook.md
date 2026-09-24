@@ -72,7 +72,7 @@ another account owns.
 git clone https://github.com/coleas33/smart_SW.git
 cd smart_SW\reviewer
 uv sync --all-extras
-uv run swreview tokenizer fetch       # or: --from <file carried by hand> (section 2)
+uv run swreview tokenizer fetch       # or: --from "<file carried by hand>" (section 2)
 $env:SWREVIEW_REQUIRE_TOKENIZER = "1" # a missing vocabulary fails the tests rather than skipping them
 uv run pytest -q -m "not live"        # reviewer suite, as CI runs it; no SOLIDWORKS needed
 Remove-Item Env:SWREVIEW_REQUIRE_TOKENIZER
@@ -234,7 +234,7 @@ silently disabled every bridge-backed feature).
 | Tool service did not start; log names a `.SLDDRW` and "no active configuration" | a drawing was the active document | fixed 2026-09-18: a drawing is skipped and the pane says so; open the part or assembly it documents |
 | Standards tab: profile could not be opened at `...\standards.yaml` | no profile placed, or the settings path points elsewhere | section 5 |
 | Standards verdicts look wrong on every document | the fictional example was copied into place | replace it with the owner's file (section 5) |
-| `swreview check rms` or `check standards` refuses to write into the package | by design: `--out` is required and the package directory is only read | pass `--out <new folder>` |
+| `swreview check rms` or `check standards` refuses to write into the package | by design: `--out` is required and the package directory is only read | pass `--out "<new folder>"` |
 | Fusion log shows a failed by-name bind for `SwReview.AddIn` | benign; `/codebase` activation always tries a by-name bind first | ignore; SOLIDWORKS' own add-ins log the same |
 
 ## 8. Handing findings back
@@ -274,7 +274,7 @@ the versions from section 2, so the owner can reproduce the machine's state.
 ```powershell
 # update (SOLIDWORKS closed, non-elevated): pull first, then build with the script that arrived (section 4)
 cd '<repo>'; git status --porcelain; git pull --ff-only origin main
-.\extractor\tools\update-workstation.ps1 -NoPull  # -TokenizerFrom <file>, -SolidWorksRoot <root> as needed
+.\extractor\tools\update-workstation.ps1 -NoPull  # -TokenizerFrom "<file>", -SolidWorksRoot "<root>" as needed
 # or, instead of the script, the same build and gates by hand
 cd reviewer; uv sync --all-extras; uv run swreview tokenizer fetch
 $env:SWREVIEW_REQUIRE_TOKENIZER = "1"; uv run pytest -q -m "not live"; Remove-Item Env:SWREVIEW_REQUIRE_TOKENIZER; cd ..
