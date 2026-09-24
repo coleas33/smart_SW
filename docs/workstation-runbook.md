@@ -58,7 +58,7 @@ Run these first on a fresh machine and after any Windows or SOLIDWORKS update.
 | `uv` (Python 3.11+ environments; the add-in launches the backend through it) | `uv --version` **from a fresh, non-elevated PowerShell**, because SOLIDWORKS inherits the same PATH | install uv for the user, then log out and in so PATH is refreshed for SOLIDWORKS |
 | SOLIDWORKS 2024 SP5 | `Test-Path "C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\api\redist\SolidWorks.Interop.sldworks.dll"` | the seat is not where the scripts expect; pass `-SolidWorksRoot <install root>` to both `update-workstation.ps1` (it builds against that root's `api\redist`) and `register-addin.ps1` |
 | The o200k_base vocabulary (the gate fails without it) | from `<repo>\reviewer`: `uv run swreview tokenizer fetch` prints `written` or `already in place` | the download needs the vocabulary host, which a web filter may block: carry the file above from the development machine's `%LOCALAPPDATA%\SwReview\tokenizer\` by hand, outside the repository as the profile is, then `uv run swreview tokenizer fetch --from <file>` (or `update-workstation.ps1 -TokenizerFrom <file>`); the hash is checked either way |
-| WebView2 runtime (the Review, Model check, Standards and Remodel tabs) | `Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" -Name pv` prints a version | install the Evergreen WebView2 runtime |
+| WebView2 runtime (the Review, Model check, Standards and Remodel tabs) | `foreach ($k in 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}') { if (Test-Path $k) { 'WebView2 ' + (Get-ItemProperty $k -Name pv).pv } }` prints a version (a per-machine install is under HKLM, a per-user one under HKCU) | install the Evergreen WebView2 runtime |
 | Codex CLI (the Ask tab's terminal) | not needed: the Ask tab is hidden in this build (`TaskPaneControl.AskTabShown` is false) | when the tab is shown again: `npm install -g @openai/codex`, then sign in once |
 | A provider key, for the Review tab only | entered in the pane's Settings; never in a file you write | the Model check and Standards tabs need no key. The one exception is 008 T106's live test, which reads `GEMINI_API_KEY` from the environment: set it for that one shell, run the handover's command, and `Remove-Item Env:GEMINI_API_KEY` after; never in a profile script |
 
@@ -86,7 +86,7 @@ dotnet test  extractor\SwReview.sln -c Release
 account that uses SOLIDWORKS:
 
 ```powershell
-cd <repo>
+cd '<repo>'
 .\extractor\tools\register-addin.ps1
 ```
 
@@ -104,7 +104,7 @@ Do this whenever the owner says a change landed, and at least once a day the wor
 in use. Every step is safe to repeat.
 
 ```powershell
-cd <repo>
+cd '<repo>'
 git status --porcelain                # must print nothing; see below if it does
 git fetch origin
 git log --oneline HEAD..origin/main   # what is about to arrive; read it
@@ -128,6 +128,11 @@ failure has already been reported and the owner asked for the build anyway; `-So
 own from an elevated prompt (section 3); the script's `-Register` is only for a machine where the
 SOLIDWORKS account's own prompt is the elevated one, and the script warns when it runs elevated.
 It refuses to run while SOLIDWORKS is open or the checkout is dirty, for the reasons below.
+PowerShell reads a script whole before running it, so the script that runs is the one already
+checked out: on a checkout that may be behind (any seat not updated since 2026-09-24, whose
+script lacks `-TokenizerFrom`, `-SolidWorksRoot` and the `swreview-extract:` health line), pull
+first and build with the script that arrived: `git pull --ff-only origin main`, then
+`.\extractor\tools\update-workstation.ps1 -NoPull` (the test plan's step 1.3 does exactly this).
 It pulls only on `main`. A seat that keeps its own documentation commits on a lane (the pilot
 workstation's `local`) merges GitHub in by hand, `git fetch origin` then `git merge origin/main`,
 and runs the script with `-NoPull` to build and gate what is checked out; on a lane without
@@ -166,7 +171,7 @@ Validate it once after placing it, from `<repo>\reviewer`, against any package a
 press already dumped (a folder under the run root ending in `-standards`):
 
 ```powershell
-uv run swreview check standards --package <a -standards run folder> --out $env:TEMP\swreview-profile-check --profile $env:LOCALAPPDATA\SwReview\standards.yaml
+uv run swreview check standards --package '<a -standards run folder>' --out "$env:TEMP\swreview-profile-check" --profile "$env:LOCALAPPDATA\SwReview\standards.yaml"
 ```
 
 A schema error is reported field by field and nothing is graded until it is fixed. A refusal
@@ -183,11 +188,13 @@ silently disabled every bridge-backed feature).
 1. **The add-in loaded.** Tools > Add-ins shows SwReview ticked. The tail of
    `%LOCALAPPDATA%\SwReview\logs\addin.log` for this start shows, in order:
    `AssemblyRedirect installed.`, `Attached to SOLIDWORKS.`, `Task Pane created.`,
-   `Review host started.`, and **no tool-service line**: the tool service logs only refusals
-   and failures, so a line beginning `The SwReview tool service` means it did not attach, and
+   `Review host started.`, each after its `[time]`, and **no tool-service line**: the tool
+   service logs only refusals and failures, so a line whose text after the `[time]` begins
+   `The SwReview tool service` means it did not attach, and
    one naming a `.SLDDRW` means the active document was a drawing. A clear check box or a
    missing load line is a load failure; the log names the step that failed.
-2. **The backend is up.** The Review tab's backend state line reads as running, and a new
+2. **The backend is up.** The Review tab's backend badge reads `Backend ready` (not `Backend
+   starting`, `Starting the review backend...` or `Error`), and a new
    `backend-<stamp>.log` appeared in the logs folder. If the tab says the backend could not be
    located, `uv` is not on the PATH SOLIDWORKS inherited (section 2).
 3. **Model check works with no key.** Press Model check on a part: a grade and a findings list
@@ -250,6 +257,10 @@ makes the next `update-workstation.ps1` refuse the tree.
   next update finds `main` clean. Never push `main`; never commit anything under the run root,
   the logs, the settings file or the profile.
 - **If it does not**, the document stays in the handover folder and is handed over with it.
+- **A sitting run by an engineer from the test plan pushes nothing** (its step 6.5): the document
+  stays in the handover folder, and the owner reads it and commits it from the development
+  machine, since the repository is public and the owner is the one who can see a company value
+  in it.
 
 Record in the document the commit the workstation was on (`git rev-parse --short HEAD`) and
 the versions from section 2, so the owner can reproduce the machine's state.
@@ -259,13 +270,13 @@ the versions from section 2, so the owner can reproduce the machine's state.
 ```powershell
 # update (SOLIDWORKS closed, non-elevated); the script is the same steps as the lines after it
 .\extractor\tools\update-workstation.ps1          # -TokenizerFrom <file>, -SolidWorksRoot <root> as needed
-cd <repo>; git status --porcelain; git pull --ff-only origin main
+cd '<repo>'; git status --porcelain; git pull --ff-only origin main
 cd reviewer; uv sync --all-extras; uv run swreview tokenizer fetch
 $env:SWREVIEW_REQUIRE_TOKENIZER = "1"; uv run pytest -q -m "not live"; Remove-Item Env:SWREVIEW_REQUIRE_TOKENIZER; cd ..
 dotnet build extractor\SwReview.sln -c Release; dotnet test extractor\SwReview.sln -c Release
 
 # the console the probe and dump tasks call, for this shell
-Set-Alias swreview-extract <repo>\extractor\SwReview.Extractor.Console\bin\x64\Release\net48\swreview-extract.exe
+Set-Alias swreview-extract '<repo>\extractor\SwReview.Extractor.Console\bin\x64\Release\net48\swreview-extract.exe'
 
 # first install only, elevated, SOLIDWORKS closed
 .\extractor\tools\register-addin.ps1
@@ -273,13 +284,13 @@ Set-Alias swreview-extract <repo>\extractor\SwReview.Extractor.Console\bin\x64\R
 # profile: present, and version 3
 Test-Path $env:LOCALAPPDATA\SwReview\standards.yaml
 Select-String -Path $env:LOCALAPPDATA\SwReview\standards.yaml -Pattern '^version:'
-cd reviewer; uv run swreview check standards --package <-standards folder> --out $env:TEMP\swreview-profile-check --profile $env:LOCALAPPDATA\SwReview\standards.yaml
+cd reviewer; uv run swreview check standards --package '<-standards folder>' --out "$env:TEMP\swreview-profile-check" --profile "$env:LOCALAPPDATA\SwReview\standards.yaml"
 
 # after starting SOLIDWORKS
 Get-Content $env:LOCALAPPDATA\SwReview\logs\addin.log -Tail 12
 Get-ChildItem $env:LOCALAPPDATA\SwReview\logs\backend-*.log | Sort-Object LastWriteTime | Select-Object -Last 1
 
 # never
-git add <anything under the run root, the logs, %APPDATA%\SwReview or %LOCALAPPDATA%\SwReview>
+git add '<anything under the run root, the logs, %APPDATA%\SwReview or %LOCALAPPDATA%\SwReview>'
 git push origin main
 ```
