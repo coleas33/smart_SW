@@ -34,9 +34,10 @@ from typing import TYPE_CHECKING, Literal
 
 from swreview.checks.result import CheckResult, DocumentResult
 from swreview.checks.tolerances import profile_name
-from swreview.drawings.evidence import DrawingIndex, id_order
+from swreview.drawings.evidence import DrawingIndex, file_name, id_order
 from swreview.drawings.native import LENGTH_UNITS
 from swreview.ir.models import Document, DrawingRecord, DrawingSheetRecord, EvidencePackage
+from swreview.report.names import and_list, plural
 from swreview.report.session import (
     MAX_OPTIONS,
     OPTION_MAX_LENGTH,
@@ -103,17 +104,6 @@ CANDIDATES_NAMED = 10
 CoverageStatus = Literal["checked", "skipped", "unresolved"]
 
 
-def _file_names(names: list[str]) -> str:
-    """`a`, `a and b`, `a, b and c`: one spelling of a list of names in a sentence."""
-    if len(names) <= 1:
-        return "".join(names)
-    return f"{', '.join(names[:-1])} and {names[-1]}"
-
-
-def _plural(count: int, noun: str) -> str:
-    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
-
-
 @dataclass(frozen=True)
 class DocumentDrawingCoverage:
     """What the drawings say about one reviewed document (`data-model.md` section 5)."""
@@ -141,8 +131,8 @@ class DocumentDrawingCoverage:
         if self.status == "unresolved":
             return "; ".join(reasons)
         head = (
-            f"read from {_file_names(list(self.read_names))}; "
-            f"{_plural(self.usable_views, 'view')} usable"
+            f"read from {and_list(list(self.read_names))}; "
+            f"{plural(self.usable_views, 'view')} usable"
         )
         return "; ".join([head, *reasons])
 
@@ -231,10 +221,6 @@ def _coverage(
     )
 
 
-def _file_name_of(path: str) -> str:
-    return path.replace("/", "\\").rsplit("\\", 1)[-1]
-
-
 def candidate_question(index: DrawingIndex) -> QuestionSpec | None:
     """The one question about every drawing candidate, or `None` when there is none.
 
@@ -245,7 +231,7 @@ def candidate_question(index: DrawingIndex) -> QuestionSpec | None:
     candidates = list(index.candidates)
     if not candidates:
         return None
-    names = [_file_name_of(candidate.path) for candidate in candidates]
+    names = [file_name(candidate.path) for candidate in candidates]
     shown = ", ".join(names[:CANDIDATES_NAMED])
     rest = len(names) - CANDIDATES_NAMED
     if rest > 0:
@@ -324,7 +310,11 @@ PROJECTION_WORDS: dict[bool, str] = {True: "first-angle", False: "third-angle"}
 
 
 def _gap_note(package: EvidencePackage, entity_id: str) -> str:
-    gap = next((item for item in package.gaps if item.entity_id == entity_id), None)
+    """` ({kind}: {reason})` of the first gap the dump recorded against `entity_id`, or empty."""
+    # Deferred: importing the standards package loads its evaluators and the review stack.
+    from swreview.checks.standards.results import find_gap
+
+    gap = find_gap(package, entity_id)
     return "" if gap is None else f" ({gap.entity_kind}: {gap.reason})"
 
 
@@ -403,7 +393,7 @@ def _compare(
 
 
 def _named(settings: list[str]) -> str:
-    return _file_names(settings)
+    return and_list(settings)
 
 
 def _conformance_item(document_id: str, reason: str) -> CoverageItem:

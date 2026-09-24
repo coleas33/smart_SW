@@ -44,8 +44,9 @@ from swreview.checks.tolerances import (
     ResolverLookup,
     drawing_answer,
     drawing_record_states_limits,
+    profile_sha256,
 )
-from swreview.drawings.evidence import DrawingIndex, ViewEvidence, id_order
+from swreview.drawings.evidence import DrawingIndex, ViewEvidence, file_name, id_order
 from swreview.drawings.native import table_kind
 from swreview.ir.models import Document, EvidencePackage
 
@@ -109,10 +110,6 @@ def _short(text: str | None) -> str | None:
     if text is None or len(text) <= TEXT_LIMIT:
         return text
     return f"{text[: TEXT_LIMIT - 1]}…"
-
-
-def _file_name(path: str) -> str:
-    return path.replace("/", "\\").rsplit("\\", 1)[-1]
 
 
 # --- the refusals (section 5) -----------------------------------------------------------------
@@ -347,7 +344,7 @@ def _drawing_section(
     ]
     covered = sorted({document_id, *_subtree_documents(package, components)}, key=id_order)
     candidates = [
-        _file_name(candidate.path)
+        file_name(candidate.path)
         for covered_id in covered
         if (candidate := index.candidate_of(covered_id)) is not None
     ]
@@ -386,12 +383,13 @@ def _conformance_section(
 
 
 def _profile_identity(profile: Any) -> str | None:
+    """The brief's `conformance.profile`: the profile's sha256 as `profile_sha256` reads it."""
     if profile is None:
         return None
-    try:
-        return f"sha256 {profile.identity.sha256[:12]}"
-    except RuntimeError:
+    sha256 = profile_sha256(profile)
+    if sha256 is None:
         return "a profile built in memory, with no file to name"
+    return f"sha256 {sha256}"
 
 
 # --- the bound (section 3) ---------------------------------------------------------------------

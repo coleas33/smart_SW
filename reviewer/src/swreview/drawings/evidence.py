@@ -38,7 +38,13 @@ from swreview.ir.models import (
     EvidencePackage,
 )
 
-__all__ = ["DrawingIndex", "ViewEvidence", "id_order", "view_label"]
+__all__ = ["DrawingIndex", "ViewEvidence", "file_name", "id_order", "view_label"]
+
+
+def file_name(path: str) -> str:
+    """The last part of a Windows path, whichever separator it was written with: how the
+    drawing check's candidate question and the brief name a file, never by its folder."""
+    return path.replace("/", "\\").rsplit("\\", 1)[-1]
 
 
 def id_order(identifier: str) -> tuple[str, int, str]:

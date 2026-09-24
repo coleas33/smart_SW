@@ -342,7 +342,11 @@ def ingested_source(sheet: DrawingSheet) -> str:
 def sheet_reason(package: EvidencePackage, sheet: DrawingSheetRecord) -> str | None:
     """Why part of a native sheet is missing: the first gap the dump recorded against it (a
     sheet whose views could not be enumerated, say), or `None`."""
-    return next((gap.reason for gap in package.gaps if gap.entity_id == sheet.id), None)
+    # Deferred: importing the standards package loads its evaluators and the review stack.
+    from swreview.checks.standards.results import find_gap
+
+    gap = find_gap(package, sheet.id)
+    return None if gap is None else gap.reason
 
 
 TABLE_KINDS: dict[int, str] = {
