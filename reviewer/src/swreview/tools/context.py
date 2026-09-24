@@ -22,7 +22,7 @@ pane sees them while the turn is still running (FR-013) and nothing has to diff
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -272,8 +272,49 @@ class ToolContext:
             "coverage", {"bucket": bucket, "item": item.model_dump(mode="json")}
         )
 
-    def replace_coverage(self, check: str, bucket: CoverageBucket, item: CoverageItem) -> None:
-        """Rewrite `check`'s item in `bucket`: drop what is there, then record `item`.
+    def withdraw_coverage(
+        self, checks: Collection[str], buckets: Collection[CoverageBucket]
+    ) -> None:
+        """Drop every item of `checks` from each of `buckets`, and announce what went.
+
+        The one place a coverage item leaves the session (feature 011 T093). A check that
+        restates its state - a rule rebuilt from the whole run, a family's summary row that
+        moves bucket, the drawing check after a confirmed read - drops its items here before
+        recording the new ones, and the `coverage.withdrawn` event names the checks and the
+        buckets that lost an item, each once and in the order given, so the pane drops exactly
+        what the session dropped (002 `contracts/chat-events.schema.json`). Nothing is
+        announced when nothing was held: a first call's stream is only its `coverage` events.
+        """
+        coverage = self.require_session().coverage
+        wanted = tuple(dict.fromkeys(checks))
+        lost_checks: set[str] = set()
+        lost_buckets: list[CoverageBucket] = []
+        for bucket in dict.fromkeys(buckets):
+            items = getattr(coverage, bucket)
+            kept = [item for item in items if item.check not in wanted]
+            if len(kept) == len(items):
+                continue
+            lost_checks.update(item.check for item in items if item.check in wanted)
+            lost_buckets.append(bucket)
+            items[:] = kept
+        if lost_buckets:
+            self.emit_event(
+                "coverage.withdrawn",
+                {
+                    "checks": [check for check in wanted if check in lost_checks],
+                    "buckets": lost_buckets,
+                },
+            )
+
+    def replace_coverage(
+        self,
+        check: str,
+        bucket: CoverageBucket,
+        item: CoverageItem,
+        *,
+        across: Collection[CoverageBucket] | None = None,
+    ) -> None:
+        """Rewrite `check`'s item: withdraw it from `across`, then record `item` in `bucket`.
 
         An aggregated coverage item - one RMS rule over every document it was evaluated on
         (data-model.md section 2) - is rebuilt from the whole run each time the check tool
@@ -281,12 +322,24 @@ class ToolContext:
         `record_coverage` does and is right for an item that stands for one occurrence;
         this is for the item that stands for the current state of a rule.
 
-        The append and the event still go through `record_coverage`, so the pane sees the
-        replacement exactly like any other coverage item and there is one path that writes
-        coverage rather than two that could drift.
+        `across` is every bucket the item may be in, `bucket` among them; `None` is `bucket`
+        alone. A family's summary row that moves between buckets passes the family's pair or
+        triple, so the row is one item wherever the last call put it.
+
+        The drop goes through `withdraw_coverage` and the append through `record_coverage`, so
+        the pane is told of both exactly as the session does them, and there is one path that
+        writes coverage and one that removes it rather than several that could drift.
+
+        Raises `ValueError` when `bucket` is not one of `across`: the item would be recorded
+        where no earlier one of it was withdrawn, and a second call would leave two.
         """
-        items = getattr(self.require_session().coverage, bucket)
-        items[:] = [existing for existing in items if existing.check != check]
+        buckets = (bucket,) if across is None else tuple(across)
+        if bucket not in buckets:
+            raise ValueError(
+                f"{check}: bucket {bucket!r} is not among the buckets it is replaced across "
+                f"({', '.join(buckets)})"
+            )
+        self.withdraw_coverage((check,), buckets)
         self.record_coverage(bucket, item)
 
     def record_contact(self, contact: Contact) -> None:

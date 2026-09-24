@@ -450,8 +450,8 @@ def _write_summary(
 
     The neutral layer writes its own summary **last**, after every extra coverage step, so
     the family's verdict-bearing one is written here once it has returned. One item that
-    moves between two buckets, which `replace_coverage` alone cannot express, so the other
-    bucket is cleared first - exactly as the neutral layer does it.
+    moves between two buckets: `replace_coverage(..., across=SUMMARY_BUCKETS)` withdraws it
+    from both before recording it in one - exactly as the neutral layer does it.
     """
     counts = verdict.counts
     target: CoverageBucket = "unresolved" if verdict.unresolved_check_ids else "checked"
@@ -479,16 +479,13 @@ def _write_summary(
             for document_id in item.scope.document_ids
         }
     )
-    for bucket in SUMMARY_BUCKETS:
-        if bucket != target:
-            items = getattr(session.coverage, bucket)
-            items[:] = [item for item in items if item.check != SUMMARY_CHECK]
     context.replace_coverage(
         SUMMARY_CHECK,
         target,
         CoverageItem(
             check=SUMMARY_CHECK, scope=scope_over(context, documents), reason=reason, error=None
         ),
+        across=SUMMARY_BUCKETS,
     )
     return {"bucket": target, "check": SUMMARY_CHECK}
 

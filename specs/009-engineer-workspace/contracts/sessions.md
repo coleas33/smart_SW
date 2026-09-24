@@ -61,10 +61,14 @@ shown one `aria-current="true"`. The page asks `sessions.list` after `init` and 
 4. Renders the snapshot into Results: the findings' cards in order, the coverage fold from
    `coverage`, the not-loaded warning, the ranking and its summary through the same functions the
    end of a turn uses, the pins and drafts kept for that chat. No `POST` is made and no `review.start`
-   is sent (SC-005). *Amended 2026-09-23 (feature 011 T082)*: the coverage fold, live or restored,
-   holds one item per identity - the item's `check` and `scope` - a later one replacing an earlier
-   one wherever it sat and going to the end of the arrival order, as the backend's restatement does
-   in the session.
+   is sent (SC-005). *Amended 2026-09-23 (feature 011 T082, superseded the same day by T092)*: the
+   coverage fold holds what the session holds. Live, each `coverage` event appends its item as sent
+   and each `coverage.withdrawn` event drops the items whose check it names from the buckets it
+   names (002 `contracts/chat-events.schema.json`), so a restated check is one line because the
+   backend withdrew the first, and two items the session holds side by side - one check over one
+   scope in two buckets, a tool that failed twice - are two lines. Restored, the snapshot's
+   `coverage` is printed as it came: it is the session after every withdrawal. The page identifies
+   no item with another.
 5. `readOnly = read_only_reason`: the follow-up, every disposition control and the questions panel
    are disabled and one line under the status line says the reason; Open report and Open run folder
    stay enabled.

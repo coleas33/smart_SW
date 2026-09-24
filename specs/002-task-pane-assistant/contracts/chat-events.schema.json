@@ -10,7 +10,7 @@
     "seq": { "type": "integer", "minimum": 1 },
     "at": { "type": "string", "format": "date-time" },
     "type": {
-      "enum": ["session.started", "text.delta", "text.done", "tool.started", "tool.finished", "finding", "evidence.requested", "evidence.answered", "disposition", "coverage", "usage", "turn.ended", "session.ended", "error"]
+      "enum": ["session.started", "text.delta", "text.done", "tool.started", "tool.finished", "finding", "evidence.requested", "evidence.answered", "disposition", "coverage", "coverage.withdrawn", "usage", "turn.ended", "session.ended", "error"]
     },
     "body": { "type": "object" }
   },
@@ -39,6 +39,10 @@
     { "if": { "properties": { "type": { "const": "coverage" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["bucket", "item"],
         "properties": { "bucket": { "enum": ["checked", "skipped", "unresolved", "failed", "out_of_scope"] }, "item": { "$ref": "https://smart-sw.local/contracts/review-session.schema.json#/$defs/CoverageItem" } } } } } },
+    { "if": { "properties": { "type": { "const": "coverage.withdrawn" } } },
+      "then": { "properties": { "body": { "type": "object", "additionalProperties": false, "required": ["checks", "buckets"],
+        "description": "Feature 011 T092: every coverage item of these checks left each of these buckets, before the check restated its state. Emitted by ToolContext.withdraw_coverage, the one place an announced item leaves the session, and only when an item did; each check and each bucket once, in the order given. A reader of the stream drops the items whose check is in checks and whose bucket is in buckets, so it holds what the session holds; nothing identifies one coverage item with another.",
+        "properties": { "checks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } }, "buckets": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["checked", "skipped", "unresolved", "failed", "out_of_scope"] } } } } } } },
     { "if": { "properties": { "type": { "const": "usage" } } },
       "then": { "properties": { "body": { "type": "object", "additionalProperties": false,
         "description": "What one model round trip cost, emitted by the adapter once per request (feature 005). Every count is nullable because a field the endpoint omitted is unknown, not zero, and the two providers' sub-counts nest differently and are never summed across them. Required is every field: the event is new, so there is no older producer to keep valid.",

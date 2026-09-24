@@ -45,6 +45,7 @@ body. Written to `events.jsonl` and streamed as server-sent events with `id = se
 | `evidence.answered` | `request_id`, `answer` | server (engineer) |
 | `disposition` | `finding_id`, `Disposition` | server (engineer) |
 | `coverage` | `bucket`, `CoverageItem` | tools |
+| `coverage.withdrawn` | `checks`, `buckets` (each non-empty): every item of those checks left those buckets before the check restated them (feature 011 T092) | tools (`ToolContext.withdraw_coverage`) |
 | `turn.ended` | `reason: end \| max_steps \| error \| stopped \| truncated` | runner |
 | `session.ended` | `ended_at`, `timing` | runner |
 | `error` | `error_class`, `message` (redacted), `retryable: bool` | any |

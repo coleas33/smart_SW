@@ -109,6 +109,7 @@ EventType = Literal[
     "evidence.answered",
     "disposition",
     "coverage",
+    "coverage.withdrawn",
     "usage",
     "turn.ended",
     "session.ended",

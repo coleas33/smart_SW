@@ -7,23 +7,23 @@ using Xunit;
 namespace SwReview.AddIn.Tests;
 
 /// <summary>
-/// Feature 011 T082 (docs/review-backlog.md, "Feature 011: open follow-ups", the item on
-/// `app.js`'s coverage events): the coverage panel holds one item per identity.
+/// Feature 011 T092 (rewritten deliberately from T082's keyed replacement, after the review
+/// finding of 2026-09-23): the coverage panel holds what the session holds.
 ///
-/// A coverage event's identity is its item's `check` and `scope` - the two fields of
-/// `CoverageItem` (specs/001-agentic-design-review/contracts/review-session.schema.json) that say
-/// what was covered; its bucket, reason and error say what became of it. A later event with the
-/// same identity replaces the earlier item wherever it sat, and takes its place at the end of the
-/// arrival order, which is where the backend's own restatement puts it in the session: a check the
-/// backend restates (`check_drawings` after a confirmed read) or a summary row that moved bucket is
-/// one line on the page, as it is one in the session and in `report.md`, instead of its first and
-/// restated items side by side until the page reloads the session.
+/// The backend restates coverage by dropping items and appending new ones, and the stream says
+/// both: a `coverage` event appends its item, and a `coverage.withdrawn` event - emitted by
+/// `ToolContext.withdraw_coverage`, the one place an announced item leaves the session - drops
+/// every item of its `checks` from each of its `buckets` (specs/002-task-pane-assistant/contracts/
+/// chat-events.schema.json). So the page identifies no item with another: two items the session
+/// holds side by side - one check over one scope, skipped and checked, or a tool that failed twice
+/// - stay two lines, as they are in `report.md`; a restated check is one line because the backend
+/// withdrew the first; and a restored snapshot, being the session after every withdrawal, is
+/// printed as it came.
 ///
-/// <b>Keyed replacement, not ranking.</b> Nothing is sorted, no bucket, status or severity is
-/// compared, and a scope's lists are compared in the order the backend sent them
-/// (<see cref="PageRuleScanTests"/> holds the source to it). Driven, because "a later event
-/// replaces an earlier one" and "a restored review keeps the rule" are things only a page that
-/// received the events can show.
+/// <b>Membership, not ranking.</b> Nothing is sorted, and the only test on a bucket is whether
+/// the backend named it (<see cref="PageRuleScanTests"/> holds the source to it). Driven, because
+/// "a withdrawal drops what it names and nothing else" and "a restored review keeps what the
+/// session kept" are things only a page that received the events can show.
 /// </summary>
 public sealed class ReviewPageCoverageTests
 {
@@ -32,14 +32,42 @@ public sealed class ReviewPageCoverageTests
     private static readonly Lazy<Run> Scripted = new Lazy<Run>(Drive);
 
     /// <summary>
-    /// The candidate's drawing context, skipped, is restated checked once the drawing is read: one
-    /// item, in the checked bucket, after the confirmed read's own item - and a restatement that
-    /// says the same thing again moves that item to the end rather than printing it twice.
+    /// `compare_with_profile` writes a drawing's conformance skipped (the profile leaves a setting
+    /// empty) and checked (the rest agree): one check, one scope, two items in the session. A tool
+    /// that failed twice is two `failed` items of one check over the empty scope. Each is a line.
     /// </summary>
     [Fact]
-    public void ALaterEventForTheSameCheckAndScopeReplacesTheEarlierItemEvenInAnotherBucket()
+    public void ItemsTheBackendHoldsSideBySideStaySideBySide()
     {
-        JsonElement live = Scripted.Value.Live;
+        JsonElement live = Scripted.Value.SideBySide;
+
+        Assert.Equal(
+            new[] { "drawing_profile.conformance - the profile leaves sheet formats empty" },
+            ReviewPageDriver.Strings(live, "skipped"));
+        Assert.Equal(
+            new[] { "drawing_profile.conformance - agrees in projection and unit" },
+            ReviewPageDriver.Strings(live, "checked"));
+        Assert.Equal(
+            new[]
+            {
+                "tool.query_package - tool query_package failed [first refusal]",
+                "tool.query_package - tool query_package failed [second refusal]",
+            },
+            ReviewPageDriver.Strings(live, "failed"));
+        Assert.Equal("1 checked · 1 skipped · 2 failed", live.GetProperty("counts").GetString());
+    }
+
+    /// <summary>
+    /// The drawing check after a confirmed read, as the backend streams it: the first items, a
+    /// withdrawal of its two checks from the buckets that held them, then the restated items. The
+    /// panel shows the restatement once, in the backend's order, and keeps every item of another
+    /// check - the confirmed open's own, and an item of the withdrawn check in a bucket the
+    /// withdrawal did not name.
+    /// </summary>
+    [Fact]
+    public void AWithdrawalDropsWhatItNamesAndTheRestatementFollows()
+    {
+        JsonElement live = Scripted.Value.Restated;
 
         Assert.Equal(
             new[]
@@ -49,75 +77,66 @@ public sealed class ReviewPageCoverageTests
                 "drawing.context - read from bracket-assy.SLDDRW; 2 views usable",
             },
             ReviewPageDriver.Strings(live, "checked"));
-        Assert.DoesNotContain(
-            "drawing.context - no open drawing shows it; a drawing with its name sits beside it (candidate)",
-            ReviewPageDriver.Strings(live, "all"));
-    }
-
-    /// <summary>
-    /// Another scope is another item: the same check over another configuration, and over the
-    /// same pair spelt in the other order - the page compares the backend's lists as sent and
-    /// sorts nothing - each stands beside the first.
-    /// </summary>
-    [Fact]
-    public void TheSameCheckOverAnotherScopeIsAnotherItem()
-    {
-        JsonElement live = Scripted.Value.Live;
-
+        Assert.Empty(ReviewPageDriver.Strings(live, "skipped"));
         Assert.Equal(
-            new[]
-            {
-                "interfaces.fit - no limits on the drawing",
-                "interfaces.fit - no limits in the machined configuration",
-                "interfaces.fit - no limits, the pair spelt the other way",
-            },
+            new[] { "drawing.context - a bucket the withdrawal did not name" },
             ReviewPageDriver.Strings(live, "unresolved"));
     }
 
     /// <summary>
-    /// An item sent with no scope, one with an empty scope object and one with every scope list
-    /// empty and no configuration name the same coverage - the contract's empty scope - so each
-    /// replaces the one before, whatever its bucket.
+    /// A withdrawal is the backend's two lists, as sent: a check it did not name keeps its item in
+    /// a bucket it did name, and a withdrawal naming what the panel does not hold changes nothing.
     /// </summary>
     [Fact]
-    public void AnAbsentScopeAnEmptyScopeAndAScopeOfEmptyListsAreOneIdentity()
+    public void AWithdrawalTouchesOnlyTheChecksAndBucketsItNames()
     {
-        JsonElement live = Scripted.Value.Live;
+        JsonElement live = Scripted.Value.Restated;
 
-        Assert.Equal(new[] { "hygiene - the third statement of the family" }, ReviewPageDriver.Strings(live, "skipped"));
-        Assert.Empty(ReviewPageDriver.Strings(live, "outOfScope"));
-    }
-
-    /// <summary>The fold's count line counts the items the panel lists, not the events that arrived.</summary>
-    [Fact]
-    public void TheCountLineCountsItemsNotEvents()
-    {
-        JsonElement live = Scripted.Value.Live;
-
-        Assert.Equal("3 checked · 1 skipped · 3 unresolved", live.GetProperty("counts").GetString());
-        Assert.Equal(7, ReviewPageDriver.Strings(live, "all").Length);
+        Assert.Equal(
+            new[] { "hygiene - a check the withdrawal did not name" },
+            ReviewPageDriver.Strings(live, "outOfScope"));
+        Assert.Equal("3 checked · 1 unresolved · 1 out of scope", live.GetProperty("counts").GetString());
+        Assert.Equal(5, ReviewPageDriver.Strings(live, "all").Length);
         Assert.Equal(0, live.GetProperty("injected").GetInt32());
     }
 
     /// <summary>
-    /// A restored review goes through the same rule: a snapshot that listed one identity twice
-    /// shows it once, the later one; and once the replay of a running chat has caught up, a live
-    /// event replaces a restored item rather than standing beside it.
+    /// A restored review prints the snapshot's coverage as it came - the session after every
+    /// withdrawal, so one check over one scope in two buckets is two lines - and once the reload of
+    /// a running chat is live again, a withdrawal and a restatement act on the restored items as on
+    /// live ones.
     /// </summary>
     [Fact]
-    public void ARestoredReviewKeepsOneItemPerIdentityAndALiveEventReplacesARestoredOne()
+    public void ARestoredReviewPrintsTheSnapshotAsItCameAndALiveWithdrawalActsOnIt()
     {
         JsonElement restored = Scripted.Value.Restored;
         JsonElement afterLive = Scripted.Value.RestoredThenLive;
 
-        Assert.Equal(new[] { "drawing.context - the later restatement" }, ReviewPageDriver.Strings(restored, "checked"));
-        Assert.Empty(ReviewPageDriver.Strings(restored, "skipped"));
+        Assert.Equal(new[] { "drawing.context - checked in the snapshot" }, ReviewPageDriver.Strings(restored, "checked"));
+        Assert.Equal(new[] { "drawing.context - skipped in the snapshot" }, ReviewPageDriver.Strings(restored, "skipped"));
         Assert.Equal(new[] { "drawing.confirmed_open - not yet opened" }, ReviewPageDriver.Strings(restored, "unresolved"));
 
         Assert.Equal(
-            new[] { "drawing.context - the later restatement", "drawing.confirmed_open - read as it stood" },
+            new[] { "drawing.context - the live restatement", "drawing.confirmed_open - read as it stood" },
             ReviewPageDriver.Strings(afterLive, "checked"));
-        Assert.Empty(ReviewPageDriver.Strings(afterLive, "unresolved"));
+        Assert.Empty(ReviewPageDriver.Strings(afterLive, "skipped"));
+        Assert.Equal(new[] { "drawing.confirmed_open - not yet opened" }, ReviewPageDriver.Strings(afterLive, "unresolved"));
+    }
+
+    /// <summary>
+    /// The Transcript of a restored review replays the stream from its start, and the snapshot
+    /// already holds what each coverage event and withdrawal did: a replayed withdrawal drops
+    /// nothing and a replayed coverage event adds nothing.
+    /// </summary>
+    [Fact]
+    public void AReplayedWithdrawalOrCoverageEventLeavesTheRestoredPanelAsItWas()
+    {
+        JsonElement before = Scripted.Value.BeforeReplay;
+        JsonElement after = Scripted.Value.AfterReplay;
+
+        Assert.Equal(ReviewPageDriver.Strings(before, "all"), ReviewPageDriver.Strings(after, "all"));
+        Assert.Equal(before.GetProperty("counts").GetString(), after.GetProperty("counts").GetString());
+        Assert.Equal(3, ReviewPageDriver.Strings(after, "all").Length);
     }
 
     // ---- driving the page ---------------------------------------------------------------------
@@ -125,13 +144,38 @@ public sealed class ReviewPageCoverageTests
     private static Run Drive()
     {
         var run = new Run();
-        RunLive(run);
+        RunLive(run, SideBySideEvents(), (r, state) => r.SideBySide = state);
+        RunLive(run, RestatedEvents(), (r, state) => r.Restated = state);
         RunRestored(run);
+        RunReplayed(run);
         return run;
     }
 
+    /// <summary>Two identities the backend holds twice each, in the order it emits them.</summary>
+    private static IEnumerable<(string Type, string Body)> SideBySideEvents()
+    {
+        yield return ("coverage", Coverage("skipped", "drawing_profile.conformance", Documents("doc:0012"), "the profile leaves sheet formats empty"));
+        yield return ("coverage", Coverage("checked", "drawing_profile.conformance", Documents("doc:0012"), "agrees in projection and unit"));
+        yield return ("coverage", Coverage("failed", "tool.query_package", EmptyScope(), "tool query_package failed", "first refusal"));
+        yield return ("coverage", Coverage("failed", "tool.query_package", EmptyScope(), "tool query_package failed", "second refusal"));
+    }
+
+    /// <summary>The drawing check restated after a confirmed read, as `check_drawings` streams it.</summary>
+    private static IEnumerable<(string Type, string Body)> RestatedEvents()
+    {
+        yield return ("coverage", Coverage("skipped", "drawing.context", Documents("doc:0004"), "no open drawing shows it; a drawing with its name sits beside it (candidate)"));
+        yield return ("coverage", Coverage("checked", "drawing.context", Documents("doc:0002"), "read from bracket-assy.SLDDRW; 2 views usable"));
+        yield return ("coverage", Coverage("unresolved", "drawing.context", Documents("doc:0009"), "a bucket the withdrawal did not name"));
+        yield return ("coverage", Coverage("out_of_scope", "hygiene", null, "a check the withdrawal did not name"));
+        yield return ("coverage", Coverage("checked", "drawing.confirmed_open", Documents("doc:0004"), "opened read-only, read and closed (1 sheet)"));
+        yield return ("coverage.withdrawn", Withdrawn(new[] { "drawing.context", "drawing_profile.conformance" }, new[] { "skipped", "checked", "out_of_scope" }));
+        yield return ("coverage", Coverage("checked", "drawing.context", Documents("doc:0004"), "read from housing.SLDDRW; 1 view usable"));
+        yield return ("coverage", Coverage("checked", "drawing.context", Documents("doc:0002"), "read from bracket-assy.SLDDRW; 2 views usable"));
+        yield return ("coverage.withdrawn", Withdrawn(new[] { "rms.part.grouping" }, new[] { "failed" }));
+    }
+
     /// <summary>A live review: the events arrive in the order a restating backend emits them.</summary>
-    private static void RunLive(Run run)
+    private static void RunLive(Run run, IEnumerable<(string Type, string Body)> events, Action<Run, JsonElement> keep)
     {
         ReviewPageDriver.Run(
             null,
@@ -140,32 +184,19 @@ public sealed class ReviewPageCoverageTests
                 await driver.StartReview();
 
                 int seq = 0;
-                foreach (string body in new[]
+                foreach ((string type, string body) in events)
                 {
-                    Coverage("skipped", "drawing.context", Documents("doc:0004"), "no open drawing shows it; a drawing with its name sits beside it (candidate)"),
-                    Coverage("checked", "drawing.context", Documents("doc:0002"), "read from bracket-assy.SLDDRW; 2 views usable"),
-                    Coverage("unresolved", "interfaces.fit", Pair("cmp:0001", "cmp:0002", "Default"), "no limits on the drawing"),
-                    Coverage("checked", "drawing.confirmed_open", Documents("doc:0004"), "opened read-only, read and closed (1 sheet)"),
-                    Coverage("checked", "drawing.context", Documents("doc:0004"), "read from housing.SLDDRW; 1 view usable"),
-                    Coverage("checked", "drawing.context", Documents("doc:0002"), "read from bracket-assy.SLDDRW; 2 views usable"),
-                    Coverage("unresolved", "interfaces.fit", Pair("cmp:0001", "cmp:0002", "Machined"), "no limits in the machined configuration"),
-                    Coverage("unresolved", "interfaces.fit", Pair("cmp:0002", "cmp:0001", "Default"), "no limits, the pair spelt the other way"),
-                    Coverage("out_of_scope", "hygiene", null, "the first statement of the family"),
-                    Coverage("skipped", "hygiene", new JsonObject(), "the second statement of the family"),
-                    Coverage("skipped", "hygiene", EmptyScope(), "the third statement of the family"),
-                })
-                {
-                    await driver.Push("chat-1", ++seq, "coverage", body);
+                    await driver.Push("chat-1", ++seq, type, body);
                 }
 
                 await driver.Settle();
-                run.Live = await driver.Read(ReadCoverage);
+                keep(run, await driver.Read(ReadCoverage));
             });
     }
 
     /// <summary>
-    /// A page reload while the chat runs: the snapshot is restored at init, the stream replays up
-    /// to its last seq, and the event after that is live.
+    /// A page reload while the chat runs: the snapshot is restored at init, and the events after its
+    /// last seq are live.
     /// </summary>
     private static void RunRestored(Run run)
     {
@@ -176,41 +207,74 @@ public sealed class ReviewPageCoverageTests
             {
                 driver.Document = new { path = PathA, configuration = "Default" };
                 driver.Sessions.Add(item);
-                driver.InitialRoutes.Add(("GET", "/sessions/chat-7/snapshot", 200, RunningSnapshot()));
+                driver.InitialRoutes.Add(("GET", "/sessions/chat-7/snapshot", 200, Snapshot("20260923-091500-bracket-7", "running", 1)));
             },
             async driver =>
             {
                 run.Restored = await driver.Read(ReadCoverage);
 
-                // The replay reaches the snapshot's last seq; the next event is live.
-                await driver.Push("chat-7", 1, "coverage", Coverage("checked", "drawing.context", Documents("doc:0004"), "the later restatement"));
-                await driver.Push("chat-7", 2, "coverage", Coverage("checked", "drawing.confirmed_open", Documents("doc:0005"), "read as it stood"));
+                await driver.Push("chat-7", 2, "coverage.withdrawn", Withdrawn(new[] { "drawing.context" }, new[] { "checked", "skipped" }));
+                await driver.Push("chat-7", 3, "coverage", Coverage("checked", "drawing.context", Documents("doc:0004"), "the live restatement"));
+                await driver.Push("chat-7", 4, "coverage", Coverage("checked", "drawing.confirmed_open", Documents("doc:0005"), "read as it stood"));
                 await driver.Settle();
                 run.RestoredThenLive = await driver.Read(ReadCoverage);
             });
     }
 
-    /// <summary>A running chat's snapshot whose coverage lists one identity twice, the later restated.</summary>
-    private static string RunningSnapshot() => new JsonObject
+    /// <summary>
+    /// An ended review restored at init, then its Transcript: the stream is replayed from its start
+    /// up to the snapshot's last seq, a withdrawal and a coverage event among the replayed events.
+    /// </summary>
+    private static void RunReplayed(Run run)
     {
-        ["run_id"] = "20260923-091500-bracket-7",
+        Dictionary<string, object?> item = ReviewPageSessionsTests.Item("chat-8", "20260923-093000-bracket-8", PathA, 9, 30);
+
+        ReviewPageDriver.Run(
+            driver =>
+            {
+                driver.Document = new { path = PathA, configuration = "Default" };
+                driver.Sessions.Add(item);
+                driver.InitialRoutes.Add(("GET", "/sessions/chat-8/snapshot", 200, Snapshot("20260923-093000-bracket-8", "ended", 4)));
+            },
+            async driver =>
+            {
+                run.BeforeReplay = await driver.Read(ReadCoverage);
+
+                await driver.Click("view-transcript");
+                await driver.Push("chat-8", 1, "coverage", Coverage("skipped", "drawing.context", Documents("doc:0004"), "skipped in the snapshot"));
+                await driver.Push("chat-8", 2, "coverage.withdrawn", Withdrawn(new[] { "drawing.context", "drawing.confirmed_open" }, new[] { "checked", "skipped", "unresolved" }));
+                await driver.Push("chat-8", 3, "coverage", Coverage("checked", "drawing.context", Documents("doc:0004"), "checked in the snapshot"));
+                await driver.Push("chat-8", 4, "session.ended", @"{""ended_at"":""2026-09-23T09:40:00+00:00""}");
+                await driver.Settle();
+                await driver.Click("view-results");
+                run.AfterReplay = await driver.Read(ReadCoverage);
+            });
+    }
+
+    /// <summary>
+    /// A chat's snapshot whose coverage holds one check over one scope in two buckets - the session
+    /// after every withdrawal, bucket by bucket.
+    /// </summary>
+    private static string Snapshot(string runId, string chatState, int lastSeq) => new JsonObject
+    {
+        ["run_id"] = runId,
         ["read_only"] = false,
         ["read_only_reason"] = null,
-        ["chat_state"] = "running",
-        ["last_seq"] = 1,
+        ["chat_state"] = chatState,
+        ["last_seq"] = lastSeq,
         ["document"] = new JsonObject { ["path"] = PathA, ["configuration"] = "Default" },
         ["findings"] = new JsonArray(),
         ["evidence_requests"] = new JsonArray(),
         ["coverage"] = new JsonArray(
-            JsonNode.Parse(Coverage("skipped", "drawing.context", Documents("doc:0004"), "the first statement")),
-            JsonNode.Parse(Coverage("unresolved", "drawing.confirmed_open", Documents("doc:0005"), "not yet opened")),
-            JsonNode.Parse(Coverage("checked", "drawing.context", Documents("doc:0004"), "the later restatement"))),
+            JsonNode.Parse(Coverage("checked", "drawing.context", Documents("doc:0004"), "checked in the snapshot")),
+            JsonNode.Parse(Coverage("skipped", "drawing.context", Documents("doc:0004"), "skipped in the snapshot")),
+            JsonNode.Parse(Coverage("unresolved", "drawing.confirmed_open", Documents("doc:0005"), "not yet opened"))),
         ["ranking"] = null,
         ["not_examined"] = null,
     }.ToJsonString();
 
     /// <summary>One `coverage` event body; a null scope sends the item with no scope member at all.</summary>
-    private static string Coverage(string bucket, string check, JsonObject? scope, string reason)
+    private static string Coverage(string bucket, string check, JsonObject? scope, string reason, string? error = null)
     {
         var item = new JsonObject { ["check"] = check };
         if (scope != null)
@@ -219,24 +283,22 @@ public sealed class ReviewPageCoverageTests
         }
 
         item["reason"] = reason;
-        item["error"] = null;
+        item["error"] = error;
         return new JsonObject { ["bucket"] = bucket, ["item"] = item }.ToJsonString();
     }
+
+    /// <summary>One `coverage.withdrawn` event body, the two lists as the backend sends them.</summary>
+    private static string Withdrawn(string[] checks, string[] buckets) => new JsonObject
+    {
+        ["checks"] = new JsonArray(Array.ConvertAll(checks, check => (JsonNode?)JsonValue.Create(check))),
+        ["buckets"] = new JsonArray(Array.ConvertAll(buckets, bucket => (JsonNode?)JsonValue.Create(bucket))),
+    }.ToJsonString();
 
     /// <summary>A scope as the backend dumps it: every list present, the named documents in one.</summary>
     private static JsonObject Documents(params string[] documentIds)
     {
         JsonObject scope = EmptyScope();
         scope["document_ids"] = new JsonArray(Array.ConvertAll(documentIds, id => (JsonNode?)JsonValue.Create(id)));
-        return scope;
-    }
-
-    private static JsonObject Pair(string first, string second, string configuration)
-    {
-        JsonObject scope = EmptyScope();
-        scope["component_ids"] = new JsonArray(JsonValue.Create(first), JsonValue.Create(second));
-        scope["pairs"] = new JsonArray(new JsonArray(JsonValue.Create(first), JsonValue.Create(second)));
-        scope["configuration"] = configuration;
         return scope;
     }
 
@@ -259,16 +321,23 @@ return JSON.stringify({
   checked: h.texts(panel, '.bucket-checked .bucket-item'),
   skipped: h.texts(panel, '.bucket-skipped .bucket-item'),
   unresolved: h.texts(panel, '.bucket-unresolved .bucket-item'),
+  failed: h.texts(panel, '.bucket-failed .bucket-item'),
   outOfScope: h.texts(panel, '.bucket-out_of_scope .bucket-item'),
   injected: h.injected(panel)
 });";
 
     private sealed class Run
     {
-        public JsonElement Live { get; set; }
+        public JsonElement SideBySide { get; set; }
+
+        public JsonElement Restated { get; set; }
 
         public JsonElement Restored { get; set; }
 
         public JsonElement RestoredThenLive { get; set; }
+
+        public JsonElement BeforeReplay { get; set; }
+
+        public JsonElement AfterReplay { get; set; }
     }
 }

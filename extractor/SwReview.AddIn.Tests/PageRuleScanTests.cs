@@ -282,56 +282,56 @@ public sealed class PageRuleScanTests
                 + string.Join("; ", AllowedComparisons.Select(entry => entry.Value)));
     }
 
-    // ---- rule 4: a coverage item's identity is what it covered ------------------------------
+    // ---- rule 4: the panel holds what the backend said, and identifies nothing -------------
 
     /// <summary>
-    /// Feature 011 T082. The Review page keeps one coverage item per identity, a later event
-    /// replacing an earlier one of the same identity. That is keyed replacement and not a rank
-    /// only while the key says what was covered and nothing about what became of it: so
-    /// `coverageKey` in the Review page reads the item's `check` and every field of its `scope`
-    /// that the session schema names, and none of the item's other fields, its bucket, or a
-    /// status or severity. A scope field the backend adds later without the page keying on it
-    /// would fold two different items into one, which is why the fields come from the schema.
+    /// Feature 011 T092 (T082's identity scan, replaced deliberately). The Review page appends
+    /// every coverage item it is sent and drops only what a `coverage.withdrawn` event names, so
+    /// `withdrawCoverage` reads the two lists the event's body carries - by the names the chat
+    /// events schema gives them - and of each held entry only its item's `check` and its `bucket`,
+    /// tested for membership in those lists; never a reason, an error, a scope, a status or a
+    /// severity, and no key that would identify one item with another.
     /// </summary>
     [Fact]
-    public void TheCoverageIdentityIsTheCheckAndEveryScopeFieldAndNothingThatRanks()
+    public void TheWithdrawalReadsTheTwoListsTheContractNamesAndNothingThatRanks()
     {
-        string key = FunctionBody(ReviewScript("app.js"), "coverageKey");
+        string app = ReviewScript("app.js");
+        string withdraw = FunctionBody(app, "withdrawCoverage");
 
-        JsonElement item = CoverageItemSchema();
-        string[] scopeFields = item.GetProperty("properties").GetProperty("scope").GetProperty("properties")
-            .EnumerateObject().Select(field => field.Name).ToArray();
-        string[] otherFields = item.GetProperty("properties").EnumerateObject()
+        string[] lists = WithdrawnBodySchema().GetProperty("properties").EnumerateObject()
             .Select(field => field.Name)
-            .Where(name => name != "check" && name != "scope")
             .ToArray();
-
-        Assert.NotEmpty(scopeFields);
-        Assert.NotEmpty(otherFields);
-        foreach (string field in new[] { "check" }.Concat(scopeFields))
+        Assert.Equal(new[] { "checks", "buckets" }, lists);
+        foreach (string field in lists.Concat(new[] { "check", "bucket" }))
         {
-            Assert.True(Word(field).IsMatch(key), "coverageKey does not read '" + field + "'.");
+            Assert.True(Word(field).IsMatch(withdraw), "withdrawCoverage does not read '" + field + "'.");
         }
 
-        foreach (string field in otherFields.Concat(new[] { "bucket", "status", "severity" }))
+        foreach (string field in new[] { "reason", "error", "scope", "status", "severity" })
         {
-            Assert.False(Word(field).IsMatch(key), "coverageKey reads '" + field + "', which is not what an item covered.");
+            Assert.False(Word(field).IsMatch(withdraw), "withdrawCoverage reads '" + field + "', which the backend did not name.");
         }
+
+        Assert.Contains("indexOf(", withdraw, StringComparison.Ordinal);
+        Assert.DoesNotContain("coverageKey", app, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// And no coverage reaches the panel's state around the key: the one append is inside
-    /// `recordCoverage`, which the live event and a restored snapshot both go through.
+    /// And no coverage reaches the panel's state, or leaves it, around those two: the one append
+    /// is inside `recordCoverage`, which the live event and a restored snapshot both go through
+    /// unchanged, and the one filter is inside `withdrawCoverage`.
     /// </summary>
     [Fact]
-    public void EveryCoverageItemReachesThePanelThroughTheKeyedRecord()
+    public void EveryCoverageItemReachesThePanelThroughOneAppendAndLeavesThroughTheWithdrawal()
     {
         string app = ReviewScript("app.js");
         string record = FunctionBody(app, "recordCoverage");
+        string withdraw = FunctionBody(app, "withdrawCoverage");
 
         Assert.Equal(1, Occurrences(app, "state.coverage.push("));
         Assert.Contains("state.coverage.push(", record, StringComparison.Ordinal);
-        Assert.Contains("coverageKey(", record, StringComparison.Ordinal);
+        Assert.Equal(1, Occurrences(app, "state.coverage.filter("));
+        Assert.Contains("state.coverage.filter(", withdraw, StringComparison.Ordinal);
         Assert.DoesNotContain("snapshot.coverage || []).slice()", app, StringComparison.Ordinal);
     }
 
@@ -445,18 +445,31 @@ public sealed class PageRuleScanTests
         return string.Empty;
     }
 
-    /// <summary><c>CoverageItem</c> as the session schema states it, copied next to the test assembly.</summary>
-    private static JsonElement CoverageItemSchema()
+    /// <summary>
+    /// The `coverage.withdrawn` body as the chat events schema states it, copied next to the test
+    /// assembly (the csproj's Content item, which <see cref="ReviewPageContractTests"/> reads too).
+    /// </summary>
+    private static JsonElement WithdrawnBodySchema()
     {
-        string path = Path.Combine(AppContext.BaseDirectory, "review-session.schema.json");
+        string path = Path.Combine(AppContext.BaseDirectory, "chat-events.schema.json");
         Assert.True(
             File.Exists(path),
-            "review-session.schema.json was not copied next to the test assembly; check the Content item in the csproj.");
+            "chat-events.schema.json was not copied next to the test assembly; check the Content item in the csproj.");
 
         using (JsonDocument schema = JsonDocument.Parse(File.ReadAllText(path)))
         {
-            return schema.RootElement.GetProperty("$defs").GetProperty("CoverageItem").Clone();
+            foreach (JsonElement rule in schema.RootElement.GetProperty("allOf").EnumerateArray())
+            {
+                JsonElement type = rule.GetProperty("if").GetProperty("properties").GetProperty("type");
+                if (type.TryGetProperty("const", out JsonElement name) && name.GetString() == "coverage.withdrawn")
+                {
+                    return rule.GetProperty("then").GetProperty("properties").GetProperty("body").Clone();
+                }
+            }
         }
+
+        Assert.Fail("chat-events.schema.json has no coverage.withdrawn body.");
+        return default;
     }
 
     /// <summary>The name as a whole word: <c>check</c> in <c>item.check</c>, not in <c>checked</c>.</summary>

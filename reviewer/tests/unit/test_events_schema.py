@@ -132,7 +132,9 @@ def full_run(start: Callable[..., runner.ReviewRun]) -> runner.ReviewRun:
     The opening turn reads the package, opens an evidence request, and makes a call that
     fails (an id the package does not hold) so `tool.finished` is exercised on both
     branches. Answering the request runs a second turn, which records coverage and a
-    drawing finding, so the three types the tool layer emits are all in the stream. The
+    drawing finding, so the three types the tool layer emits are all in the stream, and
+    calls `check_mass_material` twice, whose second call withdraws the family's summary row
+    before restating it (`coverage.withdrawn`, feature 011 T092). The
     engineer then dispositions that finding, which is the only producer of `disposition`.
     The third turn is asked for after the script has run out, which is a provider failure:
     the runner reports `error`, ends the turn and finalizes before re-raising (data-model
@@ -156,6 +158,8 @@ def full_run(start: Callable[..., runner.ReviewRun]) -> runner.ReviewRun:
                     reason="the answered thread depth clears the joint",
                 ),
                 call("record_drawing_finding", **DRAWING_FINDING_ARGUMENTS),
+                call("check_mass_material"),
+                call("check_mass_material"),
             ),
         ]
     )
@@ -248,7 +252,10 @@ def test_a_full_run_emits_every_event_type_the_runner_and_tools_can_emit(
 def test_tool_finished_validates_on_both_the_ok_and_the_error_branch(
     full_run: runner.ReviewRun,
 ) -> None:
-    """The failing call is a result, not a raise: `status: error` with a non-null `error`."""
+    """The failing call is a result, not a raise: `status: error` with a non-null `error`.
+
+    Edited deliberately on 2026-09-23 (feature 011 T092): the run's two `check_mass_material`
+    calls, which put `coverage.withdrawn` in the stream, are two more steps."""
     finished = [event for event in events_of(full_run) if event["type"] == "tool.finished"]
     started = [event for event in events_of(full_run) if event["type"] == "tool.started"]
     assert [event["body"]["tool"] for event in started] == [
@@ -257,14 +264,16 @@ def test_tool_finished_validates_on_both_the_ok_and_the_error_branch(
         "get_component",
         "mark_coverage",
         "record_drawing_finding",
+        "check_mass_material",
+        "check_mass_material",
     ]
     statuses = [event["body"]["status"] for event in finished]
-    assert statuses == ["ok", "ok", "error", "ok", "ok"]
+    assert statuses == ["ok", "ok", "error", "ok", "ok", "ok", "ok"]
     failed = finished[2]["body"]
     assert failed["error"] is not None
     assert UNKNOWN_COMPONENT in failed["error"]
     assert all(event["body"]["error"] is None for event in finished if event is not finished[2])
-    assert [event["body"]["step_index"] for event in finished] == [0, 1, 2, 3, 4]
+    assert [event["body"]["step_index"] for event in finished] == [0, 1, 2, 3, 4, 5, 6]
 
 
 def error_body_fields() -> set[str]:

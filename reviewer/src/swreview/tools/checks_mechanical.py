@@ -77,8 +77,8 @@ to both."""
 
 SUMMARY_BUCKETS: tuple[CoverageBucket, ...] = ("checked", "skipped", "failed")
 """The buckets the mass and hygiene families' summary row can be in (T108, amended
-2026-09-23). It is one row that moves between them, which `replace_coverage` - same check,
-same bucket - cannot express on its own, so the others are cleared first."""
+2026-09-23). It is one row that moves between them: `replace_coverage(..., across=` these)
+withdraws it from all of them before recording it in one (feature 011 T093)."""
 
 JOINT_MAP_CHECK = "joint.map"
 """The coverage check the joint map is recorded under. Not a checklist item id, so no row
@@ -378,11 +378,6 @@ def _record_summary(
     It is not counted in `written`: the result's counts stay the per-check rows.
     """
     bucket = _summary_bucket(written, findings, error)
-    coverage = context.require_session().coverage
-    for other in SUMMARY_BUCKETS:
-        if other != bucket:
-            items = getattr(coverage, other)
-            items[:] = [item for item in items if item.check != check]
     context.replace_coverage(
         check,
         bucket,
@@ -395,6 +390,7 @@ def _record_summary(
             ),
             error=error,
         ),
+        across=SUMMARY_BUCKETS,
     )
 
 

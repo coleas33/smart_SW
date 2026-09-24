@@ -532,6 +532,10 @@
         recordCoverage(body);
         renderCoverage();
         return;
+      case 'coverage.withdrawn':
+        withdrawCoverage(body);
+        renderCoverage();
+        return;
       case 'usage':
         state.usage.push(body);
         renderUsage();
@@ -556,9 +560,9 @@
   /**
    * An event replayed into the Transcript of a restored review (contracts/sessions.md section
    * 8). Results already hold the snapshot, so nothing here touches them: a finding adds its
-   * marker and never a second card, a coverage or disposition event is already in the snapshot,
-   * and the turn's and the session's end are lines in the chronology - neither closes the stream
-   * nor reads the ranking again. The prose, the tool calls, the evidence records and the usage
+   * marker and never a second card, a coverage, withdrawal or disposition event is already in
+   * the snapshot, and the turn's and the session's end are lines in the chronology - neither
+   * closes the stream nor reads the ranking again. The prose, the tool calls, the evidence records and the usage
    * build the Transcript and its head exactly as live.
    */
   function onReplayedEvent(event) {
@@ -568,6 +572,7 @@
         appendCard(render.findingMarker(body));
         return;
       case 'coverage':
+      case 'coverage.withdrawn':
       case 'disposition':
         return;
       case 'turn.ended':
@@ -881,40 +886,31 @@
   }
 
   /**
-   * One coverage event body into the panel's state (feature 011 T082). A body with the identity
-   * of one already held replaces it: the earlier item is dropped wherever it sat and the later
-   * one goes at the end of the arrival order, which is where the backend's own restatement puts
-   * it in the session. So a check the backend restates - the drawing check after a confirmed
-   * read, a family's summary row that moved bucket - is one line here, as it is in the session
-   * and the report, rather than its first and restated items side by side. Keyed replacement:
-   * nothing is sorted and no bucket, status or severity is compared (PageRuleScanTests).
+   * One coverage event body, or one row of a snapshot's `coverage`, onto the end of the panel's
+   * state (feature 011 T093). Appended as sent: two items the backend holds side by side - one
+   * check over one scope in two buckets, a tool that failed twice - are two lines here as they
+   * are in the session and the report. What the backend drops it says, with `coverage.withdrawn`
+   * (`withdrawCoverage`), and a snapshot is the session after every drop, so the panel holds what
+   * the session holds without identifying one item with another.
    */
   function recordCoverage(body) {
-    var key = coverageKey(body);
-    state.coverage = state.coverage.filter(function (entry) {
-      return coverageKey(entry) !== key;
-    });
     state.coverage.push(body);
   }
 
   /**
-   * A coverage item's identity: its `check` and the scope it covered, the scope's five fields
-   * of the session schema's `CoverageItem` in the order the backend sent their lists. An absent
-   * list is an empty one and an absent configuration is none, so an item sent without a scope
-   * and one sent with the empty scope are the same coverage. What became of the item - its
-   * bucket and the rest - is its state, never its identity.
+   * A `coverage.withdrawn` body (feature 011 T093, chat-events.schema.json): the backend dropped
+   * every item of `checks` from each of `buckets` before restating them, so the panel drops the
+   * same items and keeps the rest in their order. Membership in the backend's two lists, as sent:
+   * nothing is sorted and no bucket, status or severity is compared with a literal
+   * (PageRuleScanTests).
    */
-  function coverageKey(body) {
-    var item = (body && body.item) || {};
-    var scope = item.scope || {};
-    return JSON.stringify([
-      String(item.check || ''),
-      scope.component_ids || [],
-      scope.pairs || [],
-      typeof scope.configuration === 'string' ? scope.configuration : null,
-      scope.positions || [],
-      scope.document_ids || []
-    ]);
+  function withdrawCoverage(body) {
+    var checks = (body && body.checks) || [];
+    var buckets = (body && body.buckets) || [];
+    state.coverage = state.coverage.filter(function (entry) {
+      var item = (entry && entry.item) || {};
+      return checks.indexOf(item.check) < 0 || buckets.indexOf(entry.bucket) < 0;
+    });
   }
 
   function renderCoverage() {

@@ -83,9 +83,7 @@ def _record(context: ToolContext) -> dict[str, Any]:
     """
     session = context.require_session()
     result = run_drawing_context(context.ir, profile=_attached_profile(context))
-    for bucket in COVERAGE_BUCKETS:
-        items = getattr(session.coverage, bucket)
-        items[:] = [item for item in items if item.check not in (CONTEXT_CHECK, CONFORMANCE_CHECK)]
+    context.withdraw_coverage((CONTEXT_CHECK, CONFORMANCE_CHECK), COVERAGE_BUCKETS)
     counts = dict.fromkeys(COVERAGE_BUCKETS, 0)
     for coverage in result.coverage:
         context.record_coverage(coverage.status, coverage.coverage_item())
