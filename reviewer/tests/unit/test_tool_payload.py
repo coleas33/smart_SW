@@ -186,10 +186,12 @@ PRERUN_WITHHELD: tuple[str, ...] = prerun_tools()
 """The tools lever 13 takes off a pane review's array when checks first runs every one of
 them to completion (feature 008 FR-030): the pre-run's own list, never retyped here."""
 
-PRERUN_WITHHELD_WITH_BRIDGE: tuple[str, ...] = tuple(
+PRERUN_WITHHELD_KEEPING_INTERFERENCE: tuple[str, ...] = tuple(
     name for name in PRERUN_WITHHELD if name != INTERFERENCE_TOOL
 )
-"""With live detection offered the interference tool stays (`prerun.withheld_tools`)."""
+"""The pre-run's tools less the interference tool, which stays (`prerun.withheld_tools`) with live
+detection offered - a bridge - and when the pre-run judged no group: the package has none, or a
+key names two groups (`ArrayShape.groups`, 011 T096)."""
 
 TOOLSETS: dict[str, tuple[ToolFunction, ...]] = {
     "review": TOOL_FUNCTIONS,
@@ -200,7 +202,7 @@ TOOLSETS: dict[str, tuple[ToolFunction, ...]] = {
     ),
     "review+slim+bridge-prerun": without(
         (*TOOL_FUNCTIONS, *FINDING_DETAIL_TOOL_FUNCTIONS, *BRIDGE_TOOL_FUNCTIONS),
-        PRERUN_WITHHELD_WITH_BRIDGE,
+        PRERUN_WITHHELD_KEEPING_INTERFERENCE,
     ),
     "mcp": MCP_TOOL_FUNCTIONS,
     "mcp+bridge": (*MCP_TOOL_FUNCTIONS, *MCP_BRIDGE_TOOL_FUNCTIONS),
@@ -208,7 +210,7 @@ TOOLSETS: dict[str, tuple[ToolFunction, ...]] = {
 """The arrays that actually get sent. The Ask tab's is not the review's (FR-039b); a review
 with payload slimming on (the pane since feature 008) also offers `get_finding`; and a pane
 review whose checks first ran every pre-run tool to completion offers neither those tools
-(lever 13) nor, without a bridge, the interference tool."""
+(lever 13) nor, without a bridge and once it judged every group, the interference tool."""
 
 
 def baseline_rows() -> list[PayloadRow]:
@@ -372,7 +374,7 @@ growth shows in review, and never asserted under the ceiling."""
 class ArrayShape:
     """One point of the space a review's tool array varies over (decision 9A).
 
-    Five switches decide which tools `ToolRegistry._offered` puts on a review's array and which
+    Six switches decide which tools `ToolRegistry._offered` puts on a review's array and which
     lever 13 then takes off; each is a fact of the run, not of the tree:
 
     - `slim`: payload slimming (`ModelViewSettings.payload_slimming`) adds `get_finding`;
@@ -381,7 +383,14 @@ class ArrayShape:
     - `drawings`: a package with drawing evidence adds the drawing family;
     - `prerun`: checks first ran every tool it runs to completion and lever 13 took them off
       (`prerun.withheld_tools`) - the seven, less the interference tool while live detection is
-      offered, plus `check_drawings` and `check_standards` when they are offered.
+      offered, plus `check_drawings` and `check_standards` when they are offered;
+    - `groups` (011 T096, found on review): the pre-run judged the package's interference groups,
+      every one under a key no other group shares. Lever 13 withholds only a tool the pre-run
+      called to completion, and a package with no group - a drawing opened first, any package
+      reviewed while the tool service is down - makes no interference call, so the tool stays;
+      so does a key that names two groups (`prerun._every_group_judged`). It matters only where
+      the tool would otherwise leave, a pre-run without a bridge, so `SHAPES` varies it only
+      there and every other shape has it on.
 
     `prerun` is the fullest withholding. A pre-run that completed only some of its tools sends an
     array between the shape's two arms - a subset of its `prerun=False` array and a superset of
@@ -398,6 +407,7 @@ class ArrayShape:
     standards: bool
     drawings: bool
     prerun: bool
+    groups: bool = True
 
     @property
     def offered(self) -> tuple[ToolFunction, ...]:
@@ -418,10 +428,20 @@ class ArrayShape:
         if not self.prerun:
             return ()
         return (
-            *(PRERUN_WITHHELD_WITH_BRIDGE if self.bridge else PRERUN_WITHHELD),
+            *(
+                PRERUN_WITHHELD
+                if self.withholds_interference
+                else PRERUN_WITHHELD_KEEPING_INTERFERENCE
+            ),
             *((DRAWINGS_TOOL,) if self.drawings else ()),
             *((STANDARDS_TOOL,) if self.standards else ()),
         )
+
+    @property
+    def withholds_interference(self) -> bool:
+        """Whether lever 13 takes the interference tool off: a completed pre-run with no live
+        detection offered and every group judged."""
+        return self.prerun and not self.bridge and self.groups
 
     @property
     def functions(self) -> tuple[ToolFunction, ...]:
@@ -431,7 +451,8 @@ class ArrayShape:
     @property
     def label(self) -> str:
         """`review`, then `+slim`, `+bridge`, `+standards` and `+drawings` for each switch on, then
-        `-prerun`: the labels `TOOLSETS` and the drawing arm already use.
+        `-prerun`, then `-no-groups` when the pre-run kept the interference tool for want of a
+        group it judged: the labels `TOOLSETS` and the drawing arm already use.
 
         A standards run's pre-run shape is labelled without `+standards`: lever 13 took
         `check_standards` off, so it sends the same array as the pre-run shape with no profile,
@@ -444,20 +465,34 @@ class ArrayShape:
             ("drawings", self.drawings),
         )
         tail = "".join(f"+{name}" for name, on in switches if on)
-        return f"review{tail}{'-prerun' if self.prerun else ''}"
+        prerun = "-prerun" if self.prerun else ""
+        ungrouped = "-no-groups" if self.prerun and not self.bridge and not self.groups else ""
+        return f"review{tail}{prerun}{ungrouped}"
 
 
-SHAPES: tuple[ArrayShape, ...] = tuple(
+FIVE_SWITCH_SHAPES: tuple[ArrayShape, ...] = tuple(
     ArrayShape(slim=slim, bridge=bridge, standards=standards, drawings=drawings, prerun=prerun)
     for prerun, slim, bridge, standards, drawings in product((False, True), repeat=5)
 )
-"""Every combination of the five switches: thirty-two, checks first off before on."""
+"""Every combination of the first five switches, `groups` on: thirty-two, checks first off
+before on."""
+
+SHAPES: tuple[ArrayShape, ...] = (
+    *FIVE_SWITCH_SHAPES,
+    *(
+        replace(shape, groups=False)
+        for shape in FIVE_SWITCH_SHAPES
+        if shape.prerun and not shape.bridge
+    ),
+)
+"""The space: the thirty-two, then the eight pre-run shapes without a bridge whose pre-run judged
+no group (`ArrayShape.groups`) - forty."""
 
 REVIEW_ARRAYS: dict[str, tuple[ToolFunction, ...]] = {
     shape.label: shape.functions for shape in SHAPES
 }
-"""Every array a review can send, by label: twenty-four, because a standards run's eight pre-run
-shapes send the arrays of the eight without one (`ArrayShape.label`)."""
+"""Every array a review can send, by label: twenty-eight, because a standards run's twelve pre-run
+shapes send the arrays of the twelve without one (`ArrayShape.label`)."""
 
 ARRAY_KINDS: dict[str, ArrayKind] = {
     # What the pane sends by default - payload slimming, checks first and lever 13
@@ -467,6 +502,11 @@ ARRAY_KINDS: dict[str, ArrayKind] = {
     "review+slim+bridge-prerun": "pane_default",
     "review+slim+drawings-prerun": "pane_default",
     "review+slim+bridge+drawings-prerun": "pane_default",
+    # The same without a bridge when the pre-run judged no interference group - a package with
+    # none, such as a drawing opened first or one reviewed while the tool service is down - so
+    # lever 13 leaves `check_interference_group` on (011 T096).
+    "review+slim-prerun-no-groups": "pane_default",
+    "review+slim+drawings-prerun-no-groups": "pane_default",
     # Checks first off: the command line's and `benchmark run`'s default, `--payload-slimming`,
     # `--bridge` and `--standards-profile` as they are given, and a pane review whose pre-run
     # completed nothing.
@@ -492,6 +532,8 @@ ARRAY_KINDS: dict[str, ArrayKind] = {
     "review+drawings-prerun": "measured",
     "review+bridge-prerun": "measured",
     "review+bridge+drawings-prerun": "measured",
+    "review-prerun-no-groups": "measured",
+    "review+drawings-prerun-no-groups": "measured",
 }
 """Every array a review can send and its kind, in the order `--write` prints them (decision 9A).
 Written by hand, because the kind is a decision: `test_every_array_a_review_can_send_is_classified`
@@ -1079,18 +1121,21 @@ def test_both_encodings_are_byte_identical_across_hash_seeds() -> None:
 
 
 def test_every_array_a_review_can_send_is_classified() -> None:
-    """Decision 9A, stated once: every array the five switches make has a kind, and nothing else
+    """Decision 9A, stated once: every array the six switches make has a kind, and nothing else
     has one. A new switch makes arrays `ARRAY_KINDS` does not name, and this fails until each is
     classified; a new group `_offered` adds under an existing switch fails
-    `test_each_shape_offers_what_the_registry_offers` instead."""
-    assert len(SHAPES) == 32
-    assert len(REVIEW_ARRAYS) == 24
+    `test_each_shape_offers_what_the_registry_offers` instead. Edited deliberately for 011 T096:
+    the sixth switch, `groups`, adds eight shapes and four arrays, two of them the pane's."""
+    assert len(SHAPES) == 40
+    assert len(REVIEW_ARRAYS) == 28
     assert set(ARRAY_KINDS) == set(REVIEW_ARRAYS)
     assert PANE_DEFAULT_ARRAYS == (
         "review+slim-prerun",
         "review+slim+bridge-prerun",
         "review+slim+drawings-prerun",
         "review+slim+bridge+drawings-prerun",
+        "review+slim-prerun-no-groups",
+        "review+slim+drawings-prerun-no-groups",
     )
 
 
@@ -1112,15 +1157,16 @@ def test_the_pane_defaults_decide_which_arrays_are_pane_default(provider: Provid
 
 
 def test_one_label_names_one_array() -> None:
-    """Two shapes share a label exactly when they send the same array: the eight standards runs
-    whose pre-run completed, which lever 13 leaves with the array of no profile."""
+    """Two shapes share a label exactly when they send the same array: the standards runs whose
+    pre-run completed, which lever 13 leaves with the array of no profile - eight with every group
+    judged and four without (edited deliberately for 011 T096)."""
     pairs = list(combinations(SHAPES, 2))
     for first, second in pairs:
         same_array = names_of(first.functions) == names_of(second.functions)
         assert (first.label == second.label) == same_array, (first, second)
     shared = {first.label for first, second in pairs if first.label == second.label}
     assert shared == {shape.label for shape in SHAPES if shape.standards and shape.prerun}
-    assert len(shared) == 8
+    assert len(shared) == 12
 
 
 @pytest.mark.parametrize(
@@ -1189,10 +1235,22 @@ def test_each_pinned_array_measures_its_pin(label: str, encoding: str) -> None:
     assert measure(label, array, encoding).total_bytes == REVIEW_ARRAY_BYTES[label][encoding]
 
 
+UNPINNED_UNTIL_T097: tuple[str, ...] = (
+    "review+slim-prerun-no-groups",
+    "review+slim+drawings-prerun-no-groups",
+    "review-prerun-no-groups",
+    "review+drawings-prerun-no-groups",
+)
+"""The four arrays T096's switch adds, pinned by T097 with `--write` in a commit of its own - the
+T084/T085 split. T097 empties this and the test below then holds every array pinned."""
+
+
 def test_every_array_a_review_can_send_is_pinned_for_both_providers() -> None:
     """Decision 9A: whatever its kind, every array is pinned in both encodings (T085), in the
-    order `ARRAY_KINDS` and the `--write` table give."""
-    assert list(REVIEW_ARRAY_TOOL_COUNTS) == list(REVIEW_ARRAY_BYTES) == list(ARRAY_KINDS)
+    order `ARRAY_KINDS` and the `--write` table give - but for the arrays T097 pins."""
+    pinned = [label for label in ARRAY_KINDS if label not in UNPINNED_UNTIL_T097]
+    assert set(UNPINNED_UNTIL_T097) <= set(ARRAY_KINDS)
+    assert list(REVIEW_ARRAY_TOOL_COUNTS) == list(REVIEW_ARRAY_BYTES) == pinned
     assert all(set(pins) == set(ENCODINGS) for pins in REVIEW_ARRAY_BYTES.values())
 
 
@@ -1245,6 +1303,94 @@ def test_checks_first_without_the_view_sends_the_pre_run_array_without_get_findi
     assert offered == names_of(REVIEW_ARRAYS["review-prerun"])
 
 
+def without_interference_groups(package: EvidencePackage) -> EvidencePackage:
+    """`package` with no interference row, so `groups_of` finds no group to judge."""
+    return package.model_copy(update={"interferences": []})
+
+
+def with_a_key_naming_two_groups(package: EvidencePackage) -> EvidencePackage:
+    """`package` with each interference row repeated under a second configuration: every group key
+    then names two groups, which the pre-run calls once and cannot say it judged both."""
+    repeated = [
+        row.model_copy(update={"id": f"{row.id}-b", "configuration": f"{row.configuration}-B"})
+        for row in package.interferences
+    ]
+    return package.model_copy(update={"interferences": [*package.interferences, *repeated]})
+
+
+@pytest.mark.parametrize(
+    ("build", "label"),
+    [
+        (without_interference_groups, "review+slim-prerun-no-groups"),
+        (
+            lambda package: with_a_drawing_candidate(without_interference_groups(package)),
+            "review+slim+drawings-prerun-no-groups",
+        ),
+        (with_a_key_naming_two_groups, "review+slim-prerun-no-groups"),
+    ],
+    ids=["no-groups", "no-groups-with-a-drawing", "a-key-naming-two-groups"],
+)
+def test_a_pane_pre_run_that_judged_no_group_sends_its_classified_array(
+    tmp_path: Path, build: Callable[[EvidencePackage], EvidencePackage], label: str
+) -> None:
+    """011 T096 (found on review): with no group judged, lever 13 leaves the interference tool on,
+    and the array the pane sends is the space's `-no-groups` array, name for name and in order - a
+    pane default, so the ceiling is asserted on it."""
+    from tests.support.prerun import prerun_package
+
+    package = build(prerun_package())
+    offered = offered_by_a_review(
+        tmp_path, package, efficiency=PANE.efficiency, model_view=PANE.model_view
+    )
+
+    assert INTERFERENCE_TOOL in offered
+    assert offered == names_of(REVIEW_ARRAYS[label])
+    assert ARRAY_KINDS[label] == "pane_default"
+
+
+COMMITTED_FIXTURES: tuple[str, ...] = (
+    "drawings/drawing-root",
+    "drawings/plate-drawing",
+    "drawings/assembly-drawings",
+    "mechanical/small-assembly",
+    "mechanical/tolerances",
+    "mechanical/big-assembly",
+    "replay/small-assembly-a",
+    "replay/small-assembly-b",
+    "replay/big-assembly",
+)
+"""Every committed package a pane review could be played on."""
+
+
+@pytest.mark.parametrize("name", COMMITTED_FIXTURES)
+def test_a_pane_review_of_each_committed_fixture_sends_a_classified_array(
+    tmp_path: Path, name: str
+) -> None:
+    """Whatever the package, the array a pane review with no bridge hands its provider is one the
+    space names, so its kind is decided and its bytes pinned (011 T096: the drawing fixtures, the
+    tolerances assembly and one replay fixture have no group the pre-run judged, and sent an array
+    no label named)."""
+    import shutil
+
+    from swreview.agent.providers.fake import FakeProvider, ScriptedTurn
+    from swreview.agent.runner import start_review
+
+    folder = tmp_path / "package"
+    shutil.copytree(Path(__file__).resolve().parents[1] / "fixtures" / name, folder)
+    run = start_review(
+        folder,
+        folder,
+        provider=FakeProvider(script=[ScriptedTurn(text="done")], model="fake-scripted"),
+        efficiency=PANE.efficiency,
+        model_view=PANE.model_view,
+    )
+    offered = tuple(tool.name for tool in run.tools)
+
+    labels = [label for label, array in REVIEW_ARRAYS.items() if names_of(array) == offered]
+    assert len(labels) == 1, (name, offered)
+    assert ARRAY_KINDS[labels[0]] == "pane_default"
+
+
 # --- the drawing arm (feature 011, FR-050 as amended by decision 9A) ------------------------------
 
 ARM_BY_ENCODING = [
@@ -1267,8 +1413,9 @@ def test_the_family_is_read_from_the_registry_and_no_existing_array_carries_it()
 
 def test_the_drawing_arm_is_every_array_with_the_family() -> None:
     """Every array of the space that carries a drawing tool is a drawing arm, and every drawing
-    arm's base is an array of the space that carries none. Decision 9A: two arms are the pane's,
-    asserted under the ceiling; the other ten are pinned, not asserted (FR-050 as amended)."""
+    arm's base is an array of the space that carries none. Decision 9A: three arms are the pane's,
+    asserted under the ceiling; the other eleven are pinned, not asserted (FR-050 as amended;
+    edited deliberately for 011 T096, whose switch adds two arms)."""
     carrying = [
         label
         for label, functions in REVIEW_ARRAYS.items()
@@ -1276,11 +1423,12 @@ def test_the_drawing_arm_is_every_array_with_the_family() -> None:
     ]
 
     assert [arm.label for arm in DRAWING_ARMS] == carrying
-    assert len(DRAWING_ARMS) == 12
+    assert len(DRAWING_ARMS) == 14
     assert all(arm.base_label not in carrying for arm in DRAWING_ARMS)
     assert [arm.label for arm in DRAWING_ARMS if ARRAY_KINDS[arm.label] == "pane_default"] == [
         "review+slim+drawings-prerun",
         "review+slim+bridge+drawings-prerun",
+        "review+slim+drawings-prerun-no-groups",
     ]
 
 

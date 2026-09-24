@@ -121,6 +121,14 @@ drawing arm is every array with the family, twelve, each still its base array wi
 appended; the claims above about the four asserted arrays and the unasserted bridged ones are
 superseded for the review and slim arrays with the family, which are pinned and no longer asserted.
 
+*Amended 2026-09-23 (T096, T097; found on review)*: lever 13 takes off only a tool the pre-run
+called to completion, so a pre-run that judged no interference group - the package has none, as a
+drawing opened first or a package reviewed while the tool service is down has none, or a key names
+two groups - leaves `check_interference_group` on the array. That is a sixth switch, `groups`,
+varied only for a pre-run without a bridge: twenty-eight arrays, of which six are the pane's
+defaults (the four above, and without a bridge the slim pre-run array with and without the family
+and with the interference tool kept), asserted under the ceiling; the drawing arm is fourteen.
+
 ## 8. The tests
 
 `test_drawing_context.py` (sections 3 and 4 as pure functions); `test_tools_check_drawings.py` (the
