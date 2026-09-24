@@ -177,14 +177,19 @@ review of any assembly: `check_standards` runs in the pre-run and its findings a
 ## Scenario 12 [W]: the big assembly, paid
 
 A pane review of 830-02342 with the defaults. Record the input tokens (at most 1.5 times the
-replay's requested estimate for `big-assembly`), the findings (at least the recorded 99 by
-subject), every detected interference group judged, the rows in the run folder's `package.json`,
-and the usage line and report both showing uncached and cached input.
+replay's requested estimate for `big-assembly`: 995,853, from the "Requested, pane defaults"
+figure 663,902 of `docs/llm-efficiency-options.md`, counted as uncached plus cached input), the
+findings (at least the recorded 99 by subject, a contact counting for a recorded interference
+finding, owner decision 3A; compared on the development machine, Scenario 15), every detected
+interference group judged, the rows in the run folder's `package.json`, and the usage line and
+report both showing uncached and cached input.
 
 ## Scenario 13 [W]: the small assembly, paid
 
 A pane review of 810-11249 with the defaults: at most 1.5 times the replay's estimate and at most
-0.3M input tokens; at least the recorded findings.
+0.3M input tokens - 300,000 is the line, being below 1.5 times every estimate of
+`small-assembly-a`; a review that repeats the checks the digest reported fails it by design (the
+replay's requested figure, 459,000, assumes the recorded calls); at least the recorded findings.
 
 ## Scenario 14 [W]: Retry and the setup latency
 

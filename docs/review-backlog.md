@@ -2132,3 +2132,13 @@ What `specs/011-drawing-context/` leaves open after its review round of 2026-09-
 - **reviewer/src/swreview/tools/drawings.py:230** (seat, T077) - When the seam cannot close a drawing it opened, the coverage says "close it in SOLIDWORKS", but the drawing was opened hidden (`DocumentVisible(false, 3)`), so it has no window for the engineer to close.
   - Fix: probe D14 records how a hidden drawing appears (the Window menu, the document list); word the sentence from that record, or have the seam make a drawing it failed to close visible before giving up.
 
+## Seat readiness: owner items (2026-09-23)
+
+What the seat-readiness review of 2026-09-23 left for the owner; the rest of its findings were fixed that day (008 T122, T123; 010 T109; 011 T092 to T099).
+
+### 008 checks first (2)
+
+- **specs/008-checks-first-review/tasks.md** (T102, T103; owner) - The recorded 99 findings were graded with the example profile, and the sitting grades with the real one (T101 first), so the standards findings cannot be compared key for key. T102 and T103 now list them apart and compare every other recorded key, a contact counting for a recorded interference finding (owner decision 3A).
+  - Fix: the owner's rule for the standards half: compared against a replay of the recording under the real profile (008 T105 can grade the sitting's folders either way), or left out of SC-010's count.
+- **specs/008-checks-first-review/spec.md** (SC-003, SC-010; owner, watch) - T103's line is 300,000 input tokens, SC-003's 0.3M, which assumes the regrouped estimate's behaviour (no repeat of a check the digest reported); the replay's requested figure for `small-assembly-a` is 459,000. A paid review that makes the recorded calls fails T103 by design; the tasks say so and ask the seat to record the repeated calls.
+  - Fix: none unless the owner reads SC-010's "the replay's estimate" as the requested figure, in which case T103's line is 688,500 and the 0.3M is SC-003's replay target only.
