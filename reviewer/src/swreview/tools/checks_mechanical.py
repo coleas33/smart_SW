@@ -49,6 +49,7 @@ from swreview.checks.mass import run_mass_checks
 from swreview.checks.result import CheckResult, DocumentResult
 from swreview.checks.tolerances import ResolverLookup
 from swreview.checks.tool_access import recess_group, run_head_fit, sweep_head
+from swreview.report.names import plural
 from swreview.report.session import CoverageBucket, CoverageItem, CoverageScope
 from swreview.tools.context import ToolContext, current_context
 from swreview.tools.joint_context import BodyMeshes, joint_analysis
@@ -85,10 +86,6 @@ of the map closes `holes.alignment` or `fasteners`; the findings on the joints d
 (`contracts/joint-map.md` section 7)."""
 
 
-def _plural(count: int, noun: str) -> str:
-    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
-
-
 def _pattern_item(joints: list[Joint], configuration: str) -> CoverageItem:
     components = sorted({cid for joint in joints for cid in joint.component_ids})
     pairs = sorted(
@@ -103,7 +100,7 @@ def _pattern_item(joints: list[Joint], configuration: str) -> CoverageItem:
             configuration=configuration,
         ),
         reason=(
-            f"{_plural(len(joints), f'{kind} joint')}: "
+            f"{plural(len(joints), f'{kind} joint')}: "
             + ", ".join(joint_label(joint) for joint in joints)
         ),
         error=None,

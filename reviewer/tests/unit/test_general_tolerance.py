@@ -67,6 +67,21 @@ def test_the_dimension_cites_the_profile_identity_and_no_value(profile: Standard
     assert dimension.text_as_read == "12.00"
 
 
+def test_a_profile_is_named_by_its_sha256_or_as_built_in_memory(
+    profile: StandardsProfile,
+) -> None:
+    """One reading of a profile's identity (`profile_sha256`), worded by each caller: the
+    citation here, and the brief's `conformance.profile` (feature 011 review, 2026-09-23)."""
+    in_memory = StandardsProfile.model_validate(profile.model_dump())
+
+    assert tolerances.profile_sha256(profile) == profile.identity.sha256[:12]
+    assert tolerances.profile_sha256(in_memory) is None
+    assert tolerances.profile_name(profile) == (
+        f"the standards profile sha256 {profile.identity.sha256[:12]}"
+    )
+    assert tolerances.profile_name(in_memory) == "the standards profile (built in memory)"
+
+
 def test_a_precision_no_band_names_gives_nothing(profile: StandardsProfile) -> None:
     assert general_tolerance_dimension(profile, subject(4)) == (
         "the profile declares no band for 4 decimal places"

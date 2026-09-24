@@ -46,6 +46,7 @@ from swreview.ir.models import (
     SourceRef,
     Tolerance,
 )
+from swreview.report.names import and_list
 
 if TYPE_CHECKING:  # the standards package reaches the runner; only the type is needed here
     from swreview.checks.standards.profile import StandardsProfile
@@ -79,6 +80,7 @@ __all__ = [
     "iso_dimension",
     "load_iso286",
     "profile_name",
+    "profile_sha256",
     "resolve_tolerance",
     "unique_model_dimension",
 ]
@@ -308,12 +310,21 @@ def iso_dimension(
 # --- the general tolerance block (contracts/tolerances.md section 3) ---------------------------
 
 
+def profile_sha256(profile: StandardsProfile) -> str | None:
+    """The first 12 hex of the profile file's sha256, or `None` for a profile built in memory,
+    which has no file: the one reading of a profile's identity, never a value (FR-034)."""
+    try:
+        return profile.identity.sha256[:12]
+    except RuntimeError:
+        return None
+
+
 def profile_name(profile: StandardsProfile) -> str:
     """How a citation names the profile: by the first 12 hex of its sha256, never a value."""
-    try:
-        return f"the standards profile sha256 {profile.identity.sha256[:12]}"
-    except RuntimeError:
+    sha256 = profile_sha256(profile)
+    if sha256 is None:
         return "the standards profile (built in memory)"
+    return f"the standards profile sha256 {sha256}"
 
 
 def general_tolerance_dimension(
@@ -409,9 +420,7 @@ def _drawing_cited(binding: DrawingBinding) -> str:
 
 def _plural_ids(ids: list[str]) -> tuple[str, bool]:
     """`ddm:0001`, or `ddm:0001 and ddm:0002`, and whether it is more than one."""
-    if len(ids) == 1:
-        return ids[0], False
-    return f"{', '.join(ids[:-1])} and {ids[-1]}", True
+    return and_list(ids), len(ids) > 1
 
 
 def _stated_limits(

@@ -9,8 +9,9 @@ building its own would be three chances to disagree about a blank name:
 - `report/titles.display_title`, which names the parts in the title a person reads while
   `observed`, and the recorded title the model reads, keep their ids (decision 2A).
 
-`and_list` writes several names the way a sentence does; the not-loaded headline and the
-contacts list both use it.
+`and_list` writes several names the way a sentence does; the not-loaded headline, the
+contacts list and the drawing check all use it. `plural` counts one noun the one way every
+digest line does (the pre-run's digest, the joint coverage, the drawing check).
 
 Pure: it reads the package it is given and writes nothing.
 """
@@ -22,7 +23,7 @@ from collections.abc import Mapping, Sequence
 
 from swreview.ir.models import EvidencePackage
 
-__all__ = ["and_list", "component_names", "with_component_names"]
+__all__ = ["and_list", "component_names", "plural", "with_component_names"]
 
 COMPONENT_ID = re.compile(r"(?<![A-Za-z0-9_])cmp:[0-9]{4,}(?![A-Za-z0-9_])")
 """A whole component id token, the IR's `^cmp:[0-9]{4,}$`, never part of a longer token:
@@ -53,3 +54,8 @@ def and_list(names: Sequence[str]) -> str:
     if len(names) <= 1:
         return "".join(names)
     return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def plural(count: int, noun: str) -> str:
+    """`1 fastener`, `0 fasteners`: one spelling rule for every count in a sentence."""
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"

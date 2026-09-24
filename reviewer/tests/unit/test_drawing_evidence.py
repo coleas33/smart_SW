@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from swreview.drawings.evidence import DrawingIndex, ViewEvidence, id_order
+from swreview.drawings.evidence import DrawingIndex, ViewEvidence, file_name, id_order
 from swreview.ir.loader import load_package
 from swreview.ir.models import EvidencePackage
 from tests.support.drawings import DrawingBuilder
@@ -367,3 +367,17 @@ def test_id_order_reads_the_number_not_the_spelling() -> None:
     ids = ["doc:10", "doc:2", "doc:0001", "dvw:0003", "doc:x"]
 
     assert sorted(ids, key=id_order) == ["doc:0001", "doc:2", "doc:10", "doc:x", "dvw:0003"]
+
+
+@pytest.mark.parametrize(
+    ("path", "name"),
+    [
+        (r"C:\Fictional\drawings\FICT-KALO-0001.SLDDRW", "FICT-KALO-0001.SLDDRW"),
+        ("C:/Fictional/drawings/FICT-KALO-0001.SLDDRW", "FICT-KALO-0001.SLDDRW"),
+        (r"C:\Fictional/mixed\FICT-KALO-0002.SLDDRW", "FICT-KALO-0002.SLDDRW"),
+        ("FICT-KALO-0003.SLDDRW", "FICT-KALO-0003.SLDDRW"),
+    ],
+)
+def test_file_name_is_the_last_part_of_a_path_in_either_separator(path: str, name: str) -> None:
+    """The one rule the drawing check's candidate question and the brief name a file by."""
+    assert file_name(path) == name

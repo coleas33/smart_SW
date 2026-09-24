@@ -72,6 +72,7 @@ from swreview.report.attention import (
     load_policy,
     start_here_lines,
 )
+from swreview.report.names import plural
 from swreview.report.session import Contact, CoverageItem, CoverageScope
 from swreview.tools import checks_mechanical
 from swreview.tools.checks_interference import groups_of
@@ -281,11 +282,6 @@ the review starts (FR-027).
 """
 
 
-def _plural(count: int, noun: str) -> str:
-    """`1 fastener`, `0 fasteners`. One spelling rule for every count in the digest."""
-    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
-
-
 JOINTS_TOOL = "check_joints"
 """Feature 010's joint tool. When the pre-run plans it, the hole-alignment family states
 what the joint map could not reach rather than counting candidate pairs (`contracts/
@@ -308,12 +304,12 @@ def _fastener_joint_family(joint_map: JointMap) -> NotEvaluated | None:
     clauses = []
     if unplaced:
         clauses.append(
-            f"{_plural(unplaced, 'recognised fastener')} {'was' if unplaced == 1 else 'were'} "
+            f"{plural(unplaced, 'recognised fastener')} {'was' if unplaced == 1 else 'were'} "
             "not placed in any joint"
         )
     if untapped:
         clauses.append(
-            f"{_plural(untapped, 'placed screw')} {'enters' if untapped == 1 else 'enter'} a "
+            f"{plural(untapped, 'placed screw')} {'enters' if untapped == 1 else 'enter'} a "
             "part whose tapped hole was not extracted"
         )
     if not clauses:
@@ -341,7 +337,7 @@ def _hole_alignment_family(package: EvidencePackage, joint_map: JointMap) -> Not
         check=f"{PRERUN_CHECK_PREFIX}hole_alignment",
         label="hole alignment",
         reason=(
-            f"{_plural(count, 'hole')} {'has' if count == 1 else 'have'} no cylinder face or "
+            f"{plural(count, 'hole')} {'has' if count == 1 else 'have'} no cylinder face or "
             f"{'belongs' if count == 1 else 'belong'} to a component that was not read; "
             f"{'it is' if count == 1 else 'they are'} in no joint."
         ),
@@ -412,20 +408,20 @@ def _drawing_counts(payload: Mapping[str, Any], findings: Sequence[Finding]) -> 
     """`2 drawings, 3 candidates, 2 questions` - and the findings when there are any: what
     `check_drawings` recorded, read off its own payload (`contracts/questions.md` section 5)."""
     counts = [
-        _plural(int(payload.get("drawings", 0)), "drawing"),
-        _plural(int(payload.get("candidates", 0)), "candidate"),
-        _plural(int(payload.get("questions", 0)), "question"),
+        plural(int(payload.get("drawings", 0)), "drawing"),
+        plural(int(payload.get("candidates", 0)), "candidate"),
+        plural(int(payload.get("questions", 0)), "question"),
     ]
     if findings:
-        counts.append(_plural(len(findings), "finding"))
+        counts.append(plural(len(findings), "finding"))
     return ", ".join(counts)
 
 
 def _outcome_counts(findings: Sequence[Finding], contacts: Sequence[Contact]) -> str:
     """`2 findings, 1 contact`, or `no findings`: what a call, or a run of calls, recorded."""
-    counts = [_plural(len(findings), "finding")] if findings else []
+    counts = [plural(len(findings), "finding")] if findings else []
     if contacts:
-        counts.append(_plural(len(contacts), "contact"))
+        counts.append(plural(len(contacts), "contact"))
     return ", ".join(counts) or "no findings"
 
 
@@ -478,7 +474,7 @@ class LiveOutcome:
             return f"  interference: {clean}"
         return (
             f"  {LIVE_INTERFERENCE_TOOL}({self.configuration}) -> "
-            f"{_plural(self.rows_added, 'row')} in {_plural(self.groups, 'group')} "
+            f"{plural(self.rows_added, 'row')} in {plural(self.groups, 'group')} "
             f"({_settings_text(self.settings)})"
         )
 
@@ -589,7 +585,7 @@ def _collapsed_line(tool: str, calls: Sequence[PrerunCall]) -> str:
         rest = len(failed) - COLLAPSED_ERRORS_NAMED
         if rest > 0:
             named += f"; and {rest} more"
-        parts.append(f"{_plural(len(failed), 'error')} ({named})")
+        parts.append(f"{plural(len(failed), 'error')} ({named})")
     findings = [finding for call in calls for finding in call.findings]
     contacts = [contact for call in calls for contact in call.contacts]
     parts.append(_outcome_counts(findings, contacts))
@@ -842,7 +838,7 @@ def not_evaluated_families(
                 check=f"{PRERUN_CHECK_PREFIX}fastener_joint",
                 label="fastener joints",
                 reason=(
-                    f"{_plural(len(package.fasteners), 'fastener')} in the package; no "
+                    f"{plural(len(package.fasteners), 'fastener')} in the package; no "
                     "joint was evaluated. Which components a screw clamps is not derivable "
                     "from the package, so name the fastener, the hole and the clamped "
                     "stack yourself with `check_fastener_joint`."
@@ -916,7 +912,7 @@ def _interference_families(
         return [
             _interference(
                 INTERFERENCE_NOT_ATTACHED.format(
-                    groups=_plural(len(groups), "group"),
+                    groups=plural(len(groups), "group"),
                     verb="was" if len(groups) == 1 else "were",
                 )
             )
@@ -926,7 +922,7 @@ def _interference_families(
             _interference(
                 INTERFERENCE_NEEDS_ASSEMBLY.format(
                     kind=_root_kind(package),
-                    components=_plural(len(package.components), "component"),
+                    components=plural(len(package.components), "component"),
                 )
             )
         ]

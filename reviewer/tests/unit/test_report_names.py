@@ -22,7 +22,7 @@ import pytest
 from swreview.ir.loader import load_package
 from swreview.report.attention import rank
 from swreview.report.explanations import _prompt
-from swreview.report.names import and_list, component_names, with_component_names
+from swreview.report.names import and_list, component_names, plural, with_component_names
 from swreview.report.session import load_session
 from tests.support.attention import REVIEW_FOLDER, attention_package
 
@@ -115,6 +115,16 @@ def test_the_inputs_are_not_mutated() -> None:
 )
 def test_and_list_joins_names_as_a_sentence_does(names: list[str], text: str) -> None:
     assert and_list(names) == text
+
+
+@pytest.mark.parametrize(
+    ("count", "text"),
+    [(0, "0 drawings"), (1, "1 drawing"), (2, "2 drawings"), (11, "11 drawings")],
+)
+def test_plural_counts_one_noun_the_one_way_every_digest_does(count: int, text: str) -> None:
+    """The one spelling rule the pre-run's digest, the joint coverage and the drawing check
+    share (feature 011 review, 2026-09-23: three byte-identical copies became this one)."""
+    assert plural(count, "drawing") == text
 
 
 # --- the characterization: the explanations request did not move -------------------------
