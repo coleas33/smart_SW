@@ -19,7 +19,12 @@ the adapter does, and fails if the API rejects the round.
 
 A `400` is the failure this test exists to catch and its body is printed in the assertion
 message; a `401`, a `429` or a `5xx` is an environment problem rather than a protocol
-problem and is reported as a skip, so a throttled account never turns into a red run.
+problem and is reported as a skip, so a throttled account never turns into a red run. Two
+failures are not the protocol's and say so instead (feature 008 T107): a `400` naming
+`API_KEY_INVALID` fails as a refused key, and a connection that never reached the API fails as
+a network problem. Each case is decided once, in `tests/support/gemini_live.call_outcome`, and
+unit-tested offline. The seat's T106 runs this with `-m live -rs` and records it green only on
+`1 passed, 0 skipped`: a skip proves nothing.
 
 Skipped without `GOOGLE_API_KEY` or `GEMINI_API_KEY`, through `tests/conftest.py` and the
 module fixture below (the same convention `tests/live/test_openai_live_schemas.py` uses).
@@ -30,8 +35,9 @@ not a product default - `agent/settings.py` owns the per-provider default model 
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, NoReturn
 
+import httpx
 import pytest
 from google import genai
 from google.genai import errors, types
@@ -39,6 +45,7 @@ from google.genai import errors, types
 from swreview.agent.providers import ToolCallResult
 from swreview.agent.providers.gemini_provider import _request, _tool_content
 from swreview.agent.providers.schema import gemini_adapt
+from tests.support.gemini_live import call_outcome
 
 pytestmark = pytest.mark.live
 
@@ -70,6 +77,14 @@ def client() -> genai.Client:
     return genai.Client(api_key=key)
 
 
+def _settle(error: BaseException, *, claim: str) -> NoReturn:
+    """Fail or skip on `error` as `call_outcome` decides, with its sentence."""
+    outcome = call_outcome(error, claim=claim)
+    if outcome.kind == "skip":
+        pytest.skip(outcome.message)
+    pytest.fail(outcome.message)
+
+
 def _config(**extra: Any) -> types.GenerateContentConfig:
     return types.GenerateContentConfig(
         tools=[types.Tool(function_declarations=[DECLARATION])],
@@ -93,12 +108,8 @@ def test_a_tool_role_function_response_round_is_accepted(client: genai.Client) -
 
     try:
         first = client.models.generate_content(model=MODEL, contents=[prompt], config=forced)
-    except errors.ClientError as rejected:
-        if rejected.code == 400:  # the one failure this test is for
-            pytest.fail(f"the forced tool call was rejected: {rejected}")
-        pytest.skip(f"API unavailable ({rejected.code}); the response role is not proved")
-    except errors.ServerError as unavailable:
-        pytest.skip(f"API unavailable ({unavailable}); the response role is not proved")
+    except (errors.APIError, httpx.TransportError) as problem:
+        _settle(problem, claim="the forced tool call was rejected")
 
     calls = first.function_calls or []
     if not calls:
@@ -118,11 +129,7 @@ def test_a_tool_role_function_response_round_is_accepted(client: genai.Client) -
         second = client.models.generate_content(
             model=MODEL, contents=[prompt, answered, responses], config=_config()
         )
-    except errors.ClientError as rejected:
-        if rejected.code == 400:  # the one failure this test is for
-            pytest.fail(f'a role="tool" function response was rejected: {rejected}')
-        pytest.skip(f"API unavailable ({rejected.code}); the response role is not proved")
-    except errors.ServerError as unavailable:
-        pytest.skip(f"API unavailable ({unavailable}); the response role is not proved")
+    except (errors.APIError, httpx.TransportError) as problem:
+        _settle(problem, claim='a role="tool" function response was rejected')
 
     assert second.candidates, "the model answered the tool response with nothing at all"
