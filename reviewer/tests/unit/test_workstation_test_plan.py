@@ -362,12 +362,14 @@ def test_the_answer_to_a_before_this_review_panel_is_the_owners_decision(plan: s
     """Decision 14A (2026-09-24): when the panel appears, the engineer writes down its first
     line, presses Review available evidence, and never resolves or unsuppresses a part. It is
     the owner's decision, no longer a default the owner may override in `notes\\documents.txt`,
-    in each place that says what to do: section 0.1, step 3.4, step 4's box and the handover."""
+    in each place that says what to do: section 0.1, step 3.4, step 4's box, step 5.5 (which
+    presses Review on A outside step 4, on both builds) and the handover."""
     box = plan[plan.index("## Step 4.") : plan.index("### 4.1 ")]
     places = {
         "0.1": step(plan, "0.1"),
         "3.4": step(plan, "3.4"),
         "step 4's box": box,
+        "5.5": step(plan, "5.5"),
         "the handover": HANDOVER.read_text(encoding="utf-8"),
     }
 
@@ -380,6 +382,41 @@ def test_the_answer_to_a_before_this_review_panel_is_the_owners_decision(plan: s
     assert "unless the owner wrote otherwise" not in plan
     assert "the default is **Review available evidence**" not in plan
     assert "Two decisions" not in step(plan, "0.1")
+
+
+PRESS_REVIEW = re.compile(
+    r"(?<!not )(?<!not\*\* )\bpress (?:\*\*)?Review\b(?:\*\*)?(?! to | available)", re.IGNORECASE
+)
+"""A press of the Review button (`press Review`, `press **Review**`), not a `do **not** press
+Review`, the pane's own quoted `Press Review to review ...` or the panel's **Review available
+evidence**."""
+
+
+def test_every_step_outside_step_4_that_presses_review_answers_the_panel(plan: str) -> None:
+    """Step 4's box answers a Before this review panel for the steps under it; a step elsewhere
+    that presses Review says the owner's answer itself, and step 5.5 opens A resolved both
+    times, as step 4.1 does."""
+    flat = {
+        number: re.sub(r"\s+", " ", step(plan, number)) for number in STEP_HEADING.findall(plan)
+    }
+    outside = [
+        number
+        for number, text in flat.items()
+        if not number.startswith("4.") and PRESS_REVIEW.search(text)
+    ]
+
+    assert outside == ["3.4", "5.5"]
+    for number in outside:
+        assert "decision 14A" in flat[number], number
+        assert "never resolve or unsuppress a part" in flat[number], number
+    assert flat["5.5"].count("open A resolved and part J") == 2
+    assert [
+        match.group(0)
+        for match in PRESS_REVIEW.finditer(
+            "press Review; Press **Review** with; do **not** press Review; do not press Review;"
+            " `Press Review to review <document>.`; press **Review available evidence**"
+        )
+    ] == ["press Review", "Press **Review**"]
 
 
 PROBE_NAMES_COMMIT = re.compile(r'git merge-base --is-ancestor ([0-9a-f]{7,40}) HEAD; "holds \1: ')
@@ -568,6 +605,21 @@ def test_the_handover_gives_only_commands_the_plan_gives() -> None:
     assert len(spans) >= 12
     assert [line for line in lines if as_command(line) not in plan_lines] == []
     assert [span for span in spans if as_command(span) not in plan] == []
+
+
+def test_the_handovers_no_push_rule_cites_the_runbook_section_that_holds_it() -> None:
+    """The seat pushes nothing at this sitting. The runbook's rule 2 lets a seat push a
+    `workstation/<date>` branch; the rule for a sitting run from the test plan is the last
+    bullet of its section 8, which is the one the handover cites."""
+    handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
+    runbook = RUNBOOK.read_text(encoding="utf-8")
+    section_8 = re.sub(r"\s+", " ", runbook[runbook.index("## 8. ") : runbook.index("## 9. ")])
+
+    assert "from the development machine (runbook section 8, the test plan's step 6.5)" in handover
+    assert "runbook rule 2" not in handover
+    assert "A sitting run by an engineer from the test plan pushes nothing** (its step 6.5)" in (
+        section_8
+    )
 
 
 def test_every_probe_selection_the_handover_names_is_one_the_plan_runs() -> None:
@@ -845,6 +897,38 @@ def test_the_components_step_3_1_reads_are_noted_before_the_sitting(plan: str) -
     assert "Change nothing to make one" in documents
 
 
+def test_step_3_1_finds_each_component_by_the_path_the_probe_prints(plan: str) -> None:
+    """PROBE-2 and PROBE-3 print a component as its id, a space, `IComponent2.Name2` and a space
+    - the full instance path, `sub-2/bracket-3`, never the tree's `bracket<3>` - so section 0.2
+    notes each sub-assembly above a component, and step 3.1 says how the tree's name becomes the
+    path and searches for it between spaces, so that neither a longer name (`bracket-30`) nor
+    another sub-assembly's instance matches. The handover says the same."""
+    program = re.sub(
+        r"\s+",
+        " ",
+        (REPO / "extractor" / "SwReview.Extractor.Console" / "Program.cs").read_text(
+            encoding="utf-8"
+        ),
+    )
+    dump = REPO / "extractor" / "SwReview.Extractor" / "Dump"
+    contracts = (dump / "DumpContracts.cs").read_text(encoding="utf-8")
+    dumper = (dump / "ComponentTreeDumper.cs").read_text(encoding="utf-8")
+    flat = re.sub(r"\s+", " ", step(plan, "3.1"))
+
+    assert '{component.Id} {component.Node.Key}" + " HasMaterialPropertyValues="' in program
+    assert '{component.Id} {node.Key}" + " Visible="' in program
+    assert 'Full instance path, e.g. "sub-2/bracket-3"' in contracts
+    assert 'string key = gate.Call("Name2", () => component.Name2)' in dumper
+    assert "the name of each sub-assembly above it" in re.sub(r"\s+", " ", step(plan, "0.2"))
+    assert "by its name (Ctrl+F)" not in plan
+    assert "writes the instance number `<3>` as `-3`" in flat
+    assert "`sub-2/bracket-3` inside sub-assembly `sub<2>`" in flat
+    assert "type a space, the path and a space in the search box" in flat
+    assert "`sub<2>` is `sub-2/bracket-3`" in re.sub(
+        r"\s+", " ", HANDOVER.read_text(encoding="utf-8")
+    )
+
+
 def test_the_timing_is_recorded_once_the_backend_no_longer_holds_the_review(plan: str) -> None:
     """007 T060. A live review's session is saved again at the end of every turn
     (`chat.sessions.record_timing_live`), so minutes written to its folder while the backend
@@ -1000,11 +1084,27 @@ def powershell_parse_errors(sources: dict[str, str], folder: Path) -> str:
 
 @pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
 def test_every_powershell_block_parses(plan: str, tmp_path: Path) -> None:
-    blocks = POWERSHELL_BLOCK.findall(plan)
-    assert len(blocks) >= 20
+    """Every fenced PowerShell block of the plan, the handover and the runbook is pasted as it
+    stands; the handover's are otherwise only compared line by line with the plan's, and the
+    runbook's were read by nothing."""
+    blocks = {
+        name: POWERSHELL_BLOCK.findall(text)
+        for name, text in (
+            ("plan", plan),
+            ("handover", HANDOVER.read_text(encoding="utf-8")),
+            ("runbook", RUNBOOK.read_text(encoding="utf-8")),
+        )
+    }
+    assert len(blocks["plan"]) >= 20
+    assert blocks["handover"] and blocks["runbook"]
 
     assert powershell_parse_errors(
-        {f"block-{index:02d}": block for index, block in enumerate(blocks)}, tmp_path
+        {
+            f"{name}-{index:02d}": block
+            for name, found in blocks.items()
+            for index, block in enumerate(found)
+        },
+        tmp_path,
     ) == ""
 
 

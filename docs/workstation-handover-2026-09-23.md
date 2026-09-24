@@ -20,7 +20,7 @@ had", and its Results table, are what the seat follows; this list does not repea
 
 **What the seat does not do.** It commits and pushes nothing at this sitting: the findings
 document travels in the handover folder, and the owner reads it and commits it from the
-development machine (runbook rule 2, the test plan's step 6.5). It saves nothing in SOLIDWORKS: the
+development machine (runbook section 8, the test plan's step 6.5). It saves nothing in SOLIDWORKS: the
 one write is the test plan's Pack and Go copy into `%TEMP%` for the view-out-of-date probe (step
 3.5), deleted at its step 6.0, and the plan fingerprints the real files before and after. Two
 switches wait on this sitting's probe records - `DRAWING_BINDING_VALIDATED` (011 T066) and
@@ -129,11 +129,11 @@ row per step and task id. The development machine moves each answer into the res
    exploded reads, per configuration and per sub-assembly), PROBE-2 (the nine appearance slots)
    and PROBE-3 (the visibility reads beside the suppression) for every component. The engineer
    notes beforehand which components are transparent, overridden, hidden, suppressed or hidden in
-   a display state, and finds each by its name; a kind neither assembly has is blocked, never
-   made. Pass: the probe's gate log (no mutating member, refusal, activation, open or display
-   change) and every kind found and read (the test plan's step 3.1). Record: component ids and
-   answers only; the development machine moves the answers into 006 research R4 and flips
-   `TRANSPARENCY_POLARITY`.
+   a display state, and finds each by the path the probe prints (the tree's `bracket<3>` inside
+   `sub<2>` is `sub-2/bracket-3`); a kind neither assembly has is blocked, never made. Pass: the
+   probe's gate log (no mutating member, refusal, activation, open or display change) and every
+   kind found and read (the test plan's step 3.1). Record: component ids and answers only; the
+   development machine moves the answers into 006 research R4 and flips `TRANSPARENCY_POLARITY`.
 3. **011 T062: a multi-sheet drawing.** Every probe run writes its report in
    `<handover folder>\probes`, which the test plan's setup block makes, and never overwrites one.
    Open the drawing, then
