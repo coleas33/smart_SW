@@ -32,10 +32,13 @@ and they write the plan the extractor's `suppress-test` is allowed to act on.
 
 from __future__ import annotations
 
+import codecs
 import inspect
+import io
 import json
 import os
 import re
+import sys
 import zipfile
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -186,6 +189,31 @@ drawing_app = typer.Typer(
     no_args_is_help=True,
     help="Drawing context read from a package: the bounded per-part brief (feature 011).",
 )
+
+
+def utf8_streams() -> None:
+    """Reopen stdout and stderr as UTF-8 when they are text streams in another encoding.
+
+    A tool that captures this command line's output on Windows hands Python a cp1252 pipe, and a
+    line holding a character cp1252 cannot spell - the diameter sign in a finding title or a
+    callout - raised `UnicodeEncodeError` and ended the command before the rest was printed
+    (feature 011 T098; `drawing brief` writes its bytes itself since T053). A stream already in
+    UTF-8, and one that is not a reopenable text stream (a test's capture), is left as it is; the
+    stream's error handling is kept.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if not isinstance(stream, io.TextIOWrapper) or not stream.encoding:
+            continue
+        if codecs.lookup(stream.encoding).name != "utf-8":
+            stream.reconfigure(encoding="utf-8")
+
+
+@app.callback()
+def _before_any_command() -> None:
+    # No docstring: the application's help stays the one `typer.Typer(help=...)` gives it.
+    utf8_streams()
+
+
 app.add_typer(check_app, name="check")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(exceptions_app, name="exceptions")
