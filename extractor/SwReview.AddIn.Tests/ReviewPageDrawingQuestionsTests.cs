@@ -176,17 +176,21 @@ public sealed class ReviewPageDrawingQuestionsTests
     /// page prints it verbatim, in the order it arrived within each bucket: the drawing context of
     /// each reviewed document, then each confirmed candidate - read and closed, refused while the
     /// seam is off (in the bridge's words), read as it stood - then the drawing context the backend
-    /// restates after a read. The checked bucket arrives out of sorted order, so a page that
-    /// sorted it would fail here.
+    /// restates after a read, which replaces the items it restates rather than standing beside them
+    /// (T082, edited deliberately): one line per check and scope, the last the backend sent, where
+    /// it sent it - as the session holds them. The checked bucket arrives out of sorted order, so a
+    /// page that sorted it would fail here.
     /// </summary>
     [Fact]
     public void TheCoverageIsPrintedVerbatimInTheBackendsOrder()
     {
         JsonElement coverage = Scripted.Value.Coverage;
+        JsonElement[] latest = LatestPerIdentity(Coverage);
+        Assert.True(latest.Length < Coverage.Length, "the pane fixture no longer restates a check.");
 
         foreach (string bucket in new[] { "checked", "unresolved", "skipped" })
         {
-            string[] expected = Coverage
+            string[] expected = latest
                 .Where(row => row.GetProperty("bucket").GetString() == bucket)
                 .Select(row => Line(row.GetProperty("item")))
                 .ToArray();
@@ -194,6 +198,7 @@ public sealed class ReviewPageDrawingQuestionsTests
             Assert.Equal(expected, ReviewPageDriver.Strings(coverage, bucket));
         }
 
+        Assert.Equal(latest.Length, ReviewPageDriver.Strings(coverage, "all").Length);
         Assert.Equal(0, coverage.GetProperty("injected").GetInt32());
     }
 
@@ -316,6 +321,30 @@ public sealed class ReviewPageDrawingQuestionsTests
         return error.ValueKind == JsonValueKind.Null ? line : line + " [" + error.GetString() + "]";
     }
 
+    /// <summary>
+    /// The last event of each identity - its item's `check` and `scope`, the scope as the backend
+    /// dumped it - in the order those last events arrived: what the session holds after the
+    /// backend's restatement, and so what the panel must list.
+    /// </summary>
+    private static JsonElement[] LatestPerIdentity(JsonElement[] events)
+    {
+        var latest = new List<JsonElement>();
+        foreach (JsonElement row in events)
+        {
+            string identity = Identity(row);
+            latest.RemoveAll(kept => Identity(kept) == identity);
+            latest.Add(row);
+        }
+
+        return latest.ToArray();
+    }
+
+    private static string Identity(JsonElement row)
+    {
+        JsonElement item = row.GetProperty("item");
+        return item.GetProperty("check").GetString() + "|" + item.GetProperty("scope").GetRawText();
+    }
+
     /// <summary>The shared scripts the Review page's index.html loads beside its own.</summary>
     private static KeyValuePair<string, string>[] SharedScripts() =>
         Directory.GetFiles(Path.Combine(ReviewPageFiles.WebFolder, "shared"), "*.js")
@@ -357,6 +386,7 @@ return JSON.stringify({
 var panel = document.getElementById('coverage-panel');
 return JSON.stringify({
   ok: true,
+  all: h.texts(panel, '.bucket-item'),
   checked: h.texts(panel, '.bucket-checked .bucket-item'),
   unresolved: h.texts(panel, '.bucket-unresolved .bucket-item'),
   skipped: h.texts(panel, '.bucket-skipped .bucket-item'),

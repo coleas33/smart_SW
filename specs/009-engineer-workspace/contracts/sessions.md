@@ -61,7 +61,10 @@ shown one `aria-current="true"`. The page asks `sessions.list` after `init` and 
 4. Renders the snapshot into Results: the findings' cards in order, the coverage fold from
    `coverage`, the not-loaded warning, the ranking and its summary through the same functions the
    end of a turn uses, the pins and drafts kept for that chat. No `POST` is made and no `review.start`
-   is sent (SC-005).
+   is sent (SC-005). *Amended 2026-09-23 (feature 011 T082)*: the coverage fold, live or restored,
+   holds one item per identity - the item's `check` and `scope` - a later one replacing an earlier
+   one wherever it sat and going to the end of the arrival order, as the backend's restatement does
+   in the session.
 5. `readOnly = read_only_reason`: the follow-up, every disposition control and the questions panel
    are disabled and one line under the status line says the reason; Open report and Open run folder
    stay enabled.

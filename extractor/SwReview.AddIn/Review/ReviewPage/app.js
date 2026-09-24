@@ -529,7 +529,7 @@
         applyDisposition(body);
         return;
       case 'coverage':
-        state.coverage.push(body);
+        recordCoverage(body);
         renderCoverage();
         return;
       case 'usage':
@@ -878,6 +878,43 @@
     var text = render.dispositionText(disposition);
     status.className = render.dispositionClass(text);
     status.textContent = text;
+  }
+
+  /**
+   * One coverage event body into the panel's state (feature 011 T082). A body with the identity
+   * of one already held replaces it: the earlier item is dropped wherever it sat and the later
+   * one goes at the end of the arrival order, which is where the backend's own restatement puts
+   * it in the session. So a check the backend restates - the drawing check after a confirmed
+   * read, a family's summary row that moved bucket - is one line here, as it is in the session
+   * and the report, rather than its first and restated items side by side. Keyed replacement:
+   * nothing is sorted and no bucket, status or severity is compared (PageRuleScanTests).
+   */
+  function recordCoverage(body) {
+    var key = coverageKey(body);
+    state.coverage = state.coverage.filter(function (entry) {
+      return coverageKey(entry) !== key;
+    });
+    state.coverage.push(body);
+  }
+
+  /**
+   * A coverage item's identity: its `check` and the scope it covered, the scope's five fields
+   * of the session schema's `CoverageItem` in the order the backend sent their lists. An absent
+   * list is an empty one and an absent configuration is none, so an item sent without a scope
+   * and one sent with the empty scope are the same coverage. What became of the item - its
+   * bucket and the rest - is its state, never its identity.
+   */
+  function coverageKey(body) {
+    var item = (body && body.item) || {};
+    var scope = item.scope || {};
+    return JSON.stringify([
+      String(item.check || ''),
+      scope.component_ids || [],
+      scope.pairs || [],
+      typeof scope.configuration === 'string' ? scope.configuration : null,
+      scope.positions || [],
+      scope.document_ids || []
+    ]);
   }
 
   function renderCoverage() {
@@ -1365,7 +1402,11 @@
     for (var index = 0; index < findings.length; index++) {
       placeFinding(findings[index] || {});
     }
-    state.coverage = (snapshot.coverage || []).slice();
+    state.coverage = [];
+    var coverage = snapshot.coverage || [];
+    for (var row = 0; row < coverage.length; row++) {
+      recordCoverage(coverage[row] || {});
+    }
     if (state.coverage.length) {
       renderCoverage();
     }
