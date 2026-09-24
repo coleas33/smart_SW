@@ -1,10 +1,10 @@
 # Workstation findings <date>
 
-The results sheet of `docs/workstation-test-plan-2026-09-23.md`. The plan's step "Start the
-findings document" copies this file into the handover folder as `pane-findings-<date>.md`, where
-the date is the handover folder's own date, the first day of the sitting. Fill it in there as each
-step ends; step 6.4 finishes it and step 6.5 hands it over with the folder. Nothing in it is ever
-pasted into a chat.
+The results sheet of `docs/workstation-test-plan-2026-09-23.md`. The plan's step 1.4, once the
+update has brought this file, copies it into the handover folder as `pane-findings-<date>.md`,
+where the date is the handover folder's own date, the first day of the sitting. Fill it in there as
+each step ends; step 6.4 finishes it and step 6.5 hands it over with the folder. Nothing in it is
+ever pasted into a chat.
 
 Documents by letter only (the list is `notes\documents.txt` in the handover folder). No vault path,
 folder name, property name or value, sheet format or template name, and no key. A run folder is

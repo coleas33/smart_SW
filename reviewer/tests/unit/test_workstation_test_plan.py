@@ -282,13 +282,35 @@ def not_in_this_sitting(plan: str) -> set[tuple[str, str]]:
     return qualified_tasks(plan[plan.index("## Not in this sitting") :])
 
 
-def test_the_plan_starts_the_findings_document_from_the_results_sheet(plan: str) -> None:
+def step(plan: str, number: str) -> str:
+    """The text of step `number` (`1.4`), from its heading to the next heading of its level or
+    above."""
+    start = plan.index(f"### {number} ")
+    ends = [plan.find(heading, start + 1) for heading in ("\n### ", "\n## ")]
+    return plan[start : min(end for end in ends if end >= 0)]
+
+
+def test_the_plan_starts_the_findings_document_once_the_update_has_brought_the_sheet(
+    plan: str,
+) -> None:
     """The engineer copies the sheet into the handover folder on day 1, under the name step 6
-    hands over, and fills it in as each step ends."""
-    assert "docs/workstation-results-2026-09-23.md" in plan
-    assert r'Copy-Item "$R\docs\workstation-results-2026-09-23.md" $findings' in plan
+    hands over, and fills it in as each step ends. A checkout older than the plan has no sheet
+    until step 1.3's pull brings it, so the copy is made at step 1.4, after the check that the
+    checkout holds the plan; until then step 1 records in `notes\\update.txt`."""
+    copy = r'Copy-Item "$R\docs\workstation-results-2026-09-23.md" $findings'
+    step_1_4 = step(plan, "1.4")
+    step_1 = plan[plan.index("## Step 1.") : plan.index("### 1.1 ")]
+
     assert '$findings = "$H\\pane-findings-$(Split-Path $H -Leaf).md"' in plan
-    assert plan.index("## Start the findings document") < plan.index("## Step 1.")
+    assert plan.count(copy) == 1
+    assert copy in step_1_4
+    assert step_1_4.index(r"Test-Path docs\workstation-test-plan-2026-09-23.md") < step_1_4.index(
+        copy
+    )
+    assert plan.index("git pull --ff-only origin main") < plan.index(copy)
+    assert plan.index("notepad $findings") > plan.index("### 1.4 ")
+    assert r"notes\update.txt" in step_1
+    assert "## Start the findings document" not in plan
 
 
 def test_the_results_sheet_has_a_row_for_every_step_and_task_a_heading_names(
