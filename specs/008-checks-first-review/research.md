@@ -1291,7 +1291,7 @@ is unchanged, and absolute.
 
 #### R2.57 The ceiling's history, and the arrays it is asserted on
 
-**Decision** (owner, 2026-09-23, decision 9A; feature 011 research R5 Q10, its T078 and T079).
+**Decision** (owner, 2026-09-23, decision 9A; feature 011 research R5 Q10, its T084 and T085).
 `ARRAY_CEILING` (`reviewer/tests/unit/test_tool_payload.py`, 38,000 bytes, unchanged) is asserted
 only on the tool arrays the pane sends by default. Every other array a review can send is pinned
 for both providers, so its growth shows in review, and is not asserted.

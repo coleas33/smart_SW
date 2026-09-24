@@ -590,7 +590,7 @@ the family is what crosses 38,000. Neither is pinned or asserted today. Whether 
 standards run's arrays, as Q9 asked for the bridged ones, is the owner's question (R5 Q10);
 `ARRAY_CEILING` stays 38,000 and no array was trimmed to fit (tool docstrings do not move).
 
-**Answered 2026-09-23 (owner decision 9A, R5 Q10; T078, T079).** The ceiling is asserted only on
+**Answered 2026-09-23 (owner decision 9A, R5 Q10; T084, T085).** The ceiling is asserted only on
 the arrays the pane sends by default: payload slimming, checks first and lever 13 (`pane_defaults`),
 the pre-run having completed, with and without a bridge and drawing evidence - 29,217, 34,145,
 29,651 and 34,579 bytes on OpenAI, 29,552, 34,247, 29,935 and 34,630 on Gemini. A standards profile
@@ -796,13 +796,13 @@ requirement or task moves for it.
 | Q6 | A geometric tolerance value written on a drawing with no unit: read in the drawing's unit? | **Yes** (the default accepted): read in the drawing's unit and cited so | nothing (FR-029 as shipped) |
 | Q7 | Does the company use SOLIDWORKS' general tolerance table (an ISO 2768 class), or only the decimal-place convention? | **Decimal places only.** A dimension governed by the ISO 2768 table is recorded word for word and binds nothing. The real band values are still to come; `config/standards.example.yaml` keeps its clearly labelled example bands | nothing (FR-021, R2.9 as shipped) |
 | Q8 | Should `rms.drawing.model_items_preferred` be evaluated now that the extraction records model items? | **No** (the default accepted): it stays out of scope | nothing |
-| Q9 | Does `ARRAY_CEILING` hold the bridged review arrays? | **No** (the default accepted): the bridged arrays are pinned and not asserted. *Follow-up 2026-09-23 (decision 9A, Q10)*: every bridged array is now pinned for both providers - the bridged review array's Gemini figure (39,431) and the bridged slim array without the family (39,898 / 39,736), which had no pin, included - and none is asserted | nothing (FR-050, T054 as shipped); T078, T079 |
+| Q9 | Does `ARRAY_CEILING` hold the bridged review arrays? | **No** (the default accepted): the bridged arrays are pinned and not asserted. *Follow-up 2026-09-23 (decision 9A, Q10)*: every bridged array is now pinned for both providers - the bridged review array's Gemini figure (39,431) and the bridged slim array without the family (39,898 / 39,736), which had no pin, included - and none is asserted | nothing (FR-050, T054 as shipped); T084, T085 |
 
 **Answered by the owner on 2026-09-23, after the review** (Q10, decision 9A):
 
 | # | Question | Answer (owner, 2026-09-23) | Moves |
 |---|---|---|---|
-| Q10 | Does `ARRAY_CEILING` hold a standards run's review arrays (`--standards-profile` with checks first off), which the drawing family takes to 38,058 / 37,976 bytes (review) and 38,414 / 38,281 (slim), OpenAI / Gemini (R2.20)? *Raised 2026-09-23 on review* | **No, and the ceiling holds only the pane's defaults** (decision 9A): `ARRAY_CEILING` (38,000) is asserted only on the arrays the pane sends by default. Every other array is pinned, so growth is visible in review, but not asserted: checks first off, a standards run with checks first off (38,058 and 37,976 bytes with the drawing family), and the bridged arrays (40,268 and 40,624). The standards arrays are pinned beside the bridged ones, as the default foresaw, and so is every other array a review can send, each named with its kind | FR-050 (amended), `contracts/questions.md` section 7, R2.20, T078, T079; feature 005's `contracts/levers.md` and feature 008's research R2.57 record the decision and the ceiling's history |
+| Q10 | Does `ARRAY_CEILING` hold a standards run's review arrays (`--standards-profile` with checks first off), which the drawing family takes to 38,058 / 37,976 bytes (review) and 38,414 / 38,281 (slim), OpenAI / Gemini (R2.20)? *Raised 2026-09-23 on review* | **No, and the ceiling holds only the pane's defaults** (decision 9A): `ARRAY_CEILING` (38,000) is asserted only on the arrays the pane sends by default. Every other array is pinned, so growth is visible in review, but not asserted: checks first off, a standards run with checks first off (38,058 and 37,976 bytes with the drawing family), and the bridged arrays (40,268 and 40,624). The standards arrays are pinned beside the bridged ones, as the default foresaw, and so is every other array a review can send, each named with its kind | FR-050 (amended), `contracts/questions.md` section 7, R2.20, T084, T085; feature 005's `contracts/levers.md` and feature 008's research R2.57 record the decision and the ceiling's history |
 
 **Still open:**
 

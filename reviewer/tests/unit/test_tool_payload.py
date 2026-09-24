@@ -1190,7 +1190,7 @@ def test_each_pinned_array_measures_its_pin(label: str, encoding: str) -> None:
 
 
 def test_every_array_a_review_can_send_is_pinned_for_both_providers() -> None:
-    """Decision 9A: whatever its kind, every array is pinned in both encodings (T079), in the
+    """Decision 9A: whatever its kind, every array is pinned in both encodings (T085), in the
     order `ARRAY_KINDS` and the `--write` table give."""
     assert list(REVIEW_ARRAY_TOOL_COUNTS) == list(REVIEW_ARRAY_BYTES) == list(ARRAY_KINDS)
     assert all(set(pins) == set(ENCODINGS) for pins in REVIEW_ARRAY_BYTES.values())
