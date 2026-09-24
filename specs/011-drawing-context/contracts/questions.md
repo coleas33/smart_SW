@@ -103,6 +103,12 @@ its budget of section 1. The bridged slim array with the family is pinned in the
 (T055); every existing constant is untouched, which a test asserts by recomputing them with the
 family absent.
 
+*Found on review, 2026-09-23, and open (research R2.20, R5 Q10)*: the arm does not model a review
+run with a standards profile, which offers `check_standards` before the family. With checks first
+off - the command line's default - those arrays go over the ceiling because of the family: 38,058
+and 37,976 bytes (review, OpenAI and Gemini), 38,414 and 38,281 (slim). They are neither pinned nor
+asserted until the owner says whether the ceiling holds them; `ARRAY_CEILING` stays 38,000.
+
 ## 8. The tests
 
 `test_drawing_context.py` (sections 3 and 4 as pure functions); `test_tools_check_drawings.py` (the

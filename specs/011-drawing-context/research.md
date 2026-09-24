@@ -575,6 +575,21 @@ bridged review of a package with drawing evidence whose pre-run has not complete
 slim arm is pinned without the assertion so its growth shows, and whether the ceiling is meant to
 hold the bridged arrays is the owner's question (R5 Q9).
 
+**Corrected again 2026-09-23 on review: two unbridged arrays cross the ceiling because of the
+family.** A review run with a standards profile offers `check_standards` (`ToolRegistry._offered`
+appends it, then the drawing family), and `DRAWING_ARMS` does not model it. Measured with the
+payload module's own `measure` and `ENCODINGS`: the review array with `check_standards` is 37,332
+bytes (OpenAI) and 37,352 (Gemini) before the family and **38,058** and 37,976 with it; the slimmed
+review with `check_standards` is 37,688 and 37,657 before and **38,414** and **38,281** with it
+(the `check_standards` object alone 1,487 and 1,436 bytes). These are the arrays `swreview review
+RUN --standards-profile P` sends on a package with drawing evidence when checks first is off - the
+command line's default; the pane's checks first and lever 13 take both `check_standards` and
+`check_drawings` off once the pre-run completes, which is the pre-run arm, under the ceiling. So the
+sentence above, "this feature neither causes that", holds for the bridged arrays only: for these two
+the family is what crosses 38,000. Neither is pinned or asserted today. Whether the ceiling holds a
+standards run's arrays, as Q9 asked for the bridged ones, is the owner's question (R5 Q10);
+`ARRAY_CEILING` stays 38,000 and no array was trimmed to fit (tool docstrings do not move).
+
 ### R2.21 Fixtures: synthetic, built by code, fictional
 
 **Decision**: `reviewer/tests/support/drawings.py` builds drawing records on top of feature 010's
@@ -770,6 +785,7 @@ requirement or task moves for it.
 | # | Question | Default | Blocks |
 |---|---|---|---|
 | Q1 | Where is the drawing-creation base repository? | The brief ships the roadmap's five sections at `brief_version: 1`; when the location is given, its expected inputs are evaluated (T061) and the brief is extended additively, in 012 if not before | the brief's final content, feature 012 |
+| Q10 | Does `ARRAY_CEILING` hold a standards run's review arrays (`--standards-profile` with checks first off), which the drawing family takes to 38,058 / 37,976 bytes (review) and 38,414 / 38,281 (slim), OpenAI / Gemini (R2.20)? *Raised 2026-09-23 on review* | As shipped: neither pinned nor asserted. If the answer is Q9's ("no"), the two arms `review+standards+drawings` and `review+slim+standards+drawings` are pinned beside the bridged ones, unasserted, with `--write` in a commit of their own; if "yes", something must leave those arrays before the family can be offered on them, because the ceiling does not move and tool docstrings are frozen | FR-050's scope; the drawing arm's pins |
 
 ## R6. Relation to the features around it
 
