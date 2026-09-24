@@ -337,6 +337,20 @@ reads the mapping through `reviewer/tests/support/recordings.py`, skipping, sayi
 mapping or a mapped folder is absent, and failing where the mapping is there but gives no absolute
 folder for a fixture. No message names a mapped folder.
 
+*Amended 2026-09-24 (owner decision 13A): no design's number or folder name stays in the tree.*
+Decision 13A extends 11B from the recorded assemblies to every design: no company part number
+and no product or assembly folder name of any design is in a tracked file or path (git history
+keeps the older mentions). The denylist holds only what the recordings carried, so the owner
+keeps a second list beside it, `%LOCALAPPDATA%\SwReview\repo-identifiers.txt`, written by hand
+and never committed. Its shape: UTF-8, one identifier per line - a design number in any
+spelling, or a folder name, best listed as its words, which also catches it joined; blank
+lines, lines starting with `#` and a byte-order mark are ignored.
+`reviewer/tests/unit/test_tracked_files_carry_no_recorded_number.py` fails when an identifier's
+letter-and-digit runs appear in order, each a whole token, joined by nothing or by up to three
+other characters and ignoring case, in any tracked text file or in any tracked file's path. It
+names the file and line, or the path with each identifier masked as `…`, never the identifier,
+and skips, saying why, where the list is absent.
+
 *Amended 2026-09-23 (owner decision 3A; research R2.54, R2.56): the fixtures follow the code.*
 When a change to what a tool returns, or to the system prompt or the checklist, is deliberate,
 the three fixtures are regenerated, as part of that change, from `reviewer/`:
