@@ -58,7 +58,7 @@ public class RemodelGuardTests
     /// (`006-standards-check/research.md` R8, tabulated in contracts/guard-allowlist.md under
     /// "Denials added after stage 1"), and the third feature 010's, added with the Hole
     /// Wizard and tolerance reads (the "Feature 010" table of the same file). The fourth is
-    /// feature 011's: every writer of the 24 drawing families and the named shared members,
+    /// feature 011's: every writer of the 28 drawing families and the named shared members,
     /// generated from the interop into the "Feature 011" table of the same file, and read from
     /// there rather than typed a second time (<see cref="DrawingFamilyDenylistTests"/>). Every one
     /// of them is a narrowing: none is on the stage-1 allowlist, so

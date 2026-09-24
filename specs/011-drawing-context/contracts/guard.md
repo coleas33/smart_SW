@@ -4,11 +4,22 @@ Normative for FR-005 to FR-007 and SC-009. Lands before any new drawing read (Ph
 
 ## 1. The families
 
-**The 24 drawing families**, every writer of which is refused: `IDrawingDoc`, `ISheet`, `IView`,
+**The 28 drawing families**, every writer of which is refused: `IDrawingDoc`, `ISheet`, `IView`,
 `IDisplayDimension`, `IDimension`, `IDimensionTolerance`, `IAnnotation`, `INote`, `IGtol`,
 `IGtolFrame`, `IDatumTag`, `ISFSymbol`, `ITableAnnotation`, `IBomTableAnnotation`, `IBomFeature`,
 `IRevisionTableAnnotation`, `IGeneralTableFeature`, `ITitleBlockTableFeature`, `ITitleBlock`,
-`IDatumTargetSym`, `ICenterMark`, `IWeldSymbol`, `IDowelSymbol`, `IMultiJogLeader`.
+`IDatumTargetSym`, `ICenterMark`, `IWeldSymbol`, `IDowelSymbol`, `IMultiJogLeader`,
+`ICalloutVariable`, `ICalloutLengthVariable`, `ICalloutAngleVariable`, `ICalloutStringVariable`.
+
+*Corrected 2026-09-23 on review*: the last four, the hole callout's variables, joined the list.
+T026's `SwDrawingReader.HoleCalloutVariables` reads them, and they were the only interop
+interfaces the feature's reads touch outside the first 24, so twelve of their writers
+(`set_ToleranceMax`, `set_ToleranceMin`, `set_ToleranceType`, `set_Precision`,
+`set_TolerancePrecision`, `set_TextHeight`, `set_TextScale`, `set_UseTextScale`,
+`set_FitTextHeight`, `set_FitTextScale`, `set_FitUseTextScale`, `set_ShaftFit`) had been left
+callable. `ICalloutAngleVariable` and `ICalloutStringVariable` have getters only; they are listed so
+a later interop that adds a writer is caught. A family any drawing read touches is a family of this
+list.
 
 **The shared families**, named members only:
 
@@ -45,8 +56,10 @@ A public method of a drawing family is a **writer** when its name does not start
 On the 2024 SP5 interop (32.5.0.48) it matches 621 distinct names (reflected 2026-09-23, research
 R2.2). *Landed as (T004, 2026-09-23)*: the generator, applying this grammar ordinally with the
 reader prefixes checked first, finds **633** distinct matches on the 24 families - 40 already
-denied, 2 excluded, 591 new - and the shared rows add 30, so the table denies **621** new names;
-the generated table is the count, never this paragraph. A false positive costs nothing: the
+denied, 2 excluded, 591 new - and the shared rows add 30, so the table denies **621** new names.
+*Regenerated 2026-09-23 on review* with the 28 families of section 1: **646** distinct matches -
+41 already denied, 2 excluded, 603 new - and the shared rows' 30, so the table denies **633** new
+names. The generated table is the count, never this paragraph. A false positive costs nothing: the
 extractor never calls a writer, and section 5's audit proves no read is refused.
 
 ## 3. Exclusions, each with its reason
@@ -58,9 +71,11 @@ extractor never calls a writer, and section 5's audit proves no read is refused.
 | `OpenDoc7`, `NewDocument` (shared) | *Added 2026-09-23 by T003's read audit*: feature 004 calls them by their bare names on sanctioned paths - `OpenDoc7` opens the re-modeler's own copy (`remodel.open`, under `RemodelGuard`) and reopens `probe remodel`'s throwaway part, and `NewDocument` creates that part (under `RemodelProbeGuard`, which exempts only what `ReadOnlyGuard` refused when it was written). Denying them would break both; the research's collision check had read only literal call-site names, and these two are named through constants |
 | a member `RemodelGuard` refuses itself (`ExcludedMembers`) | `RemodelExclusions_AreOnlyMembersTheReadOnlyGuardDoesNotAlreadyRefuse` forbids `ReadOnlyGuard` to refuse them; none matched on 32.5.0.48, and the generator excludes them should a later interop add one |
 
-Names already denied (39 of the 621, from features 001, 006 and 010, or by a denied prefix) are
-listed in the table with the feature that denied them and are not added twice. `CloseDoc`,
-`SetUserPreferenceToggle` and `OpenDoc6` are on no row of section 1 and match no grammar on the 24
+Names already denied (41 of the 646 grammar matches, from features 001, 006 and 010, or by a
+denied prefix; the generated table is the count) are listed in the table's "already denied" column
+and are not added twice. *Corrected 2026-09-23 on review*: this paragraph had kept the pre-landing
+research figure, "39 of the 621", which the generator never produced. `CloseDoc`,
+`SetUserPreferenceToggle` and `OpenDoc6` are on no row of section 1 and match no grammar on the 28
 families, so the generated exclusion table names only what a row or the grammar reached:
 `set_Name`, `Select2`, `OpenDoc7` and `NewDocument`.
 
@@ -89,7 +104,7 @@ In `extractor/SwReview.Extractor.Tests/GuardTests.cs`:
 | Test class | Asserts |
 |---|---|
 | `DrawingFamilyDenylistTests` | parses the "Feature 011" table (`DenylistTable.Parse`, as `MechanicalChecksDenylistTests` does); every member is refused by `ReadOnlyGuard.Assert` and `ReadOnlyCallGuard.Instance.Assert` |
-| `DrawingFamilyCompletenessTests` | reflects the 24 interfaces at test time and applies the grammar: every match is refused, or is an excluded name of section 3; the shared rows are refused |
+| `DrawingFamilyCompletenessTests` | reflects the 28 interfaces at test time and applies the grammar: every match is refused, or is an excluded name of section 3; the shared rows are refused |
 | `DrawingFamilyReadAuditTests` | no bare name the extractor gates (every `SwGate.Call`/`CallOptional` literal in `extractor/SwReview.Extractor`, collected by a source scan) is refused, except the write-refusal tests' own names and the re-modeler's write sites. *Landed as (T003)*: every string literal of the product source - `SwReview.Extractor`, `SwReview.AddIn` and `SwReview.Extractor.Console`, the `Guard` folder's own tables excepted - that the table refuses must be one of four named literals that are not gated calls (two members `probe standards` asserts it never calls, a JSON property name, a remodel operation name); a superset that also reaches names passed through constants and read helpers |
 
 `RemodelGuardTests.ExpectedDeniedMembers` gains the table's names (it lists the guard's denials

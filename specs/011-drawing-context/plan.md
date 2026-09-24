@@ -9,7 +9,7 @@
 
 Make drawings read-only evidence for reviews, in the order the next sitting needs them:
 
-1. **The guard first** (Foundational): every writer of the 24 drawing families and the document
+1. **The guard first** (Foundational): every writer of the 28 drawing families and the document
    activation, closing, creation, opening and macro members of the application refused, the
    membership generated from the 2024 SP5 interop and proved complete by a reflection test
    (research R2.2). Beside it: evidence schema 1.6.0 in both languages, drawing ids allocated per

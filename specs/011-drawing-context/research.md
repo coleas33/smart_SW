@@ -101,7 +101,10 @@ feature 004's pinned five; and `OpenDoc6`, the extractor's one sanctioned read-o
 membership is **generated, never transcribed**: a reflection script prints it as the "Feature 011"
 table of `specs/004-resilient-remodeler/contracts/guard-allowlist.md`; one test parses the table and
 asserts every member refused, and one test reflects the interop at test time and asserts the table
-is complete for the 24 families.
+is complete for the 24 families. *Corrected 2026-09-23 on review*: 28 families - the hole callout's
+four variable interfaces (`ICalloutVariable`, `ICalloutLengthVariable`, `ICalloutAngleVariable`,
+`ICalloutStringVariable`), which T026's hole-callout read touches, joined the list, and the
+regenerated table denies twelve more of their writers (`contracts/guard.md` section 1).
 
 **Why**: the roadmap asks for the guard "hardened against every drawing and tolerance setter
 first", and feature 012 will need a gated creator whose allowlist overrides exactly the members
@@ -690,7 +693,9 @@ record, or leaves it false and records why.
   `IBomTableAnnotation.GetModelPathNames`; `IModelDocExtension.GetUserPreferenceInteger` and
   `GetUserPreferenceString`; and the enum values quoted in R2.7, R2.9 and R2.12.
 - **The writers**: 621 grammar matches on the 24 families, 39 denied today, 2 re-modeler
-  exclusions, 580 new; no collision with a gated read (R2.2).
+  exclusions, 580 new; no collision with a gated read (R2.2). *Landed and regenerated on review
+  (2026-09-23)*: 646 matches on the 28 families, 41 already denied, 2 excluded, 603 new, and the
+  shared rows' 30, for 633 new names; the generated table is the count.
 
 **The tests that go red by design**, each named in the task that lands it and edited deliberately,
 never loosened: `SwSessionAttachTests` (the refusal gains a purpose, T013); the drawing-phase and
