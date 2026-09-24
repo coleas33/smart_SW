@@ -429,8 +429,9 @@ public class CommandLineOptionsTests
         // contracts/cli.md row 20: "probe standards --doc <document>". The subject list is
         // the shipped one, so a subject added to the switch and forgotten here - or the
         // reverse - is a failing test rather than an "Unknown probe" at the workstation.
-        // "remodel" (tasks.md T031, T032) is the third and the one mutating subject.
-        Assert.Equal(new[] { "rms", "standards", "remodel" }, Program.ProbeSubjects);
+        // "remodel" (tasks.md T031, T032) is the third and the one mutating subject; "drawings"
+        // (feature 011 T081, edited deliberately) is the fourth.
+        Assert.Equal(new[] { "rms", "standards", "remodel", "drawings" }, Program.ProbeSubjects);
     }
 
     [Fact]

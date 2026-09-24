@@ -6,16 +6,25 @@ development machine; every probe runs at the next sitting on the licensed seat.
 ## 1. The command
 
 ```text
-swreview-extract probe drawings [--doc <open drawing or model>] [--probe D1,D4,...]
+swreview-extract probe drawings --out <folder> [--doc <open drawing or model>] [--probe D1,D4,...]
 ```
 
 A new subject of the console's existing `probe` command, beside `probe rms` and `probe standards`:
 read-only, on the read-only guard watched by a recorder, attached with `AttachForDump`, refusing a
-document that is not open (as `probe standards` does), writing no file, printing the gate log at the
-end whether or not a probe failed. It prints **ids, counts, member answers, enum numbers and
-millimetres only** - never a file name, path, property value, note text or cell text, so its output
-can be pasted into `research.md` of a public repository. `--probe` selects sections; the default is
-all that apply to the open document's kind.
+document that is not open (as `probe standards` does), writing no file but its own report, printing
+the gate log at the end whether or not a probe failed. It prints **ids, counts, member answers, enum
+numbers and millimetres only** - never a file name, path, property value, note text or cell text, so
+its output can be pasted into `research.md` of a public repository. `--probe` selects sections; the
+default is all that apply to the open document's kind.
+
+*Amended 2026-09-23 (T080, T081)*: every run writes its report - the header (UTC time, SOLIDWORKS
+version, the document's kind, the probes), every section and both gate logs, the same lines it
+prints - to `drawings-probe-<yyyyMMdd-HHmmss>.txt` in `--out`, which is therefore required; a file
+of that name is never written over (the next free `-2`, `-3` is taken). That file is the one thing
+the run writes, and it is what the owner brings back in the handoff. **D14 runs only when named**:
+the default selection is every other probe that applies, so a run nobody asked to open anything
+opens nothing. A named document that is not open is refused before anything is read, and the
+report says so without its path; a stop's full message goes to stderr only.
 
 ## 2. The sections
 
@@ -47,3 +56,55 @@ all that apply to the open document's kind.
 | D12: out-of-date views read reliably | nothing; an unreliable read keeps such views unusable (their evidence is unused, never guessed) |
 | D13: the check fetches the file or takes over a second | discovery skips the candidate check under a vault view and writes one `drawing_candidate` gap saying so - one rule in `OpenDrawingDiscovery`, recorded in research and `open-drawings.md` section 5 |
 | D14: every answer as `confirmed-open.md` requires | T077 sets `DrawingOpenScope.SeatValidated = true` in its own commit citing the record; the drawing activated, took focus, was written, stayed locked, or its hidden views did not read: the switch stays false and research R4 records why; models left loaded after the close are recorded, never closed by the product |
+
+## 4. Landed as (T080, T081, 2026-09-23)
+
+- **Where.** `extractor/SwReview.Extractor/Probes/`: `DrawingProbeCatalog` (the fourteen, in this
+  order, with the kind each runs on; `DefaultFor` leaves D14 out), `DrawingProbeRunner` (the
+  sections), `DrawingOpenProbe` (D14), `DrawingProbeReport` (the header and the file), `ProbeText`
+  (how everything is printed), `ProbeFiles` (the file seam) and the interop sides
+  `SwDrawingProbeReads` and `SwDrawingOpenProbeHost`. The console's `probe drawings` wires them in
+  `Program.cs`; `--probe` shares `probe remodel`'s parser.
+- **One extraction for the drawing sections.** D1 and D3 to D12 print what the shipped extraction
+  read: one Standards extraction of the open drawing with the Standards tab's options, built and
+  never written (`PackageWriter.Build`), shared by every section and its failure remembered rather
+  than retried. So the seat validates the product's own reads, not a copy of them; a value the read
+  did not answer prints `unread`, and D1 counts the gaps by kind.
+- **The part's own reading (D5, D6, D8).** Each part document the drawing's views show or its
+  attachments name - at most five, the rest counted - gets one Full extraction (the review's options,
+  no meshes) **only when SOLIDWORKS already has it open**; a part that is not open is said and never
+  opened. D5 and D8 pair a drawing dimension with the model dimension of the same
+  `dimension@feature` (the first two `@` segments; none, or several, is said); D8 prints each full
+  name's shape - its segment count, `default D<n>` or `renamed (<n> characters)`, and whether the
+  last segment is a document name naming the view's document - never the name. D6 ties an attached
+  face to the part's face phase by persistent reference **and** document id, printing the face id,
+  its kind and a cylinder's radius; the face phase describes the faces holes, mates and fasteners
+  name.
+- **The reads beyond the extraction.** D3's `IDrawingDoc.GetViews` per sheet and the active sheet
+  read before the extraction and after it (as positions); D7's `GetText(0)` on every hole callout, by
+  sheet, view and dimension position, as a length; D10's open check of a bill-of-materials path the
+  package did not resolve; D11's `GetProperties2` item count per sheet and preference 13
+  (`swDetailingDimensionStandard`); D2's `IModelDoc2.Visible`. Each is gated on the read-only gate
+  under the drawing phase's own member names (`DrawingProbeMember`).
+- **D2** lists by position: kind, visibility and, for a drawing, its views, blank ones and distinct
+  referenced documents; documents listed twice by full path.
+- **D13** reads the candidate's directory entry (length, write time, attribute bits) before and after
+  the timed `File.Exists`, and prints whether it changed.
+- **D14** runs `DrawingOpenScope` with its switch overridden over a recording host, so the integers
+  printed are the ones passed. It prints whether the drawing was open before; `OpenDoc6`'s type,
+  options (each bit named) and configuration; the `DocumentVisible` calls; the outcome (opened and
+  closed, the close's refusal, already open and left open, or the seam's refusal, each with the
+  drawing's path, name and stem replaced by `<drawing>`); the active document and the foreground
+  window, during and after, compared by identity; the drawing phase's sheet and view counts from the
+  hidden drawing's own handle; the file's size, write time and SHA-256 before and after; every open
+  document's save flag before and after, and the positions it rose on; whether
+  `GetOpenDocumentByName` still answers and whether an exclusive read open succeeds; the open
+  documents before, during and after, and those left loaded; the seam's keys; and last, the probe's
+  own reading against `confirmed-open.md` - `every answer as required`, or the requirements that were
+  not met (for a drawing it opened: the open-mode integers, the open, the active document, the
+  foreground window, the drawing's views, the drawing file, the save flags, the close, the lock; for
+  one already open: the seam keys, left open, the active document, the foreground window, the
+  drawing's views, the save flags). T077 decides; the line only saves reading the others twice.
+- **The report.** Beside the read-only gate's log it prints the confirmed open's own guard's
+  members, which the read-only log cannot show. Its exit code is 0 when the run completed, whatever
+  a probe printed, and 1 when it was refused, stopped or could not write its report.

@@ -14,6 +14,7 @@ using SwReview.Extractor.Ids;
 using SwReview.Extractor.Interference;
 using SwReview.Extractor.Ir;
 using SwReview.Extractor.PersistRefs;
+using SwReview.Extractor.Probes;
 using SwReview.Extractor.Rms;
 using SwReview.Extractor.Sw;
 using static System.Console;
@@ -74,6 +75,14 @@ public static class Program
         { "probe", "out", "keep-part", "acknowledge-throwaway-part" };
 
     /// <summary>
+    /// Feature 011 T081 (specs/011-drawing-context/contracts/probes.md section 1). <c>probe
+    /// drawings</c> reads an open drawing or model like <c>probe standards</c>, so it takes
+    /// <c>--doc</c>; it selects probes D1 to D14 with <c>--probe</c>; and unlike the other read-only
+    /// probes it needs <c>--out</c>, because every run writes the report the owner brings back.
+    /// </summary>
+    internal static readonly string[] DrawingsProbeOptionNames = { "doc", "probe", "out" };
+
+    /// <summary>
     /// T055. The one mutating command (contracts/cli.md). <c>--doc</c> is required rather
     /// than defaulting to the active document: this command suppresses features, and
     /// "whatever happens to be on screen" is not a model anyone chose to have modified.
@@ -116,12 +125,20 @@ public static class Program
     private const string RemodelProbeSubject = "remodel";
 
     /// <summary>
+    /// The feature 011 probe subject (tasks.md T081): probes D1 to D14 of
+    /// specs/011-drawing-context/contracts/probes.md, read-only but for D14's one read-only open,
+    /// each run writing its report in <c>--out</c>.
+    /// </summary>
+    private const string DrawingsProbeSubject = "drawings";
+
+    /// <summary>
     /// The subjects <c>probe</c> accepts (contracts/cli.md). <see cref="RunProbe"/> validates
     /// against THIS list and names it in the usage error, so a subject the switch handles and
     /// the list does not - or the reverse - is a failing test rather than an "Unknown probe"
     /// discovered at the workstation.
     /// </summary>
-    internal static readonly string[] ProbeSubjects = { RmsProbe, StandardsProbe, RemodelProbeSubject };
+    internal static readonly string[] ProbeSubjects =
+        { RmsProbe, StandardsProbe, RemodelProbeSubject, DrawingsProbeSubject };
 
     /// <summary>
     /// The interop members <c>probe rms</c> reads per feature, by the name each is gated
@@ -385,6 +402,20 @@ public static class Program
         $"'{documentPath}' is not open in SOLIDWORKS. Open it first: probe standards opens no "
         + "document, and its gate log is the proof - a run that had opened this one would be "
         + "proving the opposite of what it was asked to prove.";
+
+    /// <summary>
+    /// Why <c>probe drawings</c> will not run on a document that is not already open: the same
+    /// reason as <see cref="StandardsProbeDocumentNotOpenMessage"/>. The one document it may open is
+    /// D14's same-name drawing, read-only and hidden through the confirmed open's own seam - never
+    /// the document it was pointed at. Printed on the console only; the report names no path.
+    /// </summary>
+    internal static string DrawingsProbeDocumentNotOpenMessage(string documentPath) =>
+        $"'{documentPath}' is not open in SOLIDWORKS. Open it first: probe drawings opens no document "
+        + "it is pointed at - D14's read-only open of the same-name drawing is the only open it makes.";
+
+    /// <summary>The report's line for the same refusal, with no path in it.</summary>
+    private const string DrawingsProbeNotOpenReportLine =
+        "refused: the named document is not open in SOLIDWORKS, so nothing was read and nothing was opened";
 
     /// <summary>
     /// The gate log <c>probe standards</c> prints at the end of every run, successful or not
@@ -1198,6 +1229,7 @@ public static class Program
                 throw new UsageError(
                     "probe needs a subject: probe "
                     + string.Join("|", ProbeSubjects) + " --doc <document> (rms, standards), "
+                    + "probe drawings --out <dir> [--doc <document>] [--probe D1,...], "
                     + "or probe remodel --out <dir>.");
             }
 
@@ -1209,10 +1241,13 @@ public static class Program
             }
 
             // probe remodel is the one mutating probe (tasks.md T031) and takes none of
-            // ProbeOptionNames' --doc: it never addresses a document the engineer opened.
+            // ProbeOptionNames' --doc: it never addresses a document the engineer opened. probe
+            // drawings (feature 011 T081) adds --probe and the report's --out.
             string[] optionNames = string.Equals(subject, RemodelProbeSubject, StringComparison.Ordinal)
                 ? RemodelProbeOptionNames
-                : ProbeOptionNames;
+                : string.Equals(subject, DrawingsProbeSubject, StringComparison.Ordinal)
+                    ? DrawingsProbeOptionNames
+                    : ProbeOptionNames;
 
             parsed = CommandLine.Parse(args, 2, KnownOptions(optionNames));
             allowStart = parsed.Flag("allow-start");
@@ -1226,6 +1261,11 @@ public static class Program
         if (string.Equals(subject, RemodelProbeSubject, StringComparison.Ordinal))
         {
             return RunRemodelProbe(parsed, allowStart);
+        }
+
+        if (string.Equals(subject, DrawingsProbeSubject, StringComparison.Ordinal))
+        {
+            return RunDrawingsProbe(parsed, allowStart);
         }
 
         return string.Equals(subject, StandardsProbe, StringComparison.Ordinal)
@@ -1276,7 +1316,7 @@ public static class Program
         IReadOnlyList<string> rawProbeValues = parsed.Values("probe");
         IReadOnlyList<string> probeIds = rawProbeValues.Count == 0
             ? RemodelProbeCatalog.AllIds
-            : SplitProbeIds(rawProbeValues);
+            : SplitProbeIds(rawProbeValues, RemodelProbeCatalog.IsKnown, RemodelProbeCatalog.AllIds);
 
         var settings = new RemodelProbeSettings
         {
@@ -1292,10 +1332,12 @@ public static class Program
     /// <summary>
     /// <c>--probe id,id,...</c>, one or more tokens each holding a comma-separated list, the
     /// same shape <c>--pairs</c> already accepts. Every id is upper-cased and checked against
-    /// <see cref="RemodelProbeCatalog.AllIds"/> here, at parse time, so a typo is a usage
-    /// error rather than a silently unresolved row (contracts/cli.md).
+    /// the probe family's own catalog (<paramref name="isKnown"/>, <paramref name="known"/>) here,
+    /// at parse time, so a typo is a usage error rather than a silently unresolved row
+    /// (contracts/cli.md). One parser for <c>probe remodel</c> and <c>probe drawings</c>.
     /// </summary>
-    private static IReadOnlyList<string> SplitProbeIds(IReadOnlyList<string> rawValues)
+    private static IReadOnlyList<string> SplitProbeIds(
+        IReadOnlyList<string> rawValues, Func<string, bool> isKnown, IReadOnlyList<string> known)
     {
         var ids = new List<string>();
         foreach (string raw in rawValues)
@@ -1308,11 +1350,11 @@ public static class Program
                     continue;
                 }
 
-                if (!RemodelProbeCatalog.IsKnown(id))
+                if (!isKnown(id))
                 {
                     throw new UsageError(
                         $"--probe names an unknown probe '{id}'; the probes are "
-                        + string.Join(", ", RemodelProbeCatalog.AllIds) + ".");
+                        + string.Join(", ", known) + ".");
                 }
 
                 ids.Add(id);
@@ -1439,6 +1481,191 @@ public static class Program
         {
         }
     }
+
+    /// <summary>
+    /// T081. <c>probe drawings</c>'s own parse, done before <see cref="Connect"/> runs so a bad
+    /// command line never asks SOLIDWORKS for anything (the <c>probe remodel</c> precedent).
+    /// </summary>
+    private static int RunDrawingsProbe(CommandLine parsed, bool allowStart)
+    {
+        DrawingProbeSettings settings;
+        try
+        {
+            settings = DrawingsProbeSettingsFrom(parsed);
+        }
+        catch (UsageError error)
+        {
+            Error.WriteLine($"swreview-extract probe drawings: {error.Message}");
+            return ExitError;
+        }
+
+        return ExecuteProbeDrawings(settings, allowStart);
+    }
+
+    /// <summary>
+    /// The command line as <c>probe drawings</c>' settings (specs/011-drawing-context/contracts/
+    /// probes.md section 1): <c>--out</c> required, <c>--doc</c> optional (the active document), and
+    /// <c>--probe</c> validated against <see cref="DrawingProbeCatalog"/> and put in catalog order,
+    /// or null - the default for the open document's kind, which is known only once attached.
+    /// </summary>
+    internal static DrawingProbeSettings DrawingsProbeSettingsFrom(CommandLine parsed)
+    {
+        if (parsed == null)
+        {
+            throw new ArgumentNullException(nameof(parsed));
+        }
+
+        string outputDirectory = parsed.Required("out");
+        IReadOnlyList<string>? probeIds = parsed.Has("probe")
+            ? DrawingProbeCatalog.InCatalogOrder(
+                SplitProbeIds(parsed.Values("probe"), DrawingProbeCatalog.IsKnown, DrawingProbeCatalog.AllIds))
+            : null;
+
+        return new DrawingProbeSettings
+        {
+            OutputDirectory = outputDirectory,
+            DocumentPath = parsed.Value("doc"),
+            ProbeIds = probeIds,
+        };
+    }
+
+    /// <summary>
+    /// The report's line for the confirmed open's own gate (D14): the members its guard saw, which
+    /// the read-only gate's log above it cannot show - <c>ISldWorks.OpenDoc6</c> is gated there
+    /// under its qualified key, never on the read-only gate.
+    /// </summary>
+    internal static string DrawingsProbeSeamGateLogLine(IReadOnlyList<string> seamMembers) =>
+        "gate log: the confirmed open's guard (DrawingOpenGuard, D14 only): "
+        + (seamMembers == null || seamMembers.Count == 0 ? "none" : string.Join(", ", seamMembers));
+
+    /// <summary>
+    /// T081. <c>probe drawings</c> (specs/011-drawing-context/contracts/probes.md): attaches to the
+    /// open document on the read-only guard watched by a recorder, refuses a named document that is
+    /// not open, runs the selected probes through <see cref="DrawingProbeRunner"/>, and prints the
+    /// report - the header, every section, the read-only gate log and the confirmed open's - whether
+    /// or not a probe failed. The same lines are written to <c>drawings-probe-&lt;UTC time&gt;.txt</c>
+    /// in <c>--out</c>, the one file the run writes; the report names no path, and a stop's full
+    /// message goes to stderr only.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static int ExecuteProbeDrawings(DrawingProbeSettings settings, bool allowStart)
+    {
+        var observer = new RecordingGateObserver();
+        SwGate gate = StandardsProbeGate(observer);
+        var seamObserver = new RecordingGateObserver();
+        DateTimeOffset startedAt = DateTimeOffset.UtcNow;
+        System.Diagnostics.Stopwatch clock = System.Diagnostics.Stopwatch.StartNew();
+        string? swVersion = null;
+        DocumentKind? kind = null;
+        IReadOnlyList<string> probeIds = settings.ProbeIds ?? Array.Empty<string>();
+        var sections = new List<string>();
+        int exitCode;
+
+        using (var log = new ExtractLog(null))
+        {
+            try
+            {
+                ISldWorks swApp = Connect(allowStart, log);
+                string? documentPath = settings.DocumentPath;
+
+                // SwSession.AttachForDump would OPEN a named part or assembly that is not open. This
+                // run opens nothing it is pointed at, so such a document is refused before anything
+                // else is asked of it - as probe standards refuses it.
+                if (!string.IsNullOrWhiteSpace(documentPath) && !IsOpenDocument(gate, swApp, documentPath!))
+                {
+                    log.Write(DrawingsProbeDocumentNotOpenMessage(documentPath!));
+                    sections.Add(DrawingsProbeNotOpenReportLine);
+                    exitCode = ExitError;
+                }
+                else
+                {
+                    ISwSession session = SwSession.AttachForDump(swApp, documentPath, null, gate);
+                    swVersion = session.SwVersion;
+                    DocumentKind documentKind = SwSession.KindOf(session.Document, gate);
+                    kind = documentKind;
+                    probeIds = settings.ProbeIds ?? DrawingProbeCatalog.DefaultFor(documentKind);
+
+                    var refs = new PersistRefService(gate);
+                    string? path = gate.Call(StandardsProbeMember.PathName, () => session.Document.GetPathName());
+                    var context = new DrawingProbeContext(
+                        documentKind,
+                        path,
+                        session.Document,
+                        options => SwDump.CreateWriter(swApp, session).Build(options),
+                        (modelPath, options) => BuildOpenModel(swApp, gate, modelPath, options),
+                        new SwOpenDrawingReader(swApp, gate),
+                        new SwDrawingProbeReads(swApp, session, refs),
+                        new ProbeFiles(),
+                        new DrawingOpenProbeSeam(
+                            new SwDrawingOpenProbeHost(swApp),
+                            new DrawingDumper(gate, new SwDrawingReader(session, refs)),
+                            gate,
+                            seamObserver),
+                        () => clock.ElapsedMilliseconds);
+
+                    sections.AddRange(DrawingProbeRunner.Run(probeIds, context));
+                    exitCode = ExitSuccess;
+                }
+            }
+            catch (Exception error)
+            {
+                // The report still prints and is still written: "what had it touched when it
+                // stopped" is the question a failed run most needs answered. The message, which
+                // may name the document, goes to stderr; the report carries the type and HRESULT.
+                log.WriteError("probe drawings stopped.", error);
+                sections.Add("probe drawings stopped: " + ProbeText.Failure(error));
+                exitCode = ExitError;
+            }
+
+            var report = new DrawingProbeReport();
+            report.AddRange(DrawingProbeReport.Header(startedAt, swVersion, kind, probeIds));
+            report.AddRange(sections);
+            report.AddRange(StandardsProbeGateLogLines(observer.Members, observer.Refusals));
+            report.Add(DrawingsProbeSeamGateLogLine(seamObserver.Members));
+            foreach (string line in report.Lines)
+            {
+                Out.WriteLine(line);
+            }
+
+            try
+            {
+                Error.WriteLine("Wrote " + report.Write(settings.OutputDirectory, startedAt));
+            }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException
+                || error is ArgumentException || error is NotSupportedException)
+            {
+                log.WriteError("probe drawings could not write its report; the lines above are all of it.", error);
+                exitCode = ExitError;
+            }
+        }
+
+        return exitCode;
+    }
+
+    /// <summary>
+    /// A part's own Full extraction for D5, D6 and D8 - only when SOLIDWORKS already has it open
+    /// (a drawing's models are loaded with it); null otherwise. Asked before the attach, which would
+    /// otherwise open it read-only: this run opens nothing it is pointed at, and nothing to compare.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static EvidencePackage? BuildOpenModel(ISldWorks swApp, SwGate gate, string path, DumpOptions options)
+    {
+        if (!IsOpenDocument(gate, swApp, path))
+        {
+            return null;
+        }
+
+        ISwSession model = SwSession.AttachForDump(swApp, path, null, gate);
+        return SwDump.CreateWriter(swApp, model).Build(options);
+    }
+
+    /// <summary>
+    /// Whether SOLIDWORKS has <paramref name="documentPath"/> open, asked on the gate under the
+    /// probe's own member name. The check both read-only probes make before an attach that would
+    /// otherwise open a document.
+    /// </summary>
+    private static bool IsOpenDocument(SwGate gate, ISldWorks swApp, string documentPath) =>
+        gate.Call(StandardsProbeMember.OpenDocumentByName, () => swApp.GetOpenDocumentByName(documentPath)) is IModelDoc2;
 
     /// <summary>Is this one of the subjects <see cref="ProbeSubjects"/> lists?</summary>
     private static bool IsProbeSubject(string subject)
@@ -1783,10 +2010,7 @@ public static class Program
                 // SwSession.Attach would OPEN a named document that is not open, read-only -
                 // the extractor's one file-opening call. This run opens nothing, so a document
                 // that is not open is refused here, before anything else is asked of it.
-                if (!string.IsNullOrWhiteSpace(documentPath)
-                    && !(gate.Call(
-                            StandardsProbeMember.OpenDocumentByName,
-                            () => swApp.GetOpenDocumentByName(documentPath)) is IModelDoc2))
+                if (!string.IsNullOrWhiteSpace(documentPath) && !IsOpenDocument(gate, swApp, documentPath!))
                 {
                     throw new InvalidOperationException(
                         StandardsProbeDocumentNotOpenMessage(documentPath!));
@@ -3271,6 +3495,16 @@ public static class Program
         writer.WriteLine("                this run opens nothing, activates no sheet and changes no");
         writer.WriteLine("                display state, and prints its own gate log to prove it.");
         writer.WriteLine("                Writes nothing.");
+        writer.WriteLine("  probe drawings --out <dir> [--doc <path>] [--probe D1,D2,...]");
+        writer.WriteLine("                Print the feature 011 drawing probes D1 to D14 (default: every");
+        writer.WriteLine("                one that applies to the open document's kind, except D14) as");
+        writer.WriteLine("                ids, counts, member answers and millimetres - never a name,");
+        writer.WriteLine("                path or value - and write the same report to");
+        writer.WriteLine("                drawings-probe-<UTC time>.txt in --out. Read-only on the");
+        writer.WriteLine("                read-only guard; the document must already be open. D14, run");
+        writer.WriteLine("                only when named beside a part or assembly, opens the");
+        writer.WriteLine("                same-name drawing read-only and hidden through the confirmed");
+        writer.WriteLine("                open's own guard, reads it and closes it again.");
         writer.WriteLine("  probe remodel [--probe <id,...>] --out <dir> [--keep-part]");
         writer.WriteLine("                --acknowledge-throwaway-part");
         writer.WriteLine("                Build a throwaway part in --out and run the selected feature 004");
