@@ -910,7 +910,13 @@ public class SwReviewAddIn : ISwAddin
 
         return new ToolServiceGate(
             CurrentDocument,
-            () => ToolServiceHost.Start(new ToolServiceOptions(app, new ControlAppThreadInvoker(pane))),
+            () => ToolServiceHost.Start(new ToolServiceOptions(app, new ControlAppThreadInvoker(pane))
+            {
+                // Feature 011 T074: `drawing.read` resolves its run_id through the review host's
+                // own session records, never as a path. Read through the field per request, like
+                // `busy` below, so a host that has gone answers null - a refusal, not a crash.
+                ReviewRunDirectory = runId => _reviewHost?.ReviewRunDirectory(runId),
+            }),
             service =>
             {
                 reviewOptions.Bridge = service?.ReviewBridge;

@@ -8,7 +8,9 @@ using System.Text;
 using SolidWorks.Interop.sldworks;
 using SwReview.AddIn.Review;
 using SwReview.Extractor.Bridge;
+using SwReview.Extractor.Dump;
 using SwReview.Extractor.Guard;
+using SwReview.Extractor.PersistRefs;
 using SwReview.Extractor.Sw;
 
 namespace SwReview.AddIn.ToolService;
@@ -580,6 +582,17 @@ public sealed class ToolServiceOptions
 
     public TimeSpan InvokeTimeout { get; set; } = InProcPipeServer.DefaultInvokeTimeout;
 
+    /// <summary>
+    /// Feature 011 T074. The run folder of a review this add-in started, looked up by the
+    /// folder's own name (<see cref="ReviewHost.ReviewRunDirectory"/>), or null for a run it did
+    /// not start. The one lookup <c>drawing.read</c> resolves its <c>run_id</c> through
+    /// (specs/011-drawing-context/contracts/confirmed-open.md section 2, item 1); asked on the
+    /// application thread, per request. Null - the default - is a host that keeps no review
+    /// records, and then the command has no source and answers that this bridge cannot read a
+    /// drawing.
+    /// </summary>
+    public Func<string, string?>? ReviewRunDirectory { get; set; }
+
     /// <summary>How long <see cref="ToolServiceHost.Start"/> waits for the attach to run.</summary>
     public TimeSpan AttachTimeout { get; set; } = TimeSpan.FromSeconds(60);
 
@@ -608,6 +621,9 @@ public sealed class ToolServiceOptions
 ///     shares the one recorder, so a launch still writes one log line per request.
 ///   * <b>One host, one pipe name.</b> <c>swreview-&lt;guid&gt;</c>, because two Task Panes in
 ///     one SOLIDWORKS are two hosts in one process (see <see cref="PipeNames"/>).
+///   * <b>The confirmed drawing's gate is observed by the plain recorder</b> (feature 011,
+///     <see cref="ConfirmedDrawingSource"/>): its three keys join the request's own
+///     <c>gated=</c> line, and no <c>target=</c> is written for a read that writes nothing.
 /// </summary>
 public sealed class ToolServiceHost : IToolService
 {
@@ -734,15 +750,8 @@ public sealed class ToolServiceHost : IToolService
 
         remodelGate.Observer = new RemodelGateRecorder(recorder, () => dispatcher.RemodelTargetPath);
 
-        // Outermost first: the log describes the answer that actually goes out, including one
-        // rewritten because the document went away. A remodel request's line is written to the
-        // run folder's `remodel.log` as well, where the run report reads it.
-        var chain = new ToolServiceRequestLogger(
-            new DocumentPresenceDispatcher(
-                dispatcher, attached.DocumentIsOpen, attached.DocumentPath),
-            recorder,
-            log.Write,
-            remodelLog: new RemodelRunLog(() => dispatcher.RemodelRunDirectory).Write);
+        IBridgeDispatcher chain = RequestChain(
+            dispatcher, attached.DocumentIsOpen, attached.DocumentPath, recorder, log.Write);
 
         var server = new InProcPipeServer(
             new InProcPipeServerOptions(pipeName, chain, options.Invoker)
@@ -786,6 +795,78 @@ public sealed class ToolServiceHost : IToolService
 
         _disposed = true;
         _server.Dispose();
+    }
+
+    /// <summary>
+    /// The request path around <paramref name="dispatcher"/>, outermost first: the log describes
+    /// the answer that actually goes out, including one rewritten because the document went away.
+    /// A remodel request's line is written to the run folder's `remodel.log` as well, where the
+    /// run report reads it. Internal so the wiring tests drive the chain this host builds rather
+    /// than a copy of it.
+    /// </summary>
+    internal static IBridgeDispatcher RequestChain(
+        SwBridgeDispatcher dispatcher,
+        Func<bool> documentIsOpen,
+        string documentPath,
+        SwGateRecorder recorder,
+        Action<string> write) =>
+        new ToolServiceRequestLogger(
+            new DocumentPresenceDispatcher(dispatcher, documentIsOpen, documentPath),
+            recorder,
+            write,
+            remodelLog: new RemodelRunLog(() => dispatcher.RemodelRunDirectory).Write);
+
+    /// <summary>
+    /// Feature 011 T074: the source <c>drawing.read</c> reads a confirmed candidate through
+    /// (specs/011-drawing-context/contracts/confirmed-open.md sections 2 to 4), or null when the
+    /// host was given no review records to resolve a <c>run_id</c> through - the dispatcher then
+    /// answers that this bridge cannot read a drawing.
+    ///
+    /// <b>The run comes from the review host's records, never from the request.</b>
+    /// <paramref name="reviewRunDirectory"/> is <see cref="ReviewHost.ReviewRunDirectory"/>: the
+    /// id is compared with a review record's folder name and nothing else, so a Model check's,
+    /// Standards run's or remodel run's record, an unknown id and a path spelling all answer null,
+    /// which the confirmed read refuses naming the id before anything is opened.
+    ///
+    /// <b>On the application thread.</b> Built by <see cref="Attach"/>, which runs there, over
+    /// seams bound to the attached session; <see cref="InProcPipeServer"/> posts every request to
+    /// the same thread through the host's invoker, so the lookup, the open and the read run where
+    /// every other command runs.
+    ///
+    /// <b>The plain recorder, not the remodel gate's.</b> The seam's own gate
+    /// (<see cref="DrawingOpenGuard"/>) reports to <paramref name="recorder"/>, so its three keys
+    /// join the request's <c>gated=</c> line. <see cref="RemodelGateRecorder"/> would record a
+    /// target for every key on the remodel allowlist - <c>ISldWorks.CloseDoc</c> is one - and a
+    /// read that writes nothing must never appear as a write to a copy.
+    ///
+    /// <b>The switch is the caller's to pass.</b> The add-in passes
+    /// <see cref="DrawingOpenScope.SeatValidated"/>, false until probe D14 passes at a seat
+    /// (T077): a closed candidate is then refused with the seam's sentence and an open one is
+    /// still read, since reading it opens nothing.
+    /// </summary>
+    internal static IConfirmedDrawingSource? ConfirmedDrawingSource(
+        Func<string, string?>? reviewRunDirectory,
+        string attachedDocumentPath,
+        SwGateRecorder recorder,
+        IDrawingOpenHost host,
+        bool seatValidated,
+        IDrawingSource drawings,
+        IDocumentSource documents,
+        IManifestSource manifest)
+    {
+        if (reviewRunDirectory == null)
+        {
+            return null;
+        }
+
+        return new ConfirmedDrawingRead(
+            reviewRunDirectory,
+            attachedDocumentPath,
+            File.Exists,
+            new DrawingOpenScope(host, recorder, seatValidated),
+            drawings,
+            documents,
+            manifest);
     }
 
     /// <summary>
@@ -839,6 +920,19 @@ public sealed class ToolServiceHost : IToolService
             // reaches SOLIDWORKS through its own seat, so until one is handed over every
             // remodel command answers "this bridge was not built with a remodel seat".
             RemodelGate = remodelGate,
+
+            // Feature 011 T074, review scope only (ScopedSecretPolicy): a confirmed candidate,
+            // read into the review's package through the review host's own records, over the
+            // drawing phase, the document phase and the manifest of this session's gate.
+            ConfirmedDrawings = ConfirmedDrawingSource(
+                options.ReviewRunDirectory,
+                documentPath,
+                recorder,
+                new SwDrawingOpenHost(options.SwApp),
+                DrawingOpenScope.SeatValidated,
+                new DrawingDumper(session.Gate, new SwDrawingReader(session, new PersistRefService(session.Gate))),
+                new PropertyDumper(session, options.SwApp),
+                new ManifestBuilder(session.Gate)),
         };
 
         // The attach itself is not part of any request; the first request starts clean.
