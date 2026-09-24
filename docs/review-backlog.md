@@ -3,7 +3,7 @@
 Should-fix findings left unapplied by the adversarial review rounds of 2026-09-13. Every must-fix from the same rounds was applied and is in the history; these are quality and hardening items, confirmed by a reviewer but not required to pass the gates. Generated from the workflow outputs of the implementation session; file and line references are as of the commit each round reviewed and may have drifted.
 
 
-Total items: 1200. Generated 2026-09-13; feature 003, 004 and 005 sections appended 2026-09-16, the handoff rounds the same day. Feature 006 spec review appended 2026-09-17. Feature 006 implementation rounds A-E appended 2026-09-17. The open follow-ups of features 008 and 009 appended 2026-09-23.
+Total items: 1200. Generated 2026-09-13; feature 003, 004 and 005 sections appended 2026-09-16, the handoff rounds the same day. Feature 006 spec review appended 2026-09-17. Feature 006 implementation rounds A-E appended 2026-09-17. The open follow-ups of features 008 and 009 appended 2026-09-23. Feature 011's open follow-ups appended the same day.
 
 
 ## Pre-test diagnostics (items 1, 3, 4, 8)
@@ -2111,3 +2111,23 @@ The follow-ups research R5 of `specs/008-checks-first-review/` (008 T098) and of
   - Fix: render `review_summary` at the top of `render_report` in a change that regenerates the `.md` goldens deliberately.
 - **reviewer/src/swreview/report/review_words_v1.yaml:118** (owner) - Research R5 left open whether modelling practice belongs under the hygiene goal or is a ninth goal line; it landed as the ninth goal (`modelling_practice`, prefix `rms.`; 009 T010, T016), a data row awaiting the owner's confirmation.
   - Fix: the owner's decision. Moving it under hygiene is one row of the goal table plus the fixture counts of `test_review_summary_fixture.py`.
+
+## Feature 011: open follow-ups (2026-09-23)
+
+What `specs/011-drawing-context/` leaves open after its review round of 2026-09-23 (the findings fixed that day are in the history, and research R5 and `tasks.md` carry the owner's and the seat's). File and line references are as of that tree.
+
+### 011 drawing context (6)
+
+- **extractor/SwReview.AddIn/ToolService/ToolServiceHost.cs** (follow-up, T073-T074) - The add-in builds no `IConfirmedDrawingSource`, so `drawing.read` answers "This bridge cannot read a drawing" in a pane review and a confirmed candidate is never read, whatever `DrawingOpenScope.SeatValidated` says. `ReviewHost.ReviewRunDirectory` (T074's half) is in.
+  - Fix: `ToolServiceOptions.ReviewRunDirectory` (null by default), set in `SwReviewAddIn.CreateToolServiceGate`, and `ToolServiceHost.Attach` building `ConfirmedDrawingRead` on it with the application-thread invoker; the tests T073 lists (the wiring, the review and general-chat secrets, the `gated=` line).
+- **extractor/SwReview.AddIn/Review/ReviewPage/app.js:532** (follow-up, page lane) - The live Review page appends every `coverage` event to `state.coverage` (`render.coverageSummary`'s docstring says it is rebuilt, and a snapshot restore does replace it), so a check the backend restates - `check_drawings` after a confirmed read (`ReviewRun._restate_drawing_check`), or any check a model re-runs with checks first off - shows its first and restated items side by side until the page reloads the session. The session and `report.md` hold one of each.
+  - Fix: key the page's coverage by `(check, scope)` and let a later event replace an earlier one for the same key, or have the backend send the bucket's whole state; either way with a page test driven by the pane fixture, which now carries a restated check.
+- **reviewer/tests/unit/test_tool_payload.py:362** (owner, research R5 Q10) - `DRAWING_ARMS` does not model a standards run: with checks first off, the review and slim arrays with `check_standards` and the drawing family are 38,058 / 37,976 and 38,414 / 38,281 bytes (OpenAI / Gemini), over `ARRAY_CEILING`, and neither is pinned.
+  - Fix: the owner's answer. "No" (as Q9): pin `review+standards+drawings` and `review+slim+standards+drawings` unasserted, with `--write` in a commit of their own. "Yes": something must leave those arrays first; the ceiling and the tool docstrings do not move.
+- **reviewer/src/swreview/agent/runner.py** (T066) - The step restated after a confirmed read re-runs `check_drawings` only. While `DRAWING_BINDING_VALIDATED` is false no drawing dimension binds, so the stack-up cannot change; once T066 sets it, a confirmed candidate's tolerances would not reach `check_joints` in that review, which the re-call guard answers from the pre-run. T066's text now carries this.
+  - Fix: in T066's commit, restate `check_joints` beside `check_drawings` and answer its repeats from it, with a test under checks first.
+- **extractor/SwReview.Extractor/Guard/ReadOnlyGuard.cs** (watch item) - `OpenDoc6` and `CloseDoc` stay allowed on a read-only gate in either spelling (the documented exclusions of 011 `contracts/guard.md` section 3: the extractor's model open and the bare name of feature 004's stage-1 key), so outside `DrawingOpenScope` only call-site discipline keeps a read path from closing a document; the read audit would flag no such literal because neither is in the table.
+  - Fix: none now. Feature 012's allowlist design, which will add drawing writers deliberately, is the moment to decide whether a close belongs to a guard of its own rather than an exclusion.
+- **reviewer/src/swreview/tools/drawings.py:230** (seat, T077) - When the seam cannot close a drawing it opened, the coverage says "close it in SOLIDWORKS", but the drawing was opened hidden (`DocumentVisible(false, 3)`), so it has no window for the engineer to close.
+  - Fix: probe D14 records how a hidden drawing appears (the Window menu, the document list); word the sentence from that record, or have the seam make a drawing it failed to close visible before giving up.
+
