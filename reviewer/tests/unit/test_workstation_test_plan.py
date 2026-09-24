@@ -352,6 +352,70 @@ def test_the_update_script_fetches_before_it_decides_not_to_pull() -> None:
     assert fetch < not_main < refusal < builds
 
 
+HANDOVER = REPO / "docs" / "workstation-handover-2026-09-23.md"
+FENCED = re.compile(r"^\s*```[a-z]*\n(.*?)^\s*```", re.MULTILINE | re.DOTALL)
+INLINE_CODE = re.compile(r"`([^`]+)`")
+COMMAND = re.compile(
+    r"^(?:swreview-extract |uv run |cmd /c |dotnet |git |\.\\extractor\\|New-Item |\(Get-Item |"
+    r"Get-Content |Select-String |Show-|Set-Alias |Copy-Item |Remove-Item |\$env:|if \()"
+)
+PROBES = re.compile(r"--probe (D[0-9]+(?:,D[0-9]+)*)")
+
+
+def as_command(text: str) -> str:
+    """A command with its placeholders made alike: the handover's `"<handover folder>` is the
+    plan's `"$H`, and any other quoted placeholder (`"<full path of C>"`, `"<drawing>"`) is
+    `"<>"`; runs of spaces are one."""
+    text = text.replace('"<handover folder>', '"$H')
+    text = re.sub(r'"<[^"<>]*>"', '"<>"', text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def code_lines(text: str) -> list[str]:
+    """Each line of the code blocks of `text`, less a trailing comment, blank and comment lines
+    left out."""
+    lines = []
+    for block in FENCED.findall(text):
+        for line in block.splitlines():
+            line = re.sub(r"\s{2,}#.*$", "", line).strip()
+            if line and not line.startswith("#"):
+                lines.append(line)
+    return lines
+
+
+def inline_commands(text: str) -> list[str]:
+    """Each inline code span outside the code blocks that starts as a command does."""
+    spans = (re.sub(r"\s*\n\s*", " ", span) for span in INLINE_CODE.findall(FENCED.sub("", text)))
+    return [span for span in spans if COMMAND.match(span)]
+
+
+def test_the_handover_gives_only_commands_the_plan_gives() -> None:
+    """The handover is the same sitting for the assistant; where the two differ the plan is what
+    the seat follows, so every command the handover gives is the plan's, placeholders aside: a
+    line of a handover block is a whole line of a plan block, and a command written in the text
+    is written so in the plan."""
+    handover = HANDOVER.read_text(encoding="utf-8")
+    plan_text = PLAN.read_text(encoding="utf-8")
+    plan_lines = {as_command(line) for line in code_lines(plan_text)}
+    plan = as_command(plan_text)
+    lines = code_lines(handover)
+    spans = inline_commands(handover)
+
+    assert len(lines) >= 15
+    assert len(spans) >= 12
+    assert [line for line in lines if as_command(line) not in plan_lines] == []
+    assert [span for span in spans if as_command(span) not in plan] == []
+
+
+def test_every_probe_selection_the_handover_names_is_one_the_plan_runs() -> None:
+    plan = set(PROBES.findall(PLAN.read_text(encoding="utf-8")))
+    named = PROBES.findall(HANDOVER.read_text(encoding="utf-8"))
+
+    assert len(named) >= 10
+    assert [probes for probes in named if probes not in plan] == []
+    assert {"D1,D6,D7,D9,D10", "D4,D5,D6,D8"} <= set(named)
+
+
 def test_the_runbooks_quick_reference_pulls_before_it_runs_the_script() -> None:
     runbook = (REPO / "docs" / "workstation-runbook.md").read_text(encoding="utf-8")
     quick = runbook[runbook.index("## 9. Quick reference") :]

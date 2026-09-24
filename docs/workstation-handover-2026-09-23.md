@@ -58,24 +58,26 @@ On a fresh machine, runbook sections 2 and 3 (prerequisites, clone, gate, regist
 elevated prompt; the test plan's section 0.3); on the old seat, section 4. Either way,
 non-elevated, and pull **before** running the script, so the script that runs is the one that
 arrived (a seat older than 2026-09-24 has a script without `-TokenizerFrom`, `-SolidWorksRoot` or
-the `swreview-extract:` health line):
+the `swreview-extract:` health line). First the test plan's setup block, in every PowerShell
+window: it sets `$R` (the checkout), `$H` (the handover folder, `<handover folder>` below) and the
+`swreview-extract` alias, and defines the helpers its steps call. Then its steps 1.2 to 1.4:
 
 ```powershell
-$R = '<repo>'; cd $R
 git status --porcelain; git branch --show-current     # nothing, then main
-git rev-parse --short HEAD                            # the commit before the update: record it
+if (-not (Test-Path "$H\notes\commit-before.txt")) { git rev-parse --short HEAD | Set-Content "$H\notes\commit-before.txt" }
 git fetch origin; git log --oneline HEAD..origin/main
 git pull --ff-only origin main; "pull exit code: $LASTEXITCODE"
 .\extractor\tools\update-workstation.ps1 -NoPull      # add -TokenizerFrom "<file>" or -SolidWorksRoot "<root>" as section 2 says
-git log --oneline -1                                  # this document's commit or a later one
-Set-Alias swreview-extract "$R\extractor\SwReview.Extractor.Console\bin\x64\Release\net48\swreview-extract.exe"
+git log --oneline -1; Test-Path docs\workstation-test-plan-2026-09-23.md   # this document's commit or a later one, then True
 Select-String -Path "$env:LOCALAPPDATA\SwReview\standards.yaml" -Pattern '^version:'   # after step 1 below
 ```
 
 Pass: `pull exit code: 0`, the script ends at its health step with no step failed, and runbook
-section 6's seven checks hold. Record the commit before and after and the versions of section 2 at
-the top of the findings document. Every `swreview-extract` command below needs the alias in the
-shell it runs in; every `uv run` command runs from `<repo>\reviewer`.
+section 6's seven checks hold. The script fetches first even with `-NoPull`, and says
+`-NoPull: building what is checked out`; the test plan's step 1.3 says what each other line means.
+Record the commit before and after and the versions of section 2 at the top of the findings
+document, which the test plan starts at step 1.4. Every `swreview-extract` command below needs the
+alias in the shell it runs in; every `uv run` command runs from `<repo>\reviewer`.
 
 ## 2. The order, and why
 
@@ -98,11 +100,13 @@ brought it (an older checkout has no such file before the pull), and its Results
 row per step and task id. The development machine moves each answer into the research file named.
 
 1. **008 T101 and 006 T100: the real profile.** Place the owner's file at
-   `%LOCALAPPDATA%\SwReview\standards.yaml`; `Select-String` shows `version: 3`; runbook section
-   5's check command reports no schema error. Then one pane review: its run folder's
-   `session.json` holds a pre-run step for `check_standards` (quickstart Scenario 11 of 008). A
-   version below 3 stops the sitting's paid reviews until the owner rewrites it. Record: the
-   findings document.
+   `%LOCALAPPDATA%\SwReview\standards.yaml`; `Select-String` shows `version: 3`; the test plan's
+   step 2.4 check, `uv run swreview check standards` on a `-standards` run folder with the placed
+   profile, ends `exit code: 0` (no schema error). Then one pane review, the test plan's step 3.4:
+   `Show-ReviewFacts`'s `pre-run tools:` line includes `check_standards` (its run folder's
+   `session.json` holds that pre-run step; quickstart Scenario 11 of 008) and the report holds
+   `standards.release`. A version below 3 stops the sitting's paid reviews until the owner rewrites
+   it. Record: the findings document.
 2. **010 T103 to T106: the dumps.** For each recorded assembly, active in SOLIDWORKS:
    `swreview-extract dump --out "<handover folder>\dumps\A" --meshes none` (then `B`), never under
    the run root, where the test plan's exporter (its step 6.2, `swreview handoff` on every folder
@@ -115,32 +119,42 @@ row per step and task id. The development machine moves each answer into the res
    The last line of each `extract.log`, `gated=...`, says which mass-override path answered:
    `GetOverrideOptions` in it means the first path failed somewhere. Record: the printed lines
    and the `gated=` line, for 010 `research.md`.
-3. **011 T062: a multi-sheet drawing.** Once for the sitting,
-   `New-Item -ItemType Directory -Force "<handover folder>\probes"`: every probe run writes its
-   report there and never overwrites one. Open the drawing, then
+3. **011 T062: a multi-sheet drawing.** Every probe run writes its report in
+   `<handover folder>\probes`, which the test plan's setup block makes, and never overwrites one.
+   Open the drawing, then
    `swreview-extract probe drawings --out "<handover folder>\probes" --doc "<drawing>" --probe D1,D11`,
-   then press Standards check; then 006 T103, T105 and T107 as their task texts say (T107's
-   not-loaded model is the test plan's step 3.5, on a drawing opened in Detailing mode). Pass:
-   the probe report's answers and its gate log (no writer, activation, open or close member). Record: the
+   then press Standards check, then
+   `swreview-extract probe standards --doc "<drawing>"` into a file in the same folder (the test
+   plan's step 3.2); then 006 T103, T105 and T107 as their task texts say (T107's not-loaded model
+   is the test plan's step 3.5, on a drawing opened in Detailing mode). Pass: the probe report's
+   answers and its gate log (no writer, activation, open or close member). Record: the
    `drawings-probe-<time>.txt` files stay in the `--out` folder; the answers go to 011 research
    R4 and 006 research R4.
 4. **011 T063: discovery.** With the assembly and the three drawings open:
    `swreview-extract probe drawings --out "<handover folder>\probes" --doc "<assembly>" --probe D2,D13`,
    then `--probe D3,D12` with each drawing as `--doc` (D3 and D12 read a drawing, so on the
-   assembly they read nothing), then a
-   pane review. Pass: the two part drawings are read and the unrelated one is not; nothing was
-   opened; the candidate check neither fetched nor stalled. Record: discovery's time, from the
-   probe report.
+   assembly they read nothing), then `--probe D13` on the vault-view part whose drawing is not
+   cached (the test plan's step 3.3), then a pane review (its step 3.4). Then, as its step 3.5
+   says, `--probe D3` on the six-sheet drawing with sheet 3 active, and `--probe D12` on a Pack and
+   Go copy in `%TEMP%` whose part was changed, and again on a drawing opened in Detailing mode.
+   Pass: the two part drawings are read and the unrelated one is not; nothing was opened; the
+   candidate check neither fetched nor stalled. Record: discovery's time, the review's
+   `drawing phase` line (`Show-ReviewFacts`), and D13's `File.Exists` time and whether the local
+   copy changed.
 5. **011 T064: D4, D5, D8 and D11** on the drawings `contracts/probes.md` names, with
    `--probe D4,D5,D8,D11`. If D4 shows `units_decimal_places_raw` governs a document-precision
    dimension, that is a finding for the development machine (T064's one-line change), not an
    edit here.
-6. **011 T065: D6, D7, D9 and D10** with `--probe D6,D7,D9,D10`. Pass: the typed annotations and
-   tables are read or named in gaps, with no value silently absent.
+6. **011 T065: D1, D6, D7, D9 and D10** with `--probe D1,D6,D7,D9,D10` on each drawing that
+   carries the callouts, symbols and tables, its part open. Pass (the test plan's step 3.7): each
+   count of D7, D9 and D10 equals the engineer's own count, written before the run, or D1 lists a
+   gap of that kind; a count below it with no such gap is a value silently absent, a fail.
 7. **011 T066: the named callouts.** On the part drawing and on the assembly drawing whose
-   callouts the engineer named: `--probe D6,D8`, and D4 and D5 again on the same drawing. Pass:
-   every checked callout ties to the right hole, and D4 and D5 agree with `native_dimension`'s
-   value, tolerance and unit. Record the verdict and every mismatch; do **not** change the switch.
+   callouts the engineer named, each with its part open, one run each: `--probe D4,D5,D6,D8`
+   (the test plan's step 3.8). Pass: every named callout ties to the right hole (D6's face is a
+   cylinder of half the named hole's diameter), D8 reads `FullName equal true`, D5 `; agree true`,
+   and D4's unit and decimals are the ones the engineer named. Record the verdict and every
+   mismatch; do **not** change the switch.
 8. **011 T077: the read-only open.** Beside the reviewed part whose same-name drawing is closed
    (the test plan's part J):
    `swreview-extract probe drawings --out "<handover folder>\probes" --doc "<part J>" --probe D14`,
@@ -191,10 +205,10 @@ row per step and task id. The development machine moves each answer into the res
     folder and extracts again, and its `package.json`'s row and gap counts do not grow; the
     development machine compares the group keys the two runs judged. Record the setup time - the
     add-in, not the page, sends `POST /sessions`, so the pane's DevTools never shows it: from
-    `session.started` to that request's `201` line in the backend log (the test plan's
-    `Show-SetupTime`, step 4.3) - and the seconds from `session.started` to the first `text.delta`:
-    `Get-Content "<run folder>\events.jsonl" | ConvertFrom-Json | Where-Object { $_.type -in 'session.started','text.delta' } | Select-Object seq,type,at`
-    (the pair after the Retry's `session.started`).
+    `session.started` to that request's `201` line in the backend log - and the seconds from
+    `session.started` to the first `text.delta`, as the test plan's step 4.3 reads them, with
+    `$run` the big assembly's run folder: `Show-SetupTime $run` and `Show-ReviewFacts $run`'s last
+    line. A Retry makes a new run folder, so after one both run again on that folder.
 13. **008 T103 and 009 T079: the small assembly, paid.** A pane review with the defaults. Pass: the
     report's input tokens at most **300,000** (SC-003's 0.3M; it is below 1.5 times every
     estimate of `small-assembly-a`, so it is the line); the finding and contact counts recorded as
@@ -218,7 +232,9 @@ row per step and task id. The development machine moves each answer into the res
     the window to drop the key.
 16. **Evidence.** Zip the whole run folders of steps 1 and 3 to 14 (their `tool-results\`
     included), the dump folders of step 2, the probe `--out` folder and the logs into the handover
-    folder (runbook section 8); not `swreview handoff`, which leaves `tool-results\` out.
+    folder (runbook section 8; the test plan's step 6.3); not `swreview handoff`, which leaves
+    `tool-results\` out. The test plan also runs that exporter on each review (its step 6.2), for a
+    small key-masked summary beside the evidence, never in its place.
 17. **The findings document**, in the handover folder: the Results table filled (every row
     `pass`, `fail` or `blocked`) and every step's record above, in order, with the commit and the
     versions at the top; no company value in it. The key audit runs again after it is written.
@@ -235,9 +251,11 @@ row per step and task id. The development machine moves each answer into the res
     # the same three presses: Show in SOLIDWORKS selects A's entity
     ```
     Registration survives both rebuilds. The older build's own script is used for its build, and
-    `-SkipTests` only there: it is built to be looked at, not shipped. That script has no
-    `-SolidWorksRoot` and runs `git fetch origin` even with `-NoPull`; on a seat installed
-    elsewhere, or when that fetch is refused, build the old commit with
+    `-SkipTests` only there: it is built to be looked at, not shipped. Every version of the script
+    runs `git fetch origin` first, even with `-NoPull`, and on the detached checkout says
+    `on 'HEAD' with -NoPull: building what is checked out`, which is expected; the older one has no
+    `-SolidWorksRoot`. On a seat installed elsewhere, or when that fetch is refused (on the way
+    there or back), build with
     `dotnet build extractor\SwReview.sln -c Release "-p:SwRedist=$sw\api\redist"` instead, `$sw`
     the SOLIDWORKS install folder (the Python side needs nothing: its lock file is the same on both
     builds). After the return, the add-in DLL's time must be after the return build started; if
