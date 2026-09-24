@@ -120,6 +120,7 @@ __all__ = [
     "planned_calls",
     "prerun_checks",
     "prerun_tools",
+    "recorded_call",
     "repeat_key",
     "withheld_tools",
 ]
@@ -1105,15 +1106,32 @@ def _prerun_call(
     arguments: Mapping[str, Any],
     number: int,
 ) -> PrerunCall:
-    """One call through the dispatch, with the events around it, as the session recorded it."""
+    """One pre-run call: `recorded_call` under the pre-run's own call id."""
+    return recorded_call(context, tools, name, arguments, call_id=f"prerun_{number + 1}")
+
+
+def recorded_call(
+    context: ToolContext,
+    tools: ToolDispatch,
+    name: str,
+    arguments: Mapping[str, Any],
+    *,
+    call_id: str,
+) -> PrerunCall:
+    """One call through the dispatch, with the events around it, as the session recorded it.
+
+    The pre-run's calls are made here, and so is the one call a review makes between turns
+    outside it: feature 011's drawing check, restated over the package a confirmed read
+    reloaded (`agent/runner.ReviewRun.answer_evidence_batch`). Either way the call is one real
+    step - its events, its findings' `tool_result_ids` and its tool-results file all the
+    session's - numbered from the session's own step count.
+    """
     session = context.require_session()
     before = len(session.findings)
     contacts_before = len(session.contacts)
     step_index = len(session.steps)
     result = call_tool(
-        request=ToolCallRequest(
-            call_id=f"prerun_{number + 1}", name=name, arguments=dict(arguments)
-        ),
+        request=ToolCallRequest(call_id=call_id, name=name, arguments=dict(arguments)),
         tools=tools,
         on_event=context.emit_event,
         step_index=step_index,
@@ -1369,6 +1387,22 @@ class PrerunGuard:
 
     def __len__(self) -> int:
         return sum(1 for _ in self)
+
+    def answer_repeats_with(self, call: PrerunCall) -> None:
+        """Answer every later repeat of `call`'s question from `call`, not from the pre-run.
+
+        Feature 011: a confirmed drawing read reloads the package, and `check_drawings` is
+        restated over it (`recorded_call`); the pre-run's outcome then describes a package the
+        session no longer has, so a model that repeats the check is answered from the restated
+        call. A call that did not complete leaves no ledger entry, and the next repeat runs.
+        """
+        key = repeat_key(call.tool, call.arguments)
+        if key is None:
+            return
+        if answers_repeat(call):
+            self._ledger[key] = call
+        else:
+            self._ledger.pop(key, None)
 
     def call(self, name: str, arguments: Mapping[str, Any], call_id: str = "") -> ToolCallResult:
         """The recorded outcome for a repeat, or the dispatch's own answer for anything else."""

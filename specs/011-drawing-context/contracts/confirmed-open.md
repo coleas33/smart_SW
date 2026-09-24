@@ -22,7 +22,18 @@ It then asks the bridge once per candidate of that question, in its (traversal) 
 package holds fewer than ten drawing records: `context.bridge.drawing_read(run_id, document_id)`,
 where `run_id` is the run folder's own name. With no bridge, nothing is called. After the calls the
 package is reloaded from the run folder into `context.ir`, so the resumed turn and every tool see
-the new records; nothing else in the session changes.
+the new records. When a read succeeded, the runner then restates `check_drawings` over the
+reloaded package - one recorded step through the registry's own dispatch, before the resumed turn,
+exactly as the pre-run calls it - so each reviewed document's `drawing.context` item is restated
+(the candidate's document is now drawn), the drawing just read is compared with the profile
+(FR-046), and, with checks first on, the re-call guard answers a repeat from this step rather than
+from the pre-run's outcome (008 `contracts/checks-first.md` section 5). Nothing else in the session
+changes. *Corrected 2026-09-23 on review*: without the restated step the session held both
+"opened read-only, read and closed" and "a drawing with its name sits beside it (candidate)" for
+the same document, and under checks first the model could not refresh it (the guard answered
+`already_run` and lever 13 had withheld the check). The joint stack and the standards run are not
+restated: while `DRAWING_BINDING_VALIDATED` is false no drawing dimension binds, and the standards
+run is attached once per review (T066 revisits the stack when it sets the switch).
 
 Each candidate's outcome is one coverage item, check `drawing.confirmed_open`, subject the
 document id:

@@ -13,7 +13,8 @@ line of the host's own shape (`extractor/SwReview.Extractor/Bridge/BridgeDispatc
 `ConfirmedDrawingResult`, and a refusal's `error`), so the first block is read and closed, the
 second is refused with the host's not-validated sentence (`Sw/DrawingOpenScope.cs`) and the
 third was already open. The host's merge into the run folder is not played: the package is
-reloaded as it stands, which changes no coverage reason.
+reloaded as it stands, so the drawing check the runner restates after a read (one recorded step
+before the resumed turn) repeats the first turn's `drawing.context` reasons.
 
 It writes, to `extractor/SwReview.AddIn.Tests/Fixtures/review-drawing-questions.json`:
 
@@ -25,7 +26,7 @@ It writes, to `extractor/SwReview.AddIn.Tests/Fixtures/review-drawing-questions.
   `CANDIDATE_CONFIRM` and the plate's question answered `They all apply` - each the offered
   words exactly;
 - `coverage`: every `coverage` event body of the review, in the order the backend emitted it,
-  both turns;
+  both turns - the confirmed opens, then the restated drawing check's items;
 - `questions_open_after`: the summary's `questions` block after the resumed turn.
 
 `extractor/SwReview.AddIn.Tests/ReviewPageDrawingQuestionsTests.cs` loads it, so the page is
