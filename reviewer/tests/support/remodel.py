@@ -42,7 +42,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from swreview.ir.models import EvidencePackage, Feature, Gap
+from swreview.ir.models import EvidencePackage, Feature, Gap, SketchInfo
 from tests.support.features import (
     EquationSpec,
     FeatureSpec,
@@ -55,6 +55,7 @@ from tests.support.features import (
     rms_package,
     sketch_feature,
 )
+from tests.support.packages import persist_ref
 
 MODEL_CHECK_PROFILE = "model_check"
 """The dump profile feature 003 US6 writes for a part opened alone."""
@@ -422,11 +423,7 @@ def absorbed_twice(package: EvidencePackage, *sketch_names: str) -> EvidencePack
     "absorbed by one feature", and a fixture that is not that shape would test something
     else under this name.
     """
-    rows = list(package.features)
-    documents = {row.document_id for row in rows}
-    if len(documents) != 1:
-        raise ValueError(f"absorbed_twice lays out one part's tree; this one has {documents}")
-
+    rows = _one_part(package, "absorbed_twice")
     positions = {row.id: position for position, row in enumerate(rows)}
     consumed_by: dict[str, list[Feature]] = {}
     for name in sketch_names:
@@ -442,44 +439,112 @@ def absorbed_twice(package: EvidencePackage, *sketch_names: str) -> EvidencePack
             )
         consumed_by.setdefault(consumers[0], []).append(sketch)
 
-    listing: list[tuple[Feature, Feature | None]] = []
+    listing: list[Feature] = []
+    second: dict[str, str] = {}
     for row in rows:
-        listing.append((row, None))
-        listing.extend((sketch, row) for sketch in consumed_by.get(row.id, ()))
+        listing.append(row)
+        for sketch in consumed_by.get(row.id, ()):
+            second[sketch.id] = f"{sketch.id}#2"
+            listing.append(
+                sketch.model_copy(
+                    update={"id": second[sketch.id], "depth": row.depth + 1, "folder_id": row.id}
+                )
+            )
+    # The dumper's handle index keeps the last id a feature was given.
+    return package.model_copy(update={"features": _renumbered(listing, edges_to=second)})
 
-    first = int(rows[0].id.split(":")[1])
-    new_id: dict[str, str] = {}
-    second_id: dict[str, str] = {}
-    for offset, (row, consumer) in enumerate(listing):
-        target = second_id if consumer is not None else new_id
-        target[row.id] = f"feat:{first + offset:04d}"
 
-    def edge(old: str) -> str:
-        # The dumper's handle index keeps the last id a feature was given.
-        return second_id.get(old, new_id[old])
+def carried_under(
+    package: EvidencePackage, owner_name: str, name: str, *, type_name: str = "ProfileFeature"
+) -> EvidencePackage:
+    """`package` with a sketch its owner carries: listed **only** under that owner (T162).
+
+    The real packages show it for every Hole Wizard hole: the hole's own profile sketch is
+    a sub-feature of the hole and nowhere else. It follows the owner and any second listing
+    already under it, at the owner's depth plus one; it has no parent of its own; its one
+    child, and its one consumer, is the owner, and the owner names it among its parents -
+    so in the listing it sits **after** a feature it is a parent of, which is the shape a
+    planner that gave it a position of its own would try to "repair" with a move.
+
+    Refused rather than guessed: an owner name that is not exactly one depth-0 feature.
+    """
+    rows = _one_part(package, "carried_under")
+    owners = [row for row in rows if row.name == owner_name and row.depth == 0]
+    if len(owners) != 1:
+        raise ValueError(f"{owner_name!r} is not exactly one depth-0 feature of this package")
+    owner = owners[0]
+    carried_id = f"carried:{name}"
+    at = max(
+        position
+        for position, row in enumerate(rows)
+        if row.id == owner.id or row.folder_id == owner.id
+    )
+    carried = owner.model_copy(
+        update={
+            "id": carried_id,
+            "persist_ref": persist_ref(f"{owner.document_id}/{owner_name}/{name}"),
+            "name": name,
+            "type_name": type_name,
+            "depth": owner.depth + 1,
+            "folder_id": owner.id,
+            "parent_ids": [],
+            "child_ids": [owner.id],
+            "sketch": SketchInfo(raw_status=3, consumer_ids=[owner.id]),
+            "fillet": None,
+        }
+    )
+    listing = [
+        row.model_copy(update={"parent_ids": [*(row.parent_ids or ()), carried_id]})
+        if row.id == owner.id and row.parent_ids is not None
+        else row
+        for row in rows
+    ]
+    listing.insert(at + 1, carried)
+    return package.model_copy(update={"features": _renumbered(listing)})
+
+
+def _one_part(package: EvidencePackage, builder: str) -> list[Feature]:
+    rows = list(package.features)
+    documents = {row.document_id for row in rows}
+    if len(documents) != 1:
+        raise ValueError(f"{builder} lays out one part's tree; this one has {documents}")
+    return rows
+
+
+def _renumbered(
+    listing: Sequence[Feature], *, edges_to: dict[str, str] | None = None
+) -> list[Feature]:
+    """`listing` given `feat:NNNN` ids and indices in traversal order, as the dumper does.
+
+    Every id a row names is rewritten to the new id of the row it named. `edges_to` sends an
+    **edge** - a parent, a child or a sketch consumer - to another row than the one it named;
+    `folder_id` is structure, not an edge, and is never redirected.
+    """
+    redirect = edges_to or {}
+    first = int(listing[0].id.split(":")[1])
+    new_id = {row.id: f"feat:{first + position:04d}" for position, row in enumerate(listing)}
 
     def edges(old: Sequence[str] | None) -> list[str] | None:
-        return None if old is None else [edge(one) for one in old]
+        return None if old is None else [new_id[redirect.get(one, one)] for one in old]
 
     laid_out: list[Feature] = []
-    for index, (row, consumer) in enumerate(listing):
+    for index, row in enumerate(listing):
         sketch = row.sketch
         if sketch is not None and sketch.consumer_ids is not None:
             sketch = sketch.model_copy(update={"consumer_ids": edges(sketch.consumer_ids)})
-        update: dict[str, Any] = {
-            "id": second_id[row.id] if consumer is not None else new_id[row.id],
-            "index": index,
-            "child_ids": edges(row.child_ids),
-            "parent_ids": edges(row.parent_ids),
-            "sketch": sketch,
-            "folder_id": None if row.folder_id is None else new_id[row.folder_id],
-        }
-        if consumer is not None:
-            update["depth"] = consumer.depth + 1
-            update["folder_id"] = new_id[consumer.id]
-        laid_out.append(row.model_copy(update=update))
-
-    return package.model_copy(update={"features": laid_out})
+        laid_out.append(
+            row.model_copy(
+                update={
+                    "id": new_id[row.id],
+                    "index": index,
+                    "child_ids": edges(row.child_ids),
+                    "parent_ids": edges(row.parent_ids),
+                    "sketch": sketch,
+                    "folder_id": None if row.folder_id is None else new_id[row.folder_id],
+                }
+            )
+        )
+    return laid_out
 
 
 # --- 4. Scope signals -------------------------------------------------------------

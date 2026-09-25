@@ -58,7 +58,7 @@ from swreview.remodel.intent import (
     global_candidates,
 )
 from swreview.remodel.names import RenamePlan, plan_renames
-from swreview.remodel.nodes import MergedRow, tree_nodes
+from swreview.remodel.nodes import CarriedRow, MergedRow, tree_nodes
 from swreview.remodel.order import Move, OrderResult, plan_order
 from swreview.remodel.rank import FeatureRank, rank_features
 from swreview.remodel.scope import Refusal, ScopeGate, ScopeSignals
@@ -71,6 +71,7 @@ __all__ = [
     "PACKAGE_BEFORE",
     "PLAN_FILE_NAME",
     "PLAN_SCHEMA",
+    "CARRIED_SUB_FEATURES",
     "SECOND_LISTINGS",
     "UNREAD_SIGNALS",
     "ChangeKind",
@@ -882,6 +883,7 @@ def plan_reorganize(
             order,
             feasibility.non_contiguous,
             nodes.merged,
+            nodes.carried,
         ),
     )
 
@@ -1212,6 +1214,7 @@ def _coverage(
     order: OrderResult,
     non_contiguous: Sequence[NonContiguousGroup] = (),
     merged: Sequence[MergedRow] = (),
+    carried: Sequence[CarriedRow] = (),
 ) -> tuple[PlanCoverage, ...]:
     """What this plan did not decide, one item per question, always all of them.
 
@@ -1251,6 +1254,7 @@ def _coverage(
             feature_ids=(),
         ),
         _second_listings(merged),
+        _carried(carried),
         PlanCoverage(
             item="target group",
             reason=(
@@ -1363,6 +1367,39 @@ def _second_listings(merged: Sequence[MergedRow]) -> PlanCoverage:
             "the tree)"
         ),
         feature_ids=tuple(merge.dropped_id for merge in merged),
+    )
+
+
+CARRIED_SUB_FEATURES = "carried sub-features"
+"""The coverage item that says which rows of the dump its owners carry (T163)."""
+
+
+def _carried(carried: Sequence[CarriedRow]) -> PlanCoverage:
+    """The rows `nodes.py` carried with their owners, said on every plan, "none" included.
+
+    Like the second listings, not a gap: each moves with the feature that owns it. It is said
+    because the plan has no target for it, and the reason is the rule, not an oversight.
+    """
+    if not carried:
+        return PlanCoverage(
+            item=CARRIED_SUB_FEATURES,
+            reason=(
+                "no row of the dump is found only under the feature that owns it, so every "
+                "row holds a position of its own in the flat order"
+            ),
+            feature_ids=(),
+        )
+    owners = ", ".join(dict.fromkeys(carry.owner_id for carry in carried))
+    return PlanCoverage(
+        item=CARRIED_SUB_FEATURES,
+        reason=(
+            f"{len(carried)} row(s) the dump found only under the feature that owns each one "
+            "hold no position of their own in the flat order: each travels with its owner "
+            f"({owners}), is never moved, anchored to or put in a folder on its own, and its "
+            "edges are its owner's (contracts/run-artifacts.md, how the planner reads the "
+            "tree)"
+        ),
+        feature_ids=tuple(carry.dropped_id for carry in carried),
     )
 
 

@@ -72,6 +72,13 @@ result:
       each is planned once, as the top-level row (feat:0002, feat:0005, feat:0009),
       and never moved or renamed on its own (contracts/run-artifacts.md, how the planner
       reads the tree)'
+  - feature_ids:
+    - feat:0012
+    item: carried sub-features
+    reason: '1 row(s) the dump found only under the feature that owns each one hold
+      no position of their own in the flat order: each travels with its owner (feat:0010),
+      is never moved, anchored to or put in a folder on its own, and its edges are
+      its owner''s (contracts/run-artifacts.md, how the planner reads the tree)'
   - feature_ids: []
     item: target group
     reason: 0 of 7 content feature(s) have no target group; the judgement phase has

@@ -198,14 +198,21 @@ T143's real-shape fixture. Held to `??` exactly as this feature's own new golden
 REWRITTEN_BY_DECISION_17A: frozenset[str] = frozenset(
     {"fixtures/remodel-plan/generate_packages.py"}
     | {f"test_golden/{case}.yml" for case in REMODEL_PLAN_CASES}
+    | {
+        f"fixtures/remodel-plan/{case}/package.json"
+        for case in DECISION_17A_NEW_CASES
+    }
+    | {f"test_golden/{case}.yml" for case in DECISION_17A_NEW_CASES}
 )
 """The committed remodel-plan goldens decision 17A rewrites, named one by one.
 
-Every plan now carries the `second listings` coverage item (T143), which is the only line
-each of the thirteen baselines gains, and the generator gains the cases and the layout it
-writes. Their packages are static inputs and do not move. The same allowance
-`REWRITTEN_BY_THE_DRAWING_CHECKS` is, for another feature's round: it names nothing outside
-`remodel-plan`, and it expires the moment the round is committed.
+Every plan carries the `second listings` (T143) and `carried sub-features` (T163) coverage
+items, which are the only lines each of the thirteen baselines gains, and the generator
+gains the cases and the layouts it writes; their packages are static inputs and do not move.
+T163 extends this round's own `remodel-absorbed-sketches` package with the hole's carried
+sketch after T143 committed it, which moves that package and that baseline. The same
+allowance `REWRITTEN_BY_THE_DRAWING_CHECKS` is, for another feature's round: it names
+nothing outside `remodel-plan`, and it expires the moment the round is committed.
 """
 
 DECISION_17A_NEW_PATHS: frozenset[str] = frozenset(

@@ -357,7 +357,8 @@
       "child_ids": [],
       "parent_ids": [
         "feat:0011",
-        "feat:0003"
+        "feat:0003",
+        "feat:0012"
       ],
       "sketch": null,
       "fillet": null
@@ -382,6 +383,32 @@
       "parent_ids": [
         "feat:0001"
       ],
+      "sketch": {
+        "raw_status": 3,
+        "consumer_ids": [
+          "feat:0010"
+        ]
+      },
+      "fillet": null
+    },
+    {
+      "id": "feat:0012",
+      "persist_ref": "ZG9jOjEvSG9sZTEvU2tldGNoOQ==",
+      "persist_ref_scope": "doc:1",
+      "document_id": "doc:1",
+      "configuration": "Default",
+      "name": "Sketch9",
+      "type_name": "ProfileFeature",
+      "description": "intent",
+      "index": 11,
+      "depth": 1,
+      "folder_id": "feat:0010",
+      "suppressed": false,
+      "error_code": 0,
+      "child_ids": [
+        "feat:0010"
+      ],
+      "parent_ids": [],
       "sketch": {
         "raw_status": 3,
         "consumer_ids": [

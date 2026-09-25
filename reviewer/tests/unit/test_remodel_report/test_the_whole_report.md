@@ -84,6 +84,7 @@ Choices this run made that a reader has to check:
 
 - scope: every scope signal was read and none of them refuses this part
 - second listings: no row of the dump is a second listing of a top-level feature, so every row is planned as its own feature
+- carried sub-features: no row of the dump is found only under the feature that owns it, so every row holds a position of its own in the flat order
 - target group: 0 of 3 content feature(s) have no target group; the judgement phase has not run, and an undecided feature is never moved
 - feature descriptions: 0 description(s) unreadable and 1 blank of 3 content feature(s); the planner never invents description prose, so revision 1 proposes none, and an unreadable one is refused as a change target because it has no recoverable inverse (feat:0003)
 - global variables: 1 feature reading(s) could justify a global; revision 1 proposes none, and a v1 global names a value and drives nothing (feat:0002)

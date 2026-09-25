@@ -261,6 +261,26 @@ one `persist_ref`. The real packages carry this shape for every absorbed sketch.
   than one `reorder`: the edit script moves a feature once and the rename plan renames a
   duplicate once, so a repeat is one feature read as two.
 
+*Added 2026-09-25 (decision 17A; T162, T163), found on the same packages.* The sub-feature walk
+also lists rows that hold **no** place in the flat order: the Hole Wizard's own profile sketch
+is listed only under its hole, after it, and is that hole's parent; the annotation folders and
+the lights of the real packages are listed only under their system containers; a derived part's
+body and reference folders only under its base feature. The second rule:
+
+> **A row at depth 1 or deeper whose enclosing row is a feature and not a folder, and whose
+> `persist_ref` no depth-0 row carries, is carried by the nearest kept feature above it.** It
+> is not planned on its own - no target, never the subject or the anchor of a move, never a
+> folder member - every edge naming it names the owner instead (an edge from the owner to
+> itself is dropped), and its own parents and children become the owner's; an unreadable list
+> on either side leaves the owner's list unread.
+
+- A row whose `persist_ref` some depth-0 row carries but that is not a second listing by the
+  first rule - two depth-0 rows share the reference, or the one that has it is of another
+  type - is **neither** merged nor carried: it is kept as the dump gave it, because it names a
+  top-level feature nobody can pick, and the plan type's refusal above is its backstop.
+- The coverage item `carried sub-features` names every carried row, and its owner, on every
+  plan, "none" included.
+
 ## `grades.json`
 
 ```jsonc
