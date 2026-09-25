@@ -65,7 +65,10 @@ function Test-Creation([string] $name) {
 
 # One entry per row of the generated table: the interface, its members, and what they build. Each
 # member must be declared on its interface and must not be a grammar match, already denied or
-# excluded; any of those means this list is wrong, and the run stops.
+# excluded; any of those means this list is wrong, and the run stops. The list is a reading of the
+# API help, not a pattern, so no check here can prove it complete: on review (2026-09-25, T169) it
+# was read again over every public method of the four that is neither a reader nor a grammar match
+# and that the guard allowed, which added the last rows of each interface below.
 $namedCreators = @(
     @{ Interface = 'IFeatureManager'; Members = @('PreSplitBody', 'PreSplitBody2', 'PostSplitBody', 'PostSplitBody2')
        Builds = 'the split-body feature, begun with `Pre` and finished with `Post`' }
@@ -83,14 +86,32 @@ $namedCreators = @(
        Builds = 'deletes, patches or fills faces as a Delete Face feature: a builder named with an edit verb' }
     @{ Interface = 'IFeatureManager'; Members = @('ConvertLoftOrSweepToNetBlend')
        Builds = 'converts a loft or a sweep into a net blend feature' }
+    @{ Interface = 'IFeatureManager'; Members = @('FilletXpertMakeCorner')
+       Builds = 'a fillet corner feature, which FilletXpert creates or changes' }
     @{ Interface = 'IModelDoc2'; Members = @('PreTrimSurface', 'PostTrimSurface')
        Builds = 'the trim-surface feature, the obsolete `IModelDoc2` spelling of the pair' }
     @{ Interface = 'IModelDoc2'; Members = @('DeriveSketch')
        Builds = 'a derived sketch' }
     @{ Interface = 'IModelDoc2'; Members = @('Paste')
        Builds = 'pastes what the clipboard holds into the document' }
+    @{ Interface = 'IModelDoc2'; Members = @('Scale')
+       Builds = 'scales the part, as the refused `IFeatureManager.InsertScale` does' }
+    @{ Interface = 'IModelDoc2'; Members = @('NameView')
+       Builds = 'a named view of the current orientation, kept in the document' }
+    @{ Interface = 'IModelDoc2'; Members = @('SkToolsAutoConstr')
+       Builds = 'the relations that constrain the active sketch, which the refused `SketchAddConstraints` adds one call at a time' }
+    @{ Interface = 'IModelDoc2'; Members = @('SplitOpenSegment', 'SplitClosedSegment')
+       Builds = 'splits a sketch segment, adding the segments and points it is split into: the obsolete `IModelDoc2` spelling of the `ISketchManager` pair' }
     @{ Interface = 'IModelDocExtension'; Members = @('MoveOrCopy', 'RotateOrCopy', 'ScaleOrCopy')
        Builds = 'the move, rotate and scale body features, which can copy the bodies they move' }
+    @{ Interface = 'IModelDocExtension'; Members = @('GeodesicSketchOffset')
+       Builds = 'a geodesic sketch offset, the sibling of the refused, Euclidean `SketchOffsetOnSurface`' }
+    @{ Interface = 'IModelDocExtension'; Members = @('SaveSelection')
+       Builds = 'a selection set of the selected entities, kept in the document' }
+    @{ Interface = 'IModelDocExtension'; Members = @('Capture3DView')
+       Builds = 'a 3D View of the part or assembly, kept in the document' }
+    @{ Interface = 'IModelDocExtension'; Members = @('BreakAllExternalFileReferences2')
+       Builds = 'the original parts'' features, inserted when asked to, as it breaks every external reference' }
 )
 
 # ---- rule 3: the exclusions, each with its reason -----------------------------------------

@@ -302,8 +302,8 @@ output of `extractor/tools/list-creation-members.ps1` over `SolidWorks.Interop.s
 below and `CreationFamilyCompletenessTests` reflects the interop to prove them complete. The
 "already denied" column names members an earlier table or a denied prefix refuses; they are not
 added twice. On the four interfaces 580 distinct names match the creation grammar:
-32 already denied, 10 left allowed and 538 new; the named creators add 19,
-so the tables deny 557 new names.
+32 already denied, 10 left allowed and 538 new; the named creators add 29,
+so the tables deny 567 new names.
 
 | Members refused (decision 21A) | Interface; already denied |
 |---|---|
@@ -322,10 +322,19 @@ so the tables deny 557 new names.
 | `EndVariablePitchHelix` | `IFeatureManager`; the last call of the variable-pitch helix builder begun with `InsertVariablePitchHelix` |
 | `EditDeleteFace` | `IFeatureManager`; deletes, patches or fills faces as a Delete Face feature: a builder named with an edit verb |
 | `ConvertLoftOrSweepToNetBlend` | `IFeatureManager`; converts a loft or a sweep into a net blend feature |
+| `FilletXpertMakeCorner` | `IFeatureManager`; a fillet corner feature, which FilletXpert creates or changes |
 | `PostTrimSurface`, `PreTrimSurface` | `IModelDoc2`; the trim-surface feature, the obsolete `IModelDoc2` spelling of the pair |
 | `DeriveSketch` | `IModelDoc2`; a derived sketch |
 | `Paste` | `IModelDoc2`; pastes what the clipboard holds into the document |
+| `Scale` | `IModelDoc2`; scales the part, as the refused `IFeatureManager.InsertScale` does |
+| `NameView` | `IModelDoc2`; a named view of the current orientation, kept in the document |
+| `SkToolsAutoConstr` | `IModelDoc2`; the relations that constrain the active sketch, which the refused `SketchAddConstraints` adds one call at a time |
+| `SplitClosedSegment`, `SplitOpenSegment` | `IModelDoc2`; splits a sketch segment, adding the segments and points it is split into: the obsolete `IModelDoc2` spelling of the `ISketchManager` pair |
 | `MoveOrCopy`, `RotateOrCopy`, `ScaleOrCopy` | `IModelDocExtension`; the move, rotate and scale body features, which can copy the bodies they move |
+| `GeodesicSketchOffset` | `IModelDocExtension`; a geodesic sketch offset, the sibling of the refused, Euclidean `SketchOffsetOnSurface` |
+| `SaveSelection` | `IModelDocExtension`; a selection set of the selected entities, kept in the document |
+| `Capture3DView` | `IModelDocExtension`; a 3D View of the part or assembly, kept in the document |
+| `BreakAllExternalFileReferences2` | `IModelDocExtension`; the original parts' features, inserted when asked to, as it breaks every external reference |
 
 | Not denied (decision 21A) | Why |
 |---|---|
