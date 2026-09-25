@@ -7,6 +7,12 @@ the entity ids among its inputs, its configuration - and nothing that a re-run w
 It is unique on every recorded session (99 of 99 on the big one), where check and components
 alone are not: two `hole.coaxiality` findings share both components and differ only by the hole
 ids in their inputs.
+
+Since the owner's decision 25A (008 T128) each drawing location keeps its persistent reference.
+The key is compared only between a recording and a replay of the recording's own package, or the
+fixture made from it through one map - never across two dumps, where a reference may be
+re-encoded - so the same item has the same reference on both sides, and a finding that swapped one
+item for another is another finding (research R2.8, amended).
 """
 
 from __future__ import annotations
@@ -71,11 +77,73 @@ def test_the_order_of_entity_ids_in_the_inputs_does_not_matter() -> None:
     )
 
 
-def test_a_drawing_locations_persist_ref_does_not_change_the_key() -> None:
+def reference(name: str, document_id: str = "doc:3") -> SourceRef:
+    """An RMS subject's location: its scope and its reference alone."""
+    return SourceRef(document_id=document_id, persist_ref=persist_ref(f"{document_id}/{name}"))
+
+
+def located(*locations: SourceRef) -> Finding:
+    return finding(drawing_locations=list(locations))
+
+
+def test_a_drawing_locations_persist_ref_changes_the_key() -> None:
     one = finding(drawing_locations=[sheet(sheet="Sheet1", persist_ref=persist_ref("a"))])
     other = finding(drawing_locations=[sheet(sheet="Sheet1", persist_ref=persist_ref("b"))])
 
-    assert finding_subject_key(one) == finding_subject_key(other)
+    assert finding_subject_key(one) != finding_subject_key(other)
+
+
+def test_a_subject_swapped_for_another_in_the_same_scope_is_another_key() -> None:
+    """Two subjects on one part either way, one of them another item: not the same finding."""
+    before = located(reference("Sensors"), reference("Widget1"))
+    after = located(reference("Sensors"), reference("Boss1"))
+
+    assert finding_subject_key(before) != finding_subject_key(after)
+
+
+def test_the_order_of_the_locations_does_not_matter() -> None:
+    forward = located(reference("Widget1"), reference("Boss1"), sheet(sheet="Sheet1"))
+    backward = located(sheet(sheet="Sheet1"), reference("Boss1"), reference("Widget1"))
+
+    assert finding_subject_key(forward) == finding_subject_key(backward)
+
+
+def test_a_reference_two_locations_name_counts_twice() -> None:
+    """Real packages list one sketch twice, both rows carrying its reference: a finding naming
+    both holds that reference twice, and a multiset keeps the count."""
+    once = located(reference("Sketch1"))
+    twice = located(reference("Sketch1"), reference("Sketch1"))
+    other = located(reference("Sketch1"), reference("Sketch2"))
+
+    assert finding_subject_key(twice) == finding_subject_key(
+        located(reference("Sketch1"), reference("Sketch1"))
+    )
+    assert finding_subject_key(twice) != finding_subject_key(once)
+    assert finding_subject_key(twice) != finding_subject_key(other)
+
+
+def test_the_same_reference_in_another_scope_is_another_location() -> None:
+    reference_bytes = persist_ref("doc:3/Widget1")
+    here = located(SourceRef(document_id="doc:3", persist_ref=reference_bytes))
+    there = located(SourceRef(document_id="doc:4", persist_ref=reference_bytes))
+
+    assert finding_subject_key(here) != finding_subject_key(there)
+
+
+def test_a_location_with_a_reference_and_one_without_differ() -> None:
+    bare = finding(drawing_locations=[sheet(sheet="Sheet1")])
+    referenced = finding(drawing_locations=[sheet(sheet="Sheet1", persist_ref=persist_ref("a"))])
+
+    assert finding_subject_key(bare) != finding_subject_key(referenced)
+
+
+def test_a_finding_with_no_reference_keys_as_before() -> None:
+    """`None` stands in the reference's place and nothing else moves, so two findings with no
+    reference are equal exactly when they were before decision 25A."""
+    placed = finding(drawing_locations=[sheet(sheet="Sheet1", view="Drawing View1", page=2)])
+
+    assert finding_subject_key(placed)[2] == (("doc:1", "Sheet1", "Drawing View1", None, 2, None),)
+    assert finding_subject_key(finding())[2] == ()
 
 
 @pytest.mark.parametrize(
@@ -105,6 +173,15 @@ def test_drawing_locations_with_missing_locators_sort_without_error() -> None:
     )
     shuffled = finding(
         drawing_locations=[sheet(annotation="D1"), sheet(page=3), sheet(sheet="Sheet1")]
+    )
+
+    assert finding_subject_key(mixed) == finding_subject_key(shuffled)
+
+
+def test_locations_with_and_without_references_sort_without_error() -> None:
+    mixed = located(sheet(page=3), reference("Widget1"), sheet(sheet="Sheet1"), reference("Boss1"))
+    shuffled = located(
+        reference("Boss1"), sheet(sheet="Sheet1"), reference("Widget1"), sheet(page=3)
     )
 
     assert finding_subject_key(mixed) == finding_subject_key(shuffled)

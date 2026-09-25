@@ -10,8 +10,9 @@ recording made before a table change, feature 003's decision 20A among them.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -21,11 +22,11 @@ from swreview.benchmark.replay import TurnPlan
 from swreview.checks import rms_types
 from swreview.checks.rms_types import DEFAULT_TYPES_PATH
 from swreview.findings import Finding
-from swreview.ir.loader import save_package
+from swreview.ir.loader import load_package, save_package
 from swreview.ir.models import EvidencePackage, Feature
 from swreview.report.session import load_session
 from tests.support.features import AssemblySpec, PartSpec, feature, folder, rms_package
-from tests.support.replay import record_scripted_review
+from tests.support.replay import record_scripted_review, rewrite_session
 
 __all__ = [
     "BOSS",
@@ -39,11 +40,13 @@ __all__ = [
     "SUMMARY",
     "SYSTEM_TYPE",
     "WIDGET",
+    "edit_loose",
     "loose_findings",
     "older_table",
     "part_package",
     "record",
     "row_named",
+    "swap_reference",
 ]
 
 SYSTEM_TYPE = "SensorFolder"
@@ -141,3 +144,28 @@ def record(
 def loose_findings(run: Path) -> list[Finding]:
     """The recorded `rms.grouping.all_features_in_a_group` findings of `run`."""
     return [f for f in load_session(run / "session.json").findings if f.check == LOOSE]
+
+
+def edit_loose(run: Path, change: Callable[[dict[str, Any]], None]) -> None:
+    """Edit each recorded `rms.grouping.all_features_in_a_group` finding of `run` in place."""
+
+    def edited(session: dict[str, Any]) -> None:
+        for finding in session["findings"]:
+            if finding["check"] == LOOSE:
+                change(finding)
+
+    rewrite_session(run, edited)
+
+
+def swap_reference(run: Path, old: str, new: str) -> None:
+    """Each location of the recorded loose finding naming row `old` names row `new` instead:
+    one subject swapped for another in the same scope, at the same count."""
+    package = load_package(run).package
+    before, after = row_named(package, old).persist_ref, row_named(package, new).persist_ref
+
+    def swapped(finding: dict[str, Any]) -> None:
+        for location in finding["drawing_locations"]:
+            if location.get("persist_ref") == before:
+                location["persist_ref"] = after
+
+    edit_loose(run, swapped)

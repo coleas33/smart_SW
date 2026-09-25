@@ -9,6 +9,12 @@ fixture finding matches is narrowed over the recorded package, its narrowed key 
 fixture's names by the same map as the rest of its key, and matched one to one. Nothing else
 loosens: a key still missing after narrowing, or a new one, refuses.
 
+Since the owner's decision 25A (008 T128) a key's location carries its persistent reference, and
+the fixture's references are the recorded ones scrambled. `scrambled_key` carries each recorded
+reference into the fixture's through `FictionalMap.persist_ref`, the function that scrambled the
+package's, so the recorded findings and the fixture's compare exactly, reference by reference, and
+a recorded subject swapped for another refuses.
+
 A "recording" is a scripted review made by a type table that still counted `SensorFolder` as
 content; a "fixture" is the same script recorded by today's code on the package the map
 scrambled, which is what the generator compares (`tests/support/narrowed.py`).
@@ -17,6 +23,7 @@ scrambled, which is what the generator compares (`tests/support/narrowed.py`).
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -25,17 +32,22 @@ import pytest
 
 from swreview.benchmark import replay as replay_module
 from swreview.benchmark.recording import read_recording
+from swreview.findings import finding_subject_key
 from swreview.ir.loader import PACKAGE_FILE_NAME
 from swreview.ir.models import EvidencePackage
 from tests.support import mechanical
 from tests.support.narrowed import (
+    BOSS,
     LOOSE,
     SCRIPT,
+    WIDGET,
     loose_findings,
     older_table,
     part_package,
     record,
+    swap_reference,
 )
+from tests.support.packages import persist_ref
 from tests.support.replay import record_scripted_review, rewrite_session
 from tests.support.scramble import FictionalMap
 
@@ -45,6 +57,8 @@ GENERATOR = Path(__file__).resolve().parents[1] / "fixtures" / "replay" / "gener
 HEX_PART = "doc:0a1b2c3d4e5f"
 """A part id shaped like an extractor's, which the map re-hexes: the narrowed key must be carried
 into the fixture's names to match."""
+NO_PLACE = (None, None, None, None)
+"""A location's sheet, view, annotation and page, as an RMS subject's location has none."""
 
 
 @pytest.fixture(scope="module")
@@ -165,3 +179,86 @@ def test_with_nothing_narrowed_the_check_is_the_one_it_was(
     fixture = fixture_of(tmp_path, today, fmap)
 
     assert check(generator, today, fixture, fmap) == ([], 0, 0)
+
+
+# --- references carried by the map (owner decision 25A, 008 T128) --------------------------------
+
+
+def test_the_generators_mapped_keys_equal_the_fixtures_exactly(
+    generator: ModuleType, tmp_path: Path
+) -> None:
+    """Every recorded key, through `scrambled_key`, is a fixture key, as a multiset - and the map
+    moved every reference, each by the function that scrambled the package's references."""
+    today = record(tmp_path / "today", part_package(document_id=HEX_PART))
+    fmap = a_map(today)
+    fixture = fixture_of(tmp_path, today, fmap)
+    recorded = [finding_subject_key(item.finding) for item in read_recording(today).findings]
+    written = [finding_subject_key(item.finding) for item in read_recording(fixture).findings]
+
+    mapped = [generator.scrambled_key(fmap, key) for key in recorded]
+
+    assert Counter(mapped) == Counter(written)
+    pairs = [
+        (location[5], carried[5])
+        for key, into in zip(recorded, mapped, strict=True)
+        for location, carried in zip(key[2], into[2], strict=True)
+    ]
+    assert pairs, "the recording's loose finding names a location with a reference"
+    for reference, carried in pairs:
+        assert carried == fmap.persist_ref(reference) != reference
+
+
+def test_the_carried_locations_are_put_back_in_the_keys_order(generator: ModuleType) -> None:
+    """The map can change which of two references sorts first; the fixture's key holds its
+    locations in its own order, so the carried key must too, or equal multisets would differ."""
+    fmap = FictionalMap()
+    first, second = (persist_ref(f"doc:3/{name}") for name in ("Gadget1", "Sprocket1"))
+    carried_first, carried_second = fmap.persist_ref(first), fmap.persist_ref(second)
+    assert (first < second) != (carried_first < carried_second), "the premise: the map flips them"
+    locations = (("doc:3", *NO_PLACE, first), ("doc:3", *NO_PLACE, second))
+    key = (LOOSE, ("cmp:0002",), locations, (), "Default")
+
+    carried = generator.scrambled_key(fmap, key)[2]
+
+    assert [location[5] for location in carried] == sorted([carried_first, carried_second])
+
+
+def test_a_location_without_a_reference_is_carried_without_one(generator: ModuleType) -> None:
+    fmap = FictionalMap()
+    location = (HEX_PART, "Sheet1", None, None, 2, None)
+    key = ("drawing.manufacturing_inputs", (), (location,), (), "Default")
+
+    [carried] = generator.scrambled_key(fmap, key)[2]
+
+    assert carried == (fmap.value(HEX_PART), fmap.value("Sheet1"), None, None, 2, None)
+
+
+def test_a_recorded_subject_swapped_for_another_refuses(
+    generator: ModuleType, tmp_path: Path
+) -> None:
+    """The recording's loose finding names `Boss1` where the fixture's names `Widget1`: one
+    location on the part either way, not the same item."""
+    today = record(tmp_path / "today", part_package(document_id=HEX_PART))
+    fmap = a_map(today)
+    fixture = fixture_of(tmp_path, today, fmap)
+    swap_reference(today, WIDGET, BOSS)
+
+    assert check(generator, today, fixture, fmap) == (
+        ["the finding keys differ: 1 recorded keys are missing and 1 are new"],
+        0,
+        0,
+    )
+
+
+def test_a_narrowed_finding_whose_remaining_subject_was_swapped_refuses(
+    generator: ModuleType, tmp_path: Path, recording: Path
+) -> None:
+    fmap = a_map(recording)
+    fixture = fixture_of(tmp_path, recording, fmap)
+    swap_reference(recording, WIDGET, BOSS)
+
+    assert check(generator, recording, fixture, fmap) == (
+        ["the finding keys differ: 1 recorded keys are missing and 1 are new"],
+        0,
+        0,
+    )

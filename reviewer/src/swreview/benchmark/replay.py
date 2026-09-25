@@ -1551,12 +1551,17 @@ def _totals(rounds: Sequence[ReplayRound]) -> ReplayTotals:
 
 
 def subject_of(key: SubjectKey) -> str:
-    """A finding's subject key, without its check, as one line a person can read."""
+    """A finding's subject key, without its check, as one line a person can read.
+
+    Each location is printed with everything the key compares, its persistent reference
+    included (owner decision 25A), so the lost line and the added line of a finding whose
+    subject was swapped for another differ where the findings do.
+    """
     _, components, locations, inputs, configuration = key
     parts: list[str] = []
     if components:
         parts.append("components " + ", ".join(components))
-    for document_id, sheet, view, annotation, page in locations:
+    for document_id, sheet, view, annotation, page, persist_ref in locations:
         where = [document_id] + [
             f"{label} {value}"
             for label, value in (
@@ -1564,6 +1569,7 @@ def subject_of(key: SubjectKey) -> str:
                 ("view", view),
                 ("annotation", annotation),
                 ("page", page),
+                ("persist_ref", persist_ref),
             )
             if value is not None
         ]
@@ -1705,6 +1711,8 @@ def compare_finding_keys(
     at `package_path`, under the type table the current code ships, and takes one current
     finding **nothing else matched** - no recorded key, compared or `uncompared` - whose key
     equals its narrowed key, one to one in recorded order. What is still unmatched is lost.
+    A key holds each drawing location's persistent reference (`finding_subject_key`, owner
+    decision 25A), so both matches compare which subjects a finding names, not how many.
 
     `named` carries a recorded key, narrowed or not, into the current side's names: the replay
     compares as recorded, the fixture generator carries it into the fixture's. `uncompared`
