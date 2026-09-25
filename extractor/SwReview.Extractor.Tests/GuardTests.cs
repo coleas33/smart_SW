@@ -406,7 +406,7 @@ internal static class DenylistTable
     private static readonly Regex BacktickedName = new Regex("`([^`]+)`", RegexOptions.Compiled);
 
     public static IReadOnlyList<(string Family, string[] Members)> Parse(
-        string fileName, string documentName, string tableHeader, int minimumRows)
+        string fileName, string documentName, string tableHeader, int minimumRows, bool keepQualifier = false)
     {
         string path = Path.Combine(AppContext.BaseDirectory, fileName);
         Assert.True(
@@ -441,7 +441,7 @@ internal static class DenylistTable
             string[] members = BacktickedName.Matches(cells[0])
                 .Cast<Match>()
                 .Select(match => match.Groups[1].Value.Trim())
-                .Select(name => name.Substring(name.LastIndexOf('.') + 1))
+                .Select(name => keepQualifier ? name : name.Substring(name.LastIndexOf('.') + 1))
                 .ToArray();
             Assert.True(
                 members.Length > 0,
@@ -1278,7 +1278,7 @@ public class DrawingFamilyReadAuditTests
         }
     }
 
-    private static IReadOnlyList<(string Literal, string Where)> Literals()
+    internal static IReadOnlyList<(string Literal, string Where)> Literals()
     {
         var found = new List<(string, string)>();
         foreach (string file in ProductSourceFiles())
@@ -1311,7 +1311,7 @@ public class DrawingFamilyReadAuditTests
     /// interface-qualified key (feature 011 review, 2026-09-23), unless it is a key of one of the
     /// two allowlist guards, which judge their own keys before the read-only guard is asked.
     /// </summary>
-    private static string Judged(string literal) =>
+    internal static string Judged(string literal) =>
         CallKey.IsQualified(literal)
             && !RemodelGuard.AllowedKeys.Contains(literal)
             && !DrawingOpenGuard.AllowedKeys.Contains(literal)
@@ -1346,6 +1346,256 @@ public class DrawingFamilyReadAuditTests
         {
             Assert.Contains(literals, literal => string.Equals(literal.Literal, named.Key, StringComparison.Ordinal));
             Assert.Contains(named.Key, DrawingFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+}
+
+/// <summary>
+/// Decision 17A (2026-09-25), feature 004 T150. <see cref="ReadOnlyGuard"/>'s denylist let the
+/// FeatureWorks members - which recognize features on an imported body and build them into the
+/// part - and the import-repair writers through as bare names: <c>RecognizeFeatureAutomatic</c>,
+/// <c>CreateFeatures</c> and <c>ImportDiagnosis</c> passed a read-only gate.
+///
+/// <b>The "Decision 17A" table of <c>004-resilient-remodeler/contracts/guard-allowlist.md</c> is
+/// the membership, and this class reads it</b>, as <see cref="MechanicalChecksDenylistTests"/>
+/// reads feature 010's. The members deliberately left open are the "Left open" table beside it,
+/// each with its reason, and on a machine with the interop every method of FeatureWorks'
+/// <c>IFeatureWorksApp</c> is on one table or the other. None of these members is called; adding
+/// them is a narrowing, so no constitution exception arises, and a product literal the table
+/// would refuse fails here rather than on a seat.
+/// </summary>
+public class ImportRepairDenylistTests
+{
+    private const string AllowlistFileName = "guard-allowlist.md";
+
+    private const string Document = "specs/004-resilient-remodeler/contracts/guard-allowlist.md (decision 17A)";
+
+    internal const string TableHeader = "| Member (decision 17A) | What it writes |";
+
+    internal const string LeftOpenHeader = "| Left open (decision 17A) | Why |";
+
+    /// <summary>The table's rows, members interface-qualified as the table writes them.</summary>
+    public static readonly IReadOnlyList<(string Family, string[] Members)> QualifiedTable = DenylistTable.Parse(
+        AllowlistFileName, Document, TableHeader, minimumRows: 8, keepQualifier: true);
+
+    /// <summary>The names the section leaves callable, each with its reason.</summary>
+    public static readonly IReadOnlyList<(string Family, string[] Members)> LeftOpen = DenylistTable.Parse(
+        AllowlistFileName, Document + " left open", LeftOpenHeader, minimumRows: 4, keepQualifier: true);
+
+    /// <summary>The distinct bare names the table denies: the expected set, derived.</summary>
+    public static IReadOnlyCollection<string> ExpectedMembers =>
+        new HashSet<string>(QualifiedKeys.Select(CallKey.BareName), StringComparer.OrdinalIgnoreCase);
+
+    internal static IReadOnlyList<string> QualifiedKeys =>
+        QualifiedTable.SelectMany(row => row.Members).Distinct(StringComparer.Ordinal).ToList();
+
+    internal static IReadOnlyCollection<string> LeftOpenNames =>
+        new HashSet<string>(LeftOpen.SelectMany(row => row.Members), StringComparer.Ordinal);
+
+    public static IEnumerable<object[]> EveryMember() =>
+        ExpectedMembers.OrderBy(member => member, StringComparer.Ordinal)
+            .Select(member => new object[] { member });
+
+    public static IEnumerable<object[]> EveryQualifiedMember() =>
+        QualifiedKeys.OrderBy(key => key, StringComparer.Ordinal).Select(key => new object[] { key });
+
+    [Fact]
+    public void EveryRowNamesItsMembersWithTheirInterface()
+    {
+        foreach (string key in QualifiedKeys)
+        {
+            Assert.True(CallKey.IsQualified(key), $"'{key}' in the decision 17A table names no interface.");
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryMember))]
+    public void EveryMemberOfTheTableIsRefused(string member)
+    {
+        MutatingCallError error = Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(member));
+        Assert.Equal(member, error.MemberName);
+        Assert.Throws<MutatingCallError>(() => ReadOnlyCallGuard.Instance.Assert(member));
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryQualifiedMember))]
+    public void EveryMemberOfTheTableIsRefusedQualifiedWithItsInterface(string key)
+    {
+        MutatingCallError error = Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(key));
+        Assert.Equal(key, error.MemberName);
+        Assert.Throws<MutatingCallError>(() => ReadOnlyCallGuard.Instance.Assert(key));
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryMember))]
+    public void EveryMemberOfTheTableIsRefusedWhateverItsCase(string member)
+    {
+        Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(member.ToUpperInvariant()));
+        Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(member.ToLowerInvariant()));
+    }
+
+    /// <summary>
+    /// No gate the product builds is exempted from any of them: the suppress-test gate's two
+    /// exemptions, <c>probe remodel</c>'s throwaway-part recipe, the re-modeler's stage-1
+    /// allowlist and the confirmed drawing's open all refuse every member, bare or qualified.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(EveryQualifiedMember))]
+    public void EveryGateTheProductBuildsRefusesThem(string key)
+    {
+        string member = CallKey.BareName(key);
+        foreach (ICallGuard gate in new ICallGuard[]
+                 {
+                     new SuppressTestGuard(),
+                     new RemodelProbeGuard(),
+                     new RemodelGuard(),
+                     new DrawingOpenGuard(),
+                 })
+        {
+            Assert.Throws<MutatingCallError>(() => gate.Assert(member));
+            Assert.Throws<MutatingCallError>(() => gate.Assert(key));
+        }
+    }
+
+    /// <summary>
+    /// Feature 004's allowlist is asserted against the read-only denied surface; a denial that
+    /// shared a stage-1 key's bare name would change the keys that override a denial, and one of
+    /// <see cref="RemodelGuard.ExcludedMembers"/> would make that list redundant.
+    /// </summary>
+    [Fact]
+    public void NoMemberOfTheTableIsAStage1KeyOrARemodelExclusion()
+    {
+        var bareKeys = new HashSet<string>(
+            RemodelGuard.AllowedKeys.Select(CallKey.BareName), StringComparer.OrdinalIgnoreCase);
+
+        Assert.DoesNotContain(ExpectedMembers, bareKeys.Contains);
+        Assert.Empty(ExpectedMembers.Intersect(RemodelGuard.ExcludedMembers, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void TheTableAddsNothingAnEarlierTableOrPrefixAlreadyDenied()
+    {
+        Assert.Empty(ExpectedMembers.Intersect(StandardsDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(ExpectedMembers.Intersect(MechanicalChecksDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(ExpectedMembers.Intersect(DrawingFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            ExpectedMembers,
+            member => ReadOnlyGuard.DeniedPrefixes.Any(
+                prefix => member.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>
+    /// "Without breaking anything the product legitimately calls": no string literal of the
+    /// product source - every gated call site names its member in one - is refused by the table,
+    /// read by the same scan <see cref="DrawingFamilyReadAuditTests"/> runs.
+    /// </summary>
+    [Fact]
+    public void NoLiteralOfTheProductSourceIsRefusedByTheTable()
+    {
+        var table = new HashSet<string>(ExpectedMembers, StringComparer.OrdinalIgnoreCase);
+        var refused = DrawingFamilyReadAuditTests.Literals()
+            .Where(literal => table.Contains(DrawingFamilyReadAuditTests.Judged(literal.Literal)))
+            .Select(literal => $"\"{literal.Literal}\" in {literal.Where}")
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            refused.Count == 0,
+            "The decision 17A denials refuse a name the product source uses: " + string.Join(", ", refused));
+    }
+
+    /// <summary>The reads beside them stay allowed, and so does what the section leaves open.</summary>
+    [Theory]
+    [InlineData("GetImportedFileName")]
+    [InlineData("GetImportedFeatureParameters")]
+    [InlineData("GetImportFileData")]
+    [InlineData("Diagnose")]
+    [InlineData("GetGapsCount")]
+    [InlineData("GetEdgeInformation")]
+    [InlineData("GetTypeName2")]
+    public void TheReadsBesideThemStayAllowed(string member)
+    {
+        ReadOnlyGuard.Assert(member);
+    }
+
+    public static IEnumerable<object[]> EveryLeftOpenMember() =>
+        LeftOpenNames.Where(name => !name.Contains("*"))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .Select(name => new object[] { name });
+
+    [Theory]
+    [MemberData(nameof(EveryLeftOpenMember))]
+    public void WhatTheSectionLeavesOpenIsOpenAndNotAlsoOnTheTable(string key)
+    {
+        ReadOnlyGuard.Assert(CallKey.BareName(key));
+        Assert.DoesNotContain(CallKey.BareName(key), ExpectedMembers, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Every member the table names is declared on the interface it names, on the interop the
+    /// extractor is built against: a mis-spelled denial would refuse nothing.
+    /// </summary>
+    [FeatureWorksInteropPresentFact]
+    public void EveryMemberOfTheTableIsOnTheInstalledInterop()
+    {
+        foreach (string key in QualifiedKeys)
+        {
+            Type type = InterfaceType(CallKey.InterfaceName(key));
+            Assert.True(
+                type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Any(method => method.Name == CallKey.BareName(key)),
+                $"{key} is not declared on {type.Assembly.GetName().Name} {type.Assembly.GetName().Version}.");
+        }
+    }
+
+    /// <summary>
+    /// FeatureWorks' whole API surface is accounted for: every method of <c>IFeatureWorksApp</c>
+    /// is denied or named as left open with its reason, so a writer it gains in a later release
+    /// is a red test, not a member nobody gated.
+    /// </summary>
+    [FeatureWorksInteropPresentFact]
+    public void EveryFeatureWorksMethodIsDeniedOrLeftOpenWithAReason()
+    {
+        Type featureWorks = InterfaceType("IFeatureWorksApp");
+        var accounted = new HashSet<string>(QualifiedKeys.Concat(LeftOpenNames), StringComparer.Ordinal);
+
+        var unaccounted = featureWorks.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Select(method => "IFeatureWorksApp." + method.Name)
+            .Distinct(StringComparer.Ordinal)
+            .Where(key => !accounted.Contains(key))
+            .ToList();
+
+        Assert.True(
+            unaccounted.Count == 0,
+            "IFeatureWorksApp methods on neither decision 17A table: " + string.Join(", ", unaccounted));
+    }
+
+    private static Type InterfaceType(string name)
+    {
+        string redist = RemodelInteropManifestTests.InstalledInterop.RedistDirectory()!;
+        string assembly = name == "IFeatureWorksApp" ? FeatureWorksInterop : "SolidWorks.Interop.sldworks";
+        string space = name == "IFeatureWorksApp" ? "SolidWorks.Interop.fworks." : "SolidWorks.Interop.sldworks.";
+        Type? type = RemodelInteropManifestTests.InstalledInterop.Load(redist, assembly).GetType(space + name);
+        Assert.True(type != null, $"{name} is not on {assembly}.");
+        return type!;
+    }
+
+    internal const string FeatureWorksInterop = "SolidWorks.Interop.fworks";
+
+    /// <summary>
+    /// A <c>[Fact]</c> that reports itself skipped, with the reason, where the SOLIDWORKS interop
+    /// or its FeatureWorks assembly is not installed; xUnit 2 decides <c>Skip</c> at discovery.
+    /// </summary>
+    internal sealed class FeatureWorksInteropPresentFactAttribute : FactAttribute
+    {
+        public FeatureWorksInteropPresentFactAttribute()
+        {
+            string? redist = RemodelInteropManifestTests.InstalledInterop.RedistDirectory();
+            if (redist == null || !File.Exists(Path.Combine(redist, FeatureWorksInterop + ".dll")))
+            {
+                Skip = "SolidWorks.Interop.sldworks.dll or SolidWorks.Interop.fworks.dll is not installed "
+                    + "(looked in %SWREVIEW_SW_REDIST% and the default SOLIDWORKS api\\redist folder).";
+            }
         }
     }
 }

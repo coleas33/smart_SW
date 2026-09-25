@@ -210,6 +210,26 @@ public static partial class ReadOnlyGuard
         "set_MidCounterSinkAngle",
         "set_FarCounterSinkAngle",
         "set_ThreadAngle",
+
+        // ---- decision 17A (feature 004, 2026-09-25): FeatureWorks and import repair --------
+        //
+        // The members that recognize features on an imported body and build them into the part
+        // (IFeatureWorksApp, SolidWorks.Interop.fworks), FeatureWorks' option setters, and the
+        // writers that repair an imported body in place. None of them is called. The table that
+        // fixes the membership is the "Decision 17A" table of
+        // `004-resilient-remodeler/contracts/guard-allowlist.md`; ImportRepairDenylistTests parses
+        // it, and the members deliberately left open are tabulated beside it with their reasons.
+        "RecognizeFeatureAutomatic",
+        "RecognizeFeatureInteractive",
+        "CreateFeatures",
+        "SetAdvancedOptions",
+        "SetPerformanceOptions",
+        "ImportDiagnosis",
+        "ImportDiagnosisGapCloser",
+        "HealEdges",
+        "InsertImportedFeature",
+        "SetImportedFeatureParameters",
+        "SetImportedFileName",
     };
 
     /// <summary>
