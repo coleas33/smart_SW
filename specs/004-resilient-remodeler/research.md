@@ -714,6 +714,27 @@ and are not closed by this decision; the reflection run found saves (`IModelDoc2
 `IModelDocExtension.Rebuild` and `EditRebuildAll`) that pass a read-only gate as bare names, and creation on other interfaces (`ISketchManager`,
 `IAssemblyDoc`) is outside the four. `contracts/guard-allowlist.md` names them.
 
+*Amended 2026-09-25 on review (T169): the named creators the list missed.* A review of the
+implementation found members of the four interfaces whose API help says they create something
+passing a read-only gate bare, because the grammar does not reach them and the named list did not
+name them, and `CreationFamilyCompletenessTests` checks only the grammar's matches and that each
+named creator is real. Reading the installed help again over every public method of the four that
+is neither a reader nor a grammar match and that the guard allowed (533 names) gives ten:
+`IFeatureManager.FilletXpertMakeCorner` (a fillet corner feature); `IModelDoc2.Scale` (scales the
+part, as the refused `InsertScale` does), `NameView` (a named view), `SkToolsAutoConstr` (relations
+added to the active sketch) and the obsolete `SplitOpenSegment` and `SplitClosedSegment` (split
+sketch segments); `IModelDocExtension.GeodesicSketchOffset` (the sibling of the refused
+`SketchOffsetOnSurface`), `SaveSelection` (a selection set), `Capture3DView` (a 3D View) and
+`BreakAllExternalFileReferences2` (the original parts' features, inserted when asked). They join
+the named creators; none is a stage-1 key's bare name, a `RemodelGuard` refusal or already denied.
+The scan of product literals finds one new collision, the JSON property name `scale` of
+`Ir/DrawingSheet.cs`, which matches `Scale` by case only and is named in the audit as feature
+011's `dimensions` is; `Scale`'s other bare-name holders, `IMathPoint` and `IMathVector`, are math
+the product does not call. The same review found the grammar reaching two members that create
+nothing, `IModelDocExtension.SketchBoxSelect` (a box selection) and `IModelDoc2.AddIns` (the
+Add-In Manager); they stay refused, since a denial fails closed and allowing them would widen the
+guard, which is the owner's call, and the contract says so beside rule 1.
+
 ---
 
 ## R6. The planner: algorithms, and what is pure

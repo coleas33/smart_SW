@@ -236,19 +236,56 @@ guard sources and the exclusion rules of feature 011's section 3 with `list-writ
    tables (`Insert*`), features and bodies built from other data, reference planes, sketch entities
    and the data objects a builder is handed (`Create*`), dimensions, relations, configurations and
    custom information (`Add*`), mirrored parts and features (`Mirror*`), sections, styled curves and
-   the 3DEXPERIENCE conversion (`Make*`), the obsolete `IModelDoc2` sketch surface and its two
-   `IModelDocExtension` siblings (`Sketch*`) and the holes (`SimpleHole*`, `HoleWizard*`,
-   `AdvancedHole*`, `SimpleFeatureBossExtrude`). The optional `I` is a member's COM twin
-   (`IInsertMacroFeature`, `ICreateFeatureFromBody3`). The grammar is written here, in the generator
-   and in `CreationFamilyCompletenessTests`, the independent check of the generator's output.
+   the 3DEXPERIENCE conversion (`Make*`), the obsolete `IModelDoc2` sketch surface and its
+   `IModelDocExtension` sibling `SketchOffsetOnSurface` (`Sketch*`) and the holes (`SimpleHole*`,
+   `HoleWizard*`, `AdvancedHole*`, `SimpleFeatureBossExtrude`). The optional `I` is a member's COM
+   twin (`IInsertMacroFeature`, `ICreateFeatureFromBody3`). The grammar is written here, in the
+   generator and in `CreationFamilyCompletenessTests`, the independent check of the generator's
+   output.
+
+   **Two matches that create nothing** (*recorded 2026-09-25 on review, T169*). The grammar also
+   reaches `IModelDocExtension.SketchBoxSelect`, which box-selects the sketch entities already
+   there, and `IModelDoc2.AddIns`, which displays the Add-In Manager. Neither creates anything, and
+   both stay refused, bare and qualified: neither is a read the product makes - it selects through
+   `SelectByID2`, which stays allowed with `SelectByRay`, `MultiSelect2` and `SelectAll` - no
+   product literal names either, and a denial fails closed. Allowing them would widen the guard,
+   which is the owner's call, so they are recorded here rather than excluded.
+   `CreationFamilyDenylistTests` pins both refusals, the selections beside them and this paragraph.
 2. **Named creators the grammar does not reach**, each checked by the generator to be declared on
    its interface and to be outside the grammar: the split, trim and intersect features, begun with
    `Pre` and finished with `Post` (`PreSplitBody`, `PostSplitBody` and their siblings); the last
    calls of the multi-call builders (`FinishCornerRelief`, `FinishSMNormalCut`,
    `EndVariablePitchHelix`); the Delete Face feature (`IFeatureManager.EditDeleteFace`);
    `IFeatureManager.ConvertLoftOrSweepToNetBlend`; the move, rotate and scale body features
-   (`IModelDocExtension.MoveOrCopy`, `RotateOrCopy`, `ScaleOrCopy`); `IModelDoc2.DeriveSketch`; and
-   `IModelDoc2.Paste`. They are a table of their own below, each with what it builds.
+   (`IModelDocExtension.MoveOrCopy`, `RotateOrCopy`, `ScaleOrCopy`); `IModelDoc2.DeriveSketch`;
+   `IModelDoc2.Paste`; and, *added 2026-09-25 on review (T169)*, the fillet corner feature
+   (`IFeatureManager.FilletXpertMakeCorner`), `IModelDoc2.Scale`, which scales the part as the
+   refused `IFeatureManager.InsertScale` does, a named view (`IModelDoc2.NameView`), the relations
+   `IModelDoc2.SkToolsAutoConstr` adds to the active sketch, the split segments of the obsolete
+   `IModelDoc2.SplitOpenSegment` and `SplitClosedSegment`, a geodesic sketch offset
+   (`IModelDocExtension.GeodesicSketchOffset`, the sibling of the refused `SketchOffsetOnSurface`), a
+   selection set (`IModelDocExtension.SaveSelection`), a 3D View (`Capture3DView`) and the original
+   parts' features `BreakAllExternalFileReferences2` inserts when asked to. They are a table of their
+   own below, each with what it builds.
+
+   Rule 2 is a reading of the API help, not a pattern: `CreationFamilyCompletenessTests` proves each
+   named creator declared and outside the grammar, and cannot prove the list complete. On review
+   (2026-09-25) the list was read again against the installed `sldworksapi.chm` over every public
+   method of the four interfaces that is neither a reader nor a grammar match and that the guard
+   allowed - 533 names - and the ten above are what it had missed. The rest create nothing new:
+   edits of what is there (`DraftXpertChange`, `FilletXpertChange`, `EditReferencePoint`,
+   `DissolveLibraryFeature`, `DissolveSketchText`, `UnderiveSketch`, `ToolsSketchScale`, `Stretch`,
+   `UpgradeLegacyCThreads` and the like), the data a builder is handed before its last call, which is
+   refused (`SetFreeform*` before `InsertFreeform2`, `SetNetBlend*` before `InsertNetBlend2`),
+   document settings (`CopyDraftingStandard` and the other drafting-standard members), analyses and
+   displays (`MoldUndercutDetect2`, `MoldDraftAnalysis`, `InspectCurvature`), selections, view
+   changes, exports that write a file of their own (`SaveBMP`, which the product's view capture
+   calls, `PublishTo3DPDF`, `PublishSTEP242File`), and the saves recorded below as not closed.
+
+   `Scale` is also a bare name of `IMathPoint` and `IMathVector`: math on transient objects, which
+   the product does not call, and a literal naming either would fail the read audit. The one product literal it matches today is the JSON property name `scale` of
+   `Ir/DrawingSheet.cs`, by case only, which `CreationFamilyReadAuditTests` names, as feature 011's
+   audit names `dimensions`.
 3. **Exclusions, each with its reason**: the bare name of a stage-1 allowlist key and a member
    `RemodelGuard` refuses itself, as feature 011's section 3 has them; and the reads the grammar
    reaches - the lookups `FeatureById`, `FeatureByName` and `FeatureByPositionReverse` (with their
