@@ -20,7 +20,7 @@ Two answers are deliberately not classifications (constitution Principle I):
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType
@@ -103,6 +103,7 @@ REQUIRED_KEYS: tuple[str, ...] = (
     "default_group_by_class",
     "derived_base",
     "tolerated_loose",
+    "remodel_not_content",
     "default_names_excluded",
     "constrained_status",
     "assembly",
@@ -156,6 +157,9 @@ class RmsTypeTable:
     """The base feature types of a derived or mirrored part (feature 004, decision 17A):
     their body is another part's geometry, so the re-modeler refuses the part."""
     tolerated_loose: frozenset[str]
+    remodel_not_content: frozenset[str]
+    """System rows feature 004's planner never places (decision 17A). Read only through
+    `planner_view`; the feature 003 rules do not see it."""
     default_names_excluded: frozenset[str]
     constrained_status_map: Mapping[int, ConstrainedStatus]
     assembly: AssemblyTable
@@ -183,6 +187,21 @@ class RmsTypeTable:
         which is every answer `classify` can give, so no caller handles a missing key.
         """
         return self.default_group_by_class[classification]
+
+    def planner_view(self) -> RmsTypeTable:
+        """The table as feature 004's planner reads it: `remodel_not_content` tolerated too.
+
+        One table and one file, so the checker and the planner still agree on every class and
+        group. The planner alone stops counting the system rows the real packages carry as
+        content, because feature 003's verdicts over recorded runs count them and moving
+        those is the owner's decision (tasks.md T145). Idempotent: a view of a view is the
+        view.
+        """
+        return replace(
+            self,
+            tolerated_loose=self.tolerated_loose | self.remodel_not_content,
+            remodel_not_content=frozenset(),
+        )
 
     def is_derived_base(self, feature: Feature) -> bool:
         """Whether `feature` is the base feature of a derived or mirrored part.
@@ -365,7 +384,27 @@ def _parse(document: object, path: Path) -> RmsTypeTable:
 
     derived_base = frozenset(document["derived_base"])
     tolerated_loose = frozenset(document["tolerated_loose"])
-    _refuse_a_placed_derived_base(derived_base, tolerated_loose, classes, ambiguous, path)
+    remodel_not_content = frozenset(document["remodel_not_content"])
+    classified = ambiguous.union(*classes.values())
+    _refuse_overlap(
+        "derived_base",
+        derived_base,
+        {
+            "tolerated_loose": tolerated_loose,
+            "remodel_not_content": remodel_not_content,
+            "a class or the ambiguous set": classified,
+        },
+        "the base feature of a derived or mirrored part refuses the part and is never placed",
+        path,
+    )
+    _refuse_overlap(
+        "remodel_not_content",
+        remodel_not_content,
+        {"tolerated_loose": tolerated_loose, "a class or the ambiguous set": classified},
+        "a type is tolerated for both features or for the planner alone, and a classified "
+        "type is content",
+        path,
+    )
 
     return RmsTypeTable(
         version=int(document["version"]),
@@ -378,6 +417,7 @@ def _parse(document: object, path: Path) -> RmsTypeTable:
         default_group_by_class=_parse_default_groups(document, path, groups),
         derived_base=derived_base,
         tolerated_loose=tolerated_loose,
+        remodel_not_content=remodel_not_content,
         default_names_excluded=frozenset(document["default_names_excluded"]),
         constrained_status_map=_parse_constrained_status(document, path),
         assembly=AssemblyTable(
@@ -388,25 +428,18 @@ def _parse(document: object, path: Path) -> RmsTypeTable:
     )
 
 
-def _refuse_a_placed_derived_base(
-    derived_base: frozenset[str],
-    tolerated_loose: frozenset[str],
-    classes: Mapping[FeatureClass, frozenset[str]],
-    ambiguous: frozenset[str],
+def _refuse_overlap(
+    key: str,
+    members: frozenset[str],
+    others: Mapping[str, frozenset[str]],
+    why: str,
     path: Path,
 ) -> None:
-    """A derived base refuses the part, so the table may neither tolerate it (the method
-    would ignore it) nor classify it (the planner would place it)."""
-    placed = sorted(
-        derived_base
-        & (tolerated_loose | ambiguous | frozenset().union(*classes.values()))
-    )
-    if placed:
-        raise ValueError(
-            f"{path}: derived_base names {placed}, which the table also tolerates or "
-            "classifies; the base feature of a derived or mirrored part refuses the part and "
-            "is never placed"
-        )
+    """Refuse a type `key` lists that the table also answers for another way, naming both."""
+    for other, other_members in others.items():
+        shared = sorted(members & other_members)
+        if shared:
+            raise ValueError(f"{path}: {key} names {shared}, which {other} also carries; {why}")
 
 
 @lru_cache(maxsize=4)

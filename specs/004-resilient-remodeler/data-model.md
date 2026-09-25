@@ -600,7 +600,14 @@ means. This is the only edit feature 004 makes to a feature 003 artifact.
 *Amended 2026-09-25 (owner, decision 17A).* A second key, from the real packages and
 test-first: `derived_base` (T147), the base feature types of a derived or mirrored part, which
 refuse the part (section 4.2). The loader requires it and refuses a table that also tolerates or
-classifies one of its types; the feature 003 checker does not read it.
+classifies one of its types; the feature 003 checker does not read it. And a third key (T145),
+`remodel_not_content`: the system types the real 2024 SP5 dumps carry and the table did not know -
+the annotation folders and view, the scene's lights, a derived part's body and reference folders,
+and the cosmetic thread - which the planner counted as content and filed `unclassified`. The
+planner reads the table through `RmsTypeTable.planner_view()`, which tolerates them; feature 003's
+checker does not read the key and keeps counting those rows, because its verdicts over the runs
+feature 008's replays recorded count them, and whether it should stop is the owner's decision.
+No golden moves.
 
 ```yaml
 # The planner's target group per feature class (feature 004). The checker grades what is;

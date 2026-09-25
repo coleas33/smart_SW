@@ -843,7 +843,8 @@ def plan_reorganize(
     Args:
         package: the evidence package, `model_check` or `full` profile.
         document_id: which part to plan; required when the package carries more than one.
-        table: the type table; the shipped one by default.
+        table: the type table; the shipped one by default. It is read through
+            `planner_view()`, so the system rows the planner never places are not content.
         signals: the scope readings `remodel.probe_scope` took from the engineer's open
             source. `None` is the **dry run**: no document was ever opened, so every signal
             is unread and the scope verdict is `unresolved`, naming each one.
@@ -855,7 +856,7 @@ def plan_reorganize(
         ValueError: the package carries no part document, the named document is not one, or
             the document's tree was never dumped.
     """
-    table = load_table() if table is None else table
+    table = (load_table() if table is None else table).planner_view()
     at = datetime.now(UTC) if now is None else now
     document = _document(package, document_id)
     rows = _rows(package, document)

@@ -267,6 +267,33 @@ def test_rows_the_grouping_rules_do_not_hold_are_not_content(
     assert decide(specs, name) == NotContent()
 
 
+@pytest.mark.parametrize(
+    "type_name",
+    [
+        "NotesAreaFtrFolder",
+        "AnnotationViewFeat",
+        "AmbientLight",
+        "DirectionLight",
+        "FeatSolidBodyFolder",
+        "FeatSurfaceBodyFolder",
+        "RefAxisFtrFolder",
+        "RefPlaneFtrFolder",
+        "ProfileFtrFolder",
+        "RefPointFtrFolder",
+        "CosmeticThread",
+    ],
+)
+def test_the_system_types_of_the_real_packages_are_not_content(type_name: str) -> None:
+    """T144 (decision 17A): the planner counted these as content of unknown class and put
+    them on the rebuild list as `unclassified`, although no one of them is a feature the six
+    groups organize. Listed top-level here, where the carried-row rule of `nodes.py` does
+    not already take them out of the plan. The planner reads the table's `planner_view()`,
+    which is what `plan_reorganize` hands `target_group`."""
+    rows = list(remodel_package([feature(f"{type_name}1", type_name)]).features)
+
+    assert target_group(rows[0], rows, TABLE.planner_view()) == NotContent()
+
+
 def test_not_content_is_not_the_same_answer_as_undecided() -> None:
     """A folder has no target because it is not a subject; an unclassified feature has no
     target because nobody could decide. The report says different things about them."""
