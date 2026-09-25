@@ -1342,13 +1342,22 @@ public class DrawingFamilyReadAuditTests
     /// and hide a later collision behind an entry nobody needs.
     /// </summary>
     [Fact]
-    public void EveryNamedLiteralIsStillInTheSourceAndStillRefused()
+    public void EveryNamedLiteralIsStillInTheSourceAndStillRefused() =>
+        AssertEveryNamedLiteralIsStillInTheSourceAndRefused(NamedLiterals, DrawingFamilyDenylistTests.ExpectedMembers);
+
+    /// <summary>
+    /// The staleness check every read audit's named literals share (feature 011, decision 21A's T169):
+    /// each is still a literal of the product source, spelled exactly, and still refused by the table
+    /// its audit reads.
+    /// </summary>
+    internal static void AssertEveryNamedLiteralIsStillInTheSourceAndRefused(
+        IReadOnlyDictionary<string, string> named, IReadOnlyCollection<string> table)
     {
         IReadOnlyList<(string Literal, string Where)> literals = Literals();
-        foreach (KeyValuePair<string, string> named in NamedLiterals)
+        foreach (KeyValuePair<string, string> entry in named)
         {
-            Assert.Contains(literals, literal => string.Equals(literal.Literal, named.Key, StringComparison.Ordinal));
-            Assert.Contains(named.Key, DrawingFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains(literals, literal => string.Equals(literal.Literal, entry.Key, StringComparison.Ordinal));
+            Assert.Contains(entry.Key, table, StringComparer.OrdinalIgnoreCase);
         }
     }
 }

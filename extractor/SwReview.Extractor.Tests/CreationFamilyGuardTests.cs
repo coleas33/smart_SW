@@ -278,9 +278,73 @@ public class CreationFamilyDenylistTests
     }
 
     /// <summary>
+    /// T169, the review of 2026-09-25: members of the four interfaces whose API help says they
+    /// create something - a fillet corner feature, a scaled part, a named view, sketch relations,
+    /// split sketch segments, a geodesic sketch offset, a selection set, a 3D View, the features a
+    /// broken reference brings in - passed the guard bare, because the grammar does not reach them
+    /// and rule 2 did not name them. Each is a named creator of its own interface, so the generated
+    /// table, not this list, is what refuses it.
+    /// </summary>
+    [Theory]
+    [InlineData("IFeatureManager", "FilletXpertMakeCorner")]
+    [InlineData("IModelDoc2", "Scale")]
+    [InlineData("IModelDoc2", "NameView")]
+    [InlineData("IModelDoc2", "SkToolsAutoConstr")]
+    [InlineData("IModelDoc2", "SplitOpenSegment")]
+    [InlineData("IModelDoc2", "SplitClosedSegment")]
+    [InlineData("IModelDocExtension", "GeodesicSketchOffset")]
+    [InlineData("IModelDocExtension", "SaveSelection")]
+    [InlineData("IModelDocExtension", "Capture3DView")]
+    [InlineData("IModelDocExtension", "BreakAllExternalFileReferences2")]
+    public void TheCreatorsTheReviewFoundAreNamedCreatorsOfTheirInterfaceAndRefused(string family, string member)
+    {
+        Assert.Contains(Named, row => Names(row, family, member));
+        Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(member));
+        Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(family + "." + member));
+    }
+
+    /// <summary>
+    /// The grammar's two matches that create nothing (T169): a box selection of the sketch entities
+    /// already there, and the Add-In Manager. They stay refused - a denial fails closed, and allowing
+    /// them would be a widening, which is the owner's call - and the contract says so beside rule 1,
+    /// naming each by its interface, so its account of the grammar does not claim them as creators.
+    /// </summary>
+    [Theory]
+    [InlineData("IModelDocExtension", "SketchBoxSelect")]
+    [InlineData("IModelDoc2", "AddIns")]
+    public void TheGrammarsTwoMatchesThatCreateNothingStayRefusedAndTheContractSaysSo(string family, string member)
+    {
+        Assert.Contains(Table, row => Names(row, family, member));
+        Assert.Throws<MutatingCallError>(() => ReadOnlyGuard.Assert(member));
+        Assert.Contains("`" + family + "." + member + "`", OverReachParagraph(), StringComparison.Ordinal);
+    }
+
+    /// <summary>The heading of rule 1's paragraph on the grammar's matches that create nothing.</summary>
+    internal const string OverReachHeading = "**Two matches that create nothing**";
+
+    /// <summary>Whether <paramref name="row"/> is <paramref name="family"/>'s and names <paramref name="member"/>.</summary>
+    private static bool Names((string Family, string[] Members) row, string family, string member) =>
+        DrawingFamilyDenylistTests.InterfaceOf(row) == family && row.Members.Contains(member, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Rule 1's paragraph on the matches that create nothing, whitespace collapsed: from its heading
+    /// to rule 2, which follows it.
+    /// </summary>
+    private static string OverReachParagraph()
+    {
+        string text = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, AllowlistFileName)).Replace("\r\n", "\n");
+        int start = text.IndexOf(OverReachHeading, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"{Document} no longer carries the paragraph '{OverReachHeading}'.");
+        int end = text.IndexOf("\n2. ", start, StringComparison.Ordinal);
+        Assert.True(end > start, $"{Document}: the paragraph '{OverReachHeading}' is no longer followed by rule 2.");
+        return Regex.Replace(text.Substring(start, end - start), @"\s+", " ");
+    }
+
+    /// <summary>
     /// The reads beside the creation family stay allowed, spelled as their call sites name them to the
     /// gate: the lookups and calculator factories the grammar reaches, and the tree and body reads it
-    /// does not.
+    /// does not; and the selections beside the box selection the grammar refuses (T169), which are
+    /// how the product selects.
     /// </summary>
     [Theory]
     [InlineData("FeatureById")]
@@ -299,6 +363,10 @@ public class CreationFamilyDenylistTests
     [InlineData("GetEquationMgr")]
     [InlineData("IsNameUsed")]
     [InlineData("GetWhatsWrongCount")]
+    [InlineData("SelectByID2")]
+    [InlineData("SelectByRay")]
+    [InlineData("MultiSelect2")]
+    [InlineData("SelectAll")]
     public void TheReadsBesideThemStayAllowed(string member)
     {
         ReadOnlyGuard.Assert(member);
@@ -433,24 +501,35 @@ public class CreationFamilyCompletenessTests
 /// exempts (<see cref="ThrowawayPartExemptionTests"/>). The scan found, the day it was written,
 /// <c>FeatureFillet3</c>, <c>InsertSketch</c> and <c>CreateCircleByRadius</c> there and nothing anywhere
 /// else; the reads the grammar reaches (<c>CreateMassProperty2</c>, <c>CreateMeasure</c>,
-/// <c>FeatureFolderLocation</c>) are the table's exclusions.
+/// <c>FeatureFolderLocation</c>) are the table's exclusions. Since T169 one literal that calls nothing
+/// is named, as <see cref="DrawingFamilyReadAuditTests"/> names its own.
 /// </summary>
 public class CreationFamilyReadAuditTests
 {
     /// <summary>The probe host's file: the only file whose literals may name a denied creation member.</summary>
     internal const string ProbeHostFile = "SwRemodelProbeHost.cs";
 
+    /// <summary>
+    /// Literals the scan finds that the tables refuse and that call nothing, each with where it is and
+    /// why. Keyed case-insensitively, as the guard matches.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> NamedLiterals =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["scale"] = "Ir/DrawingSheet.cs: a JSON property name, matching IModelDoc2.Scale only by case (T169)",
+        };
+
     private static bool IsTheProbesOwnCreationCall((string Literal, string Where) literal) =>
         literal.Where == ProbeHostFile
         && RemodelProbeGuard.ThrowawayPartCreationMembers.Contains(literal.Literal, StringComparer.OrdinalIgnoreCase);
 
     [Fact]
-    public void NoLiteralOfTheProductSourceIsRefusedByTheTablesExceptTheProbesOwnCreationCalls()
+    public void NoLiteralOfTheProductSourceIsRefusedByTheTablesExceptTheProbesOwnCallsAndTheNamedOnes()
     {
         var table = new HashSet<string>(CreationFamilyDenylistTests.ExpectedMembers, StringComparer.OrdinalIgnoreCase);
         var refused = DrawingFamilyReadAuditTests.Literals()
             .Where(literal => table.Contains(DrawingFamilyReadAuditTests.Judged(literal.Literal)))
-            .Where(literal => !IsTheProbesOwnCreationCall(literal))
+            .Where(literal => !IsTheProbesOwnCreationCall(literal) && !NamedLiterals.ContainsKey(literal.Literal))
             .Select(literal => $"\"{literal.Literal}\" in {literal.Where}")
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -478,6 +557,15 @@ public class CreationFamilyReadAuditTests
         Assert.NotEmpty(granted);
         Assert.All(granted, member => Assert.Contains(member, RemodelProbeGuard.ThrowawayPartCreationMembers, StringComparer.OrdinalIgnoreCase));
     }
+
+    /// <summary>
+    /// Each named literal is still in the source and still refused by the tables, so the list cannot
+    /// go stale and hide a later collision behind an entry nobody needs.
+    /// </summary>
+    [Fact]
+    public void EveryNamedLiteralIsStillInTheSourceAndStillRefused() =>
+        DrawingFamilyReadAuditTests.AssertEveryNamedLiteralIsStillInTheSourceAndRefused(
+            NamedLiterals, CreationFamilyDenylistTests.ExpectedMembers);
 }
 
 /// <summary>
