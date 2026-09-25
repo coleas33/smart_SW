@@ -44,6 +44,12 @@ TODAY: dict[str, tuple[str, str, int]] = {
     "golden/fixtures/joint-unsupported": ("f8df1ccf2825d9d0", "aa122112190cbca9", 0),
     "golden/fixtures/mixed-units": ("4c1160b5d03154da", "c017d61574ee9ede", 0),
     "golden/fixtures/plate-stack": ("eab35adb4cb414ca", "8fcd0a985a2654c7", 0),
+    # Feature 004, decision 17A (T143): new with that round, pinned from its own output.
+    "golden/fixtures/remodel-plan/remodel-absorbed-sketches": (
+        "e1cd36bf8bce5dda",
+        "1e2f59b5fda3685c",
+        0,
+    ),
     "golden/fixtures/remodel-plan/remodel-cycle": ("05e828b7970bac7c", "04b9e6251a5d064c", 0),
     "golden/fixtures/remodel-plan/remodel-duplicate-names": (
         "02986fe1795b0812",

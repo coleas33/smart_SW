@@ -15,7 +15,9 @@ three things and re-creates nothing:
    grading the planner against a tree SOLIDWORKS cannot produce.
 3. one builder per tree the planner has to survive: a clean dependency chain, duplicate
    feature names, a shared sketch, a variable-radius fillet, an unclassified type, an
-   RMS-named folder holding the wrong members, and a derived subfolder.
+   RMS-named folder holding the wrong members, and a derived subfolder - plus
+   `absorbed_twice`, which lays a built package out the way the real dump lists an
+   absorbed sketch, twice (decision 17A).
 
 `scope_signals` is the fourth: the rows of `specs/004-resilient-remodeler/data-model.md`
 section 4.1 as a plain dict, because `ScopeSignals` itself is `remodel/scope.py`'s type
@@ -40,7 +42,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from swreview.ir.models import EvidencePackage, Gap
+from swreview.ir.models import EvidencePackage, Feature, Gap
 from tests.support.features import (
     EquationSpec,
     FeatureSpec,
@@ -363,6 +365,121 @@ def derived_subfolder_features() -> list[FeatureSpec]:
         ("Boss-Extrude1", "Rib1"),
         ("Boss-Extrude1", "Rib2"),
     )
+
+
+def absorbed_sketch_features() -> list[FeatureSpec]:
+    """Three sketches, each absorbed by one feature, and one fillet out of the method's order.
+
+    The subject of `absorbed_twice` (decision 17A): laid out as the flat walk lists it - each
+    sketch just before the feature that consumes it - so the only thing `absorbed_twice`
+    adds is the second listing. `Fillet1` belongs in `3-Core` and sits after the `4-Detail`
+    cut, so the plan has one real move to make and a planner that also moved a second
+    listing would show it.
+    """
+    return linked(
+        [
+            feature("Front Plane", "RefPlane"),
+            sketch_feature("Sketch1"),
+            feature("Boss-Extrude1", "Extrusion"),
+            sketch_feature("Sketch2"),
+            feature("Cut-Extrude1", "Cut"),
+            fillet_feature("Fillet1"),
+            sketch_feature("Sketch3"),
+            feature("Hole1", "HoleWzd"),
+        ],
+        ("Front Plane", "Sketch1"),
+        ("Sketch1", "Boss-Extrude1"),
+        ("Front Plane", "Boss-Extrude1"),
+        ("Boss-Extrude1", "Sketch2"),
+        ("Sketch2", "Cut-Extrude1"),
+        ("Boss-Extrude1", "Cut-Extrude1"),
+        ("Boss-Extrude1", "Fillet1"),
+        ("Front Plane", "Sketch3"),
+        ("Sketch3", "Hole1"),
+        ("Boss-Extrude1", "Hole1"),
+    )
+
+
+def absorbed_twice(package: EvidencePackage, *sketch_names: str) -> EvidencePackage:
+    """`package` as the real dump lists an absorbed sketch: twice (decision 17A).
+
+    `FeatureDumper` walks the tree with `FirstFeature`/`GetNextFeature` and, under every
+    feature, with `GetFirstSubFeature`/`GetNextSubFeature`. SOLIDWORKS lists an absorbed
+    sketch in both walks, and the real packages of 2026-09-25 carry exactly this shape for
+    every absorbed sketch, which this builder reproduces field for field:
+
+    - the depth-0 row stays where the flat walk put it, just before its consumer;
+    - a second row follows the consumer directly, at the consumer's depth plus one, with
+      `folder_id` naming the consumer and its own `feat:NNNN` in traversal order (so every
+      later id shifts by one, as the dumper's allocator does);
+    - the two rows carry the same `persist_ref`, name, type, description, sketch reading,
+      `parent_ids` and `child_ids`, because they are one feature read twice;
+    - every other row's edges name the **second** row's id and never the first, because the
+      dumper's handle index keeps the last id it gave a feature.
+
+    Refused rather than guessed: a name that is not exactly one depth-0 sketch of this
+    package, or a sketch without exactly one consumer listed after it - the shape is
+    "absorbed by one feature", and a fixture that is not that shape would test something
+    else under this name.
+    """
+    rows = list(package.features)
+    documents = {row.document_id for row in rows}
+    if len(documents) != 1:
+        raise ValueError(f"absorbed_twice lays out one part's tree; this one has {documents}")
+
+    positions = {row.id: position for position, row in enumerate(rows)}
+    consumed_by: dict[str, list[Feature]] = {}
+    for name in sketch_names:
+        matches = [row for row in rows if row.name == name]
+        if len(matches) != 1 or matches[0].sketch is None or matches[0].depth != 0:
+            raise ValueError(f"{name!r} is not exactly one depth-0 sketch of this package")
+        sketch = matches[0]
+        consumers = list(dict.fromkeys(sketch.child_ids or ()))
+        if len(consumers) != 1 or positions[consumers[0]] <= positions[sketch.id]:
+            raise ValueError(
+                f"{name!r} is not absorbed by exactly one feature listed after it; its "
+                f"children are {sketch.child_ids}"
+            )
+        consumed_by.setdefault(consumers[0], []).append(sketch)
+
+    listing: list[tuple[Feature, Feature | None]] = []
+    for row in rows:
+        listing.append((row, None))
+        listing.extend((sketch, row) for sketch in consumed_by.get(row.id, ()))
+
+    first = int(rows[0].id.split(":")[1])
+    new_id: dict[str, str] = {}
+    second_id: dict[str, str] = {}
+    for offset, (row, consumer) in enumerate(listing):
+        target = second_id if consumer is not None else new_id
+        target[row.id] = f"feat:{first + offset:04d}"
+
+    def edge(old: str) -> str:
+        # The dumper's handle index keeps the last id a feature was given.
+        return second_id.get(old, new_id[old])
+
+    def edges(old: Sequence[str] | None) -> list[str] | None:
+        return None if old is None else [edge(one) for one in old]
+
+    laid_out: list[Feature] = []
+    for index, (row, consumer) in enumerate(listing):
+        sketch = row.sketch
+        if sketch is not None and sketch.consumer_ids is not None:
+            sketch = sketch.model_copy(update={"consumer_ids": edges(sketch.consumer_ids)})
+        update: dict[str, Any] = {
+            "id": second_id[row.id] if consumer is not None else new_id[row.id],
+            "index": index,
+            "child_ids": edges(row.child_ids),
+            "parent_ids": edges(row.parent_ids),
+            "sketch": sketch,
+            "folder_id": None if row.folder_id is None else new_id[row.folder_id],
+        }
+        if consumer is not None:
+            update["depth"] = consumer.depth + 1
+            update["folder_id"] = new_id[consumer.id]
+        laid_out.append(row.model_copy(update=update))
+
+    return package.model_copy(update={"features": laid_out})
 
 
 # --- 4. Scope signals -------------------------------------------------------------

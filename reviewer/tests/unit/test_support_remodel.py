@@ -41,6 +41,8 @@ from tests.support.features import (
 )
 from tests.support.remodel import (
     SCOPE_SIGNAL_FIELDS,
+    absorbed_sketch_features,
+    absorbed_twice,
     dependency_chain_features,
     derived_subfolder_features,
     duplicate_name_features,
@@ -61,6 +63,7 @@ TYPE_TABLE = yaml.safe_load(
 )
 
 TREE_BUILDERS = {
+    "absorbed_sketch_features": absorbed_sketch_features,
     "dependency_chain_features": dependency_chain_features,
     "derived_subfolder_features": derived_subfolder_features,
     "duplicate_name_features": duplicate_name_features,
@@ -480,3 +483,98 @@ def test_a_fillet_spec_still_builds_outside_a_tree_builder() -> None:
 
     assert_round_trips(package)
     assert package.features[0].fillet is not None
+
+
+# --- the real dump's second listing of an absorbed sketch (decision 17A) ----------------
+
+ABSORBED = ("Sketch1", "Sketch2", "Sketch3")
+
+
+def absorbed_package() -> EvidencePackage:
+    return absorbed_twice(remodel_package(absorbed_sketch_features()), *ABSORBED)
+
+
+def listings(package: EvidencePackage, name: str) -> list[Feature]:
+    return [row for row in package.features if row.name == name]
+
+
+def test_absorbed_twice_builds_a_package_that_validates_and_round_trips() -> None:
+    assert_round_trips(absorbed_package())
+
+
+@pytest.mark.parametrize("name", ABSORBED)
+def test_each_absorbed_sketch_is_listed_at_depth_0_then_under_its_consumer(name: str) -> None:
+    """The verified shape: the top-level row just before the consumer, the second listing
+    directly after it, one level down, with `folder_id` naming the consumer."""
+    package = absorbed_package()
+    top, second = listings(package, name)
+    consumer = package.features[top.index + 1]
+
+    assert (top.depth, top.folder_id) == (0, None)
+    assert top.child_ids == [second.child_ids[0]] == [consumer.id]
+    assert second.index == consumer.index + 1
+    assert (second.depth, second.folder_id) == (consumer.depth + 1, consumer.id)
+
+
+@pytest.mark.parametrize("name", ABSORBED)
+def test_the_two_listings_are_one_feature_read_twice(name: str) -> None:
+    top, second = listings(absorbed_package(), name)
+
+    for field in (
+        "persist_ref",
+        "persist_ref_scope",
+        "type_name",
+        "description",
+        "parent_ids",
+        "child_ids",
+        "sketch",
+        "suppressed",
+        "error_code",
+    ):
+        assert getattr(top, field) == getattr(second, field), field
+    assert top.id != second.id
+
+
+def test_every_edge_names_the_second_listing_and_never_the_first() -> None:
+    """The dumper's handle index keeps the last id a feature was given, so on a real
+    package no edge names the top-level row of an absorbed sketch."""
+    package = absorbed_package()
+    named = [
+        one
+        for row in package.features
+        for one in (*(row.parent_ids or ()), *(row.child_ids or ()))
+    ]
+    for name in ABSORBED:
+        top, second = listings(package, name)
+        assert top.id not in named
+        assert second.id in named
+
+
+def test_the_ids_run_in_traversal_order_after_the_second_listings() -> None:
+    package = absorbed_package()
+
+    assert [row.index for row in package.features] == list(range(len(package.features)))
+    assert [row.id for row in package.features] == [
+        f"feat:{number:04d}" for number in range(1, len(package.features) + 1)
+    ]
+
+
+def test_absorbed_twice_adds_one_row_per_sketch_and_changes_no_other_reading() -> None:
+    base = remodel_package(absorbed_sketch_features())
+    package = absorbed_package()
+
+    assert len(package.features) == len(base.features) + len(ABSORBED)
+    assert [row.persist_ref for row in package.features if row.depth == 0] == [
+        row.persist_ref for row in base.features
+    ]
+
+
+@pytest.mark.parametrize("name", ["Boss-Extrude1", "Missing"])
+def test_absorbed_twice_refuses_a_name_that_is_not_one_depth_0_sketch(name: str) -> None:
+    with pytest.raises(ValueError, match="not exactly one depth-0 sketch"):
+        absorbed_twice(remodel_package(absorbed_sketch_features()), name)
+
+
+def test_absorbed_twice_refuses_a_sketch_with_two_consumers() -> None:
+    with pytest.raises(ValueError, match="not absorbed by exactly one feature"):
+        absorbed_twice(remodel_package(shared_sketch_features()), "Sketch1")

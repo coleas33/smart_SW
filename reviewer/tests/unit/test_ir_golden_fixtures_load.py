@@ -174,6 +174,45 @@ They are allowed **only** as untracked (`??`), unless they are named in
 golden of this feature's own that moved after it was written, and fails.
 """
 
+REMODEL_PLAN_CASES: tuple[str, ...] = (
+    "remodel-cycle",
+    "remodel-duplicate-names",
+    "remodel-ordered",
+    "remodel-pinned",
+    "remodel-refusal-3d-interconnect",
+    "remodel-refusal-mesh-body",
+    "remodel-refusal-multibody",
+    "remodel-refusal-rms-folder",
+    "remodel-refusal-sheet-metal",
+    "remodel-refusal-two-signals",
+    "remodel-refusal-weldment",
+    "remodel-reversed",
+    "remodel-unplaceable",
+)
+"""Feature 004's thirteen remodel-plan goldens as T030 committed them, named one by one."""
+
+DECISION_17A_NEW_CASES: tuple[str, ...] = ("remodel-absorbed-sketches",)
+"""The remodel-plan goldens feature 004 adds under the owner's decision 17A (2026-09-25):
+T143's real-shape fixture. Held to `??` exactly as this feature's own new goldens are."""
+
+REWRITTEN_BY_DECISION_17A: frozenset[str] = frozenset(
+    {"fixtures/remodel-plan/generate_packages.py"}
+    | {f"test_golden/{case}.yml" for case in REMODEL_PLAN_CASES}
+)
+"""The committed remodel-plan goldens decision 17A rewrites, named one by one.
+
+Every plan now carries the `second listings` coverage item (T143), which is the only line
+each of the thirteen baselines gains, and the generator gains the cases and the layout it
+writes. Their packages are static inputs and do not move. The same allowance
+`REWRITTEN_BY_THE_DRAWING_CHECKS` is, for another feature's round: it names nothing outside
+`remodel-plan`, and it expires the moment the round is committed.
+"""
+
+DECISION_17A_NEW_PATHS: frozenset[str] = frozenset(
+    [f"fixtures/remodel-plan/{case}/" for case in DECISION_17A_NEW_CASES]
+    + [f"test_golden/{case}.yml" for case in DECISION_17A_NEW_CASES]
+)
+
 GOLDEN_HARNESS: frozenset[str] = frozenset({"test_golden.py", "test_standards_goldens.py"})
 """The two modules in that tree that are code rather than artefact, named so that they are
 accounted for rather than dropped by a directory filter.
@@ -373,14 +412,14 @@ def test_the_golden_tree_holds_only_this_feature_s_new_goldens() -> None:
     """
     changed = golden_tree_status()
 
-    allowed = NEW_GOLDEN_PATHS | GOLDEN_HARNESS | REWRITTEN_BY_THE_DRAWING_CHECKS
+    new = NEW_GOLDEN_PATHS | DECISION_17A_NEW_PATHS
+    rewritten = REWRITTEN_BY_THE_DRAWING_CHECKS | REWRITTEN_BY_DECISION_17A
+    allowed = new | GOLDEN_HARNESS | rewritten
     stray = [f"{status} {path}" for status, path in changed if path not in allowed]
     drifted = [
         f"{status} {path}"
         for status, path in changed
-        if path in NEW_GOLDEN_PATHS
-        and status != "??"
-        and path not in REWRITTEN_BY_THE_DRAWING_CHECKS
+        if path in new and status != "??" and path not in rewritten
     ]
 
     assert stray == [], f"the golden tree moved outside this feature: {stray}"

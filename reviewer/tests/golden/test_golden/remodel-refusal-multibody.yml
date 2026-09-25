@@ -10,6 +10,10 @@ result:
     reason: 'solid_body_count is 2: the geometry gate cannot pair bodies unambiguously
       across a change, so a multibody part is refused'
   - feature_ids: []
+    item: second listings
+    reason: no row of the dump is a second listing of a top-level feature, so every
+      row is planned as its own feature
+  - feature_ids: []
     item: target group
     reason: 0 of 3 content feature(s) have no target group; the judgement phase has
       not run, and an undecided feature is never moved

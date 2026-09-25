@@ -45,6 +45,24 @@ ever asserted in a unit test is a reason no artifact has ever been read for:
 | `remodel-unplaceable` | `radius_unreadable`, `unclassified`, `graph_unreadable` |
 | | and `shared_sketch`, in one tree |
 
+**Added 2026-09-25 (decision 17A, T143)**, from a defect the real packages showed:
+
+| Fixture | What the plan must show |
+|---|---|
+| `remodel-absorbed-sketches` | the real dump's second listing of every absorbed sketch |
+| | (`absorbed_twice`) planned once: one target per feature, no |
+| | rename, one move, and the `second listings` coverage item |
+
+Only the cases named on the command line are written, all of them when none is named:
+
+    uv run python tests/golden/fixtures/remodel-plan/generate_packages.py remodel-absorbed-sketches
+
+The original thirteen were written at IR 1.2.0 and are static inputs now: the golden gate
+(`tests/unit/test_ir_golden_fixtures_load.py`) holds every golden to a schema before 1.4.0,
+and rewriting them would move nothing but their stamp. A package written today is stamped
+`WRITTEN_AT` - the last minor before 1.4.0, whose members (the reuse fields, null here) are
+the newest this builder writes when every later member is empty.
+
 Every reason id in a baseline is hand-checked against the closed taxonomy of
 `data-model.md` section 1.5 (`backward_reference`, `shared_sketch`, `splits_group`,
 `cycle`, `radius_unreadable`, `ambiguous_name`, `unclassified`, `graph_unreadable`) and
@@ -55,7 +73,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +89,8 @@ from tests.support.features import (  # noqa: E402
 )
 from tests.support.remodel import (  # noqa: E402
     UNKNOWN_TYPE_NAME,
+    absorbed_sketch_features,
+    absorbed_twice,
     linked,
     remodel_package,
     scope_signals,
@@ -78,8 +98,10 @@ from tests.support.remodel import (  # noqa: E402
 
 from swreview.checks.rms_types import load_table  # noqa: E402
 from swreview.ir.loader import save_package  # noqa: E402
+from swreview.ir.models import EvidencePackage  # noqa: E402
 
 CALLABLE = "swreview.checks.golden_remodel:plan_case"
+WRITTEN_AT = "1.3.0"
 TABLE = load_table()
 REF, CONSTRUCTION, CORE, DETAIL, MODIFY, QUARANTINE = TABLE.groups
 
@@ -314,15 +336,26 @@ CASES: tuple[tuple[str, list[FeatureSpec], dict[str, Any] | None], ...] = (
     ),
     ("remodel-cycle", cycle(), None),
     ("remodel-unplaceable", unplaceable(), None),
+    ("remodel-absorbed-sketches", absorbed_sketch_features(), None),
 )
 """Every fixture: its directory name, its tree, and the scope signals the probe would have
 read. `None` signals is the dry run's own answer - nothing was read, and the gate says so
 of each signal in turn."""
 
+LAYOUTS: dict[str, Callable[[EvidencePackage], EvidencePackage]] = {
+    "remodel-absorbed-sketches": lambda package: absorbed_twice(
+        package, "Sketch1", "Sketch2", "Sketch3"
+    ),
+}
+"""The fixtures whose package is laid out after it is built, the way a real dump lists it:
+the second listing of every absorbed sketch (decision 17A)."""
+
 
 def write(name: str, features: Sequence[FeatureSpec], signals: dict[str, Any] | None) -> None:
     directory = FIXTURE_DIR / name
-    save_package(remodel_package(list(features), name=name), directory)
+    package = remodel_package(list(features), name=name)
+    package = LAYOUTS.get(name, lambda built: built)(package)
+    save_package(package.model_copy(update={"schema_version": WRITTEN_AT}), directory)
     case: dict[str, Any] = {"callable": CALLABLE}
     if signals is not None:
         case["kwargs"] = {"signals": signals, "probe_id": f"probe:{name}"}
@@ -332,10 +365,15 @@ def write(name: str, features: Sequence[FeatureSpec], signals: dict[str, Any] | 
     print(f"wrote {directory}")
 
 
-def main() -> None:
+def main(names: Sequence[str]) -> None:
+    known = {name for name, _, _ in CASES}
+    unknown = sorted(set(names) - known)
+    if unknown:
+        raise SystemExit(f"no such case {unknown}; the cases are {sorted(known)}")
     for name, features, signals in CASES:
-        write(name, features, signals)
+        if not names or name in names:
+            write(name, features, signals)
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

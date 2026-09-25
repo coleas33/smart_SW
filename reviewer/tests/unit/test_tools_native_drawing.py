@@ -66,6 +66,8 @@ TODAY: dict[str, str] = {
     "golden/fixtures/joint-unsupported": "49126b32cbbb2628",
     "golden/fixtures/mixed-units": "e0c95d9d1db0b529",
     "golden/fixtures/plate-stack": "b073c80e46fe3789",
+    # Feature 004, decision 17A (T143): new with that round, pinned from its own output.
+    "golden/fixtures/remodel-plan/remodel-absorbed-sketches": "8b1de92b1250a72d",
     "golden/fixtures/remodel-plan/remodel-cycle": "8b1de92b1250a72d",
     "golden/fixtures/remodel-plan/remodel-duplicate-names": "8b1de92b1250a72d",
     "golden/fixtures/remodel-plan/remodel-ordered": "8b1de92b1250a72d",
