@@ -43,6 +43,7 @@ from swreview.findings import Finding, finding_subject_key
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
 from swreview.ir.models import EvidencePackage, SourceRef
 from swreview.report.session import load_session
+from tests.support.features import AssemblySpec, rms_package
 from tests.support.narrowed import (
     BOSS,
     CORE,
@@ -55,6 +56,7 @@ from tests.support.narrowed import (
     loose_findings,
     older_table,
     part_package,
+    part_spec,
     record,
     row_named,
     swap_reference,
@@ -436,6 +438,70 @@ def test_a_finding_with_no_reference_is_compared_as_before(tmp_path: Path) -> No
 
     assert [item.check for item in report.findings.lost] == [folders]
     assert [item.check for item in report.findings.added] == [folders]
+
+
+# --- what narrowing does not compare (review of decision 25A, 008 T129) -------------------------
+
+
+@pytest.mark.parametrize("other", [HISTORY, CORE])
+def test_a_removed_subject_swapped_for_another_row_that_is_not_content_narrows(
+    run: Path, other: str
+) -> None:
+    """Narrowing removes each location whose reference names only rows the current table does
+    not count, whichever rows they are, and compares the locations that remain: the recorded
+    system subject swapped for `History` - tolerated by both tables, so never a subject - or for
+    the folder `3-Core` narrows exactly as the unedited finding does. The removed locations are
+    compared with nothing; today's code names none of those rows in any finding. Whether
+    narrowing should demand more of them is the owner's question (T129)."""
+    swap_reference(run, SENSORS, other)
+
+    report = replay(run, requested=ALL_OFF)
+
+    assert [(item.check, item.removed_locations) for item in report.findings.narrowed] == [
+        (LOOSE, 1)
+    ]
+    assert (report.findings.lost, report.findings.added) == ([], [])
+
+
+OTHER_PART = "doc:4"
+
+
+def row_of(package: EvidencePackage, document_id: str, name: str) -> Any:
+    [row] = [r for r in package.features if (r.document_id, r.name) == (document_id, name)]
+    return row
+
+
+def test_a_removed_subject_in_another_documents_scope_narrows(tmp_path: Path, older: Path) -> None:
+    """`not_content_locations` holds every document's rows, so a location of the first part's
+    finding moved to the second part's system row - scope and reference - is removed too."""
+    parts = [part_spec(PART), part_spec(OTHER_PART, "cover")]
+    package = rms_package(parts=parts, assembly=AssemblySpec())
+    run = record(tmp_path / "run", package, older)
+    here = row_of(package, PART, SENSORS).persist_ref
+    there = row_of(package, OTHER_PART, SENSORS).persist_ref
+
+    def elsewhere(session: dict[str, Any]) -> None:
+        for finding in session["findings"]:
+            for location in finding["drawing_locations"] if finding["check"] == LOOSE else []:
+                if (location["document_id"], location.get("persist_ref")) == (PART, here):
+                    location.update(document_id=OTHER_PART, persist_ref=there)
+
+    rewrite_session(run, elsewhere)
+    moved = [
+        location
+        for finding in loose_findings(run)
+        for location in finding.drawing_locations
+        if location.persist_ref == there
+    ]
+    assert len(moved) == 2, "the second part's own finding and the edited location"
+
+    report = replay(run, requested=ALL_OFF)
+
+    assert [(item.check, item.removed_locations) for item in report.findings.narrowed] == [
+        (LOOSE, 1),
+        (LOOSE, 1),
+    ]
+    assert (report.findings.lost, report.findings.added) == ([], [])
 
 
 # --- the rule's parts ---------------------------------------------------------------------------

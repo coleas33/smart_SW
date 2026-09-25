@@ -44,6 +44,7 @@ __all__ = [
     "loose_findings",
     "older_table",
     "part_package",
+    "part_spec",
     "record",
     "row_named",
     "swap_reference",
@@ -77,21 +78,7 @@ def part_package(
     `share=(name, other)` gives the row `name` the persistent reference of the row `other`, as
     real packages share one reference between system folders. `document_id` names the part.
     """
-    package = rms_package(
-        parts=[
-            PartSpec(
-                document_id=document_id,
-                name="housing",
-                features=[
-                    feature(SENSORS, SYSTEM_TYPE),
-                    feature(WIDGET, "Frobnicate"),
-                    feature(HISTORY, "HistoryFolder"),
-                    folder(CORE, feature(BOSS, "Extrusion")),
-                ],
-            )
-        ],
-        assembly=AssemblySpec(),
-    )
+    package = rms_package(parts=[part_spec(document_id)], assembly=AssemblySpec())
     if share is None:
         return package
     name, other = share
@@ -103,6 +90,21 @@ def part_package(
                 for row in package.features
             ]
         }
+    )
+
+
+def part_spec(document_id: str = PART, name: str = "housing") -> PartSpec:
+    """The part `part_package` holds, as `document_id` named `name`: `Sensors`, `Widget1` and
+    `History` above the core group, which holds `Boss1`."""
+    return PartSpec(
+        document_id=document_id,
+        name=name,
+        features=[
+            feature(SENSORS, SYSTEM_TYPE),
+            feature(WIDGET, "Frobnicate"),
+            feature(HISTORY, "HistoryFolder"),
+            folder(CORE, feature(BOSS, "Extrusion")),
+        ],
     )
 
 
@@ -130,15 +132,17 @@ def record(
     package: EvidencePackage,
     table: Path | None = None,
     turns: Sequence[TurnPlan] = SCRIPT,
+    **start_review_kwargs: Any,
 ) -> Path:
     """A scripted recording of `package` in the new folder `out`, made by `table` (the shipped
-    one when `None`) playing `turns`. The package is saved beside `out`, in `<out>-package`."""
+    one when `None`) playing `turns`, with any other `start_review` keyword (levers, a previous
+    session to carry from). The package is saved beside `out`, in `<out>-package`."""
     package_dir = out.with_name(f"{out.name}-package")
     save_package(package, package_dir)
     with pytest.MonkeyPatch.context() as patched:
         if table is not None:
             patched.setattr(rms_types, "DEFAULT_TYPES_PATH", table)
-        return record_scripted_review(out, package_dir, turns)
+        return record_scripted_review(out, package_dir, turns, **start_review_kwargs)
 
 
 def loose_findings(run: Path) -> list[Finding]:
