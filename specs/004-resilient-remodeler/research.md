@@ -1067,7 +1067,11 @@ Two operational rules, and a third added by the owner's decision 22A (2026-09-25
   reason a discard of such a run sends no `remodel.close` through the new attachment, whose
   session, if it holds one, is another plan's (004 T168, found while implementing T160). What the
   discarded session leaves on the seat - the toggles `remodel.open` set and the copy still open -
-  is 004 T167, not decided.
+  is 004 T167, not decided. *Amended 2026-09-25 (owner, decision 24A; 004 T170):* the engineer is
+  told as soon as the plan is lost rather than at the next Start. The host hears of every
+  tool-service attach and detach, so it posts `remodel.plan_lost` for the plan on screen once
+  that plan's attachment is gone, and the page disables Start and offers Plan again; `SessionLost`
+  stays the backstop. Not yet in effect until T170 lands.
 
 ---
 
