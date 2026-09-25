@@ -1243,6 +1243,29 @@ def test_the_featureworks_block_prints_its_one_line_on_any_machine(
     )
 
 
+def test_the_seat_plan_names_decision_17as_tasks_where_they_meet_the_sitting(plan: str) -> None:
+    """Decision 17A's tasks landed on main the same day as 18A's seat plan and meet the sitting in
+    four places, where the plan and the handover name them by id. FeatureWorks ships with every
+    seat tier (004 T149), so step 1.7 records whether the add-in is there, not which tier has it;
+    the planner refuses a derived or mirrored part (004 T147), so row P asks for neither; T003's
+    packages replace 004 T148's provisional counts; and the stage-1 runs also wait on 004 T152 to
+    T160, the production seat adapter, which is not built."""
+    record = re.sub(r"\s+", " ", step(plan, "1.7"))
+    row_p = next(line for line in plan.splitlines() if line.startswith("| P |"))
+    later = plan[plan.index("## Not in this sitting") : plan.index("Open seat or key tasks")]
+    handover = re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
+    featureworks = handover[handover.index("19. **004 T164") : handover.index("20. **004 T003")]
+    adapter = {("004", f"T{number}") for number in range(152, 161)}
+
+    for text in (record, featureworks):
+        assert ("004", "T149") in qualified_tasks(text)
+        assert "the last two" not in text and "Professional or Premium seat" not in text
+    assert ("004", "T147") in qualified_tasks(row_p) and "mirrored" in row_p
+    assert ("004", "T148") in qualified_tasks(later)
+    assert adapter <= earlier_tasks_not_asked(plan)
+    assert {("004", "T148"), *adapter} <= qualified_tasks(handover)
+
+
 def test_the_owners_parts_give_004_t003_its_packages_and_no_name(plan: str) -> None:
     """Row P asks the owner for three to five parts, one with a long feature tree; step 5.1
     presses Model check on each, checks the folder holds the package the dry run reads, says

@@ -185,7 +185,7 @@ handover folder and travel by hand; they are never pushed.
 | K | an assembly in which one part's same-name drawing sits closed beside it (K-1), and two other parts (K-2, K-3) are each shown by two drawings you will open | step 4.6 |
 | L | a weldment or sheet-metal part, if one exists (006 T105's cut-list item) | step 3.2 |
 | M | a part and an assembly that each have at least two configurations (A-pin and A will do if they have) | step 4.4 |
-| P | three to five real parts **the owner names** for 004 T003's dry run (P-1 to P-5), each a part file on its own, not an assembly: ordinary single-body parts built in SOLIDWORKS (an import has no tree to reorganize, and stage 1 refuses multibody, weldment, sheet-metal and derived parts, so they would count for little). At least one has a long feature tree (the longest the owner knows, 150 features or more if there is one; write which letter), and, as `specs/004-resilient-remodeler/phase0-decision.md` section 4 asks, they are not all tidy: one the owner thinks badly organized, and one already sorted by hand into group folders if there is one. Their paths go in `notes\paths.txt` like every letter's, so the fingerprints cover them | step 5.1 |
+| P | three to five real parts **the owner names** for 004 T003's dry run (P-1 to P-5), each a part file on its own, not an assembly: ordinary single-body parts built in SOLIDWORKS (an import has no tree to reorganize, and stage 1 refuses multibody, weldment, sheet-metal, derived and mirrored parts, the planner refusing the last two by their base feature (004 T147), so they would count for little). At least one has a long feature tree (the longest the owner knows, 150 features or more if there is one; write which letter), and, as `specs/004-resilient-remodeler/phase0-decision.md` section 4 asks, they are not all tidy: one the owner thinks badly organized, and one already sorted by hand into group folders if there is one. Their paths go in `notes\paths.txt` like every letter's, so the fingerprints cover them | step 5.1 |
 
 For step 3.1's Standards probe (006 T101 and T102), also write in `notes\documents.txt`, under A
 and under B, what SOLIDWORKS shows in them as they stand:
@@ -623,8 +623,10 @@ when it is set to load at every start for this Windows account (`0` not, `none` 
 Then in SOLIDWORKS, Tools > Add-ins: find **FeatureWorks** in the list and note whether its two
 boxes are ticked, **Active** (loaded now) and **Start Up** (loaded at every start). **Change no
 box**, and close the dialog with **Cancel**, never OK. Last, from Help > About (step 1.6), note
-which product the seat runs: SOLIDWORKS Standard, Professional or Premium (FeatureWorks comes with
-the last two).
+which product the seat runs: SOLIDWORKS Standard, Professional or Premium. FeatureWorks ships with
+all three (004 T149), so the product is noted for the record and the two boxes are the answer.
+Nothing in this build calls FeatureWorks: the product's read-only guard refuses its recognition
+calls (004 T151).
 
 Any answer passes: this is a record, and `installed False` or no FeatureWorks in the list is an
 answer, not a fail. Write `blocked` only when neither the line nor the dialog could be read (the
@@ -2024,7 +2026,7 @@ For the development machine, once the folder comes back:
 | 006 | 006 T100, the audit half | the development machine scans the returned run folders for the owner's profile values before 008 T101 is ticked; the seat does the profile entry (steps 2.2 and 2.4) |
 | 010, 011 | setting either switch; 010 T104's and T106's counts | the development machine, as sections 3.10, 3.1 and 4.2 say |
 | 006 | PROBE-1 to PROBE-3 into research R4; `TRANSPARENCY_POLARITY`'s flip | the development machine, from step 3.1's two Standards probe reports |
-| 004 | 004 T003's dry run itself; the re-modeler probes' verdicts into the record | the development machine: `swreview remodel plan` over each `package.json` of step 5.1's P folders, counts only (`specs/004-resilient-remodeler/phase0-decision.md` section 4); the verdicts and raw readings of step 5.6's three answers files, as quickstart Scenario 4 says |
+| 004 | 004 T003's dry run itself; the re-modeler probes' verdicts into the record | the development machine: `swreview remodel plan` over each `package.json` of step 5.1's P folders, counts only, each part by its letter and never its file name, into T003's table (`specs/004-resilient-remodeler/phase0-decision.md` section 4), where they replace 004 T148's provisional counts (its section 4.1, taken from other parts the development machine already held); the verdicts and raw readings of step 5.6's three answers files, as quickstart Scenario 4 says |
 
 Open seat or key tasks of earlier features, not asked this time:
 
@@ -2037,7 +2039,7 @@ Open seat or key tasks of earlier features, not asked this time:
 | 002 | 002 T055a, 002 T063 | the Ask tab's terminal (Codex, Gemini CLI): the Ask tab is hidden in this build |
 | 002 | 002 T067 | every quickstart scenario of feature 002 end to end: a sweep of its own |
 | 003 | 003 T062, 003 T088, 003 T089 | the RMS fixture parts and their probes; step 5.1 touches Model check on J and the owner's parts only |
-| 004 | 004 T135 to T141 | the re-modeler's stage-1 runs: the Remodel tab is off in this build (step 5.3 checks exactly that) |
+| 004 | 004 T135 to T141 | the re-modeler's stage-1 runs: the Remodel tab is off in this build (step 5.3 checks exactly that), and they wait on 004 T152 to T160, the production seat adapter and its wiring (decision 17A), which is not built yet |
 | 005 | 005 T025 to T030 | the live usage probes: their test files are not written yet |
 | 005 | 005 T034, 005 T036 | building `rms-part` and the benchmark baseline: benchmark work |
 | 005 | 005 T085a | the workstation A/B harness: not built |
