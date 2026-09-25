@@ -1379,7 +1379,13 @@ compared with the recorded size, it confuses the scramble with the change the re
   recording's own package says what each names.
 - The recorded finding must then equal a current finding exactly - check, components, the
   remaining locations, entity inputs and configuration - and one that nothing else matched, one
-  to one in recorded order; a second recorded finding narrowing onto it stays lost.
+  to one in recorded order; a second recorded finding narrowing onto it stays lost. *Amended
+  2026-09-25 on review (T128):* "exactly" is the key's exactness, no more. A key's location
+  carries no persistent reference (R2.8), so an RMS finding's remaining locations compare as a
+  count per scope: a content subject lost or gained is seen, and one swapped for another in the
+  same scope at the same count is not - as the exact comparison does not see it for any finding.
+  Whether narrowing should also compare the references is the owner's question, T128; on the
+  three recordings every narrowed finding's current finding carries the same references.
 - It applies only to `rms.*` findings, the family the type table decides, and only to a finding
   that would otherwise be lost; reclassification and the step's class are decided first.
 - Every narrowed finding is listed with its step and the number of locations removed, so the
@@ -1391,6 +1397,11 @@ that call's raw result: the same 5,000 tokens and 5%. For every call the current
 that was already the comparison. For a call it changed, the recorded size mixed the code change
 into the measure, which excused nothing and failed a correct fixture; now the call is held to the
 same bar about its scramble. The recorded size still starts each round's usage adjustment.
+*Amended 2026-09-25 on review (T127):* except for the live call, whose raw result is the
+generator's own fictional rows measured against themselves; the recorded size was the only check
+that those rows reach the recorded result (on the big recording without `--groups 113`, 2,129
+tokens against 17,015, which the bar as landed let through). The live call is now held to both:
+its raw result and, from 5,000 tokens, its recorded size (`contracts/replay.md` section 8).
 
 **Measured before implementing** (a probe with the eleven tolerated, on the three recordings):
 every recorded finding that would read as lost narrows - 20, 2 and 1, removing 106, 10 and 5
@@ -1404,7 +1415,7 @@ that need a profile).
 |---|---|
 | Leave the checker as decision 17A has it, the planner alone tolerating the eleven | Two lists of what is content, which decision 20A removes; and every later table change would meet the same wall. |
 | Remove a location when **any** row its reference names is not content | A reference a content row shares would drop a content subject unseen. |
-| Narrow on type names, or drop locations from RMS keys altogether | The key's locations are what tell a finding's subjects apart; dropping them would hide a content subject that moved for any other reason. |
+| Narrow on type names, or drop locations from RMS keys altogether | The key's locations are what count a finding's subjects in each scope (*corrected 2026-09-25 on review:* this said they tell the subjects apart, which a location without its persistent reference cannot, T128); dropping them would hide a content subject lost or gained for any other reason. |
 | Narrow the requested pass's findings too | The current finding is what the current table says; narrowing it would let a finding that gained a subject pass unseen. |
 | A hand-kept list of the 20, 2 and 1 | The rule says which; a list beside it drifts, and the next table change needs another. |
 | Widen the 5% bar, or skip it for a result the code changed | The first hides a scramble that distorts by 10%; the second exempts exactly the results a regeneration rewrites. |
@@ -1471,6 +1482,7 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 | SC-001 (owner 2026-09-23, decision 3A) | the fixtures within 1% of their recorded input; the recordings within 1% too (R2.12) | the fixtures regenerated when a change is deliberate and still within 1%; the recordings' drift equal to the size change of the results each round carries | R2.54, R2.55 |
 | `contracts/replay.md` sections 8 and 9 (decision 3A) | the generator refuses a recorded finding it cannot reproduce; the fixtures' replay reclassifies 3, 2 and 0 | the generator reclassifies a touching group recorded as a contact, by the replay's rule; the regenerated fixtures record 3, 2 and 0 contacts and their replay reclassifies none | R2.56 |
 | `contracts/replay.md` sections 5, 7, 8 and 10 (owner 2026-09-25, decision 23A) | a recorded RMS finding that lost only subjects the type table stopped counting read as lost plus added; the generator's 5% bar compared a large result with its recorded size | such a finding is narrowed, listed with the locations removed, by one rule the replay and the generator share; the bar compares the fixture's result with the current code's result on the raw recorded package. The spec's text is unchanged: SC-001 names no outcome, and FR-005's lost and added keep their meaning (a narrowed finding is neither, as a reclassified one is neither) | R2.58 |
+| `contracts/replay.md` sections 5, 8 and 9 (review of decision 23A, 2026-09-25; T127) | the size bar held the live call to its raw result, its own fictional rows; section 5 read as if narrowing told subjects apart; the big fixture's recorded total was pinned within 1% | the live call is also held to its recorded size; narrowing sees what the key sees, a count of locations per scope, and whether it should compare references too is T128; the recorded total and the follow-up round's recorded input are pinned exactly. The spec's text is unchanged | R2.58 |
 
 ## R5. Open items that stay open
 
@@ -1492,3 +1504,4 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 | `groups_of` is recomputed per group call, quadratic in groups; the perf test in T041 guards 1,000 groups | T041 | nothing unless red |
 | An earlier scratch estimate put mate persist references at about 1,284 characters each; measured mean 781, max 1,656; no budget here uses the old figure | none | nothing |
 | SC-010: a licensed seat, the real standards profile placed first (006 T100), a paid review of each recorded assembly | owner | Phase 8 |
+| Whether a narrowed finding's remaining locations must also carry the persistent references of the current finding it takes (T128, review of decision 23A) | owner | nothing: every narrowed finding on the three recordings has a current finding with the same references |
