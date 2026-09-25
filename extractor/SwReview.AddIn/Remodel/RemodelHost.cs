@@ -1115,7 +1115,15 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
-        IRemodelPipeline? pipeline = _options.Pipeline;
+        // T168 (decision 22A): `remodel.close` names no run - the bridge closes whatever session
+        // its dispatcher holds - so the copy is closed only through the attachment this run's
+        // plan was made on, by Start's own predicate. When that attachment is gone, the run's
+        // session went with it, and a close sent through the one listening now would close the
+        // copy of whichever plan was made there. The folder is deleted either way.
+        IRemodelPipeline? pipeline =
+            SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment())
+                ? _options.Pipeline
+                : null;
         try
         {
             DeleteCopyFolder(pipeline, run.RunDirectory);
@@ -1336,6 +1344,10 @@ public sealed class RemodelHost : IDisposable
     /// refuses (`contracts/bridge-remodel.md`), which reaches the host as `copy_present: false`.
     /// The close is still attempted - the host does not know which half the bridge managed -
     /// and a folder that is not there is left alone.
+    ///
+    /// A null <paramref name="pipeline"/> closes nothing and still deletes the folder: the
+    /// add-in is not attached, or (T168, decision 22A) the run's tool-service attachment is gone
+    /// and nothing of its session is left to close through another.
     /// </summary>
     private static void DeleteCopyFolder(IRemodelPipeline? pipeline, string runDirectory)
     {
