@@ -462,6 +462,28 @@ would lose the evidence Principle VI asks for and "what did it propose" must sta
 the engineer says no. The system toggles are restored in the `finally` that wraps the run,
 including on recovery from a previous run that died.
 
+### The session and the tool service's attachment
+
+*Added 2026-09-25 (owner, decision 22A; 004 T160).* The run's `RemodelSession` lives on the
+`SwBridgeDispatcher` that answered `remodel.open`, and there is one dispatcher per tool-service
+attachment: `ToolServiceHost.Start` builds one, behind a pipe name minted fresh for that start.
+When the add-in re-attaches the tool service (`ToolServiceGate.FollowDocument`, on a document
+switch with nothing holding the bridge), the old dispatcher goes with its pipe and the new one
+has no session. **The session does not survive the re-attach**; nothing in this protocol carries
+it across, and no command is added to do so.
+
+The pane refuses Start first: `RemodelHost` records the attachment each plan was made on and
+answers `remodel.start` with `SessionLost` when it is not the one listening now, before any
+`remodel.*` command is sent (`pane-remodel-messages.md`, decision 22A). This page's own refusal
+is the backstop for the one window the pane cannot close - a re-attach that lands between the
+pane's check and the backend's first bridge call: every command after `remodel.open` reaches a
+dispatcher with no session and is answered `target_mismatch` ("remodel.open has not returned in
+this bridge session") before any write, so the run changes nothing either way.
+
+What the discarded session leaves on the seat - the system toggles `remodel.open` set, and the
+copy still open in SOLIDWORKS, since neither the dispatcher nor `ToolServiceHost.Dispose` ends a
+session - is 004 T167, not decided.
+
 ## Error codes
 
 `result.error_code` on `status: "error"`. Each maps to one Python class in
