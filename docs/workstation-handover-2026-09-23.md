@@ -304,8 +304,9 @@ row per step and task id. The development machine moves each answer into the res
     that path. Read only: the test plan's step 1.7 prints one registry line (installed, listed as
     an add-in, start-up flag), then Tools > Add-ins is looked at, FeatureWorks's Active and
     Start Up boxes noted and the dialog closed with Cancel, and Help > About names the product
-    (Standard, Professional or Premium). Any answer passes; it is a record. Record: the line, the
-    two boxes and the product, in the findings document.
+    (Standard, Professional or Premium; FeatureWorks ships with all three, 004 T149, so the boxes
+    are the answer). Any answer passes; it is a record. Record: the line, the two boxes and the
+    product, in the findings document.
 20. **004 T003's packages: Model check on the owner's parts.** The three to five real parts the
     owner names (the test plan's P-1 to P-5, one with a long feature tree), each opened alone and
     Model checked (its step 5.1): each check folder's `package.json` is a current ModelCheck-profile
@@ -345,6 +346,9 @@ from the dump folder and the big assembly's run folder. 008 T105 replays each ru
 research R5. If T066 and T077 passed, the development machine sets each switch in a commit of its
 own, editing the one pin test the task names, and 011 T095 goes into the next handover. For
 feature 004: `swreview remodel plan` runs over each P folder's `package.json` for T003, counts
-only, into `specs/004-resilient-remodeler/phase0-decision.md` section 4; the three answers files
-of step 21 give T033 to T039 their verdicts, recorded as quickstart Scenario 4 says; step 19's
-record ticks T164. A refuted blocking probe goes to the owner.
+only and each part by its letter, into `specs/004-resilient-remodeler/phase0-decision.md`
+section 4, replacing 004 T148's provisional counts; the three answers files of step 21 give T033
+to T039 their verdicts, recorded as quickstart Scenario 4 says; step 19's record ticks T164. A
+refuted blocking probe goes to the owner. The stage-1 runs, 004 T135 to T141, also wait on
+004 T152 to T160, the production seat adapter and its wiring (decision 17A), before a later
+sitting can run them.
