@@ -247,7 +247,10 @@ eleven system types of the real dumps tolerated, read by feature 008's decision 
 fixtures it regenerated: the part check each recorded review made no longer names those rows, so
 the recorded and as-recorded columns fall, and no requested figure moves, because checks first
 answers the recorded part checks and its digest counts findings, not subjects. The requested
-figures are those of feature 011's integration and of every re-measurement since). The fixtures record the scripted provider, whose pane runs checks first, lever 13, slimming
+figures are those of feature 011's integration and of every re-measurement since. Measured again
+the same day on main, once decision 23A and 20A's landing were integrated with the owner's
+decision 24A - feature 004's plan-lost notice, which changes no tool's return - every figure the
+same, section 9's last row). The fixtures record the scripted provider, whose pane runs checks first, lever 13, slimming
 and pruning but no parallel calls; `--lever parallel_tool_calls` gives the OpenAI pane, on which
 SC-003's regrouped estimate is read. The regrouped estimate assumes the model does not repeat a
 check the digest reported and batches consecutive calls to one tool (008 `contracts/replay.md`
