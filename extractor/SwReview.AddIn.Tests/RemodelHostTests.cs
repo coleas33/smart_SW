@@ -1760,6 +1760,91 @@ public sealed class RemodelHostTests
         }
     }
 
+    /// <summary>
+    /// T168 (decision 22A): `remodel.close` names no run, so a close is sent only through the
+    /// attachment the run's plan was made on. After a re-attach the run's session went with
+    /// its attachment and there is nothing of it to close; the discard still deletes the copy
+    /// and still writes `discarded`, so the run reads as the engineer left it.
+    /// </summary>
+    [Fact]
+    public void ADiscardAfterAReattachSendsNoCloseAndStillDeletesTheCopy()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Attachment = SecondAttachment;
+
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("ok", "d1");
+            Assert.Equal(0, world.Pipeline.Count("close"));
+            Assert.False(Directory.Exists(Path.Combine(world.ExpectedRunDirectory, "copy")));
+
+            world.Receive("remodel.result", "g1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("discarded", world.Reply("remodel.result", "g1").GetProperty("state").GetString());
+        }
+    }
+
+    /// <summary>
+    /// The flow T168 was found on: refused as `SessionLost`, back to plan on the new
+    /// attachment, then the old copy cleared away. The close the discard used to send through
+    /// the new attachment would have closed the new plan's copy - the bridge closes whatever
+    /// session it holds - and the new plan's Start would then have failed on the bridge. It
+    /// sends none, and the new plan starts.
+    /// </summary>
+    [Fact]
+    public void DiscardingTheOldRunAfterAReattachLeavesTheNewPlanStartable()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Attachment = SecondAttachment;
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("SessionLost", world.ErrorClass("s1"));
+            world.Receive("remodel.plan", "p2", new { });
+            string again = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+            world.Receive("remodel.start", "s2", new { run_dir = again });
+
+            world.Reply("ok", "d1");
+            Assert.Equal(0, world.Pipeline.Count("close"));
+            world.Reply("remodel.started", "s2");
+            Assert.Equal(1, world.Pipeline.Count("run"));
+        }
+    }
+
+    /// <summary>
+    /// One predicate for Start and for the close: an attachment nobody knew at the plan is not
+    /// one a close may be sent through either, since the session it would reach may be another
+    /// plan's. On the attachment the plan was made on the discard closes first, as it always has
+    /// (<see cref="DiscardDeletesOnlyTheCopyAndKeepsEveryOtherArtifact"/>).
+    /// </summary>
+    [Theory]
+    [InlineData(null, null, false)]
+    [InlineData(null, FirstAttachment, false)]
+    [InlineData(FirstAttachment, null, false)]
+    [InlineData(FirstAttachment, FirstAttachment, true)]
+    public void ADiscardClosesOnlyThroughTheAttachmentThePlanWasMadeOn(
+        string? planned, string? now, bool closes)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Attachment = planned;
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Attachment = now;
+
+            world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("ok", "d1");
+            Assert.Equal(closes ? 1 : 0, world.Pipeline.Count("close"));
+            Assert.False(Directory.Exists(Path.Combine(world.ExpectedRunDirectory, "copy")));
+        }
+    }
+
     [Fact]
     public void ResultStillAnswersAfterTheCopyIsDiscarded()
     {
