@@ -1042,9 +1042,11 @@ Two operational rules, and a third added by the owner's decision 22A (2026-09-25
   engineer plans again. Comparing the attachment rather than the document is what makes a
   re-attach back to the same document refused and a configuration switch, which re-attaches
   nothing, not. The bridge's own `target_mismatch` on a dispatcher with no session stays the
-  backstop for the race between the pane's check and the backend's first call. What the discarded
-  session leaves on the seat - the toggles `remodel.open` set and the copy still open - is 004
-  T167, not decided.
+  backstop for the race between the pane's check and the backend's first call. For the same
+  reason a discard of such a run sends no `remodel.close` through the new attachment, whose
+  session, if it holds one, is another plan's (004 T168, found while implementing T160). What the
+  discarded session leaves on the seat - the toggles `remodel.open` set and the copy still open -
+  is 004 T167, not decided.
 
 ---
 
