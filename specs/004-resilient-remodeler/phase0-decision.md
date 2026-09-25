@@ -326,8 +326,12 @@ that reason; it covers the same types wherever a dump lists them at the top. No 
 top level, no persist ref is the subject of two moves, and no rename remains.
 
 **What is left, and what it says about RK-1.** On all three packages exactly 3 content features
-reach their target group - the three reference axes, in `1-Ref` - and one folder is to be created
-for them. Everything else is undecided or split:
+reach their target group - the three reference axes, in `1-Ref` (on P1, which is refused, the 3
+it would have had). On P2 and P3 one folder is to be created for them: P2's one change is that
+folder, and P3's 14 are its 13 moves and that folder. On P1 nothing is to be created, since a
+refused part carries no change; its summary row still reads `folders.create` 1, because
+`plan_summary_row` counts the folder plan's `planned` actions whether or not the part is refused,
+as it gives the fraction a refused part would have had. Everything else is undecided or split:
 
 - P2: 3 of 8 reach (0.375). 2 wait for judgement (an `ICE` feature, which the table calls
   ambiguous, and the sketch that follows it); the other 3 content features are `3-Core`, and the
