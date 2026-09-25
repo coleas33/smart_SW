@@ -3,7 +3,8 @@
 Normative for `swreview benchmark replay`, `benchmark/recording.py`, `benchmark/replay.py`, the
 `ReplayReport` model and the committed replay fixtures (FR-001 to FR-007, SC-001 to SC-005).
 Amended 2026-09-23 by the owner's decision 3A - the fixtures follow the code - in sections 8, 9
-and 10.
+and 10. Amended 2026-09-25 by the owner's decision 23A - a recorded RMS finding the type table
+narrowed - in sections 5, 7, 8 and 10.
 
 ## 1. The command
 
@@ -192,6 +193,42 @@ contact says what became of the finding even when its step was estimated. Each c
 reclassifies one recorded finding, so the comparison stays a multiset, and a reclassified
 finding changes no exit code.
 
+*Amended 2026-09-25 (owner decision 23A; research R2.58): a finding the type table narrowed.* A
+recorded `rms.*` finding is **narrowed** exactly when, after removing each drawing location whose
+`(scope, persist_ref)` names only rows the current type table does not count as content, its key
+equals the key of a finding in the requested pass that nothing else matched. Each term is
+deliberate:
+
+- *Scope* is the location's `document_id`, which for an RMS subject is the subject row's
+  `persist_ref_scope` (a rule's finding carries one `SourceRef` per subject). The rows are the
+  feature rows of the recording's own `package.json` carrying that `persist_ref_scope` and
+  `persist_ref`; *content* is `RmsTypeTable.is_content` under the type table the current code
+  ships.
+- *Only*, because real packages share persistent references between system folders (on the three
+  recordings up to nine system folder rows carry one reference). A location stays when any row
+  its reference names is content, when its reference names no feature row at all (a mate, a
+  component) and when it carries no reference.
+- *Nothing else matched* is the added side of the comparison above: the requested pass's findings
+  no recorded key equals. The matching is one-to-one, in recorded order: each narrowed key takes
+  one such finding, so a second recorded finding narrowing onto the same current finding stays
+  lost.
+- Only a finding that would otherwise be lost is narrowed: one whose step was `reproduced`,
+  `changed` or `answered_from_checks`, or that no scripted step holds, and that no requested-pass
+  finding matches exactly (of several recorded findings with one key, the later ones in recorded
+  order). It is decided after reclassification and the step's class. A finding still unmatched
+  after narrowing stays **lost**, and a finding of another family is never narrowed.
+
+A narrowed finding is neither lost nor added and changes no exit code; it is listed with its step
+and the number of locations removed, like a reclassified finding (section 7). The rule is written
+once, `benchmark/replay.compare_finding_keys` (with `narrowed_key`, the locations a finding loses,
+and `not_content_locations`, the references that name only rows that are not content), and the
+fixture generator imports it (section 8). *Why:* feature 003's decision 20A moves the eleven
+system types of the real 2024 SP5 dumps into `tolerated_loose`, so the part check stops naming
+those rows as loose subjects. On the three recordings 20, 2 and 1
+`rms.grouping.all_features_in_a_group` findings keep their part and configuration and lose only
+those subjects, and because `finding_subject_key` holds one drawing location per subject, each
+read as a recorded finding lost and a new one added (003 T092).
+
 ## 6. The regrouped estimate (from User Story 4)
 
 Printed beside the strict figure whenever a rule applies, with its assumption: "the model does
@@ -247,6 +284,11 @@ Story 4. Before User Story 3 the command takes `RUN_DIR`, `--lever`, `--standard
 ran with (pass A: the recording's, `MODEL_VIEW_OFF` when it records none); each settings line
 reads `as recorded: <levers>; model view off` or `requested: <levers>; model view payload
 slimming, history pruning after N rounds`; a round holding a `stored` call is flagged `stored`.
+*Amended 2026-09-25 (owner decision 23A):* the findings summary line ends `…, N reclassified as
+contacts, M narrowed by the type table`, and after the reclassified lines each narrowed finding
+has one, `narrowed: <check> - <subject> (<k> locations removed)` (`1 location removed`), its
+subject the recorded finding's, as every other list's is. `findings.narrowed` is always present,
+empty when nothing narrowed.
 
 `--json` prints exactly the `ReplayReport` model and nothing else:
 
@@ -267,7 +309,9 @@ slimming, history pruning after N rounds`; a round holding a `stored` call is fl
   "findings": {"recorded": 99, "replayed": 88, "lost": [], "added": [],
                "not_replayable": [{"check": "…", "subject": "…", "step": 12, "reason": "…"}],
                "reclassified": [{"check": "interference.static", "subject": "…", "step": 15,
-                                 "group_key": "…", "contact_id": "C-001"}]}
+                                 "group_key": "…", "contact_id": "C-001"}],
+               "narrowed": [{"check": "rms.grouping.all_features_in_a_group", "subject": "…",
+                             "step": 4, "removed_locations": 5}]}
 }
 ```
 
@@ -388,6 +432,28 @@ regenerated fixture therefore reclassifies 0, 0 and 0, under every requested set
 feature 010 is built on purpose: the scripted recordings of `test_replay_findings.py` (010 T094).
 The rule that no recorded finding is lost or not replayable is unchanged, and absolute.
 
+*Amended 2026-09-25 (owner decision 23A; research R2.58): the finding check is narrowing-aware,
+and the size bar measures the scramble.* The finding check applies section 5's narrowed outcome
+through the replay's own function, `benchmark/replay.compare_finding_keys`, imported and never
+copied: a recorded `rms.*` finding that no fixture finding matches is narrowed over the recorded
+package, its narrowed key carried into the fixture's names by the map the rest of its key goes
+through (`scrambled_key`), and matched one to one, in recorded order, to a fixture finding nothing
+else matched. The generator prints how many it narrowed beside how many it reclassified. A
+recorded key still missing after narrowing, or a new key, still refuses.
+
+The 5% bar for a result of 5,000 tokens or more compares each call's result on the fixture with
+the same call's result on the raw recorded package, as the current code returns it (the play
+`original_sizes` already makes), and no longer with the recorded size. The bar exists to catch the
+scramble distorting a result, and a deliberate change to what the code returns is the
+regeneration's reason, not a distortion: decision 20A's part check returns 182,848 and 15,892
+tokens on the raw packages against 204,858 and 17,437 recorded (-10.7% and -8.9%), and the
+fixture's result is the scrambled form of the first figure, not of the second. It is exactly as
+strict about the scramble as before: the same 5,000 tokens and 5%, measured against the result it
+already measured against for every call the current code reproduced, and a call the current code
+changed is now held to the same bar rather than excused or failed by its code change. The recorded
+size still starts each round's usage adjustment, as above. Both are pinned
+(`test_replay_generator_narrowed.py`, `test_replay_generator_size_bar.py`).
+
 ## 9. The acceptance each story cites
 
 | Story | Acceptance on the fixtures |
@@ -415,6 +481,12 @@ without* the
 present - as it is not on the machine holding the recordings) checks pass A within 1% on every
 round of the three recorded reviews (observed at most 0.023%) and that replayed plus
 not-replayable findings equal the recorded key set (the big assembly's: 88 + 11 = 99).
+
+*Amended 2026-09-25 (owner decision 23A):* the finding check reads section 5's narrowed outcome.
+None lost and none added, and the replayed plus not-replayable findings are still the recorded
+count, each narrowed recorded finding matched to a replayed one: the recorded key set, less what
+the current type table narrowed. The test pins the narrowed findings of each recording by check
+and count, with the locations removed.
 
 *Amended 2026-09-23 (owner decision 3A; research R2.55): the recordings are held to their
 drift.* The recordings can never be regenerated and the code they are replayed against changes

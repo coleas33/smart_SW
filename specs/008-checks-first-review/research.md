@@ -1338,6 +1338,77 @@ arrays no engineer's default sends. Pinning them still makes every byte of growt
 | Keep asserting every array and trim tools to fit | Tool docstrings are frozen (feature 011), and the bytes would come off the pane's arrays too, which are at least 3,370 bytes under the ceiling. |
 | Leave the unmodelled arrays unpinned | Their growth would be invisible in review, which is what feature 005's pins exist to prevent. |
 
+### Amendment 2026-09-25 (owner decision 23A): a recorded RMS finding the type table narrowed
+
+#### R2.58 A finding that lost only the subjects the type table stopped counting is narrowed, not lost
+
+**Decision** (owner, 2026-09-25, decision 23A; the answer to feature 003's question 20A-Q1,
+`contracts/replay.md` sections 5, 7, 8 and 10). A recorded `rms.*` finding is **narrowed** exactly
+when, after removing each drawing location whose `(scope, persist_ref)` names only rows the
+current type table does not count as content, its key equals the key of a finding in the
+requested pass that nothing else matched. The matching is one-to-one. "Only", because real
+packages share persistent references between system folders. A finding still unmatched after
+narrowing stays lost. Narrowed findings are listed in the report, with the removed locations
+counted, like reclassified contacts. The rule is written once, in `benchmark/replay.py`, and the
+fixture generator imports it, as it imports `reclassifying_contacts`. And the generator's 5% bar
+for a result of 5,000 tokens or more measures the scramble against the current code's result on
+the raw recorded package, not against the recorded size.
+
+**Why.** Feature 003's decision 20A moves the eleven system types of the real 2024 SP5 dumps into
+`tolerated_loose`, so `check_rms_part` stops naming those rows as loose subjects. 003 T092 stopped
+on verification: on the three recordings 20, 2 and 1 `rms.grouping.all_features_in_a_group`
+findings keep their part and configuration and lose only those subjects, but `finding_subject_key`
+holds one drawing location per subject, so the replay's strict comparison and the generator's key
+check read each as a recorded finding lost and a new one added, and the generator refused all
+three fixtures. A second self-check refused two of them as well: the part check's result is
+182,848 and 15,892 tokens against 204,858 and 17,437 recorded, beyond 5%. Neither is what the
+checks exist to catch. The finding did not go away: the code judges the same part in the same
+configuration against the same rule and finds it failing, about fewer subjects, because the table
+says fewer rows are content. And the bar exists to catch the fictional names distorting a result,
+which it can only see by comparing the fixture with the same code's result on the real names;
+compared with the recorded size, it confuses the scramble with the change the regeneration is for.
+
+**How narrowing is kept strict.**
+
+- It removes only locations every row of whose reference is not content under the table the
+  current code ships; a reference a content row also carries stays, and so does a location with
+  no reference or one naming no feature row (a mate, a component). The real packages share one
+  reference among up to nine system folder rows, so "any" would have been wrong in the other
+  direction too.
+- It reads rows, not type names: the recorded finding holds its subjects' references, and the
+  recording's own package says what each names.
+- The recorded finding must then equal a current finding exactly - check, components, the
+  remaining locations, entity inputs and configuration - and one that nothing else matched, one
+  to one in recorded order; a second recorded finding narrowing onto it stays lost.
+- It applies only to `rms.*` findings, the family the type table decides, and only to a finding
+  that would otherwise be lost; reclassification and the step's class are decided first.
+- Every narrowed finding is listed with its step and the number of locations removed, so the
+  report says what the table took away.
+
+**The size bar, exactly as strict about the scramble.** `original_sizes` already plays the raw
+recorded package through the current code; the bar now compares each call's fixture result with
+that call's raw result: the same 5,000 tokens and 5%. For every call the current code reproduced,
+that was already the comparison. For a call it changed, the recorded size mixed the code change
+into the measure, which excused nothing and failed a correct fixture; now the call is held to the
+same bar about its scramble. The recorded size still starts each round's usage adjustment.
+
+**Measured before implementing** (a probe with the eleven tolerated, on the three recordings):
+every recorded finding that would read as lost narrows - 20, 2 and 1, removing 106, 10 and 5
+locations - and nothing else is lost or added; the other unmatched findings are the not-replayable
+ones (six and two interference findings behind the live call, five, one and one standards findings
+that need a profile).
+
+**Alternatives.**
+
+| Option | Why not |
+|---|---|
+| Leave the checker as decision 17A has it, the planner alone tolerating the eleven | Two lists of what is content, which decision 20A removes; and every later table change would meet the same wall. |
+| Remove a location when **any** row its reference names is not content | A reference a content row shares would drop a content subject unseen. |
+| Narrow on type names, or drop locations from RMS keys altogether | The key's locations are what tell a finding's subjects apart; dropping them would hide a content subject that moved for any other reason. |
+| Narrow the requested pass's findings too | The current finding is what the current table says; narrowing it would let a finding that gained a subject pass unseen. |
+| A hand-kept list of the 20, 2 and 1 | The rule says which; a list beside it drifts, and the next table change needs another. |
+| Widen the 5% bar, or skip it for a result the code changed | The first hides a scramble that distorts by 10%; the second exempts exactly the results a regeneration rewrites. |
+
 ## R3. Verified facts the plan relies on
 
 Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the design passes'):
@@ -1399,6 +1470,7 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 | FR-030 (new, owner 2026-09-23) | every tool stayed in the array after checks first ran it | a tool the pre-run ran to completion leaves the array (lever 13, pane default) | R2.53 |
 | SC-001 (owner 2026-09-23, decision 3A) | the fixtures within 1% of their recorded input; the recordings within 1% too (R2.12) | the fixtures regenerated when a change is deliberate and still within 1%; the recordings' drift equal to the size change of the results each round carries | R2.54, R2.55 |
 | `contracts/replay.md` sections 8 and 9 (decision 3A) | the generator refuses a recorded finding it cannot reproduce; the fixtures' replay reclassifies 3, 2 and 0 | the generator reclassifies a touching group recorded as a contact, by the replay's rule; the regenerated fixtures record 3, 2 and 0 contacts and their replay reclassifies none | R2.56 |
+| `contracts/replay.md` sections 5, 7, 8 and 10 (owner 2026-09-25, decision 23A) | a recorded RMS finding that lost only subjects the type table stopped counting read as lost plus added; the generator's 5% bar compared a large result with its recorded size | such a finding is narrowed, listed with the locations removed, by one rule the replay and the generator share; the bar compares the fixture's result with the current code's result on the raw recorded package. The spec's text is unchanged: SC-001 names no outcome, and FR-005's lost and added keep their meaning (a narrowed finding is neither, as a reclassified one is neither) | R2.58 |
 
 ## R5. Open items that stay open
 
