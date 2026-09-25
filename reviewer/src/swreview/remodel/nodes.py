@@ -129,8 +129,9 @@ def tree_nodes(rows: Sequence[Feature], table: RmsTypeTable) -> TreeNodes:
             carried_rows.append(row)
 
     into = {merge.dropped_id: merge.kept_id for merge in merged}
+    carried_ids = {row.id for row in carried_rows}
     carried = tuple(
-        CarriedRow(dropped_id=row.id, owner_id=_owner(row, by_id, into, carried_rows))
+        CarriedRow(dropped_id=row.id, owner_id=_owner(row, by_id, into, carried_ids))
         for row in carried_rows
     )
     into.update({carry.dropped_id: carry.owner_id for carry in carried})
@@ -169,7 +170,7 @@ def _owner(
     row: Feature,
     by_id: dict[str, Feature],
     merged_into: dict[str, str],
-    carried_rows: Sequence[Feature],
+    carried_ids: set[str],
 ) -> str:
     """The nearest kept feature above a carried row: its enclosing row, or - when that is
     itself carried or a second listing - the row that one folds into, walked upwards.
@@ -177,7 +178,6 @@ def _owner(
     The walk is bounded by the rows it has seen, so a `folder_id` chain that loops ends at
     the last row before the loop rather than going round it.
     """
-    carried_ids = {one.id for one in carried_rows}
     seen = {row.id}
     current = row.folder_id or row.id
     while current not in seen:
