@@ -97,6 +97,26 @@ Shipped as `reviewer/src/swreview/checks/rms_types.yaml` (created by moving the 
   then they are content of unknown class: grouped and described like any feature, unresolved
   for class-dependent rules, and named in `rms.types.unknown`.
 
+*Amended 2026-09-25 (owner, decision 20A): the system rows of the real dumps are tolerated.*
+Feature 004's census of the three real single-part `ModelCheck` dumps on 2024 SP5 (004 T144, 35
+`GetTypeName2` values, recorded as SOLIDWORKS type names only) found eleven system types the
+table did not carry: `NotesAreaFtrFolder` and `AnnotationViewFeat` (the annotations container's
+folders and view), `AmbientLight` and `DirectionLight` (the scene's lights),
+`FeatSolidBodyFolder`, `FeatSurfaceBodyFolder`, `RefAxisFtrFolder`, `RefPlaneFtrFolder`,
+`ProfileFtrFolder` and `RefPointFtrFolder` (a derived part's body and reference folders), and
+`CosmeticThread`. As unknown types they were content: this checker named them loose in
+`rms.grouping.all_features_in_a_group`, and feature 004's planner filed them `unclassified`.
+Decision 17A took them out of the planner alone, in a planner-only key (`remodel_not_content`,
+read through `RmsTypeTable.planner_view()`), because moving them changed feature 008's
+recorded-replay RMS verdicts (61 test cases). The owner's decision 20A: none of them is a
+feature the method groups or describes, so they join `tolerated_loose`, the one list both
+features read, and the planner-only key and view go (DRY), the planner's behaviour pinned
+unchanged. They stay unclassified - no class rule ever asks their class, and the planner never
+places them - and only types seen on a real dump are added; `calibrated_version` is unchanged
+until the seat census (004 T137), and T062's weldment, sheet-metal and derived-part names still
+wait for the seat. The change moves what `check_rms_part` returns, so feature 008's replay
+fixtures are regenerated under its decision 3A (tasks.md T092).
+
 The feature-type census in the extractor (`TypeNameCensus`) answers a different question
 (which type names no dump pass consumed); the RMS unknown-type report (which type names the
 rule tables do not classify) is computed in Python from `features[]` and recorded as one
