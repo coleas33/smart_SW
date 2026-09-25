@@ -235,6 +235,66 @@ the `^<prefix>:[0-9]{4,}$` shape (`ir/models.py:367, 487, 865, 911, 933, 973, 10
 `runner.py:531-552`; that existing defect in `_reconcile_reruns` is an R5 item, not fixed here);
 whole-finding equality (rejected: a changed field would read as one lost and one added).
 
+*Amended 2026-09-25 (owner decision 25A; T128): each drawing location keeps its persistent
+reference.* The key's locations are `(document_id, sheet, view, annotation, page, persist_ref)`,
+`persist_ref` `None` where a location has none; everything else above stands. Without the
+reference an RMS finding's locations - one per subject, its scope and its reference alone
+(`checks/rules/report._source_refs`) - compared as a count per scope, so a finding that swapped one
+subject for another in a scope counted as the same finding, in the exact comparison and, since
+decision 23A, after narrowing (R2.58). The owner tightens both to exact references.
+
+*The reason the reference was left out, designed around.* A re-dump may re-encode a reference, so
+a key holding one cannot join two dumps of a design. This key never does: it is compared in two
+places only, and on both sides of each the references are one dump's. The replay plays both passes
+on a copy of the recording's own `package.json`, with the recorded arguments, so a finding the
+current code makes names the bytes the recorded finding named. The fixture generator compares the
+recorded findings with the fixture's, whose package is the recorded one scrambled; its
+`scrambled_key` carries each recorded reference through `FictionalMap.persist_ref`, the function
+that scrambled the package's references (`contracts/replay.md` section 8). Kind by kind, where a
+compared finding's references come from:
+
+- `rms.*` part and assembly rules: one location per subject that has a reference - its feature
+  row, mate or component in the package. The same bytes in both passes.
+- `standards.*`: its subjects' package rows (features, components, mates, cut-list items, drawing
+  rows). The same; replayed only with a profile (on the three recordings, not replayable).
+- The drawing families (tolerances, fits, fastener identity, the standards drawing rules) read the
+  package's drawing evidence; `record_drawing_finding` takes the location the model's recorded
+  arguments name, replayed verbatim. The same; no recording carries a drawing. The generator
+  scrambles recorded arguments as text (`FictionalMap.arguments`), not as references, so a finding
+  whose reference came from an argument would be compared through two different scrambles, which
+  can refuse the fixture but never pass a mismatch; none of the three recordings passes a
+  reference as an argument.
+- The live bridge: `bridge_interference` rows carry no reference and its findings no location
+  (their row ids are entity inputs already, and the fixture rebuilds the rows with the recorded
+  ids); no bridge tool records a finding; and a replay without a bridge lists a bridge step's
+  findings as not replayable and never compares them.
+- `interference.*`, `hole.*`, `rms.folders.*` and `rms.params.*` carry no location: keyed as
+  before, as is a location without a reference.
+
+So no kind needs its entity id in place of its reference. What a reference cannot tell apart is
+rows that share one, and the key's locations are a multiset, so a reference two locations name
+counts twice. On the three recordings, content rows sharing a reference are almost all one sketch
+listed twice with its name and type (136, 14 and 11 references) and, on the big one, one cut-list
+folder - one entity reached twice, where the reference is right; and the big recording and
+`small-assembly-a`'s each have one pair of different system folders, both content under the
+current table, sharing one reference - a swap between those two alone stays unseen. The key must never be compared across two dumps, and nothing
+compares it so: carry-over has its own key (lever 11a) and an exception binds to `(persist_ref,
+scope)` through its own refresh.
+
+*Measured before implementing* (a probe with the tightened key): on the three recordings replayed
+as recorded, none lost, none added, and 20, 2 and 1 findings narrowed with 106, 10 and 5 locations
+removed, as with the loose key - every narrowed finding's remaining references are those of the
+current finding it takes; on the three fixtures replayed as recorded, none lost, added or
+narrowed.
+
+*Alternatives.* The subject's entity id read out of the finding's inputs (rejected: the inputs are
+prose in each family's format - `<id> <name> [<type>] persist_ref=… scope=…` for the rules,
+`<kind> <id> <name> …` for standards - and reading ids out of prose is what this key refused for
+an interference input; narrowing would also have to pair each input with its location). Each
+reference resolved to its rows through the package (rejected: a shared reference names several
+rows, exactly where it would be needed). A sibling key for narrowing alone (rejected: the owner
+tightens both, and one key keeps narrowing exactly as strict as the exact comparison).
+
 #### R2.9 One serialization of a tool result
 
 **Decision**: `tool_result_text(payload) -> str` in `agent/providers/__init__.py`, equal to
@@ -1386,6 +1446,10 @@ compared with the recorded size, it confuses the scramble with the change the re
   same scope at the same count is not - as the exact comparison does not see it for any finding.
   Whether narrowing should also compare the references is the owner's question, T128; on the
   three recordings every narrowed finding's current finding carries the same references.
+  *Amended 2026-09-25 (owner decision 25A, T128):* it should, and so should the exact comparison:
+  a key's location now carries its reference (R2.8, amended), so the remaining locations compare
+  reference by reference, and a content subject swapped for another is lost. Measured with the
+  tightened key, the three recordings still narrow 20, 2 and 1 with none lost.
 - It applies only to `rms.*` findings, the family the type table decides, and only to a finding
   that would otherwise be lost; reclassification and the step's class are decided first.
 - Every narrowed finding is listed with its step and the number of locations removed, so the
@@ -1415,7 +1479,7 @@ that need a profile).
 |---|---|
 | Leave the checker as decision 17A has it, the planner alone tolerating the eleven | Two lists of what is content, which decision 20A removes; and every later table change would meet the same wall. |
 | Remove a location when **any** row its reference names is not content | A reference a content row shares would drop a content subject unseen. |
-| Narrow on type names, or drop locations from RMS keys altogether | The key's locations are what count a finding's subjects in each scope (*corrected 2026-09-25 on review:* this said they tell the subjects apart, which a location without its persistent reference cannot, T128); dropping them would hide a content subject lost or gained for any other reason. |
+| Narrow on type names, or drop locations from RMS keys altogether | The key's locations are what count a finding's subjects in each scope (*corrected 2026-09-25 on review:* this said they tell the subjects apart, which a location without its persistent reference cannot, T128; since decision 25A each carries its reference and tells its subject apart, R2.8); dropping them would hide a content subject lost or gained for any other reason. |
 | Narrow the requested pass's findings too | The current finding is what the current table says; narrowing it would let a finding that gained a subject pass unseen. |
 | A hand-kept list of the 20, 2 and 1 | The rule says which; a list beside it drifts, and the next table change needs another. |
 | Widen the 5% bar, or skip it for a result the code changed | The first hides a scramble that distorts by 10%; the second exempts exactly the results a regeneration rewrites. |
@@ -1483,6 +1547,7 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 | `contracts/replay.md` sections 8 and 9 (decision 3A) | the generator refuses a recorded finding it cannot reproduce; the fixtures' replay reclassifies 3, 2 and 0 | the generator reclassifies a touching group recorded as a contact, by the replay's rule; the regenerated fixtures record 3, 2 and 0 contacts and their replay reclassifies none | R2.56 |
 | `contracts/replay.md` sections 5, 7, 8 and 10 (owner 2026-09-25, decision 23A) | a recorded RMS finding that lost only subjects the type table stopped counting read as lost plus added; the generator's 5% bar compared a large result with its recorded size | such a finding is narrowed, listed with the locations removed, by one rule the replay and the generator share; the bar compares the fixture's result with the current code's result on the raw recorded package. The spec's text is unchanged: SC-001 names no outcome, and FR-005's lost and added keep their meaning (a narrowed finding is neither, as a reclassified one is neither) | R2.58 |
 | `contracts/replay.md` sections 5, 8 and 9 (review of decision 23A, 2026-09-25; T127) | the size bar held the live call to its raw result, its own fictional rows; section 5 read as if narrowing told subjects apart; the big fixture's recorded total was pinned within 1% | the live call is also held to its recorded size; narrowing sees what the key sees, a count of locations per scope, and whether it should compare references too is T128; the recorded total and the follow-up round's recorded input are pinned exactly. The spec's text is unchanged | R2.58 |
+| `contracts/replay.md` sections 5, 7 and 8 (owner 2026-09-25, decision 25A; T128) | a key's drawing location carried no persistent reference, so an RMS finding's locations compared as a count per scope, in the exact comparison and after narrowing | each location keeps its reference: a finding that swapped one subject for another is lost, by the exact comparison and after narrowing; the printed subject names each reference; the generator carries the recorded references into the fixture's through the map that scrambled the package's. The spec's text is unchanged: FR-005's check and subject keep their meaning, the subject now naming each location's reference | R2.8, R2.58 |
 
 ## R5. Open items that stay open
 
@@ -1504,4 +1569,4 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 | `groups_of` is recomputed per group call, quadratic in groups; the perf test in T041 guards 1,000 groups | T041 | nothing unless red |
 | An earlier scratch estimate put mate persist references at about 1,284 characters each; measured mean 781, max 1,656; no budget here uses the old figure | none | nothing |
 | SC-010: a licensed seat, the real standards profile placed first (006 T100), a paid review of each recorded assembly | owner | Phase 8 |
-| Whether a narrowed finding's remaining locations must also carry the persistent references of the current finding it takes (T128, review of decision 23A) | owner | nothing: every narrowed finding on the three recordings has a current finding with the same references |
+| Settled 2026-09-25 (owner decision 25A): a narrowed finding's remaining locations must carry the persistent references of the current finding it takes, and the exact comparison compares references too (T128, R2.8) | owner | nothing: every narrowed finding on the three recordings has a current finding with the same references |
