@@ -20,10 +20,12 @@ specification, and it is five claims:
   configuration count is recorded and is what drives `which_configs` on every equation add;
   unreadable, it drives nothing rather than defaulting to one configuration;
 - **the code set is closed and shared with the bridge.** `Refusal.code` is one of the
-  eleven tokens of data-model.md section 4.2. Four of them the bridge raises before any
+  twelve tokens of data-model.md section 4.2. Four of them the bridge raises before any
   signal is returned, so the pure gate never emits them; `rms_named_folder_wrong_members`
   is the one the gate decides and the bridge spells, and it is a **scope** refusal, never a
-  ninth entry in the rebuild taxonomy of FR-014.
+  ninth entry in the rebuild taxonomy of FR-014. The twelfth, `derived_part` (T146,
+  decision 17A), is a **tree** code: decided from the package's feature rows by
+  `derived_part_refusals`, never by the gate, until the probe reads it (T161).
 """
 
 from __future__ import annotations
@@ -32,18 +34,28 @@ import inspect
 
 import pytest
 
+from swreview.checks.rms_types import load_table
 from swreview.remodel.scope import (
     BRIDGE_ONLY_CODES,
+    DERIVED_PART,
     GATE_CODES,
     REFUSAL_CODES,
     REFUSING_SIGNALS,
     RMS_NAMED_FOLDER_WRONG_MEMBERS,
+    TREE_CODES,
     WHICH_CONFIGS_ALL,
     WHICH_CONFIGS_THIS,
     ScopeGate,
     ScopeSignals,
+    derived_part_refusals,
 )
-from tests.support.remodel import SCOPE_SIGNAL_FIELDS, scope_signals
+from tests.support.remodel import (
+    SCOPE_SIGNAL_FIELDS,
+    dependency_chain_features,
+    derived_part_features,
+    remodel_package,
+    scope_signals,
+)
 
 REBUILD_REASONS: tuple[str, ...] = (
     "backward_reference",
@@ -71,6 +83,7 @@ DATA_MODEL_4_2_CODES: frozenset[str] = frozenset(
         "preexisting_rebuild_errors",
         "rms_named_folder_wrong_members",
         "signal_unresolved",
+        "derived_part",
     }
 )
 """The closed `Refusal` code set, transcribed from data-model.md section 4.2."""
@@ -285,15 +298,18 @@ def test_the_folder_refusal_is_a_scope_code_and_not_a_ninth_rebuild_reason() -> 
 
 def test_the_refusal_code_set_is_exactly_data_model_section_4_2() -> None:
     assert REFUSAL_CODES == DATA_MODEL_4_2_CODES
-    assert len(REFUSAL_CODES) == 11
+    assert len(REFUSAL_CODES) == 12
 
 
-def test_the_gate_codes_and_the_bridge_only_codes_partition_the_set() -> None:
-    assert GATE_CODES | BRIDGE_ONLY_CODES == REFUSAL_CODES
+def test_the_gate_the_bridge_only_and_the_tree_codes_partition_the_set() -> None:
+    assert GATE_CODES | BRIDGE_ONLY_CODES | TREE_CODES == REFUSAL_CODES
     assert GATE_CODES & BRIDGE_ONLY_CODES == frozenset()
+    assert GATE_CODES & TREE_CODES == frozenset()
+    assert BRIDGE_ONLY_CODES & TREE_CODES == frozenset()
     assert BRIDGE_ONLY_CODES == frozenset(
         {"not_a_part", "source_dirty", "external_refs", "preexisting_rebuild_errors"}
     )
+    assert TREE_CODES == frozenset({DERIVED_PART}) == frozenset({"derived_part"})
 
 
 def test_the_gate_never_emits_a_code_the_bridge_raises_before_the_signals_exist() -> None:
@@ -338,3 +354,47 @@ def test_every_gate_code_is_reachable_from_some_reading_of_the_signals() -> None
 def test_the_signals_type_refuses_a_row_the_data_model_does_not_carry() -> None:
     with pytest.raises(ValueError):
         ScopeSignals(**scope_signals(), copy_path="C:/runs/copy/bracket-RMS.SLDPRT")
+
+
+# --- the tree code: a derived or mirrored part (T146, decision 17A) -----------------------
+
+
+def test_a_derived_or_mirrored_base_feature_refuses_the_part_naming_it() -> None:
+    rows = remodel_package(derived_part_features()).features
+    (base,) = [row for row in rows if row.type_name == "MirrorStock"]
+
+    (refusal,) = derived_part_refusals(rows, load_table())
+
+    assert refusal.code == DERIVED_PART
+    assert refusal.signal == "features[].type_name"
+    assert base.id in refusal.message
+    assert "MirrorStock" in refusal.message
+    assert "another part" in refusal.message
+    assert "refused" in refusal.message
+
+
+@pytest.mark.parametrize("type_name", ["MirrorStock", "Stock"])
+def test_every_derived_base_row_is_its_own_refusal(type_name: str) -> None:
+    """Every failing reading is reported, as the gate reports every failing signal."""
+    rows = list(remodel_package(derived_part_features()).features)
+    extra = rows[0].model_copy(update={"id": "feat:0099", "type_name": type_name})
+
+    refusals = derived_part_refusals([*rows, extra], load_table())
+
+    assert len(refusals) == 2
+    assert "feat:0099" in refusals[1].message
+
+
+def test_a_part_with_no_derived_base_is_not_refused_for_one() -> None:
+    rows = remodel_package(dependency_chain_features()).features
+
+    assert derived_part_refusals(rows, load_table()) == ()
+
+
+def test_the_gate_never_emits_the_tree_code() -> None:
+    """The gate decides from `ScopeSignals` alone, and no signal carries the feature rows;
+    until the probe reads the base feature (T161) the refusal is the planner's."""
+    reached = {rule.code for rule in ScopeGate.RULES}
+
+    assert DERIVED_PART not in reached
+    assert DERIVED_PART not in GATE_CODES

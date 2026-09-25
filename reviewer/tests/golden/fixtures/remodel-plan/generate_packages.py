@@ -53,6 +53,9 @@ ever asserted in a unit test is a reason no artifact has ever been read for:
 | | (`absorbed_twice`) planned once, and the hole's own profile |
 | | sketch (`carried_under`) carried by the hole: one target per |
 | | feature, no rename, one move, and both coverage items (T163) |
+| `remodel-refusal-derived-part` | a mirrored part, its body another part's through a |
+| | `MirrorStock`, refused with the tree code `derived_part` and |
+| | its reason, and no change planned (T147) |
 
 Only the cases named on the command line are written, all of them when none is named:
 
@@ -93,6 +96,7 @@ from tests.support.remodel import (  # noqa: E402
     absorbed_sketch_features,
     absorbed_twice,
     carried_under,
+    derived_part_features,
     linked,
     remodel_package,
     scope_signals,
@@ -339,6 +343,7 @@ CASES: tuple[tuple[str, list[FeatureSpec], dict[str, Any] | None], ...] = (
     ("remodel-cycle", cycle(), None),
     ("remodel-unplaceable", unplaceable(), None),
     ("remodel-absorbed-sketches", absorbed_sketch_features(), None),
+    ("remodel-refusal-derived-part", derived_part_features(), None),
 )
 """Every fixture: its directory name, its tree, and the scope signals the probe would have
 read. `None` signals is the dry run's own answer - nothing was read, and the gate says so

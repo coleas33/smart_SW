@@ -101,6 +101,7 @@ REQUIRED_KEYS: tuple[str, ...] = (
     "classes",
     "ambiguous",
     "default_group_by_class",
+    "derived_base",
     "tolerated_loose",
     "default_names_excluded",
     "constrained_status",
@@ -151,6 +152,9 @@ class RmsTypeTable:
     classes: Mapping[FeatureClass, frozenset[str]]
     ambiguous: frozenset[str]
     default_group_by_class: Mapping[Classification, str]
+    derived_base: frozenset[str]
+    """The base feature types of a derived or mirrored part (feature 004, decision 17A):
+    their body is another part's geometry, so the re-modeler refuses the part."""
     tolerated_loose: frozenset[str]
     default_names_excluded: frozenset[str]
     constrained_status_map: Mapping[int, ConstrainedStatus]
@@ -179,6 +183,13 @@ class RmsTypeTable:
         which is every answer `classify` can give, so no caller handles a missing key.
         """
         return self.default_group_by_class[classification]
+
+    def is_derived_base(self, feature: Feature) -> bool:
+        """Whether `feature` is the base feature of a derived or mirrored part.
+
+        Exact and case-sensitive, like `classify`: `type_name` is a `GetTypeName2` string.
+        """
+        return feature.type_name in self.derived_base
 
     def is_folder(self, feature: Feature) -> bool:
         """A folder-typed feature that is not an end-tag marker (rules.md, "Group
@@ -352,6 +363,10 @@ def _parse(document: object, path: Path) -> RmsTypeTable:
                 f"set; the class sets must be disjoint"
             )
 
+    derived_base = frozenset(document["derived_base"])
+    tolerated_loose = frozenset(document["tolerated_loose"])
+    _refuse_a_placed_derived_base(derived_base, tolerated_loose, classes, ambiguous, path)
+
     return RmsTypeTable(
         version=int(document["version"]),
         calibrated_version=str(document["calibrated_version"]),
@@ -361,7 +376,8 @@ def _parse(document: object, path: Path) -> RmsTypeTable:
         classes=classes,
         ambiguous=ambiguous,
         default_group_by_class=_parse_default_groups(document, path, groups),
-        tolerated_loose=frozenset(document["tolerated_loose"]),
+        derived_base=derived_base,
+        tolerated_loose=tolerated_loose,
         default_names_excluded=frozenset(document["default_names_excluded"]),
         constrained_status_map=_parse_constrained_status(document, path),
         assembly=AssemblyTable(
@@ -370,6 +386,27 @@ def _parse(document: object, path: Path) -> RmsTypeTable:
             mate_chain_depth_limit=depth_limit,
         ),
     )
+
+
+def _refuse_a_placed_derived_base(
+    derived_base: frozenset[str],
+    tolerated_loose: frozenset[str],
+    classes: Mapping[FeatureClass, frozenset[str]],
+    ambiguous: frozenset[str],
+    path: Path,
+) -> None:
+    """A derived base refuses the part, so the table may neither tolerate it (the method
+    would ignore it) nor classify it (the planner would place it)."""
+    placed = sorted(
+        derived_base
+        & (tolerated_loose | ambiguous | frozenset().union(*classes.values()))
+    )
+    if placed:
+        raise ValueError(
+            f"{path}: derived_base names {placed}, which the table also tolerates or "
+            "classifies; the base feature of a derived or mirrored part refuses the part and "
+            "is never placed"
+        )
 
 
 @lru_cache(maxsize=4)

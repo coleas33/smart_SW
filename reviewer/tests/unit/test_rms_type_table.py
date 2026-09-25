@@ -633,3 +633,47 @@ def test_a_table_that_is_not_a_mapping_is_refused(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="mapping"):
         load_table(path)
+
+
+# --- the derived base (feature 004 T146, decision 17A) ------------------------------------
+
+
+def test_the_derived_base_set_is_loaded(table: RmsTypeTable, document: dict[str, Any]) -> None:
+    """`MirrorStock` is the mirrored part's base feature the real packages carry; `Stock` is
+    Insert Part's, from the API's type-name list and not yet seen in a package."""
+    assert table.derived_base == frozenset(document["derived_base"])
+    assert frozenset({"MirrorStock", "Stock"}) == table.derived_base
+
+
+def test_is_derived_base_reads_the_type_name_exactly(table: RmsTypeTable) -> None:
+    assert table.is_derived_base(build_feature(type_name="MirrorStock"))
+    assert table.is_derived_base(build_feature(type_name="Stock"))
+    assert not table.is_derived_base(build_feature(type_name="Extrusion"))
+    assert not table.is_derived_base(build_feature(type_name="mirrorstock"))
+    assert not table.is_derived_base(build_feature(type_name="StockFolder"))
+
+
+def test_no_derived_base_is_tolerated_or_classified(table: RmsTypeTable) -> None:
+    """A derived base refuses the part; a tolerated row is one the method ignores, and a
+    classified one is one the planner would place. It can be neither."""
+    assert not table.derived_base & table.tolerated_loose
+    assert {table.classify(name) for name in table.derived_base} == {"unknown"}
+
+
+def test_a_table_that_tolerates_a_derived_base_is_refused(
+    tmp_path: Path, document: dict[str, Any]
+) -> None:
+    document = dict(document, tolerated_loose=[*document["tolerated_loose"], "MirrorStock"])
+
+    with pytest.raises(ValueError, match="derived_base"):
+        load_table(_write(tmp_path, document))
+
+
+def test_a_table_that_classifies_a_derived_base_is_refused(
+    tmp_path: Path, document: dict[str, Any]
+) -> None:
+    document = dict(document, classes=dict(document["classes"]))
+    document["classes"]["solid"] = [*document["classes"]["solid"], "Stock"]
+
+    with pytest.raises(ValueError, match="derived_base"):
+        load_table(_write(tmp_path, document))

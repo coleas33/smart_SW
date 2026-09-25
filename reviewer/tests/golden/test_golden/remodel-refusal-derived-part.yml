@@ -22,17 +22,23 @@ result:
     item: second listings
     reason: no row of the dump is a second listing of a top-level feature, so every
       row is planned as its own feature
-  - feature_ids: []
+  - feature_ids:
+    - feat:0006
+    - feat:0007
+    - feat:0008
     item: carried sub-features
-    reason: no row of the dump is found only under the feature that owns it, so every
-      row holds a position of its own in the flat order
-  - feature_ids: []
+    reason: '3 row(s) the dump found only under the feature that owns each one hold
+      no position of their own in the flat order: each travels with its owner (feat:0005),
+      is never moved, anchored to or put in a folder on its own, and its edges are
+      its owner''s (contracts/run-artifacts.md, how the planner reads the tree)'
+  - feature_ids:
+    - feat:0005
     item: target group
-    reason: 0 of 6 content feature(s) have no target group; the judgement phase has
+    reason: 1 of 1 content feature(s) have no target group; the judgement phase has
       not run, and an undecided feature is never moved
   - feature_ids: []
     item: feature descriptions
-    reason: 0 description(s) unreadable and 0 blank of 6 content feature(s); the planner
+    reason: 0 description(s) unreadable and 0 blank of 1 content feature(s); the planner
       never invents description prose, so revision 1 proposes none, and an unreadable
       one is refused as a change target because it has no recoverable inverse
   - feature_ids: []
@@ -49,36 +55,20 @@ result:
       rename one, nor drive one from a global (FR-030)
   - feature_ids: []
     item: folders
-    reason: 0 folder(s) to create, 2 already correct, 0 refused
+    reason: 0 folder(s) to create, 0 already correct, 0 refused
   - feature_ids: []
     item: changes
-    reason: 'no change is planned, and nothing refused this part: the tree is already
-      in the order the method wants and every group folder it needs already holds
-      exactly its features'
+    reason: 'no change is planned: this part is derived or mirrored from another part
+      (feat:0005 is a MirrorStock: this part''s body is another part''s geometry,
+      brought in whole by that feature from the part it was derived or mirrored from,
+      so the features the six groups organize do not build it and a re-model would
+      have to start from that part; a derived or mirrored part is refused)'
   created_at: '2026-09-16T14:22:01Z'
   descriptions: []
   deviations: []
   document_id: doc:1
   folders:
-    actions:
-    - contiguous: true
-      existing_folder_id: feat:0001
-      member_feature_ids:
-      - feat:0002
-      - feat:0003
-      - feat:0004
-      name: 3-Core
-      op: create
-      status: no_op
-    - contiguous: true
-      existing_folder_id: feat:0005
-      member_feature_ids:
-      - feat:0006
-      - feat:0007
-      - feat:0008
-      name: 4-Detail
-      op: create
-      status: no_op
+    actions: []
     refusals: []
   globals: []
   limits:
@@ -87,64 +77,24 @@ result:
     max_rebuild_seconds: 120
   order:
     achievable:
-    - feat:0002
-    - feat:0003
-    - feat:0004
-    - feat:0006
-    - feat:0007
-    - feat:0008
+    - feat:0005
     cycle: null
     edit_script: []
     kept:
-    - feat:0002
-    - feat:0003
-    - feat:0004
-    - feat:0006
-    - feat:0007
-    - feat:0008
+    - feat:0005
     move_count: 0
   package_before: package-before.json
   pins: []
   plan_revision: 1
   plan_schema: '1.0'
-  ranks:
-  - feature_id: feat:0002
-    group_index: 3
-    intra_rank: 1
-    intra_rule_id: null
-    original_index: 1
-    rankable: true
-  - feature_id: feat:0003
-    group_index: 3
-    intra_rank: 1
-    intra_rule_id: null
-    original_index: 2
-    rankable: true
-  - feature_id: feat:0004
-    group_index: 3
-    intra_rank: 2
-    intra_rule_id: rms.core.shell_last
-    original_index: 3
-    rankable: true
-  - feature_id: feat:0006
-    group_index: 4
-    intra_rank: 1
-    intra_rule_id: null
-    original_index: 5
-    rankable: true
-  - feature_id: feat:0007
-    group_index: 4
-    intra_rank: 1
-    intra_rule_id: null
-    original_index: 6
-    rankable: true
-  - feature_id: feat:0008
-    group_index: 4
-    intra_rank: 2
-    intra_rule_id: rms.detail.holes_last
-    original_index: 7
-    rankable: true
-  rebuild: []
+  ranks: []
+  rebuild:
+  - blocking_edge: null
+    detail: 'GetTypeName2 returned ''MirrorStock'', which rms_types.yaml does not
+      carry: the feature is unresolved and is never moved'
+    feature_id: feat:0005
+    name: Mirror-Part1
+    reason: unclassified
   rejected_proposals: []
   renames: []
   run_id: null
@@ -206,113 +156,86 @@ result:
       vault: null
     verdict: unresolved
   source: null
-  state: planned
+  state: failed
   targets:
   - basis: null
     candidates: []
-    current_group: 3-Core
+    current_group: null
     decided_by: planner
-    feature_class: unknown
+    feature_class: reference
     feature_id: feat:0001
     model: null
-    name: 3-Core
+    name: Front Plane
     provider: null
     rationale: null
     state: not_content
     target_group: null
-    type_name: FtrFolder
-  - basis: sketch_follows_consumer
-    candidates: []
-    current_group: 3-Core
-    decided_by: planner
-    feature_class: sketch
-    feature_id: feat:0002
-    model: null
-    name: Sketch1
-    provider: null
-    rationale: null
-    state: resolved
-    target_group: 3-Core
-    type_name: ProfileFeature
-  - basis: type_table
-    candidates: []
-    current_group: 3-Core
-    decided_by: planner
-    feature_class: solid
-    feature_id: feat:0003
-    model: null
-    name: Boss-Extrude1
-    provider: null
-    rationale: null
-    state: resolved
-    target_group: 3-Core
-    type_name: Extrusion
-  - basis: type_table
-    candidates: []
-    current_group: 3-Core
-    decided_by: planner
-    feature_class: shell
-    feature_id: feat:0004
-    model: null
-    name: Shell1
-    provider: null
-    rationale: null
-    state: resolved
-    target_group: 3-Core
-    type_name: Shell
+    type_name: RefPlane
   - basis: null
     candidates: []
-    current_group: 4-Detail
+    current_group: null
+    decided_by: planner
+    feature_class: reference
+    feature_id: feat:0002
+    model: null
+    name: Top Plane
+    provider: null
+    rationale: null
+    state: not_content
+    target_group: null
+    type_name: RefPlane
+  - basis: null
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: reference
+    feature_id: feat:0003
+    model: null
+    name: Right Plane
+    provider: null
+    rationale: null
+    state: not_content
+    target_group: null
+    type_name: RefPlane
+  - basis: null
+    candidates: []
+    current_group: null
+    decided_by: planner
+    feature_class: reference
+    feature_id: feat:0004
+    model: null
+    name: Origin
+    provider: null
+    rationale: null
+    state: not_content
+    target_group: null
+    type_name: OriginProfileFeature
+  - basis: null
+    candidates:
+    - 1-Ref
+    - 2-Construction
+    - 3-Core
+    - 4-Detail
+    - 5-Modify
+    - 6-Quarantine
+    current_group: null
     decided_by: planner
     feature_class: unknown
     feature_id: feat:0005
     model: null
-    name: 4-Detail
+    name: Mirror-Part1
     provider: null
     rationale: null
-    state: not_content
+    state: needs_judgement
     target_group: null
-    type_name: FtrFolder
-  - basis: sketch_follows_consumer
-    candidates: []
-    current_group: 4-Detail
-    decided_by: planner
-    feature_class: sketch
-    feature_id: feat:0006
-    model: null
-    name: Sketch2
-    provider: null
-    rationale: null
-    state: resolved
-    target_group: 4-Detail
-    type_name: ProfileFeature
-  - basis: type_table
-    candidates: []
-    current_group: 4-Detail
-    decided_by: planner
-    feature_class: cut
-    feature_id: feat:0007
-    model: null
-    name: Cut-Extrude1
-    provider: null
-    rationale: null
-    state: resolved
-    target_group: 4-Detail
-    type_name: Cut
-  - basis: type_table
-    candidates: []
-    current_group: 4-Detail
-    decided_by: planner
-    feature_class: hole
-    feature_id: feat:0008
-    model: null
-    name: Hole1
-    provider: null
-    rationale: null
-    state: resolved
-    target_group: 4-Detail
-    type_name: HoleWzd
-  tree_refusals: []
+    type_name: MirrorStock
+  tree_refusals:
+  - code: derived_part
+    message: 'feat:0005 is a MirrorStock: this part''s body is another part''s geometry,
+      brought in whole by that feature from the part it was derived or mirrored from,
+      so the features the six groups organize do not build it and a re-model would
+      have to start from that part; a derived or mirrored part is refused'
+    signal: features[].type_name
   type_table_calibrated_version: 2026 SP1.1
   type_table_version: '1'
   updated_at: '2026-09-16T14:22:01Z'

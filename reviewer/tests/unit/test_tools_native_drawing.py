@@ -74,6 +74,8 @@ TODAY: dict[str, str] = {
     "golden/fixtures/remodel-plan/remodel-pinned": "8b1de92b1250a72d",
     "golden/fixtures/remodel-plan/remodel-refusal-3d-interconnect": "8b1de92b1250a72d",
     "golden/fixtures/remodel-plan/remodel-refusal-mesh-body": "8b1de92b1250a72d",
+    # Feature 004, decision 17A (T147): new with that round, pinned from its own output.
+    "golden/fixtures/remodel-plan/remodel-refusal-derived-part": "8b1de92b1250a72d",
     "golden/fixtures/remodel-plan/remodel-refusal-multibody": "8b1de92b1250a72d",
     "golden/fixtures/remodel-plan/remodel-refusal-rms-folder": "8b1de92b1250a72d",
     "golden/fixtures/remodel-plan/remodel-refusal-sheet-metal": "8b1de92b1250a72d",

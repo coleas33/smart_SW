@@ -368,6 +368,31 @@ def derived_subfolder_features() -> list[FeatureSpec]:
     )
 
 
+def derived_part_features() -> list[FeatureSpec]:
+    """A mirrored part: its body arrives whole from another part through a `MirrorStock`.
+
+    The shape the real packages carry (decision 17A, T146): the default planes and the
+    origin, then the base feature, which lists the source part's body and reference folders
+    as its sub-features. Nothing here builds the body, which is why the re-modeler refuses
+    the part rather than reporting it reorganized.
+    """
+    return [
+        feature("Front Plane", "RefPlane"),
+        feature("Top Plane", "RefPlane"),
+        feature("Right Plane", "RefPlane"),
+        feature("Origin", "OriginProfileFeature"),
+        feature(
+            "Mirror-Part1",
+            "MirrorStock",
+            contents=(
+                feature("Solid Bodies", "FeatSolidBodyFolder"),
+                feature("Surface Bodies", "FeatSurfaceBodyFolder"),
+                feature("Planes", "RefPlaneFtrFolder"),
+            ),
+        ),
+    ]
+
+
 def absorbed_sketch_features() -> list[FeatureSpec]:
     """Three sketches, each absorbed by one feature, and one fillet out of the method's order.
 

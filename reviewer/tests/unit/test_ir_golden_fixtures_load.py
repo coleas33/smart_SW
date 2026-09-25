@@ -191,9 +191,13 @@ REMODEL_PLAN_CASES: tuple[str, ...] = (
 )
 """Feature 004's thirteen remodel-plan goldens as T030 committed them, named one by one."""
 
-DECISION_17A_NEW_CASES: tuple[str, ...] = ("remodel-absorbed-sketches",)
+DECISION_17A_NEW_CASES: tuple[str, ...] = (
+    "remodel-absorbed-sketches",
+    "remodel-refusal-derived-part",
+)
 """The remodel-plan goldens feature 004 adds under the owner's decision 17A (2026-09-25):
-T143's real-shape fixture. Held to `??` exactly as this feature's own new goldens are."""
+T143's real-shape fixture and T147's derived-part refusal. Held to `??` exactly as this
+feature's own new goldens are, until committed."""
 
 REWRITTEN_BY_DECISION_17A: frozenset[str] = frozenset(
     {"fixtures/remodel-plan/generate_packages.py"}

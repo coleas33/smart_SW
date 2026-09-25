@@ -61,7 +61,13 @@ from swreview.remodel.names import RenamePlan, plan_renames
 from swreview.remodel.nodes import CarriedRow, MergedRow, tree_nodes
 from swreview.remodel.order import Move, OrderResult, plan_order
 from swreview.remodel.rank import FeatureRank, rank_features
-from swreview.remodel.scope import Refusal, ScopeGate, ScopeSignals
+from swreview.remodel.scope import (
+    TREE_CODES,
+    Refusal,
+    ScopeGate,
+    ScopeSignals,
+    derived_part_refusals,
+)
 from swreview.remodel.target import Basis, NotContent, Resolved, target_group
 
 __all__ = [
@@ -649,6 +655,7 @@ class RemodelPlan(_Model):
     type_table_version: str
     type_table_calibrated_version: str
     scope: ScopeReport
+    tree_refusals: tuple[Refusal, ...] = ()
     targets: tuple[PlanTarget, ...] = ()
     ranks: tuple[FeatureRank, ...] = ()
     order: OrderPlan
@@ -669,6 +676,7 @@ class RemodelPlan(_Model):
         self._check_attestation()
         self._check_revision()
         self._check_changes()
+        self._check_tree_refusals()
         if not self.coverage:
             raise ValueError(
                 "the plan carries no coverage item; a plan with nothing unresolved says "
@@ -702,6 +710,28 @@ class RemodelPlan(_Model):
                 f"{len(self.descriptions)} description(s), {len(self.globals)} global(s), "
                 f"{len(self.rejected_proposals)} rejection(s) and {len(judged)} target(s) "
                 "the model decided; the judgement phase writes revision 2"
+            )
+
+    def _check_tree_refusals(self) -> None:
+        """Only a tree code belongs here, and a plan that carries one is a refusal.
+
+        The scope gate's codes are `scope.refusals`' and the bridge's are the host's; a tree
+        code is decided from the package after the copy (`scope.TREE_CODES`), and a plan
+        that recorded one and still said `planned` would be a refused part a run could start.
+        """
+        stray = sorted(
+            {refusal.code for refusal in self.tree_refusals} - TREE_CODES
+        )
+        if stray:
+            raise ValueError(
+                f"tree_refusals carries {stray}, which are not tree codes {sorted(TREE_CODES)};"
+                " a scope refusal is the gate's and is recorded in scope.refusals"
+            )
+        if self.tree_refusals and self.state != "failed":
+            raise ValueError(
+                f"this plan carries tree refusal(s) {[r.code for r in self.tree_refusals]} and "
+                f"is {self.state!r}; a refused part is failed, and never planned, so no run can "
+                "start from it"
             )
 
     def _check_changes(self) -> None:
@@ -828,7 +858,8 @@ def plan_reorganize(
     table = load_table() if table is None else table
     at = datetime.now(UTC) if now is None else now
     document = _document(package, document_id)
-    nodes = tree_nodes(_rows(package, document), table)
+    rows = _rows(package, document)
+    nodes = tree_nodes(rows, table)
     tree = _tree(package, document, nodes.rows, table)
 
     targets, resolved = _targets(tree)
@@ -849,7 +880,10 @@ def plan_reorganize(
         UNREAD_SIGNALS if signals is None else signals, probe_id=probe_id
     )
 
-    refused = scope.refused or folders.refused or order.cycle is not None
+    tree_refusals = derived_part_refusals(rows, table)
+    refused = (
+        scope.refused or folders.refused or order.cycle is not None or bool(tree_refusals)
+    )
     changes = () if refused else _changes(tree, names.renames, order, folders)
     return RemodelPlan(
         plan_revision=1,
@@ -862,6 +896,7 @@ def plan_reorganize(
         type_table_version=str(table.version),
         type_table_calibrated_version=table.calibrated_version,
         scope=scope,
+        tree_refusals=tree_refusals,
         targets=targets,
         ranks=ranks,
         order=_order_plan(order),
@@ -884,6 +919,7 @@ def plan_reorganize(
             feasibility.non_contiguous,
             nodes.merged,
             nodes.carried,
+            tree_refusals,
         ),
     )
 
@@ -1215,6 +1251,7 @@ def _coverage(
     non_contiguous: Sequence[NonContiguousGroup] = (),
     merged: Sequence[MergedRow] = (),
     carried: Sequence[CarriedRow] = (),
+    tree_refusals: Sequence[Refusal] = (),
 ) -> tuple[PlanCoverage, ...]:
     """What this plan did not decide, one item per question, always all of them.
 
@@ -1317,7 +1354,7 @@ def _coverage(
         ),
         PlanCoverage(
             item="changes",
-            reason=_why_changes(tree, changes, folders, scope, order),
+            reason=_why_changes(tree, changes, folders, scope, order, tree_refusals),
             feature_ids=(),
         ),
     ) + tuple(
@@ -1423,6 +1460,7 @@ def _why_changes(
     folders: FolderPlan,
     scope: ScopeReport,
     order: OrderResult,
+    tree_refusals: Sequence[Refusal] = (),
 ) -> str:
     """Why the change list is the length it is, said in words on every run.
 
@@ -1436,6 +1474,11 @@ def _why_changes(
         return f"{len(changes)} change(s) planned, in the fixed order of section 1.11"
     if scope.refused:
         return f"no change is planned: the scope gate refused this part ({scope.message})"
+    if tree_refusals:
+        return (
+            "no change is planned: this part is derived or mirrored from another part "
+            f"({'; '.join(refusal.message for refusal in tree_refusals)})"
+        )
     if folders.refused:
         return (
             "no change is planned: this part already carries a group-named folder holding "

@@ -45,6 +45,7 @@ from tests.support.remodel import (
     absorbed_twice,
     carried_under,
     dependency_chain_features,
+    derived_part_features,
     derived_subfolder_features,
     duplicate_name_features,
     linked,
@@ -66,6 +67,7 @@ TYPE_TABLE = yaml.safe_load(
 TREE_BUILDERS = {
     "absorbed_sketch_features": absorbed_sketch_features,
     "dependency_chain_features": dependency_chain_features,
+    "derived_part_features": derived_part_features,
     "derived_subfolder_features": derived_subfolder_features,
     "duplicate_name_features": duplicate_name_features,
     "mis_membered_group_folder_features": mis_membered_group_folder_features,

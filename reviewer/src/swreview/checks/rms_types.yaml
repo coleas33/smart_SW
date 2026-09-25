@@ -51,6 +51,13 @@ default_group_by_class:
   construction: 2-Construction
   unknown: needs_judgement    # a type name nobody recognised is never guessed into a group
   ambiguous: needs_judgement  # ICE
+# The base feature of a derived or mirrored part (feature 004, decision 17A, 2026-09-25). Its
+# body is another part's geometry, brought in whole by this feature, so no feature of the part
+# builds it: the re-modeler refuses such a part (`derived_part`) rather than reorganizing what is
+# around its base. MirrorStock is a mirrored part's base feature and is on a real 2024 SP5 dump;
+# Stock is Insert Part's, from the API's GetTypeName2 list, and is on no package yet - T137's
+# census on the seat confirms or removes it. Neither may be tolerated or classified.
+derived_base: [MirrorStock, Stock]
 tolerated_loose: [OriginProfileFeature, MateGroup, HistoryFolder, SensorFolder, DetailCabinet, CommentFolder, FavoriteFolder, SolidBodyFolder, SurfaceBodyFolder, DocsFolder, MaterialFolder, EnvFolder, LightFolder, EqnFolder, RefPlane, OriginPoint, CoordSys, CommentsFolder, SelectionSetFolder, InkMarkupFolder]
 default_names_excluded: ["Front Plane", "Top Plane", "Right Plane", "Origin"]
 # swConstrainedStatus_e (2024 SP5 and 2026 SP1.1 agree): 1 swUnknownConstraint,

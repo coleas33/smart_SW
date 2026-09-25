@@ -93,6 +93,7 @@ FIELDS: tuple[str, ...] = (
     "type_table_version",
     "type_table_calibrated_version",
     "scope",
+    "tree_refusals",
     "targets",
     "ranks",
     "order",
