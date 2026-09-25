@@ -264,6 +264,7 @@
    * verbatim: this page reads no words file. Start is disabled for that plan and Plan again
    * offered. A notice naming a folder this page is not showing changes nothing. Start's
    * `SessionLost` refusal stays the host's backstop for a page this notice has not reached.
+   * `init.latest_run.plan_lost` arrives here too, for a page that has loaded again since.
    */
   function showPlanLost(payload) {
     if (!payload.run_dir || payload.run_dir !== state.runDirectory) {
@@ -1128,6 +1129,13 @@
     var latest = payload.latest_run;
     if (latest && latest.run_dir) {
       renderRun(latest.run_dir);
+
+      // Decision 24A, amended on review: the host tells a lost plan once, so a page that has
+      // loaded again hears of it here, in the same words, and shows it as the notice would.
+      if (latest.plan_lost) {
+        showPlanLost({ run_dir: latest.run_dir, message: latest.plan_lost });
+      }
+
       refreshResult();
     }
   }
