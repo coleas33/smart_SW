@@ -261,6 +261,27 @@ class TestGroupingAllFeaturesInAGroup:
 
         assert list(keyed) == ["pass"]
 
+    def test_the_system_rows_of_the_real_packages_are_never_loose(self) -> None:
+        """Decision 20A (2026-09-25): a light, an annotation folder and a cosmetic thread
+        listed above the first group - where the real 2024 SP5 dumps put them - are tolerated,
+        not loose content; the recorded runs' findings named them until then. A type nobody
+        recognises still is loose."""
+        result, subjects = subject_names(
+            self.RULE,
+            [
+                feature("Ambient", "AmbientLight"),
+                feature("Notes", "NotesAreaFtrFolder"),
+                feature("Thread1", "CosmeticThread"),
+                feature("Widget1", "Frobnicate"),
+                folder(CORE, feature("Boss1", "Extrusion")),
+            ],
+            "fail",
+        )
+
+        assert subjects == ["Widget1"]
+        assert result.result is not None
+        assert "Ambient" not in result.result.observed
+
     def test_a_part_with_no_content_features_passes_vacuously(self) -> None:
         keyed = by_outcome(run(self.RULE, [feature("Front Plane", "RefPlane")]))
 
@@ -1108,6 +1129,26 @@ class TestEveryFeatureDescribed:
                     feature("Sensors", "SensorFolder", description=""),
                     folder(CORE, feature("Boss1", "Extrusion")),
                     end_tag(CORE),
+                ],
+            )
+        )
+
+        assert list(keyed) == ["pass"]
+
+    def test_the_system_rows_of_the_real_packages_need_no_description(self) -> None:
+        """Decision 20A: a light, an annotation folder and a cosmetic thread carry no
+        engineer's description on a real dump and are not asked for one."""
+        keyed = by_outcome(
+            run(
+                self.RULE,
+                [
+                    feature("Ambient", "AmbientLight", description=""),
+                    feature("Notes", "NotesAreaFtrFolder", description=""),
+                    folder(
+                        CORE,
+                        feature("Boss1", "Extrusion"),
+                        feature("Thread1", "CosmeticThread", description=""),
+                    ),
                 ],
             )
         )

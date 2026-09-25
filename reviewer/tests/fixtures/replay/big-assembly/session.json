@@ -1,9 +1,9 @@
 {
-  "session_id": "0114195f-fc5f-4c49-9b31-bfd4eed3951d",
+  "session_id": "76579561-e129-4a3f-a52a-19f2c10f055c",
   "package_id": "c2455a09-0b55-41b5-a153-9481660969dd",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-25T14:22:11.352212Z",
-  "ended_at": "2026-09-25T14:22:11.613828Z",
+  "started_at": "2026-09-25T18:32:24.890491Z",
+  "ended_at": "2026-09-25T18:32:25.144073Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -35,34 +35,34 @@
     "rounds": 41,
     "turns": 2,
     "totals": {
-      "input_tokens": 12412329,
-      "cached_input_tokens": 11988092,
+      "input_tokens": 11732561,
+      "cached_input_tokens": 11416554,
       "cache_write_tokens": 407265,
       "output_tokens": 8518,
       "reasoning_tokens": 3132,
       "tool_result_input_tokens": null,
-      "total_tokens": 12420847,
+      "total_tokens": 11741079,
       "latency_s": 130.09220530011225
     },
     "by_turn": [
       {
-        "input_tokens": 12007009,
-        "cached_input_tokens": 11584984,
+        "input_tokens": 11349169,
+        "cached_input_tokens": 11033162,
         "cache_write_tokens": 404979,
         "output_tokens": 8054,
         "reasoning_tokens": 2950,
         "tool_result_input_tokens": null,
-        "total_tokens": 12015063,
+        "total_tokens": 11357223,
         "latency_s": 123.5840773000964
       },
       {
-        "input_tokens": 405320,
-        "cached_input_tokens": 403108,
+        "input_tokens": 383392,
+        "cached_input_tokens": 383392,
         "cache_write_tokens": 2286,
         "output_tokens": 464,
         "reasoning_tokens": 182,
         "tool_result_input_tokens": null,
-        "total_tokens": 405784,
+        "total_tokens": 383856,
         "latency_s": 6.508128000015859
       }
     ]
@@ -76,7 +76,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"596-11251\",\"configuration\":\"Kamibat\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":26,\"component_count\":89,\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000028400012524798512,
+      "elapsed_s": 0.000024199980543926358,
       "result_bytes": 480,
       "result_tokens": 164
     },
@@ -87,7 +87,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000029000017093494534,
+      "elapsed_s": 0.00003260001540184021,
       "result_bytes": 3838,
       "result_tokens": 843
     },
@@ -98,7 +98,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"not_extracted\",\"entity_kind\":\"component\",\"entity_id\":null,\"reason\":\"'VOM01O-RUNAGO07 GONI TETE-2/PIT76O-FETU3-00-1' has no loaded model document, so Toolbox identity could duv be …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001367000222671777,
+      "elapsed_s": 0.00014439999358728528,
       "result_bytes": 52805,
       "result_tokens": 15848
     },
@@ -112,7 +112,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"596-11251\",\"full_path\":\"596-11251\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Kamibat\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00002239999594166875,
+      "elapsed_s": 0.0000219999928958714,
       "result_bytes": 221,
       "result_tokens": 75
     },
@@ -126,7 +126,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"359-17543-2\",\"full_path\":\"359-17543-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configuration\":\"Kamibat\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006859999848529696,
+      "elapsed_s": 0.00007770000956952572,
       "result_bytes": 20492,
       "result_tokens": 8280
     },
@@ -140,7 +140,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMwA1ADkALQAxADcANQA0ADMALQAyAEAANQA5ADYALQAxADEAMgA1ADEABAAAABAAAAABAAAAAQAAAHMAAAA=\",\"persist_ref_scope\":\"doc:792f2ea287a0\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00022459999308921397,
+      "elapsed_s": 0.0002161000156775117,
       "result_bytes": 20414,
       "result_tokens": 8526
     },
@@ -154,7 +154,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00001750001683831215,
+      "elapsed_s": 0.000017099984688684344,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -167,7 +167,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAAJAAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMatePARALLEL\",\"entities\":[{\"component_id\":\"cmp:0021\",\"persist_ref\":\"aEIAAAMAA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00028039998142048717,
+      "elapsed_s": 0.0007893999863881618,
       "result_bytes": 112264,
       "result_tokens": 56265
     },
@@ -180,9 +180,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.026563099992927164,
-      "result_bytes": 537698,
-      "result_tokens": 204775
+      "elapsed_s": 0.02582270000129938,
+      "result_bytes": 479323,
+      "result_tokens": 182848
     },
     {
       "index": 9,
@@ -191,7 +191,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-052\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0001 (swMatePARALLEL) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.002761399984592572,
+      "elapsed_s": 0.002654399984749034,
       "result_bytes": 101174,
       "result_tokens": 44735
     },
@@ -204,7 +204,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-053\",\"check\":\"rms.params.dimensions_driven_by_equations\",\"title\":\"none of the 1 equation(s) drives a dimension (a driven left side names one, as\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.010019100009230897,
+      "elapsed_s": 0.009761399996932596,
       "result_bytes": 36442,
       "result_tokens": 11313
     },
@@ -215,7 +215,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-086\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch1 is under-defined, at the top level of the feature tree; Sketch1 is unde\\u2026\",\"status\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.01659079999080859,
+      "elapsed_s": 0.016115799982799217,
       "result_bytes": 15434,
       "result_tokens": 5201
     },
@@ -236,7 +236,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Kamibat\",\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp:0026\"],\"volume\":{\"value\":2.5254845822e-07,\"unit\":\"m3\"},\"set…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0007947999984025955,
+      "elapsed_s": 0.0007796999998390675,
       "result_bytes": 54320,
       "result_tokens": 17062
     },
@@ -250,7 +250,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0015|cmp:0026\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Kamibat\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005930001498199999,
+      "elapsed_s": 0.00005420000525191426,
       "result_bytes": 2265,
       "result_tokens": 718
     },
@@ -263,7 +263,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-091\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0015 and cmp:0026 in configuration Kamibat: lar\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.07125819998327643,
+      "elapsed_s": 0.07067909999750555,
       "result_bytes": 3477,
       "result_tokens": 1016
     },
@@ -276,7 +276,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-001\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0015|cmp:0021\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0104\"],\"component_ids\":[\"cmp:0015\",\"cmp:0021\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002555999963078648,
+      "elapsed_s": 0.000215600011870265,
       "result_bytes": 551,
       "result_tokens": 193
     },
@@ -290,7 +290,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0015|cmp:0026\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Kamibat\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00008999998681247234,
+      "elapsed_s": 0.00007249999907799065,
       "result_bytes": 6835,
       "result_tokens": 2152
     },
@@ -303,7 +303,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-092\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0026 and cmp:0060, cmp:0072, cmp:0075 in config\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0005169000069145113,
+      "elapsed_s": 0.00045960000716149807,
       "result_bytes": 4075,
       "result_tokens": 1273
     },
@@ -316,7 +316,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-093\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0021 and cmp:0026 in configuration Kamibat: lar\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0005241000035312027,
+      "elapsed_s": 0.0004895000020042062,
       "result_bytes": 4802,
       "result_tokens": 1613
     },
@@ -329,7 +329,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-002\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0013|cmp:0026\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0064\",\"int:0093\"],\"component_ids\":[\"cmp:0013\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00021229998674243689,
+      "elapsed_s": 0.0003819999983534217,
       "result_bytes": 590,
       "result_tokens": 211
     },
@@ -342,7 +342,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-003\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0002|cmp:0026\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0084\"],\"component_ids\":[\"cmp:0002\",\"cmp:0026\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00018489998183213174,
+      "elapsed_s": 0.00018540001474320889,
       "result_bytes": 551,
       "result_tokens": 193
     },
@@ -357,7 +357,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-094\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0004 and hol:0010 are 25.0 mm apart (parallel), but no coaxiali\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0003488000074867159,
+      "elapsed_s": 0.0003496000135783106,
       "result_bytes": 2804,
       "result_tokens": 819
     },
@@ -372,7 +372,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-095\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0010 and hol:0024 are 13.5 mm apart (skew), but no coaxiality t\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0004687000182457268,
+      "elapsed_s": 0.0003409000055398792,
       "result_bytes": 2981,
       "result_tokens": 867
     },
@@ -387,7 +387,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-096\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0017 and hol:0027 are 68.35203 mm apart (parallel), but no coax\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00030659997719340026,
+      "elapsed_s": 0.00027180000324733555,
       "result_bytes": 2812,
       "result_tokens": 820
     },
@@ -409,7 +409,7 @@
       "result_summary": "entity_ids not in this package: ['doc:9map90032o5']",
       "status": "error",
       "error": "entity_ids not in this package: ['doc:9map90032o5']",
-      "elapsed_s": 0.00007310000364668667,
+      "elapsed_s": 0.00005160001455806196,
       "result_bytes": 64,
       "result_tokens": 22
     },
@@ -431,7 +431,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Drawing package for every manufactured part, including readable sheets vazo material, general tolerance note, functional surface finish, thr…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00016419999883510172,
+      "elapsed_s": 0.0001653999788686633,
       "result_bytes": 741,
       "result_tokens": 211
     },
@@ -460,7 +460,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"Complete fastener inventory fiz joint mapping for all screw/bolt-like components, including fastener ids, nominal thread designation fiz len…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00021329999435693026,
+      "elapsed_s": 0.0001821999903768301,
       "result_bytes": 771,
       "result_tokens": 225
     },
@@ -483,7 +483,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"Vault/PDM evidence for every reviewed document: vault version, local modification state, fiz revision where missing; also resolve lightweigh…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00015549999079667032,
+      "elapsed_s": 0.00016269998741336167,
       "result_bytes": 708,
       "result_tokens": 188
     },
@@ -505,7 +505,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-004\",\"what\":\"Confirm the SOLIDWORKS interference volume unit on the workstation fiz provide the intended motion positions or a motion sweep for the mecha…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014769998961128294,
+      "elapsed_s": 0.00014789999113418162,
       "result_bytes": 689,
       "result_tokens": 165
     },
@@ -532,7 +532,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"provenance\",\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":\"Kamibat\",\"positions\":[],\"document_ids\":[\"doc:681d2181ba04\",\"do…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012929999502375722,
+      "elapsed_s": 0.00014150000060908496,
       "result_bytes": 526,
       "result_tokens": 142
     },
@@ -554,7 +554,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":\"Kamibat\",\"positions\":[],\"document_ids\":[]},\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012989999959245324,
+      "elapsed_s": 0.00012710000737570226,
       "result_bytes": 410,
       "result_tokens": 102
     },
@@ -597,7 +597,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\",\"cmp:0006\",\"cmp:0009\",\"cmp:0010\",\"cmp:0013\"],\"pairs\":[[…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00013210001634433866,
+      "elapsed_s": 0.00014099999680183828,
       "result_bytes": 546,
       "result_tokens": 172
     },
@@ -630,7 +630,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0003\",\"cmp:0004\",\"cmp:0009\",\"cmp:0010\",\"cmp:0013\",\"cmp:0026\"],\"pairs\":[],\"configu…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012730000889860094,
+      "elapsed_s": 0.0001340000017080456,
       "result_bytes": 524,
       "result_tokens": 151
     },
@@ -668,7 +668,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0005\",\"cmp:0007\",\"cmp:0008\",\"cmp:0015\",\"cmp:0016\",\"cmp:0017\",\"cmp:0018\",\"cmp:0022\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014779999037273228,
+      "elapsed_s": 0.0001370999962091446,
       "result_bytes": 585,
       "result_tokens": 181
     },
@@ -711,7 +711,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0003\",\"cmp:0004\",\"cmp:0013\"],\"pairs\":[[\"hol:0004\",\"hol:0010\"],[\"hol:0010\",\"hol:002…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012760001118294895,
+      "elapsed_s": 0.00013500000932253897,
       "result_bytes": 569,
       "result_tokens": 166
     },
@@ -816,7 +816,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"checked\",\"coverage_item\":{\"check\":\"interference\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\",\"cmp:0006\",\"cmp:0008\",\"cmp:0009\",\"cmp:0010\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001441999920643866,
+      "elapsed_s": 0.00016460000188089907,
       "result_bytes": 1524,
       "result_tokens": 604
     },
@@ -847,7 +847,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"coverage.closeout\",\"scope\":{\"component_ids\":[\"cmp:0020\",\"cmp:0021\",\"cmp:0029\"],\"pairs\":[],\"configuration\":\"Kamibat\",\"positions\":[]…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001294999965466559,
+      "elapsed_s": 0.00017250000382773578,
       "result_bytes": 566,
       "result_tokens": 159
     },
@@ -858,7 +858,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000159099989105016,
+      "elapsed_s": 0.00013150001177564263,
       "result_bytes": 3886,
       "result_tokens": 849
     }
@@ -979,76 +979,13 @@
     {
       "id": "F-002",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "57 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "50 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Re…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0002"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAIYAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAIgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:792f2ea287a0",
           "sheet": null,
@@ -1514,16 +1451,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "57 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Directional2, Directional3, Axis1, Axis2, Axis3, Sketch1, Revolve1, Sketch1, Sketch8, Cut-Revolve1, Sketch8, Chamfer1, Fillet4, Sketch13, Boss-Extrude2, Sketch13, Sketch22, Boss-Extrude3, Sketch22, Sketch9, Cut-Extrude1, Sketch9, Sketch18, Cut-Extrude4, Sketch18, Fillet16, Chamfer9, Chamfer8, Fillet3, Fillet12, Fillet5, Fillet6, Fillet15, Fillet17, Fillet24, Sketch16, Cut-Extrude2, Sketch16, Fillet19, Chamfer10, Sketch21, M8 Clearance Hole1, Sketch21, Sketch20, Sketch25, Ø2.0mm Degob Hole1, Sketch25, Sketch24, CirPattern2, Fillet20, Fillet22, Fillet23",
+      "observed": "50 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Revolve1, Sketch1, Sketch8, Cut-Revolve1, Sketch8, Chamfer1, Fillet4, Sketch13, Boss-Extrude2, Sketch13, Sketch22, Boss-Extrude3, Sketch22, Sketch9, Cut-Extrude1, Sketch9, Sketch18, Cut-Extrude4, Sketch18, Fillet16, Chamfer9, Chamfer8, Fillet3, Fillet12, Fillet5, Fillet6, Fillet15, Fillet17, Fillet24, Sketch16, Cut-Extrude2, Sketch16, Fillet19, Chamfer10, Sketch21, M8 Clearance Hole1, Sketch21, Sketch20, Sketch25, Ø2.0mm Degob Hole1, Sketch25, Sketch24, CirPattern2, Fillet20, Fillet22, Fillet23",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0007 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFsAAAA= scope=doc:792f2ea287a0",
-        "feat:0008 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMgAAAA= scope=doc:792f2ea287a0",
-        "feat:0009 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFwAAAA= scope=doc:792f2ea287a0",
-        "feat:0012 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:792f2ea287a0",
-        "feat:0013 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:792f2ea287a0",
-        "feat:0014 Directional2 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAIYAAAA= scope=doc:792f2ea287a0",
-        "feat:0015 Directional3 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAIgAAAA= scope=doc:792f2ea287a0",
         "feat:0025 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:792f2ea287a0",
         "feat:0026 Axis2 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADAAAAA= scope=doc:792f2ea287a0",
         "feat:0027 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:792f2ea287a0",
@@ -1697,58 +1627,13 @@
     {
       "id": "F-005",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "116 content feature(s) sit outside every group: Notes, Notes Area, Setul9___End…",
+      "title": "105 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, B…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0003"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:8a412bc4633c",
           "sheet": null,
@@ -1926,33 +1811,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAALMBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAALYBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAL8BAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAHwDAAA=",
           "page": null,
           "bbox": null
         },
@@ -2277,33 +2135,6 @@
           "view": null,
           "annotation": null,
           "persist_ref": "aEIAAAEAAAD//v8AAAAAAOoBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAO8BAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAPIBAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAFsDAAA=",
           "page": null,
           "bbox": null
         },
@@ -2763,14 +2594,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "116 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch5, Cut-Extrude1, Sketch5, Sketch4, Sketch10, Sketch6, Cut-Extrude2, Sketch6, M4 Clearance Hole1, Sketch4, Sketch3, M8x1.25 Tapped Hole1, Sketch10, Sketch9, Hole Thread28, Hole Thread31, Hole Thread35, Sketch22, Cut-Extrude4, Sketch22, Sketch36, Cut-Extrude10, Sketch36, Sketch24, Cut-Extrude12, Sketch24, Sketch40, M3x0.5 Tapped Hole1, Sketch40, Sketch39, Sketch46, Cut-Extrude16, Sketch46, Fillet2, Fillet14, Mirror1, Sketch37, Cut-Extrude11, Sketch37, Fillet1, Sketch15, Cut-Extrude3, Sketch15, Sketch41, Boss-Extrude6, Sketch41, Sketch42, Boss-Extrude7, Sketch42, Sketch18, M10x1.5 Tapped Hole1, Sketch18, Sketch17, Hole Thread32, Hole Thread33, Hole Thread34, Sketch21, Ø3.0mm Degob Hole1, Sketch21, Sketch20, Sketch28, Cut-Extrude7, Sketch28, Sketch23, Boss-Extrude2, Sketch23, Sketch27, Boss-Extrude5, Sketch27, Sketch30, Cut-Extrude8, Sketch30, Sketch43, Cut-Extrude13, Sketch43, Sketch44, Cut-Extrude14, Sketch44, Sketch33, M2x0.4 Tapped Hole1, Sketch33, Sketch32, Fillet9, Fillet6, Fillet3, Fillet5, Fillet10, Fillet4, Chamfer1, Fillet7, Fillet8, Fillet11, Fillet18, Fillet12, Fillet15, Fillet16, Fillet17, Sketch45, Cut-Extrude15, Sketch45, Sketch51, 3/8 NPT Tapped Hole1, Sketch51, Sketch50, Chamfer3; Ø3.0mm Degob Hole1 is suppressed in Kamibat; Boss-Extrude2 is suppressed in Kamibat; Sketch27 is suppressed in Kamibat; Boss-Extrude5 is suppressed in Kamibat; Sketch27 is suppressed in Kamibat; Fillet5 is suppressed in Kamibat; Fillet4 is suppressed in Kamibat; Chamfer1 is suppressed in Kamibat; Fillet7 is suppressed in Kamibat; Fillet8 is suppressed in Kamibat",
+      "observed": "105 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch5, Cut-Extrude1, Sketch5, Sketch4, Sketch10, Sketch6, Cut-Extrude2, Sketch6, M4 Clearance Hole1, Sketch4, Sketch3, M8x1.25 Tapped Hole1, Sketch10, Sketch9, Sketch22, Cut-Extrude4, Sketch22, Sketch36, Cut-Extrude10, Sketch36, Sketch24, Cut-Extrude12, Sketch24, Sketch40, M3x0.5 Tapped Hole1, Sketch40, Sketch39, Sketch46, Cut-Extrude16, Sketch46, Fillet2, Fillet14, Mirror1, Sketch37, Cut-Extrude11, Sketch37, Fillet1, Sketch15, Cut-Extrude3, Sketch15, Sketch41, Boss-Extrude6, Sketch41, Sketch42, Boss-Extrude7, Sketch42, Sketch18, M10x1.5 Tapped Hole1, Sketch18, Sketch17, Sketch21, Ø3.0mm Degob Hole1, Sketch21, Sketch20, Sketch28, Cut-Extrude7, Sketch28, Sketch23, Boss-Extrude2, Sketch23, Sketch27, Boss-Extrude5, Sketch27, Sketch30, Cut-Extrude8, Sketch30, Sketch43, Cut-Extrude13, Sketch43, Sketch44, Cut-Extrude14, Sketch44, Sketch33, M2x0.4 Tapped Hole1, Sketch33, Sketch32, Fillet9, Fillet6, Fillet3, Fillet5, Fillet10, Fillet4, Chamfer1, Fillet7, Fillet8, Fillet11, Fillet18, Fillet12, Fillet15, Fillet16, Fillet17, Sketch45, Cut-Extrude15, Sketch45, Sketch51, 3/8 NPT Tapped Hole1, Sketch51, Sketch50, Chamfer3; Ø3.0mm Degob Hole1 is suppressed in Kamibat; Boss-Extrude2 is suppressed in Kamibat; Sketch27 is suppressed in Kamibat; Boss-Extrude5 is suppressed in Kamibat; Sketch27 is suppressed in Kamibat; Fillet5 is suppressed in Kamibat; Fillet4 is suppressed in Kamibat; Chamfer1 is suppressed in Kamibat; Fillet7 is suppressed in Kamibat; Fillet8 is suppressed in Kamibat",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0081 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFsAAAA= scope=doc:8a412bc4633c",
-        "feat:0082 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMgAAAA= scope=doc:8a412bc4633c",
-        "feat:0083 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFwAAAA= scope=doc:8a412bc4633c",
-        "feat:0086 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:8a412bc4633c",
-        "feat:0087 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:8a412bc4633c",
         "feat:0097 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:8a412bc4633c",
         "feat:0098 Axis2 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADAAAAA= scope=doc:8a412bc4633c",
         "feat:0099 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:8a412bc4633c",
@@ -2791,9 +2617,6 @@
         "feat:0114 M8x1.25 Tapped Hole1 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAGABAAA= scope=doc:8a412bc4633c",
         "feat:0115 Sketch10 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAF8BAAA= scope=doc:8a412bc4633c",
         "feat:0116 Sketch9 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAALMBAAA= scope=doc:8a412bc4633c",
-        "feat:0117 Hole Thread28 [CosmeticThread] persist_ref=aEIAAAEAAAD//v8AAAAAALYBAAA= scope=doc:8a412bc4633c",
-        "feat:0118 Hole Thread31 [CosmeticThread] persist_ref=aEIAAAEAAAD//v8AAAAAAL8BAAA= scope=doc:8a412bc4633c",
-        "feat:0119 Hole Thread35 [CosmeticThread] persist_ref=aEIAAAEAAAD//v8AAAAAAHwDAAA= scope=doc:8a412bc4633c",
         "feat:0120 Sketch22 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAAwCAAA= scope=doc:8a412bc4633c",
         "feat:0121 Cut-Extrude4 [ICE] persist_ref=aEIAAAEAAAD//v8AAAAAABYCAAA= scope=doc:8a412bc4633c",
         "feat:0122 Sketch22 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAAwCAAA= scope=doc:8a412bc4633c",
@@ -2830,9 +2653,6 @@
         "feat:0153 M10x1.5 Tapped Hole1 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAOwBAAA= scope=doc:8a412bc4633c",
         "feat:0154 Sketch18 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAOsBAAA= scope=doc:8a412bc4633c",
         "feat:0155 Sketch17 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAOoBAAA= scope=doc:8a412bc4633c",
-        "feat:0156 Hole Thread32 [CosmeticThread] persist_ref=aEIAAAEAAAD//v8AAAAAAO8BAAA= scope=doc:8a412bc4633c",
-        "feat:0157 Hole Thread33 [CosmeticThread] persist_ref=aEIAAAEAAAD//v8AAAAAAPIBAAA= scope=doc:8a412bc4633c",
-        "feat:0158 Hole Thread34 [CosmeticThread] persist_ref=aEIAAAEAAAD//v8AAAAAAFsDAAA= scope=doc:8a412bc4633c",
         "feat:0159 Sketch21 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAAACAAA= scope=doc:8a412bc4633c",
         "feat:0160 Ø3.0mm Degob Hole1 [HoleWzd] persist_ref=aEIAAAEAAAD//v8AAAAAAAECAAA= scope=doc:8a412bc4633c",
         "feat:0161 Sketch21 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAAACAAA= scope=doc:8a412bc4633c",
@@ -2946,58 +2766,13 @@
     {
       "id": "F-007",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "102 content feature(s) sit outside every group: Notes, Notes Area, Setul9___End…",
+      "title": "97 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Bo…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0004"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:8b5228d54fc8",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8b5228d54fc8",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8b5228d54fc8",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8b5228d54fc8",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8b5228d54fc8",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:8b5228d54fc8",
           "sheet": null,
@@ -3886,14 +3661,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "102 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Cut-Extrude1, Sketch2, Sketch3, Chamfer1, Cut-Extrude4, Sketch3, Sketch7, Cut-Extrude5, Sketch7, Sketch12, Cut-Extrude6, Sketch12, Mirror1, Sketch64, Cut-Extrude12, Sketch64, Sketch65, Boss-Extrude4, Sketch65, Sketch66, Cut-Extrude13, Sketch66, Sketch73, Cut-Extrude14, Sketch73, Sketch22, CBORE for M8 GAGI4, Sketch22, Sketch21, Sketch43, Boss-Extrude3, Sketch43, Sketch46, CBORE for M10 SUGU0, Sketch46, Sketch45, Sketch69, M8x1.25 Tapped Hole1, Sketch69, Sketch68, Sketch76, M5x0.8 Tapped Hole1, Sketch76, Sketch75, Sketch90, Cut-Extrude15, Sketch90, Sketch91, Cut-Extrude16, Sketch91, Sketch79, M3x0.5 Tapped Hole2, Sketch79, Sketch78, Sketch72, M3x0.5 Tapped Hole1, Sketch72, Sketch71, Sketch82, M2x0.4 Tapped Hole4, Sketch82, Sketch81, Sketch85, Ø3.0mm Degob Hole2, Sketch85, Sketch86, Sketch89, Ø3.0mm Degob Slot2, Sketch89, Sketch88, Mirror2, Chamfer7, Fillet8, Fillet14, Fillet4, Chamfer6, Fillet3, Chamfer8, Fillet9, Fillet10, Fillet11, Fillet12, Fillet13, Fillet15, Fillet16, Fillet19, Chamfer5, Fillet17, Fillet18, Chamfer9; Chamfer5 is suppressed in Kamibat; Fillet17 is suppressed in Kamibat",
+      "observed": "97 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Cut-Extrude1, Sketch2, Sketch3, Chamfer1, Cut-Extrude4, Sketch3, Sketch7, Cut-Extrude5, Sketch7, Sketch12, Cut-Extrude6, Sketch12, Mirror1, Sketch64, Cut-Extrude12, Sketch64, Sketch65, Boss-Extrude4, Sketch65, Sketch66, Cut-Extrude13, Sketch66, Sketch73, Cut-Extrude14, Sketch73, Sketch22, CBORE for M8 GAGI4, Sketch22, Sketch21, Sketch43, Boss-Extrude3, Sketch43, Sketch46, CBORE for M10 SUGU0, Sketch46, Sketch45, Sketch69, M8x1.25 Tapped Hole1, Sketch69, Sketch68, Sketch76, M5x0.8 Tapped Hole1, Sketch76, Sketch75, Sketch90, Cut-Extrude15, Sketch90, Sketch91, Cut-Extrude16, Sketch91, Sketch79, M3x0.5 Tapped Hole2, Sketch79, Sketch78, Sketch72, M3x0.5 Tapped Hole1, Sketch72, Sketch71, Sketch82, M2x0.4 Tapped Hole4, Sketch82, Sketch81, Sketch85, Ø3.0mm Degob Hole2, Sketch85, Sketch86, Sketch89, Ø3.0mm Degob Slot2, Sketch89, Sketch88, Mirror2, Chamfer7, Fillet8, Fillet14, Fillet4, Chamfer6, Fillet3, Chamfer8, Fillet9, Fillet10, Fillet11, Fillet12, Fillet13, Fillet15, Fillet16, Fillet19, Chamfer5, Fillet17, Fillet18, Chamfer9; Chamfer5 is suppressed in Kamibat; Fillet17 is suppressed in Kamibat",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0214 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFsAAAA= scope=doc:8b5228d54fc8",
-        "feat:0215 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMgAAAA= scope=doc:8b5228d54fc8",
-        "feat:0216 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFwAAAA= scope=doc:8b5228d54fc8",
-        "feat:0219 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:8b5228d54fc8",
-        "feat:0220 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:8b5228d54fc8",
         "feat:0230 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:8b5228d54fc8",
         "feat:0231 Axis2 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADAAAAA= scope=doc:8b5228d54fc8",
         "feat:0232 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:8b5228d54fc8",
@@ -4154,7 +3924,7 @@
     {
       "id": "F-010",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axi…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -4168,51 +3938,6 @@
         "cmp:0044"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:9c7425f72c64",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:9c7425f72c64",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMkAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:9c7425f72c64",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHkAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:9c7425f72c64",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:9c7425f72c64",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:9c7425f72c64",
           "sheet": null,
@@ -4354,14 +4079,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
+      "observed": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0333 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHgAAAA= scope=doc:9c7425f72c64",
-        "feat:0334 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMkAAAA= scope=doc:9c7425f72c64",
-        "feat:0335 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHkAAAA= scope=doc:9c7425f72c64",
-        "feat:0338 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:9c7425f72c64",
-        "feat:0339 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:9c7425f72c64",
         "feat:0349 MateReferences [MateReferenceGroupFolder] persist_ref=aEIAACQAAAD//v8AAAAAAF0AAAA= scope=doc:9c7425f72c64",
         "feat:0350 Kamibat-<1> [PosGroupFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:9c7425f72c64",
         "feat:0352 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:9c7425f72c64",
@@ -4429,58 +4149,13 @@
     {
       "id": "F-012",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "25 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "20 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Bo…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0006"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:ad861218f8f0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:ad861218f8f0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:ad861218f8f0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:ad861218f8f0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:ad861218f8f0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:ad861218f8f0",
           "sheet": null,
@@ -4676,14 +4351,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "25 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Cut-Extrude1, Sketch2, Sketch3, Cut-Extrude2, Sketch3, Sketch6, CSK for M3 Bola Vebu Machine Screw1, Sketch6, Sketch5, Fillet2, Fillet1, Fillet3, Chamfer1",
+      "observed": "20 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Cut-Extrude1, Sketch2, Sketch3, Cut-Extrude2, Sketch3, Sketch6, CSK for M3 Bola Vebu Machine Screw1, Sketch6, Sketch5, Fillet2, Fillet1, Fillet3, Chamfer1",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0370 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFsAAAA= scope=doc:ad861218f8f0",
-        "feat:0371 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMgAAAA= scope=doc:ad861218f8f0",
-        "feat:0372 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFwAAAA= scope=doc:ad861218f8f0",
-        "feat:0375 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:ad861218f8f0",
-        "feat:0376 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:ad861218f8f0",
         "feat:0386 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:ad861218f8f0",
         "feat:0387 Axis2 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADAAAAA= scope=doc:ad861218f8f0",
         "feat:0388 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:ad861218f8f0",
@@ -4760,7 +4430,7 @@
     {
       "id": "F-014",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axi…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -4770,51 +4440,6 @@
         "cmp:0053"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:bea71039d48c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:bea71039d48c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMkAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:bea71039d48c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHkAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:bea71039d48c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:bea71039d48c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:bea71039d48c",
           "sheet": null,
@@ -4956,14 +4581,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
+      "observed": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0412 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHgAAAA= scope=doc:bea71039d48c",
-        "feat:0413 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMkAAAA= scope=doc:bea71039d48c",
-        "feat:0414 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHkAAAA= scope=doc:bea71039d48c",
-        "feat:0417 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:bea71039d48c",
-        "feat:0418 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:bea71039d48c",
         "feat:0428 MateReferences [MateReferenceGroupFolder] persist_ref=aEIAACQAAAD//v8AAAAAAF0AAAA= scope=doc:bea71039d48c",
         "feat:0429 Kamibat-<1> [PosGroupFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:bea71039d48c",
         "feat:0431 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:bea71039d48c",
@@ -5031,58 +4651,13 @@
     {
       "id": "F-016",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "27 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "22 content feature(s) sit outside every group: Tables, Sketch1, Sketch2, Sketch…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0008"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:cfb91d5bb128",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAC8DAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:cfb91d5bb128",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:cfb91d5bb128",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAADADAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:cfb91d5bb128",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:cfb91d5bb128",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAH4DAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:cfb91d5bb128",
           "sheet": null,
@@ -5296,14 +4871,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "27 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Tables, Sketch1, Sketch2, Sketch12, Revolve1, Sketch12, Sketch7, Revolve2, Sketch7, Sketch11, Cut-Extrude4, Sketch11, CirPattern1, Chamfer1, Split1, Sketch13, Helix/Spiral1, Sketch13, Sketch14, Cut-Sweep1, Sketch14, Combine1; Split1 is suppressed in 80704P581; Sketch13 is suppressed in 80704P581; Helix/Spiral1 is suppressed in 80704P581; Sketch13 is suppressed in 80704P581; Sketch14 is suppressed in 80704P581; Cut-Sweep1 is suppressed in 80704P581; Sketch14 is suppressed in 80704P581; Combine1 is suppressed in 80704P581",
+      "observed": "22 content feature(s) sit outside every group: Tables, Sketch1, Sketch2, Sketch12, Revolve1, Sketch12, Sketch7, Revolve2, Sketch7, Sketch11, Cut-Extrude4, Sketch11, CirPattern1, Chamfer1, Split1, Sketch13, Helix/Spiral1, Sketch13, Sketch14, Cut-Sweep1, Sketch14, Combine1; Split1 is suppressed in 80704P581; Sketch13 is suppressed in 80704P581; Helix/Spiral1 is suppressed in 80704P581; Sketch13 is suppressed in 80704P581; Sketch14 is suppressed in 80704P581; Cut-Sweep1 is suppressed in 80704P581; Sketch14 is suppressed in 80704P581; Combine1 is suppressed in 80704P581",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0449 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAC8DAAA= scope=doc:cfb91d5bb128",
-        "feat:0450 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMsAAAA= scope=doc:cfb91d5bb128",
-        "feat:0451 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAADADAAA= scope=doc:cfb91d5bb128",
-        "feat:0454 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:cfb91d5bb128",
-        "feat:0455 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAH4DAAA= scope=doc:cfb91d5bb128",
         "feat:0465 Tables [ConfigTableFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:cfb91d5bb128",
         "feat:0467 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJoAAAA= scope=doc:cfb91d5bb128",
         "feat:0468 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAG0DAAA= scope=doc:cfb91d5bb128",
@@ -5508,58 +5078,13 @@
     {
       "id": "F-019",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "57 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "52 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Bo…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0009"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:d0db1a7c9db4",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:d0db1a7c9db4",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:d0db1a7c9db4",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:d0db1a7c9db4",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:d0db1a7c9db4",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:d0db1a7c9db4",
           "sheet": null,
@@ -6043,14 +5568,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "57 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3, Sketch4, Cut-Extrude2, Sketch4, Sketch5, Cut-Extrude3, Sketch5, Sketch8, Boss-Extrude3, Sketch8, Sketch13, Boss-Extrude4, Sketch13, Fillet4, Chamfer1, Sketch7, Cut-Extrude4, Sketch7, Sketch11, CSK for M3 Bola Vebu Machine Screw1, Sketch11, Sketch10, Sketch19, M3x0.5 Tapped Hole1, Sketch19, Sketch18, Sketch16, CBORE for M4 GAGI4, Sketch16, Sketch15, Mirror1, Chamfer2, Chamfer3, Fillet3, Fillet11, Fillet12, Fillet5, Fillet6, Fillet7, Fillet8, Fillet10",
+      "observed": "52 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3, Sketch4, Cut-Extrude2, Sketch4, Sketch5, Cut-Extrude3, Sketch5, Sketch8, Boss-Extrude3, Sketch8, Sketch13, Boss-Extrude4, Sketch13, Fillet4, Chamfer1, Sketch7, Cut-Extrude4, Sketch7, Sketch11, CSK for M3 Bola Vebu Machine Screw1, Sketch11, Sketch10, Sketch19, M3x0.5 Tapped Hole1, Sketch19, Sketch18, Sketch16, CBORE for M4 GAGI4, Sketch16, Sketch15, Mirror1, Chamfer2, Chamfer3, Fillet3, Fillet11, Fillet12, Fillet5, Fillet6, Fillet7, Fillet8, Fillet10",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0497 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFsAAAA= scope=doc:d0db1a7c9db4",
-        "feat:0498 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMgAAAA= scope=doc:d0db1a7c9db4",
-        "feat:0499 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFwAAAA= scope=doc:d0db1a7c9db4",
-        "feat:0502 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:d0db1a7c9db4",
-        "feat:0503 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:d0db1a7c9db4",
         "feat:0513 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:d0db1a7c9db4",
         "feat:0514 Axis2 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADAAAAA= scope=doc:d0db1a7c9db4",
         "feat:0515 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:d0db1a7c9db4",
@@ -6246,58 +5766,13 @@
     {
       "id": "F-022",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "30 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "25 content feature(s) sit outside every group: Cut-List-Item1, Axis1, Axis2, Ax…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0010"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:e0ec179d6940",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:e0ec179d6940",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:e0ec179d6940",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:e0ec179d6940",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:e0ec179d6940",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:e0ec179d6940",
           "sheet": null,
@@ -6538,14 +6013,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "30 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Cut-List-Item1, Axis1, Axis2, Axis3, Sketch1, Sheet-Metal5, Base-Flange1, Sketch1, Sketch12, Cut-Extrude1, Sketch12, Sketch11, CSK for M2 Bola Vebu Machine Screw1, Sketch11, Sketch10, Sketch13, Cut-Extrude2, Sketch13, Fillet2, Fillet4, Cut-List-Item1, Bola-Pattern5, Bend-Lines2, Bounding-Box2, Sketch Transformation1; Bola-Pattern5 is suppressed in Kamibat; Bounding-Box2 is suppressed in Kamibat; Sketch Transformation1 is suppressed in Kamibat",
+      "observed": "25 content feature(s) sit outside every group: Cut-List-Item1, Axis1, Axis2, Axis3, Sketch1, Sheet-Metal5, Base-Flange1, Sketch1, Sketch12, Cut-Extrude1, Sketch12, Sketch11, CSK for M2 Bola Vebu Machine Screw1, Sketch11, Sketch10, Sketch13, Cut-Extrude2, Sketch13, Fillet2, Fillet4, Cut-List-Item1, Bola-Pattern5, Bend-Lines2, Bounding-Box2, Sketch Transformation1; Bola-Pattern5 is suppressed in Kamibat; Bounding-Box2 is suppressed in Kamibat; Sketch Transformation1 is suppressed in Kamibat",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0572 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFsAAAA= scope=doc:e0ec179d6940",
-        "feat:0573 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMgAAAA= scope=doc:e0ec179d6940",
-        "feat:0574 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFwAAAA= scope=doc:e0ec179d6940",
-        "feat:0577 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:e0ec179d6940",
-        "feat:0578 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:e0ec179d6940",
         "feat:0580 Cut-List-Item1 [CutListFolder] persist_ref=aEIAABQAAAD//v8AAAAAAAEBAAA= scope=doc:e0ec179d6940",
         "feat:0589 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:e0ec179d6940",
         "feat:0590 Axis2 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADAAAAA= scope=doc:e0ec179d6940",
@@ -6691,7 +6161,7 @@
     {
       "id": "F-025",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Tab…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -6699,51 +6169,6 @@
         "cmp:0014"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:f21001d02278",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAGMAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:f21001d02278",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAM4AAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:f21001d02278",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAGQAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:f21001d02278",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:f21001d02278",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAGwAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:f21001d02278",
           "sheet": null,
@@ -6885,14 +6310,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Tables, Sketch1, Sketch2, Extrude1, Sketch2, Sketch3, Extrude2, Sketch3, Sketch4, Extrude3, Sketch4, Sketch5",
+      "observed": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Tables, Sketch1, Sketch2, Extrude1, Sketch2, Sketch3, Extrude2, Sketch3, Sketch4, Extrude3, Sketch4, Sketch5",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0619 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAGMAAAA= scope=doc:f21001d02278",
-        "feat:0620 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAM4AAAA= scope=doc:f21001d02278",
-        "feat:0621 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAGQAAAA= scope=doc:f21001d02278",
-        "feat:0624 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAwAAAA= scope=doc:f21001d02278",
-        "feat:0625 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAGwAAAA= scope=doc:f21001d02278",
         "feat:0635 MateReferences [MateReferenceGroupFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHsAAAA= scope=doc:f21001d02278",
         "feat:0636 Kamibat-<1> [PosGroupFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:f21001d02278",
         "feat:0638 Tables [ConfigTableFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:f21001d02278",
@@ -7051,58 +6471,13 @@
     {
       "id": "F-028",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "53 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "48 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Bo…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0013"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:03210ef10e04",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:03210ef10e04",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:03210ef10e04",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:03210ef10e04",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:03210ef10e04",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:03210ef10e04",
           "sheet": null,
@@ -7550,14 +6925,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "53 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch5, CBORE for M8 GAGI4, Sketch5, Sketch4, Sketch8, CBORE for M8 KIKA7, Sketch8, Sketch7, Sketch10, Cut-Extrude1, Sketch10, Sketch11, Cut-Extrude2, Sketch11, Sketch15, Cut-Extrude3, Sketch15, Sketch19, Cut-Extrude4, Sketch19, Sketch20, Cut-Extrude5, Sketch20, Chamfer1, Sketch14, M5x0.8 Tapped Hole1, Sketch14, Sketch13, Sketch18, Ø3.0mm Degob Hole1, Sketch18, Sketch17, Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
+      "observed": "48 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch5, CBORE for M8 GAGI4, Sketch5, Sketch4, Sketch8, CBORE for M8 KIKA7, Sketch8, Sketch7, Sketch10, Cut-Extrude1, Sketch10, Sketch11, Cut-Extrude2, Sketch11, Sketch15, Cut-Extrude3, Sketch15, Sketch19, Cut-Extrude4, Sketch19, Sketch20, Cut-Extrude5, Sketch20, Chamfer1, Sketch14, M5x0.8 Tapped Hole1, Sketch14, Sketch13, Sketch18, Ø3.0mm Degob Hole1, Sketch18, Sketch17, Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0658 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFsAAAA= scope=doc:03210ef10e04",
-        "feat:0659 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMgAAAA= scope=doc:03210ef10e04",
-        "feat:0660 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFwAAAA= scope=doc:03210ef10e04",
-        "feat:0663 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:03210ef10e04",
-        "feat:0664 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:03210ef10e04",
         "feat:0674 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:03210ef10e04",
         "feat:0675 Axis2 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADAAAAA= scope=doc:03210ef10e04",
         "feat:0676 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:03210ef10e04",
@@ -7732,7 +7102,7 @@
     {
       "id": "F-031",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axi…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -7742,51 +7112,6 @@
         "cmp:0075"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:14430b03daa0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:14430b03daa0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMkAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:14430b03daa0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:14430b03daa0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:14430b03daa0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:14430b03daa0",
           "sheet": null,
@@ -7928,14 +7253,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
+      "observed": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0729 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHsAAAA= scope=doc:14430b03daa0",
-        "feat:0730 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMkAAAA= scope=doc:14430b03daa0",
-        "feat:0731 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHwAAAA= scope=doc:14430b03daa0",
-        "feat:0734 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:14430b03daa0",
-        "feat:0735 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:14430b03daa0",
         "feat:0745 MateReferences [MateReferenceGroupFolder] persist_ref=aEIAACQAAAD//v8AAAAAAF0AAAA= scope=doc:14430b03daa0",
         "feat:0746 Kamibat-<1> [PosGroupFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:14430b03daa0",
         "feat:0748 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:14430b03daa0",
@@ -8005,7 +7325,7 @@
     {
       "id": "F-033",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axi…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -8014,51 +7334,6 @@
         "cmp:0031"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:25550924b73c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:25550924b73c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMkAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:25550924b73c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHkAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:25550924b73c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:25550924b73c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:25550924b73c",
           "sheet": null,
@@ -8200,14 +7475,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
+      "observed": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0766 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHgAAAA= scope=doc:25550924b73c",
-        "feat:0767 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMkAAAA= scope=doc:25550924b73c",
-        "feat:0768 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHkAAAA= scope=doc:25550924b73c",
-        "feat:0771 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:25550924b73c",
-        "feat:0772 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:25550924b73c",
         "feat:0782 MateReferences [MateReferenceGroupFolder] persist_ref=aEIAACQAAAD//v8AAAAAAF0AAAA= scope=doc:25550924b73c",
         "feat:0783 Kamibat-<1> [PosGroupFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:25550924b73c",
         "feat:0785 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:25550924b73c",
@@ -8290,7 +7560,7 @@
     {
       "id": "F-035",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "38 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "33 content feature(s) sit outside every group: Tables, Sketch1, Sketch2, Boss-E…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -8312,51 +7582,6 @@
         "cmp:0069"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:3676f64593c8",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAJYAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:3676f64593c8",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAM4AAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:3676f64593c8",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAJcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:3676f64593c8",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:3676f64593c8",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAO8BAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:3676f64593c8",
           "sheet": null,
@@ -8669,14 +7894,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "38 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Tables, Sketch1, Sketch2, Boss-Extrude1, Sketch2, Chamfer1, Sketch3, Revolve1, Sketch3, Sketch4, Revolve2, Sketch4, Sketch5, Sketch6, Cut-Revolve1, Sketch6, Boss-Extrude2, Sketch5, CirPattern1, Sketch7, Cut-Extrude1, Sketch7, Split1, Sketch8, Sketch9, Helix/Spiral1, Sketch9, Cut-Sweep1, Sketch8, Sketch10, Boss-Extrude3, Sketch10, Sketch11; Split1 is suppressed in 19645L936; Sketch8 is suppressed in 19645L936; Sketch9 is suppressed in 19645L936; Helix/Spiral1 is suppressed in 19645L936; Sketch9 is suppressed in 19645L936; Cut-Sweep1 is suppressed in 19645L936; Sketch8 is suppressed in 19645L936; Sketch10 is suppressed in 19645L936; Boss-Extrude3 is suppressed in 19645L936; Sketch10 is suppressed in 19645L936; Sketch11 is suppressed in 19645L936",
+      "observed": "33 content feature(s) sit outside every group: Tables, Sketch1, Sketch2, Boss-Extrude1, Sketch2, Chamfer1, Sketch3, Revolve1, Sketch3, Sketch4, Revolve2, Sketch4, Sketch5, Sketch6, Cut-Revolve1, Sketch6, Boss-Extrude2, Sketch5, CirPattern1, Sketch7, Cut-Extrude1, Sketch7, Split1, Sketch8, Sketch9, Helix/Spiral1, Sketch9, Cut-Sweep1, Sketch8, Sketch10, Boss-Extrude3, Sketch10, Sketch11; Split1 is suppressed in 19645L936; Sketch8 is suppressed in 19645L936; Sketch9 is suppressed in 19645L936; Helix/Spiral1 is suppressed in 19645L936; Sketch9 is suppressed in 19645L936; Cut-Sweep1 is suppressed in 19645L936; Sketch8 is suppressed in 19645L936; Sketch10 is suppressed in 19645L936; Boss-Extrude3 is suppressed in 19645L936; Sketch10 is suppressed in 19645L936; Sketch11 is suppressed in 19645L936",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0803 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAJYAAAA= scope=doc:3676f64593c8",
-        "feat:0804 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAM4AAAA= scope=doc:3676f64593c8",
-        "feat:0805 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAJcAAAA= scope=doc:3676f64593c8",
-        "feat:0808 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAwAAAA= scope=doc:3676f64593c8",
-        "feat:0809 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAO8BAAA= scope=doc:3676f64593c8",
         "feat:0819 Tables [ConfigTableFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:3676f64593c8",
         "feat:0821 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACIAAAA= scope=doc:3676f64593c8",
         "feat:0822 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADMAAAA= scope=doc:3676f64593c8",
@@ -9036,7 +8256,7 @@
     {
       "id": "F-038",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axi…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -9045,51 +8265,6 @@
         "cmp:0033"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:4788f3676f64",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:4788f3676f64",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMkAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:4788f3676f64",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHkAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:4788f3676f64",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:4788f3676f64",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:4788f3676f64",
           "sheet": null,
@@ -9231,14 +8406,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
+      "observed": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0864 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHgAAAA= scope=doc:4788f3676f64",
-        "feat:0865 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMkAAAA= scope=doc:4788f3676f64",
-        "feat:0866 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHkAAAA= scope=doc:4788f3676f64",
-        "feat:0869 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:4788f3676f64",
-        "feat:0870 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:4788f3676f64",
         "feat:0880 MateReferences [MateReferenceGroupFolder] persist_ref=aEIAACQAAAD//v8AAAAAAF0AAAA= scope=doc:4788f3676f64",
         "feat:0881 Kamibat-<1> [PosGroupFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:4788f3676f64",
         "feat:0883 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:4788f3676f64",
@@ -9315,7 +8485,7 @@
     {
       "id": "F-040",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axi…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -9331,51 +8501,6 @@
         "cmp:0078"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:7befe7ecd1b4",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:7befe7ecd1b4",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMkAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:7befe7ecd1b4",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAHkAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:7befe7ecd1b4",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:7befe7ecd1b4",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:7befe7ecd1b4",
           "sheet": null,
@@ -9517,14 +8642,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "19 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
+      "observed": "14 content feature(s) sit outside every group: MateReferences, Kamibat-<1>, Axis1, Axis2, Axis3, Sketch1, Extrude1, Sketch1, Sketch2, Extrude2, Sketch2, Sketch3, Cut-Extrude1, Sketch3",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0901 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHgAAAA= scope=doc:7befe7ecd1b4",
-        "feat:0902 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMkAAAA= scope=doc:7befe7ecd1b4",
-        "feat:0903 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHkAAAA= scope=doc:7befe7ecd1b4",
-        "feat:0906 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:7befe7ecd1b4",
-        "feat:0907 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:7befe7ecd1b4",
         "feat:0917 MateReferences [MateReferenceGroupFolder] persist_ref=aEIAACQAAAD//v8AAAAAAF0AAAA= scope=doc:7befe7ecd1b4",
         "feat:0918 Kamibat-<1> [PosGroupFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:7befe7ecd1b4",
         "feat:0920 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:7befe7ecd1b4",
@@ -9610,7 +8730,7 @@
     {
       "id": "F-042",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "38 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "33 content feature(s) sit outside every group: Tables, Sketch1, Sketch2, Boss-E…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -9635,51 +8755,6 @@
         "cmp:0089"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:8c00e50ebd40",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAJYAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8c00e50ebd40",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAM4AAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8c00e50ebd40",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAJcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8c00e50ebd40",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8c00e50ebd40",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAO8BAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:8c00e50ebd40",
           "sheet": null,
@@ -9992,14 +9067,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "38 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Tables, Sketch1, Sketch2, Boss-Extrude1, Sketch2, Chamfer1, Sketch3, Revolve1, Sketch3, Sketch4, Revolve2, Sketch4, Sketch5, Sketch6, Cut-Revolve1, Sketch6, Boss-Extrude2, Sketch5, CirPattern1, Sketch7, Cut-Extrude1, Sketch7, Split1, Sketch8, Sketch9, Helix/Spiral1, Sketch9, Cut-Sweep1, Sketch8, Sketch10, Boss-Extrude3, Sketch10, Sketch11; Split1 is suppressed in 91999B956; Sketch8 is suppressed in 91999B956; Sketch9 is suppressed in 91999B956; Helix/Spiral1 is suppressed in 91999B956; Sketch9 is suppressed in 91999B956; Cut-Sweep1 is suppressed in 91999B956; Sketch8 is suppressed in 91999B956; Sketch10 is suppressed in 91999B956; Boss-Extrude3 is suppressed in 91999B956; Sketch10 is suppressed in 91999B956; Sketch11 is suppressed in 91999B956",
+      "observed": "33 content feature(s) sit outside every group: Tables, Sketch1, Sketch2, Boss-Extrude1, Sketch2, Chamfer1, Sketch3, Revolve1, Sketch3, Sketch4, Revolve2, Sketch4, Sketch5, Sketch6, Cut-Revolve1, Sketch6, Boss-Extrude2, Sketch5, CirPattern1, Sketch7, Cut-Extrude1, Sketch7, Split1, Sketch8, Sketch9, Helix/Spiral1, Sketch9, Cut-Sweep1, Sketch8, Sketch10, Boss-Extrude3, Sketch10, Sketch11; Split1 is suppressed in 91999B956; Sketch8 is suppressed in 91999B956; Sketch9 is suppressed in 91999B956; Helix/Spiral1 is suppressed in 91999B956; Sketch9 is suppressed in 91999B956; Cut-Sweep1 is suppressed in 91999B956; Sketch8 is suppressed in 91999B956; Sketch10 is suppressed in 91999B956; Boss-Extrude3 is suppressed in 91999B956; Sketch10 is suppressed in 91999B956; Sketch11 is suppressed in 91999B956",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0938 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAJYAAAA= scope=doc:8c00e50ebd40",
-        "feat:0939 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAM4AAAA= scope=doc:8c00e50ebd40",
-        "feat:0940 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAJcAAAA= scope=doc:8c00e50ebd40",
-        "feat:0943 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAwAAAA= scope=doc:8c00e50ebd40",
-        "feat:0944 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAO8BAAA= scope=doc:8c00e50ebd40",
         "feat:0954 Tables [ConfigTableFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:8c00e50ebd40",
         "feat:0956 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAACIAAAA= scope=doc:8c00e50ebd40",
         "feat:0957 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAADMAAAA= scope=doc:8c00e50ebd40",
@@ -10360,49 +9430,13 @@
     {
       "id": "F-045",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "15 content feature(s) sit outside every group: Notes, Setul9___EndTag___, Ambie…",
+      "title": "11 content feature(s) sit outside every group: Tables, Sketch1, Sketch2, Sketch…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0025"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:9d12e22f99ed",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAABEAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:9d12e22f99ed",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAABIAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:9d12e22f99ed",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:9d12e22f99ed",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAD4AAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:9d12e22f99ed",
           "sheet": null,
@@ -10517,13 +9551,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "15 content feature(s) sit outside every group: Notes, Setul9___EndTag___, Ambient, Directional1, Tables, Sketch1, Sketch2, Sketch3, Boss-Extrude1, Sketch3, Sketch4, Cut-Extrude1, Sketch4, Fillet1, Sketch5",
+      "observed": "11 content feature(s) sit outside every group: Tables, Sketch1, Sketch2, Sketch3, Boss-Extrude1, Sketch3, Sketch4, Cut-Extrude1, Sketch4, Fillet1, Sketch5",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:1000 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAABEAAAA= scope=doc:9d12e22f99ed",
-        "feat:1001 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAABIAAAA= scope=doc:9d12e22f99ed",
-        "feat:1006 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAwAAAA= scope=doc:9d12e22f99ed",
-        "feat:1007 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAD4AAAA= scope=doc:9d12e22f99ed",
         "feat:1014 Tables [ConfigTableFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:9d12e22f99ed",
         "feat:1016 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAD8AAAA= scope=doc:9d12e22f99ed",
         "feat:1017 Sketch2 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAEYAAAA= scope=doc:9d12e22f99ed",
@@ -10688,58 +9718,13 @@
     {
       "id": "F-048",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "67 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndT…",
+      "title": "62 content feature(s) sit outside every group: Axis1, Axis2, Axis3, 8-11-26 823…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0026"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:ae34ef307679",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:ae34ef307679",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:ae34ef307679",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:ae34ef307679",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAF4AAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:ae34ef307679",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAF8AAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:ae34ef307679",
           "sheet": null,
@@ -11313,14 +10298,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "67 content feature(s) sit outside every group: Notes, Notes Area, Setul9___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, 8-11-26 82350820(2)-1/88534272-1-solid1, 8-11-26 82350820(2)-1/15104486-1-solid1, 8-11-26 82350820(2)-1/50257021 Mozutoli Bebevunig Ring 47x0.79mm Zeniv Lop Profile Tabs-1-solid1, 8-11-26 82350820(2)-1/82081797 64d06e7mu Double VUD-1-solid1, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid1, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid2, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid3, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid4, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid5, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid6, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid7, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid8, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid9, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid10, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid11, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid12, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid13, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid14, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid15, 8-11-26 82350820(2)-1/40798206 FIM-869 Input Flange_8mm Input, 3_1 & 4_1 & 5_1, Keyed -1-solid1, 8-11-26 82350820(2)-1/53580438-1-solid1, 8-11-26 82350820(2)-1/91916004-1-solid1, 8-11-26 82350820(2)-1/7352PETO D-Rings_52x1.0mm VUD-1-solid1, 8-11-26 82350820(2)-1/7352PETO D-Rings_32x1.0mm VUD-1-solid1, 8-11-26 82350820(2)-1/7352PETO D-Rings_52x1.0mm VUD-2-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-1-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-1-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-1-solid1, 8-11-26 82350820(2)-1/30218372 M12 Kezi-1-solid1, 8-11-26 82350820(2)-1/12031220 Sealing Washer (Rofug) M12 Kezi_65360P388-1-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 12-1-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 12-2-solid1, 8-11-26 82350820(2)-1/72965679-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-1-solid1, 8-11-26 82350820(2)-1/8071NOZE Housing Cap_MU13345-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-0-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-1-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-2-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-3-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-4-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-5-1-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-2-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-3-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 20-1-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 20-2-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-4-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-5-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-6-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-2-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-3-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-4-solid1, 8-11-26 82350820(2)-1/12031220 Sealing Washer (Rofug) M12 Kezi_65360P388-2-solid1, 8-11-26 82350820(2)-1/30218372 M12 Kezi-2-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-2-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-3-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-4-solid1, 8-11-26 82350820(2)-1/BIVEV-X_12662396 (LI428-3)-1-solid1, 8-11-26 82350820(2)-1/56800103 Muzifu Gear i=3 KAZ019-1-solid1",
+      "observed": "62 content feature(s) sit outside every group: Axis1, Axis2, Axis3, 8-11-26 82350820(2)-1/88534272-1-solid1, 8-11-26 82350820(2)-1/15104486-1-solid1, 8-11-26 82350820(2)-1/50257021 Mozutoli Bebevunig Ring 47x0.79mm Zeniv Lop Profile Tabs-1-solid1, 8-11-26 82350820(2)-1/82081797 64d06e7mu Double VUD-1-solid1, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid1, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid2, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid3, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid4, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid5, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid6, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid7, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid8, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid9, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid10, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid11, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid12, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid13, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid14, 8-11-26 82350820(2)-1/15844552 GULI-58172MI-1-solid15, 8-11-26 82350820(2)-1/40798206 FIM-869 Input Flange_8mm Input, 3_1 & 4_1 & 5_1, Keyed -1-solid1, 8-11-26 82350820(2)-1/53580438-1-solid1, 8-11-26 82350820(2)-1/91916004-1-solid1, 8-11-26 82350820(2)-1/7352PETO D-Rings_52x1.0mm VUD-1-solid1, 8-11-26 82350820(2)-1/7352PETO D-Rings_32x1.0mm VUD-1-solid1, 8-11-26 82350820(2)-1/7352PETO D-Rings_52x1.0mm VUD-2-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-1-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-1-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-1-solid1, 8-11-26 82350820(2)-1/30218372 M12 Kezi-1-solid1, 8-11-26 82350820(2)-1/12031220 Sealing Washer (Rofug) M12 Kezi_65360P388-1-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 12-1-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 12-2-solid1, 8-11-26 82350820(2)-1/72965679-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-1-solid1, 8-11-26 82350820(2)-1/8071NOZE Housing Cap_MU13345-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-0-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-1-1-solid1, 8-11-26 82350820(2)-1/16500824 ZOT M8 9n11o3.80mm Lusa_Simplified-2-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-3-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-4-1-solid1, 8-11-26 82350820(2)-1/5598GANO M8 NIFU_M8 X 35-5-1-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-2-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-3-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 20-1-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 20-2-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-4-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-5-solid1, 8-11-26 82350820(2)-1/08485507 ZOT M3 5d6u9.50mm GI_Simplified-6-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-2-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-3-solid1, 8-11-26 82350820(2)-1/2686PANI M3 NIFU_M3 X 40-4-solid1, 8-11-26 82350820(2)-1/12031220 Sealing Washer (Rofug) M12 Kezi_65360P388-2-solid1, 8-11-26 82350820(2)-1/30218372 M12 Kezi-2-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-2-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-3-solid1, 8-11-26 82350820(2)-1/0692GUSI M4 NIFU_M4 X 14 Lusa-4-solid1, 8-11-26 82350820(2)-1/BIVEV-X_12662396 (LI428-3)-1-solid1, 8-11-26 82350820(2)-1/56800103 Muzifu Gear i=3 KAZ019-1-solid1",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:1033 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFsAAAA= scope=doc:ae34ef307679",
-        "feat:1034 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMgAAAA= scope=doc:ae34ef307679",
-        "feat:1035 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFwAAAA= scope=doc:ae34ef307679",
-        "feat:1038 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAF4AAAA= scope=doc:ae34ef307679",
-        "feat:1039 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAF8AAAA= scope=doc:ae34ef307679",
         "feat:1049 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:ae34ef307679",
         "feat:1050 Axis2 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADAAAAA= scope=doc:ae34ef307679",
         "feat:1051 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:ae34ef307679",
@@ -11439,7 +10419,7 @@
     {
       "id": "F-050",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "22 content feature(s) sit outside every group: Notes, Setul9___EndTag___, Ambie…",
+      "title": "18 content feature(s) sit outside every group: Tables, Sketch1, Sketch6, Sketch…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -11449,42 +10429,6 @@
         "cmp:0088"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:bf46ec524205",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAABEAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:bf46ec524205",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAABIAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:bf46ec524205",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:bf46ec524205",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAMUAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:bf46ec524205",
           "sheet": null,
@@ -11662,13 +10606,9 @@
         }
       ],
       "configuration": "Kamibat",
-      "observed": "22 content feature(s) sit outside every group: Notes, Setul9___EndTag___, Ambient, Directional1, Tables, Sketch1, Sketch6, Sketch2, Revolve1, Sketch2, Sketch7, Cut-Extrude1, Sketch7, Sketch8, Cut-Extrude2, Sketch8, Sketch3, Helix/Spiral1, Sketch3, Sketch4, Cut-Sweep1, Sketch4; Sketch3 is suppressed in 6926R326; Helix/Spiral1 is suppressed in 6926R326; Sketch3 is suppressed in 6926R326; Sketch4 is suppressed in 6926R326; Cut-Sweep1 is suppressed in 6926R326; Sketch4 is suppressed in 6926R326",
+      "observed": "18 content feature(s) sit outside every group: Tables, Sketch1, Sketch6, Sketch2, Revolve1, Sketch2, Sketch7, Cut-Extrude1, Sketch7, Sketch8, Cut-Extrude2, Sketch8, Sketch3, Helix/Spiral1, Sketch3, Sketch4, Cut-Sweep1, Sketch4; Sketch3 is suppressed in 6926R326; Helix/Spiral1 is suppressed in 6926R326; Sketch3 is suppressed in 6926R326; Sketch4 is suppressed in 6926R326; Cut-Sweep1 is suppressed in 6926R326; Sketch4 is suppressed in 6926R326",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:1118 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAABEAAAA= scope=doc:bf46ec524205",
-        "feat:1119 Setul9___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAABIAAAA= scope=doc:bf46ec524205",
-        "feat:1124 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAwAAAA= scope=doc:bf46ec524205",
-        "feat:1125 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAMUAAAA= scope=doc:bf46ec524205",
         "feat:1132 Tables [ConfigTableFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:bf46ec524205",
         "feat:1134 Sketch1 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAD8AAAA= scope=doc:bf46ec524205",
         "feat:1135 Sketch6 [ProfileFeature] persist_ref=aEIAAAEAAAD//v8AAAAAAJUAAAA= scope=doc:bf46ec524205",
@@ -15382,7 +14322,7 @@
     "F-095": "No model explanation was generated; read the finding evidence and status."
   },
   "explanations_enabled": true,
-  "finding_explanation_fingerprint": "5c8da625a0ee943689d25e1479adf3ae815fab58f17710dc345b45bdd3d116f8",
+  "finding_explanation_fingerprint": "1c0ecc4141942b1ee355b033cc163334e0875b96a01186744c694d964d8f957b",
   "contacts": [
     {
       "id": "C-001",
@@ -16767,28 +15707,23 @@
           "positions": [],
           "document_ids": [
             "doc:792f2ea287a0",
-            "doc:8a412bc4633c",
-            "doc:8b5228d54fc8",
+            "doc:3676f64593c8",
+            "doc:8c00e50ebd40",
             "doc:9c7425f72c64",
-            "doc:ad861218f8f0",
             "doc:bea71039d48c",
-            "doc:cfb91d5bb128",
-            "doc:d0db1a7c9db4",
-            "doc:e0ec179d6940",
             "doc:f21001d02278",
-            "doc:03210ef10e04",
             "doc:14430b03daa0",
             "doc:25550924b73c",
-            "doc:3676f64593c8",
             "doc:4788f3676f64",
             "doc:7befe7ecd1b4",
-            "doc:8c00e50ebd40",
+            "doc:cfb91d5bb128",
             "doc:9d12e22f99ed",
-            "doc:ae34ef307679",
-            "doc:bf46ec524205"
+            "doc:bf46ec524205",
+            "doc:e0ec179d6940",
+            "doc:ae34ef307679"
           ]
         },
-        "reason": "feature type names not in the calibrated table: NotesAreaFtrFolder x40, AnnotationViewFeat x18, AmbientLight x20, DirectionLight x22, RevCut x3, CosmeticThread x6, MateReferenceGroupFolder x7, PosGroupFolder x7, ConfigTableFolder x6, Split x3, Helix x4, CombineBodies x1, CutListFolder x2, SheetMetal x1, SMBaseFlange x1, FlatPattern x1, FoldUpDownSketchFolder x1, BaseBody x59",
+        "reason": "feature type names not in the calibrated table: RevCut x3, MateReferenceGroupFolder x7, PosGroupFolder x7, ConfigTableFolder x6, Split x3, Helix x4, CombineBodies x1, CutListFolder x2, SheetMetal x1, SMBaseFlange x1, FlatPattern x1, FoldUpDownSketchFolder x1, BaseBody x59",
         "error": null
       },
       {
@@ -17849,7 +16784,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.004360266666666667,
+    "unattended_runtime_minutes": 0.004226366666666666,
     "net_saved_minutes": null
   }
 }

@@ -348,7 +348,7 @@ def judgement_slots(plan: RemodelPlan, package: EvidencePackage) -> tuple[str, .
     deviations for the two decisions - so a slot can never disagree with the tool that fills
     it.
     """
-    table = load_table().planner_view()
+    table = load_table()
     rows = _rows(plan, package)
     slots: list[str] = []
     if any(gap.proposable for gap in description_gaps(rows, table)):

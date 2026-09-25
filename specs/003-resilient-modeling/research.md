@@ -117,11 +117,11 @@ until the seat census (004 T137), and T062's weldment, sheet-metal and derived-p
 wait for the seat. The change moves what `check_rms_part` returns, so feature 008's replay
 fixtures are regenerated under its decision 3A (tasks.md T092).
 
-*Status 2026-09-25 (review of decision 20A): decided, not yet in effect.* T092 stopped on
-verification - the real recordings' 20, 2 and 1 `rms.grouping.all_features_in_a_group`
-findings would read as lost and new - and T090 to T092 wait on the owner's question 20A-Q1.
-Until they land, the shipped table keeps the eleven in `remodel_not_content` and
-`planner_view()`, and this checker counts them as content.
+The replay's reading of the recorded runs is feature 008's decision 23A (the owner's answer to
+20A-Q1): the real recordings' 20, 2 and 1 `rms.grouping.all_features_in_a_group` findings,
+which lose only these rows as subjects, are narrowed - matched to the replayed finding once the
+locations that name only rows the table does not count are taken out, and listed - never lost
+and new (008 `contracts/replay.md` section 5, research R2.58).
 
 The feature-type census in the extractor (`TypeNameCensus`) answers a different question
 (which type names no dump pass consumed); the RMS unknown-type report (which type names the
