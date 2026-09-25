@@ -100,9 +100,8 @@ and Start refuses the plan by name.**
   safe, since nothing is changed, but the page learns of the loss only when Start is pressed.
   Telling the engineer at the re-attach itself would need the host to push it, which decision
   22A does not do. `RemodelPageContractTests` pins that sequence. *Amended 2026-09-25 (owner,
-  decision 24A):* the host is to push it (`remodel.plan_lost`, below, once 004 T170 lands), so
-  this sequence becomes what a page sees only when that notice has not reached it, and
-  `SessionLost` stays the backstop.
+  decision 24A):* the host now pushes it (`remodel.plan_lost`, below), so this sequence is what a
+  page sees only when that notice has not reached it, and `SessionLost` stays the backstop.
 - The refusal is answered before `remodel.started`, before any pipeline, backend or bridge call,
   and writes nothing: not `plan.json`, not the copy, not the run folder, not the engineer's file.
   The run stays readable through `remodel.result`, `report.open`, `folder.open` and
@@ -128,14 +127,14 @@ and Start refuses the plan by name.**
 
 *Added 2026-09-25 (owner, decision 24A; 004 T170).* Decision 22A refuses Start for a plan whose
 tool-service attachment is gone, and the page learned of it only at the next Start. **The host
-now tells the page as soon as it sees the plan lost, before the engineer presses anything.** Not
-yet in effect: 004 T170 implements it, and until then the page learns of the loss only at Start.
+now tells the page as soon as it sees the plan lost, before the engineer presses anything.**
 
-- **What is told.** `remodel.plan_lost {run_dir, message}`, unsolicited. `run_dir` is the plan's
-  folder as `remodel.planned` named it. `message` is `RemodelHost.PlanLostMessage`, in the plain
-  words `SessionLostMessage` keeps - no command, no path, none of the build's plumbing - saying
-  that nothing was changed and naming the button the page offers, Plan again, by its label. The
-  page prints it verbatim: the Remodel page reads no words file, so the host is its words source.
+- **What is told.** `remodel.plan_lost {run_dir, message}`, unsolicited (the table below).
+  `run_dir` is the plan's folder as `remodel.planned` named it. `message` is
+  `RemodelHost.PlanLostMessage`, in the plain words `SessionLostMessage` keeps - no command, no
+  path, none of the build's plumbing - saying that nothing was changed, in the one sentence the
+  two share, and naming the button the page offers, Plan again, by its label. The page prints it
+  verbatim: the Remodel page reads no words file, so the host is its words source.
 - **Which plan.** The plan on screen: the host's latest run - the one `init.latest_run` and the
   last `remodel.planned` named - while it is planned and waiting for Start: not started, not
   finished, its copy not discarded. No plan held, nothing told.
@@ -179,12 +178,15 @@ yet in effect: 004 T170 implements it, and until then the page learns of the los
 | `remodel.progress` | `{applied, total, current: {seq, kind, subject_name}}` |
 | `remodel.change` | one `ChangeRecord` as it is written, so the change list grows live (`run-artifacts.md`) |
 | `document.changed` | `{path, configuration, kind, remodel: {available: true \| false \| null, message: string \| null}} \| {path, configuration} \| null`. The additive `remodel` field refreshes capability after tool-service attach/detach. If the **copy** goes away mid-run, the run aborts with the change log intact |
+| `remodel.plan_lost` | `{run_dir, message}`: the plan in `run_dir` can no longer be started, because the tool service re-attached after it was made (decision 24A, above). Posted once per plan, as soon as the host sees it; `message` is `RemodelHost.PlanLostMessage`, printed verbatim. The page disables Start for that plan and offers Plan again; a `run_dir` it is not showing changes nothing |
 | `backend.stopped` | `{exit_code, log_path}`, unchanged from feature 002 |
 
 ## What the page shows
 
 Three stacked regions, all rendered through `web/shared/dom.js`, so every untrusted string
-(feature names, descriptions, model rationale, error messages) is inserted with `textContent`:
+(feature names, descriptions, model rationale, error messages) is inserted with `textContent`.
+Above them, under the banner, a plan the host has said can no longer be started is shown as a
+notice of its own with **Plan again** (decision 24A, above):
 
 1. **Run header**: source path, configuration, run folder, run state - the eight `RunState`
    values of data-model.md section 11 and no others, because `remodel.result` reads `state`
@@ -240,3 +242,24 @@ Two buttons and what they must say. **Open copy** activates the copy in SOLIDWOR
   builds `RemodelHostOptions` in one place and reads `ToolServiceAttachment` off its gate per
   call - the one production line without which every Start is `SessionLost`, since the option's
   default is none.
+- Decision 24A's cases (004 T170). `RemodelHostTests`: the notice at the withdrawal, after the
+  capability refresh, in the host's words, and nothing more when the new service listens;
+  nothing told with no plan held (none yet, a refused plan, a finished run, a discarded copy); a
+  re-attach back to the same document told once and still refused at Start; a configuration
+  switch, the same document spelt differently and a refresh on the plan's own attachment tell
+  nothing; two re-attaches in a row tell once; a refresh while a run is in progress tells
+  nothing, and neither does one after it; a re-attach during a plan told when the plan ends,
+  about the run it recorded or, when the plan fails, the plan still on screen; a plan made on the
+  new attachment told about when it, in turn, is lost; the notice writes nothing and Start still
+  answers `SessionLost`; and three of these again through a real `ToolServiceGate` wired as the
+  add-in wires it (a re-attach and back, a configuration switch, a switch while a run holds the
+  service). `ToolServiceWiringTests`: the gate publishes every attachment change, with the new
+  attachment already in place, and nothing else; and the add-in's gate is built in one place, its
+  publish callback refreshes the Remodel host and its busy question reads `RunInProgress`.
+  `RemodelPageContractTests`: the notice over the real transport - the host's sentence verbatim,
+  Start disabled and not sent, Plan again pressable; a refused Plan again leaving the notice and
+  an accepted one planning a startable folder; a notice before the plan, for another folder or for
+  none changing nothing; the re-attach as the host tells it ending with the notice standing and
+  Start disabled; markup written as text; the sentence naming the Plan again button by its label;
+  and `tokens.css` linked before `remodel.css`, with the notice's rules naming tokens only.
+  `PageRuleScanTests` sweeps this page too.

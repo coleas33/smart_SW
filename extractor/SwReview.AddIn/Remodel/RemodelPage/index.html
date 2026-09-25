@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <title>SwReview Remodel</title>
+<link rel="stylesheet" href="../../shared/tokens.css">
 <link rel="stylesheet" href="remodel.css">
 </head>
 <body>
@@ -32,6 +33,16 @@
 </header>
 
 <p id="banner" class="banner" hidden></p>
+
+<!-- Decision 24A: the plan on screen can no longer be started, said as soon as the host sees
+     the tool service re-attach rather than when Start is pressed. The line is the host's own
+     sentence, written in by remodel.js; Plan again is the plan button's action under this
+     notice's label. Apart from the banner, which the seat-checking wait comes and goes
+     through. -->
+<div id="plan-lost" class="plan-lost" role="status" hidden>
+  <p id="plan-lost-text" class="plan-lost-text"></p>
+  <button type="button" id="plan-again" disabled>Plan again</button>
+</div>
 
 <!-- 1. The run header: what is being remodelled, where, in what state, and whether the
      engineer's own file is still exactly as they left it. -->

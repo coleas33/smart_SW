@@ -164,8 +164,31 @@ public sealed class RemodelHost : IDisposable
     public const string SessionLostMessage =
         "This plan can no longer be started. The add-in reconnected to SOLIDWORKS after the plan "
         + "was made, which happens when the active document changes, and the plan did not carry "
-        + "over to the new connection. Nothing was changed: not your part and not the copy. Make "
-        + "your part the active document and press Remodel a copy to plan again.";
+        + "over to the new connection. " + NothingWasChanged + " Make your part the active "
+        + "document and press Remodel a copy to plan again.";
+
+    /// <summary>
+    /// What `remodel.plan_lost` tells the page as soon as the plan on screen can no longer be
+    /// started (decision 24A, `contracts/pane-remodel-messages.md`): SOLIDWORKS switched
+    /// documents, the tool service re-attached, and the bridge session holding the plan's copy
+    /// went with the old attachment. <see cref="SessionLostMessage"/> stays Start's answer to
+    /// the same condition, for a Start that reaches the host before this reaches the page.
+    ///
+    /// In the same plain words, by the same rule: no command, no path, none of the build's
+    /// plumbing. It names the button the page offers beside it by the label the page gives it.
+    /// The Remodel page reads no words file, so this constant is its words source, printed
+    /// verbatim.
+    /// </summary>
+    public const string PlanLostMessage =
+        "This plan was made before SOLIDWORKS switched documents, so it can no longer be "
+        + "started. " + NothingWasChanged + " Make your part the active document and press Plan "
+        + "again.";
+
+    /// <summary>
+    /// The one sentence <see cref="SessionLostMessage"/> and <see cref="PlanLostMessage"/> share:
+    /// the same condition, told at two moments, reassures the engineer in the same words.
+    /// </summary>
+    private const string NothingWasChanged = "Nothing was changed: not your part and not the copy.";
 
     /// <summary>The only scope this feature reorganizes. Parts only, by owner decision.</summary>
     private const string PartKind = "part";
@@ -228,7 +251,8 @@ public sealed class RemodelHost : IDisposable
     /// A plan waiting for Start is <b>not</b> in progress and holds nothing (decision 22A): a
     /// document switch between the plan and Start re-attaches the tool service, the plan's
     /// bridge session goes with the old attachment, and `remodel.start` refuses that plan as
-    /// `SessionLost` rather than start it on a dispatcher that never saw its copy.
+    /// `SessionLost` rather than start it on a dispatcher that never saw its copy. The page is
+    /// told at the re-attach itself, before Start (decision 24A, <see cref="AnnounceLostPlan"/>).
     /// </summary>
     public bool RunInProgress => _busy;
 
@@ -369,9 +393,17 @@ public sealed class RemodelHost : IDisposable
     /// <summary>
     /// Refreshes the page's capability banner when the tool service finishes attaching or
     /// detaches. It uses the existing document message so no new page protocol row is needed.
+    ///
+    /// It is also where this host sees a re-attach (decision 24A): the add-in calls it each time
+    /// its gate withdraws a service and each time a new one listens, so after the refresh it
+    /// asks whether that just cost the plan on screen its session, and tells the page at once
+    /// if it did (<see cref="AnnounceLostPlan"/>).
     /// </summary>
-    public void RefreshAvailability() =>
+    public void RefreshAvailability()
+    {
         Post("document.changed", DocumentPayloadWithCapability(_options.CurrentDocument()));
+        AnnounceLostPlan();
+    }
 
     public void Dispose()
     {
@@ -732,6 +764,11 @@ public sealed class RemodelHost : IDisposable
         finally
         {
             _busy = false;
+
+            // Decision 24A: a re-attach that landed while this plan held the host was not told
+            // then. It is asked about now, of whichever plan is on screen - the one just
+            // recorded, or the earlier one if this plan was refused.
+            AnnounceLostPlan();
         }
     }
 
@@ -975,6 +1012,51 @@ public sealed class RemodelHost : IDisposable
         !string.IsNullOrWhiteSpace(planned)
         && !string.IsNullOrWhiteSpace(now)
         && string.Equals(planned, now, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Tells the page that the plan on screen can no longer be started, once, as soon as this
+    /// host can see it (decision 24A): `remodel.plan_lost {run_dir, message}`.
+    ///
+    /// The plan on screen is <see cref="LatestRun"/> - the run `init` and the last
+    /// `remodel.planned` named - while it is planned and waiting for Start: not started, not
+    /// finished, its copy not discarded. It is lost by Start's own predicate,
+    /// <see cref="SameAttachment"/>: the attachment it was made on is not the one listening now,
+    /// none included. The attachment decides, never the document, so a re-attach back to the
+    /// same part is a loss and a configuration switch, which re-attaches nothing, is not.
+    ///
+    /// Asked on every tool-service attach and detach (<see cref="RefreshAvailability"/>) and when
+    /// a plan releases the host. Never while a plan or a run holds it: a run holds the tool
+    /// service, so no re-attach should land under one, and one that lands under a plan is asked
+    /// about the moment that plan ends. A re-attach is two refreshes and two in a row are four,
+    /// every one of them finding the attachment gone; <see cref="RemodelRun.ClaimPlanLostNotice"/>
+    /// lets one notice through per plan.
+    ///
+    /// It changes nothing but the page. Start still refuses the plan as `SessionLost`, which
+    /// stays the backstop for a Start that reaches this host before the notice reaches the page.
+    /// </summary>
+    private void AnnounceLostPlan()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        RemodelRun? run = LatestRun;
+        if (run == null
+            || run.Phase != RemodelRunPhase.Planned
+            || run.CopyDiscarded
+            || SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment())
+            || !run.ClaimPlanLostNotice())
+        {
+            return;
+        }
+
+        Post("remodel.plan_lost", new Dictionary<string, object?>
+        {
+            { "run_dir", run.RunDirectory },
+            { "message", PlanLostMessage },
+        });
+    }
 
     private void Stop(string? id)
     {

@@ -86,6 +86,13 @@
     planning: false,
     running: false,
 
+    /**
+     * The run folder of a plan the host has said can no longer be started (decision 24A,
+     * `remodel.plan_lost`), or null. Kept by folder, so the plan Plan again makes - a folder of
+     * its own - is startable without anything having to clear this.
+     */
+    lostRunDirectory: null,
+
     /** Whether a `ready` is in flight, so a second status does not ask again on top of it. */
     initPending: false
   };
@@ -136,11 +143,12 @@
   }
 
   /**
-   * The four unsolicited rows of the contract, plus a bare `error`.
+   * The unsolicited rows of the contract, plus a bare `error`.
    *
    * Every one of them is a thing the engineer would otherwise have to guess at: what stage the
    * run is in, how far through the plan it is, that another change has just been written, that
-   * the copy went away, and that the backend stopped.
+   * the copy went away, that the plan on screen can no longer be started, and that the backend
+   * stopped.
    */
   function handleUnsolicited(message) {
     var payload = message.payload || {};
@@ -158,6 +166,9 @@
         state.documentInfo = (payload && payload.path) ? payload : null;
         applyRemodelCapability(payload && payload.remodel);
         renderDocument();
+        return;
+      case 'remodel.plan_lost':
+        showPlanLost(payload);
         return;
       case 'backend.stopped':
         state.backend = null;
@@ -215,7 +226,7 @@
    * what the page offers while it runs is Stop, and the change list grows underneath.
    */
   function startRun() {
-    if (!state.runDirectory || state.running || state.planning) {
+    if (!state.runDirectory || state.running || state.planning || planLost()) {
       return;
     }
 
@@ -244,6 +255,33 @@
         showBanner(error.message);
         endRun();
       });
+  }
+
+  /**
+   * Decision 24A: the host says the plan on screen can no longer be started - the tool service
+   * re-attached after it was made, so the session holding its copy is gone - as soon as that
+   * happens, rather than when Start is pressed. The line is the host's own sentence, printed
+   * verbatim: this page reads no words file. Start is disabled for that plan and Plan again
+   * offered. A notice naming a folder this page is not showing changes nothing. Start's
+   * `SessionLost` refusal stays the host's backstop for a page this notice has not reached.
+   */
+  function showPlanLost(payload) {
+    if (!payload.run_dir || payload.run_dir !== state.runDirectory) {
+      return;
+    }
+
+    state.lostRunDirectory = payload.run_dir;
+    dom.clear(ui.planLostText);
+    dom.write(ui.planLostText, dom.scalar(payload.message));
+
+    // "Planned. Press Start ..." is no longer true, and the notice says what is.
+    setRunStatus('');
+    renderControls();
+  }
+
+  /** Whether the plan on screen is one the host has said can no longer be started. */
+  function planLost() {
+    return !!state.runDirectory && state.lostRunDirectory === state.runDirectory;
   }
 
   /**
@@ -884,15 +922,19 @@
   /**
    * Which buttons can be pressed. A part has to be open to plan, a plan has to exist to start,
    * and the copy actions need a run - offered as disabled rather than absent, so the tab says
-   * what it can do before it can do it.
+   * what it can do before it can do it. A plan the host has said is lost is not offered Start;
+   * its notice shows, and Plan again in it is pressable exactly when the plan button is.
    */
   function renderControls() {
     var open = state.documentInfo;
     var busy = state.planning || state.running;
     var hasRun = !!state.runDirectory;
+    var lost = planLost();
 
     ui.planRun.disabled = busy || !state.remodelAvailable || !open || !open.path;
-    ui.startRun.disabled = busy || !state.remodelAvailable || !hasRun;
+    ui.startRun.disabled = busy || !state.remodelAvailable || !hasRun || lost;
+    ui.planLost.hidden = !lost;
+    ui.planAgain.disabled = ui.planRun.disabled;
     ui.stopRun.disabled = !state.running;
     ui.openCopy.disabled = !hasRun;
     ui.discardCopy.disabled = !hasRun || state.running;
@@ -974,6 +1016,9 @@
     ui.documentName = byId('document-name');
     ui.backendState = byId('backend-state');
     ui.banner = byId('banner');
+    ui.planLost = byId('plan-lost');
+    ui.planLostText = byId('plan-lost-text');
+    ui.planAgain = byId('plan-again');
     ui.planRun = byId('plan-run');
     ui.startRun = byId('start-run');
     ui.stopRun = byId('stop-run');
@@ -1000,6 +1045,7 @@
     ui.judgement = byId('judgement');
 
     ui.planRun.addEventListener('click', planRun);
+    ui.planAgain.addEventListener('click', planRun);
     ui.startRun.addEventListener('click', startRun);
     ui.stopRun.addEventListener('click', stopRun);
     ui.openCopy.addEventListener('click', openCopy);
