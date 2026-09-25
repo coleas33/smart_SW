@@ -245,8 +245,9 @@ code regenerated, 008 decision 3A; the figures of 008 `contracts/replay.md` sect
 re-measured row for feature 011's integration, where the version-3 example profile's hash moved
 the recorded and as-recorded columns and no requested figure, and measured again on 2026-09-25
 after the owner's decisions 21A and 22A landed and 20A was recorded, its checker change still
-waiting on the owner's question 20A-Q1 (003 T092), every figure the same, section 9's last
-row). The fixtures record the scripted provider, whose pane runs checks first, lever 13, slimming
+waiting on the owner's question 20A-Q1 (003 T092), every figure the same, and again the same day
+on the fixtures regenerated to carry feature 011's `coverage.withdrawn` events, every figure the
+same, section 9's last row). The fixtures record the scripted provider, whose pane runs checks first, lever 13, slimming
 and pruning but no parallel calls; `--lever parallel_tool_calls` gives the OpenAI pane, on which
 SC-003's regrouped estimate is read. The regrouped estimate assumes the model does not repeat a
 check the digest reported and batches consecutive calls to one tool (008 `contracts/replay.md`
