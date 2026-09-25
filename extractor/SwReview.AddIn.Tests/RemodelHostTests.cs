@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using SwReview.AddIn.Remodel;
 using SwReview.AddIn.Review;
+using SwReview.AddIn.ToolService;
 using SwReview.Extractor.Rms;
 using Xunit;
 
@@ -1378,6 +1379,10 @@ public sealed class RemodelHostTests
     /// When the plan reads the attachment: once it holds the host busy - from then on the
     /// tool service will not begin a re-attach of its own - and before the probe, so the name
     /// recorded is the one the probe, the copy and the session went to.
+    ///
+    /// *Amended 2026-09-25 (decision 24A):* the read the run records is still that one, and the
+    /// only other is decision 24A's question once the plan has released the host - whether the
+    /// plan on screen is already lost - after every pipeline call the plan made.
     /// </summary>
     [Fact]
     public void ThePlanReadsTheAttachmentOnceItIsBusyAndBeforeTheProbe()
@@ -1389,9 +1394,8 @@ public sealed class RemodelHostTests
             world.Receive("remodel.plan", "p1", new { });
 
             world.Reply("remodel.planned", "p1");
-            (bool busy, int pipelineCalls) = Assert.Single(world.AttachmentReads);
-            Assert.True(busy, "the plan read the attachment before it held the host busy");
-            Assert.Equal(0, pipelineCalls);
+            int planCalls = world.Pipeline.Calls.Count;
+            Assert.Equal(new[] { (true, 0), (false, planCalls) }, world.AttachmentReads.ToArray());
             Assert.Equal(FirstAttachment, world.Host.LatestRun!.ToolServiceAttachment);
         }
     }
@@ -1592,6 +1596,453 @@ public sealed class RemodelHostTests
             Assert.Equal(
                 "planned",
                 world.Reply("init", "r2").GetProperty("latest_run").GetProperty("state").GetString());
+        }
+    }
+
+    // ---- the page is told when a plan is lost (decision 24A, T170) ----------------------
+
+    /// <summary>
+    /// The decision: a re-attach after the plan is told to the page at once, before any Start.
+    /// It reaches the host as the gate's withdrawal of the old service - a refresh with nothing
+    /// listening - and the host posts `remodel.plan_lost` there, naming the plan's folder, in
+    /// its own words, right after the capability refresh that shows the page the wait. The new
+    /// service listening is the second refresh of the same re-attach and tells nothing more.
+    /// </summary>
+    [Fact]
+    public void AReattachAfterThePlanIsToldToThePageAtOnceInTheHostsOwnWords()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reply("remodel.planned", "p1");
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            int before = world.Posted.Count;
+
+            world.Publish(null);
+
+            Assert.Equal(new[] { "document.changed", "remodel.plan_lost" }, world.TypesPostedSince(before));
+            JsonElement notice = world.LastPosted("remodel.plan_lost");
+            Assert.Equal(world.ExpectedRunDirectory, notice.GetProperty("run_dir").GetString());
+            Assert.Equal(RemodelHost.PlanLostMessage, notice.GetProperty("message").GetString());
+            Assert.Equal(2, notice.EnumerateObject().Count());
+
+            int withdrawn = world.Posted.Count;
+            world.Publish(SecondAttachment);
+
+            Assert.Equal(new[] { "document.changed" }, world.TypesPostedSince(withdrawn));
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    /// <summary>
+    /// U13's rule, as <see cref="RemodelHost.SessionLostMessage"/> keeps it: plain words, no
+    /// command, no path and none of the build's plumbing. It says nothing was changed, in the
+    /// one sentence both messages share, and what to press next.
+    /// </summary>
+    [Fact]
+    public void ThePlanLostMessageIsPlainWordsAndNamesNoCommandNoPathAndNoPlumbing()
+    {
+        Assert.Equal(
+            "This plan was made before SOLIDWORKS switched documents, so it can no longer be "
+            + "started. Nothing was changed: not your part and not the copy. Make your part the "
+            + "active document and press Plan again.",
+            RemodelHost.PlanLostMessage);
+
+        const string nothingWasChanged = "Nothing was changed: not your part and not the copy.";
+        Assert.Contains(nothingWasChanged, RemodelHost.PlanLostMessage, StringComparison.Ordinal);
+        Assert.Contains(nothingWasChanged, RemodelHost.SessionLostMessage, StringComparison.Ordinal);
+
+        foreach (string word in new[]
+                 {
+                     "swreview-extract", "--", "tool service", "bridge", "pipe", "attach", "session",
+                     "dispatcher", "remodel.", "\\", ".SLDPRT",
+                 })
+        {
+            Assert.DoesNotContain(word, RemodelHost.PlanLostMessage, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// No plan held, nothing told: before any plan; after a plan that was refused, which tracks
+    /// no run; after the run has finished, which is not a plan waiting for Start; and after the
+    /// engineer discarded the copy, whose Start is `CopyDiscarded` whatever is attached.
+    /// </summary>
+    [Theory]
+    [InlineData("no plan")]
+    [InlineData("a refused plan")]
+    [InlineData("a finished run")]
+    [InlineData("a discarded copy")]
+    public void AReattachWithNoPlanHeldTellsNothing(string held)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            switch (held)
+            {
+                case "a refused plan":
+                    world.Pipeline.Signals.SaveFlagDirty = true;
+                    world.Receive("remodel.plan", "p1", new { });
+                    Assert.Equal("DocumentDirty", world.ErrorClass("p1"));
+                    break;
+                case "a finished run":
+                    world.Receive("remodel.plan", "p1", new { });
+                    world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                    Assert.Equal(RemodelRunPhase.Finished, world.Host.LatestRun!.Phase);
+                    break;
+                case "a discarded copy":
+                    world.Receive("remodel.plan", "p1", new { });
+                    world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+                    world.Reply("ok", "d1");
+                    break;
+            }
+
+            world.Reattach(SecondAttachment);
+            world.Reattach("swreview-attachment-3");
+
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    /// <summary>
+    /// The attachment decides, never the document. Away and back re-attaches twice and ends on
+    /// the part the plan was made from, on a dispatcher that never saw its copy: the plan is
+    /// lost, the page is told once, at the first withdrawal, and Start still refuses it.
+    /// </summary>
+    [Fact]
+    public void AReattachBackToTheSameDocumentIsStillLostAndIsToldOnce()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Document = new PageDocument(@"C:\parts\frame.SLDPRT", "Default");
+            world.Host.DocumentChanged();
+            world.Reattach(SecondAttachment);
+            world.Document = new PageDocument(SourcePath, "Default");
+            world.Host.DocumentChanged();
+            world.Reattach("swreview-attachment-3");
+
+            JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(world.ExpectedRunDirectory, notice.GetProperty("run_dir").GetString());
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("SessionLost", world.ErrorClass("s1"));
+        }
+    }
+
+    /// <summary>
+    /// A configuration switch reaches the host as a `document.changed` and the gate as a follow
+    /// of the same document, which re-attaches nothing; the same document spelt differently is
+    /// the same. And a refresh on which the plan's own attachment is still listening - a
+    /// capability answer, not a re-attach - is no loss either. None of them tells anything, and
+    /// Start goes ahead.
+    /// </summary>
+    [Theory]
+    [InlineData(SourcePath, "Machined")]
+    [InlineData(@"c:\PARTS\BRACKET.sldprt", "Default")]
+    public void AConfigurationSwitchOrARefreshOnThePlansOwnAttachmentTellsNothing(
+        string path, string configuration)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Document = new PageDocument(path, configuration);
+            world.Host.DocumentChanged();
+            world.Publish(FirstAttachment);
+
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("remodel.started", "s1");
+        }
+    }
+
+    /// <summary>
+    /// Two re-attaches in a row are four refreshes, every one of which finds the plan's
+    /// attachment gone. The page is told once, and the plan stays refused at Start.
+    /// </summary>
+    [Fact]
+    public void TwoReattachesInARowAreToldOnce()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+
+            world.Reattach(SecondAttachment);
+            world.Reattach("swreview-attachment-3");
+
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("SessionLost", world.ErrorClass("s1"));
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    /// <summary>
+    /// A run in progress holds the tool service - `RunInProgress` is the gate's busy question -
+    /// so no re-attach should land under one. Pinned all the same: a refresh during the run,
+    /// with the attachment gone, tells nothing, and neither does one after the run has
+    /// finished, which is not a plan waiting for Start. The run's own ending is what the page
+    /// is told.
+    /// </summary>
+    [Fact]
+    public void ARefreshWhileARunIsInProgressTellsNothingAndNeitherDoesTheFinishedRun()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Pipeline.DuringRun = reporter =>
+            {
+                Assert.True(world.Host.RunInProgress);
+                world.Reattach(SecondAttachment);
+            };
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("remodel.started", "s1");
+            world.Reattach("swreview-attachment-3");
+
+            Assert.Equal(1, world.Pipeline.Count("run"));
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    /// <summary>
+    /// 22A's race: a re-attach that lands while the plan itself runs. Nothing is told while the
+    /// plan holds the host - the run it will record does not exist yet - and the moment the plan
+    /// releases the host it is asked again: the run it just recorded is lost on arrival, and
+    /// the page is told once, after `remodel.planned` has given it the folder the notice names.
+    /// </summary>
+    [Fact]
+    public void AReattachDuringThePlanIsToldWhenThePlanEndsAboutTheRunItRecorded()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            int toldDuringThePlan = -1;
+            world.Pipeline.DuringPlan = () =>
+            {
+                world.Reattach(SecondAttachment);
+                toldDuringThePlan = world.AllPosted("remodel.plan_lost").Length;
+            };
+
+            world.Receive("remodel.plan", "p1", new { });
+
+            Assert.Equal(0, toldDuringThePlan);
+            JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(world.ExpectedRunDirectory, notice.GetProperty("run_dir").GetString());
+            Assert.True(world.IndexOf("remodel.planned") < world.IndexOf("remodel.plan_lost"));
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("SessionLost", world.ErrorClass("s1"));
+        }
+    }
+
+    /// <summary>
+    /// Nothing is told while a plan holds the host, even about the plan still on screen from
+    /// before: that plan is about to be replaced, and a notice for it mid-plan would be a notice
+    /// for a folder the page is leaving. When the second plan ends the plan on screen is the
+    /// one it recorded, lost on arrival, and that is the one the page is told about - once.
+    /// </summary>
+    [Fact]
+    public void AReattachDuringASecondPlanIsToldAboutTheSecondWhenItEndsAndNeverAboutTheFirst()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reply("remodel.planned", "p1");
+            int toldDuringThePlan = -1;
+            world.Pipeline.DuringPlan = () =>
+            {
+                world.Reattach(SecondAttachment);
+                toldDuringThePlan = world.AllPosted("remodel.plan_lost").Length;
+            };
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            Assert.Equal(0, toldDuringThePlan);
+            string second = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            Assert.NotEqual(world.ExpectedRunDirectory, second);
+            JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(second, notice.GetProperty("run_dir").GetString());
+        }
+    }
+
+    /// <summary>
+    /// The same race under a plan that fails: it records nothing, so the plan still on screen
+    /// is the earlier one - made on the attachment that has just gone - and that is the one the
+    /// page is told about when the failed plan releases the host.
+    /// </summary>
+    [Fact]
+    public void AReattachDuringARefusedPlanIsToldAboutThePlanStillOnScreen()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reply("remodel.planned", "p1");
+            world.Pipeline.DuringPlan = () =>
+            {
+                world.Reattach(SecondAttachment);
+                throw new InvalidOperationException("the copy's feature tree could not be read");
+            };
+
+            world.Receive("remodel.plan", "p2", new { });
+
+            Assert.Equal("HostError", world.ErrorClass("p2"));
+            Assert.Equal(world.ExpectedRunDirectory, world.Host.LatestRun!.RunDirectory);
+            JsonElement notice = Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(world.ExpectedRunDirectory, notice.GetProperty("run_dir").GetString());
+        }
+    }
+
+    /// <summary>
+    /// Once per plan, not once per host: Plan again makes a plan on the new attachment, which is
+    /// not lost and is not told about; when it, in turn, is lost, the page is told about it,
+    /// by its own folder.
+    /// </summary>
+    [Fact]
+    public void APlanMadeOnTheNewAttachmentIsToldAboutWhenItInTurnIsLost()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reattach(SecondAttachment);
+
+            world.Receive("remodel.plan", "p2", new { });
+            string again = world.Reply("remodel.planned", "p2").GetProperty("run_dir").GetString()!;
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+
+            world.Reattach("swreview-attachment-3");
+
+            Assert.Equal(
+                new[] { world.ExpectedRunDirectory, again },
+                world.AllPosted("remodel.plan_lost").Select(notice => notice.GetProperty("run_dir").GetString()).ToArray());
+        }
+    }
+
+    /// <summary>
+    /// The notice changes nothing but the page. Not one byte written or touched in the run
+    /// folder or the engineer's file, no pipeline call, the host not held, the run still
+    /// planned and readable - and Start's refusal unchanged: `SessionLost` stays the backstop,
+    /// for a Start that reaches the host before the notice reaches the page.
+    /// </summary>
+    [Fact]
+    public void TheNoticeChangesNothingAndStartStillRefusesAsSessionLost()
+    {
+        using (var world = new RemodelWorld())
+        {
+            string source = world.CreateSourceFile();
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            string[] callsBefore = world.Pipeline.Calls.ToArray();
+            string[] runFolderBefore = RemodelWorld.Snapshot(world.ExpectedRunDirectory);
+            string[] sourceBefore = RemodelWorld.Snapshot(Path.GetDirectoryName(source)!);
+
+            world.Reattach(SecondAttachment);
+
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.Equal(callsBefore, world.Pipeline.Calls.ToArray());
+            Assert.Equal(runFolderBefore, RemodelWorld.Snapshot(world.ExpectedRunDirectory));
+            Assert.Equal(sourceBefore, RemodelWorld.Snapshot(Path.GetDirectoryName(source)!));
+            Assert.Equal(RemodelRunPhase.Planned, world.Host.LatestRun!.Phase);
+            Assert.False(world.Host.RunInProgress);
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            JsonElement error = world.Reply("error", "s1");
+            Assert.Equal("SessionLost", error.GetProperty("error_class").GetString());
+            Assert.Equal(RemodelHost.SessionLostMessage, error.GetProperty("message").GetString());
+            Assert.Equal(callsBefore, world.Pipeline.Calls.ToArray());
+
+            world.Receive("remodel.result", "r1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("planned", world.Reply("remodel.result", "r1").GetProperty("state").GetString());
+        }
+    }
+
+    // ---- ...and through a real gate, wired as the add-in wires it -------------------------
+
+    /// <summary>
+    /// The same decision with the refreshes coming from a real <see cref="ToolServiceGate"/>
+    /// rather than from the test: a re-attach before any plan tells nothing; one after the plan
+    /// tells once, at the withdrawal; away and back again tells nothing more; and the plan made
+    /// on the part it started from is refused at Start, because every attachment is new.
+    /// </summary>
+    [Fact]
+    public void ThroughTheGateAReattachIsToldOnceAndBackToTheSameDocumentNothingMore()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            ToolServiceGate gate = world.AttachGate();
+            gate.EnsureStarted();
+            world.SwitchTo(gate, @"C:\parts\frame.SLDPRT");
+            world.SwitchTo(gate, SourcePath);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+
+            world.Receive("remodel.plan", "p1", new { });
+            Assert.Equal(gate.Attachment, world.Host.LatestRun!.ToolServiceAttachment);
+            world.SwitchTo(gate, @"C:\parts\frame.SLDPRT");
+            world.SwitchTo(gate, SourcePath);
+
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+            Assert.NotEqual(gate.Attachment, world.Host.LatestRun!.ToolServiceAttachment);
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("SessionLost", world.ErrorClass("s1"));
+        }
+    }
+
+    /// <summary>
+    /// Through the gate, a configuration switch and the same document spelt differently are
+    /// follows of the document already attached: nothing re-attaches, nothing is told, and
+    /// Start goes ahead on the plan's own attachment.
+    /// </summary>
+    [Fact]
+    public void ThroughTheGateAConfigurationSwitchReattachesNothingAndTellsNothing()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            ToolServiceGate gate = world.AttachGate();
+            gate.EnsureStarted();
+            world.Receive("remodel.plan", "p1", new { });
+            string? planned = gate.Attachment;
+
+            world.SwitchTo(gate, SourcePath, "Machined");
+            world.SwitchTo(gate, @"c:\PARTS\BRACKET.sldprt", "Machined");
+
+            Assert.Equal(planned, gate.Attachment);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            world.Reply("remodel.started", "s1");
+        }
+    }
+
+    /// <summary>
+    /// Through the gate, a run holds the tool service: a document switch while it runs is asked
+    /// whether work is holding the bridge, `RunInProgress` says yes, and the gate re-attaches
+    /// nothing - so no refresh reaches the host and nothing is told, during the run or after it.
+    /// </summary>
+    [Fact]
+    public void ThroughTheGateARunHoldsTheServiceSoASwitchWhileItRunsTellsNothing()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            ToolServiceGate gate = world.AttachGate();
+            gate.EnsureStarted();
+            world.Receive("remodel.plan", "p1", new { });
+            string? planned = gate.Attachment;
+            world.Pipeline.DuringRun = reporter => world.SwitchTo(gate, @"C:\parts\frame.SLDPRT");
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+
+            world.Reply("remodel.started", "s1");
+            Assert.Equal(planned, gate.Attachment);
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
         }
     }
 
@@ -2140,6 +2591,8 @@ public sealed class RemodelHostTests
     {
         private readonly string _root;
         private RemodelHost? _host;
+        private ToolServiceGate? _gate;
+        private int _services;
 
         public RemodelWorld()
         {
@@ -2211,7 +2664,7 @@ public sealed class RemodelHostTests
                 ToolServiceAttachment = () =>
                 {
                     AttachmentReads.Add((Host.RunInProgress, Pipeline.Calls.Count));
-                    return Attachment;
+                    return _gate != null ? _gate.Attachment : Attachment;
                 },
                 Pipeline = UsePipeline ? Pipeline : null,
                 EntityResolver = () => Resolver,
@@ -2230,6 +2683,66 @@ public sealed class RemodelHostTests
 
         public void Receive(string type, string id, object payload) =>
             Host.Receive(JsonSerializer.Serialize(new { type, id, payload }));
+
+        /// <summary>
+        /// What the add-in's gate callback does each time the gate publishes a service or
+        /// withdraws one (`SwReviewAddIn.CreateToolServiceGate`): the attachment listening is
+        /// now <paramref name="attachment"/> - null for a withdrawal - and the host is refreshed.
+        /// </summary>
+        public void Publish(string? attachment)
+        {
+            Attachment = attachment;
+            Host.RefreshAvailability();
+        }
+
+        /// <summary>
+        /// One re-attach as the gate performs it: the old service withdrawn, then the new one
+        /// listening under <paramref name="next"/>. Two refreshes, as `ToolServiceWiringTests`
+        /// pins the gate publishing them.
+        /// </summary>
+        public void Reattach(string next)
+        {
+            Publish(null);
+            Publish(next);
+        }
+
+        /// <summary>
+        /// A real <see cref="ToolServiceGate"/> over <see cref="FakeToolService"/>s, wired to this
+        /// host the way `SwReviewAddIn.CreateToolServiceGate` wires the add-in's: its publish
+        /// callback refreshes the host, its busy question is
+        /// <see cref="RemodelHost.RunInProgress"/>, and from here on the attachment the host
+        /// reads is the gate's. It starts inline, so an assertion can follow the call.
+        /// </summary>
+        public ToolServiceGate AttachGate()
+        {
+            _gate = new ToolServiceGate(
+                () => Document,
+                () => new FakeToolService(++_services, Document!.Path),
+                _ => Host.RefreshAvailability(),
+                (what, failure) => { },
+                schedule: work => work(),
+                busy: () => Host.RunInProgress);
+            return _gate;
+        }
+
+        /// <summary>
+        /// SOLIDWORKS makes <paramref name="path"/> the active document, or switches it to
+        /// <paramref name="configuration"/>, and the add-in fans it out as it does: every tab's
+        /// `document.changed` first, then the gate follows the document
+        /// (`SwReviewAddIn.TellEveryTabTheDocumentChanged`).
+        /// </summary>
+        public void SwitchTo(ToolServiceGate gate, string path, string? configuration = "Default")
+        {
+            Document = new PageDocument(path, configuration);
+            Host.DocumentChanged();
+            gate.FollowDocument(path);
+        }
+
+        /// <summary>The types posted from <paramref name="index"/> on, in the order the page receives them.</summary>
+        public string[] TypesPostedSince(int index) => Posted
+            .Skip(index)
+            .Select(message => JsonDocument.Parse(message).RootElement.GetProperty("type").GetString()!)
+            .ToArray();
 
         public string? ErrorClass(string id) =>
             Reply("error", id).GetProperty("error_class").GetString();

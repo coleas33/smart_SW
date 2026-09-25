@@ -64,6 +64,24 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+/*
+  Decision 24A: the plan on screen can no longer be started. Every colour is a token from
+  shared/tokens.css, linked before this file, so the notice follows the workstation's theme.
+*/
+.plan-lost {
+  margin: 8px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--warn);
+  border-left-width: 4px;
+  background: var(--warn-bg);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.plan-lost-text {
+  margin: 0 0 6px 0;
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;

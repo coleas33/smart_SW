@@ -769,6 +769,10 @@ public sealed class RemodelPageContractTests
     /// host answers it `SessionLost`, which the page prints verbatim. The host's order, `SessionLost`
     /// before the seat check, does not show here: it decides only a Start that reaches the host
     /// while the service is still restarting, which `RemodelHostTests` pins.
+    ///
+    /// *Amended 2026-09-25 (decision 24A):* the host now tells the page at the re-attach itself
+    /// (`remodel.plan_lost`, the tests below), so this is the backstop - what a page sees when
+    /// that notice has not reached it - and it stays pinned as such: this stub sends no notice.
     /// </summary>
     [Fact]
     public void AReattachAfterThePlanShowsTheWaitFirstAndTheNextStartIsRefusedAsSessionLost()
@@ -825,6 +829,362 @@ public sealed class RemodelPageContractTests
         Assert.Equal(1, stub!.Starts);
     }
 
+    // ---- a lost plan is told at once (decision 24A, T170) -------------------------------------
+
+    /// <summary>
+    /// The decision as the engineer sees it. After the plan, the host says it is lost
+    /// (`remodel.plan_lost`): the notice shows the host's sentence verbatim - the page has no
+    /// words of its own for it - Start is disabled and pressing it sends nothing, Plan again is
+    /// offered and pressable, and the run status line no longer tells the engineer to press
+    /// Start.
+    /// </summary>
+    [Fact]
+    public void APlanLostNoticeShowsTheHostsSentenceVerbatimDisablesStartAndOffersPlanAgain()
+    {
+        HostStub? stub = null;
+        LostPlanView? before = null;
+        LostPlanView? after = null;
+        int? startsAfterPressing = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                before = await ReadLostPlanView(page);
+
+                stub!.Post(
+                    "remodel.plan_lost",
+                    new { run_dir = HostStub.RunDir, message = RemodelHost.PlanLostMessage });
+                await Settled(page);
+                after = await ReadLostPlanView(page);
+
+                await Click(page, "start-run");
+                startsAfterPressing = stub.Starts;
+            });
+
+        Assert.True(before!.NoticeHidden);
+        Assert.False(before.StartDisabled);
+        Assert.Equal("Planned. Press Start to apply the plan to the copy.", before.RunStatus);
+
+        Assert.False(after!.NoticeHidden);
+        Assert.Equal(RemodelHost.PlanLostMessage, after.NoticeText);
+        Assert.True(after.StartDisabled);
+        Assert.False(after.PlanAgainDisabled);
+        Assert.False(after.PlanDisabled);
+        Assert.Equal(string.Empty, after.RunStatus);
+        Assert.Equal(0, startsAfterPressing);
+    }
+
+    /// <summary>
+    /// Plan again is the way back. A refused Plan again - the part has unsaved changes - leaves
+    /// the lost plan on screen and the notice standing, with the refusal in the banner. An
+    /// accepted one plans a folder of its own, and that plan is not lost: the notice goes and
+    /// Start is pressable again, and sent.
+    /// </summary>
+    [Fact]
+    public void PlanAgainPlansAFolderOfItsOwnThatIsStartableAndARefusedOneLeavesTheNotice()
+    {
+        HostStub? stub = null;
+        LostPlanView? refused = null;
+        LostPlanView? planned = null;
+        int plansAfterTheRefusal = 0;
+        string? runDirShown = null;
+        int startsAtTheEnd = 0;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                stub!.Post(
+                    "remodel.plan_lost",
+                    new { run_dir = HostStub.RunDir, message = RemodelHost.PlanLostMessage });
+                await Settled(page);
+
+                stub.PlanRefusal = ("DocumentDirty", "the part has unsaved changes.");
+                await Click(page, "plan-again");
+                refused = await ReadLostPlanView(page);
+                plansAfterTheRefusal = stub.Plans;
+
+                stub.PlanRefusal = null;
+                await Click(page, "plan-again");
+                planned = await ReadLostPlanView(page);
+                runDirShown = await TextOf(page, "run-dir");
+
+                await Click(page, "start-run");
+                startsAtTheEnd = stub.Starts;
+            });
+
+        Assert.Equal(2, plansAfterTheRefusal);
+        Assert.False(refused!.NoticeHidden);
+        Assert.Equal(RemodelHost.PlanLostMessage, refused.NoticeText);
+        Assert.True(refused.StartDisabled);
+        Assert.Equal("the part has unsaved changes.", refused.Banner);
+
+        Assert.True(planned!.NoticeHidden);
+        Assert.False(planned.StartDisabled);
+        Assert.Equal(HostStub.RunDirFor(2), runDirShown);
+        Assert.Equal(1, startsAtTheEnd);
+    }
+
+    /// <summary>
+    /// A notice is about one folder. One that arrives before the page has a plan is not kept
+    /// for a plan that comes later, one naming another folder leaves the plan on screen
+    /// startable, and one naming no folder at all is nobody's.
+    /// </summary>
+    [Fact]
+    public void ANoticeForAFolderThePageIsNotShowingChangesNothing()
+    {
+        HostStub? stub = null;
+        LostPlanView? afterThePlan = null;
+        LostPlanView? afterTheOthers = null;
+        int startsAtTheEnd = 0;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page); },
+            async page =>
+            {
+                await Settled(page);
+                stub!.Post(
+                    "remodel.plan_lost",
+                    new { run_dir = HostStub.RunDir, message = RemodelHost.PlanLostMessage });
+                await Settled(page);
+                await Click(page, "plan-run");
+                afterThePlan = await ReadLostPlanView(page);
+
+                stub.Post(
+                    "remodel.plan_lost",
+                    new { run_dir = HostStub.RunDirFor(2), message = RemodelHost.PlanLostMessage });
+                stub.Post("remodel.plan_lost", new { message = RemodelHost.PlanLostMessage });
+                await Settled(page);
+                afterTheOthers = await ReadLostPlanView(page);
+
+                await Click(page, "start-run");
+                startsAtTheEnd = stub.Starts;
+            });
+
+        foreach (LostPlanView view in new[] { afterThePlan!, afterTheOthers! })
+        {
+            Assert.True(view.NoticeHidden);
+            Assert.False(view.StartDisabled);
+        }
+
+        Assert.Equal(1, startsAtTheEnd);
+    }
+
+    /// <summary>
+    /// A re-attach as the host tells it: the withdrawal's capability refresh (the wait, in the
+    /// banner), the notice, then the new service's refresh. The wait clears from the banner as
+    /// it always has, and takes nothing else with it: the notice stands, Start stays disabled
+    /// once the seat is back, and Plan again - held while the seat was being checked, like the
+    /// plan button - is pressable.
+    /// </summary>
+    [Fact]
+    public void AReattachAsTheHostTellsItLeavesTheNoticeStandingOnceTheServiceIsBack()
+    {
+        HostStub? stub = null;
+        LostPlanView? whileAttaching = null;
+        LostPlanView? onceAttached = null;
+        int startsAtTheEnd = -1;
+
+        object Document(bool? available, string? message) => new
+        {
+            path = @"C:\\vault\\bracket.sldprt",
+            configuration = "Default",
+            kind = "part",
+            remodel = new { available, message },
+        };
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+
+                stub!.Post("document.changed", Document(null, RemodelHost.SeatCheckingMessage));
+                stub.Post(
+                    "remodel.plan_lost",
+                    new { run_dir = HostStub.RunDir, message = RemodelHost.PlanLostMessage });
+                await Settled(page);
+                whileAttaching = await ReadLostPlanView(page);
+
+                stub.Post("document.changed", Document(true, null));
+                await Settled(page);
+                onceAttached = await ReadLostPlanView(page);
+
+                await Click(page, "start-run");
+                startsAtTheEnd = stub.Starts;
+            });
+
+        Assert.Equal(RemodelHost.SeatCheckingMessage, whileAttaching!.Banner);
+        Assert.False(whileAttaching.NoticeHidden);
+        Assert.True(whileAttaching.StartDisabled);
+        Assert.True(whileAttaching.PlanAgainDisabled);
+
+        Assert.Equal(string.Empty, onceAttached!.Banner);
+        Assert.False(onceAttached.NoticeHidden);
+        Assert.Equal(RemodelHost.PlanLostMessage, onceAttached.NoticeText);
+        Assert.True(onceAttached.StartDisabled);
+        Assert.False(onceAttached.PlanAgainDisabled);
+        Assert.Equal(0, startsAtTheEnd);
+    }
+
+    /// <summary>
+    /// The notice's line reaches the DOM as text, like every other string on this page: markup
+    /// in it builds no element and runs nothing. The host's sentence carries none, and the page
+    /// does not take that on trust.
+    /// </summary>
+    [Fact]
+    public void ANoticeCarryingMarkupIsWrittenAsText()
+    {
+        const string hostile = "<img src=x onerror=\"document.title='owned'\">Plan again.";
+        HostStub? stub = null;
+        string? text = null;
+        string? elements = null;
+        string? title = null;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                stub!.Post("remodel.plan_lost", new { run_dir = HostStub.RunDir, message = hostile });
+                await Settled(page);
+
+                text = await TextOf(page, "plan-lost-text");
+                elements = await page.ExecuteScriptAsync(
+                    "String(document.getElementById('plan-lost-text').children.length)");
+                title = await page.ExecuteScriptAsync("document.title");
+            });
+
+        Assert.Equal(hostile, text);
+        Assert.Equal("\"0\"", elements);
+        Assert.DoesNotContain("owned", title, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The notice sends the engineer to Plan again, and says so with the label they will see on
+    /// the button beside it, read from the page itself rather than restated, so the two cannot
+    /// drift. Plan again is the owner's word for it.
+    /// </summary>
+    [Fact]
+    public void ThePlanLostMessageNamesThePlanAgainButtonByItsLabel()
+    {
+        Match button = Regex.Match(
+            RemodelPageFiles.Read("index.html"),
+            @"<button[^>]*\bid=""plan-again""[^>]*>([^<]+)</button>");
+        Assert.True(button.Success, "index.html has no plan-again button");
+
+        string label = button.Groups[1].Value.Trim();
+        Assert.Equal("Plan again", label);
+        Assert.EndsWith("press " + label + ".", RemodelHost.PlanLostMessage, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The pane's palette is `web/shared/tokens.css` (the other tabs' rule, pinned there by
+    /// <see cref="SharedCheckPageTests"/> and <see cref="ReviewPageInjectionTests"/>). The Remodel
+    /// page links it before its own stylesheet, so a `var()` in that stylesheet resolves, and
+    /// the notice's rules spell out no colour of their own: every colour they set is a token,
+    /// which follows the theme the workstation is in.
+    /// </summary>
+    [Fact]
+    public void TheNoticeIsDrawnWithTheSharedTokensLinkedBeforeThePagesOwnStylesheet()
+    {
+        Assert.True(
+            File.Exists(Path.Combine(RemodelPageFiles.SharedFolder, "tokens.css")),
+            "tokens.css was not copied to " + RemodelPageFiles.SharedFolder);
+
+        string html = RemodelPageFiles.IndexHtml();
+        int tokens = html.IndexOf("href=\"../../shared/tokens.css\"", StringComparison.Ordinal);
+        int own = html.IndexOf("href=\"remodel.css\"", StringComparison.Ordinal);
+        Assert.True(tokens >= 0, "the Remodel page does not link ../../shared/tokens.css");
+        Assert.True(own > tokens, "the Remodel page must link shared/tokens.css before remodel.css");
+
+        List<Match> rules = Regex.Matches(
+                RemodelPageFiles.Read("remodel.css"),
+                @"(?<selector>[^{}]*\.plan-lost[^{}]*)\{(?<body>[^{}]*)\}")
+            .Cast<Match>()
+            .ToList();
+        Assert.NotEmpty(rules);
+
+        foreach (Match rule in rules)
+        {
+            string body = rule.Groups["body"].Value;
+            Assert.False(
+                SharedCheckPageTests.ColourLiteral.IsMatch(body),
+                "a plan-lost rule spells out a colour of its own: " + body.Trim());
+
+            // Every declaration that sets a colour - not `border-left-width`, which sets none.
+            foreach (Match declaration in Regex.Matches(
+                         body,
+                         @"(?<![a-z-])(?<property>color|(?:background|outline|border(?:-(?:top|right|bottom|left))?)(?:-color)?)\s*:\s*(?<value>[^;]+);"))
+            {
+                Assert.True(
+                    declaration.Groups["value"].Value.Contains("var(--"),
+                    "a plan-lost rule sets " + declaration.Groups["property"].Value + " without a token: "
+                        + declaration.Value.Trim());
+            }
+        }
+
+        Assert.Contains(rules, rule => rule.Groups["body"].Value.Contains("var(--"));
+    }
+
+    /// <summary>What the page shows of a lost plan, read off the live page in one go.</summary>
+    private sealed class LostPlanView
+    {
+        public bool NoticeHidden { get; set; }
+
+        public string? NoticeText { get; set; }
+
+        public bool StartDisabled { get; set; }
+
+        public bool PlanDisabled { get; set; }
+
+        public bool PlanAgainDisabled { get; set; }
+
+        public string? RunStatus { get; set; }
+
+        public string? Banner { get; set; }
+    }
+
+    private static async Task<LostPlanView> ReadLostPlanView(CoreWebView2 page) => new LostPlanView
+    {
+        NoticeHidden = await Hidden(page, "plan-lost"),
+        NoticeText = await TextOf(page, "plan-lost-text"),
+        StartDisabled = await Disabled(page, "start-run"),
+        PlanDisabled = await Disabled(page, "plan-run"),
+        PlanAgainDisabled = await Disabled(page, "plan-again"),
+        RunStatus = await TextOf(page, "run-status"),
+        Banner = await Banner(page),
+    };
+
+    /// <summary>Presses a button the way the engineer does, and lets the page act on it.</summary>
+    private static async Task Click(CoreWebView2 page, string elementId)
+    {
+        await page.ExecuteScriptAsync("document.getElementById('" + elementId + "').click()");
+        await Settled(page);
+    }
+
+    /// <summary>An element's text, read off the live page.</summary>
+    private static async Task<string?> TextOf(CoreWebView2 page, string elementId) =>
+        JsonDocument.Parse(await page.ExecuteScriptAsync(
+            "document.getElementById('" + elementId + "').textContent")).RootElement.GetString();
+
+    /// <summary>Whether an element is hidden, read off the live page.</summary>
+    private static async Task<bool> Hidden(CoreWebView2 page, string elementId) =>
+        JsonDocument.Parse(await page.ExecuteScriptAsync(
+            "document.getElementById('" + elementId + "').hidden")).RootElement.GetBoolean();
+
     /// <summary>The banner's text, read off the live page.</summary>
     private static async Task<string?> Banner(CoreWebView2 page) =>
         JsonDocument.Parse(await page.ExecuteScriptAsync(
@@ -844,9 +1204,13 @@ public sealed class RemodelPageContractTests
     /// </summary>
     private sealed class HostStub
     {
-        private const string RunDir = @"C:\SwReviewRuns\20260916-142201-bracket-remodel";
+        /// <summary>The folder the first `remodel.plan` is answered with.</summary>
+        public const string RunDir = @"C:\SwReviewRuns\20260916-142201-bracket-remodel";
 
         private readonly CoreWebView2 _page;
+
+        /// <summary>How many plans have been answered `remodel.planned`.</summary>
+        private int _planned;
 
         /// <param name="startRefusal">When set, `remodel.start` is answered with this
         /// `error {error_class, message}`, not retryable, as `RemodelHost` refuses one.</param>
@@ -873,6 +1237,16 @@ public sealed class RemodelPageContractTests
         public int Starts { get; private set; }
 
         public int Plans { get; private set; }
+
+        /// <summary>
+        /// When set, `remodel.plan` is answered with this `error {error_class, message}`, as
+        /// `RemodelHost` refuses a plan; when clear, each plan is answered with a folder of its
+        /// own, as `RunFolders.CreateForRemodel` makes one per plan.
+        /// </summary>
+        public (string ErrorClass, string Message)? PlanRefusal { get; set; }
+
+        /// <summary>The folder the <paramref name="plan"/>th accepted `remodel.plan` is answered with.</summary>
+        public static string RunDirFor(int plan) => plan == 1 ? RunDir : RunDir + "-" + plan;
 
         /// <summary>Posts an unsolicited message, which carries no `id`.</summary>
         public void Post(string type, object payload) =>
@@ -917,9 +1291,21 @@ public sealed class RemodelPageContractTests
                     return;
                 case "remodel.plan":
                     Plans++;
+                    if (PlanRefusal.HasValue)
+                    {
+                        Reply("error", id, new
+                        {
+                            error_class = PlanRefusal.Value.ErrorClass,
+                            message = PlanRefusal.Value.Message,
+                            retryable = true,
+                        });
+                        return;
+                    }
+
+                    _planned++;
                     Reply("remodel.planned", id, new
                     {
-                        run_dir = RunDir,
+                        run_dir = RunDirFor(_planned),
                         plan_summary = Parse(RemodelResultSample.PlanSummaryJson()),
                     });
                     return;
@@ -1287,7 +1673,7 @@ public sealed class RemodelPageContractTests
 
             // A parser that quietly matched nothing would make every test above vacuous.
             Assert.True(
-                pageToHost.Count == 11 && unsolicited.Count == 5 && hostToPage.Count >= 8,
+                pageToHost.Count == 11 && unsolicited.Count == 6 && hostToPage.Count >= 8,
                 $"contracts/pane-remodel-messages.md did not parse: {pageToHost.Count} "
                     + $"page-to-host rows ({Join(pageToHost)}), {unsolicited.Count} unsolicited "
                     + $"rows ({Join(unsolicited)}). Did the table or heading shape change?");

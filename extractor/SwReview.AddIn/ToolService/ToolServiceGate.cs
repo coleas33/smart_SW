@@ -142,7 +142,9 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// <param name="publish">Publishes the review half of whichever service is listening - in
     /// the add-in, into <see cref="ReviewHostOptions.Bridge"/>, which is what
     /// <c>POST /sessions</c> carries - and is called with null when one stops, so that what is
-    /// published is never a pipe that has been closed.</param>
+    /// published is never a pipe that has been closed. Every change of <see cref="Attachment"/>
+    /// is published, and <see cref="Attachment"/> already answers the new state when it is: the
+    /// Remodel tab tells the page a plan is lost from this callback (decision 24A).</param>
     /// <param name="report">A failed start, or a document not attached to, for the pane and the
     /// add-in log. The exception is null when nothing threw: a refusal is not a failure, but it
     /// is just as invisible if it is not said.</param>
@@ -300,7 +302,8 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// document. A busy question that throws counts as busy: a teardown cannot be undone. A
     /// remodel plan waiting for Start is not such work (decision 22A): it holds nothing, the
     /// re-attach goes ahead and throws the plan's session away, and the Remodel tab refuses
-    /// that plan's Start by name because <see cref="Attachment"/> has changed.
+    /// that plan's Start by name because <see cref="Attachment"/> has changed - and says so to
+    /// the engineer as soon as the old service is withdrawn, before Start (decision 24A).
     /// </summary>
     public void FollowDocument(string? activePath)
     {

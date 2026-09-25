@@ -25,11 +25,12 @@ namespace SwReview.AddIn.Tests;
 /// <see cref="StandardsPageTests"/> and <see cref="ReviewPageAttentionPanelTests"/> all make
 /// that assertion with rows in an order no page could have produced. What they cannot prove is
 /// that no page will reorder some other list next year. That is a property of the source, so
-/// it is scanned in the source, over every script all three pages run - which is why the Review
+/// it is scanned in the source, over every script all four pages run - which is why the Review
 /// page's entry brings `shared/dom.js` in with it: a comparator helper added there would reach
-/// every page in the pane at once.
+/// every page in the pane at once. The Remodel tab joined the sweep with the owner's decision
+/// 24A (004 T170), whose plan-lost notice was the first change to that page to be held to it.
 ///
-/// <b>The allowlist is the interesting half.</b> Three ordered lists in these pages are display
+/// <b>The allowlist is the interesting half.</b> Four ordered lists in these pages are display
 /// orders, written down before this feature and unrelated to it, and two comparisons decide
 /// which bucket a row is drawn in. Each is named below with the reason it is not a rank. A new
 /// one has to be added here deliberately, with a reason, which is the whole mechanism: the
@@ -69,8 +70,8 @@ public sealed class PageRuleScanTests
     private const int OrderedListSize = 3;
 
     /// <summary>
-    /// The three ordered lists that were here before this feature, each a display order and
-    /// none of them a rank. Keyed by the script and by the vocabulary words it holds, sorted,
+    /// The three ordered lists that were here before this feature, and the Remodel tab's, which
+    /// joined the sweep later: each a display order and none of them a rank. Keyed by the script and by the vocabulary words it holds, sorted,
     /// so moving the list within its file is fine and adding a word to it is not.
     /// </summary>
     private static readonly Dictionary<string, string> AllowedOrders =
@@ -97,6 +98,15 @@ public sealed class PageRuleScanTests
                 // coverage panel lists its buckets in. Coverage items, not findings.
                 "Review/ReviewPage/render.js|checked,failed,out_of_scope,skipped,unresolved",
                 "the coverage panel's bucket order"
+            },
+            {
+                // `BUCKETS` in Remodel/RemodelPage/remodel.js: the order the Remodel tab's before
+                // and after grades state their counts in, the check tabs' bucket display order
+                // over one run's grade. It orders buckets of rules, never findings, and every
+                // bucket is drawn whatever its count. Written with the page (004 T133); in the
+                // sweep since decision 24A (004 T170).
+                "Remodel/RemodelPage/remodel.js|checked,failed,out_of_scope,skipped,unresolved,warned",
+                "the Remodel tab's grade bucket order"
             },
         };
 
@@ -133,17 +143,25 @@ public sealed class PageRuleScanTests
                 "Review/ReviewPage/render.js|body.status === 'answered'",
                 "whether an evidence request has been answered"
             },
+            {
+                // `changeRow` in Remodel/RemodelPage/remodel.js: a change record's own lifecycle -
+                // written as `attempting` before its call and again with its outcome - which
+                // decides whether the row carries the "written before the call" note. Not a
+                // finding's status at all, and it puts no row before another.
+                "Remodel/RemodelPage/remodel.js|change.status === 'attempting'",
+                "whether a change record is the one a run left in flight"
+            },
         };
 
     // ---- the scan is not vacuous ----------------------------------------------------------
 
     /// <summary>
-    /// Every script all three pages run is in the sweep, `shared/dom.js` and
+    /// Every script all four pages run is in the sweep, `shared/dom.js` and
     /// `shared/check-page.js` included, and each file is scanned once however many pages load
     /// it. A sweep that quietly found nothing would make every assertion below pass for free.
     /// </summary>
     [Fact]
-    public void EveryScriptOfAllThreePagesIsScannedOnce()
+    public void EveryScriptOfAllFourPagesIsScannedOnce()
     {
         IReadOnlyList<KeyValuePair<string, string>> scripts = Scripts();
 
@@ -157,6 +175,7 @@ public sealed class PageRuleScanTests
                      "Standards/StandardsPage/standards.js",
                      "Review/ReviewPage/app.js",
                      "Review/ReviewPage/render.js",
+                     "Remodel/RemodelPage/remodel.js",
                  })
         {
             Assert.Single(scripts, script => script.Key == expected);
@@ -380,7 +399,7 @@ public sealed class PageRuleScanTests
     // ---- scanning ------------------------------------------------------------------------------
 
     /// <summary>
-    /// Every script the three pages run, each file once. `PageScripts.Collect` answers "what
+    /// Every script the four pages run, each file once. `PageScripts.Collect` answers "what
     /// does this page load" per page - the page's own folder plus the shared files its own
     /// `index.html` names - and the two check tabs both load `shared/check-page.js`, so the
     /// union is taken by path.
@@ -391,7 +410,8 @@ public sealed class PageRuleScanTests
             PageScripts.Collect(ModelCheckPageFiles.Folder, ModelCheckPageFiles.IndexHtml())
                 .Concat(PageScripts.Collect(
                     StandardsPageFiles.Folder, StandardsPageFiles.IndexHtml()))
-                .Concat(PageScripts.Collect(ReviewPageFiles.Folder, ReviewPageFiles.IndexHtml()));
+                .Concat(PageScripts.Collect(ReviewPageFiles.Folder, ReviewPageFiles.IndexHtml()))
+                .Concat(PageScripts.Collect(RemodelPageFiles.Folder, RemodelPageFiles.IndexHtml()));
 
         List<KeyValuePair<string, string>> scripts = all
             .GroupBy(script => Normalize(script.Key), StringComparer.Ordinal)

@@ -578,8 +578,12 @@ return JSON.stringify({ok: true, rules: out});";
                 + "literal here cannot follow the theme the workstation is in.");
     }
 
-    /// <summary>A hex colour, or a function that builds one. Not an id selector.</summary>
-    private static readonly Regex ColourLiteral = new Regex(
+    /// <summary>
+    /// A hex colour, or a function that builds one. Not an id selector. Shared with
+    /// <see cref="RemodelPageContractTests"/>, which holds the Remodel tab's plan-lost notice to
+    /// the same rule (decision 24A), rather than copied.
+    /// </summary>
+    internal static readonly Regex ColourLiteral = new Regex(
         @"#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b|\b(?:rgba?|hsla?)\s*\(",
         RegexOptions.Compiled);
 

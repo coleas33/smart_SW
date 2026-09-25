@@ -64,6 +64,7 @@ public enum RemodelRunPhase
 public sealed class RemodelRun
 {
     private int _stop;
+    private int _planLostNotice;
 
     internal RemodelRun(
         string runDirectory, string copyPath, DateTime at, string? toolServiceAttachment)
@@ -113,4 +114,13 @@ public sealed class RemodelRun
     public bool StopRequested => Interlocked.CompareExchange(ref _stop, 0, 0) != 0;
 
     internal void RequestStop() => Interlocked.Exchange(ref _stop, 1);
+
+    /// <summary>
+    /// Claims the one `remodel.plan_lost` this run's plan is told with (decision 24A): true the
+    /// first time, false ever after. The attachment a plan was made on never comes back -
+    /// every start mints a new one - so a plan lost once is lost for good, and every refresh
+    /// after the first finds it lost again. Interlocked because the refreshes arrive on the
+    /// tool service's thread and the end of a plan on the message thread.
+    /// </summary>
+    internal bool ClaimPlanLostNotice() => Interlocked.Exchange(ref _planLostNotice, 1) == 0;
 }

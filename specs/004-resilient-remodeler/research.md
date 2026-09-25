@@ -1071,7 +1071,7 @@ Two operational rules, and a third added by the owner's decision 22A (2026-09-25
   told as soon as the plan is lost rather than at the next Start. The host hears of every
   tool-service attach and detach, so it posts `remodel.plan_lost` for the plan on screen once
   that plan's attachment is gone, and the page disables Start and offers Plan again; `SessionLost`
-  stays the backstop. Not yet in effect until T170 lands.
+  stays the backstop.
 
 ---
 

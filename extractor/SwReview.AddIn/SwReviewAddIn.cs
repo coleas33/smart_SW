@@ -925,6 +925,9 @@ public class SwReviewAddIn : ISwAddin
             service =>
             {
                 reviewOptions.Bridge = service?.ReviewBridge;
+
+                // The Remodel tab's capability, and the one way it hears of a re-attach: a
+                // plan made on the service going away is told to the page here (decision 24A).
                 _remodelHost?.RefreshAvailability();
             },
             Report,

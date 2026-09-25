@@ -686,6 +686,87 @@ public sealed class ToolServiceWiringTests
         Assert.Contains("RemodelAvailability = () => _toolService?.RemodelCapability", host, StringComparison.Ordinal);
     }
 
+    // ---- what the Remodel tab hears of every attachment change (decision 24A, 004 T170) ------
+
+    /// <summary>
+    /// The gate's half of decision 24A. The Remodel tab tells the page a plan is lost when the
+    /// gate's publish callback refreshes it, so every change of <see cref="ToolServiceGate.Attachment"/>
+    /// must be published and nothing else may be: a re-attach is a withdrawal (null) and then
+    /// the new service, a restart whose attach fails and a disconnect are a withdrawal alone,
+    /// and a follow that re-attaches nothing - the same document spelt differently, which is
+    /// how a configuration switch arrives, a drawing, nothing open, a busy bridge - publishes
+    /// nothing. And when the callback runs the attachment is already the new one, never the one
+    /// going away, so the host that reads it there reads the state it is being told about.
+    /// </summary>
+    [Fact]
+    public void EveryAttachmentChangeIsPublishedWithTheNewAttachmentInPlaceAndNothingElseIs()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\bracket.SLDPRT" };
+        ToolServiceGate? gate = null;
+        var published = new List<(string? Service, string? Attachment)>();
+        world.Publish = service => published.Add((service?.PipeName, gate!.Attachment));
+        gate = world.Gate();
+
+        gate.EnsureStarted();
+        gate.FollowDocument(@"c:\MODELS\BRACKET.sldprt");
+        gate.FollowDocument(@"C:\models\sheet.SLDDRW");
+        gate.FollowDocument(null);
+        world.Busy = true;
+        world.DocumentPath = @"C:\models\frame.SLDPRT";
+        gate.FollowDocument(@"C:\models\frame.SLDPRT");
+        world.Busy = false;
+        gate.FollowDocument(@"C:\models\frame.SLDPRT");
+        world.Failure = new InvalidOperationException("the component tree could not be walked");
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        world.Failure = null;
+        gate.EnsureStarted();
+        gate.Dispose();
+
+        Assert.Equal(
+            new (string?, string?)[]
+            {
+                ("swreview-fake-1", "swreview-fake-1"),
+                (null, null),
+                ("swreview-fake-2", "swreview-fake-2"),
+                (null, null),
+                ("swreview-fake-3", "swreview-fake-3"),
+                (null, null),
+            },
+            published.ToArray());
+    }
+
+    /// <summary>
+    /// The add-in's half, read from its source because <c>SwReviewAddIn</c> needs a live
+    /// <c>ISldWorks</c>: the gate is built in one place, <c>CreateToolServiceGate</c>; its
+    /// publish callback refreshes the Remodel host - the one line through which a lost plan
+    /// reaches the page before Start - and its busy question asks that host whether a plan or a
+    /// run is in flight, which is why no re-attach lands under a run. Either line dropped, and
+    /// every host and gate test above would still pass.
+    /// </summary>
+    [Fact]
+    public void TheAddInsGateRefreshesTheRemodelHostOnEveryPublishAndARunHoldsIt()
+    {
+        string addIn = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
+        var construction = new Regex(@"new\s+ToolServiceGate\s*\(", RegexOptions.CultureInvariant);
+        var sites = Directory.EnumerateFiles(addIn, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Split(Path.DirectorySeparatorChar).Any(part => part == "obj" || part == "bin"))
+            .SelectMany(file => construction.Matches(File.ReadAllText(file)).Cast<Match>().Select(_ => Path.GetFileName(file)))
+            .ToList();
+        Assert.Equal(new[] { "SwReviewAddIn.cs" }, sites);
+
+        string source = Regex.Replace(File.ReadAllText(Path.Combine(addIn, "SwReviewAddIn.cs")), @"\s+", " ");
+        int start = source.IndexOf("private ToolServiceGate CreateToolServiceGate(", StringComparison.Ordinal);
+        int end = start < 0 ? -1 : source.IndexOf("private void StartBackend(", start, StringComparison.Ordinal);
+        Assert.True(end > start, "SwReviewAddIn.CreateToolServiceGate was not found, or StartBackend no longer follows it.");
+        string gate = source.Substring(start, end - start);
+
+        Match publish = Regex.Match(gate, @"service => \{(?<body>[^}]*)\}");
+        Assert.True(publish.Success, "CreateToolServiceGate's publish callback is no longer a block lambda over `service`.");
+        Assert.Contains("_remodelHost?.RefreshAvailability();", publish.Groups["body"].Value, StringComparison.Ordinal);
+        Assert.Contains("(_remodelHost != null && _remodelHost.RunInProgress)", gate, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ARestartWhoseAttachFailsIsReportedAndTheNextDocumentTriesAgain()
     {
@@ -2110,69 +2191,6 @@ public sealed class ToolServiceWiringTests
             Services.Add(service);
             return service;
         }
-    }
-
-    /// <summary>A tool service with no pipe, no SOLIDWORKS and two distinct secrets.</summary>
-    private sealed class FakeToolService : IToolService
-    {
-        public FakeToolService(int ordinal, string? documentPath = null)
-        {
-            PipeName = "swreview-fake-" + ordinal;
-            ReviewBridge = new BridgeConfig(PipeName, "review-secret-" + ordinal);
-            GeneralChatBridge = new BridgeConfig(PipeName, "chat-secret-" + ordinal);
-            RemodelBridge = new BridgeConfig(PipeName, "remodel-secret-" + ordinal);
-            RemodelSeatAvailable = false;
-            DocumentPath = documentPath ?? @"C:\models\bracket-" + ordinal + ".sldasm";
-            Session = new FakeSession();
-        }
-
-        public string PipeName { get; }
-
-        public string DocumentPath { get; }
-
-        public BridgeConfig ReviewBridge { get; }
-
-        public BridgeConfig GeneralChatBridge { get; }
-
-        public BridgeConfig RemodelBridge { get; }
-
-        public bool RemodelSeatAvailable { get; }
-
-        public ISwSession Session { get; }
-
-        public bool Disposed { get; private set; }
-
-        /// <summary>
-        /// The thread the gate stopped it on. Recorded because the real stop joins an accept
-        /// thread, every client thread and the pump - so it must not be the SOLIDWORKS
-        /// application thread.
-        /// </summary>
-        public int DisposedThreadId { get; private set; }
-
-        /// <summary>What the gate wrote into this service's own tool-service log.</summary>
-        public List<string> LogLines { get; } = new List<string>();
-
-        public void WriteLog(string line) => LogLines.Add(line);
-
-        public void Dispose()
-        {
-            DisposedThreadId = Thread.CurrentThread.ManagedThreadId;
-            Disposed = true;
-        }
-    }
-
-    /// <summary>Identity only: the tests assert which scope `entity.show` was handed, never
-    /// what it did with it. Touching a member would need SOLIDWORKS.</summary>
-    private sealed class FakeSession : ISwSession
-    {
-        public IModelDoc2 Document => throw new NotSupportedException("no SOLIDWORKS in a test.");
-
-        public IConfiguration Configuration =>
-            throw new NotSupportedException("no SOLIDWORKS in a test.");
-
-        public string? SwVersion => null;
-
-        public SwGate Gate { get; } = new SwGate();
     }
 
     /// <summary>The page is not part of this wiring; the options object is.</summary>
