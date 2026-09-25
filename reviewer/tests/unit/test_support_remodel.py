@@ -43,6 +43,7 @@ from tests.support.remodel import (
     SCOPE_SIGNAL_FIELDS,
     absorbed_sketch_features,
     absorbed_twice,
+    carried_under,
     dependency_chain_features,
     derived_subfolder_features,
     duplicate_name_features,
@@ -578,3 +579,54 @@ def test_absorbed_twice_refuses_a_name_that_is_not_one_depth_0_sketch(name: str)
 def test_absorbed_twice_refuses_a_sketch_with_two_consumers() -> None:
     with pytest.raises(ValueError, match="not absorbed by exactly one feature"):
         absorbed_twice(remodel_package(shared_sketch_features()), "Sketch1")
+
+
+# --- a sketch its owner carries, listed only under it (T162) ---------------------------
+
+
+def carried_package_of(owner: str = "Hole1") -> EvidencePackage:
+    return carried_under(absorbed_package(), owner, "Sketch9")
+
+
+def test_carried_under_builds_a_package_that_validates_and_round_trips() -> None:
+    assert_round_trips(carried_package_of())
+
+
+def test_the_carried_sketch_is_listed_only_under_its_owner_after_its_second_listings() -> None:
+    package = carried_package_of()
+    (carried,) = listings(package, "Sketch9")
+    (hole,) = listings(package, "Hole1")
+    _, second = listings(package, "Sketch3")
+
+    assert (carried.depth, carried.folder_id) == (hole.depth + 1, hole.id)
+    assert carried.index == second.index + 1
+    assert not [
+        row
+        for row in package.features
+        if row.depth == 0 and row.persist_ref == carried.persist_ref
+    ]
+
+
+def test_the_carried_sketch_is_its_owners_parent_and_has_none_of_its_own() -> None:
+    package = carried_package_of()
+    (carried,) = listings(package, "Sketch9")
+    (hole,) = listings(package, "Hole1")
+
+    assert carried.parent_ids == []
+    assert carried.child_ids == [hole.id]
+    assert carried.sketch is not None
+    assert carried.sketch.consumer_ids == [hole.id]
+    assert carried.id in (hole.parent_ids or [])
+
+
+def test_carried_under_keeps_the_ids_in_traversal_order() -> None:
+    package = carried_package_of()
+
+    assert [row.id for row in package.features] == [
+        f"feat:{number:04d}" for number in range(1, len(package.features) + 1)
+    ]
+
+
+def test_carried_under_refuses_an_owner_that_is_not_one_depth_0_feature() -> None:
+    with pytest.raises(ValueError, match="not exactly one depth-0 feature"):
+        carried_package_of("Missing")

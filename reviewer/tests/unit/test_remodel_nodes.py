@@ -13,6 +13,10 @@ pins it from both ends:
 - `plan_reorganize` over a fictional, code-built package laid out in the real shape
   (`tests/support/remodel.py::absorbed_twice`): the second listing changes nothing in the
   plan but the coverage line that says it was read.
+
+T162 adds the second shape the same packages carry: a row the walk finds **only** under the
+feature that owns it (the Hole Wizard's own profile sketch) is carried by that feature - no
+target, no move of its own - and the whole real shape plans exactly as the flat walk's tree.
 """
 
 from __future__ import annotations
@@ -23,12 +27,13 @@ import pytest
 
 from swreview.checks.rms_types import load_table
 from swreview.ir.models import EvidencePackage, Feature, SketchInfo
-from swreview.remodel.nodes import MergedRow, tree_nodes
+from swreview.remodel.nodes import CarriedRow, MergedRow, tree_nodes
 from swreview.remodel.plan import RemodelPlan, plan_reorganize
 from tests.support.features import feature, folder, sketch_feature
 from tests.support.remodel import (
     absorbed_sketch_features,
     absorbed_twice,
+    carried_under,
     linked,
     remodel_package,
 )
@@ -37,6 +42,9 @@ TABLE = load_table()
 AT = datetime(2026, 9, 16, 14, 22, 1, tzinfo=UTC)
 ABSORBED = ("Sketch1", "Sketch2", "Sketch3")
 SECOND_LISTINGS = "second listings"
+CARRIED_ITEM = "carried sub-features"
+CARRIED = "Sketch9"
+"""The Hole Wizard's own profile sketch of the fixture: listed only under `Hole1`."""
 
 
 def base_package() -> EvidencePackage:
@@ -45,6 +53,12 @@ def base_package() -> EvidencePackage:
 
 def real_shape_package() -> EvidencePackage:
     return absorbed_twice(base_package(), *ABSORBED)
+
+
+def carried_package() -> EvidencePackage:
+    """The whole real shape: every absorbed sketch listed twice, and the hole's own
+    profile sketch listed only under the hole."""
+    return carried_under(real_shape_package(), "Hole1", CARRIED)
 
 
 def by_name(rows: tuple[Feature, ...] | list[Feature], name: str) -> list[Feature]:
@@ -138,25 +152,16 @@ def test_a_tree_with_no_second_listing_is_returned_unchanged() -> None:
     assert nodes.merged == ()
 
 
-def test_a_row_the_walk_found_only_under_its_owner_is_kept() -> None:
+def test_a_row_the_walk_found_only_under_its_owner_is_no_second_listing() -> None:
     """A sub-feature with no depth-0 twin - the Hole Wizard's own profile sketch is one on
-    the real packages - is not a second listing of anything."""
-    rows = list(base_package().features)
-    hole = by_name(rows, "Hole1")[0]
-    inner = retyped(
-        by_name(rows, "Sketch3")[0],
-        id="feat:0099",
-        name="Sketch9",
-        persist_ref="aW5uZXI=",
-        index=len(rows),
-        depth=1,
-        folder_id=hole.id,
-        parent_ids=[],
-    )
-    nodes = tree_nodes([*rows, inner], TABLE)
+    the real packages - is not a second listing of anything, so nothing is merged into a
+    top-level row for it; it is carried by its owner instead (T162, below)."""
+    rows = carried_package().features
+    (inner,) = by_name(rows, CARRIED)
+    nodes = tree_nodes(rows, TABLE)
 
-    assert inner in nodes.rows
-    assert nodes.merged == ()
+    assert all(merge.dropped_id != inner.id for merge in nodes.merged)
+    assert len(nodes.merged) == len(ABSORBED)
 
 
 def test_a_row_under_a_folder_is_not_merged() -> None:
@@ -193,6 +198,9 @@ def test_a_second_listing_of_another_type_is_not_merged() -> None:
         nodes.merged
     )
     assert len(nodes.merged) == len(ABSORBED) - 1
+    assert second.id in {row.id for row in nodes.rows}, (
+        "a row a top-level persist ref names is never carried either"
+    )
 
 
 def test_a_persist_ref_two_top_level_rows_share_merges_nothing() -> None:
@@ -334,32 +342,34 @@ def test_no_persist_ref_is_moved_twice() -> None:
     assert len(moved) == len(set(moved))
 
 
+def projection(result: RemodelPlan) -> dict[str, object]:
+    """What a plan decides, keyed by feature name so two packages of one tree compare."""
+    names = names_of(result)
+    return {
+        "targets": [
+            (item.name, item.state, item.target_group, item.basis) for item in result.targets
+        ],
+        "moves": [
+            (names[move.feature_id], names[move.anchor_feature_id], move.location)
+            for move in result.order.edit_script
+        ],
+        "pins": [
+            (names[pin.feature_id], names[pin.blocking_edge.parent_id]) for pin in result.pins
+        ],
+        "rebuild": [(names[entry.feature_id], entry.reason) for entry in result.rebuild],
+        "folders": [
+            (action.op, action.name, [names[one] for one in action.member_feature_ids])
+            for action in result.folders.actions
+        ],
+        "changes": [change.kind for change in result.changes],
+        "state": result.state,
+    }
+
+
 def test_the_second_listing_changes_nothing_in_the_plan_but_its_coverage_line() -> None:
     """The strongest form of the rule: the same tree, with and without the dump's second
     listings, plans the same targets, moves, pins, rebuild list and folders, keyed by name."""
     with_twins, without = plan(real_shape_package()), plan(base_package())
-
-    def projection(result: RemodelPlan) -> dict[str, object]:
-        names = names_of(result)
-        return {
-            "targets": [
-                (item.name, item.state, item.target_group, item.basis) for item in result.targets
-            ],
-            "moves": [
-                (names[move.feature_id], names[move.anchor_feature_id], move.location)
-                for move in result.order.edit_script
-            ],
-            "pins": [
-                (names[pin.feature_id], names[pin.blocking_edge.parent_id]) for pin in result.pins
-            ],
-            "rebuild": [(names[entry.feature_id], entry.reason) for entry in result.rebuild],
-            "folders": [
-                (action.op, action.name, [names[one] for one in action.member_feature_ids])
-                for action in result.folders.actions
-            ],
-            "changes": [change.kind for change in result.changes],
-            "state": result.state,
-        }
 
     assert projection(with_twins) == projection(without)
     assert with_twins.order.move_count == 1
@@ -379,6 +389,157 @@ def test_the_coverage_says_so_when_no_row_was_listed_twice() -> None:
     """Every coverage item is written on every run: "nothing was listed twice" is an answer,
     and a plan that left the item out could not be told apart from one that never looked."""
     (item,) = [item for item in plan(base_package()).coverage if item.item == SECOND_LISTINGS]
+
+    assert item.feature_ids == ()
+    assert item.reason
+
+
+# --- T162: a row its owner carries --------------------------------------------------
+
+
+def test_a_row_listed_only_under_its_owner_is_carried_by_it() -> None:
+    rows = carried_package().features
+    (inner,) = by_name(rows, CARRIED)
+    (hole,) = by_name(rows, "Hole1")
+    nodes = tree_nodes(rows, TABLE)
+
+    assert inner not in nodes.rows
+    assert nodes.carried == (CarriedRow(dropped_id=inner.id, owner_id=hole.id),)
+
+
+def test_every_edge_that_named_a_carried_row_names_its_owner_and_never_the_owner_itself() -> None:
+    rows = carried_package().features
+    (inner,) = by_name(rows, CARRIED)
+    nodes = tree_nodes(rows, TABLE)
+    (hole,) = by_name(nodes.rows, "Hole1")
+
+    for row in nodes.rows:
+        named = (*(row.parent_ids or ()), *(row.child_ids or ()))
+        assert inner.id not in named, row.name
+    assert hole.id not in (hole.parent_ids or ())
+    assert hole.id not in (hole.child_ids or ())
+
+
+def test_a_carried_rows_own_parents_and_children_become_its_owners() -> None:
+    rows = list(carried_package().features)
+    (inner,) = by_name(rows, CARRIED)
+    (plane,) = by_name(rows, "Front Plane")
+    (fillet,) = by_name(rows, "Fillet1")
+    rows[inner.index] = retyped(
+        inner, parent_ids=[plane.id], child_ids=[*(inner.child_ids or ()), fillet.id]
+    )
+    rows[plane.index] = retyped(plane, child_ids=[*(plane.child_ids or ()), inner.id])
+    rows[fillet.index] = retyped(fillet, parent_ids=[*(fillet.parent_ids or ()), inner.id])
+    nodes = tree_nodes(rows, TABLE)
+    (hole,) = by_name(nodes.rows, "Hole1")
+    (kept_plane,) = by_name(nodes.rows, "Front Plane")
+    (kept_fillet,) = by_name(nodes.rows, "Fillet1")
+
+    assert plane.id in (hole.parent_ids or ())
+    assert fillet.id in (hole.child_ids or ())
+    assert hole.id in (kept_plane.child_ids or ())
+    assert hole.id in (kept_fillet.parent_ids or ())
+
+
+@pytest.mark.parametrize("field", ["parent_ids", "child_ids"])
+def test_an_unreadable_list_on_a_carried_row_leaves_its_owners_list_unread(field: str) -> None:
+    """The owner's constraints include the carried row's, so a list nobody read on the
+    carried row is a list nobody read on the owner - never a shorter list read as whole."""
+    rows = list(carried_package().features)
+    (inner,) = by_name(rows, CARRIED)
+    rows[inner.index] = retyped(inner, **{field: None})
+    nodes = tree_nodes(rows, TABLE)
+    (hole,) = by_name(nodes.rows, "Hole1")
+
+    assert getattr(hole, field) is None
+
+
+def test_a_row_under_a_folder_is_never_carried() -> None:
+    package = remodel_package(
+        linked(
+            [sketch_feature("Sketch1"), folder("Ribs", feature("Rib1", "Extrusion"))],
+            ("Sketch1", "Rib1"),
+        )
+    )
+    nodes = tree_nodes(package.features, TABLE)
+
+    assert nodes.carried == ()
+    assert by_name(nodes.rows, "Rib1")
+
+
+def test_a_row_under_a_carried_row_is_carried_by_the_nearest_kept_feature() -> None:
+    rows = list(carried_package().features)
+    (inner,) = by_name(rows, CARRIED)
+    (hole,) = by_name(rows, "Hole1")
+    deeper = retyped(
+        inner,
+        id="feat:0099",
+        name="Sketch9-inner",
+        persist_ref="ZGVlcGVy",
+        index=len(rows),
+        depth=inner.depth + 1,
+        folder_id=inner.id,
+        child_ids=[inner.id],
+    )
+    nodes = tree_nodes([*rows, deeper], TABLE)
+
+    assert CarriedRow(dropped_id=deeper.id, owner_id=hole.id) in nodes.carried
+
+
+def test_a_system_row_under_a_system_owner_that_is_not_a_folder_is_carried() -> None:
+    """The real packages list their annotation folders under the annotations container and
+    their lights under the scene container, neither of which the type table calls a folder;
+    none of those rows has a position of its own in the flat walk."""
+    package = remodel_package(
+        [
+            feature(
+                "Annotations",
+                "DetailCabinet",
+                contents=(feature("Notes", "NotesAreaFtrFolder"),),
+            ),
+            sketch_feature("Sketch1"),
+        ]
+    )
+    rows = package.features
+    (notes,) = by_name(rows, "Notes")
+    (cabinet,) = by_name(rows, "Annotations")
+    nodes = tree_nodes(rows, TABLE)
+
+    assert nodes.carried == (CarriedRow(dropped_id=notes.id, owner_id=cabinet.id),)
+
+
+def test_no_move_names_a_carried_row() -> None:
+    package = carried_package()
+    (inner,) = by_name(package.features, CARRIED)
+    result = plan(package)
+    named = {
+        one
+        for move in result.order.edit_script
+        for one in (move.feature_id, move.anchor_feature_id)
+    }
+
+    assert inner.id not in named
+    assert inner.id not in {item.feature_id for item in result.targets}
+    assert all(inner.id not in action.member_feature_ids for action in result.folders.actions)
+
+
+def test_the_carried_row_changes_nothing_in_the_plan_but_its_coverage_line() -> None:
+    """The real shape whole - second listings and the hole's own sketch - plans exactly as
+    the flat walk's tree does."""
+    assert projection(plan(carried_package())) == projection(plan(base_package()))
+
+
+def test_the_coverage_names_every_carried_row() -> None:
+    package = carried_package()
+    (inner,) = by_name(package.features, CARRIED)
+    (item,) = [item for item in plan(package).coverage if item.item == CARRIED_ITEM]
+
+    assert item.feature_ids == (inner.id,)
+    assert "1 row(s)" in item.reason
+
+
+def test_the_coverage_says_so_when_no_row_was_carried() -> None:
+    (item,) = [item for item in plan(base_package()).coverage if item.item == CARRIED_ITEM]
 
     assert item.feature_ids == ()
     assert item.reason

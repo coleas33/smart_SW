@@ -50,8 +50,9 @@ ever asserted in a unit test is a reason no artifact has ever been read for:
 | Fixture | What the plan must show |
 |---|---|
 | `remodel-absorbed-sketches` | the real dump's second listing of every absorbed sketch |
-| | (`absorbed_twice`) planned once: one target per feature, no |
-| | rename, one move, and the `second listings` coverage item |
+| | (`absorbed_twice`) planned once, and the hole's own profile |
+| | sketch (`carried_under`) carried by the hole: one target per |
+| | feature, no rename, one move, and both coverage items (T163) |
 
 Only the cases named on the command line are written, all of them when none is named:
 
@@ -91,6 +92,7 @@ from tests.support.remodel import (  # noqa: E402
     UNKNOWN_TYPE_NAME,
     absorbed_sketch_features,
     absorbed_twice,
+    carried_under,
     linked,
     remodel_package,
     scope_signals,
@@ -343,12 +345,13 @@ read. `None` signals is the dry run's own answer - nothing was read, and the gat
 of each signal in turn."""
 
 LAYOUTS: dict[str, Callable[[EvidencePackage], EvidencePackage]] = {
-    "remodel-absorbed-sketches": lambda package: absorbed_twice(
-        package, "Sketch1", "Sketch2", "Sketch3"
+    "remodel-absorbed-sketches": lambda package: carried_under(
+        absorbed_twice(package, "Sketch1", "Sketch2", "Sketch3"), "Hole1", "Sketch9"
     ),
 }
 """The fixtures whose package is laid out after it is built, the way a real dump lists it:
-the second listing of every absorbed sketch (decision 17A)."""
+the second listing of every absorbed sketch and the hole's own profile sketch, listed only
+under the hole (decision 17A)."""
 
 
 def write(name: str, features: Sequence[FeatureSpec], signals: dict[str, Any] | None) -> None:

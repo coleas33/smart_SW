@@ -77,6 +77,10 @@ result:
     item: second listings
     reason: no row of the dump is a second listing of a top-level feature, so every
       row is planned as its own feature
+  - feature_ids: []
+    item: carried sub-features
+    reason: no row of the dump is found only under the feature that owns it, so every
+      row holds a position of its own in the flat order
   - feature_ids:
     - feat:0001
     - feat:0006
