@@ -254,7 +254,8 @@ exact reference:
 - Narrowing: the remaining locations must be exactly the current finding's, reference by
   reference. A finding that lost only system subjects and also had a content subject swapped is
   lost, never narrowed. Narrowing stays exactly as strict about subjects as the exact comparison,
-  now both by reference.
+  now both by reference. *Corrected 2026-09-25 on review (T129):* about the locations that
+  remain; the locations narrowing removes are compared with nothing (below).
 - A key's locations are a multiset: the same locations in another order are the same finding, and
   a reference two locations name - real packages list one sketch twice, both rows carrying its
   reference - counts twice, so a recorded finding naming it once more or less than the current
@@ -270,6 +271,40 @@ the code with the tightened key: the three recordings replayed as recorded lose 
 20, 2 and 1, 106, 10 and 5 locations removed, as before; the three fixtures lose and narrow none.
 `test_finding_subject_key.py`, `test_replay_narrowed.py` and `test_replay_generator_narrowed.py`
 pin it.
+
+*Amended 2026-09-25 on review of decision 25A (T129): a carried finding, and what narrowing does
+not compare.*
+
+- **A carried finding.** A finding lever 11a carried (`Finding.carried_over_from` set) keeps the
+  drawing locations of the session it was carried from, and carry-over decides "unchanged" from a
+  `feature_tree` fingerprint that hashes no reference (`exceptions._feature_row`), so its
+  references can be an earlier dump's, which the recording's dump may have re-encoded: the one
+  kind whose references are not the recording's own (R2.8). It is compared by reference first and
+  narrowed like any other; still unmatched, it takes one requested-pass finding nothing else
+  matched whose key equals its own with every reference left out on both sides - the comparison
+  every finding had before decision 25A, its subjects counted per scope - one to one in recorded
+  order, after every narrowing. It is then kept: neither lost nor added, nor listed. Once its
+  references differ, a re-encoded reference and a swapped subject cannot be told apart, so
+  neither is seen; a subject gained or lost in a scope, or a moved configuration or component,
+  still is. `benchmark/replay.compare_finding_keys` holds the rule, so the generator applies it
+  through `scrambled_key` too. Two limits stay on the safe side, lost and never slipped: the
+  replay plays no previous session, so a carried finding that no requested pass computes again
+  (checks first off) is lost, as it was before decision 25A; and a carried finding whose
+  reference was re-encoded and which also lost a subject the table stopped counting is lost,
+  because narrowing reads references in the recording's package. None of the three fixtures and
+  none of the three recordings holds a carried finding. `test_replay_carried.py` pins it.
+- **What narrowing does not compare.** Narrowing removes each location whose `(scope,
+  persist_ref)` names only rows the current table does not count as content, whichever rows they
+  are - a system row the table newly tolerates, one no table counts, a folder, an end tag, a
+  default-named row - and `not_content_locations` reads every document's rows, so a location
+  scoped to another document is removed on the same terms. The removed locations are compared
+  with nothing: a recorded finding whose removed subject is another row that is not content
+  narrows exactly as one whose removed subject is the row the table change took away. The
+  remaining locations are compared exactly, reference by reference. `test_replay_narrowed.py` and
+  `test_replay_generator_narrowed.py` pin both. Whether narrowing should demand more of a removed
+  location is the owner's question (T129, research R5); on the three recordings every location it
+  can remove names only rows of `tolerated_loose` types and lies in the scope of a location that
+  remains, so no figure depends on the answer.
 
 ## 6. The regrouped estimate (from User Story 4)
 
