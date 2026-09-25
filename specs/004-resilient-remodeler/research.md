@@ -509,7 +509,8 @@ the spec can enumerate. The re-modeler is also exactly the workload that finds a
 gaps: `ReadOnlyGuard` blocks `InsertFeatureChamfer`, `InsertFeatureShell` **and**
 `InsertFeatureTreeFolder2` through its `InsertFeature` prefix, while leaving `FeatureFillet3`,
 `FeatureRevolve2`, `InsertMirrorFeature2`, `InsertPart3`, `SetSuppression2` and `IModelDoc2.Save`
-wide open.
+wide open. *Amended 2026-09-25 (the owner's decision 21A, R5.11)*: the creation members among them
+are closed now; `IModelDoc2.Save` is not, and the case for an allowlist is unchanged.
 
 ### R5.3 Interface-qualified keys, and the collision that proves they are needed
 
@@ -667,7 +668,52 @@ independently found real **gaps**, members that mutate and are not denied:
 `IFeature.SetSuppression2`, `ISldWorks.SetUserPreferenceToggle`, `IModelDoc2.EditUndo2`, and
 `IModelDoc2.SetSaveFlag`. Feature 003 adds those four denials (with `SetSuppression2` exempted
 only under 003's `SuppressTestGuard`). **Feature 004 adds nothing to `ReadOnlyGuard` at all**;
-it introduces a separate guard whose allowlist is delegated back to it.
+it introduces a separate guard whose allowlist is delegated back to it. *Amended 2026-09-25*: the
+owner's decisions 17A (FeatureWorks and import repair) and 21A (the creation family, R5.11) narrow
+`ReadOnlyGuard` for 004; both only add denials, so SC-004's "never widened" holds.
+
+### R5.11 Decision 21A: the creation family is closed in `ReadOnlyGuard` (owner, 2026-09-25)
+
+**Decision.** Close the wider feature-creation family decision 17A left open - `FeatureFillet*`,
+`FeatureRevolve*`, `InsertMirrorFeature*`, `InsertPart*`, `MirrorPart*`, `InsertSheetMetal*`,
+`InsertConvertToSheetMetal*`, the pattern creators and the like - in `ReadOnlyGuard`, with a table
+generated from the installed interop the way feature 011 generated its drawing writer list.
+
+**Why a grammar over four interfaces, not a longer prefix list.** A prefix is a bare-name rule that
+reaches every interface, and the creation verbs are also read verbs elsewhere: `Create` names the
+mass-property and measure calculators the product reads through, and `Feature` names the lookups
+`FeatureById` and `FeatureFolderLocation`. So the denial is exact names, reflected from
+`IFeatureManager`, `IModelDoc2`, `IPartDoc` and `IModelDocExtension` (the interfaces feature
+creation is reached through) with a creation grammar - `Feature`, `Insert`, `Create`, `Add`,
+`Mirror`, `Make`, `Sketch` and the hole builders, each with its optional COM `I` - plus a short list
+of named creators the grammar cannot reach (the `Pre`/`Post` split, trim and intersect features, the
+builders' last calls, the Delete Face feature, the body move and copy features, `DeriveSketch`,
+`Paste`). The existing three prefixes stay; nothing is removed.
+
+**Collisions, checked by name.** A bare-name denial reaches every interface, so every generated name
+is checked against (1) feature 004's stage-1 allowlist - no generated name is the bare name of a
+stage-1 key or of a `RemodelGuard` refusal, so the five keys that override a read-only denial are
+unchanged; (2) the reads the grammar reaches, which are excluded by name with their reasons
+(`FeatureById`, `FeatureByName`, `FeatureByPositionReverse`, their `I` twins, `FeatureFolderLocation`,
+`CreateMassProperty`, `CreateMassProperty2`, `CreateMeasure`); and (3) every string literal of the
+product source, by the scan feature 011's read audit runs. The scan finds exactly three literals the
+new table refuses, all in `Rms/SwRemodelProbeHost.cs`, the throwaway-part probe: `FeatureFillet3`,
+`InsertSketch` and `CreateCircleByRadius` (the last two are `ISketchManager` calls whose bare names
+`IModelDoc2` also declares).
+
+**The probe's exemption.** Those three join the members `RemodelProbeGuard` already exempted for the
+same part (`FeatureExtrusion3`, `FeatureCut4`, `InsertFeatureChamfer`, `InsertFeatureShell`,
+`InsertFeatureTreeFolder2`) in one named set, the throwaway part's creation members. The guard is
+built only by `probe remodel`'s gate, which refuses to run while a document is open and addresses
+only the part it creates, so that is the exemption's scope; a test pins the set to the probe host's
+own literals and asserts that no other gate exempts any of them.
+
+**Not in scope, recorded for the owner.** The other writers of the four interfaces are not creation
+and are not closed by this decision; the reflection run found saves (`IModelDoc2.Save`, `SaveAs`,
+`SaveSilent` and their siblings, `IPartDoc.SaveToFile*`) and rebuilds (`IModelDoc2.Rebuild`,
+`IModelDocExtension.Rebuild` and `EditRebuildAll`, `IPartDoc.ForceRebuild` and `EditRebuild`) that
+pass a read-only gate as bare names, and creation on other interfaces (`ISketchManager`,
+`IAssemblyDoc`) is outside the four. `contracts/guard-allowlist.md` names them.
 
 ---
 
