@@ -519,6 +519,13 @@ public sealed class RemodelHost : IDisposable
                         { "run_dir", latest.RunDirectory },
                         { "at", latest.At.ToString("o", CultureInfo.InvariantCulture) },
                         { "state", StateOf(latest.RunDirectory) },
+
+                        // Decision 24A, amended on review: the notice is told once per plan,
+                        // and a page that loads again starts from this alone. Read afresh by
+                        // the notice's own rule, whatever holds the host, since `init`
+                        // describes the run it names; the notice's once-per-plan claim is
+                        // neither spent nor needed here.
+                        { "plan_lost", IsLostPlan(latest) ? PlanLostMessage : null },
                     }
             },
         });
@@ -1014,15 +1021,29 @@ public sealed class RemodelHost : IDisposable
         && string.Equals(planned, now, StringComparison.Ordinal);
 
     /// <summary>
+    /// Whether <paramref name="run"/> is a plan that can no longer be started (decision 24A):
+    /// planned and waiting for Start - not started, not finished, its copy not discarded - and
+    /// made on an attachment that is not the one listening now, none included, by Start's own
+    /// predicate, <see cref="SameAttachment"/>. The attachment decides, never the document, so a
+    /// re-attach back to the same part is a loss and a configuration switch, which re-attaches
+    /// nothing, is not.
+    ///
+    /// One rule for the two ways the page hears of it: the notice
+    /// (<see cref="AnnounceLostPlan"/>) and `init.latest_run.plan_lost`, which a page that loads
+    /// again starts from (<see cref="SendInit"/>; decision 24A, amended on review).
+    /// </summary>
+    private bool IsLostPlan(RemodelRun? run) =>
+        run != null
+        && run.Phase == RemodelRunPhase.Planned
+        && !run.CopyDiscarded
+        && !SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment());
+
+    /// <summary>
     /// Tells the page that the plan on screen can no longer be started, once, as soon as this
     /// host can see it (decision 24A): `remodel.plan_lost {run_dir, message}`.
     ///
     /// The plan on screen is <see cref="LatestRun"/> - the run `init` and the last
-    /// `remodel.planned` named - while it is planned and waiting for Start: not started, not
-    /// finished, its copy not discarded. It is lost by Start's own predicate,
-    /// <see cref="SameAttachment"/>: the attachment it was made on is not the one listening now,
-    /// none included. The attachment decides, never the document, so a re-attach back to the
-    /// same part is a loss and a configuration switch, which re-attaches nothing, is not.
+    /// `remodel.planned` named - and it is lost by <see cref="IsLostPlan"/>.
     ///
     /// Asked on every tool-service attach and detach (<see cref="RefreshAvailability"/>) and when
     /// a plan releases the host. Never while a plan or a run holds it: a run holds the tool
@@ -1042,11 +1063,7 @@ public sealed class RemodelHost : IDisposable
         }
 
         RemodelRun? run = LatestRun;
-        if (run == null
-            || run.Phase != RemodelRunPhase.Planned
-            || run.CopyDiscarded
-            || SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment())
-            || !run.ClaimPlanLostNotice())
+        if (run == null || !IsLostPlan(run) || !run.ClaimPlanLostNotice())
         {
             return;
         }

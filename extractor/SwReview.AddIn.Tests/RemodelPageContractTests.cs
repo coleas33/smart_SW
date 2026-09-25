@@ -1038,6 +1038,90 @@ public sealed class RemodelPageContractTests
     }
 
     /// <summary>
+    /// A page that loads again after the notice starts from `init` alone (decision 24A, amended on
+    /// review): the notice is told once per plan, so `init.latest_run.plan_lost` carries it. The
+    /// page shows the plan's folder with the host's sentence verbatim in the notice, Start
+    /// disabled and pressing it sending nothing, and Plan again pressable - the notice exactly as
+    /// the unsolicited row gave it before the reload.
+    /// </summary>
+    [Fact]
+    public void APageLoadedAgainAfterTheNoticeIsToldAgainByInit()
+    {
+        HostStub? stub = null;
+        LostPlanView? beforeTheReload = null;
+        LostPlanView? afterTheReload = null;
+        string? runDirShown = null;
+        int startsAtTheEnd = -1;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+                stub!.Post(
+                    "remodel.plan_lost",
+                    new { run_dir = HostStub.RunDir, message = RemodelHost.PlanLostMessage });
+                await Settled(page);
+                beforeTheReload = await ReadLostPlanView(page);
+
+                stub.LatestRun = LatestPlan(RemodelHost.PlanLostMessage);
+                await Reload(page);
+                afterTheReload = await ReadLostPlanView(page);
+                runDirShown = await TextOf(page, "run-dir");
+
+                await Click(page, "start-run");
+                startsAtTheEnd = stub.Starts;
+            });
+
+        Assert.False(beforeTheReload!.NoticeHidden);
+
+        Assert.Equal(HostStub.RunDir, runDirShown);
+        Assert.False(afterTheReload!.NoticeHidden);
+        Assert.Equal(RemodelHost.PlanLostMessage, afterTheReload.NoticeText);
+        Assert.True(afterTheReload.StartDisabled);
+        Assert.False(afterTheReload.PlanAgainDisabled);
+        Assert.False(afterTheReload.PlanDisabled);
+        Assert.Equal(0, startsAtTheEnd);
+    }
+
+    /// <summary>
+    /// The other side: a page that loads again while its plan is still startable - `plan_lost`
+    /// null - shows no notice and starts the plan.
+    /// </summary>
+    [Fact]
+    public void APageLoadedAgainWithItsPlanStillStartableStartsIt()
+    {
+        HostStub? stub = null;
+        LostPlanView? afterTheReload = null;
+        string? runDirShown = null;
+        int startsAtTheEnd = -1;
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page => { stub = new HostStub(page, remodelAvailable: true); },
+            async page =>
+            {
+                await Settled(page);
+                await Click(page, "plan-run");
+
+                stub!.LatestRun = LatestPlan(null);
+                await Reload(page);
+                afterTheReload = await ReadLostPlanView(page);
+                runDirShown = await TextOf(page, "run-dir");
+
+                await Click(page, "start-run");
+                startsAtTheEnd = stub.Starts;
+            });
+
+        Assert.Equal(HostStub.RunDir, runDirShown);
+        Assert.True(afterTheReload!.NoticeHidden);
+        Assert.False(afterTheReload.StartDisabled);
+        Assert.Equal(1, startsAtTheEnd);
+    }
+
+    /// <summary>
     /// The notice's line reaches the DOM as text, like every other string on this page: markup
     /// in it builds no element and runs nothing. The host's sentence carries none, and the page
     /// does not take that on trust.
@@ -1168,6 +1252,39 @@ public sealed class RemodelPageContractTests
         Banner = await Banner(page),
     };
 
+    /// <summary>
+    /// Loads the page again, as F5 or the pane building its view anew does, and lets it ask
+    /// `ready` and apply the `init` it is answered with.
+    /// </summary>
+    private static async Task Reload(CoreWebView2 page)
+    {
+        var loaded = new TaskCompletionSource<bool>();
+        void OnLoaded(object? sender, CoreWebView2NavigationCompletedEventArgs args) =>
+            loaded.TrySetResult(args.IsSuccess);
+
+        page.NavigationCompleted += OnLoaded;
+        try
+        {
+            page.Reload();
+            Assert.True(await loaded.Task, "the Remodel page did not load again");
+        }
+        finally
+        {
+            page.NavigationCompleted -= OnLoaded;
+        }
+
+        await Settled(page);
+    }
+
+    /// <summary>`init.latest_run` for the first plan's folder, as `RemodelHost.SendInit` writes it.</summary>
+    private static object LatestPlan(string? planLost) => new
+    {
+        run_dir = HostStub.RunDir,
+        at = "2026-09-16T14:22:01.0000000",
+        state = "planned",
+        plan_lost = planLost,
+    };
+
     /// <summary>Presses a button the way the engineer does, and lets the page act on it.</summary>
     private static async Task Click(CoreWebView2 page, string elementId)
     {
@@ -1239,6 +1356,12 @@ public sealed class RemodelPageContractTests
         public int Plans { get; private set; }
 
         /// <summary>
+        /// What `init.latest_run` carries - null, as for a host with no run yet, until a test
+        /// sets it, as the real host answers a page that loads again after a plan.
+        /// </summary>
+        public object? LatestRun { get; set; }
+
+        /// <summary>
         /// When set, `remodel.plan` is answered with this `error {error_class, message}`, as
         /// `RemodelHost` refuses a plan; when clear, each plan is answered with a folder of its
         /// own, as `RunFolders.CreateForRemodel` makes one per plan.
@@ -1286,7 +1409,7 @@ public sealed class RemodelPageContractTests
                                         : null,
                             }
                             : null,
-                        latest_run = (object?)null,
+                        latest_run = LatestRun,
                     });
                     return;
                 case "remodel.plan":

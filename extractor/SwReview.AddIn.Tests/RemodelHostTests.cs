@@ -1963,6 +1963,142 @@ public sealed class RemodelHostTests
         }
     }
 
+    // ---- ...and to a page that starts again (decision 24A, amended on review) --------------
+
+    /// <summary>
+    /// The notice is told once per plan, and a page keeps it only while it lives. A page that
+    /// loads again - a reload, or the pane building its view anew - asks `ready` and starts
+    /// from `init` alone, so `init.latest_run` says the plan is lost, in the notice's own words.
+    /// The notice is not posted again: `init` neither spends nor needs its once-per-plan claim.
+    /// </summary>
+    [Fact]
+    public void AnInitAfterTheNoticeSaysThePlanIsLostInTheHostsOwnWords()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reattach(SecondAttachment);
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+
+            world.Receive("ready", "r2", new { });
+
+            JsonElement latest = world.Reply("init", "r2").GetProperty("latest_run");
+            Assert.Equal(world.ExpectedRunDirectory, latest.GetProperty("run_dir").GetString());
+            Assert.Equal("planned", latest.GetProperty("state").GetString());
+            Assert.Equal(RemodelHost.PlanLostMessage, latest.GetProperty("plan_lost").GetString());
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+
+            world.Receive("ready", "r3", new { });
+            Assert.Equal(
+                RemodelHost.PlanLostMessage,
+                world.Reply("init", "r3").GetProperty("latest_run").GetProperty("plan_lost").GetString());
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    /// <summary>
+    /// `init` reads the state, not the notice: an attachment that changed with no refresh to
+    /// post the notice - so the page was never told - is still a lost plan to `init`, and the
+    /// notice's claim is still unspent for the refresh that follows.
+    /// </summary>
+    [Fact]
+    public void AnInitSaysThePlanIsLostWhenTheNoticeWasNeverPosted()
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Attachment = SecondAttachment;
+
+            world.Receive("ready", "r2", new { });
+
+            Assert.Equal(
+                RemodelHost.PlanLostMessage,
+                world.Reply("init", "r2").GetProperty("latest_run").GetProperty("plan_lost").GetString());
+            Assert.Empty(world.AllPosted("remodel.plan_lost"));
+
+            world.Host.RefreshAvailability();
+            Assert.Single(world.AllPosted("remodel.plan_lost"));
+        }
+    }
+
+    /// <summary>
+    /// No lost plan, no `plan_lost`: a plan on its own attachment (whatever the document did
+    /// that re-attached nothing); a finished run, which is not a plan waiting for Start; and a
+    /// discarded copy, whose Start is `CopyDiscarded` whatever is attached - each after a
+    /// re-attach, which a plan on screen would have lost.
+    /// </summary>
+    [Theory]
+    [InlineData("a plan on its own attachment")]
+    [InlineData("a finished run")]
+    [InlineData("a discarded copy")]
+    public void AnInitWithNoLostPlanSaysNothingIsLost(string held)
+    {
+        using (var world = new RemodelWorld())
+        {
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            switch (held)
+            {
+                case "a plan on its own attachment":
+                    world.Document = new PageDocument(SourcePath, "Machined");
+                    world.Host.DocumentChanged();
+                    world.Publish(FirstAttachment);
+                    break;
+                case "a finished run":
+                    world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+                    Assert.Equal(RemodelRunPhase.Finished, world.Host.LatestRun!.Phase);
+                    world.Reattach(SecondAttachment);
+                    break;
+                case "a discarded copy":
+                    world.Receive("remodel.discard_copy", "d1", new { run_dir = world.ExpectedRunDirectory });
+                    world.Reply("ok", "d1");
+                    world.Reattach(SecondAttachment);
+                    break;
+            }
+
+            world.Receive("ready", "r2", new { });
+
+            JsonElement latest = world.Reply("init", "r2").GetProperty("latest_run");
+            Assert.Equal(world.ExpectedRunDirectory, latest.GetProperty("run_dir").GetString());
+            Assert.Equal(JsonValueKind.Null, latest.GetProperty("plan_lost").ValueKind);
+        }
+    }
+
+    /// <summary>
+    /// An `init` changes nothing either: no pipeline call, nothing written to the run folder or
+    /// beside the engineer's file, the host not held and the run still planned - and Start
+    /// still refuses the lost plan as `SessionLost`.
+    /// </summary>
+    [Fact]
+    public void AnInitAboutALostPlanChangesNothingAndStartStillRefusesAsSessionLost()
+    {
+        using (var world = new RemodelWorld())
+        {
+            string source = world.CreateSourceFile();
+            world.Open();
+            world.Receive("remodel.plan", "p1", new { });
+            world.Reattach(SecondAttachment);
+            string[] callsBefore = world.Pipeline.Calls.ToArray();
+            string[] runFolderBefore = RemodelWorld.Snapshot(world.ExpectedRunDirectory);
+            string[] sourceBefore = RemodelWorld.Snapshot(Path.GetDirectoryName(source)!);
+
+            world.Receive("ready", "r2", new { });
+            world.Reply("init", "r2");
+
+            Assert.Equal(callsBefore, world.Pipeline.Calls.ToArray());
+            Assert.Equal(runFolderBefore, RemodelWorld.Snapshot(world.ExpectedRunDirectory));
+            Assert.Equal(sourceBefore, RemodelWorld.Snapshot(Path.GetDirectoryName(source)!));
+            Assert.Equal(RemodelRunPhase.Planned, world.Host.LatestRun!.Phase);
+            Assert.False(world.Host.RunInProgress);
+
+            world.Receive("remodel.start", "s1", new { run_dir = world.ExpectedRunDirectory });
+            Assert.Equal("SessionLost", world.ErrorClass("s1"));
+            Assert.Equal(callsBefore, world.Pipeline.Calls.ToArray());
+        }
+    }
+
     // ---- ...and through a real gate, wired as the add-in wires it -------------------------
 
     /// <summary>
