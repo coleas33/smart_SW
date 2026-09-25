@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using SolidWorks.Interop.sldworks;
 using SwReview.AddIn.Review;
@@ -651,6 +652,38 @@ public sealed class ToolServiceWiringTests
 
         gate.Dispose();
         Assert.Null(gate.Attachment);
+    }
+
+    /// <summary>
+    /// The add-in's one line that lets any Start through (the review of 2026-09-25).
+    /// <c>RemodelHostOptions.ToolServiceAttachment</c> defaults to none, and none never matches, so
+    /// a host the add-in forgot to wire - or wired to anything but the gate's attachment - would
+    /// refuse every Start as `SessionLost` while every host, page and gate test still passed.
+    /// <c>SwReviewAddIn</c> cannot be built without a live <c>ISldWorks</c>, so its source is read:
+    /// the options are built in exactly one place, <c>StartRemodelHost</c>, and that construction
+    /// reads the attachment off the add-in's gate field per call, as it reads the remodel
+    /// capability. What the gate's attachment answers is the tests above.
+    /// </summary>
+    [Fact]
+    public void TheAddInsOneRemodelHostReadsTheGatesAttachmentPerCall()
+    {
+        string addIn = Path.Combine(ErrorLabelsCoverTheHostTests.RepositoryRoot(), "extractor", "SwReview.AddIn");
+        var construction = new Regex(@"new\s+RemodelHostOptions\s*\(", RegexOptions.CultureInvariant);
+        var sites = Directory.EnumerateFiles(addIn, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Split(Path.DirectorySeparatorChar).Any(part => part == "obj" || part == "bin"))
+            .SelectMany(file => construction.Matches(File.ReadAllText(file)).Cast<Match>().Select(_ => Path.GetFileName(file)))
+            .ToList();
+        Assert.Equal(new[] { "SwReviewAddIn.cs" }, sites);
+
+        string source = Regex.Replace(File.ReadAllText(Path.Combine(addIn, "SwReviewAddIn.cs")), @"\s+", " ");
+        Assert.Contains("private ToolServiceGate? _toolService;", source, StringComparison.Ordinal);
+
+        int start = source.IndexOf("private void StartRemodelHost(", StringComparison.Ordinal);
+        int end = start < 0 ? -1 : source.IndexOf("StartRemodelPump();", start, StringComparison.Ordinal);
+        Assert.True(end > start, "SwReviewAddIn.StartRemodelHost was not found, or no longer starts the remodel pump.");
+        string host = source.Substring(start, end - start);
+        Assert.Contains("ToolServiceAttachment = () => _toolService?.Attachment,", host, StringComparison.Ordinal);
+        Assert.Contains("RemodelAvailability = () => _toolService?.RemodelCapability", host, StringComparison.Ordinal);
     }
 
     [Fact]

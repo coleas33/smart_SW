@@ -136,7 +136,7 @@ public sealed class ErrorLabelsCoverTheHostTests
     }
 
     /// <summary>The repository's root: the first folder above the test assembly that holds both `extractor` and `specs`.</summary>
-    private static string RepositoryRoot()
+    internal static string RepositoryRoot()
     {
         for (DirectoryInfo? folder = new DirectoryInfo(AppContext.BaseDirectory); folder != null; folder = folder.Parent)
         {
