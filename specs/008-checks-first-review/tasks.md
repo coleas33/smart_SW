@@ -286,6 +286,20 @@ Re-measured on main after the four lanes of 2026-09-23 merged (feature 008 US4 a
 
 ---
 
+## Phase 12: Amendment 2026-09-25 (owner decision 23A): a recorded RMS finding the type table narrowed
+
+**Goal**: feature 003's decision 20A - the eleven system types of the real dumps tolerated - lands without loosening the replay (research R2.58, `contracts/replay.md` sections 5, 7, 8 and 10): a recorded `rms.*` finding that lost only the subjects the current type table stops counting is **narrowed**, listed with the locations removed, never read as lost plus added, by one rule the replay and the fixture generator share; and the generator's 5% bar measures the scramble against the current code's result on the raw recorded package, not against the recorded size.
+
+**Independent Test**: scripted recordings made with a type table that still counted a system type as content replay with that finding narrowed, its removed locations counted, nothing lost or added and exit 0; a finding that also changed otherwise, a second finding narrowing onto one current finding, a location whose reference a content row shares and a finding of another family are each lost, never narrowed; on the recordings' machine, after 003 T090 to T092, the real recordings replay with none lost, 20, 2 and 1 narrowed and a zero residual on every round, and the generator writes all three fixtures.
+
+- [ ] T124 [P] Write the tests first. `reviewer/tests/unit/test_replay_narrowed.py` (red: `compare_finding_keys`, `narrowed_key`, `not_content_locations` and `ReplayFindings.narrowed` do not exist), on scripted recordings made with a copy of the shipped type table that counts `SensorFolder` - tolerated in the shipped table - as content, replayed with the shipped one: a finding that lost only that subject is narrowed (one location removed, its step, its recorded subject; none lost or added; exit 0; the human line); one that also lost a content subject, or changed its configuration, is lost; two recorded findings narrowing onto one current finding narrow the first and lose the second (exit 1); a system row whose reference a content row shares is not removed, so its finding is lost, while one whose reference only other system rows share is; a location naming no feature row and one with no reference stay; a non-`rms` finding is never narrowed; the recording's own package is read, the current table decides, and the JSON report carries `narrowed`, empty when nothing narrowed. `reviewer/tests/unit/test_replay_generator_narrowed.py` on the same recordings: the generator's finding check narrows by the replay's function (the same object), counts it, and still refuses a key missing after narrowing or a second one onto one fixture finding. `reviewer/tests/unit/test_replay_generator_size_bar.py`: the bar compares the fixture's result with the raw result of the current code - a result 10.7% off its recorded size with an undistorted scramble passes, a scramble more than 5% off refuses, exactly 5% passes, a result under 5,000 tokens on the raw package is not measured, one of 5,000 is, a call the fixture never played refuses.
+- [ ] T125 Implement in `reviewer/src/swreview/benchmark/replay.py`: `not_content_locations(package, table)`, `narrowed_key(finding, not_content)`, `compare_finding_keys(findings, current, package_path, *, named=, uncompared=)` and `KeyComparison`; `NarrowedFinding` and `ReplayFindings.narrowed`; `_findings` compares through `compare_finding_keys`, reading the recording's package only when an `rms.*` finding is unmatched; the human lines. In `reviewer/tests/fixtures/replay/generate_fixtures.py`: `finding_problems` compares through the same function, carrying the narrowed key into the fixture's names with `scrambled_key`, and returns the narrowed count, which `generate` prints; `original_sizes` returns the current code's raw result of every call beside the sizes the usage adjustment starts from, and `size_problems` holds the bar. `data-model.md` section 2. Acceptance: T124 green; `test_replay_findings.py` and `test_replay_generator_contacts.py` green, the latter's expected tuples gaining the narrowed count (0) deliberately.
+- [ ] T126 With feature 003 T090 to T092 (decision 20A): `reviewer/tests/integration/test_replay_recorded_runs.py` asserts none lost, none added, and the narrowed findings of each recording by check and count with the locations removed (20, 2 and 1 `rms.grouping.all_features_in_a_group`, 106, 10 and 5 locations, measured by the probe of R2.58), and a zero residual on every round; the generator writes all three fixtures, narrowing 20, 2 and 1, and passes the size bar
+
+**Checkpoint**: a deliberate change to what the type table counts regenerates the fixtures and keeps SC-001's 1%; no recorded finding is lost or not replayable, and every narrowed one is named with what the table took away.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase dependencies
@@ -301,6 +315,7 @@ Re-measured on main after the four lanes of 2026-09-23 merged (feature 008 US4 a
 - **Phase 9 (amendment)**: after US3 (the guard, the view and pruning exist); T108 after T107; T110 after T109 and T108; T112 after T111 and T110; T114 after T113; T115 after T110; T116 after T110, T112 and T114
 - **Phase 10 (amendment, decision 3A)**: after Phase 9; T118 after T117; T120 after T119; T121 after T118, T120 and feature 010 T098, T099 and T108 (the change that makes the fixtures drift)
 - **Phase 11 (amendment, seat readiness)**: before the sitting (Phase 8); T122 before T106; T123 before T101
+- **Phase 12 (amendment, decision 23A)**: after Phase 10; T125 after T124; T126 after T125 and lands in feature 003's T090 to T092 commit (decision 20A), the change that makes a recorded RMS finding narrow
 
 ### Task-level dependencies
 
@@ -339,7 +354,7 @@ Every functional requirement has at least one task; the tasks listed are the one
 | FR-002 | T001, T002, T019, T024 | FR-017 | T070, T071 |
 | FR-003 | T001, T002, T003, T004, T019 | FR-018 | T035, T036, T060 to T063 |
 | FR-004 | T019, T023 | FR-019 | T060, T061 |
-| FR-005 | T007, T008, T021, T023, T049, T050 | FR-020 | T068 to T071, T078 |
+| FR-005 | T007, T008, T021, T023, T049, T050, T124, T125 | FR-020 | T068 to T071, T078 |
 | FR-006 | T015, T016, T024, T025 | FR-021 | T066, T067, T078 |
 | FR-007 | T009, T010, T017, T018, T022, T026 | FR-022 | T068, T070, T071 |
 | FR-008 | T041, T042, T047, T048 | FR-023 | T052, T053, T074 to T077 |
@@ -353,7 +368,7 @@ Every functional requirement has at least one task; the tasks listed are the one
 
 | SC | Tasks | SC | Tasks |
 |---|---|---|---|
-| SC-001 | T022, T026, T117 to T121 | SC-006 | T041, T049, T102 |
+| SC-001 | T022, T026, T117 to T121, T124 to T126 | SC-006 | T041, T049, T102 |
 | SC-002 | T078 | SC-007 | T072, T078 |
 | SC-003 (amended) | T086 | SC-008 | T066, T078 |
 | SC-004 | T086 | SC-009 | T093, T094, T102 |

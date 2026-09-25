@@ -99,8 +99,12 @@ where `class` is one of `reproduced`, `changed`, `estimated`, `carried`, `answer
 `added: [{check, subject}]`, `not_replayable: [{check, subject, step, reason}]`,
 `reclassified: [{check, subject, step, group_key, contact_id}]` (feature 010 T094: a recorded
 `interference.static` whose group key and configuration equal a contact the requested pass
-recorded; neither lost nor not replayable). `subject` is the printable form of
-`finding_subject_key` minus the check.
+recorded; neither lost nor not replayable),
+`narrowed: [{check, subject, step, removed_locations}]` (owner decision 23A, 2026-09-25: a
+recorded `rms.*` finding whose key, less the drawing locations that name only rows the current
+type table does not count as content, equals a requested-pass finding nothing else matched, one
+to one; neither lost nor added; `contracts/replay.md` section 5). `subject` is the printable form
+of `finding_subject_key` minus the check.
 
 ## 3. The scripted provider (`agent/providers/fake.py`, test-facing)
 
