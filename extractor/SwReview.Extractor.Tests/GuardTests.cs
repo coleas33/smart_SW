@@ -1089,25 +1089,28 @@ public class DrawingFamilyCompletenessTests
     /// The installed interop the build references (<c>$(SwRedist)</c>, or <c>SWREVIEW_SW_REDIST</c>),
     /// found and loaded for its metadata by the locator the interop-manifest tests use.
     /// </summary>
-    private static Assembly Interop => RemodelInteropManifestTests.InstalledInterop.Load(
+    internal static Assembly Interop => RemodelInteropManifestTests.InstalledInterop.Load(
         RemodelInteropManifestTests.InstalledInterop.RedistDirectory()!, "SolidWorks.Interop.sldworks");
 
-    private static Type InterfaceType(string name)
+    internal static Type InterfaceType(string name)
     {
         Type? type = Interop.GetType("SolidWorks.Interop.sldworks." + name);
         Assert.True(type != null, $"{name} is not on {Interop.GetName().Name} {Interop.GetName().Version}.");
         return type!;
     }
 
-    private static IEnumerable<string> MethodNames(string interfaceName) =>
+    internal static IEnumerable<string> MethodNames(string interfaceName) =>
         InterfaceType(interfaceName)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .Select(method => method.Name)
             .Distinct(StringComparer.Ordinal);
 
-    internal static bool IsWriter(string name) =>
-        !ReaderPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal))
-        && WriterGrammar.IsMatch(name);
+    /// <summary>contracts/guard.md section 2's reader rule, which decision 21A's creation grammar
+    /// applies first as well (<see cref="CreationFamilyCompletenessTests.IsCreation"/>).</summary>
+    internal static bool IsReader(string name) =>
+        ReaderPrefixes.Any(prefix => name.StartsWith(prefix, StringComparison.Ordinal));
+
+    internal static bool IsWriter(string name) => !IsReader(name) && WriterGrammar.IsMatch(name);
 
     [RemodelInteropManifestTests.InteropAssembliesPresentFact]
     public void EveryFamilyOfTheContractIsOnTheInterop()
@@ -1253,7 +1256,7 @@ public class DrawingFamilyReadAuditTests
         return directory!.FullName;
     }
 
-    private static IEnumerable<string> ProductSourceFiles()
+    internal static IEnumerable<string> ProductSourceFiles()
     {
         string root = ExtractorRoot();
         foreach (string project in ProductSourceRoots)

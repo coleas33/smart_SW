@@ -180,6 +180,8 @@ public class RemodelGuardTests
         .Concat(DrawingFamilyDenylistTests.ExpectedMembers)
         // Decision 17A (feature 004 T150): the FeatureWorks and import-repair table, parsed.
         .Concat(ImportRepairDenylistTests.ExpectedMembers)
+        // Decision 21A (feature 004 T165): the generated creation-family tables, parsed.
+        .Concat(CreationFamilyDenylistTests.ExpectedMembers)
         .ToArray();
 
     /// <summary><see cref="ReadOnlyGuard.DeniedPrefixes"/> as this allowlist was written against it.</summary>
@@ -343,8 +345,11 @@ public class RemodelGuardTests
     [InlineData("IFeatureManager.InsertFeatureChamfer")]
     [InlineData("InsertFeatureChamfer")]
     [InlineData("IFeatureManager.FeatureFillet3")]
+    [InlineData("FeatureFillet3")]
     [InlineData("IFeatureManager.InsertMirrorFeature2")]
+    [InlineData("InsertMirrorFeature2")]
     [InlineData("IPartDoc.CreateFeatureFromBody3")]
+    [InlineData("CreateFeatureFromBody3")]
     [InlineData("ISketchManager.CreateCircle")]
     public void Assert_ExcludedMember_IsRefused(string key)
     {
@@ -397,18 +402,32 @@ public class RemodelGuardTests
     }
 
     /// <summary>
-    /// The denylist's known gaps are why the write surface is keyed by interface:
-    /// <c>FeatureFillet3</c> is a creation member <see cref="ReadOnlyGuard"/> never covered,
-    /// so a bare key would pass. It is refused the moment it is spelled as the qualified key
-    /// every write call site is required to use (<see cref="CallKey.AssertQualified"/>),
-    /// which is the property this guard actually rests on.
+    /// The denylist's known gaps are why the write surface is keyed by interface. Decision 21A
+    /// closed the creation family (<see cref="Assert_BareCreationMember_IsRefusedSinceDecision21A"/>),
+    /// but a denylist still cannot enumerate every writer: <c>IFeatureManager.MoveToFolder</c>
+    /// moves features into a folder and no denial names it, so a bare key passes. It is refused
+    /// the moment it is spelled as the qualified key every write call site is required to use
+    /// (<see cref="CallKey.AssertQualified"/>), which is the property this guard actually rests on.
     /// </summary>
     [Fact]
-    public void Assert_BareCreationMemberTheDenylistMisses_PassesWhichIsWhyWritesAreQualified()
+    public void Assert_BareWriterTheDenylistMisses_PassesWhichIsWhyWritesAreQualified()
     {
-        Guard().Assert("FeatureFillet3");
+        Guard().Assert("MoveToFolder");
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("IFeatureManager.MoveToFolder"));
+        Assert.Throws<ArgumentException>(() => CallKey.AssertQualified("MoveToFolder"));
+    }
+
+    /// <summary>
+    /// Decision 21A (2026-09-25): <c>FeatureFillet3</c>, the creation member this class used to cite
+    /// as the denylist's gap, is refused bare now as well as qualified, and so are its family.
+    /// </summary>
+    [Fact]
+    public void Assert_BareCreationMember_IsRefusedSinceDecision21A()
+    {
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("FeatureFillet3"));
         Assert.Throws<MutatingCallError>(() => Guard().Assert("IFeatureManager.FeatureFillet3"));
-        Assert.Throws<ArgumentException>(() => CallKey.AssertQualified("FeatureFillet3"));
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("FeatureRevolve2"));
+        Assert.Throws<MutatingCallError>(() => Guard().Assert("InsertPart3"));
     }
 
     /// <summary>The allowlist matches ordinally, so a mis-cased key fails closed.</summary>
