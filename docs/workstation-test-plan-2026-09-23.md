@@ -15,7 +15,7 @@ machine ticks from your result. The plan was built from what is on `main` with i
 (`[W]`) of features 008, 009, 010 and 011, four earlier ones the owner added (decision 15A,
 2026-09-24: 006 T101 and T102 at step 3.1, 007 T059 and T060 at steps 4.1, 4.5, 5.1 and 5.2),
 three items of feature 004, the re-modeler, the owner added (decision 18A, 2026-09-25: the
-FeatureWorks record 004 T142 at step 1.7, the packages 004 T003 reads at step 5.1, the probes
+FeatureWorks record 004 T164 at step 1.7, the packages 004 T003 reads at step 5.1, the probes
 004 T033 to T039 at step 5.6), and `docs/workstation-runbook.md`. The assistant's
 version of the same sitting, with the reasons for its order, is
 `docs/workstation-handover-2026-09-23.md`; **where this plan and the handover differ, follow this
@@ -600,7 +600,7 @@ Record: pass or fail for checks 1, 2, 3, 6 and 7 in the 1.6 row; on a fail, the 
 after its `[time]`). A fail of check 1 or 2: "When a step fails" says what to try once and what
 can still go on.
 
-### 1.7 FeatureWorks, for the record [004 T142]
+### 1.7 FeatureWorks, for the record [004 T164]
 
 Two minutes, and read only. FeatureWorks is the SOLIDWORKS add-in that recognises features in an
 imported solid (a STEP file has no feature tree). Feature 004's work on imports is parked, and
@@ -628,7 +628,7 @@ the last two).
 
 Any answer passes: this is a record, and `installed False` or no FeatureWorks in the list is an
 answer, not a fail. Write `blocked` only when neither the line nor the dialog could be read (the
-line needs no SOLIDWORKS; the dialog does). Record in 004 T142's row: the printed line (it holds
+line needs no SOLIDWORKS; the dialog does). Record in 004 T164's row: the printed line (it holds
 no path), `Active yes` or `no` and `Start Up yes` or `no`, or `not listed`, and the product.
 
 ## Step 2. The standards profile and the key

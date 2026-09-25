@@ -38,7 +38,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 |---|---|---|---|---|
 | 1.3 | update, build and gates | | | |
 | 1.6 | health checks 1, 2, 3, 6 and 7 | | | |
-| 1.7 | 004 T142: FeatureWorks present and enabled, for the record | | | |
+| 1.7 | 004 T164: FeatureWorks present and enabled, for the record | | | |
 | 2.2 | 006 T100: the pane reads the placed profile | | | |
 | 2.3 | 008 T101: the profile is version 3 | | | |
 | 2.4 | 006 T100: the backend validates the profile (health check 4) | | | |
