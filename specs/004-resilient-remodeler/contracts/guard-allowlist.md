@@ -16,13 +16,17 @@ this file enumerates. It is also exactly the workload that finds a denylist's ga
 `ReadOnlyGuard` blocks `InsertFeatureChamfer`, `InsertFeatureShell` **and**
 `InsertFeatureTreeFolder2` through its `InsertFeature` prefix, while leaving `FeatureFillet3`,
 `FeatureRevolve2`, `InsertMirrorFeature2`, `InsertPart3`, `SetSuppression2` and `IModelDoc2.Save`
-wide open.
+wide open. *Amended 2026-09-25*: the owner's decision 21A (below) closes the creation members among
+them; the argument stands, because a denylist still cannot enumerate a write surface, and
+`IModelDoc2.Save` is still open.
 
 **Stage 1 adds nothing to `ReadOnlyGuard`.** The four narrowing denials
 (`IFeature.SetSuppression2` exempted under `SuppressTestGuard`,
 `ISldWorks.SetUserPreferenceToggle`, `IModelDoc2.EditUndo2`, `IModelDoc2.SetSaveFlag`) are feature
 003's, and narrowing is not widening. The owner's decision 17A (2026-09-25) narrows it once more,
 for 004: the FeatureWorks and import-repair members of the table below, and nothing is removed.
+Decision 21A (the same day) narrows it again, by the creation family of the four interfaces feature
+creation is reached through, and removes nothing.
 
 ### Denials added after stage 1
 
@@ -157,7 +161,8 @@ string literal of the product source is one, which `ImportRepairDenylistTests` c
 scan `DrawingFamilyReadAuditTests` runs - and no gate's exemption names one: not the suppress-test
 gate's two, not `RemodelProbeGuard`'s throwaway-part recipe (`FeatureExtrusion3`, `FeatureCut4`,
 `InsertFeatureChamfer`, `InsertFeatureShell`, `InsertFeatureTreeFolder2`, `ForceRebuild3`, `SaveAs3`,
-`SetSuppression2` and the two toggles), not the twenty stage-1 keys, not `DrawingOpenGuard`'s. This
+`SetSuppression2` and the two toggles, and since decision 21A `FeatureFillet3`, `InsertSketch` and
+`CreateCircleByRadius`), not the twenty stage-1 keys, not `DrawingOpenGuard`'s. This
 table is the membership: `ImportRepairDenylistTests` (in `GuardTests.cs`) parses it,
 `RemodelGuardTests.ExpectedDeniedMembers` reads it from there, and where the interop is installed
 every member is checked to exist on the interface named and every method of `IFeatureWorksApp` is
@@ -184,13 +189,100 @@ Left open deliberately, each with its reason:
 | `IBody2.Diagnose` | a check that returns the gaps it found as a `DiagnoseResult`, whose members are all reads |
 | `ISimpleFilletFeatureData2.RepairMissingReferences` | a feature-data edit that takes effect only through `ModifyDefinition`, which is denied; a fillet repair, not an import repair |
 | `IDocumentSpecification.set_AutoRepair`, `IDocumentSpecification.set_CriticalDataRepair` | options of an open request, set as plain properties rather than through the gate, exactly as `Silent` and `LoadModel` are; the product sets neither |
-| `FeatureFillet*`, `FeatureRevolve*`, `InsertMirrorFeature*`, `InsertPart*`, `MirrorPart*` and the rest of the creation family | an owner decision: a complete denial needs a table generated from the interop as feature 011's was, not a hand list, and closing `FeatureFillet*` needs a `RemodelProbeGuard` exemption for the throwaway part's fillet, which passes today only because nothing denies it. Every write call site of the re-modeler is interface-qualified, and `RemodelGuard` refuses any qualified key off its allowlist, so a creation member cannot reach a remodel write |
+
+Decision 17A also left the rest of the creation family open (`FeatureFillet*`, `FeatureRevolve*`,
+`InsertMirrorFeature*`, `InsertPart*`, `MirrorPart*` and the like), as an owner decision: a complete
+denial needed a table generated from the interop as feature 011's was, not a hand list, and closing
+`FeatureFillet*` needed a `RemodelProbeGuard` exemption for the throwaway part's fillet. *Closed
+2026-09-25 by the owner's decision 21A, below*; until then its row stood in the table above.
 
 **None of them widens this allowlist either.** No member of the table is the bare name of a
 stage-1 key or of `RemodelGuard.ExcludedMembers`, so the five overriding keys answer as before, and
 the reads beside them (`GetImportedFileName`, `GetImportedFeatureParameters`, `GetImportFileData`,
 `Diagnose`, `GetGapsCount`) stay allowed. A denial is a narrowing, so none of this is a
 constitution exception.
+
+**Decision 21A (feature 004, 2026-09-25, the owner): the creation family.** `ReadOnlyGuard` refused
+feature creation only through three prefixes (`FeatureCut`, `FeatureExtrusion`, `InsertFeature`),
+so `FeatureFillet3`, `FeatureRevolve2`, `InsertMirrorFeature2`, `InsertPart3`, `MirrorPart2`,
+`InsertSheetMetalBaseFlange2`, `InsertConvertToSheetMetal2`, the pattern creators
+(`FeatureLinearPattern5`, `FeatureCircularPattern5`, `InsertTableDrivenPattern2` and the rest),
+`CreateFeatureFromBody3`, `InsertRefPlane` and the hole builders all passed a read-only gate as bare
+names. They are refused now, bare or interface-qualified, by `ReadOnlyGuard` and therefore by every
+gate built on it, with one exemption: `RemodelProbeGuard`, for the members the throwaway part is
+built with, and nothing else (below).
+
+As feature 011's was, this table is **generated from the interop, never typed**.
+`extractor/tools/list-creation-members.ps1` reflects `SolidWorks.Interop.sldworks` 32.5.0.48 as
+metadata (no interop code runs and SOLIDWORKS is never started), applies the three rules below to
+the four interfaces feature creation is reached through - `IFeatureManager`, `IModelDoc2`,
+`IPartDoc` and `IModelDocExtension` - and prints both the generated section below and
+`Guard/ReadOnlyGuard.Creation.cs`, one `string[]` that `ReadOnlyGuard`'s static constructor merges
+into the denied set as it merges the drawing block. It shares its interop loader, its reading of the
+guard sources and the exclusion rules of feature 011's section 3 with `list-writer-members.ps1`
+(`extractor/tools/guard-table-helpers.ps1`), and reads what is already denied from
+`Guard/ReadOnlyGuard.cs` and `Guard/ReadOnlyGuard.Drawing.cs`.
+
+1. **The creation grammar.** A public method of the four interfaces is a creation member when its
+   name does not start with `get_`, `Get`, `IGet` or `Is`, and matches, ordinally:
+
+   ```text
+   ^I?(Feature|Insert|Create|Add|Mirror|Make|Sketch|SimpleHole|SimpleFeature|HoleWizard|AdvancedHole)
+   ```
+
+   The verbs are the ones these interfaces name a builder with: features (`FeatureFillet3`,
+   `FeatureRevolve2`, the `Feature*Pattern*` creators), inserted features, sketches, reference
+   geometry, sheet metal, weldments, mirrors, base and derived parts, imported files, annotations and
+   tables (`Insert*`), features and bodies built from other data, reference planes, sketch entities
+   and the data objects a builder is handed (`Create*`), dimensions, relations, configurations and
+   custom information (`Add*`), mirrored parts (`Mirror*`), sections and styled curves (`Make*`), the
+   obsolete `IModelDoc2` sketch surface (`Sketch*`) and the holes (`SimpleHole*`, `HoleWizard*`,
+   `AdvancedHole*`, `SimpleFeatureBossExtrude`). The optional `I` is a member's COM twin
+   (`IInsertMacroFeature`, `ICreateFeatureFromBody3`). The grammar is written here, in the generator
+   and in `CreationFamilyCompletenessTests`, the independent check of the generator's output.
+2. **Named creators the grammar does not reach**, each checked by the generator to be declared on
+   its interface and to be outside the grammar: the split, trim and intersect features, begun with
+   `Pre` and finished with `Post` (`PreSplitBody`, `PostSplitBody` and their siblings); the last
+   calls of the multi-call builders (`FinishCornerRelief`, `FinishSMNormalCut`,
+   `EndVariablePitchHelix`); the Delete Face feature (`IFeatureManager.EditDeleteFace`);
+   `IFeatureManager.ConvertLoftOrSweepToNetBlend`; the move, rotate and scale body features
+   (`IModelDocExtension.MoveOrCopy`, `RotateOrCopy`, `ScaleOrCopy`); `IModelDoc2.DeriveSketch`; and
+   `IModelDoc2.Paste`. They are a table of their own below, each with what it builds.
+3. **Exclusions, each with its reason**: the bare name of a stage-1 allowlist key and a member
+   `RemodelGuard` refuses itself, as feature 011's section 3 has them; and the reads the grammar
+   reaches - the lookups `FeatureById`, `FeatureByName` and `FeatureByPositionReverse` (with their
+   `I` twins) and `FeatureFolderLocation`, and the factories of the mass-property and measure
+   calculators, `CreateMassProperty`, `CreateMassProperty2` and `CreateMeasure`, which the property
+   dump, the measure source and the re-modeler's geometry gate read through. A read is never denied:
+   a denylist that fails closed on a read teaches nobody anything. What an earlier table or a denied
+   prefix refuses is named in the "already denied" column and not added twice.
+
+**The throwaway part's exemption.** `probe remodel` builds its throwaway part with creation members,
+so `RemodelProbeGuard` exempts exactly the ones it calls - the recipe's box, cut, fillet, chamfer,
+shell and folder, the profile sketches, and PROBE-8's cylinder - under the bare names
+`SwRemodelProbeHost` gates them by, and no other. The exemption is the throwaway part's scope: the
+guard is built only by `probe remodel`'s gate (`Program.RemodelProbeGate`), which refuses to run
+while any document is open and addresses only the part it created with `NewDocument`.
+`ThrowawayPartExemptionTests` pins the set to the probe host's own literals and asserts that every
+other gate the product builds refuses each member, bare or qualified, and that `RemodelProbeGuard`
+itself refuses every other member of the tables and every interface-qualified spelling of its own
+exemptions.
+
+**What decision 21A does not close.** The grammar is the creation family of the four interfaces.
+Their other writers - edits, suppression and visibility writers, saves and rebuilds - are not in its
+scope, and neither is creation on other interfaces (`ISketchManager`, `IAssemblyDoc`'s components
+and mates, `IFeature`). Among them, `IModelDoc2.Save`, `Save2`, `SaveAs`, `SaveAs2`, `SaveAs4`,
+`SaveSilent` and `SaveAsSilent`, `IModelDocExtension.SaveAs` and `SaveAs2`, `IPartDoc.SaveToFile`,
+`SaveToFile2` and `SaveToFile3`, `IModelDoc2.Rebuild`, `IModelDocExtension.Rebuild` and
+`EditRebuildAll`, and `IPartDoc.ForceRebuild` and `EditRebuild` pass a read-only gate as bare names;
+they are recorded here for the owner, not closed. No product literal names one.
+
+**None of them widens this allowlist either.** No member of the generated tables is the bare name
+of a stage-1 key or of `RemodelGuard.ExcludedMembers` (the generator excludes both, and the "Not
+denied" table names what it left allowed and why), so the five overriding keys answer as before.
+Every write call site of the re-modeler was already interface-qualified, and `RemodelGuard` already
+refused any qualified key off its allowlist, so no remodel write changes. A denial is a narrowing,
+so none of this is a constitution exception.
 
 004 makes exactly one **visibility-only** change to that file: `DeniedMembers` and
 `DeniedPrefixes` become `public static readonly IReadOnlyCollection<string>` instead of
