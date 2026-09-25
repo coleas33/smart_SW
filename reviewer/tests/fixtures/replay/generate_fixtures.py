@@ -70,7 +70,9 @@ type table narrowed matched to the fixture finding it narrows onto, one to one, 
 own comparison (`compare_finding_keys`, imported; owner decision 23A of 2026-09-25) - every
 result of 5,000 tokens or more on the raw recorded package, as the current code returns it, is
 within 5% of the same call's result on the fixture (the bar measures the scramble, not a change
-to the code), no identifying token of the recording - three characters or more with a
+to the code) - and the live call's fixture result, whose raw result is its own fictional rows, is
+also within 5% of its recorded size when that is 5,000 tokens or more (`live_target`, the
+review of decision 23A) - no identifying token of the recording - three characters or more with a
 letter, or five digits or more - remains in any string of the three files or inside a
 persistent reference, no word of three letters or more of a recorded property key or value
 remains in the fixture's property keys and values unless the example profile names it, and
@@ -216,6 +218,28 @@ def live_call(recording: Recording) -> RecordedCall | None:
             "answers one"
         )
     return calls[0] if calls else None
+
+
+class LiveTarget(NamedTuple):
+    """Where the live call sits among the recorded calls, and the recorded size of its result."""
+
+    index: int
+    recorded: int
+
+
+def live_target(recording: Recording, live: RecordedCall) -> LiveTarget:
+    """The live call's index among the recorded calls, and its recorded result's size in
+    tokens, sized from the growth of the round it was sent in (`estimated_sizes`).
+
+    One value for two uses: `generate` fits the fictional rows to this size, and `size_problems`
+    holds the live call's fixture result to it. The recorded size is the only size those rows
+    can be checked against: `original_sizes` answers the live call on the raw package with the
+    same rows, so its raw result is the rows measured against themselves (the review of owner
+    decision 23A, `contracts/replay.md` section 8).
+    """
+    [index] = [i for i, call in enumerate(all_calls(recording)) if call.step == live.step]
+    recorded, _ = estimated_sizes(recording, round_of(recording, live.step), {})[live.step]
+    return LiveTarget(index=index, recorded=recorded)
 
 
 def fixture_group(fmap: FictionalMap, group: JudgedGroup) -> JudgedGroup:
@@ -507,28 +531,48 @@ def finding_problems(
     )
 
 
-def size_problems(current: Mapping[int, int], fixture_sizes: Mapping[int, int]) -> list[str]:
-    """Every call whose result the scramble moved beyond the bar, in call order.
+def size_problems(
+    current: Mapping[int, int],
+    fixture_sizes: Mapping[int, int],
+    live: LiveTarget | None = None,
+) -> list[str]:
+    """Every call whose result on the fixture is beyond the bar, in call order.
 
     `current` is each call's result on the raw recorded package as the current code returns it
     (`original_sizes`), `fixture_sizes` the same call's result on the fixture. A result of
     `LARGE_RESULT_TOKENS` or more on the raw package must be within `LARGE_RESULT_TOLERANCE` of
-    it on the fixture. The recorded size is deliberately not an argument: the bar exists to
+    it on the fixture. The recorded size is deliberately not the measure: the bar exists to
     catch the fictional names distorting a result, not a change to what the code returns
     (owner decision 23A, `contracts/replay.md` section 8).
+
+    Except for `live`, the live call (`live_target`). Its result on the raw package is the
+    generator's own fictional rows measured against themselves, so it is held to its recorded
+    size as well - the size the rows are fitted to - when that is `LARGE_RESULT_TOKENS` or more
+    (the review of decision 23A: on the big recording without `--groups 113` the rows came to
+    2,129 tokens against 17,015 recorded, and the raw comparison alone let that fixture through).
+    A call beyond both is named against both; a large call the fixture never played, once.
     """
+    references: dict[int, list[tuple[int, str]]] = {}
+    for index, size in current.items():
+        references.setdefault(index, []).append((size, "on the recorded package"))
+    if live is not None:
+        references.setdefault(live.index, []).append(
+            (live.recorded, "recorded, the size its live rows are fitted to")
+        )
     problems: list[str] = []
-    for index, size in sorted(current.items()):
-        if size < LARGE_RESULT_TOKENS:
+    for index, measures in sorted(references.items()):
+        large = [(size, against) for size, against in measures if size >= LARGE_RESULT_TOKENS]
+        if not large:
             continue
         mine = fixture_sizes.get(index)
         if mine is None:
             problems.append(f"call {index} was not played on the fixture")
-        elif abs(mine - size) > LARGE_RESULT_TOLERANCE * size:
-            problems.append(
-                f"call {index} is {mine} tokens on the fixture against {size} on the recorded "
-                "package, beyond 5%"
-            )
+            continue
+        problems += [
+            f"call {index} is {mine} tokens on the fixture against {size} {against}, beyond 5%"
+            for size, against in large
+            if abs(mine - size) > LARGE_RESULT_TOLERANCE * size
+        ]
     return problems
 
 
@@ -595,6 +639,7 @@ def self_check(
     fmap: FictionalMap,
     current_sizes: Mapping[int, int],
     fixture_sizes: Mapping[int, int],
+    live: LiveTarget | None,
     recorded_folders: set[str],
     public: frozenset[str],
     generic_property_words: set[str],
@@ -610,7 +655,7 @@ def self_check(
     """
     found = finding_problems(recording, read_recording(fixture), fmap)
     problems = list(found.problems)
-    problems += size_problems(current_sizes, fixture_sizes)
+    problems += size_problems(current_sizes, fixture_sizes, live)
     denied = {token for token in fmap.replaced if identifying(token)} - generic_property_words
     problems += leaks(fixture, denied)
     problems += surviving_property_words(raw_package, fixture, public)
@@ -643,9 +688,11 @@ def generate(recorded_dir: Path, name: str, groups: int | None) -> int:
         call.step: fmap.arguments(call.arguments) for call in all_calls(recording)
     }
     live = live_call(recording)
+    live_fit: LiveTarget | None = None
 
     rows: list[dict[str, Any]] = []
     if live is not None:
+        live_fit = live_target(recording, live)
         judged = judged_rows(recording, fmap)
         target_groups = max(groups or 0, len({row["group_key"] for row in judged}))
         root = package["design"]["root_assembly_document_id"]
@@ -656,7 +703,6 @@ def generate(recorded_dir: Path, name: str, groups: int | None) -> int:
         ]
         live_arguments = scrambled_arguments[live.step]
         configuration = fmap.value(str(live.arguments.get("configuration") or "Default"))
-        recorded_size, _ = estimated_sizes(recording, round_of(recording, live.step), {})[live.step]
 
         def rows_with(extra: int) -> list[dict[str, Any]]:
             return all_rows(
@@ -664,13 +710,13 @@ def generate(recorded_dir: Path, name: str, groups: int | None) -> int:
             )
 
         rows = rows_with(0)
-        if recorded_size >= LARGE_RESULT_TOKENS and target_groups > len(judged):
+        if live_fit.recorded >= LARGE_RESULT_TOKENS and target_groups > len(judged):
             base = live_result_tokens(with_rows(package, rows), rows, live_arguments)
             step = live_result_tokens(
                 with_rows(package, rows_with(10)), rows_with(10), live_arguments
             )
             per_row = max((step - base) / 10, 1.0)
-            extra = max(round((recorded_size - base) / per_row), 0)
+            extra = max(round((live_fit.recorded - base) / per_row), 0)
             rows = rows_with(extra)
         print(f"live interference: {len(rows)} rows in {target_groups} groups")
 
@@ -720,6 +766,7 @@ def generate(recorded_dir: Path, name: str, groups: int | None) -> int:
             fmap,
             current_sizes,
             fixture_sizes,
+            live_fit,
             recorded_folders,
             public,
             {word for word in property_words - name_words if is_allowed_token(word)},

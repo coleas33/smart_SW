@@ -194,13 +194,17 @@ BIG_RECORDED_TOTAL = 11_732_561
 of it until feature 003's decision 20A (2026-09-25): the fixtures follow the code (decision 3A),
 and the part check the recorded review made no longer names the 106 system rows the eleven
 tolerated types cover, so each of the 31 rounds that carry its result records 21,928 input
-tokens fewer - 679,768 in all, from 12,412,329."""
+tokens fewer - 679,768 in all, from 12,412,329.
+
+Pinned exactly, not within 1% (the review of decision 23A, 008 T127): the figure is the sum of
+the fixture's recorded usage, so nothing but a regeneration moves it, and `contracts/replay.md`
+section 8 has every figure a regeneration moves re-measured and its reason written here. A 1%
+tolerance let a regeneration move it by up to 117,000 tokens unseen. SC-001's 1% is per round
+(`test_every_round_is_within_one_percent_of_the_recorded_input`) and is unchanged."""
 
 
 def test_the_big_assembly_recorded_total_follows_the_current_code() -> None:
-    total = as_recorded("big-assembly").totals.recorded
-
-    assert abs(total - BIG_RECORDED_TOTAL) / BIG_RECORDED_TOTAL < TOLERANCE
+    assert as_recorded("big-assembly").totals.recorded == BIG_RECORDED_TOTAL
 
 
 # --- the User Story 2 acceptance: checks first alone (008 T049) ------------------------------
@@ -454,6 +458,11 @@ REGROUPED_TARGET = 300_000
 """SC-003 as amended (research R2.43, R4): each small fixture's regrouped estimate."""
 FOLLOW_UP_TARGET = 30_000
 """SC-004: the big fixture's follow-up question, against 405k recorded."""
+BIG_FOLLOW_UP_RECORDED = 383_392
+"""The big fixture's follow-up round's recorded input. The recording's follow-up carried 405k
+(405,320 on the fixtures before decision 20A); since 003 T092 the part check it carries is 21,928
+tokens smaller. Pinned exactly, as `BIG_RECORDED_TOTAL` is and for the same reason (008 T127): it
+was held above a floor of 400,000, then 380,000, which a regeneration could cross or not unseen."""
 
 
 def openai_pane_request(prune_after: int = 2) -> Requested:
@@ -576,10 +585,7 @@ def test_the_big_assemblys_follow_up_is_under_thirty_thousand() -> None:
     [follow_up] = [r for r in report.rounds if (r.turn, r.round) == (1, 0)]
     assert follow_up.kind == "main"
     assert follow_up.requested_input < FOLLOW_UP_TARGET
-    # The recording's follow-up carried 405k. The fixture follows the code: since decision 20A
-    # the part check it carries is 21,928 tokens smaller, so it records 383,392 (above 400,000
-    # until then).
-    assert follow_up.recorded_input > 380_000
+    assert follow_up.recorded_input == BIG_FOLLOW_UP_RECORDED
 
 
 def test_both_prune_ages_are_priced_for_the_owner() -> None:
