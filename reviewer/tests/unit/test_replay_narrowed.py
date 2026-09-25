@@ -8,7 +8,10 @@ comparison read it as a recorded finding lost and a new one added. It is **narro
 when, after removing each drawing location whose `(scope, persist_ref)` names only rows the
 current type table does not count as content, its key equals the key of a finding in the
 requested pass that nothing else matched - one to one - and it is listed with the locations
-removed. A finding still unmatched after narrowing stays lost.
+removed. A finding still unmatched after narrowing stays lost. The key's locations carry no
+persistent reference, so narrowing sees what the exact comparison sees - how many subjects a
+finding names in each scope, not which - and a question to the owner (008 T128) asks whether it
+should see more.
 
 The recordings are made by a copy of the shipped table that still counted `SensorFolder` as
 content and replayed by the shipped table, which tolerates it (`tests/support/narrowed.py`).
@@ -253,6 +256,79 @@ def test_a_system_row_whose_reference_a_content_row_shares_is_not_removed(
     """"Only": the location names `Boss1` too, which is content, so it stays - and the finding,
     still naming two locations where today's names one, is lost."""
     run = record(tmp_path / "run", part_package(share=(SENSORS, BOSS)), older)
+
+    report = replay(run, requested=ALL_OFF)
+
+    assert report.findings.narrowed == []
+    assert [item.check for item in report.findings.lost] == [LOOSE]
+    assert [item.check for item in report.findings.added] == [LOOSE]
+
+
+# --- what the key can see (the review of decision 23A: 008 T127, T128) --------------------------
+
+
+def swap_reference(run: Path, old: str, new: str) -> None:
+    """Each location of the recorded loose finding naming row `old` names row `new` instead."""
+    package = load_package(run).package
+    before, after = row_named(package, old).persist_ref, row_named(package, new).persist_ref
+
+    def swapped(finding: dict[str, Any]) -> None:
+        for location in finding["drawing_locations"]:
+            if location.get("persist_ref") == before:
+                location["persist_ref"] = after
+
+    edit_loose(run, swapped)
+
+
+def test_a_content_subject_swapped_at_the_same_count_narrows_because_the_key_cannot_see_it(
+    run: Path,
+) -> None:
+    """The recorded finding names `Sensors` and `Boss1` where it named `Sensors` and `Widget1`.
+    Once `Sensors` goes it holds one location on the part, as today's finding - `Widget1` -
+    does, and a key's location carries no persistent reference (research R2.8): the keys are
+    equal and it narrows, though `Boss1` went and `Widget1` came. Decision 23A narrows on the
+    key, as every other outcome is decided; whether narrowing should also compare references is
+    the owner's question, T128. Until the owner answers, this is what the replay does."""
+    swap_reference(run, WIDGET, BOSS)
+    boss = row_named(load_package(run).package, BOSS)
+    assert boss.persist_ref in {ref.persist_ref for ref in recorded_loose(run).drawing_locations}
+
+    report = replay(run, requested=ALL_OFF)
+
+    [item] = report.findings.narrowed
+    assert (item.check, item.removed_locations) == (LOOSE, 1)
+    assert report.findings.lost == []
+    assert report.findings.added == []
+
+
+def test_the_exact_comparison_keeps_a_finding_whose_one_subject_was_swapped(
+    tmp_path: Path,
+) -> None:
+    """With nothing to narrow - recorded by today's table - a recorded finding naming `Boss1`
+    where today's names `Widget1` is kept: one location on the part either way. Narrowing is
+    exactly as blind as this, and no blinder."""
+    run = record(tmp_path / "today", part_package())
+    swap_reference(run, WIDGET, BOSS)
+
+    report = replay(run, requested=ALL_OFF)
+
+    assert report.findings.narrowed == []
+    assert report.findings.lost == []
+    assert report.findings.added == []
+    assert report.findings.recorded == report.findings.replayed
+
+
+def test_a_content_subject_swapped_and_one_more_lost_is_still_lost(run: Path) -> None:
+    """What the key does see: the count. `Boss1` in place of `Widget1` and a second content
+    subject besides leaves two locations after narrowing, against today's one - lost."""
+    swap_reference(run, WIDGET, BOSS)
+    widget = row_named(load_package(run).package, WIDGET)
+    edit_loose(
+        run,
+        lambda finding: finding["drawing_locations"].append(
+            {"document_id": PART, "persist_ref": widget.persist_ref}
+        ),
+    )
 
     report = replay(run, requested=ALL_OFF)
 
