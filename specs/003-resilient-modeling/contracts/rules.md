@@ -128,6 +128,15 @@ excluded default names, and its type is not in `tolerated_loose`. A feature of c
 `unknown` is content (it must be grouped and described); rules that need its class report it
 unresolved, and its type name is reported once per review in `rms.types.unknown`.
 
+*Amended 2026-09-25 (owner decision 20A):* `tolerated_loose` also holds the eleven system types
+the real 2024 SP5 dumps carry (research R3): the annotations container's folders and view, the
+scene's lights, a derived part's body and reference folders, and the cosmetic thread. A row of
+one of them is not content wherever it sits - never loose, never asked for a description, never
+named in `rms.types.unknown`, and never a subject of a rule that grades content features - and it
+stays unclassified.
+Feature 004's planner reads the same list; the table keeps no second list of types that are
+content to one feature and not to the other.
+
 ## Unresolved part documents (normative)
 
 A part document with no `features[]` rows whose every `ComponentInstance` has `suppression`
