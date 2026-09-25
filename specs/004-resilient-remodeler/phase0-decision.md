@@ -262,7 +262,7 @@ made. Record the same five numbers per part plus the per-part reorganizable frac
 
 **Table to fill in** (same columns as section 2.1, with the fraction always stated over its denominator)
 
-| # | Part file | Feature count | content | reach | frac | moves | renames | chg | pins (with blocking edge) | non-contiguous groups (with interloper) | rebuild by reason | f+/f= | refusals | exit |
+| # | Seat letter (never a file name: public repo) | Feature count | content | reach | frac | moves | renames | chg | pins (with blocking edge) | non-contiguous groups (with interloper) | rebuild by reason | f+/f= | refusals | exit |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | R1 | *(pending)* | | | | | | | | | | | | | |
 | R2 | *(pending)* | | | | | | | | | | | | | |
