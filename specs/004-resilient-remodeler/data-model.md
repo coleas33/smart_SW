@@ -49,7 +49,7 @@ that `state` is always readable from disk.
 | `package_before` | str | Relative path, `package-before.json` |
 | `type_table_version`, `type_table_calibrated_version` | str | From `rms_types.yaml`, recorded so a re-grade on another machine is comparable |
 | `scope` | `ScopeReport` | Section 4 |
-| `targets` | list[`PlanTarget`] | One per feature in the tree, including the ones that are not content |
+| `targets` | list[`PlanTarget`] | One per feature in the tree, including the ones that are not content. One per **feature**, not per row: a row the dump lists a second time under the feature that consumes it is that feature (`contracts/run-artifacts.md`, "How the planner reads the tree"; decision 17A, 2026-09-25) |
 | `ranks` | list[`FeatureRank`] | One per content feature with a resolved target |
 | `order` | `OrderPlan` | |
 | `pins` | list[`Pin`] | |

@@ -9,6 +9,10 @@ result:
     item: scope
     reason: 'mesh_body_present is true: a mesh body has no B-rep, so there is no gate'
   - feature_ids: []
+    item: second listings
+    reason: no row of the dump is a second listing of a top-level feature, so every
+      row is planned as its own feature
+  - feature_ids: []
     item: target group
     reason: 0 of 3 content feature(s) have no target group; the judgement phase has
       not run, and an undecided feature is never moved

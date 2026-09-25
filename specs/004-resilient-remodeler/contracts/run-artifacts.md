@@ -230,6 +230,37 @@ anything is copied, and it appears in `scope.refusals` and in `folders.refusals`
 | `unclassified` | `GetTypeName2()` is not in `rms_types.yaml`; reported `unresolved`, never "movable" |
 | `graph_unreadable` | `child_ids` **and** `parent_ids` are both `None`; never move on an unknown graph |
 
+### How the planner reads the tree
+
+*Added 2026-09-25 (owner, decision 17A; T142, T143).* The planner plans **features**, not
+rows, and a package can list one feature on two rows. The extractor walks the tree with
+`FirstFeature`/`GetNextFeature` and, under every feature, with
+`GetFirstSubFeature`/`GetNextSubFeature`; SOLIDWORKS lists an absorbed sketch in both walks, at
+depth 0 just before the feature that consumes it and again at depth 1 under that feature, with
+one `persist_ref`. The real packages carry this shape for every absorbed sketch. The rule:
+
+> **A row at depth 1 or deeper whose enclosing row (`folder_id`) is a feature and not a folder,
+> and whose `persist_ref` and `type_name` equal those of exactly one depth-0 row of the same
+> document, is that depth-0 row listed a second time.** The planner keeps the depth-0 row, drops
+> the second listing, and rewrites every `parent_ids`, `child_ids`, `sketch.consumer_ids` and
+> `folder_id` that names the dropped id to name the kept one, once.
+
+- The depth-0 row is kept because its position is the feature's place in the flat order
+  `ReorderFeature` works on; its readings stand, and the second listing contributes only its
+  id, which is the id the other rows' edges name (the dumper's handle index keeps the last id
+  it gave a feature).
+- A depth-1 row under a **folder** is folder membership in the nested traversal shape and is
+  never merged; nothing on the real packages shows a folder member listed twice.
+- A second listing whose `persist_ref` names two depth-0 rows is not merged: the real packages
+  carry seven system folders of seven types that share one reference, and a reference that
+  names two rows cannot say which one a second listing is.
+- `plan.json` therefore carries **one `targets[]` entry per feature**, and the coverage item
+  `second listings` names every dropped row on every plan ("none" included), so a reader
+  counting the package's rows against the plan's targets has the difference in writing.
+- The plan type refuses a persist ref that is the subject of more than one `rename` or more
+  than one `reorder`: the edit script moves a feature once and the rename plan renames a
+  duplicate once, so a repeat is one feature read as two.
+
 ## `grades.json`
 
 ```jsonc

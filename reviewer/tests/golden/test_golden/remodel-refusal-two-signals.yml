@@ -11,6 +11,10 @@ result:
       across a change, so a multibody part is refused; is_weldment is true: a weldment''s
       cut list and structural members are not modelled by the six groups'
   - feature_ids: []
+    item: second listings
+    reason: no row of the dump is a second listing of a top-level feature, so every
+      row is planned as its own feature
+  - feature_ids: []
     item: target group
     reason: 0 of 3 content feature(s) have no target group; the judgement phase has
       not run, and an undecided feature is never moved

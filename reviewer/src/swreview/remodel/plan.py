@@ -58,6 +58,7 @@ from swreview.remodel.intent import (
     global_candidates,
 )
 from swreview.remodel.names import RenamePlan, plan_renames
+from swreview.remodel.nodes import MergedRow, tree_nodes
 from swreview.remodel.order import Move, OrderResult, plan_order
 from swreview.remodel.rank import FeatureRank, rank_features
 from swreview.remodel.scope import Refusal, ScopeGate, ScopeSignals
@@ -70,6 +71,7 @@ __all__ = [
     "PACKAGE_BEFORE",
     "PLAN_FILE_NAME",
     "PLAN_SCHEMA",
+    "SECOND_LISTINGS",
     "UNREAD_SIGNALS",
     "ChangeKind",
     "ChangeSubject",
@@ -523,6 +525,11 @@ _STEP: Mapping[ChangeKind, int] = {
 """Which of the six steps each kind belongs to. `folder.create` and `folder.rename` share
 C4, so two folder changes may come in either order relative to each other."""
 
+_ONCE_PER_FEATURE: tuple[ChangeKind, ...] = ("rename", "reorder")
+"""The planner's two feature-addressed kinds, each of which names a feature at most once
+(T142, decision 17A). `describe` is not one of them: it is the judgement phase's, and
+which features it names is the tool layer's rule, not the planner's."""
+
 _SUBJECT_KIND: Mapping[ChangeKind, str] = {
     "rename": "feature",
     "describe": "feature",
@@ -712,6 +719,21 @@ class RemodelPlan(_Model):
                 "rename is name-ambiguous, a folder before a reorder wraps the wrong run, "
                 "and an added global before a repaired one competes for the same name"
             )
+        for kind in _ONCE_PER_FEATURE:
+            refs = [
+                change.subject.persist_ref
+                for change in self.changes
+                if change.kind == kind and change.subject is not None
+            ]
+            repeated = sorted({ref for ref in refs if refs.count(ref) > 1 and ref})
+            if repeated:
+                raise ValueError(
+                    f"the change list names persist ref(s) {repeated} as the subject of more "
+                    f"than one {kind}; the edit script moves a feature once and the rename "
+                    "plan renames a duplicate once, so this is one feature read as two - the "
+                    "dump's second listing of an absorbed sketch is one - and the executor "
+                    "would move or rename it again from a position the plan no longer knows"
+                )
 
 
 # --- 7. Composing the plan ---------------------------------------------------------
@@ -805,7 +827,8 @@ def plan_reorganize(
     table = load_table() if table is None else table
     at = datetime.now(UTC) if now is None else now
     document = _document(package, document_id)
-    tree = _tree(package, document, table)
+    nodes = tree_nodes(_rows(package, document), table)
+    tree = _tree(package, document, nodes.rows, table)
 
     targets, resolved = _targets(tree)
     ranks = tuple(rank_features(tree.rows, resolved, table))
@@ -858,6 +881,7 @@ def plan_reorganize(
             document,
             order,
             feasibility.non_contiguous,
+            nodes.merged,
         ),
     )
 
@@ -879,8 +903,8 @@ def _document(package: EvidencePackage, document_id: str | None) -> Document:
     )
 
 
-def _tree(package: EvidencePackage, document: Document, table: RmsTypeTable) -> PartTree:
-    """The document's tree, indexed as every feature 003 rule reads it."""
+def _rows(package: EvidencePackage, document: Document) -> list[Feature]:
+    """The document's rows as the dump listed them, second listings included."""
     rows = [row for row in package.features if row.document_id == document.document_id]
     if not rows:
         raise ValueError(
@@ -889,6 +913,17 @@ def _tree(package: EvidencePackage, document: Document, table: RmsTypeTable) -> 
             f"{package.extractor.profile!r}, and the planner needs a model_check or a full "
             "dump. An empty tree is 'we never looked', not 'nothing to reorganize'"
         )
+    return rows
+
+
+def _tree(
+    package: EvidencePackage,
+    document: Document,
+    rows: Sequence[Feature],
+    table: RmsTypeTable,
+) -> PartTree:
+    """The document's tree, one row per feature (`nodes.py`), indexed as every feature 003
+    rule reads it."""
     return part_tree(document.document_id, rows, table, assign_groups(rows, table), package)
 
 
@@ -1176,6 +1211,7 @@ def _coverage(
     document: Document,
     order: OrderResult,
     non_contiguous: Sequence[NonContiguousGroup] = (),
+    merged: Sequence[MergedRow] = (),
 ) -> tuple[PlanCoverage, ...]:
     """What this plan did not decide, one item per question, always all of them.
 
@@ -1214,6 +1250,7 @@ def _coverage(
             ),
             feature_ids=(),
         ),
+        _second_listings(merged),
         PlanCoverage(
             item="target group",
             reason=(
@@ -1292,6 +1329,40 @@ def _coverage(
             feature_ids=split.interloper_ids,
         )
         for split in non_contiguous
+    )
+
+
+SECOND_LISTINGS = "second listings"
+"""The coverage item that says which rows of the dump were a feature listed twice."""
+
+
+def _second_listings(merged: Sequence[MergedRow]) -> PlanCoverage:
+    """The rows `nodes.py` merged, said on every plan, "none" included.
+
+    Not a gap - each one is a feature the plan does place - but the plan carries fewer
+    targets than the package has rows, and a reader counting both is owed the reason.
+    `feature_ids` are the dropped rows' ids, which name rows of the package and no target.
+    """
+    if not merged:
+        return PlanCoverage(
+            item=SECOND_LISTINGS,
+            reason=(
+                "no row of the dump is a second listing of a top-level feature, so every "
+                "row is planned as its own feature"
+            ),
+            feature_ids=(),
+        )
+    kept = ", ".join(dict.fromkeys(merge.kept_id for merge in merged))
+    return PlanCoverage(
+        item=SECOND_LISTINGS,
+        reason=(
+            f"{len(merged)} row(s) the dump listed a second time, under the feature that "
+            "consumes each one, carry the persist_ref and type of a top-level row and are "
+            f"that feature: each is planned once, as the top-level row ({kept}), and never "
+            "moved or renamed on its own (contracts/run-artifacts.md, how the planner reads "
+            "the tree)"
+        ),
+        feature_ids=tuple(merge.dropped_id for merge in merged),
     )
 
 

@@ -626,6 +626,32 @@ def test_the_sequence_numbers_start_at_one_and_have_no_holes() -> None:
         plan(changes=(change(seq=1), change(seq=3, kind="describe")))
 
 
+@pytest.mark.parametrize("kind", ["rename", "reorder"])
+def test_one_persist_ref_is_the_subject_of_at_most_one_change_of_a_planner_kind(
+    kind: str,
+) -> None:
+    """T142 (decision 17A): the edit script moves each feature it moves once, and the
+    rename plan renames each duplicate once, so a second `reorder` or `rename` naming one
+    persist ref is a planner that read one feature as two - the real dump's second listing
+    of an absorbed sketch did exactly this - and the plan refuses it rather than handing the
+    executor a move of a feature it already moved."""
+    one = change(seq=1, kind=kind)
+    with pytest.raises(ValidationError, match="persist ref"):
+        plan(changes=(one, one.model_copy(update={"seq": 2})))
+
+
+def test_two_changes_of_one_kind_on_two_persist_refs_validate() -> None:
+    other = ChangeSubject(feature_id="feat:0008", name="Cut-Extrude2", persist_ref="b3RoZXI=")
+    body = plan(
+        changes=(
+            change(seq=1, kind="reorder"),
+            change(seq=2, kind="reorder", subject=other),
+        )
+    )
+
+    assert len(body.changes) == 2
+
+
 # --- the run state field, the copy and the attestation -----------------------------
 
 
