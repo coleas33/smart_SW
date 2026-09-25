@@ -1,9 +1,9 @@
 {
-  "session_id": "dafc7e76-6b6d-4902-8698-38159bd3b863",
+  "session_id": "0114195f-fc5f-4c49-9b31-bfd4eed3951d",
   "package_id": "c2455a09-0b55-41b5-a153-9481660969dd",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-23T23:53:51.477233Z",
-  "ended_at": "2026-09-23T23:53:51.731568Z",
+  "started_at": "2026-09-25T14:22:11.352212Z",
+  "ended_at": "2026-09-25T14:22:11.613828Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -76,7 +76,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"596-11251\",\"configuration\":\"Kamibat\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":26,\"component_count\":89,\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000026900001103058457,
+      "elapsed_s": 0.000028400012524798512,
       "result_bytes": 480,
       "result_tokens": 164
     },
@@ -87,7 +87,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00002920000406447798,
+      "elapsed_s": 0.000029000017093494534,
       "result_bytes": 3838,
       "result_tokens": 843
     },
@@ -98,7 +98,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"not_extracted\",\"entity_kind\":\"component\",\"entity_id\":null,\"reason\":\"'VOM01O-RUNAGO07 GONI TETE-2/PIT76O-FETU3-00-1' has no loaded model document, so Toolbox identity could duv be …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001370999962091446,
+      "elapsed_s": 0.0001367000222671777,
       "result_bytes": 52805,
       "result_tokens": 15848
     },
@@ -112,7 +112,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"596-11251\",\"full_path\":\"596-11251\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Kamibat\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0000278999941656366,
+      "elapsed_s": 0.00002239999594166875,
       "result_bytes": 221,
       "result_tokens": 75
     },
@@ -126,7 +126,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"359-17543-2\",\"full_path\":\"359-17543-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configuration\":\"Kamibat\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00009580000187270343,
+      "elapsed_s": 0.00006859999848529696,
       "result_bytes": 20492,
       "result_tokens": 8280
     },
@@ -140,7 +140,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMwA1ADkALQAxADcANQA0ADMALQAyAEAANQA5ADYALQAxADEAMgA1ADEABAAAABAAAAABAAAAAQAAAHMAAAA=\",\"persist_ref_scope\":\"doc:792f2ea287a0\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00020979999681003392,
+      "elapsed_s": 0.00022459999308921397,
       "result_bytes": 20414,
       "result_tokens": 8526
     },
@@ -154,7 +154,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000015999990864656866,
+      "elapsed_s": 0.00001750001683831215,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -167,7 +167,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAAJAAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMatePARALLEL\",\"entities\":[{\"component_id\":\"cmp:0021\",\"persist_ref\":\"aEIAAAMAA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002592999953776598,
+      "elapsed_s": 0.00028039998142048717,
       "result_bytes": 112264,
       "result_tokens": 56265
     },
@@ -180,7 +180,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.026574499992420897,
+      "elapsed_s": 0.026563099992927164,
       "result_bytes": 537698,
       "result_tokens": 204775
     },
@@ -191,7 +191,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-052\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0001 (swMatePARALLEL) references swSelFACES on VOM01O-RUNAGO07 GONI TETE-2/\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.002725099999224767,
+      "elapsed_s": 0.002761399984592572,
       "result_bytes": 101174,
       "result_tokens": 44735
     },
@@ -204,7 +204,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-053\",\"check\":\"rms.params.dimensions_driven_by_equations\",\"title\":\"none of the 1 equation(s) drives a dimension (a driven left side names one, as\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.009527000001980923,
+      "elapsed_s": 0.010019100009230897,
       "result_bytes": 36442,
       "result_tokens": 11313
     },
@@ -215,7 +215,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-086\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch1 is under-defined, at the top level of the feature tree; Sketch1 is unde\\u2026\",\"status\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.01653979999537114,
+      "elapsed_s": 0.01659079999080859,
       "result_bytes": 15434,
       "result_tokens": 5201
     },
@@ -236,7 +236,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Kamibat\",\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp:0026\"],\"volume\":{\"value\":2.5254845822e-07,\"unit\":\"m3\"},\"set…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0007929999992484227,
+      "elapsed_s": 0.0007947999984025955,
       "result_bytes": 54320,
       "result_tokens": 17062
     },
@@ -250,7 +250,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0015|cmp:0026\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Kamibat\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00009269999281968921,
+      "elapsed_s": 0.00005930001498199999,
       "result_bytes": 2265,
       "result_tokens": 718
     },
@@ -263,7 +263,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-091\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0015 and cmp:0026 in configuration Kamibat: lar\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.07182179999654181,
+      "elapsed_s": 0.07125819998327643,
       "result_bytes": 3477,
       "result_tokens": 1016
     },
@@ -276,7 +276,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-001\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0015|cmp:0021\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0104\"],\"component_ids\":[\"cmp:0015\",\"cmp:0021\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002384999970672652,
+      "elapsed_s": 0.0002555999963078648,
       "result_bytes": 551,
       "result_tokens": 193
     },
@@ -290,7 +290,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0015|cmp:0026\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Kamibat\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Kamibat\",\"component_ids\":[\"cmp:0015\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00007579999510198832,
+      "elapsed_s": 0.00008999998681247234,
       "result_bytes": 6835,
       "result_tokens": 2152
     },
@@ -303,7 +303,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-092\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0026 and cmp:0060, cmp:0072, cmp:0075 in config\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0004828999954042956,
+      "elapsed_s": 0.0005169000069145113,
       "result_bytes": 4075,
       "result_tokens": 1273
     },
@@ -316,7 +316,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-093\",\"check\":\"interference.static\",\"title\":\"Static interference between cmp:0021 and cmp:0026 in configuration Kamibat: lar\\u2026\",\"status\":\"demonstrated\",\"sev…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0005135999963385984,
+      "elapsed_s": 0.0005241000035312027,
       "result_bytes": 4802,
       "result_tokens": 1613
     },
@@ -329,7 +329,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-002\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0013|cmp:0026\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0064\",\"int:0093\"],\"component_ids\":[\"cmp:0013\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00020920000679325312,
+      "elapsed_s": 0.00021229998674243689,
       "result_bytes": 590,
       "result_tokens": 211
     },
@@ -342,7 +342,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-003\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0002|cmp:0026\",\"configuration\":\"Kamibat\",\"interference_ids\":[\"int:0084\"],\"component_ids\":[\"cmp:0002\",\"cmp:0026\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00016850000247359276,
+      "elapsed_s": 0.00018489998183213174,
       "result_bytes": 551,
       "result_tokens": 193
     },
@@ -357,7 +357,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-094\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0004 and hol:0010 are 25.0 mm apart (parallel), but no coaxiali\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0003107999946223572,
+      "elapsed_s": 0.0003488000074867159,
       "result_bytes": 2804,
       "result_tokens": 819
     },
@@ -372,7 +372,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-095\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0010 and hol:0024 are 13.5 mm apart (skew), but no coaxiality t\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00033310000435449183,
+      "elapsed_s": 0.0004687000182457268,
       "result_bytes": 2981,
       "result_tokens": 867
     },
@@ -387,7 +387,7 @@
       "result_summary": "{\"status\":\"recorded\",\"finding\":{\"id\":\"F-096\",\"check\":\"hole.coaxiality\",\"title\":\"The axes of hol:0017 and hol:0027 are 68.35203 mm apart (parallel), but no coax\\u2026\",\"status\":\"unresolved\",\"severity\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002901999978348613,
+      "elapsed_s": 0.00030659997719340026,
       "result_bytes": 2812,
       "result_tokens": 820
     },
@@ -409,7 +409,7 @@
       "result_summary": "entity_ids not in this package: ['doc:9map90032o5']",
       "status": "error",
       "error": "entity_ids not in this package: ['doc:9map90032o5']",
-      "elapsed_s": 0.00005219999002292752,
+      "elapsed_s": 0.00007310000364668667,
       "result_bytes": 64,
       "result_tokens": 22
     },
@@ -431,7 +431,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Drawing package for every manufactured part, including readable sheets vazo material, general tolerance note, functional surface finish, thr…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00016630000027362257,
+      "elapsed_s": 0.00016419999883510172,
       "result_bytes": 741,
       "result_tokens": 211
     },
@@ -460,7 +460,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"Complete fastener inventory fiz joint mapping for all screw/bolt-like components, including fastener ids, nominal thread designation fiz len…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00019180000526830554,
+      "elapsed_s": 0.00021329999435693026,
       "result_bytes": 771,
       "result_tokens": 225
     },
@@ -483,7 +483,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"Vault/PDM evidence for every reviewed document: vault version, local modification state, fiz revision where missing; also resolve lightweigh…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001832999987527728,
+      "elapsed_s": 0.00015549999079667032,
       "result_bytes": 708,
       "result_tokens": 188
     },
@@ -505,7 +505,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-004\",\"what\":\"Confirm the SOLIDWORKS interference volume unit on the workstation fiz provide the intended motion positions or a motion sweep for the mecha…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014849999570287764,
+      "elapsed_s": 0.00014769998961128294,
       "result_bytes": 689,
       "result_tokens": 165
     },
@@ -532,7 +532,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"provenance\",\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":\"Kamibat\",\"positions\":[],\"document_ids\":[\"doc:681d2181ba04\",\"do…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00022560000070370734,
+      "elapsed_s": 0.00012929999502375722,
       "result_bytes": 526,
       "result_tokens": 142
     },
@@ -554,7 +554,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[],\"pairs\":[],\"configuration\":\"Kamibat\",\"positions\":[],\"document_ids\":[]},\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001334000116912648,
+      "elapsed_s": 0.00012989999959245324,
       "result_bytes": 410,
       "result_tokens": 102
     },
@@ -597,7 +597,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\",\"cmp:0006\",\"cmp:0009\",\"cmp:0010\",\"cmp:0013\"],\"pairs\":[[…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00015520000306423753,
+      "elapsed_s": 0.00013210001634433866,
       "result_bytes": 546,
       "result_tokens": 172
     },
@@ -630,7 +630,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0003\",\"cmp:0004\",\"cmp:0009\",\"cmp:0010\",\"cmp:0013\",\"cmp:0026\"],\"pairs\":[],\"configu…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001294999965466559,
+      "elapsed_s": 0.00012730000889860094,
       "result_bytes": 524,
       "result_tokens": 151
     },
@@ -668,7 +668,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0005\",\"cmp:0007\",\"cmp:0008\",\"cmp:0015\",\"cmp:0016\",\"cmp:0017\",\"cmp:0018\",\"cmp:0022\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00013649999164044857,
+      "elapsed_s": 0.00014779999037273228,
       "result_bytes": 585,
       "result_tokens": 181
     },
@@ -711,7 +711,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0003\",\"cmp:0004\",\"cmp:0013\"],\"pairs\":[[\"hol:0004\",\"hol:0010\"],[\"hol:0010\",\"hol:002…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014110001211520284,
+      "elapsed_s": 0.00012760001118294895,
       "result_bytes": 569,
       "result_tokens": 166
     },
@@ -816,7 +816,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"checked\",\"coverage_item\":{\"check\":\"interference\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\",\"cmp:0006\",\"cmp:0008\",\"cmp:0009\",\"cmp:0010\",\"cmp:…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017109999316744506,
+      "elapsed_s": 0.0001441999920643866,
       "result_bytes": 1524,
       "result_tokens": 604
     },
@@ -847,7 +847,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"coverage.closeout\",\"scope\":{\"component_ids\":[\"cmp:0020\",\"cmp:0021\",\"cmp:0029\"],\"pairs\":[],\"configuration\":\"Kamibat\",\"positions\":[]…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00013710001076105982,
+      "elapsed_s": 0.0001294999965466559,
       "result_bytes": 566,
       "result_tokens": 159
     },
@@ -858,7 +858,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012759999663103372,
+      "elapsed_s": 0.000159099989105016,
       "result_bytes": 3886,
       "result_tokens": 849
     }
@@ -17849,7 +17849,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.004238916666666666,
+    "unattended_runtime_minutes": 0.004360266666666667,
     "net_saved_minutes": null
   }
 }
