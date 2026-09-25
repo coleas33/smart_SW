@@ -241,14 +241,16 @@ research R2.53).
 The replay's figures, requested input tokens counted with o200k_base, copied from
 `swreview benchmark replay` on the three committed fixtures (run from `reviewer/`, each with
 `--standards-profile ../config/standards.example.yaml`, 2026-09-23, on the fixtures the current
-code regenerated, 008 decision 3A; the figures of 008 `contracts/replay.md` section 9's last
-re-measured row, feature 011's integration, where the version-3 example profile's hash moved
-the recorded and as-recorded columns and no requested figure). The fixtures record the scripted
-provider, whose pane runs checks first, lever 13, slimming and pruning but no parallel calls;
-`--lever parallel_tool_calls` gives the OpenAI pane, on which SC-003's regrouped estimate is
-read. The regrouped estimate assumes the model does not repeat a check the digest reported and
-batches consecutive calls to one tool (008 `contracts/replay.md` section 6); the requested
-figure assumes the model makes the recorded calls in the recorded rounds.
+code regenerated, 008 decision 3A; the figures of 008 `contracts/replay.md` section 9's
+re-measured row for feature 011's integration, where the version-3 example profile's hash moved
+the recorded and as-recorded columns and no requested figure, and measured again on 2026-09-25
+after the owner's decisions 20A, 21A and 22A landed, every figure the same, section 9's last
+row). The fixtures record the scripted provider, whose pane runs checks first, lever 13, slimming
+and pruning but no parallel calls; `--lever parallel_tool_calls` gives the OpenAI pane, on which
+SC-003's regrouped estimate is read. The regrouped estimate assumes the model does not repeat a
+check the digest reported and batches consecutive calls to one tool (008 `contracts/replay.md`
+section 6); the requested figure assumes the model makes the recorded calls in the recorded
+rounds.
 
 | Fixture | Recorded | As recorded | Requested, pane defaults | Regrouped estimate, pane defaults (rule R) | Regrouped estimate, OpenAI pane (rules R and M) | Requested, `--prune-after 1` | Regrouped estimate, OpenAI pane, `--prune-after 1` |
 |---|---:|---:|---:|---:|---:|---:|---:|
