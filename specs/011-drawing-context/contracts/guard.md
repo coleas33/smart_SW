@@ -97,6 +97,13 @@ pasted whole, and `ReadOnlyGuard`'s feature 011 block (`Guard/ReadOnlyGuard.Draw
 `partial` of the static class holding one `string[]`) is generated from the same run. Both land in
 one commit with the tests of section 5.
 
+*Noted 2026-09-25 (feature 004, the owner's decision 21A)*: the script's metadata-only loader, its
+reading of the guard sources, section 3's two structural exclusions and its name formatting now live
+in `extractor/tools/guard-table-helpers.ps1`, shared with `extractor/tools/list-creation-members.ps1`,
+which generates 004's separate creation-family table ("Decision 21A" in `guard-allowlist.md`,
+`Guard/ReadOnlyGuard.Creation.cs`). This contract's table is not shared: the script's output, and so
+the "Feature 011" section and `ReadOnlyGuard.Drawing.cs`, were checked byte-identical after the move.
+
 ## 5. The tests
 
 In `extractor/SwReview.Extractor.Tests/GuardTests.cs`:
