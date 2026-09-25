@@ -17,7 +17,10 @@
     What is "already denied" is read from the guard's own source, Guard/ReadOnlyGuard.cs (the
     quoted names of DeniedMemberSet and DeniedPrefixArray), and the exclusions of section 3 from
     Guard/RemodelGuard.cs (the bare names of the stage-1 allowlist keys and RemodelGuard's own
-    refusals) plus the named members below, each with its reason. Nothing is typed twice.
+    refusals) plus the named members below, each with its reason. Nothing is typed twice. The
+    loader, the reading of the guard sources, the section 3 exclusions and the name formatting are
+    shared with list-creation-members.ps1 (feature 004, decision 21A) through
+    guard-table-helpers.ps1.
 
 .PARAMETER SwRedist
     The interop folder. Defaults to the path extractor/Directory.Build.props names.
@@ -38,9 +41,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'guard-table-helpers.ps1')
+
 $extractor = Split-Path -Parent $PSScriptRoot
-$guardSource = Join-Path $extractor 'SwReview.Extractor\Guard\ReadOnlyGuard.cs'
-$remodelSource = Join-Path $extractor 'SwReview.Extractor\Guard\RemodelGuard.cs'
 
 # ---- contracts/guard.md section 1: the families -------------------------------------------
 
@@ -72,7 +75,6 @@ $sharedRows = [ordered]@{
 
 # ---- section 2: the writer grammar --------------------------------------------------------
 
-$readerPrefixes = @('get_', 'Get', 'IGet', 'Is')
 $writerPattern = '^(set_|Set|ISet|Add|IAdd|Insert|IInsert|Delete|Remove|Edit|Modify|Change|Reset|' +
     'Activate|Attach|Detach|Update|Replace|Break|Hide|Show|Move|Align|Suppress|Unsuppress|Rebuild|' +
     'Convert|Create|ICreate|Make|Lock|Unlock|Sort|Split|Merge|Rotate|Scale|Flip|Link|Unlink|Import|' +
@@ -80,76 +82,27 @@ $writerPattern = '^(set_|Set|ISet|Add|IAdd|Insert|IInsert|Delete|Remove|Edit|Mod
     'Close|Quit|Open|Load|Unload|Regenerate|Reorder|Auto|Dimension|Reverse|Swap|Toggle|Enable|' +
     'Disable|Select|Purge|Relink|Resolve|Crop|Unbreak|Force|Hatch|Offset|Position|Freeze|Unfreeze)'
 
+# The reader prefixes ($ReaderPrefixes, Test-Reader) are guard-table-helpers.ps1's.
 function Test-Writer([string] $name) {
-    foreach ($prefix in $readerPrefixes) {
-        if ($name.StartsWith($prefix, [StringComparison]::Ordinal)) { return $false }
-    }
+    if (Test-Reader $name) { return $false }
     return [regex]::IsMatch($name, $writerPattern)
 }
 
 # ---- section 3: the exclusions, each with its reason --------------------------------------
 
-function Get-QuotedNames([string] $path, [string] $startMarker, [string] $endMarker) {
-    $text = [IO.File]::ReadAllText($path)
-    $start = $text.IndexOf($startMarker, [StringComparison]::Ordinal)
-    if ($start -lt 0) { throw "'$startMarker' not found in $path" }
-    $end = $text.IndexOf($endMarker, $start, [StringComparison]::Ordinal)
-    if ($end -lt 0) { throw "'$endMarker' not found after '$startMarker' in $path" }
-    $block = $text.Substring($start, $end - $start)
-    # Comments are dropped first, so a name quoted in a comment is not a denial.
-    $block = [regex]::Replace($block, '//[^\r\n]*', '')
-    return @([regex]::Matches($block, '"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
-}
-
-$baseDenied = Get-QuotedNames $guardSource 'DeniedMemberSet = new HashSet' '};'
-$basePrefixes = Get-QuotedNames $guardSource 'DeniedPrefixArray =' '};'
-$stageOneKeys = Get-QuotedNames $remodelSource 'AllowedKeySet = new HashSet' '};'
-$remodelRefusals = Get-QuotedNames $remodelSource 'ExcludedMemberSet = new HashSet' '};'
-
-if ($baseDenied.Count -lt 50 -or $basePrefixes.Count -lt 1 -or $stageOneKeys.Count -lt 10) {
-    throw 'The guard sources parsed as nearly empty; check the markers in this script.'
-}
-
-$exclusions = [ordered]@{}
-foreach ($key in $stageOneKeys) {
-    $bare = $key.Substring($key.LastIndexOf('.') + 1)
-    $exclusions[$bare] = "the bare name of feature 004's stage-1 allowlist key ``$key``; denying it would make that key override a read-only denial and move ``Allowlist_KeysOverridingAReadOnlyDenial_AreExactlyTheDeclaredFive``"
-}
-foreach ($member in $remodelRefusals) {
-    $exclusions[$member] = "refused by feature 004's ``RemodelGuard`` itself (``ExcludedMembers``), whose test asserts ``ReadOnlyGuard`` does not refuse it"
-}
+$guard = Read-GuardSources $extractor
+$exclusions = New-GuardExclusions $guard
 $exclusions['OpenDoc6'] = "the extractor's one sanctioned read-only open of a model (``SwSession.OpenReadOnly``); the confirmed drawing's open calls the qualified key through its own allowlist guard (``contracts/confirmed-open.md``)"
 $exclusions['OpenDoc7'] = "feature 004's open of the re-modeler's own copy (``remodel.open``, a bare read call site under ``RemodelGuard``) and ``probe remodel``'s reopen of its throwaway part; found by the read audit (T003)"
 $exclusions['NewDocument'] = "``probe remodel``'s throwaway part (feature 004 T032, under ``RemodelProbeGuard``, which exempts only the members ``ReadOnlyGuard`` refused when it was written); found by the read audit (T003)"
 
 function Test-AlreadyDenied([string] $name) {
-    if ($baseDenied -contains $name) { return $true }   # -contains is case-insensitive, as the guard is
-    foreach ($prefix in $basePrefixes) {
-        if ($name.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $true }
-    }
-    return $false
+    return (Test-DeniedBy $name $guard.BaseDenied $guard.BasePrefixes)
 }
 
 # ---- the reflection -----------------------------------------------------------------------
 
-$interop = Join-Path $SwRedist 'SolidWorks.Interop.sldworks.dll'
-if (-not (Test-Path $interop)) { throw "No interop at '$interop'; pass -SwRedist." }
-
-$resolve = [ResolveEventHandler] {
-    param($sender, $eventArgs)
-    $name = (New-Object Reflection.AssemblyName $eventArgs.Name).Name
-    $candidate = Join-Path $SwRedist "$name.dll"
-    if (Test-Path $candidate) { return [Reflection.Assembly]::ReflectionOnlyLoadFrom($candidate) }
-    return [Reflection.Assembly]::ReflectionOnlyLoad($eventArgs.Name)
-}
-[AppDomain]::CurrentDomain.add_ReflectionOnlyAssemblyResolve($resolve)
-$assembly = [Reflection.Assembly]::ReflectionOnlyLoadFrom($interop)
-
-function Get-PublicMethodNames([string] $interfaceName) {
-    $type = $assembly.GetType("SolidWorks.Interop.sldworks.$interfaceName", $true)
-    return @($type.GetMethods([Reflection.BindingFlags]'Public, Instance') |
-        ForEach-Object { $_.Name } | Sort-Object -Unique)
-}
+$assembly = Open-InteropMetadata $SwRedist
 
 $version = $assembly.GetName().Version.ToString()
 $rows = New-Object System.Collections.Generic.List[object]
@@ -160,7 +113,7 @@ $grammarMatches = New-Object 'System.Collections.Generic.HashSet[string]' ([Stri
 foreach ($family in $drawingFamilies) {
     $refused = New-Object System.Collections.Generic.List[string]
     $already = New-Object System.Collections.Generic.List[string]
-    foreach ($name in (Get-PublicMethodNames $family)) {
+    foreach ($name in (Get-PublicMethodNames $assembly $family)) {
         if (-not (Test-Writer $name)) { continue }
         [void] $grammarMatches.Add($name)
         if ($exclusions.Contains($name)) { [void] $excludedSeen.Add($name); continue }
@@ -171,7 +124,7 @@ foreach ($family in $drawingFamilies) {
 
 $sharedOut = New-Object System.Collections.Generic.List[object]
 foreach ($entry in $sharedRows.GetEnumerator()) {
-    $declared = Get-PublicMethodNames $entry.Key
+    $declared = Get-PublicMethodNames $assembly $entry.Key
     $refused = New-Object System.Collections.Generic.List[string]
     $already = New-Object System.Collections.Generic.List[string]
     foreach ($name in ($entry.Value | Sort-Object { $_ } -CaseSensitive)) {
@@ -180,13 +133,6 @@ foreach ($entry in $sharedRows.GetEnumerator()) {
         if (Test-AlreadyDenied $name) { $already.Add($name) } else { $refused.Add($name); [void] $newNames.Add($name) }
     }
     $sharedOut.Add([pscustomobject]@{ Interface = $entry.Key; Refused = $refused; Already = $already })
-}
-
-function Format-Names($names) {
-    if ($names.Count -eq 0) { return '-' }
-    $sorted = [string[]] @($names)
-    [Array]::Sort($sorted, [StringComparer]::Ordinal)
-    return (($sorted | ForEach-Object { "``$_``" }) -join ', ')
 }
 
 $sortedNew = [string[]] @($newNames)
