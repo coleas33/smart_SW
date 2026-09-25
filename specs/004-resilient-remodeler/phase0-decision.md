@@ -1,7 +1,7 @@
 # Phase 0 decision: is stage 1 (reorganize) worth building?
 
 **Feature**: 004 Resilient re-modeler, stage 1
-**Tasks**: T002 (offline dry run, complete), T003 (workstation dry run over real parts, **not run**), T004 (this file)
+**Tasks**: T002 (offline dry run, complete), T003 (workstation dry run over real parts, **not run**; a provisional count over three real packages is section 4.1, T148), T004 (this file)
 **Status**: **incomplete — awaiting T003 and the owner's signature.** The go / no-go in section 5 is unsigned and no decision has been taken.
 **Repository**: `baa7424`, working tree dirty; no file under `reviewer/tests/golden/fixtures/` or `benchmarks/` was modified by any run recorded here.
 **Date of the offline run**: 2026-09-16
@@ -282,6 +282,67 @@ made. Record the same five numbers per part plus the per-part reorganizable frac
 - Anything the planner refused or reported `unresolved` that the owner can see is wrong: an
   `unclassified` type that is in fact a common feature is a `rms_types.yaml` calibration gap (RK-8),
   not a property of the part.
+
+### 4.1 PROVISIONAL, 2026-09-25 (decision 17A, T148): three real packages, counts only
+
+> **This is not T003 and does not fill the table above.** It is a read-only dry run over the three
+> real single-part `ModelCheck` packages the development machine already holds, taken to find
+> planner defects before the seat sitting. The seat's current-IR packages (decision 18A) replace it,
+> and T003 stays open. No part, feature, file or folder name is recorded here, and no path: the
+> packages are labelled by their schema version and row count only.
+
+**What was run.** `plan_reorganize` - the call `swreview remodel plan` makes - over the newest
+`ModelCheck` package of each of three designs (older packages of the same designs were not counted),
+once at `666512d` (before) and once after T142 to T147 and T162/T163 (after). No SOLIDWORKS, no
+model, no write. Every scope verdict is `unresolved`, because a dry run reads no signal (section
+3.4); `planned` below therefore means "no refusal the package can show", not "runnable". The
+planner took under 0.01 s per package.
+
+| Package | Schema | Feature rows | Content | Reach target group | Moves | Renames | Changes | Pins | Non-contiguous groups | Rebuild by reason | State, refusals |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| P1 before | 1.3.0 | 37 | 16 | 3 | 0 | 0 | 1 | 0 | 0 | `unclassified` 13 | planned |
+| P1 after | 1.3.0 | 37 | 4 | 3 | 0 | 0 | 0 | 0 | 0 | `unclassified` 1 | **failed**, `derived_part` x1 |
+| P2 before | 1.4.0 | 33 | 15 | 3 | 2 | 2 | 5 | 2 | 1 | `splits_group` 7, `unclassified` 5 | planned |
+| P2 after | 1.4.0 | 33 | 8 | 3 | 0 | 0 | 1 | 0 | 1 | `splits_group` 5 | planned |
+| P3 before | 1.4.0 | 71 | 53 | 3 | 25 | 11 | 37 | 16 | 2 | `backward_reference` 2, `splits_group` 43, `unclassified` 5 | planned |
+| P3 after | 1.4.0 | 71 | 33 | 3 | 13 | 0 | 14 | 7 | 2 | `backward_reference` 2, `splits_group` 28 | planned |
+
+**What the "before" numbers were made of.** On P2 and P3 every absorbed sketch is listed twice
+(once before its consumer, once under it), and the planner planned both listings: all 2 and all 11
+renames were a feature renamed against its own second listing, 3 persist refs on P3 were each
+moved twice, and 2 of P2's moves and 11 of P3's named a row below the top level as their subject.
+P3's Hole Wizard holes each carry a profile sketch listed only under the hole; once the second
+listings were merged, 2 of P3's remaining moves still had one as their subject and 2 more as their
+anchor. All 5 `unclassified` entries on P2 and P3, and 12 of the 13 on P1, were
+system rows (annotation folders and view, lights, a derived part's body and reference folders, a
+cosmetic thread). P1 is a mirrored part and was reported `planned`.
+
+**What changed them** (per package, after): second listings merged into their top-level row - P1 0,
+P2 2, P3 11 (T143); rows carried by the feature that owns them - P1 16, P2 5, P3 9, among them
+every system row, since on these packages each is listed under a system container or the derived
+base (T163); P1 refused as a derived or mirrored part, its base feature the one remaining
+`unclassified` entry (T147). T145's planner-only type list changes nothing measurable here, for
+that reason; it covers the same types wherever a dump lists them at the top. No move now names a row below the
+top level, no persist ref is the subject of two moves, and no rename remains.
+
+**What is left, and what it says about RK-1.** On all three packages exactly 3 content features
+reach their target group - the three reference axes, in `1-Ref` - and one folder is to be created
+for them. Everything else is undecided or split:
+
+- P2: 3 of 8 reach (0.375). 2 wait for judgement (an `ICE` feature, which the table calls
+  ambiguous, and the sketch that follows it); the other 3 content features are `3-Core`, and the
+  2 undecided features sit inside its span, so all 5 are `splits_group`.
+- P3: 3 of 33 reach (0.091). 12 wait for judgement (6 `ICE` features and the 6 sketches that follow
+  them); 2 are held by a `backward_reference`; the 28 `splits_group` entries are the members of
+  `3-Core` and `4-Detail` and the undecided features inside their spans. 13 moves are planned,
+  against 7 pins.
+- P1: refused; the reachable 3 of 4 is the fraction it would have had (section 3.2).
+
+The single largest blocker on these parts is `ICE`: every undecided content feature is an `ICE`
+feature or a sketch consumed by one, which is `research.md`'s ambiguity (an `ICE` can add or
+remove material) and a judgement-phase question, not a dependency. Whether stage 1 has a subject
+on the owner's parts therefore depends as much on how the judgement phase classifies `ICE` as on
+`ReorderFeature`. That is a reading of three parts, recorded for T003 to confirm or refute.
 
 ---
 
