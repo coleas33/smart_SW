@@ -212,6 +212,21 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     public string? DocumentPath => Service?.DocumentPath;
 
     /// <summary>
+    /// Which attachment is listening, as the pipe name it was started with; null before the
+    /// first start, while a re-attach is in flight, after a start that failed and after
+    /// <see cref="Dispose"/> (decision 22A, 004 T160).
+    ///
+    /// <see cref="PipeNames"/> mints the name fresh for every start, so it names one
+    /// attachment - one bridge dispatcher, and the one remodel session that dispatcher can
+    /// hold - even when two attachments in a row are to the same document. That is why the
+    /// Remodel tab records this on each plan and compares it at Start rather than
+    /// <see cref="DocumentPath"/>: a re-attach back to the same document has still thrown the
+    /// plan's session away. It is the pipe's name, not its secret; the name alone reaches
+    /// nothing.
+    /// </summary>
+    public string? Attachment => Service?.PipeName;
+
+    /// <summary>
     /// The attached scope, for <c>entity.show</c>. Null before the tool service is listening,
     /// where the resolver falls back to its own attach.
     /// </summary>
@@ -282,7 +297,10 @@ public sealed class ToolServiceGate : IToolServiceAccess, IDisposable
     /// against this scope; disposing it underneath them fails work that was going fine. The
     /// engineer is told through the tool-service log rather than by a silent no-op, because
     /// this is the one case where the bridge really does keep answering about the other
-    /// document. A busy question that throws counts as busy: a teardown cannot be undone.
+    /// document. A busy question that throws counts as busy: a teardown cannot be undone. A
+    /// remodel plan waiting for Start is not such work (decision 22A): it holds nothing, the
+    /// re-attach goes ahead and throws the plan's session away, and the Remodel tab refuses
+    /// that plan's Start by name because <see cref="Attachment"/> has changed.
     /// </summary>
     public void FollowDocument(string? activePath)
     {

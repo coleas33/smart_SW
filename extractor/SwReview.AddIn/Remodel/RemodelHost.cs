@@ -48,6 +48,22 @@ public sealed class RemodelHostOptions
         () => global::SwReview.AddIn.Remodel.RemodelAvailability.Available;
 
     /// <summary>
+    /// Which tool-service attachment is listening now, or null while none is (decision 22A,
+    /// 004 T160).
+    ///
+    /// The add-in answers with <see cref="ToolService.ToolServiceGate.Attachment"/>: the pipe
+    /// name of the running service, which is minted fresh for every start, so it names exactly
+    /// one bridge dispatcher - and the one remodel session that dispatcher can hold. A plan
+    /// records it, and `remodel.start` refuses a run whose attachment is not the one listening
+    /// now, because a re-attach throws that session away.
+    ///
+    /// Null by default, and null never matches: a host nobody told about the tool service
+    /// refuses every Start as `SessionLost` rather than start a run on a session it cannot
+    /// vouch for.
+    /// </summary>
+    public Func<string?> ToolServiceAttachment { get; set; } = () => null;
+
+    /// <summary>
     /// Makes the run's folder the pane's latest run, the same way a Model check's folder does
     /// (<see cref="Model.ModelCheckHostOptions.RegisterLatestRun"/>). There is one answer to
     /// "which folder is the pane looking at" and it is not this host's to keep: `entity.show`
@@ -135,6 +151,22 @@ public sealed class RemodelHost : IDisposable
     public const string SeatCheckingMessage =
         "remodel seat availability is still being checked; wait for the tool service to attach.";
 
+    /// <summary>
+    /// What `remodel.start` answers a plan whose tool-service attachment is gone (decision 22A,
+    /// `contracts/pane-remodel-messages.md`): the add-in reconnected to SOLIDWORKS after the
+    /// plan was made, and the bridge session holding the copy did not carry over.
+    ///
+    /// In the engineer's words, like <see cref="NoSeatMessage"/>: no command, none of the
+    /// build's plumbing, and no path - the source's least of all, since nothing after the copy
+    /// may name it. It says nothing was changed, because nothing was, and it names the button
+    /// that is the way back by the label the page gives it.
+    /// </summary>
+    public const string SessionLostMessage =
+        "This plan can no longer be started. The add-in reconnected to SOLIDWORKS after the plan "
+        + "was made, which happens when the active document changes, and the plan did not carry "
+        + "over to the new connection. Nothing was changed: not your part and not the copy. Make "
+        + "your part the active document and press Remodel a copy to plan again.";
+
     /// <summary>The only scope this feature reorganizes. Parts only, by owner decision.</summary>
     private const string PartKind = "part";
 
@@ -192,6 +224,11 @@ public sealed class RemodelHost : IDisposable
     /// one on. Read by <see cref="SwReview.AddIn.ToolService.ToolServiceGate.FollowDocument"/>:
     /// every write the run makes goes through the bridge, so restarting the tool service
     /// underneath one would fail it mid-copy.
+    ///
+    /// A plan waiting for Start is <b>not</b> in progress and holds nothing (decision 22A): a
+    /// document switch between the plan and Start re-attaches the tool service, the plan's
+    /// bridge session goes with the old attachment, and `remodel.start` refuses that plan as
+    /// `SessionLost` rather than start it on a dispatcher that never saw its copy.
     /// </summary>
     public bool RunInProgress => _busy;
 
@@ -549,6 +586,13 @@ public sealed class RemodelHost : IDisposable
         _busy = true;
         try
         {
+            // Decision 22A: the attachment this plan's bridge session will live on. Read once
+            // the host is busy - from here the tool service begins no re-attach of its own - and
+            // before the probe, so it is the attachment the probe, the copy and the session go
+            // to. A re-attach that still lands while the plan runs leaves the run holding the
+            // attachment it began on, and Start refuses it.
+            string? attachment = _options.ToolServiceAttachment();
+
             RemodelScopeReading scope;
             try
             {
@@ -673,7 +717,7 @@ public sealed class RemodelHost : IDisposable
                 throw;
             }
 
-            RemodelRun run = Track(runDirectory, copy.CopyPath);
+            RemodelRun run = Track(runDirectory, copy.CopyPath, attachment);
             PostStatus("ready", "Planned. Press Start to apply the plan to the copy.");
 
             using (JsonDocument summary = JsonDocument.Parse(planSummary))
@@ -815,6 +859,17 @@ public sealed class RemodelHost : IDisposable
             return;
         }
 
+        // Decision 22A: the plan's bridge session lives on the attachment the plan was made on
+        // and does not survive a re-attach, so a run whose attachment is not the one listening
+        // now is refused here, before `remodel.started` and before any call that could change
+        // anything. Ahead of the seat check on purpose: mid-restart the seat reads as still
+        // being checked, and asking the engineer to wait would only earn this answer next time.
+        if (!SameAttachment(run.ToolServiceAttachment, _options.ToolServiceAttachment()))
+        {
+            _actions.SendError(id, "SessionLost", SessionLostMessage, retryable: false);
+            return;
+        }
+
         RemodelAvailability availability = _options.RemodelAvailability();
         if (availability != RemodelAvailability.Available)
         {
@@ -909,6 +964,17 @@ public sealed class RemodelHost : IDisposable
             });
         }
     }
+
+    /// <summary>
+    /// Whether the attachment a plan was made on is the one listening now. Ordinal, because a
+    /// pipe name is minted, never typed. A missing or blank name on either side is never a
+    /// match - not even with another missing one - because an unknown attachment is not known
+    /// to be the same one (constitution Principle I).
+    /// </summary>
+    private static bool SameAttachment(string? planned, string? now) =>
+        !string.IsNullOrWhiteSpace(planned)
+        && !string.IsNullOrWhiteSpace(now)
+        && string.Equals(planned, now, StringComparison.Ordinal);
 
     private void Stop(string? id)
     {
@@ -1249,9 +1315,9 @@ public sealed class RemodelHost : IDisposable
     /// existence as something the pane is looking at: a refused plan records no run and must
     /// leave the pane pointed wherever it already was.
     /// </summary>
-    private RemodelRun Track(string runDirectory, string copyPath)
+    private RemodelRun Track(string runDirectory, string copyPath, string? toolServiceAttachment)
     {
-        var run = new RemodelRun(runDirectory, copyPath, _options.Now());
+        var run = new RemodelRun(runDirectory, copyPath, _options.Now(), toolServiceAttachment);
         _runs.Add(run);
         LatestRun = run;
         _options.RegisterLatestRun(runDirectory);

@@ -634,6 +634,73 @@ public sealed class RemodelPageContractTests
         Assert.Equal(1, stub!.Starts);
     }
 
+    /// <summary>
+    /// Decision 22A over the real transport: a Start the host refuses because the tool service
+    /// re-attached after the plan. The page prints the host's sentence verbatim - it has no
+    /// words file and invents none - and, since no run began and no terminal `status` is
+    /// coming, it leaves the running state at once: Stop is off, and Remodel a copy, the way
+    /// back the sentence names, is pressable.
+    /// </summary>
+    [Fact]
+    public void ARefusedStartPrintsTheHostsSentenceVerbatimAndLeavesTheWayBackToPlanOpen()
+    {
+        HostStub? stub = null;
+        string? banner = null;
+        bool? bannerHidden = null;
+        var disabled = new Dictionary<string, bool>(StringComparer.Ordinal);
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page =>
+            {
+                stub = new HostStub(
+                    page, startRefusal: ("SessionLost", RemodelHost.SessionLostMessage));
+            },
+            async page =>
+            {
+                await Settled(page);
+                await page.ExecuteScriptAsync("document.getElementById('plan-run').click()");
+                await Settled(page);
+                await page.ExecuteScriptAsync("document.getElementById('start-run').click()");
+                await Settled(page);
+
+                banner = JsonDocument.Parse(await page.ExecuteScriptAsync(
+                    "document.getElementById('banner').textContent")).RootElement.GetString();
+                bannerHidden = JsonDocument.Parse(await page.ExecuteScriptAsync(
+                    "document.getElementById('banner').hidden")).RootElement.GetBoolean();
+                foreach (string id in new[] { "plan-run", "start-run", "stop-run" })
+                {
+                    disabled[id] = await Disabled(page, id);
+                }
+            });
+
+        Assert.Equal(RemodelHost.SessionLostMessage, banner);
+        Assert.False(bannerHidden);
+        Assert.False(disabled["plan-run"]);
+        Assert.True(disabled["stop-run"]);
+
+        // Start stays pressable - the page keeps no list of classes to disable it on - and the
+        // host answers the same refusal again, which the host's own tests pin.
+        Assert.False(disabled["start-run"]);
+        Assert.Equal(1, stub!.Starts);
+    }
+
+    /// <summary>
+    /// The refusal sends the engineer back to plan, and it says so with the label they will see
+    /// on the button, read from the page itself rather than restated, so the two cannot drift.
+    /// </summary>
+    [Fact]
+    public void TheSessionLostMessageNamesThePlanButtonByItsLabel()
+    {
+        Match button = Regex.Match(
+            RemodelPageFiles.Read("index.html"),
+            @"<button[^>]*\bid=""plan-run""[^>]*>([^<]+)</button>");
+        Assert.True(button.Success, "index.html has no plan-run button");
+
+        string label = button.Groups[1].Value.Trim();
+        Assert.Contains("press " + label + " to plan again", RemodelHost.SessionLostMessage, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ABridgeWithoutARemodelSeatDisablesActionsAndShowsGuidanceBeforePosting()
     {
@@ -711,20 +778,26 @@ public sealed class RemodelPageContractTests
 
         private readonly CoreWebView2 _page;
 
+        /// <param name="startRefusal">When set, `remodel.start` is answered with this
+        /// `error {error_class, message}`, not retryable, as `RemodelHost` refuses one.</param>
         public HostStub(
             CoreWebView2 page,
             bool? remodelAvailable = null,
-            bool emitUnknownCapability = false)
+            bool emitUnknownCapability = false,
+            (string ErrorClass, string Message)? startRefusal = null)
         {
             _page = page;
             RemodelAvailable = remodelAvailable;
             EmitRemodelCapability = remodelAvailable.HasValue || emitUnknownCapability;
+            StartRefusal = startRefusal;
             page.WebMessageReceived += OnMessage;
         }
 
         private bool? RemodelAvailable { get; }
 
         private bool EmitRemodelCapability { get; }
+
+        private (string ErrorClass, string Message)? StartRefusal { get; }
 
         /// <summary>How many `remodel.start` messages the page has posted.</summary>
         public int Starts { get; private set; }
@@ -782,6 +855,17 @@ public sealed class RemodelPageContractTests
                     return;
                 case "remodel.start":
                     Starts++;
+                    if (StartRefusal.HasValue)
+                    {
+                        Reply("error", id, new
+                        {
+                            error_class = StartRefusal.Value.ErrorClass,
+                            message = StartRefusal.Value.Message,
+                            retryable = false,
+                        });
+                        return;
+                    }
+
                     Reply("remodel.started", id, new { chat_id = "20260916-142201-bracket-remodel" });
                     return;
                 case "remodel.result":

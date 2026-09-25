@@ -518,6 +518,141 @@ public sealed class ToolServiceWiringTests
         Assert.Null(documentMidway);
     }
 
+    // ---- the attachment the Remodel tab compares (decision 22A, 004 T160) ---------------------
+
+    /// <summary>
+    /// What <see cref="ToolServiceGate.Attachment"/> is: the pipe name of the service that is
+    /// listening, and nothing before there is one. The Remodel tab records it on each plan and
+    /// refuses Start when it has changed, because the plan's bridge session lives on that
+    /// service's dispatcher and on no other.
+    /// </summary>
+    [Fact]
+    public void TheAttachmentIsNothingBeforeTheFirstServiceAndItsPipeNameOnceListening()
+    {
+        var world = new GateWorld();
+        ToolServiceGate gate = world.Gate();
+        Assert.Null(gate.Attachment);
+
+        gate.EnsureStarted();
+
+        Assert.Equal(world.Services[0].PipeName, gate.Attachment);
+        Assert.Equal(gate.RemodelBridge!.Pipe, gate.Attachment);
+    }
+
+    /// <summary>
+    /// Every re-attach is a new attachment, including one back to the document the first was
+    /// attached to: the document is the same, the dispatcher is new and holds no session. This
+    /// is why the tab compares the attachment and not <see cref="ToolServiceGate.DocumentPath"/>.
+    /// </summary>
+    [Fact]
+    public void EveryReattachIsANewAttachmentEvenBackToTheSameDocument()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\bracket.SLDPRT" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        string? first = gate.Attachment;
+
+        world.DocumentPath = @"C:\models\frame.SLDPRT";
+        gate.FollowDocument(@"C:\models\frame.SLDPRT");
+        string? second = gate.Attachment;
+
+        world.DocumentPath = @"C:\models\bracket.SLDPRT";
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        string? third = gate.Attachment;
+
+        Assert.Equal(3, world.Starts);
+        Assert.Equal(@"C:\models\bracket.SLDPRT", gate.DocumentPath);
+        Assert.Equal(3, new[] { first, second, third }.Distinct(StringComparer.Ordinal).Count());
+        Assert.DoesNotContain(null, new[] { first, second, third });
+    }
+
+    /// <summary>
+    /// What leaves the attachment alone, and so leaves a plan startable: the same document
+    /// spelt another way, and a configuration switch - which the add-in fans out as a follow of
+    /// the active document, the same path again.
+    /// </summary>
+    [Fact]
+    public void TheSameDocumentSpeltDifferentlyOrAConfigurationSwitchKeepsTheAttachment()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\bracket.SLDPRT" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        string? attached = gate.Attachment;
+
+        gate.FollowDocument(@"C:\models\bracket.SLDPRT");
+        gate.FollowDocument(@"c:\MODELS\BRACKET.sldprt");
+        gate.FollowDocument(@"C:\models\sub\..\bracket.SLDPRT");
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(attached, gate.Attachment);
+    }
+
+    /// <summary>
+    /// Neither a drawing glanced at, nor nothing open, nor a document change while work holds
+    /// the bridge re-attaches anything, so none of them changes the attachment.
+    /// </summary>
+    [Fact]
+    public void ADrawingNothingOpenAndABusyBridgeEachKeepTheAttachment()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\bracket.SLDPRT" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        string? attached = gate.Attachment;
+
+        gate.FollowDocument(@"C:\models\sheet.SLDDRW");
+        gate.FollowDocument(null);
+        world.Busy = true;
+        world.DocumentPath = @"C:\models\frame.SLDPRT";
+        gate.FollowDocument(@"C:\models\frame.SLDPRT");
+
+        Assert.Equal(1, world.Starts);
+        Assert.Equal(attached, gate.Attachment);
+    }
+
+    /// <summary>
+    /// Between the teardown and the new service listening there is no attachment, which a plan
+    /// can never match; once the new service listens the attachment is its own, and never the
+    /// one that was taken down.
+    /// </summary>
+    [Fact]
+    public void MidRestartThereIsNoAttachmentAndAfterItTheNewServicesOwn()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\bracket.SLDPRT" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+        string? before = gate.Attachment;
+
+        string? midway = "not read";
+        world.OnStart = () => midway = gate.Attachment;
+        world.DocumentPath = @"C:\models\frame.SLDPRT";
+        gate.FollowDocument(@"C:\models\frame.SLDPRT");
+
+        Assert.Null(midway);
+        Assert.Equal(world.Services[1].PipeName, gate.Attachment);
+        Assert.NotEqual(before, gate.Attachment);
+    }
+
+    /// <summary>A restart whose attach fails, and a disconnect, both leave no attachment at all.</summary>
+    [Fact]
+    public void AFailedRestartAndADisconnectLeaveNoAttachment()
+    {
+        var world = new GateWorld { DocumentPath = @"C:\models\bracket.SLDPRT" };
+        ToolServiceGate gate = world.Gate();
+        gate.EnsureStarted();
+
+        world.Failure = new InvalidOperationException("the component tree could not be walked");
+        world.DocumentPath = @"C:\models\frame.SLDPRT";
+        gate.FollowDocument(@"C:\models\frame.SLDPRT");
+        Assert.Null(gate.Attachment);
+
+        world.Failure = null;
+        gate.EnsureStarted();
+        Assert.NotNull(gate.Attachment);
+
+        gate.Dispose();
+        Assert.Null(gate.Attachment);
+    }
+
     [Fact]
     public void ARestartWhoseAttachFailsIsReportedAndTheNextDocumentTriesAgain()
     {
