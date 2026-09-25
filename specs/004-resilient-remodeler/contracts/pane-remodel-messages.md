@@ -28,7 +28,7 @@ byte-identical CSP meta tag, the `textContent`-only rule for every untrusted str
 |------|---------|-------------|
 | `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, run_root, document: {path, configuration, kind} \| null, limits: {max_changes, max_minutes, max_rebuild_seconds}, remodel: {available: true \| false \| null, message: string \| null}, latest_run: {run_dir, at, state} \| null}`. `available: null` means the tool service is still attaching; the page keeps Remodel actions disabled until it receives a capability answer. |
 | `remodel.plan` | `{}` | Refuse with `RemodelUnavailable` before any bridge call when `remodel.available` is false or still unknown. Otherwise read the scope signals off the active document with `remodel.probe_scope` and refuse with `error {error_class}` when there is no document, the document is not a part, it is dirty (`GetSaveFlag()`), it is read-only, it has external references, or it fails the scope gate, **all before anything is copied**. Otherwise create the run folder, copy the source, open and tag the copy, and roll and rebuild it; a non-zero rebuild-error count refuses with `PreexistingRebuildErrors` and deletes the copy, which is the one refusal that happens after a copy exists, because the reading needs a rollback and a rebuild and neither may touch the source. Then dump the copy, carry forward `exceptions.json`, and run the pure planner. Reply `remodel.planned {run_dir, plan_summary}`. Progress via `status` |
-| `remodel.start` | `{run_dir}` | Refuse with `RemodelUnavailable` before any bridge call when the seat is false or still unknown. Otherwise run phases B (judge), C (apply) and D (verify) **to completion**; there is no approve-each-change mode. Progress via `status` and `remodel.progress`; each change is pushed as `remodel.change` as it is written. Reply `remodel.started {chat_id}` |
+| `remodel.start` | `{run_dir}` | Refuse with `SessionLost` before any bridge call when the tool service has re-attached since the plan was made (decision 22A, below). Refuse with `RemodelUnavailable` before any bridge call when the seat is false or still unknown. Otherwise run phases B (judge), C (apply) and D (verify) **to completion**; there is no approve-each-change mode. Progress via `status` and `remodel.progress`; each change is pushed as `remodel.change` as it is written. Reply `remodel.started {chat_id}` |
 | `remodel.stop` | `{}` | Set the stop flag. The executor finishes the change in flight, inverts it if it failed, finalizes the artifacts, and reports the run as `truncated`. Reply `remodel.stopped {changes_applied}` |
 | `remodel.result` | `{run_dir}` | Reply `{changes[], grade_before, grade_after, geometry, rebuild_list[], attestation, state}`, read from the run folder rather than from memory, so the tab answers after a restart |
 | `remodel.open_copy` | `{run_dir}` | Activate the copy, re-opening it if it was closed; reply `ok`. The copy lives **only** in the run folder; it leaves through a Save As the engineer performs in SOLIDWORKS |
@@ -63,10 +63,46 @@ issued, and the host resolves it against its own run record.
 | `RunNotFound` | `run_dir` is not a run this host created |
 | `CopyDiscarded` | The run's copy was discarded; the artifacts remain readable |
 | `ResumeRefused` | A run interrupted by a crash or an open circuit is never auto-resumed |
+| `SessionLost` | The tool service re-attached between the plan and Start - which it does when SOLIDWORKS switches documents - so the bridge session holding the plan's copy is gone. Raised by `remodel.start` only, before anything is changed; `message` is `RemodelHost.SessionLostMessage`, in plain words, and sends the engineer back to Remodel a copy. Not retryable: pressing Start again gets the same answer (decision 22A, 2026-09-25) |
 | `RemodelUnavailable` | The attached bridge has no remodel seat, or seat availability is still being checked; `message` says in plain words that Remodel is not in this build yet and that the tab will not change the open part, or asks the engineer to wait for attachment. It names no console command: the standalone probe belongs in the workstation handover, not the Task Pane (U13, 2026-09-22) |
 
 A refusal costs nothing. A half-rebuilt sheet-metal part costs the engineer their afternoon. Per
 Principle VI every refusal is recorded as a reported coverage gap, never a silent skip.
+
+### A plan belongs to one tool-service attachment (decision 22A)
+
+*Added 2026-09-25 (owner, decision 22A; 004 T160).* `remodel.open` leaves the run's
+`RemodelSession` - the probe, the copy, the toggles - on the dispatcher of the tool service that
+answered it (`bridge-remodel.md`, "The session and the tool service's attachment"). When
+SOLIDWORKS switches documents and nothing holds the bridge, `ToolServiceGate.FollowDocument`
+replaces that service, and a plan waiting for Start holds nothing: `RemodelHost.RunInProgress`
+is true only while a plan or a run is executing. **The session does not survive the re-attach,
+and Start refuses the plan by name.**
+
+- `RemodelHost` records on each run the attachment its plan was made on: the attachment's pipe
+  name (`ToolServiceGate.Attachment`), which `PipeNames` mints fresh for every start, so it names
+  one dispatcher. It is read once the plan holds the host busy and before `remodel.probe_scope`.
+- `remodel.start` compares it with the attachment listening now. A different attachment, none
+  now (a restart in flight), or none recorded is `SessionLost`; a blank name is none, and none
+  never matches none, because an unknown attachment is not the same one.
+- The order of `remodel.start`'s refusals is `RunNotFound`, `RunInProgress`, `CopyDiscarded`,
+  `ResumeRefused`, `SessionLost`, `RemodelUnavailable`, `NotAttached`. A run that can never be
+  resumed says so first; a lost session comes before the seat check, because while the service
+  is restarting the seat reads as still being checked, and telling the engineer to wait would
+  only lead to `SessionLost` on the next press.
+- The refusal is answered before `remodel.started`, before any pipeline, backend or bridge call,
+  and writes nothing: not `plan.json`, not the copy, not the run folder, not the engineer's file.
+  The run stays readable through `remodel.result`, `report.open`, `folder.open` and
+  `remodel.open_copy`.
+- The attachment decides, never the document: a re-attach back to the same document is a new
+  attachment and is refused; the same document spelt differently and a configuration switch
+  re-attach nothing (`FollowDocument` compares the document canonically) and are not refused.
+- Start pressed twice after a re-attach is refused twice, identically, and leaves the host free to
+  plan; the new plan is made on the attachment listening now and starts. A refused plan tracks no
+  run, so a Start naming its folder is `RunNotFound`, and it neither rescues nor invalidates an
+  earlier plan.
+- The page prints the host's sentence verbatim in its banner, like every other refusal; the
+  Remodel page reads no words file.
 
 ## Host to page (unsolicited)
 
@@ -125,3 +161,10 @@ Two buttons and what they must say. **Open copy** activates the copy in SOLIDWOR
   SOLIDWORKS.
 - A resume test: a run folder left in `applying` state - what a run interrupted mid-apply leaves
   on disk - is answered `ResumeRefused`.
+- Decision 22A's cases in `RemodelHostTests`: a re-attach between the plan and Start is
+  `SessionLost` with nothing called and nothing written; the refusal's place in the order above;
+  a re-attach back to the same document, a configuration switch, Start pressed twice, a refused
+  plan, a restart in flight and a re-attach that lands during the plan. `ToolServiceWiringTests`
+  pins what `ToolServiceGate.Attachment` answers across starts, re-attaches, spellings, drawings,
+  a busy bridge and a restart in flight, and `RemodelPageContractTests` that the host's sentence
+  reaches the banner verbatim and names the button the engineer presses.

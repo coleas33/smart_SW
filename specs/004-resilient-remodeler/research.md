@@ -1020,7 +1020,7 @@ existing pages. `RemodelHost` owns only `ready` and `remodel.*`; everything else
 | `remodel.change` | one `ChangeRecord` as it is written, so the list grows live |
 | `document.changed` | `{path, configuration} \| null`; if the **copy** goes away mid-run, the run aborts |
 
-Two operational rules:
+Two operational rules, and a third added by the owner's decision 22A (2026-09-25):
 
 - **One remodel run per host.** A second is refused with `error {error_class: "RunInProgress"}`,
   the same shape `settings.save` already uses for `TurnRunning`. `ToolServiceGate` already
@@ -1029,6 +1029,22 @@ Two operational rules:
   to `circuit_open`, and the copy and `changes.jsonl` survive on disk. Resuming onto a tree that
   was not re-verified is exactly the wrong risk, so resume is refused and there is a test that
   says so; recovery is manual and documented in the quickstart (RK-12).
+- **A plan does not survive a tool-service re-attach (decision 22A, 004 T160).** `remodel.open`
+  leaves the run's `RemodelSession` on the dispatcher of the tool service that answered it, and
+  `ToolServiceGate.FollowDocument` replaces that service - a new pipe, new secrets, a new
+  dispatcher with no session - whenever SOLIDWORKS switches documents and nothing holds the
+  bridge. A plan waiting for Start holds nothing: `RemodelHost.RunInProgress` drops when planning
+  ends. The two ways out were to carry the session across the re-attach (it belongs to the run,
+  not to the document) or to refuse Start by name; the owner chose the refusal. The host records
+  on each run the attachment its plan was made on (the pipe name, minted fresh per start) and
+  `remodel.start` refuses a run whose attachment is not the one listening now with
+  `SessionLost`, before `remodel.started` and before any call that could change anything; the
+  engineer plans again. Comparing the attachment rather than the document is what makes a
+  re-attach back to the same document refused and a configuration switch, which re-attaches
+  nothing, not. The bridge's own `target_mismatch` on a dispatcher with no session stays the
+  backstop for the race between the pane's check and the backend's first call. What the discarded
+  session leaves on the seat - the toggles `remodel.open` set and the copy still open - is 004
+  T167, not decided.
 
 ---
 

@@ -141,8 +141,10 @@ refusal is still a refusal and is never guessed into a nearer class.
 | `UnknownJob` | 404 | No job of that id on this backend |
 | `PackageAfterRefused` | 400 | The posted `path` is not `<run_dir>/package-after.json`, or does not load as a ModelCheck package |
 
-`NoDocument`, `NotAttached`, `DocumentReadOnly`, `RunNotFound` and `CopyDiscarded` are the host's
-own refusals (`AddIn/Remodel/RemodelHost.cs`) and are raised before any of these routes is called;
+`NoDocument`, `NotAttached`, `DocumentReadOnly`, `RunNotFound`, `CopyDiscarded` and `SessionLost`
+are the host's own refusals (`AddIn/Remodel/RemodelHost.cs`) and are raised before any of these
+routes is called - `SessionLost` (decision 22A, 2026-09-25) before `POST /remodel/runs`, when the
+tool service re-attached after the plan, so no job is created and nothing here learns of it;
 `PreexistingRebuildErrors` is the host's too and is reached from the ok reply above rather than
 from an error body. `InvalidRunDir` is `chat-api.md`'s and is unchanged here.
 
