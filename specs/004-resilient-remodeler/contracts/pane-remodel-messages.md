@@ -26,7 +26,7 @@ byte-identical CSP meta tag, the `textContent`-only rule for every untrusted str
 
 | type | payload | host action |
 |------|---------|-------------|
-| `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, run_root, document: {path, configuration, kind} \| null, limits: {max_changes, max_minutes, max_rebuild_seconds}, remodel: {available: true \| false \| null, message: string \| null}, latest_run: {run_dir, at, state} \| null}`. `available: null` means the tool service is still attaching; the page keeps Remodel actions disabled until it receives a capability answer. |
+| `ready` | `{}` | Reply `init` with `{backend: {port, origin}, token, run_root, document: {path, configuration, kind} \| null, limits: {max_changes, max_minutes, max_rebuild_seconds}, remodel: {available: true \| false \| null, message: string \| null}, latest_run: {run_dir, at, state, plan_lost: string \| null} \| null}`. `available: null` means the tool service is still attaching; the page keeps Remodel actions disabled until it receives a capability answer. `plan_lost` is `RemodelHost.PlanLostMessage` when the latest run is a plan that can no longer be started, by `remodel.plan_lost`'s own rule, and null otherwise (decision 24A, amended on review, below). |
 | `remodel.plan` | `{}` | Refuse with `RemodelUnavailable` before any bridge call when `remodel.available` is false or still unknown. Otherwise read the scope signals off the active document with `remodel.probe_scope` and refuse with `error {error_class}` when there is no document, the document is not a part, it is dirty (`GetSaveFlag()`), it is read-only, it has external references, or it fails the scope gate, **all before anything is copied**. Otherwise create the run folder, copy the source, open and tag the copy, and roll and rebuild it; a non-zero rebuild-error count refuses with `PreexistingRebuildErrors` and deletes the copy, which is the one refusal that happens after a copy exists, because the reading needs a rollback and a rebuild and neither may touch the source. Then dump the copy, carry forward `exceptions.json`, and run the pure planner. Reply `remodel.planned {run_dir, plan_summary}`. Progress via `status` |
 | `remodel.start` | `{run_dir}` | Refuse with `SessionLost` before any bridge call when the tool service has re-attached since the plan was made (decision 22A, below). Refuse with `RemodelUnavailable` before any bridge call when the seat is false or still unknown. Otherwise run phases B (judge), C (apply) and D (verify) **to completion**; there is no approve-each-change mode. Progress via `status` and `remodel.progress`; each change is pushed as `remodel.change` as it is written. Reply `remodel.started {chat_id}` |
 | `remodel.stop` | `{}` | Set the stop flag. The executor finishes the change in flight, inverts it if it failed, finalizes the artifacts, and reports the run as `truncated`. Reply `remodel.stopped {changes_applied}` |
@@ -169,6 +169,18 @@ now tells the page as soon as it sees the plan lost, before the engineer presses
   `folder.open`, `remodel.open_copy` and `remodel.discard_copy`. `remodel.start` is unchanged:
   `SessionLost` stays the backstop, for a Start that reaches the host before the notice reaches
   the page.
+- **A page that starts again.** *Amended 2026-09-25 on review (004 T170):* the notice is told
+  once per plan, and a page keeps what it was told only while it lives. A page that loads again -
+  a reload, or the pane building its view anew - starts from `init` alone, and `init` said
+  nothing of a lost plan, so the page showed the lost plan with Start pressable (Start was still
+  refused, `SessionLost`). So `init.latest_run` carries `plan_lost`: `PlanLostMessage` when the
+  latest run is a plan that can no longer be started, null otherwise. It is the notice's own
+  predicate, `RemodelHost.IsLostPlan` - planned and waiting for Start, its copy not discarded,
+  made on an attachment that is not the one listening now - read afresh for every `init`, whether
+  or not the notice was ever posted and whatever holds the host, since `init` describes the run it
+  names; the once-per-plan claim is the notice's alone and `init` neither spends nor needs it. The
+  page treats it as the notice for that folder: the same line verbatim, Start disabled and not
+  sent, Plan again offered. `init` changes nothing either.
 
 ## Host to page (unsolicited)
 
@@ -262,4 +274,10 @@ Two buttons and what they must say. **Open copy** activates the copy in SOLIDWOR
   none changing nothing; the re-attach as the host tells it ending with the notice standing and
   Start disabled; markup written as text; the sentence naming the Plan again button by its label;
   and `tokens.css` linked before `remodel.css`, with the notice's rules naming tokens only.
-  `PageRuleScanTests` sweeps this page too.
+  `PageRuleScanTests` sweeps this page too. *Added 2026-09-25 on review:* `RemodelHostTests`:
+  `init.latest_run.plan_lost` is the host's sentence after a re-attach, the notice still posted
+  once; it is so when the attachment changed with no refresh to post the notice; it is null for
+  a plan on its own attachment, a finished run and a discarded copy; an `init` changes nothing
+  and Start still answers `SessionLost`. `RemodelPageContractTests`: a page reloaded after the
+  notice shows it again from `init` - the host's sentence, Start disabled and not sent, Plan
+  again pressable - and a page reloaded with `plan_lost` null starts its plan.

@@ -229,6 +229,20 @@ those rows as loose subjects. On the three recordings 20, 2 and 1
 those subjects, and because `finding_subject_key` holds one drawing location per subject, each
 read as a recorded finding lost and a new one added (003 T092).
 
+*Amended 2026-09-25 on review (T128): what "its key equals" can see.* The key is
+`finding_subject_key` exactly, and a key's drawing location carries no persistent reference
+(data-model section 4, research R2.8). An RMS subject's location is its scope and its reference
+alone, so after narrowing the remaining locations compare as a count per scope. A finding that
+also lost or gained a content subject - the count in its scope moved - or moved its
+configuration, components or entity inputs, is lost. One whose remaining content subject was
+swapped for another in the same scope, at the same count, narrows: exactly as the exact
+comparison above keeps a recorded finding whose one subject was swapped for another. Narrowing is
+never stricter or looser about subjects than the key every other outcome is decided by.
+`test_replay_narrowed.py` pins both. Whether narrowing should demand more - the remaining
+locations' references equal to those of the current finding it takes - is the owner's question,
+T128, not decided. On the three recordings every narrowed finding's current finding carries the
+same references (20, 2 and 1 of 20, 2 and 1), so no figure depends on the answer.
+
 ## 6. The regrouped estimate (from User Story 4)
 
 Printed beside the strict figure whenever a rule applies, with its assumption: "the model does
@@ -445,21 +459,40 @@ The 5% bar for a result of 5,000 tokens or more compares each call's result on t
 the same call's result on the raw recorded package, as the current code returns it (the play
 `original_sizes` already makes), and no longer with the recorded size. The bar exists to catch the
 scramble distorting a result, and a deliberate change to what the code returns is the
-regeneration's reason, not a distortion: decision 20A's part check returns 182,848 and 15,892
-tokens on the raw packages against 204,858 and 17,437 recorded (-10.7% and -8.9%), and the
-fixture's result is the scrambled form of the first figure, not of the second. It is exactly as
-strict about the scramble as before: the same 5,000 tokens and 5%, measured against the result it
-already measured against for every call the current code reproduced, and a call the current code
-changed is now held to the same bar rather than excused or failed by its code change. The recorded
-size still starts each round's usage adjustment, as above. Both are pinned
+regeneration's reason, not a distortion: decision 20A's part check returns 182,865 and 15,548
+tokens on the raw packages against 204,858 and 17,437 recorded (-10.7% and -10.8%), and the
+fixtures' results, 182,848 and 15,892, are the scrambled form of the first figures, within 5% of
+them, not of the second (*corrected 2026-09-25 on review:* this sentence first gave the fixtures'
+figures as the raw packages', and -8.9%, which is the fixture's 15,892 against 17,437). It is
+exactly as strict about the scramble as before: the same 5,000 tokens and 5%, measured against the
+result it already measured against for every call the current code reproduced, and a call the
+current code changed is now held to the same bar rather than excused or failed by its code change.
+The recorded size still starts each round's usage adjustment, as above. Both are pinned
 (`test_replay_generator_narrowed.py`, `test_replay_generator_size_bar.py`).
+
+*Amended 2026-09-25 on review (T127): the live call is also held to its recorded size.* That
+sentence held for every call but one. The live `bridge_interference` call's result is the
+generator's own invention: `original_sizes` answers it on the raw recorded package with the same
+fictional rows the fixture gets, so its raw result is those rows measured against themselves, and
+a bar against it cannot see rows fitted short of the recorded result. The bar before decision 23A
+saw them only because it compared with the recorded size: on the big recording without
+`--groups 113` the rows come to 2,128 tokens raw and 2,129 on the fixture, against 17,015
+recorded, and the bar as 23A landed it passed that fixture and it was written. So the live call is
+held twice: against its raw result like every call, and, when its recorded result - the size the
+generator fits the rows to, sized from the recorded growth - is 5,000 tokens or more, within 5% of
+that on the fixture. With `--groups 113` it is 17,062 against 17,015. One function,
+`generate_fixtures.live_target`, gives the call's place and recorded size, to the rows and to the
+bar alike; `size_problems` names the recorded size in its refusal
+(`test_replay_generator_size_bar.py`). The three committed fixtures pass it as written, so none is
+regenerated: the generator, run again with the three commands above, writes them again with only
+the ids and clocks every run mints moved, and without `--groups 113` it refuses the big one.
 
 ## 9. The acceptance each story cites
 
 | Story | Acceptance on the fixtures |
 |---|---|
 | US1 | Pass A within 1% of the recorded input on every round of every fixture; the finding set exact - since feature 010, recorded = replayed + reclassified, with 3, 2 and 0 touching groups reclassified as contacts on `big-assembly`, `small-assembly-a` and `small-assembly-b` (on the fixtures before decision 3A; the amended row below states the invariant as it now reads); the big fixture: four estimated rounds - `bridge_interference`, and since feature 010 the three touching groups judged after it, whose contact results a replay cannot separate from the live call's effect - and one carried round; its recorded total 12.4M within 1% (SC-001) |
-| US1 *amended* (2026-09-23, owner decision 3A; research R2.54, R2.56) | On the fixtures regenerated by the current code (section 8): pass A within 1% on every round of every fixture; the finding set exact, recorded = replayed, with 0, 0 and 0 reclassified - the 3, 2 and 0 touching groups live in the generator's reclassification output, the fixtures' recorded contacts and the replay reproducing those contacts exactly with the recorded settings (section 8), and the replay's reclassification path stays pinned on the scripted pre-010 recordings of `test_replay_findings.py`; the big fixture: one estimated round, `bridge_interference` (the three groups judged after it reproduce their recorded contacts), and one carried round; its recorded total 12.4M within 1% (SC-001). Under every requested setting of US2 to US4, no recorded finding lost or not replayable - an absolute rule, unchanged by decision 3A - and none reclassified; each fixture's recorded contacts among the requested pass's |
+| US1 *amended* (2026-09-23, owner decision 3A; research R2.54, R2.56) | On the fixtures regenerated by the current code (section 8): pass A within 1% on every round of every fixture; the finding set exact, recorded = replayed, with 0, 0 and 0 reclassified - the 3, 2 and 0 touching groups live in the generator's reclassification output, the fixtures' recorded contacts and the replay reproducing those contacts exactly with the recorded settings (section 8), and the replay's reclassification path stays pinned on the scripted pre-010 recordings of `test_replay_findings.py`; the big fixture: one estimated round, `bridge_interference` (the three groups judged after it reproduce their recorded contacts), and one carried round; its recorded total 12.4M within 1% (SC-001) (*amended 2026-09-25 on review (T127):* until decision 20A's regeneration, 003 T092; since then the recorded total follows the code, 11,732,561 on the fixtures of that row below, 5.4% under the recording's bill, and `test_replay_fixtures.py` pins it exactly, so a regeneration that moves it at all is re-pinned with its reason; SC-001's 1% on every round is unchanged). Under every requested setting of US2 to US4, no recorded finding lost or not replayable - an absolute rule, unchanged by decision 3A - and none reclassified; each fixture's recorded contacts among the requested pass's |
 | US2 | Checks first alone (requested efficiency `prerun_checks=True`, model view off; on the command line `--lever prerun_checks`, or `--no-pane-defaults --lever prerun_checks` once US3 has landed): no recorded finding lost on any fixture; on the big fixture the requested total below pass A's, every one of the 113 groups judged, one interference finding per group (SC-006 offline); the recorded RMS and assembly calls classed `answered_from_checks` |
 | US2 *landed as* (T049, T050, 2026-09-23; re-measured after the Phase 9 amendment, unchanged) | `--no-pane-defaults --lever prerun_checks --standards-profile ../config/standards.example.yaml` (before US3 made the pane request the default, `--lever prerun_checks` alone): `big-assembly` recorded 12,456,095, as recorded 12,455,282, requested 4,225,060 (-66.1%); `small-assembly-a` 1,619,376 / 1,619,532 / 1,236,667 (-23.6%); `small-assembly-b` 1,497,696 / 1,497,378 / 1,133,500 (-24.3%). No recorded finding lost and none not replayable on any fixture; 3, 2 and 0 reclassified as contacts on the fixtures before decision 3A (since, the 3, 2 and 0 are the fixtures' recorded contacts, replayed exactly, and none is reclassified (T121)); 62, 7 and 5 added (feature 010's checks in the pre-run: `check_joints`, `check_mass_material`, `check_hygiene`; measured after feature 010 US4-US8 landed). Every one of the 113 groups judged - since feature 010, one finding or one contact each; every recorded `check_rms_*` call `answered_from_checks`; the RMS verdict multiset equal to the recording's |
 | US3 | `--pane-defaults` on the big fixture under 1,000,000 requested input tokens with no loss (SC-002); the session's findings identical with the model-view settings on and off (SC-007); every step of the requested pass stored under `tool-results/` (SC-008); every result older than the prune age a stub in every reconstructed request |

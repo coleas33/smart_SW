@@ -322,7 +322,11 @@ P2 2, P3 11 (T143); rows carried by the feature that owns them - P1 16, P2 5, P3
 every system row, since on these packages each is listed under a system container or the derived
 base (T163); P1 refused as a derived or mirrored part, its base feature the one remaining
 `unclassified` entry (T147). T145's planner-only type list changes nothing measurable here, for
-that reason; it covers the same types wherever a dump lists them at the top. No move now names a row below the
+that reason; it covers the same types wherever a dump lists them at the top. *Amended 2026-09-25
+on review (decision 20A, landed with 003 T090 to T092):* the list is planner-only no longer: the
+eleven types are the table's `tolerated_loose`, one list for the checker and the planner, and
+`remodel_not_content` and `RmsTypeTable.planner_view()` are gone. It still changes nothing
+measurable here, for the same reason. No move now names a row below the
 top level, no persist ref is the subject of two moves, and no rename remains.
 
 **What is left, and what it says about RK-1.** On all three packages exactly 3 content features
