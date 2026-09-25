@@ -270,6 +270,15 @@ compared finding's references come from:
   findings as not replayable and never compares them.
 - `interference.*`, `hole.*`, `rms.folders.*` and `rms.params.*` carry no location: keyed as
   before, as is a location without a reference.
+- *Added 2026-09-25 on review (T129):* a finding lever 11a carried is the exception. It keeps
+  the drawing locations of the session it was carried from, and carry-over's key decides
+  "unchanged" from a `feature_tree` fingerprint that hashes no reference
+  (`carry_over.carry_over_key`, `exceptions._feature_row`), so its references can be an earlier
+  dump's, which a re-dump may have re-encoded. This paragraph's premise - on both sides the
+  references are one dump's - is false for it, and the replay with checks first read such a
+  finding as lost plus added. It is compared by reference first; still unmatched after narrowing,
+  it is compared with every reference left out on both sides, as before this amendment
+  (`contracts/replay.md` section 5).
 
 So no kind needs its entity id in place of its reference. What a reference cannot tell apart is
 rows that share one, and the key's locations are a multiset, so a reference two locations name
@@ -279,7 +288,9 @@ folder - one entity reached twice, where the reference is right; and the big rec
 `small-assembly-a`'s each have one pair of different system folders, both content under the
 current table, sharing one reference - a swap between those two alone stays unseen. The key must never be compared across two dumps, and nothing
 compares it so: carry-over has its own key (lever 11a) and an exception binds to `(persist_ref,
-scope)` through its own refresh.
+scope)` through its own refresh. *Corrected 2026-09-25 on review (T129):* the key's references
+can still meet another dump's through a carried finding, which is why such a finding is compared
+without them once they differ (above).
 
 *Measured before implementing* (a probe with the tightened key): on the three recordings replayed
 as recorded, none lost, none added, and 20, 2 and 1 findings narrowed with 106, 10 and 5 locations
@@ -1449,7 +1460,12 @@ compared with the recorded size, it confuses the scramble with the change the re
   *Amended 2026-09-25 (owner decision 25A, T128):* it should, and so should the exact comparison:
   a key's location now carries its reference (R2.8, amended), so the remaining locations compare
   reference by reference, and a content subject swapped for another is lost. Measured with the
-  tightened key, the three recordings still narrow 20, 2 and 1 with none lost.
+  tightened key, the three recordings still narrow 20, 2 and 1 with none lost. *Corrected
+  2026-09-25 on review (T129):* the locations narrowing removes are compared with nothing - any
+  location naming only rows that are not content goes, whichever rows, in whichever document's
+  scope - so the exactness is the remaining locations'; whether a removed location should have
+  to be more (a `tolerated_loose` type's row, or in the scope of a location that remains) is the
+  owner's question (R5).
 - It applies only to `rms.*` findings, the family the type table decides, and only to a finding
   that would otherwise be lost; reclassification and the step's class are decided first.
 - Every narrowed finding is listed with its step and the number of locations removed, so the
@@ -1547,6 +1563,7 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 | `contracts/replay.md` sections 8 and 9 (decision 3A) | the generator refuses a recorded finding it cannot reproduce; the fixtures' replay reclassifies 3, 2 and 0 | the generator reclassifies a touching group recorded as a contact, by the replay's rule; the regenerated fixtures record 3, 2 and 0 contacts and their replay reclassifies none | R2.56 |
 | `contracts/replay.md` sections 5, 7, 8 and 10 (owner 2026-09-25, decision 23A) | a recorded RMS finding that lost only subjects the type table stopped counting read as lost plus added; the generator's 5% bar compared a large result with its recorded size | such a finding is narrowed, listed with the locations removed, by one rule the replay and the generator share; the bar compares the fixture's result with the current code's result on the raw recorded package. The spec's text is unchanged: SC-001 names no outcome, and FR-005's lost and added keep their meaning (a narrowed finding is neither, as a reclassified one is neither) | R2.58 |
 | `contracts/replay.md` sections 5, 8 and 9 (review of decision 23A, 2026-09-25; T127) | the size bar held the live call to its raw result, its own fictional rows; section 5 read as if narrowing told subjects apart; the big fixture's recorded total was pinned within 1% | the live call is also held to its recorded size; narrowing sees what the key sees, a count of locations per scope, and whether it should compare references too is T128; the recorded total and the follow-up round's recorded input are pinned exactly. The spec's text is unchanged | R2.58 |
+| `contracts/replay.md` section 5 (review of decision 25A, 2026-09-25; T129) | a carried finding's references were compared as if they were the recording's dump's; the section said narrowing is as strict about subjects as the exact comparison | a carried finding nothing matched by reference is compared with its references left out, after narrowing; the locations narrowing removes are compared with nothing, said and pinned. The spec's text is unchanged | R2.8, R2.58 |
 | `contracts/replay.md` sections 5, 7 and 8 (owner 2026-09-25, decision 25A; T128) | a key's drawing location carried no persistent reference, so an RMS finding's locations compared as a count per scope, in the exact comparison and after narrowing | each location keeps its reference: a finding that swapped one subject for another is lost, by the exact comparison and after narrowing; the printed subject names each reference; the generator carries the recorded references into the fixture's through the map that scrambled the package's. The spec's text is unchanged: FR-005's check and subject keep their meaning, the subject now naming each location's reference | R2.8, R2.58 |
 
 ## R5. Open items that stay open
@@ -1570,3 +1587,6 @@ Re-opened on 2026-09-23 at `43e9b15` for this reconciliation (the rest are the d
 | An earlier scratch estimate put mate persist references at about 1,284 characters each; measured mean 781, max 1,656; no budget here uses the old figure | none | nothing |
 | SC-010: a licensed seat, the real standards profile placed first (006 T100), a paid review of each recorded assembly | owner | Phase 8 |
 | Settled 2026-09-25 (owner decision 25A): a narrowed finding's remaining locations must carry the persistent references of the current finding it takes, and the exact comparison compares references too (T128, R2.8) | owner | nothing: every narrowed finding on the three recordings has a current finding with the same references |
+| Should narrowing demand more of a location it removes (T129)? It removes any location naming only rows that are not content, in any document's scope, and compares it with nothing. On the three recordings every removable location names only rows of `tolerated_loose` types (108, 10 and 5) and lies in the scope of a location that remains; they belong to the 20, 2 and 1 narrowed `rms.grouping.all_features_in_a_group` findings and, on the big recording, to two `rms.sketches.one_sketch_per_feature` findings that match exactly because today's code still names those rows - so a change to a rule other than the grouping rule could narrow too. Options: narrow only `rms.grouping.all_features_in_a_group`; remove only a `tolerated_loose` type's row; remove only a location in a remaining location's scope; keep the rule | owner | nothing: no figure depends on the answer |
+| The replay plays no previous session, so a recorded finding lever 11a carried is lost unless the requested pass computes it again (checks first); existing before decision 25A (T129) | backlog | nothing: `carry_over_rms` is a workstation lever, off by default, and no recording holds a carried finding |
+| A printed subject names every location's base64 reference (decision 25A, section 7): the review measured the big recording's 20 narrowed subjects at 49,774 characters, none holding a denylist token; a shorter printed form, such as a digest, would change what 25A decided is printed (T129) | owner | nothing |
