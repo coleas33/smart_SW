@@ -17,7 +17,11 @@ exactly zero (`tests/support/drift.round_drifts`) - which a deliberate change to
 never break and a defect in how the replay rebuilds a request always does. The findings the
 replay reproduces plus the ones it can only list as not replayable must be the recorded set:
 on the big run 88 reproduced and 11 not replayable (six interference findings behind the live
-bridge call, five standards findings that need a profile).
+bridge call, five standards findings that need a profile). Since the owner's decision 23A a
+recorded RMS finding that lost only the subjects the current type table stopped counting is
+**narrowed** - matched to the replayed finding once those locations are taken out, and listed -
+so it is among the reproduced, never lost or added, and each recording's narrowed findings are
+pinned by check and by the locations removed.
 
 No `pytest.mark.integration`: that marker means "needs a saved native evidence package" and
 `tests/conftest.py` skips it whole when that package is absent, which it is on the machine that
@@ -84,6 +88,24 @@ def test_replayed_and_not_replayable_findings_are_the_recorded_set(run: str) -> 
     assert findings.lost == []
     assert findings.added == []
     assert findings.replayed + len(findings.not_replayable) == findings.recorded
+
+
+NARROWED: dict[str, Counter[str]] = {run: Counter() for run in RUNS}
+"""The recorded findings each recording's replay narrows, by check (owner decision 23A,
+`contracts/replay.md` sections 5 and 10): none while the type table the recordings were graded
+with is the one the code ships."""
+REMOVED_LOCATIONS = dict.fromkeys(RUNS, 0)
+"""The drawing locations those narrowed findings lose, in all."""
+
+
+@pytest.mark.parametrize("run", RUNS)
+def test_the_narrowed_findings_are_what_the_type_table_stopped_counting(run: str) -> None:
+    """A narrowed finding is one the replayed pass matched once the locations naming only rows
+    the current table does not count were taken out: listed, never lost, never added."""
+    findings = as_recorded(run)[1].findings
+
+    assert Counter(item.check for item in findings.narrowed) == NARROWED[run]
+    assert sum(item.removed_locations for item in findings.narrowed) == REMOVED_LOCATIONS[run]
 
 
 def test_the_big_run_replays_88_findings_and_lists_11_it_cannot() -> None:

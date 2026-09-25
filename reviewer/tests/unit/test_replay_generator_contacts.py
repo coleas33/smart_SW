@@ -77,7 +77,9 @@ def fixture_by_todays_code(tmp_path: Path, package_dir: Path) -> Path:
 
 def check(
     generator: ModuleType, recording: Path, fixture: Path, fmap: FictionalMap | None = None
-) -> tuple[list[str], int]:
+) -> tuple[list[str], int, int]:
+    """The generator's finding check: its problems, the reclassified count and - since the
+    owner's decision 23A - the narrowed count, which no recording here has (no RMS finding)."""
     recorded: Recording = read_recording(recording)
     return generator.finding_problems(
         recorded, read_recording(fixture), fmap if fmap is not None else FictionalMap()
@@ -111,7 +113,7 @@ def _session(run: Path) -> dict[str, Any]:
 def test_a_touching_group_recorded_as_a_contact_is_reclassified_not_missing(
     generator: ModuleType, pair: tuple[Path, Path]
 ) -> None:
-    assert check(generator, *pair) == ([], 1)
+    assert check(generator, *pair) == ([], 1, 0)
 
 
 def test_the_generator_reuses_the_replays_rule_rather_than_a_copy(generator: ModuleType) -> None:
@@ -142,11 +144,11 @@ def test_a_group_key_made_of_names_is_matched_in_the_fixtures_names(
 
     rewrite_session(recording, named)
     rewrite_session(fixture, contact_named(scrambled))
-    assert check(generator, recording, fixture, fmap) == ([], 1)
+    assert check(generator, recording, fixture, fmap) == ([], 1, 0)
 
     rewrite_session(fixture, contact_named(NAMED_GROUP))
-    problems, reclassified = check(generator, recording, fixture, fmap)
-    assert reclassified == 0
+    problems, reclassified, narrowed = check(generator, recording, fixture, fmap)
+    assert (reclassified, narrowed) == (0, 0)
     assert problems == ["the finding keys differ: 1 recorded keys are missing and 0 are new"]
 
 
@@ -158,7 +160,7 @@ def test_with_no_contact_the_check_is_the_key_comparison_it_was(
         patched.setattr(interference, "CONTACT_VOLUME_MM3", -1.0)
         fixture = fixture_by_todays_code(tmp_path, package_dir)
 
-    assert check(generator, recording, fixture) == ([], 0)
+    assert check(generator, recording, fixture) == ([], 0, 0)
 
 
 # --- still refused ------------------------------------------------------------------------------
@@ -176,6 +178,7 @@ def test_a_contact_in_another_configuration_leaves_the_key_missing(
 
     assert check(generator, recording, fixture) == (
         ["the finding keys differ: 1 recorded keys are missing and 0 are new"],
+        0,
         0,
     )
 
@@ -205,8 +208,8 @@ def test_another_checks_finding_with_the_same_group_key_is_never_reclassified(
 
     rewrite_session(recording, not_interference)
 
-    problems, reclassified = check(generator, recording, fixture)
-    assert reclassified == 0
+    problems, reclassified, narrowed = check(generator, recording, fixture)
+    assert (reclassified, narrowed) == (0, 0)
     assert problems == ["the finding keys differ: 1 recorded keys are missing and 0 are new"]
 
 
@@ -225,6 +228,7 @@ def test_one_contact_reclassifies_one_of_two_recorded_findings_of_its_group(
     assert check(generator, recording, fixture) == (
         ["the finding keys differ: 1 recorded keys are missing and 0 are new"],
         1,
+        0,
     )
 
 
@@ -242,4 +246,5 @@ def test_a_new_finding_in_the_fixture_still_refuses(
     assert check(generator, recording, fixture) == (
         ["the finding keys differ: 0 recorded keys are missing and 1 are new"],
         1,
+        0,
     )
