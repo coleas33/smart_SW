@@ -65,8 +65,10 @@ tolerated_loose: [OriginProfileFeature, MateGroup, HistoryFolder, SensorFolder, 
 # folders, and the cosmetic thread annotation. The planner had counted them as content of unknown
 # class and filed them unclassified. The planner reads the table through `planner_view()`, which
 # tolerates these as well; feature 003's checker does not read this key, because its verdicts on
-# the recorded runs of feature 008's replays count these rows, and whether it should stop is the
-# owner's decision (tasks.md T145). Only types seen on a real dump are listed; `calibrated_version`
+# the recorded runs of feature 008's replays count these rows. The owner has decided it should stop
+# (decision 20A, 2026-09-25): these move into `tolerated_loose` and this key and `planner_view()`
+# go, with feature 003's T090 to T092, which wait on the owner's question 20A-Q1; until then the
+# key stands. Only types seen on a real dump are listed; `calibrated_version`
 # stays until the seat census (T137). Disjoint from every class, the ambiguous set,
 # `tolerated_loose` and `derived_base`.
 remodel_not_content: [NotesAreaFtrFolder, AnnotationViewFeat, AmbientLight, DirectionLight, FeatSolidBodyFolder, FeatSurfaceBodyFolder, RefAxisFtrFolder, RefPlaneFtrFolder, ProfileFtrFolder, RefPointFtrFolder, CosmeticThread]

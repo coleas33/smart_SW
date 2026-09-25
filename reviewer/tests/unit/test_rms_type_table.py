@@ -693,7 +693,8 @@ SYSTEM_TYPES_ADDED_2026_09_25: tuple[str, ...] = (
 """The census names the table did not carry and the planner filed `unclassified`: the
 annotation folder and view under the annotations container, the scene's lights, a derived
 part's body and reference folders, and the cosmetic thread annotation. They are the planner's
-`remodel_not_content`; feature 003's rules still count them (T145)."""
+`remodel_not_content`; feature 003's rules still count them until decision 20A lands (003 T090
+to T092, waiting on the owner's question 20A-Q1)."""
 
 
 def test_the_census_is_thirty_five_distinct_names() -> None:
@@ -729,16 +730,47 @@ def test_the_system_types_the_real_packages_carry_are_not_content_to_the_planner
 
 
 @pytest.mark.parametrize("type_name", SYSTEM_TYPES_ADDED_2026_09_25)
-def test_feature_003s_rules_still_count_them_until_the_owner_decides(
+def test_feature_003s_rules_still_count_them_until_decision_20a_lands(
     table: RmsTypeTable, type_name: str
 ) -> None:
     """`tolerated_loose` is feature 003's key too, and the recorded runs feature 008 replays
-    grade these rows as content; moving that is an owner decision, so the checker's reading
-    is pinned unchanged here and the planner's alone moves."""
+    grade these rows as content. The owner decided the checker stops counting them (decision
+    20A), and that lands with 003 T090 to T092, which wait on the owner's question 20A-Q1;
+    until then the checker's reading is pinned unchanged here and the planner's alone moves."""
     row = build_feature(type_name=type_name, name=f"{type_name}1")
 
     assert type_name not in table.tolerated_loose
     assert table.is_content(row)
+
+
+FEATURE_003 = Path(__file__).resolve().parents[3] / "specs" / "003-resilient-modeling"
+"""Feature 003's package, whose normative texts record decision 20A."""
+
+DECISION_20A_PENDING = {
+    FEATURE_003 / "contracts" / "rules.md": (
+        "*Status 2026-09-25 (review of decision 20A): not yet in effect.*"
+    ),
+    FEATURE_003 / "research.md": (
+        "*Status 2026-09-25 (review of decision 20A): decided, not yet in effect.*"
+    ),
+    FEATURE_003 / "spec.md": "*Not yet in effect (review of 2026-09-25):*",
+}
+"""Each text that records decision 20A as it will read, and the sentence saying it is pending."""
+
+
+@pytest.mark.parametrize("path", sorted(DECISION_20A_PENDING), ids=lambda path: path.name)
+def test_the_texts_say_decision_20a_is_pending_exactly_while_the_planner_only_key_stands(
+    path: Path,
+) -> None:
+    """Decision 20A is written into feature 003's normative texts as the table will read once
+    T090 to T092 land. While the shipped file still has decision 17A's `remodel_not_content`,
+    each of them says the decision is not yet in effect, and the day the key goes the sentence
+    goes with it, so no text describes a table that is not the one shipped (the review of
+    2026-09-25 found the contract written as if the key had already gone)."""
+    shipped = yaml.safe_load(DEFAULT_TYPES_PATH.read_text(encoding="utf-8"))
+    key_stands = "remodel_not_content" in shipped
+
+    assert (DECISION_20A_PENDING[path] in path.read_text(encoding="utf-8")) is key_stands
 
 
 def test_the_planner_view_tolerates_the_planners_system_types_and_changes_nothing_else(

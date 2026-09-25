@@ -193,9 +193,10 @@ class RmsTypeTable:
 
         One table and one file, so the checker and the planner still agree on every class and
         group. The planner alone stops counting the system rows the real packages carry as
-        content, because feature 003's verdicts over recorded runs count them and moving
-        those is the owner's decision (tasks.md T145). Idempotent: a view of a view is the
-        view.
+        content, because feature 003's verdicts over recorded runs count them. The owner has
+        decided the checker stops too (decision 20A): this view and `remodel_not_content` go
+        with feature 003's T090 to T092, which wait on the owner's question 20A-Q1.
+        Idempotent: a view of a view is the view.
         """
         return replace(
             self,

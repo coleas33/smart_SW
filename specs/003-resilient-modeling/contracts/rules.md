@@ -128,14 +128,22 @@ excluded default names, and its type is not in `tolerated_loose`. A feature of c
 `unknown` is content (it must be grouped and described); rules that need its class report it
 unresolved, and its type name is reported once per review in `rms.types.unknown`.
 
-*Amended 2026-09-25 (owner decision 20A):* `tolerated_loose` also holds the eleven system types
-the real 2024 SP5 dumps carry (research R3): the annotations container's folders and view, the
-scene's lights, a derived part's body and reference folders, and the cosmetic thread. A row of
-one of them is not content wherever it sits - never loose, never asked for a description, never
-named in `rms.types.unknown`, and never a subject of a rule that grades content features - and it
-stays unclassified.
+*Amended 2026-09-25 (owner decision 20A; decided, not yet in effect - see the status below):*
+`tolerated_loose` also holds the eleven system types the real 2024 SP5 dumps carry (research R3):
+the annotations container's folders and view, the scene's lights, a derived part's body and
+reference folders, and the cosmetic thread. A row of one of them is not content wherever it sits -
+never loose, never asked for a description, never named in `rms.types.unknown`, and never a
+subject of a rule that grades content features - and it stays unclassified.
 Feature 004's planner reads the same list; the table keeps no second list of types that are
 content to one feature and not to the other.
+
+*Status 2026-09-25 (review of decision 20A): not yet in effect.* The decision is recorded and its
+code is not: tasks T090 and T091 land with T092 in one commit, and T092 stopped on verification
+and waits on the owner's question 20A-Q1 (how feature 008's replay reads a recorded finding the
+table has narrowed). Until they land, the shipped `rms_types.yaml` holds the eleven only in
+decision 17A's planner-only key `remodel_not_content`, which `RmsTypeTable.planner_view()`
+tolerates for feature 004's planner alone. These rules still read them as content of unknown
+class: loose outside a group, asked for a description, and named in `rms.types.unknown`.
 
 ## Unresolved part documents (normative)
 
