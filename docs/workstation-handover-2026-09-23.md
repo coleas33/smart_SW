@@ -7,7 +7,9 @@ and keep its three rules: never commit or push per-machine state, never push `ma
 SOLIDWORKS before building or registering. This document replaces the 2026-09-20 round-2
 handover as the current work; it is one ordered list of every seat task of features 008, 009, 010
 and 011, and of four earlier ones the owner added (decision 15A, 2026-09-24: 006 T101 and T102 in
-step 2, 007 T059 and T060 in step 13), each with its command, what decides pass or fail, and
+step 2, 007 T059 and T060 in step 13), and of three items of feature 004 the owner added
+(decision 18A, 2026-09-25: 004 T142 in step 19, the packages for 004 T003 in step 20, the probes
+004 T033 to T039 in step 21), each with its command, what decides pass or fail, and
 where its record goes. The task
 texts in `specs/00N-*/tasks.md` stay the source of truth: where this document and a task
 disagree, the task wins and the difference is a finding. The engineer who runs the sitting follows
@@ -21,8 +23,10 @@ had", and its Results table, are what the seat follows; this list does not repea
 **What the seat does not do.** It commits and pushes nothing at this sitting: the findings
 document travels in the handover folder, and the owner reads it and commits it from the
 development machine (runbook section 8, the test plan's step 6.5). It saves nothing in SOLIDWORKS: the
-one write is the test plan's Pack and Go copy into `%TEMP%` for the view-out-of-date probe (step
-3.5), deleted at its step 6.0, and the plan fingerprints the real files before and after. Two
+one write from the real files is the test plan's Pack and Go copy into `%TEMP%` for the
+view-out-of-date probe (step 3.5), deleted at its step 6.0, and the plan fingerprints the real
+files before and after; the re-modeler probes (step 21) build, save and delete throwaway parts of
+their own inside the handover folder, never a real file. Two
 switches wait on this sitting's probe records - `DRAWING_BINDING_VALIDATED` (011 T066) and
 `DrawingOpenScope.SeatValidated` (011 T077) - and the development machine sets them afterwards,
 each in a commit of its own. What can only be seen with a switch on is 011 T095, at the sitting
@@ -54,7 +58,8 @@ the sitting's runs) and 009 T085 (restore them offline).
    names (T064, T065); a part drawing and an assembly drawing whose callouts the engineer names
    beforehand, each with its SOLIDWORKS name (T066); a reviewed part whose same-name drawing
    exists and is closed (T077); a design with a candidate drawing and a part drawn twice (T067); a
-   design with its drawing open (T068).
+   design with its drawing open (T068); and three to five real single parts the owner names for
+   004 T003's dry run, one of them with a long feature tree (the test plan's letter P).
 
 ## 1. Install or update, then check
 
@@ -93,7 +98,8 @@ alias in the shell it runs in; every `uv run` command runs from `<repo>\reviewer
 | Steps 3 to 6, the probes D1 to D13 | step 7 (011 T066) | T066 compares D6 and D8 with T064's D4 and D5 on the same drawing |
 | Step 8's probe D14 | step 8's pane review (T077) | the pane half is read against the probe's answers |
 | Step 11 (008 T102) | step 12 (T104) | T104 presses Retry on T102's run folder |
-| everything else | step 18 (009 T082) | it builds an older commit, then returns to `main` |
+| everything else but step 21 | step 18 (009 T082) | it builds an older commit, then returns to `main` |
+| everything, step 18 included | step 21 (004 T033 to T039), then only the handoff | a refuted PROBE-1 can leave a "Cannot reorder" box holding SOLIDWORKS, and PROBE-1 asks for one on purpose |
 
 ## 3. The script
 
@@ -259,8 +265,9 @@ row per step and task id. The development machine moves each answer into the res
     Pass: `1 passed` and no `SKIPPED` line. A skip proves nothing; a refused key or an unreachable
     API fails with its own sentence and is setup, not the protocol failure. After a Ctrl+C, close
     the window to drop the key.
-16. **Evidence.** Zip the whole run folders of steps 1 and 3 to 14 (their `tool-results\`
-    included), the dump folders of step 2, the probe `--out` folder and the logs into the handover
+16. **Evidence.** Zip the whole run folders of steps 1, 3 to 14 and 20 (their `tool-results\`
+    included), the dump folders of step 2, the probe `--out` folders (step 21's three among them)
+    and the logs into the handover
     folder (runbook section 8; the test plan's step 6.3); not `swreview handoff`, which leaves
     `tool-results\` out. The test plan also runs that exporter on each review (its step 6.2), for a
     small key-masked summary beside the evidence, never in its place.
@@ -291,6 +298,41 @@ row per step and task id. The development machine moves each answer into the res
     the return stops at a gate, run it once more, then with `-SkipTests`, and if `dotnet build`
     fails, clear SwReview's boxes in Tools > Add-ins: never leave the seat on the older add-in (the
     test plan's step 5.5). Record both answers.
+19. **004 T142: FeatureWorks, for the record.** Feature 004's import path is on the back burner
+    (its spec, owner decision 2026-09-19); whether the seat has FeatureWorks, the add-in that
+    recognises features in an imported solid, informs the feasibility probe if the owner reopens
+    that path. Read only: the test plan's step 1.7 prints one registry line (installed, listed as
+    an add-in, start-up flag), then Tools > Add-ins is looked at, FeatureWorks's Active and
+    Start Up boxes noted and the dialog closed with Cancel, and Help > About names the product
+    (Standard, Professional or Premium). Any answer passes; it is a record. Record: the line, the
+    two boxes and the product, in the findings document.
+20. **004 T003's packages: Model check on the owner's parts.** The three to five real parts the
+    owner names (the test plan's P-1 to P-5, one with a long feature tree), each opened alone and
+    Model checked (its step 5.1): each check folder's `package.json` is a current ModelCheck-profile
+    package, the input 004 T003's dry run needs. The folders stay under the run root and travel in
+    step 16's zip; the development machine runs `swreview remodel plan` over them and writes counts
+    only. Record: each part's letter, its folder's stamp and letter, and the counts under its
+    grade; no part name, number, feature name or folder name.
+21. **004 T033 to T039: the re-modeler probes,** last before the handoff, SOLIDWORKS running with
+    no document open (the probe refuses otherwise), on the current build. Three runs, each into
+    its own folder, since a second run into the same folder overwrites the first one's answers
+    file; first the probes that never reorder, then the three reorders no watchdog times, then
+    PROBE-1 alone, which provokes a "Cannot reorder" box with the flag clear on purpose:
+    ```powershell
+    swreview-extract probe remodel --probe PROBE-2,PROBE-4,PROBE-6,PROBE-7,PROBE-8,PROBE-9,PROBE-10,PROBE-11,PROBE-12,PROBE-13,PROBE-21 --out "$H\probes\remodel-no-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    swreview-extract probe remodel --probe PROBE-3,PROBE-5,PROBE-20 --out "$H\probes\remodel-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    swreview-extract probe remodel --probe PROBE-1 --out "$H\probes\remodel-probe-1" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+    ```
+    After each, `Show-RemodelLedger` on its folder prints each probe's id, blocking flag, verdict
+    (`verified`, `refuted` or `unresolved`) and reason. A message box is answered only after 30
+    seconds (PROBE-1 times each of its two tries for 5 seconds), with OK; a run that hangs is recovered as the test
+    plan's "If SOLIDWORKS stops answering" says and is not run again. Each run turns three
+    SOLIDWORKS options off and puts them back when it ends; the plan notes them before the runs
+    and checks them after (its step 5.6). Pass per probe: `verified`; `refuted` is a fail that is
+    the answer the probe exists for, `unresolved` or a run that did not finish is blocked. Record:
+    per run its exit code and `probes:` line, each `BLOCKING` line up to its colon, every box,
+    the verdicts; the answers files `capabilities\remodel-<version>.yaml` and the logs stay in
+    their folders under `<handover folder>\probes` and travel with it.
 
 ## 4. After the sitting, on the development machine
 
@@ -301,4 +343,8 @@ from the dump folder and the big assembly's run folder. 008 T105 replays each ru
 009 T085 restores each through `GET /reviews/{run_id}`; the answers move into 011 research R4,
 010 `research.md`, 008 research R5 and `docs/llm-efficiency-options.md`, 006 research R4 and 009
 research R5. If T066 and T077 passed, the development machine sets each switch in a commit of its
-own, editing the one pin test the task names, and 011 T095 goes into the next handover.
+own, editing the one pin test the task names, and 011 T095 goes into the next handover. For
+feature 004: `swreview remodel plan` runs over each P folder's `package.json` for T003, counts
+only, into `specs/004-resilient-remodeler/phase0-decision.md` section 4; the three answers files
+of step 21 give T033 to T039 their verdicts, recorded as quickstart Scenario 4 says; step 19's
+record ticks T142. A refuted blocking probe goes to the owner.
