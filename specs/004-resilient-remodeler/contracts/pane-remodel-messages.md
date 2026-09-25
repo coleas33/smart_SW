@@ -88,8 +88,18 @@ and Start refuses the plan by name.**
 - The order of `remodel.start`'s refusals is `RunNotFound`, `RunInProgress`, `CopyDiscarded`,
   `ResumeRefused`, `SessionLost`, `RemodelUnavailable`, `NotAttached`. A run that can never be
   resumed says so first; a lost session comes before the seat check, because while the service
-  is restarting the seat reads as still being checked, and telling the engineer to wait would
-  only lead to `SessionLost` on the next press.
+  is restarting the seat reads as still being checked, and a Start the host answered with a wait
+  would only lead to `SessionLost` on the next press. *Amended 2026-09-25 on review:* that order
+  decides only a Start that reaches the host mid-restart - one the page sent before the
+  availability refresh reached it. It is not what the engineer usually sees. A re-attach reaches
+  the page first as that refresh (`ToolServiceGate.Stop` publishes no service, and
+  `RemodelHost.RefreshAvailability` posts `available` unknown with
+  `RemodelHost.SeatCheckingMessage`); the page then disables Start, shows that wait itself and
+  sends nothing, and once the new service is attached Start is pressable again and is answered
+  `SessionLost`. So the engineer is asked to wait, by the page, and then told the plan is lost:
+  safe, since nothing is changed, but the page learns of the loss only when Start is pressed.
+  Telling the engineer at the re-attach itself would need the host to push it, which decision
+  22A does not do. `RemodelPageContractTests` pins that sequence.
 - The refusal is answered before `remodel.started`, before any pipeline, backend or bridge call,
   and writes nothing: not `plan.json`, not the copy, not the run folder, not the engineer's file.
   The run stays readable through `remodel.result`, `report.open`, `folder.open` and
@@ -174,4 +184,9 @@ Two buttons and what they must say. **Open copy** activates the copy in SOLIDWOR
   plan, a restart in flight and a re-attach that lands during the plan. `ToolServiceWiringTests`
   pins what `ToolServiceGate.Attachment` answers across starts, re-attaches, spellings, drawings,
   a busy bridge and a restart in flight, and `RemodelPageContractTests` that the host's sentence
-  reaches the banner verbatim and names the button the engineer presses.
+  reaches the banner verbatim and names the button the engineer presses. *Added 2026-09-25 on
+  review:* `RemodelPageContractTests` also pins what a re-attach after the plan shows on the page
+  (the wait, then `SessionLost` on the next Start), and `ToolServiceWiringTests` that the add-in
+  builds `RemodelHostOptions` in one place and reads `ToolServiceAttachment` off its gate per
+  call - the one production line without which every Start is `SessionLost`, since the option's
+  default is none.

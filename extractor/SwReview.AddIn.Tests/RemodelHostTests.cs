@@ -1304,9 +1304,12 @@ public sealed class RemodelHostTests
 
     /// <summary>
     /// Mid-restart the gate answers no attachment and the seat reads as still being checked.
-    /// The session is already gone - whatever attaches next is a new dispatcher - so the
-    /// engineer is told that now, rather than asked to wait for an attachment that will refuse
-    /// the plan on the next press.
+    /// The session is already gone - whatever attaches next is a new dispatcher - so a Start
+    /// that reaches the host then is told so, rather than asked to wait for an attachment that
+    /// will refuse the plan on the next press. Such a Start is one the page sent before the
+    /// availability refresh reached it: the page itself holds Start while the seat reads as
+    /// being checked, so the engineer's usual sequence is the wait and then `SessionLost`
+    /// (<c>RemodelPageContractTests</c>, the review of 2026-09-25).
     /// </summary>
     [Fact]
     public void AStartWhileTheToolServiceIsRestartingIsSessionLostRatherThanAWait()

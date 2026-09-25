@@ -760,6 +760,76 @@ public sealed class RemodelPageContractTests
             });
     }
 
+    /// <summary>
+    /// Decision 22A as the engineer sees it (the review of 2026-09-25). A re-attach after the plan
+    /// reaches the page first as the host's availability refresh - `ToolServiceGate.Stop` publishes
+    /// no service, so `RemodelHost.RefreshAvailability` posts `available` unknown with
+    /// <see cref="RemodelHost.SeatCheckingMessage"/> - and the page itself disables Start, shows the
+    /// wait and sends nothing. Once the new service is attached, Start is pressable again and the
+    /// host answers it `SessionLost`, which the page prints verbatim. The host's order, `SessionLost`
+    /// before the seat check, does not show here: it decides only a Start that reaches the host
+    /// while the service is still restarting, which `RemodelHostTests` pins.
+    /// </summary>
+    [Fact]
+    public void AReattachAfterThePlanShowsTheWaitFirstAndTheNextStartIsRefusedAsSessionLost()
+    {
+        HostStub? stub = null;
+        bool? startDisabledWhileAttaching = null;
+        string? bannerWhileAttaching = null;
+        int? startsWhileAttaching = null;
+        bool? startDisabledOnceAttached = null;
+        string? bannerAfterStart = null;
+
+        object Document(bool? available, string? message) => new
+        {
+            path = @"C:\\vault\\bracket.sldprt",
+            configuration = "Default",
+            kind = "part",
+            remodel = new { available, message },
+        };
+
+        OffscreenReviewPage.WithPage(
+            RemodelPageFiles.PageUrl,
+            page =>
+            {
+                stub = new HostStub(
+                    page, remodelAvailable: true, startRefusal: ("SessionLost", RemodelHost.SessionLostMessage));
+            },
+            async page =>
+            {
+                await Settled(page);
+                await page.ExecuteScriptAsync("document.getElementById('plan-run').click()");
+                await Settled(page);
+
+                stub!.Post("document.changed", Document(null, RemodelHost.SeatCheckingMessage));
+                await Settled(page);
+                startDisabledWhileAttaching = await Disabled(page, "start-run");
+                bannerWhileAttaching = await Banner(page);
+                await page.ExecuteScriptAsync("document.getElementById('start-run').click()");
+                await Settled(page);
+                startsWhileAttaching = stub.Starts;
+
+                stub.Post("document.changed", Document(true, null));
+                await Settled(page);
+                startDisabledOnceAttached = await Disabled(page, "start-run");
+                await page.ExecuteScriptAsync("document.getElementById('start-run').click()");
+                await Settled(page);
+                bannerAfterStart = await Banner(page);
+            });
+
+        Assert.True(startDisabledWhileAttaching);
+        Assert.Equal(RemodelHost.SeatCheckingMessage, bannerWhileAttaching);
+        Assert.Equal(0, startsWhileAttaching);
+        Assert.False(startDisabledOnceAttached);
+        Assert.Equal(RemodelHost.SessionLostMessage, bannerAfterStart);
+        Assert.Equal(1, stub!.Starts);
+    }
+
+    /// <summary>The banner's text, read off the live page.</summary>
+    private static async Task<string?> Banner(CoreWebView2 page) =>
+        JsonDocument.Parse(await page.ExecuteScriptAsync(
+            "document.getElementById('banner').textContent")).RootElement.GetString();
+
     /// <summary>Whether a button is disabled, read off the live page.</summary>
     private static async Task<bool> Disabled(CoreWebView2 page, string elementId)
     {
