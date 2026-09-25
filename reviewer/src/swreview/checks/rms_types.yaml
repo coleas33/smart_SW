@@ -59,6 +59,17 @@ default_group_by_class:
 # census on the seat confirms or removes it. Neither may be tolerated or classified.
 derived_base: [MirrorStock, Stock]
 tolerated_loose: [OriginProfileFeature, MateGroup, HistoryFolder, SensorFolder, DetailCabinet, CommentFolder, FavoriteFolder, SolidBodyFolder, SurfaceBodyFolder, DocsFolder, MaterialFolder, EnvFolder, LightFolder, EqnFolder, RefPlane, OriginPoint, CoordSys, CommentsFolder, SelectionSetFolder, InkMarkupFolder]
+# System rows feature 004's planner never groups, moves or describes (decision 17A, 2026-09-25),
+# from the census of three real ModelCheck dumps on 2024 SP5: the annotation folders and view
+# under the annotations container, the scene's lights, a derived part's body and reference
+# folders, and the cosmetic thread annotation. The planner had counted them as content of unknown
+# class and filed them unclassified. The planner reads the table through `planner_view()`, which
+# tolerates these as well; feature 003's checker does not read this key, because its verdicts on
+# the recorded runs of feature 008's replays count these rows, and whether it should stop is the
+# owner's decision (tasks.md T145). Only types seen on a real dump are listed; `calibrated_version`
+# stays until the seat census (T137). Disjoint from every class, the ambiguous set,
+# `tolerated_loose` and `derived_base`.
+remodel_not_content: [NotesAreaFtrFolder, AnnotationViewFeat, AmbientLight, DirectionLight, FeatSolidBodyFolder, FeatSurfaceBodyFolder, RefAxisFtrFolder, RefPlaneFtrFolder, ProfileFtrFolder, RefPointFtrFolder, CosmeticThread]
 default_names_excluded: ["Front Plane", "Top Plane", "Right Plane", "Origin"]
 # swConstrainedStatus_e (2024 SP5 and 2026 SP1.1 agree): 1 swUnknownConstraint,
 # 2 swUnderConstrained, 3 swFullyConstrained, 4 swOverConstrained, 5 swNoSolution,

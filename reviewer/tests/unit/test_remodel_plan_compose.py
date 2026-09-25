@@ -255,6 +255,26 @@ def test_an_unclassified_type_is_unresolved_terminal_and_never_moved() -> None:
     ]
 
 
+def test_the_system_rows_of_the_real_packages_are_not_content_and_never_rebuilt() -> None:
+    """T144 (decision 17A): a light, an annotation folder and a cosmetic thread listed at the
+    top of the tree - where no owner carries them - are not content to the planner and are
+    never filed `unclassified`, while a type nobody knows still is."""
+    plan = planned(
+        [
+            sketch_feature("Sketch1"),
+            feature("Ambient", "AmbientLight"),
+            feature("Notes", "NotesAreaFtrFolder"),
+            feature("Thread1", "CosmeticThread"),
+            feature("Deform1", UNKNOWN_TYPE_NAME),
+        ]
+    )
+    states = {item.name: item.state for item in plan.targets}
+    rebuilt = {entry.name for entry in plan.rebuild}
+
+    assert states["Ambient"] == states["Notes"] == states["Thread1"] == "not_content"
+    assert rebuilt == {"Deform1"}
+
+
 def test_the_achievable_order_holds_every_content_feature_and_counts_its_moves() -> None:
     plan = planned(out_of_order())
 

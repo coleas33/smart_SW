@@ -635,6 +635,154 @@ def test_a_table_that_is_not_a_mapping_is_refused(tmp_path: Path) -> None:
         load_table(path)
 
 
+# --- the census of the real packages (feature 004 T144, decision 17A) ---------------------
+
+CENSUS_2026_09_25: tuple[str, ...] = (
+    "AmbientLight",
+    "AnnotationViewFeat",
+    "Chamfer",
+    "CommentsFolder",
+    "CosmeticThread",
+    "DetailCabinet",
+    "DirectionLight",
+    "DocsFolder",
+    "EnvFolder",
+    "EqnFolder",
+    "Extrusion",
+    "FavoriteFolder",
+    "FeatSolidBodyFolder",
+    "FeatSurfaceBodyFolder",
+    "Fillet",
+    "FtrFolder",
+    "HistoryFolder",
+    "HoleWzd",
+    "ICE",
+    "InkMarkupFolder",
+    "MaterialFolder",
+    "MirrorStock",
+    "NotesAreaFtrFolder",
+    "OriginProfileFeature",
+    "ProfileFeature",
+    "ProfileFtrFolder",
+    "RefAxis",
+    "RefAxisFtrFolder",
+    "RefPlane",
+    "RefPlaneFtrFolder",
+    "RefPointFtrFolder",
+    "SelectionSetFolder",
+    "SensorFolder",
+    "SolidBodyFolder",
+    "SurfaceBodyFolder",
+)
+"""Every `GetTypeName2` value the three real single-part ModelCheck packages carry (2024 SP5,
+counted 2026-09-25). SOLIDWORKS type names only: API vocabulary, not anything of the parts."""
+
+SYSTEM_TYPES_ADDED_2026_09_25: tuple[str, ...] = (
+    "NotesAreaFtrFolder",
+    "AnnotationViewFeat",
+    "AmbientLight",
+    "DirectionLight",
+    "FeatSolidBodyFolder",
+    "FeatSurfaceBodyFolder",
+    "RefAxisFtrFolder",
+    "RefPlaneFtrFolder",
+    "ProfileFtrFolder",
+    "RefPointFtrFolder",
+    "CosmeticThread",
+)
+"""The census names the table did not carry and the planner filed `unclassified`: the
+annotation folder and view under the annotations container, the scene's lights, a derived
+part's body and reference folders, and the cosmetic thread annotation. They are the planner's
+`remodel_not_content`; feature 003's rules still count them (T145)."""
+
+
+def test_the_census_is_thirty_five_distinct_names() -> None:
+    assert len(set(CENSUS_2026_09_25)) == len(CENSUS_2026_09_25) == 35
+
+
+@pytest.mark.parametrize("type_name", CENSUS_2026_09_25)
+def test_no_type_the_real_packages_carry_is_left_unplaced(
+    table: RmsTypeTable, type_name: str
+) -> None:
+    """Each census name is in a class, the ambiguous set, `tolerated_loose`, the folder type
+    or the derived-base set; none is a content type nobody recognised."""
+    placed = (
+        table.classify(type_name) != "unknown"
+        or type_name in table.tolerated_loose
+        or type_name in table.remodel_not_content
+        or type_name == table.folder_type
+        or type_name in table.derived_base
+    )
+
+    assert placed, f"{type_name} is on a real package and nowhere in the table"
+
+
+@pytest.mark.parametrize("type_name", SYSTEM_TYPES_ADDED_2026_09_25)
+def test_the_system_types_the_real_packages_carry_are_not_content_to_the_planner(
+    table: RmsTypeTable, type_name: str
+) -> None:
+    row = build_feature(type_name=type_name, name=f"{type_name}1")
+
+    assert type_name in table.remodel_not_content
+    assert not table.planner_view().is_content(row)
+    assert table.classify(type_name) == "unknown"
+
+
+@pytest.mark.parametrize("type_name", SYSTEM_TYPES_ADDED_2026_09_25)
+def test_feature_003s_rules_still_count_them_until_the_owner_decides(
+    table: RmsTypeTable, type_name: str
+) -> None:
+    """`tolerated_loose` is feature 003's key too, and the recorded runs feature 008 replays
+    grade these rows as content; moving that is an owner decision, so the checker's reading
+    is pinned unchanged here and the planner's alone moves."""
+    row = build_feature(type_name=type_name, name=f"{type_name}1")
+
+    assert type_name not in table.tolerated_loose
+    assert table.is_content(row)
+
+
+def test_the_planner_view_tolerates_the_planners_system_types_and_changes_nothing_else(
+    table: RmsTypeTable,
+) -> None:
+    view = table.planner_view()
+
+    assert view.tolerated_loose == table.tolerated_loose | table.remodel_not_content
+    assert view.remodel_not_content == frozenset()
+    assert view.planner_view() == view
+    for name in ("version", "calibrated_version", "groups", "classes", "ambiguous",
+                 "default_group_by_class", "derived_base", "default_names_excluded",
+                 "constrained_status_map", "assembly"):
+        assert getattr(view, name) == getattr(table, name), name
+
+
+def test_the_planners_system_types_are_disjoint_from_every_other_answer(
+    table: RmsTypeTable,
+) -> None:
+    classified = table.ambiguous.union(*table.classes.values())
+
+    assert not table.remodel_not_content & table.tolerated_loose
+    assert not table.remodel_not_content & table.derived_base
+    assert not table.remodel_not_content & classified
+
+
+@pytest.mark.parametrize(
+    ("key", "name"),
+    [("tolerated_loose", "AmbientLight"), ("derived_base", "AmbientLight")],
+)
+def test_a_table_that_answers_for_a_planner_system_type_twice_is_refused(
+    tmp_path: Path, document: dict[str, Any], key: str, name: str
+) -> None:
+    document = dict(document, **{key: [*document[key], name]})
+
+    with pytest.raises(ValueError, match="remodel_not_content|derived_base"):
+        load_table(_write(tmp_path, document))
+
+
+def test_the_census_adds_no_type_the_real_packages_do_not_carry() -> None:
+    """The table grows from readings, not from a list of names someone expects."""
+    assert set(SYSTEM_TYPES_ADDED_2026_09_25) <= set(CENSUS_2026_09_25)
+
+
 # --- the derived base (feature 004 T146, decision 17A) ------------------------------------
 
 
