@@ -104,7 +104,8 @@ recorded; neither lost nor not replayable),
 recorded `rms.*` finding whose key, less the drawing locations that name only rows the current
 type table does not count as content, equals a requested-pass finding nothing else matched, one
 to one; neither lost nor added; `contracts/replay.md` section 5). `subject` is the printable form
-of `finding_subject_key` minus the check.
+of `finding_subject_key` minus the check (since owner decision 25A, each location with its
+`persist_ref`, `contracts/replay.md` section 7).
 
 ## 3. The scripted provider (`agent/providers/fake.py`, test-facing)
 
@@ -118,7 +119,7 @@ of `finding_subject_key` minus the check.
 | Name | Definition |
 |---|---|
 | `ENTITY_ID` | `re.compile(r"^[a-z]{3,4}:[0-9]{4,}$")` |
-| `finding_subject_key(finding)` | `(check, tuple(sorted(component_ids)), tuple(sorted((document_id, sheet, view, annotation, page) for each drawing location)), tuple(sorted(s for s in inputs if ENTITY_ID.match(s))), configuration)`; ignores `id`, `tool_result_ids`, `capture_ids` and every `persist_ref` |
+| `finding_subject_key(finding)` | `(check, tuple(sorted(component_ids)), tuple(sorted((document_id, sheet, view, annotation, page, persist_ref) for each drawing location)), tuple(sorted(s for s in inputs if ENTITY_ID.match(s))), configuration)`, sorted with `None` last; ignores `id`, `tool_result_ids` and `capture_ids`. *Amended 2026-09-25 (owner decision 25A, T128):* each location keeps its `persist_ref` (`None` where it has none), which the key ignored before; compared only between a recording and its replay or its fixture, never across two dumps (research R2.8) |
 
 ## 5. The tokenizer (`tokens.py`)
 

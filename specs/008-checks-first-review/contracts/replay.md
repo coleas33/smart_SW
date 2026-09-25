@@ -243,6 +243,34 @@ locations' references equal to those of the current finding it takes - is the ow
 T128, not decided. On the three recordings every narrowed finding's current finding carries the
 same references (20, 2 and 1 of 20, 2 and 1), so no figure depends on the answer.
 
+*Amended 2026-09-25 (owner decision 25A; T128 decided): exact references.* This replaces the
+paragraph above. A key's drawing location is `(document_id, sheet, view, annotation, page,
+persist_ref)` (data-model section 4, research R2.8), so both comparisons hold each location's
+exact reference:
+
+- The exact comparison: a recorded finding whose subject was swapped for another - one location
+  naming another reference, in the same scope, at the same count - is **lost**, and the
+  requested pass's finding is **added**; the exit is 1.
+- Narrowing: the remaining locations must be exactly the current finding's, reference by
+  reference. A finding that lost only system subjects and also had a content subject swapped is
+  lost, never narrowed. Narrowing stays exactly as strict about subjects as the exact comparison,
+  now both by reference.
+- A key's locations are a multiset: the same locations in another order are the same finding, and
+  a reference two locations name - real packages list one sketch twice, both rows carrying its
+  reference - counts twice, so a recorded finding naming it once more or less than the current
+  finding is lost.
+- A location without a reference, and a finding with no location at all, are keyed as before.
+- A reference several rows share names all of them, so which of them a location meant is not
+  compared (R2.8 says where the recordings have such rows).
+
+The references are safe to compare because the replay plays the recording's own package and
+arguments, never a re-dump, and the generator carries each recorded reference into the fixture's
+through the function that scrambled the package's (section 8; R2.8, kind by kind). Measured before
+the code with the tightened key: the three recordings replayed as recorded lose none and narrow
+20, 2 and 1, 106, 10 and 5 locations removed, as before; the three fixtures lose and narrow none.
+`test_finding_subject_key.py`, `test_replay_narrowed.py` and `test_replay_generator_narrowed.py`
+pin it.
+
 ## 6. The regrouped estimate (from User Story 4)
 
 Printed beside the strict figure whenever a rule applies, with its assumption: "the model does
@@ -302,7 +330,10 @@ slimming, history pruning after N rounds`; a round holding a `stored` call is fl
 contacts, M narrowed by the type table`, and after the reclassified lines each narrowed finding
 has one, `narrowed: <check> - <subject> (<k> locations removed)` (`1 location removed`), its
 subject the recorded finding's, as every other list's is. `findings.narrowed` is always present,
-empty when nothing narrowed.
+empty when nothing narrowed. *Amended 2026-09-25 (owner decision 25A):* a subject prints each
+location as `at <document_id>`, then `sheet`, `view`, `annotation`, `page` and `persist_ref`, each
+with its value where it has one, so the lost line and the added line of a swapped subject differ
+in the reference, as the findings do (section 5).
 
 `--json` prints exactly the `ReplayReport` model and nothing else:
 
@@ -454,6 +485,18 @@ package, its narrowed key carried into the fixture's names by the map the rest o
 through (`scrambled_key`), and matched one to one, in recorded order, to a fixture finding nothing
 else matched. The generator prints how many it narrowed beside how many it reclassified. A
 recorded key still missing after narrowing, or a new key, still refuses.
+
+*Amended 2026-09-25 (owner decision 25A): references carried by the map.* A key's locations now
+carry their references (section 5), and the fixture's references are the recorded ones scrambled -
+the names and paths inside them replaced, every other byte kept. `scrambled_key` carries each
+location's reference through `FictionalMap.persist_ref`, the function `FictionalMap.package`
+scrambled the package's references with, beside the document id, sheet, view and annotation it
+already carried through `FictionalMap.value`; so a recorded finding and the fixture finding the
+current code makes on the scrambled package compare exactly, reference by reference, narrowed or
+not. The recorded arguments are scrambled as text (`FictionalMap.arguments`), not as references:
+none of the three recordings passes a reference as an argument, and a finding whose reference came
+from one would be compared through two different scrambles, which can refuse the fixture but never
+pass a mismatch.
 
 The 5% bar for a result of 5,000 tokens or more compares each call's result on the fixture with
 the same call's result on the raw recorded package, as the current code returns it (the play
