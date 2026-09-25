@@ -617,8 +617,13 @@ $startup = (Get-ItemProperty "HKCU:\Software\SolidWorks\AddInsStartup\$id" -Erro
 ```
 
 It prints one line: `installed True` when FeatureWorks's program is registered on this machine,
-`listed as an add-in True` when SOLIDWORKS offers it in Tools > Add-ins, and `start-up flag 1`
-when it is set to load at every start for this Windows account (`0` not, `none` never set).
+`listed as an add-in True` when FeatureWorks is under one of the two keys the block reads,
+`HKLM\SOFTWARE\SolidWorks\AddIns` and `HKLM\SOFTWARE\SolidWorks\SOLIDWORKS 20*\AddIns`, where most
+add-ins register, and `start-up flag 1` when it is set to load at every start for this Windows
+account (`0` not, `none` never set). `listed as an add-in False` does not mean Tools > Add-ins
+lacks FeatureWorks: SOLIDWORKS's own add-ins need not be under those keys (on the development
+machine's SOLIDWORKS 2024 SP5, FeatureWorks is installed and under neither), so the dialog is the
+answer.
 
 Then in SOLIDWORKS, Tools > Add-ins: find **FeatureWorks** in the list and note whether its two
 boxes are ticked, **Active** (loaded now) and **Start Up** (loaded at every start). **Change no

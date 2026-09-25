@@ -1243,6 +1243,26 @@ def test_the_featureworks_block_prints_its_one_line_on_any_machine(
     )
 
 
+def test_the_featureworks_line_does_not_stand_in_for_the_dialog(plan: str) -> None:
+    """`listed as an add-in` reads only the two `AddIns` keys the block names, and SOLIDWORKS's own
+    add-ins need not be under either: on the development machine's SOLIDWORKS 2024 SP5, the seat's
+    version, FeatureWorks's id resolves to its program and is under neither key, and the account's
+    start-up flags name two more of SOLIDWORKS's own add-ins that are under neither. So `False` is
+    not an absence from Tools > Add-ins; step 1.7 says so, names the keys it read, and leaves the
+    answer to the dialog (004 T164, the review of 2026-09-25)."""
+    record = re.sub(r"\s+", " ", step(plan, "1.7"))
+    [block] = POWERSHELL_BLOCK.findall(step(plan, "1.7"))
+    [keys] = re.findall(r"\$listed = @\(Get-Item ('[^)]*') -ErrorAction", block)
+    read = re.findall(r"'HKLM:\\([^']+)'", keys)
+
+    assert read == ["SOFTWARE\\SolidWorks\\AddIns", "SOFTWARE\\SolidWorks\\SOLIDWORKS 20*\\AddIns"]
+    for key in read:
+        assert f"`HKLM\\{key}`" in record, key
+    assert "`listed as an add-in True` when SOLIDWORKS offers it" not in record
+    assert "`listed as an add-in False` does not mean Tools > Add-ins lacks FeatureWorks" in record
+    assert "so the dialog is the answer" in record
+
+
 def test_the_seat_plan_names_decision_17as_tasks_where_they_meet_the_sitting(plan: str) -> None:
     """Decision 17A's tasks landed on main the same day as 18A's seat plan and meet the sitting in
     four places, where the plan and the handover name them by id. FeatureWorks ships with every
