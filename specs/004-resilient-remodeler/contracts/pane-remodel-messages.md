@@ -99,7 +99,10 @@ and Start refuses the plan by name.**
   `SessionLost`. So the engineer is asked to wait, by the page, and then told the plan is lost:
   safe, since nothing is changed, but the page learns of the loss only when Start is pressed.
   Telling the engineer at the re-attach itself would need the host to push it, which decision
-  22A does not do. `RemodelPageContractTests` pins that sequence.
+  22A does not do. `RemodelPageContractTests` pins that sequence. *Amended 2026-09-25 (owner,
+  decision 24A):* the host is to push it (`remodel.plan_lost`, below, once 004 T170 lands), so
+  this sequence becomes what a page sees only when that notice has not reached it, and
+  `SessionLost` stays the backstop.
 - The refusal is answered before `remodel.started`, before any pipeline, backend or bridge call,
   and writes nothing: not `plan.json`, not the copy, not the run folder, not the engineer's file.
   The run stays readable through `remodel.result`, `report.open`, `folder.open` and
@@ -120,6 +123,53 @@ and Start refuses the plan by name.**
   whose attachment is gone has no session anywhere, and a close sent through the new attachment
   would close the session of the plan made there. A copy the dead session left open in
   SOLIDWORKS is 004 T167's.
+
+### The page is told when a plan is lost (decision 24A)
+
+*Added 2026-09-25 (owner, decision 24A; 004 T170).* Decision 22A refuses Start for a plan whose
+tool-service attachment is gone, and the page learned of it only at the next Start. **The host
+now tells the page as soon as it sees the plan lost, before the engineer presses anything.** Not
+yet in effect: 004 T170 implements it, and until then the page learns of the loss only at Start.
+
+- **What is told.** `remodel.plan_lost {run_dir, message}`, unsolicited. `run_dir` is the plan's
+  folder as `remodel.planned` named it. `message` is `RemodelHost.PlanLostMessage`, in the plain
+  words `SessionLostMessage` keeps - no command, no path, none of the build's plumbing - saying
+  that nothing was changed and naming the button the page offers, Plan again, by its label. The
+  page prints it verbatim: the Remodel page reads no words file, so the host is its words source.
+- **Which plan.** The plan on screen: the host's latest run - the one `init.latest_run` and the
+  last `remodel.planned` named - while it is planned and waiting for Start: not started, not
+  finished, its copy not discarded. No plan held, nothing told.
+- **When it is lost.** By Start's own predicate: the attachment the plan was made on is not the
+  one listening now - another one, or none while a restart is in flight. The attachment decides,
+  never the document: a re-attach back to the same document is lost, because the attachment
+  identity changed; a configuration switch and the same document spelt differently re-attach
+  nothing and tell nothing.
+- **When the host asks.** On every tool-service attach and detach. The add-in's gate calls
+  `RemodelHost.RefreshAvailability` each time it withdraws a service (before the old one is
+  closed) and each time a new one listens, so a re-attach is seen at the withdrawal, while the
+  page is still showing the seat-checking wait. And once more when a plan releases the host,
+  because nothing is told while a plan or a run holds it: a re-attach that lands during a plan
+  (22A's race) is told when the plan ends - about the plan just recorded, lost on arrival, or, if
+  that plan was refused, about the plan still on screen. A run holds the tool service
+  (`RunInProgress` is part of the gate's busy question), so no re-attach should land under one; a
+  refresh during a run tells nothing, and a finished run is not a plan waiting for Start.
+- **Once per plan.** A re-attach is two refreshes, the withdrawal and the new service, and two
+  re-attaches in a row are four; the page is told once per plan. A plan made on the new
+  attachment is told about when it, in turn, is lost.
+- **What the page does.** It shows the line in a notice of its own above the run header, apart
+  from the banner: the seat-checking wait and its clearing go through the banner and must not
+  take the notice with them. It disables Start for that plan and sends no `remodel.start` for it,
+  clears the run status line's "Press Start", which is no longer true, and offers **Plan again**,
+  the plan button's action (`remodel.plan`) under the notice's own label, pressable whenever the
+  plan button is. A notice naming a folder the page is not showing changes nothing. The page keeps
+  the notice by folder, so the plan Plan again makes - a new folder - is startable, and a refused
+  Plan again leaves the notice where it was. The notice's rules use `web/shared/tokens.css` and
+  its text goes through `web/shared/dom.js`.
+- **What it changes.** Nothing but the page. The notice writes nothing to the run folder, the copy
+  or the engineer's file, and the run stays readable through `remodel.result`, `report.open`,
+  `folder.open`, `remodel.open_copy` and `remodel.discard_copy`. `remodel.start` is unchanged:
+  `SessionLost` stays the backstop, for a Start that reaches the host before the notice reaches
+  the page.
 
 ## Host to page (unsolicited)
 
