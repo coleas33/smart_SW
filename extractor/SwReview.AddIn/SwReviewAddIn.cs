@@ -785,6 +785,11 @@ public class SwReviewAddIn : ISwAddin
             CurrentDocument = CurrentDocument,
             RemodelAvailability = () => _toolService?.RemodelCapability
                 ?? RemodelAvailability.Unknown,
+
+            // Decision 22A: which attachment is listening, read through the field per call like
+            // the capability above. A plan records it and Start refuses a run whose attachment
+            // has changed, because the plan's bridge session did not survive the re-attach.
+            ToolServiceAttachment = () => _toolService?.Attachment,
             Pipeline = new BackendRemodelPipeline(
                 endpoint,
                 () => _toolService?.RemodelBridge,

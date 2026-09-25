@@ -65,11 +65,13 @@ public sealed class RemodelRun
 {
     private int _stop;
 
-    internal RemodelRun(string runDirectory, string copyPath, DateTime at)
+    internal RemodelRun(
+        string runDirectory, string copyPath, DateTime at, string? toolServiceAttachment)
     {
         RunDirectory = runDirectory ?? throw new ArgumentNullException(nameof(runDirectory));
         CopyPath = copyPath ?? throw new ArgumentNullException(nameof(copyPath));
         At = at;
+        ToolServiceAttachment = toolServiceAttachment;
         RunId = System.IO.Path.GetFileName(runDirectory.TrimEnd(
             System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
     }
@@ -84,6 +86,14 @@ public sealed class RemodelRun
 
     /// <summary>When the run was planned, as `init.latest_run.at` carries it.</summary>
     public DateTime At { get; }
+
+    /// <summary>
+    /// The tool-service attachment this run's plan was made on, or null when none was
+    /// listening (decision 22A). The bridge session that holds the copy lives and dies with
+    /// that attachment, so `remodel.start` refuses the run as `SessionLost` unless it is the
+    /// attachment listening now. Set once, at the plan, and never moved to a later attachment.
+    /// </summary>
+    public string? ToolServiceAttachment { get; }
 
     public RemodelRunPhase Phase { get; internal set; } = RemodelRunPhase.Planned;
 
