@@ -65,8 +65,12 @@ framing noise of the recorded growth), and the recorded growth otherwise.
 recording's (through the same map) - less each recorded `interference.static` finding that a
 contact of the fixture reclassifies, by the replay's own rule (`reclassifying_contacts` over
 `judged_group`, imported, never copied; owner decision 3A of 2026-09-23), since feature 010's
-code records a touching group as a contact - every result of 5,000 tokens or more is within
-5% of its recorded size, no identifying token of the recording - three characters or more with a
+code records a touching group as a contact, and with each recorded `rms.*` finding the current
+type table narrowed matched to the fixture finding it narrows onto, one to one, by the replay's
+own comparison (`compare_finding_keys`, imported; owner decision 23A of 2026-09-25) - every
+result of 5,000 tokens or more on the raw recorded package, as the current code returns it, is
+within 5% of the same call's result on the fixture (the bar measures the scramble, not a change
+to the code), no identifying token of the recording - three characters or more with a
 letter, or five digits or more - remains in any string of the three files or inside a
 persistent reference, no word of three letters or more of a recorded property key or value
 remains in the fixture's property keys and values unless the example profile names it, and
@@ -87,10 +91,9 @@ import json
 import shutil
 import sys
 import tempfile
-from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 FIXTURE_ROOT = Path(__file__).resolve().parent
 REVIEWER = FIXTURE_ROOT.parents[2]
@@ -134,6 +137,7 @@ from swreview.benchmark.recording import (  # noqa: E402
 from swreview.benchmark.replay import (  # noqa: E402
     JudgedGroup,
     PlayedRound,
+    compare_finding_keys,
     estimated_sizes,
     judged_group,
     play_review,
@@ -346,13 +350,16 @@ def original_sizes(
     rows: list[dict[str, Any]],
     live: RecordedCall | None,
     scratch: Path,
-) -> dict[int, tuple[int, str]]:
-    """Each recorded call's result size in tokens, by call index, with how it was measured.
+) -> tuple[dict[int, tuple[int, str]], dict[int, int]]:
+    """Each recorded call's original size in tokens, by call index, with how it was measured;
+    and the current code's result on the raw recorded package, by call index.
 
     The original package is played as recorded - no rows persisted, the live call answered
     with the rows - and a call counts as reproduced when its status and summary match the
     recording (ids compared as ids, the replay's own `same_summary`) and its size sits within
     the framing noise of the recorded growth. Every other call is sized from the recorded growth.
+    The first mapping starts each round's usage adjustment; the second is what the size bar
+    measures the fixture against (`size_problems`, owner decision 23A), for every call alike.
     """
     played = play_review(
         recording.package_path.parent,
@@ -366,9 +373,11 @@ def original_sizes(
     if len(calls) != len(recorded):
         raise SystemExit(f"the original replay made {len(calls)} calls; recorded {len(recorded)}")
     sizes: dict[int, tuple[int, str]] = {}
+    current: dict[int, int] = {}
     reproduced: dict[int, int] = {}
     for index, (mine, theirs) in enumerate(zip(calls, recorded, strict=True)):
         size = count_tokens(mine.text)
+        current[index] = size
         growth = recording.growth_after(round_of(recording, theirs.step))
         close = growth is None or abs(size + FRAMING_TOKENS - growth) <= FRAMING_NOISE
         single = len(round_of(recording, theirs.step).calls) == 1
@@ -387,7 +396,7 @@ def original_sizes(
         }
         size, lower_bound = estimated_sizes(recording, recorded_round, known)[theirs.step]
         sizes[index] = (size, "lower bound" if lower_bound else "estimated")
-    return sizes
+    return sizes, current
 
 
 def bridge_options(live: RecordedCall | None, rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -439,10 +448,20 @@ def scrambled_key(fmap: FictionalMap, key: SubjectKey) -> SubjectKey:
     )
 
 
+class FindingCheck(NamedTuple):
+    """What the finding check found: why the fixture must not be written, and how many recorded
+    findings a contact reclassified and the type table narrowed."""
+
+    problems: list[str]
+    reclassified: int
+    narrowed: int
+
+
 def finding_problems(
     recording: Recording, written: Recording, fmap: FictionalMap
-) -> tuple[list[str], int]:
-    """Why the fixture's findings are not the recording's, and how many it reclassified.
+) -> FindingCheck:
+    """Why the fixture's findings are not the recording's, and how many it reclassified and
+    narrowed.
 
     The recording's finding keys, through the map, must be the fixture's as a multiset - after
     taking out every recorded finding a contact of the fixture reclassifies (decision 3A,
@@ -450,6 +469,13 @@ def finding_problems(
     `interference.static` finding whose group, carried into the fixture's names
     (`fixture_group`), is a contact's group and configuration. Since feature 010 the current
     code records a touching group as a contact, where the recorded review wrote a finding.
+
+    The keys are compared by the replay's own comparison, imported (owner decision 23A,
+    `contracts/replay.md` sections 5 and 8): a recorded `rms.*` finding no fixture finding
+    matches is narrowed over the recorded package - its locations that name only rows the
+    current type table does not count as content removed - and its narrowed key, carried into
+    the fixture's names by the map the rest of its key goes through, takes one fixture finding
+    nothing else matched. A recorded key still missing, or a new key, refuses.
     """
     contacts = reclassifying_contacts(
         [
@@ -458,19 +484,52 @@ def finding_problems(
         ],
         written.session.contacts,
     )
-    expected = Counter(
-        scrambled_key(fmap, finding_subject_key(item.finding))
-        for item, contact in zip(recording.findings, contacts, strict=True)
-        if contact is None
+    comparison = compare_finding_keys(
+        [
+            item.finding
+            for item, contact in zip(recording.findings, contacts, strict=True)
+            if contact is None
+        ],
+        (finding_subject_key(item.finding) for item in written.findings),
+        recording.package_path,
+        named=lambda key: scrambled_key(fmap, key),
     )
-    actual = Counter(finding_subject_key(item.finding) for item in written.findings)
     problems: list[str] = []
-    if expected != actual:
+    if comparison.lost or comparison.added:
         problems.append(
-            f"the finding keys differ: {sum((expected - actual).values())} recorded keys are "
-            f"missing and {sum((actual - expected).values())} are new"
+            f"the finding keys differ: {len(comparison.lost)} recorded keys are missing and "
+            f"{sum(comparison.added.values())} are new"
         )
-    return problems, sum(1 for contact in contacts if contact is not None)
+    return FindingCheck(
+        problems=problems,
+        reclassified=sum(1 for contact in contacts if contact is not None),
+        narrowed=len(comparison.narrowed),
+    )
+
+
+def size_problems(current: Mapping[int, int], fixture_sizes: Mapping[int, int]) -> list[str]:
+    """Every call whose result the scramble moved beyond the bar, in call order.
+
+    `current` is each call's result on the raw recorded package as the current code returns it
+    (`original_sizes`), `fixture_sizes` the same call's result on the fixture. A result of
+    `LARGE_RESULT_TOKENS` or more on the raw package must be within `LARGE_RESULT_TOLERANCE` of
+    it on the fixture. The recorded size is deliberately not an argument: the bar exists to
+    catch the fictional names distorting a result, not a change to what the code returns
+    (owner decision 23A, `contracts/replay.md` section 8).
+    """
+    problems: list[str] = []
+    for index, size in sorted(current.items()):
+        if size < LARGE_RESULT_TOKENS:
+            continue
+        mine = fixture_sizes.get(index)
+        if mine is None:
+            problems.append(f"call {index} was not played on the fixture")
+        elif abs(mine - size) > LARGE_RESULT_TOLERANCE * size:
+            problems.append(
+                f"call {index} is {mine} tokens on the fixture against {size} on the recorded "
+                "package, beyond 5%"
+            )
+    return problems
 
 
 def documents_of(folder: Path, name: str) -> list[Any]:
@@ -534,14 +593,14 @@ def self_check(
     raw_package: Mapping[str, Any],
     fixture: Path,
     fmap: FictionalMap,
-    sizes: Mapping[int, tuple[int, str]],
+    current_sizes: Mapping[int, int],
     fixture_sizes: Mapping[int, int],
     recorded_folders: set[str],
     public: frozenset[str],
     generic_property_words: set[str],
-) -> tuple[list[str], int]:
+) -> FindingCheck:
     """Why the fixture must not be written - empty when it may - and how many recorded
-    findings its contacts reclassified (`finding_problems`).
+    findings its contacts reclassified and the type table narrowed (`finding_problems`).
 
     `generic_property_words` are generic words made strict only by a property key or value.
     Outside the package the reviewer writes them in its own sentences (`not`, `and`), and the
@@ -549,20 +608,14 @@ def self_check(
     were recorded - the property keys and values (`surviving_property_words`) - rather than
     by the leak check.
     """
-    problems, reclassified = finding_problems(recording, read_recording(fixture), fmap)
-    for index, (size, how) in sorted(sizes.items()):
-        if size < LARGE_RESULT_TOKENS:
-            continue
-        mine = fixture_sizes[index]
-        if abs(mine - size) > LARGE_RESULT_TOLERANCE * size:
-            problems.append(
-                f"call {index} is {mine} tokens against {size} recorded ({how}), beyond 5%"
-            )
+    found = finding_problems(recording, read_recording(fixture), fmap)
+    problems = list(found.problems)
+    problems += size_problems(current_sizes, fixture_sizes)
     denied = {token for token in fmap.replaced if identifying(token)} - generic_property_words
     problems += leaks(fixture, denied)
     problems += surviving_property_words(raw_package, fixture, public)
     problems += recorded_folders_found(fixture, recorded_folders)
-    return problems, reclassified
+    return found._replace(problems=problems)
 
 
 # --- the run ---------------------------------------------------------------------------------
@@ -636,7 +689,7 @@ def generate(recorded_dir: Path, name: str, groups: int | None) -> int:
 
     with tempfile.TemporaryDirectory(prefix="swreview-fixture-") as scratch_name:
         scratch = Path(scratch_name)
-        sizes = original_sizes(recording, rows, live, scratch)
+        sizes, current_sizes = original_sizes(recording, rows, live, scratch)
         package_dir = scratch / "package"
         package_dir.mkdir()
         (package_dir / PACKAGE_FILE_NAME).write_text(
@@ -660,19 +713,19 @@ def generate(recorded_dir: Path, name: str, groups: int | None) -> int:
             model=recording.session.model,
             **bridge_options(live, rows),
         )
-        problems, reclassified = self_check(
+        checked = self_check(
             recording,
             raw,
             out,
             fmap,
-            sizes,
+            current_sizes,
             fixture_sizes,
             recorded_folders,
             public,
             {word for word in property_words - name_words if is_allowed_token(word)},
         )
-        if problems:
-            for problem in problems:
+        if checked.problems:
+            for problem in checked.problems:
                 print(f"refused: {problem}", file=sys.stderr)
             return 1
         target = FIXTURE_ROOT / name
@@ -692,7 +745,8 @@ def generate(recorded_dir: Path, name: str, groups: int | None) -> int:
     estimated = sum(1 for _, how in sizes.values() if how != "reproduced")
     print(
         f"wrote {target}: {len(sizes)} calls ({estimated} sized from the recorded growth), "
-        f"{len(recording.findings)} findings ({reclassified} reclassified as contacts); the "
+        f"{len(recording.findings)} findings ({checked.reclassified} reclassified as contacts, "
+        f"{checked.narrowed} narrowed by the type table); the "
         f"denylist holds {len(entries)} tokens and {len(folders)} folder names"
     )
     return 0

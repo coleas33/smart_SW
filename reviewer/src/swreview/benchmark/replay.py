@@ -30,7 +30,7 @@ import re
 import shutil
 import tempfile
 from collections import Counter
-from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
@@ -65,14 +65,18 @@ from swreview.agent.settings import (
 from swreview.benchmark.recording import (
     UNCOMMITTED_ENDS,
     RecordedCall,
+    RecordedFinding,
     RecordedRound,
     RecordedTurn,
     Recording,
     read_recording,
 )
 from swreview.checks.interference import CHECK as INTERFERENCE_CHECK
+from swreview.checks.rms_types import RmsTypeTable, load_table
+from swreview.exceptions import RMS_CHECK_PREFIX
 from swreview.findings import Finding, SubjectKey, finding_subject_key
 from swreview.ir.loader import PACKAGE_FILE_NAME
+from swreview.ir.models import EvidencePackage
 from swreview.prerun import ALREADY_RUN
 from swreview.report.session import Contact, ReviewSession
 from swreview.tokens import TOKENIZER_NAME, count_tokens, encoding
@@ -92,6 +96,10 @@ __all__ = [
     "REGROUPED_ASSUMPTION",
     "CallClass",
     "JudgedGroup",
+    "KeyComparison",
+    "NarrowedFinding",
+    "NarrowedKey",
+    "PersistLocation",
     "PlayedCall",
     "PlayedReview",
     "PlayedRound",
@@ -109,8 +117,11 @@ __all__ = [
     "ReplayTotals",
     "TurnKind",
     "TurnPlan",
+    "compare_finding_keys",
     "estimated_sizes",
     "judged_group",
+    "narrowed_key",
+    "not_content_locations",
     "play_review",
     "reclassifying_contacts",
     "render_replay_lines",
@@ -656,6 +667,15 @@ class ReclassifiedFinding(ReplayFinding):
     """The requested pass's contact whose group key and configuration matched."""
 
 
+class NarrowedFinding(ReplayFinding):
+    """A recorded `rms.*` finding the current type table narrowed (owner decision 23A)."""
+
+    step: int | None
+    removed_locations: int
+    """Its drawing locations taken out before its key matched: each named only rows the
+    current type table does not count as content (`narrowed_key`)."""
+
+
 class ReplayFindings(ReplayModel):
     recorded: int
     replayed: int
@@ -666,6 +686,11 @@ class ReplayFindings(ReplayModel):
     """Recorded `interference.static` findings whose group key and configuration equal a
     contact the requested pass recorded: touching groups, contacts by design since feature
     010 (its `contracts/contacts.md` section 6). Neither lost nor not replayable."""
+    narrowed: list[NarrowedFinding] = Field(default_factory=list)
+    """Recorded `rms.*` findings whose key, less the drawing locations that name only rows the
+    current type table does not count as content, equals a requested-pass finding nothing else
+    matched, one to one (`compare_finding_keys`; `contracts/replay.md` section 5, owner
+    decision 23A). Neither lost nor added."""
 
 
 RegroupRule = Literal["R", "M"]
@@ -1592,6 +1617,129 @@ def reclassifying_contacts(
     return matched
 
 
+PersistLocation = tuple[str, str]
+"""`(scope, persist_ref)`: where a drawing location of an RMS subject resolves - its
+`document_id`, the subject row's `persist_ref_scope` - and what a feature row carries."""
+
+
+def not_content_locations(
+    package: EvidencePackage, table: RmsTypeTable
+) -> frozenset[PersistLocation]:
+    """Every `(scope, persist_ref)` of `package`'s feature rows that names only rows `table`
+    does not count as content (`RmsTypeTable.is_content`: folders and end tags included).
+
+    "Only" (owner decision 23A): real packages share one reference between system folders, so a
+    reference any content row also carries is left out, and a reference no feature row carries
+    - a mate's, a component's - is never in the set.
+    """
+    any_content: dict[PersistLocation, bool] = {}
+    for row in package.features:
+        location = (row.persist_ref_scope, row.persist_ref)
+        any_content[location] = any_content.get(location, False) or table.is_content(row)
+    return frozenset(location for location, content in any_content.items() if not content)
+
+
+@dataclass(frozen=True)
+class NarrowedKey:
+    """A recorded finding's key less the locations the current type table narrowed away."""
+
+    key: SubjectKey
+    removed_locations: int
+
+
+def narrowed_key(
+    finding: Finding, not_content: Collection[PersistLocation]
+) -> NarrowedKey | None:
+    """`finding`'s key with each drawing location in `not_content` removed, or `None`.
+
+    `None` for a finding of another family than `rms.*` - the type table decides only the RMS
+    rules' subjects - and for one that loses no location. A location with no persistent
+    reference is never removed.
+    """
+    if not finding.check.startswith(RMS_CHECK_PREFIX):
+        return None
+    kept = [
+        location
+        for location in finding.drawing_locations
+        if location.persist_ref is None
+        or (location.document_id, location.persist_ref) not in not_content
+    ]
+    removed = len(finding.drawing_locations) - len(kept)
+    if removed == 0:
+        return None
+    return NarrowedKey(
+        key=finding_subject_key(finding.model_copy(update={"drawing_locations": kept})),
+        removed_locations=removed,
+    )
+
+
+@dataclass(frozen=True)
+class KeyComparison:
+    """Recorded findings against current ones, narrowing included (`compare_finding_keys`)."""
+
+    lost: tuple[int, ...]
+    """Positions, among the recorded findings compared, of those nothing matched."""
+    narrowed: tuple[tuple[int, int], ...]
+    """`(position, locations removed)` of each narrowed recorded finding, in recorded order."""
+    added: Counter[SubjectKey]
+    """The current keys no recorded key - compared or uncompared - and no narrowed key took."""
+
+
+def _as_recorded(key: SubjectKey) -> SubjectKey:
+    return key
+
+
+def compare_finding_keys(
+    findings: Sequence[Finding],
+    current: Iterable[SubjectKey],
+    package_path: Path,
+    *,
+    named: Callable[[SubjectKey], SubjectKey] = _as_recorded,
+    uncompared: Iterable[SubjectKey] = (),
+) -> KeyComparison:
+    """Compare recorded `findings` with the `current` keys, one to one (owner decision 23A).
+
+    `contracts/replay.md` section 5. Each recorded finding, in order, takes one current finding
+    of its key while any remains, so of several with one key the later ones are unmatched.
+    Then each unmatched `rms.*` finding is narrowed (`narrowed_key`) over the recorded package
+    at `package_path`, under the type table the current code ships, and takes one current
+    finding **nothing else matched** - no recorded key, compared or `uncompared` - whose key
+    equals its narrowed key, one to one in recorded order. What is still unmatched is lost.
+
+    `named` carries a recorded key, narrowed or not, into the current side's names: the replay
+    compares as recorded, the fixture generator carries it into the fixture's. `uncompared`
+    holds the keys of recorded findings that are never lost but that a current finding may
+    still equal - the replay's not-replayable and reclassified ones - so neither is added.
+    The package is read only when an `rms.*` finding is unmatched: nothing else can narrow.
+    """
+    keys = [named(finding_subject_key(finding)) for finding in findings]
+    current_keys = Counter(current)
+    pool = Counter(current_keys)
+    unmatched: list[int] = []
+    for position, key in enumerate(keys):
+        if pool[key] > 0:
+            pool[key] -= 1
+        else:
+            unmatched.append(position)
+    added = current_keys - (Counter(keys) + Counter(named(key) for key in uncompared))
+    not_content: frozenset[PersistLocation] = frozenset()
+    if any(findings[position].check.startswith(RMS_CHECK_PREFIX) for position in unmatched):
+        package = EvidencePackage.model_validate_json(package_path.read_bytes())
+        not_content = not_content_locations(package, load_table())
+    lost: list[int] = []
+    narrowed: list[tuple[int, int]] = []
+    for position in unmatched:
+        candidate = narrowed_key(findings[position], not_content)
+        if candidate is not None:
+            target = named(candidate.key)
+            if added[target] > 0:
+                added[target] -= 1
+                narrowed.append((position, candidate.removed_locations))
+                continue
+        lost.append(position)
+    return KeyComparison(lost=tuple(lost), narrowed=tuple(narrowed), added=+added)
+
+
 def _findings(
     recording: Recording,
     classes: Sequence[_Classified],
@@ -1605,7 +1753,8 @@ def _findings(
     is more than "not replayable" can. Each contact reclassifies one recorded finding, so the
     comparison stays a multiset. A finding of a step the requested pass answered from checks
     is compared against the whole requested session - the pre-run wrote it there - even
-    when pass A had to estimate the step, and a missing one is lost.
+    when pass A had to estimate the step, and a missing one is lost unless the current type
+    table narrowed it (`compare_finding_keys`, owner decision 23A).
     """
     by_step = {item.recorded.step: item for item in classes}
     contacts = reclassifying_contacts(
@@ -1613,12 +1762,12 @@ def _findings(
     )
     reclassified: list[ReclassifiedFinding] = []
     not_replayable: list[NotReplayableFinding] = []
-    replayable: Counter[SubjectKey] = Counter()
-    recorded_all: Counter[SubjectKey] = Counter()
+    replayable: list[RecordedFinding] = []
+    uncompared: list[SubjectKey] = []
     for item, contact in zip(recording.findings, contacts, strict=True):
         key = finding_subject_key(item.finding)
-        recorded_all[key] += 1
         if contact is not None:
+            uncompared.append(key)
             reclassified.append(
                 ReclassifiedFinding(
                     check=item.finding.check,
@@ -1635,6 +1784,7 @@ def _findings(
             and step_class.class_ in ("estimated", "stored")
             and step_class.index not in answered
         ):
+            uncompared.append(key)
             not_replayable.append(
                 NotReplayableFinding(
                     check=item.finding.check,
@@ -1644,15 +1794,31 @@ def _findings(
                 )
             )
         else:
-            replayable[key] += 1
-    replayed = Counter(finding_subject_key(finding) for finding in second.session.findings)
+            replayable.append(item)
+    comparison = compare_finding_keys(
+        [item.finding for item in replayable],
+        (finding_subject_key(finding) for finding in second.session.findings),
+        recording.package_path,
+        uncompared=uncompared,
+    )
+    narrowed = [
+        NarrowedFinding(
+            check=replayable[position].finding.check,
+            subject=subject_of(finding_subject_key(replayable[position].finding)),
+            step=replayable[position].step,
+            removed_locations=removed,
+        )
+        for position, removed in comparison.narrowed
+    ]
+    lost = Counter(finding_subject_key(replayable[p].finding) for p in comparison.lost)
     return ReplayFindings(
         recorded=len(recording.findings),
         replayed=len(second.session.findings),
-        lost=_listed(replayable - replayed),
-        added=_listed(replayed - recorded_all),
+        lost=_listed(lost),
+        added=_listed(comparison.added),
         not_replayable=not_replayable,
         reclassified=reclassified,
+        narrowed=narrowed,
     )
 
 
@@ -1732,7 +1898,8 @@ def render_replay_lines(report: ReplayReport) -> list[str]:
         f"findings: {findings.recorded} recorded, {findings.replayed} replayed, "
         f"{len(findings.lost)} lost, {len(findings.added)} added, "
         f"{len(findings.not_replayable)} not replayable offline, "
-        f"{len(findings.reclassified)} reclassified as contacts"
+        f"{len(findings.reclassified)} reclassified as contacts, "
+        f"{len(findings.narrowed)} narrowed by the type table"
     )
     lines += [f"  lost: {item.check} - {item.subject}" for item in findings.lost]
     lines += [f"  added: {item.check} - {item.subject}" for item in findings.added]
@@ -1743,5 +1910,10 @@ def render_replay_lines(report: ReplayReport) -> list[str]:
     lines += [
         f"  reclassified: {item.check} - {item.subject} (contact {item.contact_id})"
         for item in findings.reclassified
+    ]
+    lines += [
+        f"  narrowed: {item.check} - {item.subject} ({item.removed_locations} "
+        f"location{'' if item.removed_locations == 1 else 's'} removed)"
+        for item in findings.narrowed
     ]
     return lines

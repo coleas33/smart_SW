@@ -114,11 +114,14 @@ now it reclassifies 0, 0 and 0 (`no_recorded_finding_lost`) and these are pinned
 
 def no_recorded_finding_lost(findings: ReplayFindings) -> None:
     """Every recorded finding replayed: none lost, none behind a call the replay could not
-    run, and none reclassified - the fixtures already record their touching groups as the
-    contacts the current code judges them."""
+    run, none reclassified - the fixtures already record their touching groups as the
+    contacts the current code judges them - and none narrowed: the fixtures record what the
+    current type table counts as content (owner decision 23A; the narrowed outcome is for a
+    recording the table changed under, and the generator applies it when it regenerates)."""
     assert findings.lost == []
     assert findings.not_replayable == []
     assert findings.reclassified == []
+    assert findings.narrowed == []
 
 
 def contact_groups(session: ReviewSession) -> Counter[tuple[str, str]]:
