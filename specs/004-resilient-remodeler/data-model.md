@@ -607,7 +607,10 @@ and the cosmetic thread - which the planner counted as content and filed `unclas
 planner reads the table through `RmsTypeTable.planner_view()`, which tolerates them; feature 003's
 checker does not read the key and keeps counting those rows, because its verdicts over the runs
 feature 008's replays recorded count them, and whether it should stop is the owner's decision.
-No golden moves.
+No golden moves. *Decided 2026-09-25 (owner, decision 20A), not yet in effect:* the checker stops
+counting them too, the eleven move into `tolerated_loose`, and this key and `planner_view()` go;
+that lands with feature 003's T090 to T092, which wait on the owner's question 20A-Q1, and this
+section is amended with them (T145). Until then the key stands as described.
 
 ```yaml
 # The planner's target group per feature class (feature 004). The checker grades what is;
