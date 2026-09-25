@@ -178,6 +178,8 @@ public class RemodelGuardTests
         // Feature 011 (T003): the generated table, parsed - 600-odd names that a hand copy here
         // would only let drift from the table the guard is generated with.
         .Concat(DrawingFamilyDenylistTests.ExpectedMembers)
+        // Decision 17A (feature 004 T150): the FeatureWorks and import-repair table, parsed.
+        .Concat(ImportRepairDenylistTests.ExpectedMembers)
         .ToArray();
 
     /// <summary><see cref="ReadOnlyGuard.DeniedPrefixes"/> as this allowlist was written against it.</summary>

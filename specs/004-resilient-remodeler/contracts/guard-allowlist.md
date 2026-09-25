@@ -18,10 +18,11 @@ this file enumerates. It is also exactly the workload that finds a denylist's ga
 `FeatureRevolve2`, `InsertMirrorFeature2`, `InsertPart3`, `SetSuppression2` and `IModelDoc2.Save`
 wide open.
 
-**004 adds nothing to `ReadOnlyGuard`.** The four narrowing denials
+**Stage 1 adds nothing to `ReadOnlyGuard`.** The four narrowing denials
 (`IFeature.SetSuppression2` exempted under `SuppressTestGuard`,
 `ISldWorks.SetUserPreferenceToggle`, `IModelDoc2.EditUndo2`, `IModelDoc2.SetSaveFlag`) are feature
-003's, and narrowing is not widening.
+003's, and narrowing is not widening. The owner's decision 17A (2026-09-25) narrows it once more,
+for 004: the FeatureWorks and import-repair members of the table below, and nothing is removed.
 
 ### Denials added after stage 1
 
@@ -144,6 +145,52 @@ Interfaces of the 28 with no writer on this interop: `IGeneralTableFeature`, `IT
 member `RemodelGuard` refuses itself (the "Not denied" table says which names were left allowed and
 why), so the five overriding keys and `RemodelGuard.ExcludedMembers` answer exactly as before, and
 the reads beside them stay allowed (`DrawingFamilyReadAuditTests`).
+
+**Decision 17A (feature 004, 2026-09-25): FeatureWorks and import repair.** The denylist let the
+members that recognize features on an imported body and build them into the part, and the
+writers that repair an imported body, through a read-only gate as bare names:
+`RecognizeFeatureAutomatic`, `CreateFeatures` and `ImportDiagnosis` all passed. They are refused
+now, bare or interface-qualified, by `ReadOnlyGuard` and therefore by every gate built on it. Every
+name was reflected on the 2024 SP5 interop (`SolidWorks.Interop.sldworks` and
+`SolidWorks.Interop.fworks` 32.5.0.48, metadata only). The product calls none of them - no
+string literal of the product source is one, which `ImportRepairDenylistTests` checks with the
+scan `DrawingFamilyReadAuditTests` runs - and no gate's exemption names one: not the suppress-test
+gate's two, not `RemodelProbeGuard`'s throwaway-part recipe (`FeatureExtrusion3`, `FeatureCut4`,
+`InsertFeatureChamfer`, `InsertFeatureShell`, `InsertFeatureTreeFolder2`, `ForceRebuild3`, `SaveAs3`,
+`SetSuppression2` and the two toggles), not the twenty stage-1 keys, not `DrawingOpenGuard`'s. This
+table is the membership: `ImportRepairDenylistTests` (in `GuardTests.cs`) parses it,
+`RemodelGuardTests.ExpectedDeniedMembers` reads it from there, and where the interop is installed
+every member is checked to exist on the interface named and every method of `IFeatureWorksApp` is
+checked to be on this table or the next.
+
+| Member (decision 17A) | What it writes |
+|---|---|
+| `IFeatureWorksApp.RecognizeFeatureAutomatic` | recognizes features on an imported body and builds them into the part's tree |
+| `IFeatureWorksApp.RecognizeFeatureInteractive` | the same, one feature type at a time |
+| `IFeatureWorksApp.CreateFeatures` | builds the recognized features into the part's tree |
+| `IFeatureWorksApp.SetAdvancedOptions`, `IFeatureWorksApp.SetPerformanceOptions` | the add-in's recognition options, a setting that outlives the session |
+| `IPartDoc.ImportDiagnosis` | Import Diagnostics: closes gaps and removes or repairs the faces of an imported body in place |
+| `IPartDoc.ImportDiagnosisGapCloser` | moves a gap's vertices on an imported body |
+| `IHealEdgesFeatureData.HealEdges` | heals the short edges of an imported body's faces |
+| `IPartDoc.InsertImportedFeature` | inserts a file as an imported body feature; the `InsertFeature` prefix does not reach it |
+| `IFeature.SetImportedFeatureParameters` | rewrites an imported feature's parameters |
+| `IFeature.SetImportedFileName` | relinks an imported feature to another file |
+
+Left open deliberately, each with its reason:
+
+| Left open (decision 17A) | Why |
+|---|---|
+| `IFeatureWorksApp.BubbleTipCallback`, `IFeatureWorksApp.HelpErrCallback` | FeatureWorks' tooltip and help callbacks: they show help and write nothing to a document or a setting |
+| `IBody2.Diagnose` | a check that returns the gaps it found as a `DiagnoseResult`, whose members are all reads |
+| `ISimpleFilletFeatureData2.RepairMissingReferences` | a feature-data edit that takes effect only through `ModifyDefinition`, which is denied; a fillet repair, not an import repair |
+| `IDocumentSpecification.set_AutoRepair`, `IDocumentSpecification.set_CriticalDataRepair` | options of an open request, set as plain properties rather than through the gate, exactly as `Silent` and `LoadModel` are; the product sets neither |
+| `FeatureFillet*`, `FeatureRevolve*`, `InsertMirrorFeature*`, `InsertPart*`, `MirrorPart*` and the rest of the creation family | an owner decision: a complete denial needs a table generated from the interop as feature 011's was, not a hand list, and closing `FeatureFillet*` needs a `RemodelProbeGuard` exemption for the throwaway part's fillet, which passes today only because nothing denies it. Every write call site of the re-modeler is interface-qualified, and `RemodelGuard` refuses any qualified key off its allowlist, so a creation member cannot reach a remodel write |
+
+**None of them widens this allowlist either.** No member of the table is the bare name of a
+stage-1 key or of `RemodelGuard.ExcludedMembers`, so the five overriding keys answer as before, and
+the reads beside them (`GetImportedFileName`, `GetImportedFeatureParameters`, `GetImportFileData`,
+`Diagnose`, `GetGapsCount`) stay allowed. A denial is a narrowing, so none of this is a
+constitution exception.
 
 004 makes exactly one **visibility-only** change to that file: `DeniedMembers` and
 `DeniedPrefixes` become `public static readonly IReadOnlyCollection<string>` instead of
