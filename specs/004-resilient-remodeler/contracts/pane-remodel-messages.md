@@ -32,7 +32,7 @@ byte-identical CSP meta tag, the `textContent`-only rule for every untrusted str
 | `remodel.stop` | `{}` | Set the stop flag. The executor finishes the change in flight, inverts it if it failed, finalizes the artifacts, and reports the run as `truncated`. Reply `remodel.stopped {changes_applied}` |
 | `remodel.result` | `{run_dir}` | Reply `{changes[], grade_before, grade_after, geometry, rebuild_list[], attestation, state}`, read from the run folder rather than from memory, so the tab answers after a restart |
 | `remodel.open_copy` | `{run_dir}` | Activate the copy, re-opening it if it was closed; reply `ok`. The copy lives **only** in the run folder; it leaves through a Save As the engineer performs in SOLIDWORKS |
-| `remodel.discard_copy` | `{run_dir}` | `CloseDoc` without saving, delete `copy/`, and **keep every other artifact**; reply `ok {kept: [...]}`  |
+| `remodel.discard_copy` | `{run_dir}` | `CloseDoc` without saving, delete `copy/`, and **keep every other artifact**; reply `ok {kept: [...]}`. The close goes only through the attachment the run's plan was made on; when that attachment is gone the close is skipped and the rest is unchanged (decision 22A, T168, below)  |
 | `remodel.show_change` | `{run_dir, change_seq}` | Resolve that change's persist ref through feature 003's `FeatureSelection` and the existing `SwEntityResolver`; reply `entity.shown {ok, state_code, message, full_path \| null}`, deliberately the identical payload `entity.show` already returns, so one resolver serves three tabs |
 | `report.open` / `folder.open` / `log.open` | `{run_dir}` / `{run_dir}` / `{}` | Delegated to `PaneActions`. The path is resolved from the host's own run record, canonicalized, and must be a descendant of `run_root` (or the log folder) before it reaches `ShellExecute`; anything else is answered `error` |
 
@@ -103,6 +103,13 @@ and Start refuses the plan by name.**
   earlier plan.
 - The page prints the host's sentence verbatim in its banner, like every other refusal; the
   Remodel page reads no words file.
+- *Added 2026-09-25 (decision 22A, found while implementing T160; T168).* `remodel.close` names no
+  run: the bridge closes whatever session its dispatcher holds. So `remodel.discard_copy` asks the
+  pipeline to close the copy only when the run's attachment is the one listening now - the same
+  predicate as Start's - and otherwise deletes `copy/` and writes `discarded` without it. A run
+  whose attachment is gone has no session anywhere, and a close sent through the new attachment
+  would close the session of the plan made there. A copy the dead session left open in
+  SOLIDWORKS is 004 T167's.
 
 ## Host to page (unsolicited)
 
