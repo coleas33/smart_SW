@@ -131,6 +131,8 @@ specs/004-resilient-remodeler/
 ```text
 reviewer/src/swreview/
 ├── remodel/__init__.py
+├── remodel/nodes.py           # one node per feature position: second listings merged, carried
+│                              #   sub-features folded into their owner (decision 17A, 2026-09-25)
 ├── remodel/target.py          # row -> Resolved | NeedsJudgement | NotContent; reads default_group_by_class
 ├── remodel/rank.py            # (group_index, intra_rank, original_index) from the rules part.py grades
 ├── remodel/order.py           # Kahn with a rank-keyed priority queue, then LIS -> minimal edit script
