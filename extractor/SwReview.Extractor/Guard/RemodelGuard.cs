@@ -10,9 +10,12 @@ namespace SwReview.Extractor.Guard;
 /// <see cref="ReadOnlyGuard"/> is a denylist because the reviewer's read surface is unbounded
 /// and grows every phase. The re-modeler is the inverse: its write surface is the closed set
 /// of twenty keys in <see cref="AllowedKeys"/>, and it is exactly the workload that finds a
-/// denylist's gaps - the read-only list blocks <c>InsertFeatureTreeFolder2</c> through its
+/// denylist's gaps - the read-only list blocked <c>InsertFeatureTreeFolder2</c> through its
 /// <c>InsertFeature</c> prefix while leaving <c>FeatureFillet3</c>, <c>FeatureRevolve2</c>,
-/// <c>InsertPart3</c> and <c>SetSuppression2</c>'s neighbours wide open.
+/// <c>InsertPart3</c> and <c>SetSuppression2</c>'s neighbours wide open. Decision 21A
+/// (2026-09-25) closed that creation family in <see cref="ReadOnlyGuard"/>, but a denylist still
+/// cannot enumerate a write surface: <c>IFeatureManager.MoveToFolder</c> and <c>IModelDoc2.Save</c>
+/// pass it as bare names.
 ///
 /// Three answers, in this order:
 ///   1. a key on <see cref="AllowedKeys"/>, matched <b>ordinally</b> so a mis-spelling fails
@@ -103,8 +106,9 @@ public sealed class RemodelGuard : ICallGuard
     ///
     /// Everything else in that exclusion table is already refused: by <see cref="ReadOnlyGuard"/>
     /// for a bare name (<c>SaveAs3</c>, <c>SetSaveFlag</c>, <c>EditRebuild3</c>,
-    /// <c>ModifyDefinition</c>, the suppression members, <c>SetSystemValue*</c> and the
-    /// <c>FeatureCut*</c> / <c>FeatureExtrusion*</c> / <c>InsertFeature*</c> families), and by
+    /// <c>ModifyDefinition</c>, the suppression members, <c>SetSystemValue*</c>, the
+    /// <c>FeatureCut*</c> / <c>FeatureExtrusion*</c> / <c>InsertFeature*</c> families and, since
+    /// decision 21A, the rest of the creation family), and by
     /// rule 3 above for any interface-qualified key that is not on the allowlist -
     /// <c>IModelDoc2.EditDelete</c>, <c>IDimension.set_Name</c>, <c>IEntity.Delete2</c> and
     /// the rest of the creation family among them.

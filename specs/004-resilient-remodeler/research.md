@@ -711,8 +711,7 @@ own literals and asserts that no other gate exempts any of them.
 **Not in scope, recorded for the owner.** The other writers of the four interfaces are not creation
 and are not closed by this decision; the reflection run found saves (`IModelDoc2.Save`, `SaveAs`,
 `SaveSilent` and their siblings, `IPartDoc.SaveToFile*`) and rebuilds (`IModelDoc2.Rebuild`,
-`IModelDocExtension.Rebuild` and `EditRebuildAll`, `IPartDoc.ForceRebuild` and `EditRebuild`) that
-pass a read-only gate as bare names, and creation on other interfaces (`ISketchManager`,
+`IModelDocExtension.Rebuild` and `EditRebuildAll`) that pass a read-only gate as bare names, and creation on other interfaces (`ISketchManager`,
 `IAssemblyDoc`) is outside the four. `contracts/guard-allowlist.md` names them.
 
 ---

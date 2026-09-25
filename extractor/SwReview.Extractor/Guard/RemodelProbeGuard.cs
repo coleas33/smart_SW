@@ -13,41 +13,64 @@ namespace SwReview.Extractor.Guard;
 ///
 /// Written as an exemption over the read-only guard, exactly as <see cref="SuppressTestGuard"/>
 /// is: the probe's mutation surface is small and closed (one throwaway part, in the run
-/// folder, never the engineer's document), so the exemption list is short, and everything
+/// folder, never the engineer's document), so the exemption lists are short, and everything
 /// <see cref="ReadOnlyGuard"/> already refuses for another reason - <c>Save3</c>,
-/// <c>EditDelete</c>, <c>SetSuppression2</c>, every other <c>FeatureExtrusion*</c>/
-/// <c>FeatureCut*</c>/<c>InsertFeature*</c> variant this probe never calls - stays refused.
+/// <c>EditDelete</c>, every other <c>FeatureExtrusion*</c>/<c>FeatureCut*</c>/<c>InsertFeature*</c>
+/// variant and every other member of the creation family this probe never calls - stays refused.
 ///
-/// <c>FeatureFillet3</c> needs no entry here: it is not on <see cref="ReadOnlyGuard"/>'s
-/// denylist or denied-prefix list at all, so it already passes underneath this guard exactly
-/// as it does under a plain <see cref="ReadOnlyGuard"/>. It is exercised through
-/// <see cref="Sw.SwGate.Call{T}"/> regardless, for the same audit-trail reason every other
-/// interop call in the product is.
+/// Decision 21A (feature 004, 2026-09-25) closed the creation family in <see cref="ReadOnlyGuard"/>,
+/// so the throwaway part's own creation members are gathered in one named set,
+/// <see cref="ThrowawayPartCreationMembers"/>, and <c>ThrowawayPartExemptionTests</c> ties it to the
+/// probe's scope: it is exactly the creation members <c>SwRemodelProbeHost</c> gates that
+/// <see cref="ReadOnlyGuard"/> refuses, no other gate the product builds exempts any of them, and
+/// this guard is built in exactly one place, <c>probe remodel</c>'s gate. Every member is still
+/// exercised through <see cref="Sw.SwGate.Call{T}"/>, for the audit trail every other interop call
+/// in the product leaves.
 /// </summary>
 public sealed class RemodelProbeGuard : ICallGuard
 {
     /// <summary>
-    /// The whole exemption set: one member per recipe step
-    /// (<see cref="RemodelProbePartRecipe.Default"/>) that <see cref="ReadOnlyGuard"/> would
-    /// otherwise refuse, plus the two run-scoped system settings <see cref="RemodelSystemToggles"/>
-    /// sets and restores in a <c>finally</c> around the whole probe run.
+    /// The creation members the throwaway part is built with (<see cref="RemodelProbePartRecipe.Default"/>
+    /// and PROBE-8's analytic solids), matched as the bare names <c>SwRemodelProbeHost</c> gates them
+    /// under, so an interface-qualified spelling of any of them is still refused. Each one is refused
+    /// by <see cref="ReadOnlyGuard"/>; the comment says by what.
     /// </summary>
-    private static readonly HashSet<string> ExemptMembers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> ThrowawayPartCreationMemberSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        // The box: IFeatureManager.FeatureExtrusion3 (denied by the FeatureExtrusion* prefix).
+        // The box, and PROBE-8's box and cylinder: IFeatureManager.FeatureExtrusion3 (the
+        // FeatureExtrusion* prefix).
         "FeatureExtrusion3",
 
-        // The cut: IFeatureManager.FeatureCut4 (denied by the FeatureCut* prefix).
+        // The cut: IFeatureManager.FeatureCut4 (the FeatureCut* prefix).
         "FeatureCut4",
 
+        // The fillet: IFeatureManager.FeatureFillet3 (decision 21A's generated table).
+        "FeatureFillet3",
+
         // The chamfer and the shell: IFeatureManager.InsertFeatureChamfer and
-        // IModelDoc2.InsertFeatureShell (both denied by the InsertFeature* prefix).
+        // IModelDoc2.InsertFeatureShell (both the InsertFeature* prefix).
         "InsertFeatureChamfer",
         "InsertFeatureShell",
 
-        // The one folder: IFeatureManager.InsertFeatureTreeFolder2 (denied by the same prefix).
+        // The one folder: IFeatureManager.InsertFeatureTreeFolder2 (the same prefix).
         "InsertFeatureTreeFolder2",
 
+        // Opening and closing every profile sketch: ISketchManager.InsertSketch, refused because
+        // decision 21A denies the bare name IModelDoc2.InsertSketch shares with it.
+        "InsertSketch",
+
+        // PROBE-8's cylinder profile: ISketchManager.CreateCircleByRadius, refused because decision
+        // 21A denies the bare name IModelDoc2.CreateCircleByRadius shares with it.
+        "CreateCircleByRadius",
+    };
+
+    /// <summary>
+    /// The rest of the exemption: one rebuild per recipe step, the part's save into the run folder,
+    /// the run-scoped system settings <see cref="RemodelSystemToggles"/> sets and restores in a
+    /// <c>finally</c> around the whole probe run, and PROBE-9's one suppression.
+    /// </summary>
+    private static readonly HashSet<string> RunScopedMemberSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
         // Committing each step so the next one sees a rebuilt tree.
         "ForceRebuild3",
 
@@ -75,13 +98,22 @@ public sealed class RemodelProbeGuard : ICallGuard
         "SetSuppression2",
     };
 
+    /// <summary>
+    /// The throwaway part's creation members, for reading: the tests pin the set to the probe
+    /// host's own calls and assert that no other gate exempts any of them (decision 21A).
+    /// </summary>
+    public static readonly IReadOnlyCollection<string> ThrowawayPartCreationMembers = ThrowawayPartCreationMemberSet;
+
     /// <inheritdoc />
     public void Assert(string interopMemberName)
     {
-        if (!string.IsNullOrWhiteSpace(interopMemberName)
-            && ExemptMembers.Contains(interopMemberName.Trim()))
+        if (!string.IsNullOrWhiteSpace(interopMemberName))
         {
-            return;
+            string member = interopMemberName.Trim();
+            if (ThrowawayPartCreationMemberSet.Contains(member) || RunScopedMemberSet.Contains(member))
+            {
+                return;
+            }
         }
 
         // Everything else - including a missing member name - is the read-only guard's answer.

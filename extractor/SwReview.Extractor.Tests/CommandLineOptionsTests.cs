@@ -965,9 +965,9 @@ public class CommandLineOptionsTests
     public void RemodelProbe_BuildsItsGateWithTheRemodelProbeGuard()
     {
         // A separate guard from RemodelGuard on purpose: the probe builds a throwaway part and
-        // needs the feature-creation family RemodelGuard refuses outright
-        // (contracts/guard-allowlist.md), plus PROBE-9's one suppression exemption, and nothing
-        // else the read-only guard denies.
+        // needs the feature-creation members RemodelGuard refuses outright and ReadOnlyGuard
+        // refuses since decision 21A (contracts/guard-allowlist.md), plus PROBE-9's one
+        // suppression exemption, and nothing else the read-only guard denies.
         var observer = new RecordingGateObserver();
         SwGate gate = Program.RemodelProbeGate(observer);
 
@@ -981,8 +981,11 @@ public class CommandLineOptionsTests
         Assert.True(gate.Call(RemodelSystemToggles.ToggleMember, () => true));
         Assert.True(gate.Call(RemodelSystemToggles.CommandInProgressMember, () => true));
 
-        // FeatureFillet3 needs no exemption: it is not on ReadOnlyGuard's denylist at all.
+        // Decision 21A: the fillet, the profile sketches and PROBE-8's cylinder profile are refused
+        // by ReadOnlyGuard now, and exempted here for the throwaway part only.
         Assert.True(gate.Call("FeatureFillet3", () => true));
+        Assert.True(gate.Call("InsertSketch", () => true));
+        Assert.True(gate.Call("CreateCircleByRadius", () => true));
 
         // PROBE-9 (tasks.md T038): the only deterministic way to force a real rebuild error on
         // the throwaway part to inspect GetWhatsWrong's element kind.
@@ -993,8 +996,14 @@ public class CommandLineOptionsTests
         Assert.Throws<MutatingCallError>(() => gate.Call("ForceRebuildAll", () => true));
 
         // A FeatureExtrusion* variant this probe never calls stays refused: the exemption is
-        // an exact match on the calls the recipe actually makes, not a widened prefix.
+        // an exact match on the calls the recipe actually makes, not a widened prefix. So do the
+        // fillet's siblings and the rest of the creation family, and a qualified spelling of an
+        // exempted member.
         Assert.Throws<MutatingCallError>(() => gate.Call("FeatureExtrusion2", () => true));
+        Assert.Throws<MutatingCallError>(() => gate.Call("FeatureFillet2", () => true));
+        Assert.Throws<MutatingCallError>(() => gate.Call("FeatureRevolve2", () => true));
+        Assert.Throws<MutatingCallError>(() => gate.Call("InsertMirrorFeature2", () => true));
+        Assert.Throws<MutatingCallError>(() => gate.Call("IFeatureManager.FeatureFillet3", () => true));
     }
 
     // ---- --fasteners -------------------------------------------------------------

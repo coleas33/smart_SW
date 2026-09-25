@@ -261,10 +261,16 @@ public static partial class ReadOnlyGuard
     /// the set here. A static constructor runs after every static field initializer of both
     /// partial files, so the order the compiler takes the two files in cannot matter, and
     /// <see cref="DeniedMembers"/>, being the same set, reads them too.
+    ///
+    /// Decision 21A (feature 004, 2026-09-25): the generated creation-family denials
+    /// (<c>ReadOnlyGuard.Creation.cs</c>, the "Decision 21A" tables of the same contract) join the
+    /// set the same way, for the same reason. <see cref="RemodelProbeGuard"/> exempts the throwaway
+    /// part's own creation members; no other gate exempts any.
     /// </summary>
     static ReadOnlyGuard()
     {
         DeniedMemberSet.UnionWith(DrawingFamilyDeniedMembers);
+        DeniedMemberSet.UnionWith(CreationFamilyDeniedMembers);
     }
 
     /// <summary>Image extensions SaveAs3 may write. Anything else is a model write.</summary>
