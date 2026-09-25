@@ -14,7 +14,9 @@ example **[011 T062]**: that is the row of `specs/011-drawing-context/tasks.md` 
 machine ticks from your result. The plan was built from what is on `main` with it: every seat task
 (`[W]`) of features 008, 009, 010 and 011, four earlier ones the owner added (decision 15A,
 2026-09-24: 006 T101 and T102 at step 3.1, 007 T059 and T060 at steps 4.1, 4.5, 5.1 and 5.2),
-and `docs/workstation-runbook.md`. The assistant's
+three items of feature 004, the re-modeler, the owner added (decision 18A, 2026-09-25: the
+FeatureWorks record 004 T142 at step 1.7, the packages 004 T003 reads at step 5.1, the probes
+004 T033 to T039 at step 5.6), and `docs/workstation-runbook.md`. The assistant's
 version of the same sitting, with the reasons for its order, is
 `docs/workstation-handover-2026-09-23.md`; **where this plan and the handover differ, follow this
 plan.** Where this plan and a task text disagree, the task wins; write the difference down as a
@@ -24,8 +26,10 @@ finding.
 
 1. **Save nothing in SOLIDWORKS.** When SOLIDWORKS asks whether to save, choose **Don't Save**. The
    product only reads your files, and this sitting proves it, so nothing else may change them
-   either. The one write of the sitting is step 3.5's Pack and Go copy into a scratch folder under
-   `%TEMP%`, which step 6.0 deletes. **Check nothing out of the vault** during the sitting: a file
+   either. The one write of the sitting from your files is step 3.5's Pack and Go copy into a
+   scratch folder under `%TEMP%`, which step 6.0 deletes; step 5.6's probe builds, saves and
+   deletes throwaway parts of its own inside `$H\probes`, never a file of yours. **Check nothing
+   out of the vault** during the sitting: a file
    you have not checked out is read-only on disk, so a wrong Save cannot reach it. Steps 3.1, 3.5
    and 6.0 fingerprint your files and show whether anything changed.
 2. **Edit no file in the checkout, and commit or push nothing.** The findings document travels in
@@ -52,19 +56,20 @@ finding.
    component is its id (`cmp:` and four digits), never its name; never copy its `document:` line
    or a configuration's or exploded view's name.
 6. **Do not click or type while a probe runs.** Probe D14 checks that the window in front and the
-   active document do not change; your own click would fail it.
+   active document do not change; your own click would fail it. The one exception is a SOLIDWORKS
+   message box during step 5.6, which that step says how to answer.
 7. **A step that fails**: record what it says to record, look the failure up in "When a step
    fails" below, and mark every task it blocks as `blocked` in the Results table, with the step
    number (for example `blocked by 2.3`). Then go on, unless that section says to stop.
 
 ## When a step fails: what is still possible
 
-The console steps (3.1, 3.2 items 1 and 3, 3.3, 3.5 items 1 and 2, 3.6 to 3.9) attach to the
-running SOLIDWORKS directly and need neither the add-in nor the pane.
+The console steps (3.1, 3.2 items 1 and 3, 3.3, 3.5 items 1 and 2, 3.6 to 3.9, 5.6) attach to
+the running SOLIDWORKS directly and need neither the add-in nor the pane.
 
 | What failed | What to do | What is blocked |
 |---|---|---|
-| SOLIDWORKS will not start (no licence, a crash at start) | **Stop.** Record the message. | everything but 5.4 and step 6 |
+| SOLIDWORKS will not start (no licence, a crash at start) | **Stop.** Record the message. | everything but 1.7's registry line, 5.4 and step 6 |
 | A gate at 1.3 (a red line ending `failed with exit code <n>; nothing after it was run.`) | **Stop** and call the owner; see "Going back to the build you had" at the end | everything |
 | The vocabulary download is refused and the owner's file is not at hand | **Stop**: the gate needs it | everything |
 | 1.5 (registration), or 1.6 check 1 still failing after one retry | Go on with the console steps. The retry: read the `addin.log` line after the last good one and look it up in runbook section 7; restart SOLIDWORKS once; if SwReview's box is clear in Tools > Add-ins, tick it under **Active** and **Start Up** and restart; if SwReview is not listed at all, do 1.5 once | every pane step: `blocked by 1.6` |
@@ -76,6 +81,8 @@ running SOLIDWORKS directly and need neither the add-in nor the pane.
 | A dump at 3.1 fails | Retry once as 3.1 says, then go on: 4.2 still runs, because the pane extracts for itself | 010 T103 to T106 for that assembly |
 | The Standards probe at 3.1 fails (an exit code other than 0, or a gate log word other than `none`) | Record the lines, after checking they hold no path, write `fail` in 006 T101's and T102's rows, and go on: nothing else in the sitting needs it | nothing more |
 | A D14 report at 3.9 ends `against confirmed-open.md: not as required: ...` | Go on: the switch stays off | nothing more |
+| Step 5.5 did not come back to the current build | Its own last paragraph; call the owner | 5.6: `blocked by 5.5` in its rows |
+| A re-modeler probe run at 5.6 hangs, or SOLIDWORKS stops answering in it | 5.6's "If a run hangs": that run is not run again | that run's probes: `blocked: hung in run <n>` |
 | 6.1 or 6.5 names a leaked file | **Stop and send nothing**; call the owner | the handoff |
 
 ## If SOLIDWORKS stops answering (steps 3 to 5)
@@ -96,24 +103,31 @@ running SOLIDWORKS directly and need neither the add-in nor the pane.
 7. If SOLIDWORKS closes between 4.1 and 4.5, the review chips are gone. Review A again (its first
    review stays 008 T103's record), then A-pin and A-plate, before 4.4. The backend closes with
    SOLIDWORKS, so nothing keeps spending.
+8. At step 5.6 a run that hung is not run again, unlike item 5, and the three SOLIDWORKS options
+   the probe turns off are checked afterwards: that step says how.
 
 ## How long it takes
 
-About **10 hours 30 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
+About **11 hours 15 minutes at the seat**, best planned as two days: day 1 steps 1 to 3, day 2
 steps 4 to 6. The four earlier tasks the owner added (decision 15A) take about 25 minutes of it,
-inside steps 3.1, 4.1, 4.5, 5.1 and 5.2. Keep SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
+inside steps 3.1, 4.1, 4.5, 5.1 and 5.2; feature 004's three items (decision 18A) about 40
+minutes more: the FeatureWorks record at step 1.7 (5 minutes), the owner's parts at step 5.1 (10
+minutes) and the re-modeler probes at step 5.6 (25 minutes), the last step of day 2 before the
+handoff. Keep SOLIDWORKS open from step 4.1 to step 4.5 on day 2:
 the review chips of steps 4.4 and 4.5 live only as long as the SOLIDWORKS session. Before the
 sitting, allow **half a day** to find and note documents C to M, and the components of A and B
-step 3.1 asks about (section 0.2); a new machine (section 0.3) adds about an hour.
+step 3.1 asks about (section 0.2), while the owner names the parts P; a new machine (section
+0.3) adds about an hour.
 
 | Step | What | Estimate |
 |---|---|---|
-| 1 | Update, gates, health checks (registration only on a new machine) | 50 min |
+| 1 | Update, gates, health checks (registration only on a new machine), the FeatureWorks record | 55 min |
 | 2 | Profile and key | 20 min |
 | 3 | Dumps and the Standards probe of A and B, probes D1 to D14 and one pane review, with the fingerprints | 3 h 55 min |
 | 4 | The pane reviews, with the Start here panel and the timing of A's review | 3 h 10 min |
-| 5.1 to 5.4 | Model check, Standards (each with its Start here block), Remodel, the Gemini test | 35 min |
+| 5.1 to 5.4 | Model check on J and on the owner's parts, Standards (each with its Start here block), Remodel, the Gemini test | 45 min |
 | 5.5 | The older build and back: two builds, two SOLIDWORKS restarts, two reviews of A | 1 h |
+| 5.6 | The re-modeler probes: three runs with no document open, and the three options checked | 25 min |
 | 6 | Handoff | 45 min |
 
 The dump of B (step 3.1) may take many minutes; do not click in SOLIDWORKS while it runs. The paid
@@ -171,6 +185,7 @@ handover folder and travel by hand; they are never pushed.
 | K | an assembly in which one part's same-name drawing sits closed beside it (K-1), and two other parts (K-2, K-3) are each shown by two drawings you will open | step 4.6 |
 | L | a weldment or sheet-metal part, if one exists (006 T105's cut-list item) | step 3.2 |
 | M | a part and an assembly that each have at least two configurations (A-pin and A will do if they have) | step 4.4 |
+| P | three to five real parts **the owner names** for 004 T003's dry run (P-1 to P-5), each a part file on its own, not an assembly: ordinary single-body parts built in SOLIDWORKS (an import has no tree to reorganize, and stage 1 refuses multibody, weldment, sheet-metal and derived parts, so they would count for little). At least one has a long feature tree (the longest the owner knows, 150 features or more if there is one; write which letter), and, as `specs/004-resilient-remodeler/phase0-decision.md` section 4 asks, they are not all tidy: one the owner thinks badly organized, and one already sorted by hand into group folders if there is one. Their paths go in `notes\paths.txt` like every letter's, so the fingerprints cover them | step 5.1 |
 
 For step 3.1's Standards probe (006 T101 and T102), also write in `notes\documents.txt`, under A
 and under B, what SOLIDWORKS shows in them as they stand:
@@ -332,6 +347,13 @@ function Compare-Fingerprint {
     $changed | ForEach-Object { 'changed (terminal only, never in the findings): ' + $_ }
 }
 
+function Show-RemodelLedger {
+    param([string] $folder)
+    $ledgers = @(Get-ChildItem -LiteralPath "$($folder.TrimEnd('\'))\capabilities" -Filter 'remodel-*.yaml' -ErrorAction SilentlyContinue)
+    if ($ledgers.Count -eq 0) { 'no answers file in this folder: the run did not finish'; return }
+    Select-String -LiteralPath $ledgers.FullName -Pattern '^  - probe_id: |^    blocking: |^    verdict: |^      "(reason|error)": ' | ForEach-Object { $_.Line.Trim() }
+}
+
 Set-Location $R
 "checkout $R | handover folder $H | run folders $runs | checkout found: $(Test-Path "$R\extractor\tools\update-workstation.ps1")"
 ```
@@ -368,6 +390,10 @@ What the commands do, so you know what you are running (each only reads):
   every document the dumps list, in `notes\fingerprint-<name>.csv`; `Compare-Fingerprint '<name>'`
   compares that record with the one named `before`. Both only read; hashing B's documents can
   take a few minutes.
+- `Show-RemodelLedger "<probe run folder>"` prints, from the answers file a re-modeler probe run
+  wrote (step 5.6), four lines per probe: its id, whether it is `blocking`, its `verdict`
+  (`verified`, `refuted` or `unresolved`) and its `"reason"` (or the `"error"` it threw); or
+  `no answers file in this folder: the run did not finish`.
 
 If a `Show-` command prints a red Python traceback, copy its last line into the Notes of the step's
 row, write `facts not read` there, and go on: the run folder travels in step 6.3 and the
@@ -573,6 +599,37 @@ Every line of that log starts with its time in square brackets; read what follow
 Record: pass or fail for checks 1, 2, 3, 6 and 7 in the 1.6 row; on a fail, the log lines (each
 after its `[time]`). A fail of check 1 or 2: "When a step fails" says what to try once and what
 can still go on.
+
+### 1.7 FeatureWorks, for the record [004 T142]
+
+Two minutes, and read only. FeatureWorks is the SOLIDWORKS add-in that recognises features in an
+imported solid (a STEP file has no feature tree). Feature 004's work on imports is parked, and
+nothing is decided here: whether this seat has FeatureWorks tells the later feasibility probe what
+it can try. First the registry, which only reads:
+
+```powershell
+$fw = '{7CF8CA03-1DCE-11D1-A89B-0020AF351FA9}'
+$installed = $null -ne (Get-ItemProperty "Registry::HKEY_CLASSES_ROOT\CLSID\$fw\InprocServer32" -ErrorAction SilentlyContinue)
+$listed = @(Get-Item 'HKLM:\SOFTWARE\SolidWorks\AddIns', 'HKLM:\SOFTWARE\SolidWorks\SOLIDWORKS 20*\AddIns' -ErrorAction SilentlyContinue | Get-ChildItem | Where-Object { $_.PSChildName -eq $fw -or (Get-ItemProperty $_.PSPath).Title -match 'FeatureWorks' })
+$id = if ($listed.Count -gt 0) { $listed[0].PSChildName } else { $fw }
+$startup = (Get-ItemProperty "HKCU:\Software\SolidWorks\AddInsStartup\$id" -ErrorAction SilentlyContinue).'(default)'
+"FeatureWorks: installed $installed | listed as an add-in $($listed.Count -gt 0) | start-up flag $(if ($null -eq $startup) { 'none' } else { $startup })"
+```
+
+It prints one line: `installed True` when FeatureWorks's program is registered on this machine,
+`listed as an add-in True` when SOLIDWORKS offers it in Tools > Add-ins, and `start-up flag 1`
+when it is set to load at every start for this Windows account (`0` not, `none` never set).
+
+Then in SOLIDWORKS, Tools > Add-ins: find **FeatureWorks** in the list and note whether its two
+boxes are ticked, **Active** (loaded now) and **Start Up** (loaded at every start). **Change no
+box**, and close the dialog with **Cancel**, never OK. Last, from Help > About (step 1.6), note
+which product the seat runs: SOLIDWORKS Standard, Professional or Premium (FeatureWorks comes with
+the last two).
+
+Any answer passes: this is a record, and `installed False` or no FeatureWorks in the list is an
+answer, not a fail. Write `blocked` only when neither the line nor the dialog could be read (the
+line needs no SOLIDWORKS; the dialog does). Record in 004 T142's row: the printed line (it holds
+no path), `Active yes` or `no` and `Start Up yes` or `no`, or `not listed`, and the product.
 
 ## Step 2. The standards profile and the key
 
@@ -1547,7 +1604,7 @@ would change (it would go in `review_words_v1.yaml` on the development machine).
 
 ## Step 5. The other tabs, the live Gemini test, and the older build
 
-### 5.1 Model check [007 T059]
+### 5.1 Model check, on J and on the owner's parts [007 T059; 004 T003]
 
 Open part J; on the Model check tab press **Model check**. Pass: a grade within seconds, headed
 `Grade: <J's file name> [<configuration>]`, with its counts; under the counts either
@@ -1570,6 +1627,26 @@ Show-StartHere $run
 Pass: the block is above the chips, and the printed ids are its rows' ids in the same order (or
 both say there is nothing to start with). Fail: the block below the chips or missing, or the ids
 differ. Record: pass or fail, and the printed line.
+
+**The owner's parts, for 004 T003.** Then, for each of P-1 to P-5 in turn: open it on its own
+(File > Open), click its window so it is the active document, and on the Model
+check tab press **Model check**. Each press dumps the part's feature tree with the Model check
+profile into a new check folder; that `package.json`, written by this build, is the package
+004 T003's dry run reads on the development machine. Pass, for each part: a grade appears,
+headed `Grade: <its file name> [<configuration>]`, and **Open check folder** opens a new folder
+ending `-check` that holds `package.json` beside `session.json`, `report.md` and `check.json`.
+Close that Explorer window, then the part (Don't Save), before the next. Fail: an error in place
+of the grade (copy its sentence, with any name in it replaced by the part's letter), or no
+`package.json` in the folder. With fewer than three parts named, write `blocked: <n> parts named`
+in 004 T003's row; the parts there are still pressed.
+
+Record, per part: its letter, its folder's stamp and letter (`20261002-141516-P1`) and the counts
+under its grade, and which letter is the long feature tree. No part name, number or feature
+name goes in the findings document, and neither does a folder's name: a check folder is named
+after its part. The folders stay where the tab writes them, under the run root; step 6.3 zips
+them with every other run folder of the sitting into `run-folders.zip`, and the development
+machine runs 004 T003's `swreview remodel plan` over each `package.json` from there. They never
+enter the repository: only counts do.
 
 ### 5.2 Standards [007 T059]
 
@@ -1617,7 +1694,7 @@ role="tool" function response was rejected`. Record the last lines. If you press
 not sure the last line ran, close this PowerShell window: that is the sure way to drop the key.
 Open a new one and paste the setup block.
 
-### 5.5 Before and after the Show fix, on the older build: last [009 T082]
+### 5.5 Before and after the Show fix, on the older build [009 T082]
 
 This builds an older version, looks at one thing, and comes back. Close SOLIDWORKS (Don't Save).
 Then check the checkout and keep a copy of the settings file beside it (not in `$H`: it holds the
@@ -1686,6 +1763,132 @@ entity. Record: both answers. The registration survives both builds; nothing to 
 Settings now shows a different provider, model or no key, close SOLIDWORKS and put the copy back:
 `Copy-Item "$env:APPDATA\SwReview\settings.json.before-5.5" "$env:APPDATA\SwReview\settings.json"`.
 
+### 5.6 The re-modeler probes, with no document open: last [004 T033 to T039]
+
+Feature 004's Phase 2 probes (the owner's decision 18A). `swreview-extract probe remodel` builds a
+throwaway part of its own inside the folder it is given, changes it on purpose to see what this
+SOLIDWORKS does, measures it, closes it and deletes it. It never opens or touches a document of
+yours, and it refuses to start while any document is open. Each run writes its answers, one
+verdict per probe, to `capabilities\remodel-<SOLIDWORKS version>.yaml` in its folder: the answers
+file. This is the last step before the handoff because a "Cannot reorder" message box can hold
+SOLIDWORKS until someone answers it, and PROBE-1 asks for one on purpose.
+
+1. **Before.** Step 5.5 must have come back to the current build (its last check passed);
+   otherwise write `blocked by 5.5` in the rows of 5.6 and go on to step 6. In SOLIDWORKS,
+   Window > Close All, **Don't Save**, so that no document is open, and leave SOLIDWORKS running:
+   the probe attaches to it and never starts one. Then open Tools > Options > System Options,
+   General page, note in `notes\documents.txt` whether **Input dimension value**, **Show errors
+   every rebuild** and **Warn before saving documents with update errors** are ticked
+   (`not found` for one you cannot find), and press **Cancel**. Each run turns all three off
+   while it runs, so that no dialog of theirs can hold it, and puts them back when it ends; a run
+   that hangs cannot.
+2. **Three runs, in this order, each into its own folder** (a second run into the same folder
+   would overwrite the first one's answers). Paste one block, wait for the prompt, read what the
+   run printed (item 4), then paste the next.
+
+   The first run holds every probe that never asks SOLIDWORKS to reorder a feature, so no
+   message box can hold it, and its answers are written even if a later run hangs:
+
+   ```powershell
+   swreview-extract probe remodel --probe PROBE-2,PROBE-4,PROBE-6,PROBE-7,PROBE-8,PROBE-9,PROBE-10,PROBE-11,PROBE-12,PROBE-13,PROBE-21 --out "$H\probes\remodel-no-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+   Show-RemodelLedger "$H\probes\remodel-no-reorder"
+   ```
+
+   The second asks for three reorders that no watchdog times, PROBE-3's past a dependency
+   among them. While the flag the probe sets works, no box appears; if one does, that is PROBE-1's
+   answer seen early:
+
+   ```powershell
+   swreview-extract probe remodel --probe PROBE-3,PROBE-5,PROBE-20 --out "$H\probes\remodel-reorder" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+   Show-RemodelLedger "$H\probes\remodel-reorder"
+   ```
+
+   The third is PROBE-1 alone: an illegal reorder with SOLIDWORKS's CommandInProgress flag
+   clear, which should raise a "Cannot reorder" box, then again with the flag set, which should
+   not. Expect at least one box:
+
+   ```powershell
+   swreview-extract probe remodel --probe PROBE-1 --out "$H\probes\remodel-probe-1" --acknowledge-throwaway-part; "exit code: $LASTEXITCODE"
+   Show-RemodelLedger "$H\probes\remodel-probe-1"
+   ```
+
+3. **While a run runs, touch nothing but a SOLIDWORKS message box** (rule 6's one exception). If
+   nothing has printed for a minute, press Alt+Tab to look for one. When one is there, wait until
+   **30 seconds** have passed since it appeared: PROBE-1 times each of its two tries for 5
+   seconds, and a box answered sooner looks like no box at all. Then write down its title, its
+   first sentence (no path) and the run it came in, and press **OK** (if it has none, **Cancel**
+   or **No**; never a Save). The same for every box.
+4. **After each run, look at:**
+   - `exit code:`. `0`: the run finished and wrote its answers. `1`: it was refused or failed,
+     and the time-stamped line before says which:
+     `probe remodel refused, and nothing was built.` with the reason after it, or
+     `probe remodel failed.` with the error. A reason that begins
+     `SOLIDWORKS already has a document open.` means what it says: Window > Close All, Don't
+     Save, and paste the same block again. Any other number: the console itself crashed: copy
+     the last 20 lines, after checking they hold no path, and go on with the next run.
+   - the time-stamped lines: `Attached to the running SOLIDWORKS session.` first, which is
+     normal; at the end `probes: <n> run (<n> verified, <n> refuted, <n> unresolved)`,
+     `interop members: ...`, a line beginning `Wrote`, and one line
+     `BLOCKING PROBE-<n> is <verdict>: ...` for each blocking probe that did not read
+     `verified`, saying what that answer stops. The line after them is the answers file's path.
+     That line, the `Wrote` line and the run's first line (the command with its folder) hold the
+     handover folder's path: never copy them.
+   - `Show-RemodelLedger`'s lines, four per probe: `- probe_id: "PROBE-<n>"`, `blocking: true`
+     or `false`, `verdict: verified`, `refuted` or `unresolved`, and its `"reason":` sentence. An
+     `"error":` line in place of the reason means the probe threw, and its verdict is
+     `unresolved`.
+5. **What each probe asks.** Research R10 and quickstart Scenario 4 of
+   `specs/004-resilient-remodeler` hold the whole question and what a bad answer costs.
+
+   | Probe | Task | Run | What it asks | `verified` means |
+   |---|---|---|---|---|
+   | PROBE-1 | 004 T033 | third | does setting CommandInProgress stop the "Cannot reorder" box? | the illegal reorder blocked with the flag clear and returned with it set |
+   | PROBE-2 | 004 T035 | first | is `"w" = 120` in a millimetre part 120 mm, and in which unit does the equation manager answer? | it answered 120, the part's own unit, not 0.12 metres |
+   | PROBE-3 | 004 T034 | second | does a reorder move a feature, and refuse past a dependency without harm? | the harmless reorder answered true, the illegal one false, and the tree did not change |
+   | PROBE-4 | 004 T034 | first | must a folder's members be contiguous? | contiguous members made a folder and non-contiguous ones did not |
+   | PROBE-5 | 004 T038 | second | the three ways into an existing folder | all three calls answered |
+   | PROBE-6 | 004 T036 | first | does `Add3` add an equation? | it answered an index and the count rose by one |
+   | PROBE-7 | 004 T036 | first | does `set_Equation` edit an equation in place? | the edit reads back |
+   | PROBE-8 | 004 T039 | first | the tolerance calibration: how exactly a box and a cylinder of known size measure | both measured; the errors are in the answers file |
+   | PROBE-9 | 004 T038 | first | what `GetWhatsWrong` lists | feature names or feature objects |
+   | PROBE-10 | 004 T038 | first | the `___EndTag___` marker after a folder rename | no marker, or one that kept the folder's first name |
+   | PROBE-11 | 004 T038 | first | every feature's type name | every one read |
+   | PROBE-12 | 004 T037 | first | does a tag survive a save, a close and a reopen? | it read back unchanged |
+   | PROBE-13 | 004 T037 | first | can a part be copied while SOLIDWORKS holds it open? | a plain copy worked |
+   | PROBE-20 | 004 T038 | second | does a feature's description survive a move into a folder? | it read back unchanged |
+   | PROBE-21 | 004 T036 | first | the equation count of a part with none | 0 |
+
+   A probe's result: `pass` when its verdict is `verified`, `fail` when `refuted`, `blocked` when
+   `unresolved` (Notes: the first words of its reason, or `error`, never the error's text, which
+   may hold a path) or when its run did not finish (Notes:
+   `blocked by 5.6: run <n> exit code <n>` or `blocked: hung in run <n>`). A `fail` here is the
+   answer the probe exists to get, not a fault of the sitting: the development machine still
+   ticks the task, and what a refuted
+   blocking probe stops is the owner's decision (its `BLOCKING` line names it). Each task's row
+   takes its probes together: `pass` when every one passed, `fail` when any failed, otherwise
+   `blocked`; Observed lists each probe with its verdict (`PROBE-3 verified, PROBE-4 refuted`).
+6. **If a run hangs** (nothing printed for 10 minutes and no box waiting, or SOLIDWORKS says Not
+   Responding): "If SOLIDWORKS stops answering", items 2 to 5, except that the run is **not run
+   again**: the hang is itself the record, PROBE-1's question answered the hard way. A run writes
+   its answers file and its log only when it ends, so after Ctrl+C neither exists: record the
+   run, the time, how long it had run, the title and first sentence of every box, whether
+   SOLIDWORKS had to be ended in Task Manager and whether a crash report appeared, and write
+   `blocked: hung in run <n>` for that run's probes. Before the next run: start SOLIDWORKS again
+   if it was ended (close Document Recovery without opening anything), then Window > Close All,
+   Don't Save, since the throwaway part may still be open.
+7. **At the end**, with every run done: Tools > Options > System Options, General page, once
+   more. Pass: the three boxes are as item 1 noted. A box that differs: tick or clear it back as
+   noted and press **OK**, which puts back what the seat had and is the one change this step
+   makes to SOLIDWORKS; write down which box, and after which run, under 5.6's heading.
+
+Where the answers go: nothing to copy. Each run's folder under `$H\probes` (`remodel-no-reorder`,
+`remodel-reorder`, `remodel-probe-1`) holds its answers file, its log `remodel-probe.log` and,
+after a hang, the throwaway part in `probe-part`; step 6.3 lists them, and the handover folder
+travels whole (step 6.5). The development machine reads the verdicts and the raw readings from
+them. In the findings document, under 5.6's heading: per run its folder's name, its `exit code`
+and its `probes:` line; each `BLOCKING` line as far as its colon; every box you answered; and
+the rows of 5.6.
+
 ## Step 6. The handoff
 
 This is `docs/workstation-runbook.md` section 8.
@@ -1747,8 +1950,9 @@ Get-ChildItem "$H\probes", "$H\dumps" | Select-Object Name
 ```
 
 Pass: the list names every run folder of the sitting (the reviews, the `-check` and `-standards`
-folders), free space is at least twice the figure, both zips are written (`-Force` replaces a zip
-left by an earlier try), and the probe reports and dump folders are listed. If `Compress-Archive`
+folders, step 5.1's P folders among them), free space is at least twice the figure, both zips are
+written (`-Force` replaces a zip left by an earlier try), and the probe reports and dump folders
+are listed, step 5.6's three `remodel-` folders among them. If `Compress-Archive`
 stops, delete the partial `run-folders.zip`, then copy the folders instead with
 `Copy-Item -LiteralPath $folders.FullName "$H\run-folders" -Recurse`. The run folders hold vault
 paths: they travel in the handover folder only and are never committed.
@@ -1820,6 +2024,7 @@ For the development machine, once the folder comes back:
 | 006 | 006 T100, the audit half | the development machine scans the returned run folders for the owner's profile values before 008 T101 is ticked; the seat does the profile entry (steps 2.2 and 2.4) |
 | 010, 011 | setting either switch; 010 T104's and T106's counts | the development machine, as sections 3.10, 3.1 and 4.2 say |
 | 006 | PROBE-1 to PROBE-3 into research R4; `TRANSPARENCY_POLARITY`'s flip | the development machine, from step 3.1's two Standards probe reports |
+| 004 | 004 T003's dry run itself; the re-modeler probes' verdicts into the record | the development machine: `swreview remodel plan` over each `package.json` of step 5.1's P folders, counts only (`specs/004-resilient-remodeler/phase0-decision.md` section 4); the verdicts and raw readings of step 5.6's three answers files, as quickstart Scenario 4 says |
 
 Open seat or key tasks of earlier features, not asked this time:
 
@@ -1831,8 +2036,8 @@ Open seat or key tasks of earlier features, not asked this time:
 | 002 | 002 T044, 002 T051 | quickstart scenarios on the bracket fixture, which is not prepared (001 T061) |
 | 002 | 002 T055a, 002 T063 | the Ask tab's terminal (Codex, Gemini CLI): the Ask tab is hidden in this build |
 | 002 | 002 T067 | every quickstart scenario of feature 002 end to end: a sweep of its own |
-| 003 | 003 T062, 003 T088, 003 T089 | the RMS fixture parts and their probes; step 5.1 touches Model check on J only |
-| 004 | 004 T003, 004 T033 to T039, 004 T135 to T141 | the re-modeler's dry run, probes and stage-1 runs: the Remodel tab is off in this build (step 5.3 checks exactly that) |
+| 003 | 003 T062, 003 T088, 003 T089 | the RMS fixture parts and their probes; step 5.1 touches Model check on J and the owner's parts only |
+| 004 | 004 T135 to T141 | the re-modeler's stage-1 runs: the Remodel tab is off in this build (step 5.3 checks exactly that) |
 | 005 | 005 T025 to T030 | the live usage probes: their test files are not written yet |
 | 005 | 005 T034, 005 T036 | building `rms-part` and the benchmark baseline: benchmark work |
 | 005 | 005 T085a | the workstation A/B harness: not built |

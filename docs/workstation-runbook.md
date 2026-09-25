@@ -251,7 +251,10 @@ makes the next `update-workstation.ps1` refuse the tree.
   - `tool-results\` included, which 008 T105's replay reads to size every call it cannot
   reproduce - and the logs into the same `%LOCALAPPDATA%\SwReview\handover\<date>\`, with the
   `--out` folder of every `swreview-extract probe` run (its `drawings-probe-<time>.txt` files are
-  feature 011's record) and every dump folder a task names, and tell the owner it is there. Do not
+  feature 011's record; a `probe remodel` run's `capabilities\remodel-<version>.yaml` answers file
+  and `remodel-probe.log` are feature 004's, one folder per run, because a second run into the
+  same folder overwrites the answers file) and every dump folder a task names, and tell the owner
+  it is there. Do not
   use `swreview handoff` for this: its bundle is a bounded allowlist that leaves `tool-results\`
   out by design. Run folders hold vault paths and must never be committed.
 - **No company value in the document**: no vault path, no library folder name, no property

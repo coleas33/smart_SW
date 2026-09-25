@@ -25,7 +25,14 @@ promises is held in its text:
   T060) each have a step where their documents are already open and a row, and are gone from
   the table of earlier tasks not asked; `Show-StartHere` prints a committed report's Start here
   rows in their order, the timing line passes `swreview timing`'s four inputs, and the headline
-  time is the steps' sum.
+  time is the steps' sum;
+- feature 004's three items the owner added (decision 18A, 2026-09-25) do the same: the
+  FeatureWorks record (004 T142, dated in 004's `tasks.md`) at step 1.7 is read only and prints
+  one line; the owner's parts at step 5.1 give 004 T003 its packages and no name; the probes
+  004 T033 to T039 are step 5.6, the last before the handoff, in three runs into three folders -
+  every probe whose body never reorders first, PROBE-1 alone last - that cover the probe
+  catalog once; `Show-RemodelLedger` reads a ledger in `RemodelProbeLedger.Render`'s shape; a
+  message box waits out PROBE-1's watchdog; and the lines step 5.6 reads are the console's.
 """
 
 from __future__ import annotations
@@ -247,6 +254,15 @@ QUOTED: tuple[tuple[str, str], ...] = (
     ("net saved: ", "reviewer/src/swreview/cli.py"),
     ("report: ", "reviewer/src/swreview/cli.py"),
     ("Net saved minutes: ", "reviewer/src/swreview/report/markdown.py"),
+    # The re-modeler probe's own lines, which step 5.6 reads (004, decision 18A).
+    ("--acknowledge-throwaway-part", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("probe remodel refused, and nothing was built.",
+     "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("probe remodel failed.", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("remodel-probe.log", "extractor/SwReview.Extractor.Console/Program.cs"),
+    ("SOLIDWORKS already has a document open.", "extractor/SwReview.Extractor/Rms/RemodelProbe.cs"),
+    ("interop members: ", "extractor/SwReview.Extractor/Rms/RemodelProbe.cs"),
+    ("BLOCKING ", "extractor/SwReview.Extractor/Rms/RemodelProbe.cs"),
 )
 """Every product sentence the plan quotes, with the file that says it."""
 
@@ -821,19 +837,43 @@ EARLIER_TASKS = frozenset({("006", "T101"), ("006", "T102"), ("007", "T059"), ("
 EARLIER_PACKAGES = {"006": "006-standards-check", "007": "007-attention-policy-gate"}
 
 
+def tagged_tasks(plan: str) -> set[tuple[str, str]]:
+    """Every task id a step heading of the plan names in its brackets."""
+    return set().union(*(qualified_tasks(tags) for _, tags in TAGGED_STEP.findall(plan)))
+
+
+def rowed_tasks(results: str) -> set[tuple[str, str]]:
+    """Every task id a row of the results sheet names."""
+    return set().union(*(qualified_tasks(cell) for _, cell, *_ in result_rows(results)))
+
+
+def earlier_tasks_not_asked(plan: str) -> set[tuple[str, str]]:
+    """The task ids of the plan's last table, the earlier features' tasks not asked this time."""
+    return qualified_tasks(plan[plan.index("Open seat or key tasks of earlier features") :])
+
+
+def assert_named_only_at(
+    places: dict[tuple[str, str], set[str]], plan: str, results: str
+) -> None:
+    """Each task is named by exactly the step headings `places` gives it, and rowed at exactly
+    those steps of the results sheet."""
+    headings = {number: qualified_tasks(tags) for number, tags in TAGGED_STEP.findall(plan)}
+    rows = [(number, qualified_tasks(cell)) for number, cell, *_ in result_rows(results)]
+
+    for task, steps in places.items():
+        assert {number for number, tasks in headings.items() if task in tasks} == steps, task
+        assert {number for number, tasks in rows if task in tasks} == steps, task
+
+
 def test_the_four_earlier_seat_tasks_the_owner_added_are_in_this_sitting(
     plan: str, results: str
 ) -> None:
     """Decision 15A: 006 T101 and T102 and 007 T059 and T060 each have a step that names them,
     a row of the results sheet, and are gone from the table of earlier tasks not asked; each is
     still an open seat task of its package, so the plan asks for work that is there to do."""
-    tagged = set().union(*(qualified_tasks(tags) for _, tags in TAGGED_STEP.findall(plan)))
-    rowed = set().union(*(qualified_tasks(cell) for _, cell, *_ in result_rows(results)))
-    earlier = plan[plan.index("Open seat or key tasks of earlier features") :]
-
-    assert EARLIER_TASKS <= tagged
-    assert EARLIER_TASKS <= rowed
-    assert EARLIER_TASKS.isdisjoint(qualified_tasks(earlier))
+    assert EARLIER_TASKS <= tagged_tasks(plan)
+    assert EARLIER_TASKS <= rowed_tasks(results)
+    assert EARLIER_TASKS.isdisjoint(earlier_tasks_not_asked(plan))
     for number, task in EARLIER_TASKS:
         assert task in open_seat_tasks(EARLIER_PACKAGES[number]), f"{number} {task}"
     assert "decision 15A" in re.sub(r"\s+", " ", plan[: plan.index("## The rules")])
@@ -845,18 +885,361 @@ def test_each_earlier_task_is_read_where_its_documents_are_already_open(
     """006 T101 and T102 read A and B while step 3.1 has them open; 007 T059 reads the review
     of A (step 4.1) and the Model check and Standards results of part J (steps 5.1 and 5.2);
     007 T060 times A's review (step 4.5)."""
-    places = {
-        ("006", "T101"): {"3.1"},
-        ("006", "T102"): {"3.1"},
-        ("007", "T059"): {"4.1", "5.1", "5.2"},
-        ("007", "T060"): {"4.5"},
-    }
-    headings = {number: qualified_tasks(tags) for number, tags in TAGGED_STEP.findall(plan)}
-    rows = [(number, qualified_tasks(cell)) for number, cell, *_ in result_rows(results)]
+    assert_named_only_at(
+        {
+            ("006", "T101"): {"3.1"},
+            ("006", "T102"): {"3.1"},
+            ("007", "T059"): {"4.1", "5.1", "5.2"},
+            ("007", "T060"): {"4.5"},
+        },
+        plan,
+        results,
+    )
 
-    for task, steps in places.items():
-        assert {number for number, tasks in headings.items() if task in tasks} == steps, task
-        assert {number for number, tasks in rows if task in tasks} == steps, task
+
+FEATURE_004 = REPO / "specs" / "004-resilient-remodeler"
+RMS = REPO / "extractor" / "SwReview.Extractor" / "Rms"
+PROBE_RUNS = tuple(("004", f"T{number:03d}") for number in range(33, 40))
+"""004 T033 to T039, the re-modeler probes step 5.6 runs."""
+DECISION_18A_TASKS = frozenset({("004", "T003"), ("004", "T142"), *PROBE_RUNS})
+"""Feature 004's items the owner added to this sitting (decision 18A, 2026-09-25)."""
+OPEN_TASK = re.compile(r"^- \[ \] (T\d{3})\b", re.MULTILINE)
+"""An open task of any kind; feature 004 marks its seat tasks `Workstation`, not `[W]`."""
+
+
+def test_decision_18a_puts_feature_004s_three_items_in_the_sitting(
+    plan: str, results: str
+) -> None:
+    """Decision 18A: the FeatureWorks record (004 T142), the packages 004 T003 reads and the
+    probes 004 T033 to T039 each have a step that names them and a row, and are gone from the
+    table of earlier tasks not asked, which keeps the stage-1 runs T135 to T141. Each is still
+    open in 004's `tasks.md`, and T142, which no task described before, is dated there with the
+    decision that added it."""
+    tasks = (FEATURE_004 / "tasks.md").read_text(encoding="utf-8")
+    [t142] = [line for line in tasks.splitlines() if line.startswith("- [ ] T142 ")]
+
+    assert DECISION_18A_TASKS <= tagged_tasks(plan)
+    assert DECISION_18A_TASKS <= rowed_tasks(results)
+    assert DECISION_18A_TASKS.isdisjoint(earlier_tasks_not_asked(plan))
+    assert {("004", f"T{number}") for number in range(135, 142)} <= earlier_tasks_not_asked(plan)
+    assert {task for _, task in DECISION_18A_TASKS} <= set(OPEN_TASK.findall(tasks))
+    assert "added 2026-09-25, the owner's decision 18A" in t142
+    assert "FeatureWorks" in t142 and "step 1.7" in t142
+    assert "decision 18A" in re.sub(r"\s+", " ", plan[: plan.index("## The rules")])
+    assert "decision 18A" in re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
+    assert ("004", "T003") in qualified_tasks(
+        plan[plan.index("## Not in this sitting") : plan.index("Open seat or key tasks")]
+    ), "the development machine's table says who runs T003's dry run"
+
+
+def test_each_decision_18a_item_has_its_one_place(plan: str, results: str) -> None:
+    """The FeatureWorks record at step 1.7, beside the health checks' Tools > Add-ins; the
+    owner's parts at step 5.1, on the Model check tab; the probes at step 5.6."""
+    assert_named_only_at(
+        {
+            ("004", "T142"): {"1.7"},
+            ("004", "T003"): {"5.1"},
+            **{task: {"5.6"} for task in PROBE_RUNS},
+        },
+        plan,
+        results,
+    )
+
+
+def test_the_remodel_probes_are_the_last_step_before_the_handoff(plan: str) -> None:
+    """A "Cannot reorder" box can hold SOLIDWORKS, and PROBE-1 asks for one, so step 5.6 comes
+    after everything but the handoff - after 5.5's return to the current build - with no
+    document open, and 5.5 no longer calls itself last."""
+    numbers = STEP_HEADING.findall(plan)
+    headings = re.findall(r"^### (5\.[56]) (.*)$", plan, re.MULTILINE)
+    probes = re.sub(r"\s+", " ", step(plan, "5.6"))
+
+    assert numbers[numbers.index("6.0") - 1] == "5.6"
+    assert dict(headings)["5.6"].startswith("The re-modeler probes, with no document open: last ")
+    assert "last" not in dict(headings)["5.5"]
+    assert "blocked by 5.5" in probes
+    assert "Window > Close All, **Don't Save**, so that no document is open" in probes
+    assert "--allow-start" not in probes and "--keep-part" not in probes
+
+
+def catalog_probes() -> list[str]:
+    """The probe ids of `RemodelProbeCatalog`, in its order (the default `--probe` list)."""
+    source = (RMS / "RemodelProbe.cs").read_text(encoding="utf-8")
+    return re.findall(r'new RemodelProbeDefinition\(\s*"(PROBE-\d+)"', source)
+
+
+PROBE_BODY = re.compile(
+    r"private static RemodelProbeReading Probe(\d+)\(RemodelProbeContext context\)"
+)
+
+
+def probe_bodies() -> dict[str, str]:
+    """Each probe's body in `RemodelProbeExecutors.cs`, by probe id, from its signature to the
+    next probe's; every catalog probe has one, so reading bodies misses none."""
+    source = (RMS / "RemodelProbeExecutors.cs").read_text(encoding="utf-8")
+    starts = [(match.start(), f"PROBE-{match.group(1)}") for match in PROBE_BODY.finditer(source)]
+    ends = [start for start, _ in starts[1:]] + [len(source)]
+    bodies = {probe: source[start:end] for (start, probe), end in zip(starts, ends, strict=True)}
+
+    assert set(bodies) == set(catalog_probes())
+    return bodies
+
+
+def reordering_probes() -> set[str]:
+    """The probes whose body calls `ReorderFeature`: the ones a "Cannot reorder" box can hold."""
+    return {probe for probe, body in probe_bodies().items() if "ReorderFeature(" in body}
+
+
+REMODEL_RUN = re.compile(
+    r'^\s*swreview-extract probe remodel --probe (\S+) --out "\$H\\probes\\([\w-]+)" '
+    r'--acknowledge-throwaway-part; "exit code: \$LASTEXITCODE"$',
+    re.MULTILINE,
+)
+"""One run of step 5.6: its probe list and its folder under the handover folder's probes."""
+
+
+def test_the_three_runs_cover_the_catalog_once_with_probe_1_alone_and_last(plan: str) -> None:
+    """Each run writes `capabilities/remodel-<version>.yaml` in its own `--out` folder and a
+    second run into the same folder would overwrite it, so the three folders differ. A run that
+    hangs never writes its ledger, so the first run holds exactly the probes whose bodies never
+    reorder (read from the executors, so a body that starts reordering moves this pin), the
+    second the remaining reorders, and the third PROBE-1 alone; together they are the catalog,
+    once each, each run in the catalog's order. Each run is read back from its own folder."""
+    probes = step(plan, "5.6")
+    runs = [(ids.split(","), folder) for ids, folder in REMODEL_RUN.findall(probes)]
+    catalog = catalog_probes()
+    reorders = reordering_probes()
+    ledger = (RMS / "RemodelProbe.cs").read_text(encoding="utf-8")
+
+    assert plan.count("swreview-extract probe remodel --") == len(runs) == 3
+    assert len({folder for _, folder in runs}) == 3
+    assert sorted(probe for ids, _ in runs for probe in ids) == sorted(catalog)
+    for ids, folder in runs:
+        assert ids == [probe for probe in catalog if probe in ids], folder
+        assert f'Show-RemodelLedger "$H\\probes\\{folder}"' in probes, folder
+    assert set(runs[0][0]) == set(catalog) - reorders
+    assert set(runs[1][0]) == reorders - {"PROBE-1"}
+    assert runs[2][0] == ["PROBE-1"]
+    assert "PROBE-1" in reorders
+    for constant in ('DirectoryName = "capabilities"', 'FileNamePrefix = "remodel-"',
+                     'FileNameExtension = ".yaml"'):
+        assert constant in ledger
+    assert "`capabilities\\remodel-<SOLIDWORKS version>.yaml`" in probes
+
+
+def test_the_handover_runs_the_same_three_probe_runs() -> None:
+    handover = HANDOVER.read_text(encoding="utf-8")
+    plan_runs = REMODEL_RUN.findall(step(PLAN.read_text(encoding="utf-8"), "5.6"))
+
+    assert REMODEL_RUN.findall(handover) == plan_runs
+    assert "step 21 (004 T033 to T039), then only the handoff" in handover
+
+
+def test_a_message_box_is_answered_only_after_probe_1s_watchdog_has_timed_both_tries(
+    plan: str,
+) -> None:
+    """PROBE-1 decides "blocked" from a watchdog that waits `DefaultTimeout` for each of its two
+    illegal reorders; a box answered before both have timed out lets the call return inside the
+    timeout and reads as no box. So the wait step 5.6 asks for is longer than both tries, and
+    the plan states the watchdog's own figure."""
+    watchdog = (RMS / "RemodelProbeWatchdog.cs").read_text(encoding="utf-8")
+    [timeout] = re.findall(r"DefaultTimeout = TimeSpan\.FromSeconds\((\d+)\)", watchdog)
+    probes = re.sub(r"\s+", " ", step(plan, "5.6"))
+    [wait] = re.findall(r"wait until \*\*(\d+) seconds\*\* have passed since it appeared", probes)
+
+    assert f"times each of its two tries for {timeout} seconds" in probes
+    assert int(wait) > 2 * int(timeout)
+    assert "rule 6's one exception" in probes
+    assert "step 5.6" in re.sub(r"\s+", " ", plan[plan.index("6. **Do not click") :][:400])
+
+
+def test_the_lines_step_5_6_reads_are_the_consoles(plan: str) -> None:
+    """The run refuses while a document is open, writes its ledger and its log only when it
+    ends (so a run stopped with Ctrl+C leaves neither, as step 5.6 says), and ends with the
+    count line and one BLOCKING line per blocking probe not verified; and it turns off the three
+    options step 5.6 notes before the runs and checks after."""
+    program = (REPO / "extractor" / "SwReview.Extractor.Console" / "Program.cs").read_text(
+        encoding="utf-8"
+    )
+    run = program[program.index("private static int ExecuteProbeRemodel(") :]
+    run = run[: run.index("private static void TryDeleteProbePart(")]
+    log = (REPO / "extractor" / "SwReview.Extractor.Console" / "ExtractLog.cs").read_text(
+        encoding="utf-8"
+    )
+    lines = (RMS / "RemodelProbe.cs").read_text(encoding="utf-8")
+    toggles = (RMS / "RemodelSystemToggles.cs").read_text(encoding="utf-8")
+    probes = re.sub(r"\s+", " ", step(plan, "5.6"))
+
+    assert run.index("host.AnyDocumentOpen()") < run.index("host.BuildPart(")
+    assert run.index("RemodelSystemToggles.Within(") < run.index("RemodelProbeLedger.Write(")
+    assert log.count("File.AppendAllText(") == 1
+    assert log.index("public void Dispose()") < log.index("File.AppendAllText(")
+    assert "only when it ends, so after Ctrl+C neither exists" in probes
+    fragments = [
+        '"probes: {records.Count} run "',
+        '"({Count(records, RemodelProbeVerdict.Verified)} verified, "',
+        '"{Count(records, RemodelProbeVerdict.Refuted)} refuted, "',
+        '"{Count(records, RemodelProbeVerdict.Unresolved)} unresolved)"',
+        '$"BLOCKING {record.ProbeId} is {record.Verdict.CliName()}: {record.Fallback}"',
+    ]
+    places = [lines.index(fragment) for fragment in fragments]
+    assert places == sorted(places)
+    assert "`probes: <n> run (<n> verified, <n> refuted, <n> unresolved)`" in probes
+    assert "`BLOCKING PROBE-<n> is <verdict>: ...`" in probes
+    toggled = re.search(r"ToggleArray =\s*\{([^}]*)\}", toggles).group(1)
+    assert [name.strip() for name in toggled.split(",") if name.strip()] == [
+        "InputDimValOnCreate", "ShowErrorsEveryRebuild", "WarnSaveUpdateErrors",
+    ]
+    for option in ("**Input dimension value**", "**Show errors every rebuild**",
+                   "**Warn before saving documents with update errors**"):
+        assert option in probes, option
+    assert "the three boxes are as item 1 noted" in probes
+
+
+def rendered_ledger(records: list[tuple[str, bool, str, dict[str, str]]]) -> str:
+    """A ledger in `RemodelProbeLedger.Render`'s shape (the test below pins the prefixes it
+    relies on against the C# source): `(probe id, blocking, verdict, raw_result)` per probe."""
+    lines = ['sw_version: "32.5.0.48"', 'generated_at: "2026-10-02T12:00:00.0000000+00:00"',
+             "probes:"]
+    for probe, blocking, verdict, raw in records:
+        lines += [
+            f'  - probe_id: "{probe}"',
+            '    question: "a question"',
+            '    method: "a method"',
+            f"    blocking: {'true' if blocking else 'false'}",
+            '    fallback: "a fallback"',
+            f"    verdict: {verdict}",
+            '    sw_version: "32.5.0.48"',
+            "    duration_ms: 12",
+            "    interop_members: []",
+        ]
+        if raw:
+            lines.append("    raw_result:")
+            lines += [f'      "{key}": "{value}"' for key, value in raw.items()]
+        else:
+            lines.append("    raw_result: {}")
+    return "\n".join(lines) + "\n"
+
+
+def test_the_fixture_ledger_has_the_shape_render_writes() -> None:
+    """`Show-RemodelLedger` matches lines by their indentation and key, so the fixture's
+    prefixes are the ones `RemodelProbeLedger.Render` appends, and the two raw_result keys it
+    prints are the runner's error key and the reason key every probe body files."""
+    ledger = (RMS / "RemodelProbe.cs").read_text(encoding="utf-8")
+
+    for prefix in ('text.Append("  - probe_id: ")', 'text.Append("    blocking: ")',
+                   'text.Append("    verdict: ")',
+                   'text.Append("      ").Append(Quote(entry.Key)).Append(": ")',
+                   "Encoding.UTF8"):
+        assert prefix in ledger, prefix
+    assert 'public const string ErrorKey = "error";' in ledger
+    assert [probe for probe, body in probe_bodies().items() if '["reason"]' not in body] == []
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_show_remodel_ledger_prints_each_probes_verdict_and_reason(
+    plan: str, tmp_path: Path
+) -> None:
+    run = tmp_path / "remodel-no-reorder"
+    (run / "capabilities").mkdir(parents=True)
+    (run / "capabilities" / "remodel-32.5.0.48.yaml").write_text(
+        rendered_ledger(
+            [
+                ("PROBE-2", True, "verified", {
+                    "equation_count": "1",
+                    "equation_text": '\\"w\\" = 120',
+                    "reason": "get_Value returned 120.",
+                }),
+                ("PROBE-13", False, "unresolved", {"error": "the call threw"}),
+                ("PROBE-21", False, "refuted", {}),
+            ]
+        ),
+        encoding="utf-8-sig",
+    )
+    empty = tmp_path / "remodel-probe-1"
+    empty.mkdir()
+    function = plan_function(plan, "Show-RemodelLedger")
+    quoted, quoted_empty = (str(folder).replace("'", "''") for folder in (run, empty))
+
+    lines = run_powershell(
+        f"{function}\nShow-RemodelLedger '{quoted}'\nShow-RemodelLedger '{quoted_empty}\\'\n",
+        tmp_path,
+    )
+
+    assert lines == [
+        '- probe_id: "PROBE-2"',
+        "blocking: true",
+        "verdict: verified",
+        '"reason": "get_Value returned 120."',
+        '- probe_id: "PROBE-13"',
+        "blocking: false",
+        "verdict: unresolved",
+        '"error": "the call threw"',
+        '- probe_id: "PROBE-21"',
+        "blocking: false",
+        "verdict: refuted",
+        "no answers file in this folder: the run did not finish",
+    ]
+    assert plan.index("function Show-RemodelLedger ") < plan.index("Set-Location $R")
+
+
+FEATUREWORKS_LINE = re.compile(
+    r"^FeatureWorks: installed (True|False) \| listed as an add-in (True|False) \| "
+    r"start-up flag (\S+)$"
+)
+WRITING_COMMAND = re.compile(
+    r"\b(Set-Item|Set-ItemProperty|New-Item|New-ItemProperty|Remove-Item|Remove-ItemProperty|"
+    r"Rename-Item|Copy-Item|Move-Item|reg(?:\.exe)? (?:add|delete|import))\b",
+    re.IGNORECASE,
+)
+
+
+def test_the_featureworks_record_only_reads(plan: str) -> None:
+    """004 T142 is a record: the registry block writes nothing, the dialog is closed with Cancel
+    with no box changed, and any answer passes."""
+    record = step(plan, "1.7")
+    flat = re.sub(r"\s+", " ", record)
+    [block] = POWERSHELL_BLOCK.findall(record)
+
+    assert WRITING_COMMAND.findall(block) == []
+    assert WRITING_COMMAND.findall("Set-ItemProperty; reg add; New-Item") != []
+    assert "**Change no box**" in flat and "close the dialog with **Cancel**, never OK" in flat
+    assert "Any answer passes" in flat
+    assert "Standard, Professional or Premium" in flat
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is not on PATH")
+def test_the_featureworks_block_prints_its_one_line_on_any_machine(
+    plan: str, tmp_path: Path
+) -> None:
+    """Run as pasted, it reads the registry only and prints one line in the shape step 1.7
+    explains, whatever this machine has installed."""
+    [block] = POWERSHELL_BLOCK.findall(step(plan, "1.7"))
+
+    [line] = run_powershell(block, tmp_path)
+
+    assert FEATUREWORKS_LINE.match(line), line
+    assert FEATUREWORKS_LINE.match(
+        "FeatureWorks: installed True | listed as an add-in False | start-up flag none"
+    )
+
+
+def test_the_owners_parts_give_004_t003_its_packages_and_no_name(plan: str) -> None:
+    """Row P asks the owner for three to five parts, one with a long feature tree; step 5.1
+    presses Model check on each, checks the folder holds the package the dry run reads, says
+    where the folders go and keeps every part's name out of the findings document."""
+    row_p = next(line for line in plan.splitlines() if line.startswith("| P |"))
+    parts = re.sub(r"\s+", " ", step(plan, "5.1"))
+
+    assert "three to five real parts **the owner names**" in row_p
+    assert "long feature tree" in row_p and row_p.endswith("| step 5.1 |")
+    assert "`notes\\paths.txt`" in row_p
+    for phrase in ("holds `package.json` beside", "`run-folders.zip`",
+                   "No part name, number or feature name goes in the findings document",
+                   "They never enter the repository: only counts do",
+                   "`swreview remodel plan`", "`blocked: <n> parts named`"):
+        assert phrase in parts, phrase
+    assert "step 5.1's P folders" in re.sub(r"\s+", " ", step(plan, "6.3"))
 
 
 def test_the_standards_probe_reads_each_recorded_assembly_right_after_its_dump(plan: str) -> None:
@@ -1046,13 +1429,17 @@ def minutes(estimate: str) -> int:
 
 def test_the_time_estimate_is_the_sum_of_its_steps(plan: str) -> None:
     """The headline figure is the table's steps added up, to the nearest quarter hour, so a
-    step that grows (decision 15A added about 25 minutes) moves the headline too."""
+    step that grows (decision 15A added about 25 minutes) moves the headline too. Decision 18A
+    adds about 40: step 1 and step 5.1's row grow, and step 5.6 has a row of its own."""
     section = plan[plan.index("## How long it takes") : plan.index("## 0. Before the sitting")]
-    rows = re.findall(r"^\| [^|]+ \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
+    rows = re.findall(r"^\| ([^|]+) \| [^|]+ \| ([^|]+) \|$", section, re.MULTILINE)[1:]
     [(hours, mins)] = re.findall(r"About \*\*(\d+) hours(?: (\d+) minutes)? at the seat", section)
+    estimates = {name.strip(): minutes(estimate) for name, estimate in rows}
 
-    assert len(rows) == 7
-    assert abs(sum(minutes(row) for row in rows) - (int(hours) * 60 + int(mins or 0))) <= 7
+    assert len(rows) == 8
+    assert abs(sum(estimates.values()) - (int(hours) * 60 + int(mins or 0))) <= 7
+    assert estimates["5.6"] == 25 and estimates["1"] == 55 and estimates["5.1 to 5.4"] == 45
+    assert 30 <= estimates["5.6"] + (estimates["1"] - 50) + (estimates["5.1 to 5.4"] - 35) <= 45
 
 
 def powershell_parse_errors(sources: dict[str, str], folder: Path) -> str:

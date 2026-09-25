@@ -11,7 +11,8 @@ folder name, property name or value, sheet format or template name, and no key. 
 written as its time stamp and letter (`20261001-101112-A`), never its name. From a D6 or D8 line of
 a probe report, its id only: never a dimension's name, view, value or radius. From a Standards
 probe report, a component's id only (`cmp:` and four digits), never its name, and no
-configuration's or view's name.
+configuration's or view's name. From a re-modeler probe run, no line that holds a path (the
+command line, the `Wrote` line, the answers file's path) and no error's text.
 
 | | |
 |---|---|
@@ -37,6 +38,7 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 |---|---|---|---|---|
 | 1.3 | update, build and gates | | | |
 | 1.6 | health checks 1, 2, 3, 6 and 7 | | | |
+| 1.7 | 004 T142: FeatureWorks present and enabled, for the record | | | |
 | 2.2 | 006 T100: the pane reads the placed profile | | | |
 | 2.3 | 008 T101: the profile is version 3 | | | |
 | 2.4 | 006 T100: the backend validates the profile (health check 4) | | | |
@@ -86,11 +88,20 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 | 4.7 | 011 T101: parts 2, 3 and 4, a candidate opened first | | | |
 | 5.1 | Model check on J | | | |
 | 5.1 | 007 T059: Start here above the chips on Model check, against `report.md`'s | | | |
+| 5.1 | 004 T003: Model check packages of the owner's parts P-1 to P-5 | | | |
 | 5.2 | Standards on J and on A | | | |
 | 5.2 | 007 T059: Start here above the chips on Standards, against `report.md`'s | | | |
 | 5.3 | Remodel leaves J unchanged | | | |
 | 5.4 | 008 T106: the live Gemini test | | | |
 | 5.5 | 009 T082: Show before and after the fix | | | |
+| 5.6 | 004 T033: PROBE-1, the "Cannot reorder" box with the flag clear and set | | | |
+| 5.6 | 004 T034: PROBE-3 and PROBE-4, the reorder and folder contiguity | | | |
+| 5.6 | 004 T035: PROBE-2, the equation unit | | | |
+| 5.6 | 004 T036: PROBE-6, PROBE-7 and PROBE-21, the equation manager | | | |
+| 5.6 | 004 T037: PROBE-12 and PROBE-13, the tag and the copy of an open part | | | |
+| 5.6 | 004 T038: PROBE-5, PROBE-9, PROBE-10, PROBE-11 and PROBE-20 | | | |
+| 5.6 | 004 T039: PROBE-8, the tolerance calibration | | | |
+| 5.6 | SOLIDWORKS's three options as they were before the probes | | | |
 | 6.0 | real files unchanged at the end | | | |
 | 6.1 | no key in a file (first audit) | | | |
 | 6.2 | the exports | | | |
@@ -121,6 +132,8 @@ a report file name, a run folder's stamp and letter, or a quoted line: never a p
 ### 4.6 and 4.7 Drawing questions and the confirmed candidate
 
 ### 5. The other tabs, the Gemini test, the older build
+
+### 5.6 The re-modeler probes
 
 ### 6. Handoff
 
