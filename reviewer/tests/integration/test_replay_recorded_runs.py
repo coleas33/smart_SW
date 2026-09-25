@@ -90,12 +90,18 @@ def test_replayed_and_not_replayable_findings_are_the_recorded_set(run: str) -> 
     assert findings.replayed + len(findings.not_replayable) == findings.recorded
 
 
-NARROWED: dict[str, Counter[str]] = {run: Counter() for run in RUNS}
+LOOSE = "rms.grouping.all_features_in_a_group"
+NARROWED: dict[str, Counter[str]] = dict(
+    zip(RUNS, (Counter({LOOSE: 20}), Counter({LOOSE: 2}), Counter({LOOSE: 1})), strict=True)
+)
 """The recorded findings each recording's replay narrows, by check (owner decision 23A,
-`contracts/replay.md` sections 5 and 10): none while the type table the recordings were graded
-with is the one the code ships."""
-REMOVED_LOCATIONS = dict.fromkeys(RUNS, 0)
-"""The drawing locations those narrowed findings lose, in all."""
+`contracts/replay.md` sections 5 and 10). None until feature 003's decision 20A made the eleven
+system types of the real dumps `tolerated_loose` (003 T090 to T092); since, 20, 2 and 1 part
+checks' loose-feature findings, each on the same part and configuration as recorded, without
+its system-row subjects."""
+REMOVED_LOCATIONS = dict(zip(RUNS, (106, 10, 5), strict=True))
+"""The drawing locations those narrowed findings lose, in all: one per system row the part
+check named loose when the recordings were made (the 106, 10 and 5 rows 003 T092 counted)."""
 
 
 @pytest.mark.parametrize("run", RUNS)

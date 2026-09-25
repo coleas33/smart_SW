@@ -1,9 +1,9 @@
 {
-  "session_id": "0ab4cd98-3ce1-4c2d-80c5-924be88f7645",
+  "session_id": "3bc11e43-981e-41f3-a24e-15b4f32007d6",
   "package_id": "dbce1f40-e74b-4f3b-ae27-af61ec45d66a",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-25T14:22:13.347968Z",
-  "ended_at": "2026-09-25T14:22:13.425939Z",
+  "started_at": "2026-09-25T18:32:26.873188Z",
+  "ended_at": "2026-09-25T18:32:26.943180Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -35,34 +35,34 @@
     "rounds": 39,
     "turns": 2,
     "totals": {
-      "input_tokens": 1598829,
-      "cached_input_tokens": 1501667,
+      "input_tokens": 1566206,
+      "cached_input_tokens": 1491496,
       "cache_write_tokens": 67908,
       "output_tokens": 6605,
       "reasoning_tokens": 2654,
       "tool_result_input_tokens": null,
-      "total_tokens": 1605434,
+      "total_tokens": 1572811,
       "latency_s": 95.64147399994545
     },
     "by_turn": [
       {
-        "input_tokens": 1531463,
-        "cached_input_tokens": 1437126,
+        "input_tokens": 1500759,
+        "cached_input_tokens": 1426955,
         "cache_write_tokens": 66064,
         "output_tokens": 5928,
         "reasoning_tokens": 2206,
         "tool_result_input_tokens": null,
-        "total_tokens": 1537391,
+        "total_tokens": 1506687,
         "latency_s": 88.99878119994537
       },
       {
-        "input_tokens": 67366,
+        "input_tokens": 65447,
         "cached_input_tokens": 64541,
         "cache_write_tokens": 1844,
         "output_tokens": 677,
         "reasoning_tokens": 448,
         "tool_result_input_tokens": null,
-        "total_tokens": 68043,
+        "total_tokens": 66124,
         "latency_s": 6.642692800000077
       }
     ]
@@ -76,7 +76,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"268-88428\",\"configuration\":\"Default\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":3,\"component_count\":4,\"ma…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00002980002318508923,
+      "elapsed_s": 0.000030399998649954796,
       "result_bytes": 473,
       "result_tokens": 163
     },
@@ -87,7 +87,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003070000093430281,
+      "elapsed_s": 0.000028900016332045197,
       "result_bytes": 3838,
       "result_tokens": 843
     },
@@ -98,7 +98,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"tool_error\",\"entity_kind\":\"mass_override\",\"entity_id\":\"doc:681d2181ba04\",\"reason\":\"read OverrideMass for '268-88428.SLDASM'\",\"error\":\"InvalidCastException: Unable to cast COM obje…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003440000000409782,
+      "elapsed_s": 0.000029400020139291883,
       "result_bytes": 5791,
       "result_tokens": 1690
     },
@@ -112,7 +112,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"268-88428\",\"full_path\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Default\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000018799997633323073,
+      "elapsed_s": 0.00001930000144056976,
       "result_bytes": 221,
       "result_tokens": 74
     },
@@ -126,7 +126,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"full_path\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configura…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000017299986211583018,
+      "elapsed_s": 0.000016999983927235007,
       "result_bytes": 795,
       "result_tokens": 323
     },
@@ -139,7 +139,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAABkAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMateCOORDINATE\",\"entities\":[{\"component_id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAY…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003809999907389283,
+      "elapsed_s": 0.000040300015825778246,
       "result_bytes": 4371,
       "result_tokens": 2120
     },
@@ -153,7 +153,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:8a412bc4633c\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006009999196976423,
+      "elapsed_s": 0.00006140000186860561,
       "result_bytes": 2820,
       "result_tokens": 1176
     },
@@ -166,7 +166,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-8…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002699999895412475,
+      "elapsed_s": 0.000288500013994053,
       "result_bytes": 27503,
       "result_tokens": 12665
     },
@@ -179,7 +179,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0002\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005779997445642948,
+      "elapsed_s": 0.00008249998791143298,
       "result_bytes": 3056,
       "result_tokens": 1344
     },
@@ -192,7 +192,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0003\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00007870001718401909,
+      "elapsed_s": 0.00007130001904442906,
       "result_bytes": 7436,
       "result_tokens": 3527
     },
@@ -206,7 +206,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000017299986211583018,
+      "elapsed_s": 0.000016400008462369442,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -220,7 +220,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0003|cmp:0004\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Default\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003880000440403819,
+      "elapsed_s": 0.00003539997851476073,
       "result_bytes": 1132,
       "result_tokens": 354
     },
@@ -235,7 +235,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000025300018023699522,
+      "elapsed_s": 0.000022499996703118086,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -248,7 +248,7 @@
       "result_summary": "{\"result\":[{\"document_id\":\"doc:792f2ea287a0\",\"index\":0,\"text\":\"\\\"D1@Sketch1\\\" = \\\"N@Sketch1\\\"\",\"lhs\":\"D1@Sketch1\",\"is_global\":false,\"value\":0.5},{\"document_id\":\"doc:792f2ea287a0\",\"index\":1,\"text\":\"\\\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000024199980543926358,
+      "elapsed_s": 0.00002269999822601676,
       "result_bytes": 597,
       "result_tokens": 251
     },
@@ -261,7 +261,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00009849999332800508,
+      "elapsed_s": 0.000013200013199821115,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -274,7 +274,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00001610000617802143,
+      "elapsed_s": 0.000013400014722719789,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -295,7 +295,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp:0003\"],\"volume\":{\"value\":0.0,\"unit\":\"m3\"},\"settings\":{\"trea…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00006369999027810991,
+      "elapsed_s": 0.00005910001345910132,
       "result_bytes": 1037,
       "result_tokens": 315
     },
@@ -309,7 +309,7 @@
       "result_summary": "{\"result\":[{\"group_key\":\"cmp:0003|cmp:0004\",\"count\":1,\"statuses\":[\"computed\"],\"configurations\":[\"Default\"],\"interferences\":[{\"id\":\"int:0001\",\"configuration\":\"Default\",\"component_ids\":[\"cmp:0004\",\"cmp…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0000337999954354018,
+      "elapsed_s": 0.000033199990866705775,
       "result_bytes": 1132,
       "result_tokens": 354
     },
@@ -322,7 +322,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-001\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0003|cmp:0004\",\"configuration\":\"Default\",\"interference_ids\":[\"int:0001\"],\"component_ids\":[\"cmp:0003\",\"cmp:0004\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0014216999989002943,
+      "elapsed_s": 0.0012795999937225133,
       "result_bytes": 551,
       "result_tokens": 190
     },
@@ -335,7 +335,7 @@
       "result_summary": "{\"status\":\"contact\",\"contact\":{\"id\":\"C-002\",\"kind\":\"zero_volume\",\"group_key\":\"cmp:0002|cmp:0004\",\"configuration\":\"Default\",\"interference_ids\":[\"int:0002\"],\"component_ids\":[\"cmp:0002\",\"cmp:0004\"],\"vol…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005669999518431723,
+      "elapsed_s": 0.00005740000051446259,
       "result_bytes": 551,
       "result_tokens": 190
     },
@@ -348,9 +348,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.005606699996860698,
-      "result_bytes": 48566,
-      "result_tokens": 17810
+      "elapsed_s": 0.005472799995914102,
+      "result_bytes": 43354,
+      "result_tokens": 15892
     },
     {
       "index": 21,
@@ -359,7 +359,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-007\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0014888999867253006,
+      "elapsed_s": 0.0014325999945867807,
       "result_bytes": 6216,
       "result_tokens": 2568
     },
@@ -372,7 +372,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-008\",\"check\":\"rms.params.global_variables_present\",\"title\":\"none of the 4 equation(s) is a global variable: D1@Sketch1, D1@Sketch5, D2@Sket\\u2026\",\"status\":\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0015559999737888575,
+      "elapsed_s": 0.0015819999971427023,
       "result_bytes": 3438,
       "result_tokens": 1039
     },
@@ -383,7 +383,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-011\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde\\u2026\",\"status\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.004540499998256564,
+      "elapsed_s": 0.004339899984188378,
       "result_bytes": 4713,
       "result_tokens": 1466
     },
@@ -402,7 +402,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Vault version dok local-modification status for doc:681d2181ba04, doc:792f2ea287a0, dok doc:8a412bc4633c, tied to active configuration Defau…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017260000458918512,
+      "elapsed_s": 0.00017189999925903976,
       "result_bytes": 525,
       "result_tokens": 155
     },
@@ -424,7 +424,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"The native part drawing package for 268-88428 dok the applicable drawing or supplier dimensional specification for dowel pin 17543T177, incl…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00023889998556114733,
+      "elapsed_s": 0.00014990000636316836,
       "result_bytes": 683,
       "result_tokens": 179
     },
@@ -445,7 +445,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"A mating-part hole-axis/coaxiality requirement for the two dowel joints, plus malunomopum hole or datum references for the pin-side axes if …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001753999968059361,
+      "elapsed_s": 0.0001453000004403293,
       "result_bytes": 584,
       "result_tokens": 161
     },
@@ -476,7 +476,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"provenance\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001294999965466559,
+      "elapsed_s": 0.00012549999519251287,
       "result_bytes": 487,
       "result_tokens": 147
     },
@@ -505,7 +505,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014650000957772136,
+      "elapsed_s": 0.00012509999214671552,
       "result_bytes": 509,
       "result_tokens": 141
     },
@@ -545,7 +545,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:0004…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012989999959245324,
+      "elapsed_s": 0.0001247999898623675,
       "result_bytes": 525,
       "result_tokens": 164
     },
@@ -585,7 +585,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:00…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001294999965466559,
+      "elapsed_s": 0.00013010000111535192,
       "result_bytes": 518,
       "result_tokens": 157
     },
@@ -618,7 +618,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"out_of_scope\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"position…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012700000661425292,
+      "elapsed_s": 0.00013830000534653664,
       "result_bytes": 484,
       "result_tokens": 151
     },
@@ -658,7 +658,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0002\",\"cmp:0004\"],[\"cmp:0003\",\"cmp:000…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014699998428113759,
+      "elapsed_s": 0.00014099999680183828,
       "result_bytes": 551,
       "result_tokens": 169
     },
@@ -669,7 +669,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000055100012104958296,
+      "elapsed_s": 0.00005500001134350896,
       "result_bytes": 3882,
       "result_tokens": 850
     },
@@ -702,7 +702,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"coverage.closeout\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00012849998893216252,
+      "elapsed_s": 0.00012489999062381685,
       "result_bytes": 668,
       "result_tokens": 186
     },
@@ -713,7 +713,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005319999763742089,
+      "elapsed_s": 0.00005289999535307288,
       "result_bytes": 3888,
       "result_tokens": 851
     }
@@ -807,7 +807,7 @@
     {
       "id": "F-002",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "19 content feature(s) sit outside every group: Notes, Notes Area, Notes1___EndT…",
+      "title": "14 content feature(s) sit outside every group: MateReferences, Default-<1>, Tab…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
@@ -815,51 +815,6 @@
         "cmp:0003"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAGMAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAM4AAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAGQAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:792f2ea287a0",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAGwAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:792f2ea287a0",
           "sheet": null,
@@ -1001,14 +956,9 @@
         }
       ],
       "configuration": "Default",
-      "observed": "19 content feature(s) sit outside every group: Notes, Notes Area, Notes1___EndTag___, Ambient, Directional1, MateReferences, Default-<1>, Tables, Sketch1, Sketch2, Extrude1, Sketch2, Sketch3, Extrude2, Sketch3, Sketch4, Extrude3, Sketch4, Sketch5",
+      "observed": "14 content feature(s) sit outside every group: MateReferences, Default-<1>, Tables, Sketch1, Sketch2, Extrude1, Sketch2, Sketch3, Extrude2, Sketch3, Sketch4, Extrude3, Sketch4, Sketch5",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0007 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAGMAAAA= scope=doc:792f2ea287a0",
-        "feat:0008 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAM4AAAA= scope=doc:792f2ea287a0",
-        "feat:0009 Notes1___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAGQAAAA= scope=doc:792f2ea287a0",
-        "feat:0012 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAwAAAA= scope=doc:792f2ea287a0",
-        "feat:0013 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAGwAAAA= scope=doc:792f2ea287a0",
         "feat:0023 MateReferences [MateReferenceGroupFolder] persist_ref=aEIAACQAAAD//v8AAAAAAHsAAAA= scope=doc:792f2ea287a0",
         "feat:0024 Default-<1> [PosGroupFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:792f2ea287a0",
         "feat:0026 Tables [ConfigTableFolder] persist_ref=aEIAAAAAAAD//v8AAAAAAA== scope=doc:792f2ea287a0",
@@ -1167,58 +1117,13 @@
     {
       "id": "F-005",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "53 content feature(s) sit outside every group: Notes, Notes Area, Notes1___EndT…",
+      "title": "48 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Bo…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0004"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:8a412bc4633c",
           "sheet": null,
@@ -1666,14 +1571,9 @@
         }
       ],
       "configuration": "Default",
-      "observed": "53 content feature(s) sit outside every group: Notes, Notes Area, Notes1___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch5, CBORE for M8 KAPO7, Sketch5, Sketch4, Sketch8, CBORE for M8 TOPU3, Sketch8, Sketch7, Sketch10, Cut-Extrude1, Sketch10, Sketch11, Cut-Extrude2, Sketch11, Sketch15, Cut-Extrude3, Sketch15, Sketch19, Cut-Extrude4, Sketch19, Sketch20, Cut-Extrude5, Sketch20, Chamfer1, Sketch14, M5x0.8 Tapped Hole1, Sketch14, Sketch13, Sketch18, Ø3.0mm Fidaz Hole1, Sketch18, Sketch17, Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
+      "observed": "48 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch5, CBORE for M8 KAPO7, Sketch5, Sketch4, Sketch8, CBORE for M8 TOPU3, Sketch8, Sketch7, Sketch10, Cut-Extrude1, Sketch10, Sketch11, Cut-Extrude2, Sketch11, Sketch15, Cut-Extrude3, Sketch15, Sketch19, Cut-Extrude4, Sketch19, Sketch20, Cut-Extrude5, Sketch20, Chamfer1, Sketch14, M5x0.8 Tapped Hole1, Sketch14, Sketch13, Sketch18, Ø3.0mm Fidaz Hole1, Sketch18, Sketch17, Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0046 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFsAAAA= scope=doc:8a412bc4633c",
-        "feat:0047 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMgAAAA= scope=doc:8a412bc4633c",
-        "feat:0048 Notes1___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFwAAAA= scope=doc:8a412bc4633c",
-        "feat:0051 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:8a412bc4633c",
-        "feat:0052 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:8a412bc4633c",
         "feat:0062 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:8a412bc4633c",
         "feat:0063 Axis2 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADAAAAA= scope=doc:8a412bc4633c",
         "feat:0064 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:8a412bc4633c",
@@ -2091,7 +1991,7 @@
     "F-002": "No model explanation was generated; read the finding evidence and status."
   },
   "explanations_enabled": true,
-  "finding_explanation_fingerprint": "ca1e6a2b13f21b257af1b8966f7381218aea262192f212a8f4e43161e81baee8",
+  "finding_explanation_fingerprint": "b957d1ea04507817a4f6023745d4805157e5125b06e5ad6f76c45267638988f3",
   "contacts": [
     {
       "id": "C-001",
@@ -2649,11 +2549,10 @@
           "configuration": "Default",
           "positions": [],
           "document_ids": [
-            "doc:792f2ea287a0",
-            "doc:8a412bc4633c"
+            "doc:792f2ea287a0"
           ]
         },
-        "reason": "feature type names not in the calibrated table: NotesAreaFtrFolder x4, AnnotationViewFeat x2, AmbientLight x2, DirectionLight x2, MateReferenceGroupFolder x1, PosGroupFolder x1, ConfigTableFolder x1",
+        "reason": "feature type names not in the calibrated table: MateReferenceGroupFolder x1, PosGroupFolder x1, ConfigTableFolder x1",
         "error": null
       },
       {
@@ -3295,7 +3194,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.0012995166666666667,
+    "unattended_runtime_minutes": 0.0011665333333333334,
     "net_saved_minutes": null
   }
 }

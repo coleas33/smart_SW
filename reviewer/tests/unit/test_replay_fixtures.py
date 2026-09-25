@@ -5,7 +5,8 @@ one - and replaying it with the settings it was recorded with must reproduce eve
 round within 1% and the finding set exactly: every recorded finding replayed. Every replay of a
 committed fixture is graded with `config/standards.example.yaml`, the profile the pilot ran
 (research R2.10). The payload shapes that make later savings measurable are pinned too: the
-part check's 866 feature rows and the 110 mate entities with their persistent references.
+part check's 760 feature rows (866 until feature 003's decision 20A tolerated the system rows
+of the real dumps) and the 110 mate entities with their persistent references.
 
 Since the owner's decision 3A of 2026-09-23 the fixtures follow the code (research R2.54 to
 R2.56, `contracts/replay.md` sections 8 and 9): a deliberate change to what a tool returns, or
@@ -188,10 +189,18 @@ def test_the_big_assembly_carries_one_presentation_round() -> None:
     assert [r.kind for r in report.rounds].count("presentation") == 1
 
 
-def test_the_big_assembly_recorded_total_is_twelve_point_four_million() -> None:
+BIG_RECORDED_TOTAL = 11_732_561
+"""The big fixture's recorded input. The recording's bill is 12.4M, and the fixture was within 1%
+of it until feature 003's decision 20A (2026-09-25): the fixtures follow the code (decision 3A),
+and the part check the recorded review made no longer names the 106 system rows the eleven
+tolerated types cover, so each of the 31 rounds that carry its result records 21,928 input
+tokens fewer - 679,768 in all, from 12,412,329."""
+
+
+def test_the_big_assembly_recorded_total_follows_the_current_code() -> None:
     total = as_recorded("big-assembly").totals.recorded
 
-    assert abs(total - 12_400_000) / 12_400_000 < TOLERANCE
+    assert abs(total - BIG_RECORDED_TOTAL) / BIG_RECORDED_TOTAL < TOLERANCE
 
 
 # --- the User Story 2 acceptance: checks first alone (008 T049) ------------------------------
@@ -294,7 +303,8 @@ def test_the_big_assembly_keeps_the_recorded_payload_shapes() -> None:
     part = dispatch.call("check_rms_part", {"document_id": None}).payload
     mates = dispatch.call("list_mates", {"component_id": None}).payload
 
-    assert sum(len(rows) for rows in part["subjects"].values()) == 866
+    # 866 until decision 20A: the part check named 106 system rows loose that it now tolerates.
+    assert sum(len(rows) for rows in part["subjects"].values()) == 760
     entities = [entity for mate in mates["result"] for entity in mate["entities"]]
     assert len(entities) == 110
     assert all(entity["persist_ref"] for entity in entities)
@@ -566,7 +576,10 @@ def test_the_big_assemblys_follow_up_is_under_thirty_thousand() -> None:
     [follow_up] = [r for r in report.rounds if (r.turn, r.round) == (1, 0)]
     assert follow_up.kind == "main"
     assert follow_up.requested_input < FOLLOW_UP_TARGET
-    assert follow_up.recorded_input > 400_000
+    # The recording's follow-up carried 405k. The fixture follows the code: since decision 20A
+    # the part check it carries is 21,928 tokens smaller, so it records 383,392 (above 400,000
+    # until then).
+    assert follow_up.recorded_input > 380_000
 
 
 def test_both_prune_ages_are_priced_for_the_owner() -> None:

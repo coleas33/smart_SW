@@ -13,6 +13,7 @@ described), and an absent constrained status is `unavailable`, never a defined s
 
 from __future__ import annotations
 
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -692,9 +693,9 @@ SYSTEM_TYPES_ADDED_2026_09_25: tuple[str, ...] = (
 )
 """The census names the table did not carry and the planner filed `unclassified`: the
 annotation folder and view under the annotations container, the scene's lights, a derived
-part's body and reference folders, and the cosmetic thread annotation. They are the planner's
-`remodel_not_content`; feature 003's rules still count them until decision 20A lands (003 T090
-to T092, waiting on the owner's question 20A-Q1)."""
+part's body and reference folders, and the cosmetic thread annotation. They are
+`tolerated_loose`, the one list feature 003's rules and feature 004's planner both read, so
+neither counts them as content (004 T145; the checker's too since the owner's decision 20A)."""
 
 
 def test_the_census_is_thirty_five_distinct_names() -> None:
@@ -710,7 +711,6 @@ def test_no_type_the_real_packages_carry_is_left_unplaced(
     placed = (
         table.classify(type_name) != "unknown"
         or type_name in table.tolerated_loose
-        or type_name in table.remodel_not_content
         or type_name == table.folder_type
         or type_name in table.derived_base
     )
@@ -719,95 +719,29 @@ def test_no_type_the_real_packages_carry_is_left_unplaced(
 
 
 @pytest.mark.parametrize("type_name", SYSTEM_TYPES_ADDED_2026_09_25)
-def test_the_system_types_the_real_packages_carry_are_not_content_to_the_planner(
+def test_the_system_types_the_real_packages_carry_are_tolerated_and_not_content(
     table: RmsTypeTable, type_name: str
 ) -> None:
+    """Decision 20A: the checker stops counting them, as the planner already had - one list,
+    so the two cannot disagree about what is content. Tolerated, not classified: no rule ever
+    asks their class, and the planner never places them."""
     row = build_feature(type_name=type_name, name=f"{type_name}1")
 
-    assert type_name in table.remodel_not_content
-    assert not table.planner_view().is_content(row)
+    assert type_name in table.tolerated_loose
+    assert not table.is_content(row)
     assert table.classify(type_name) == "unknown"
 
 
-@pytest.mark.parametrize("type_name", SYSTEM_TYPES_ADDED_2026_09_25)
-def test_feature_003s_rules_still_count_them_until_decision_20a_lands(
-    table: RmsTypeTable, type_name: str
+def test_the_table_keeps_one_list_of_tolerated_types(
+    table: RmsTypeTable, document: dict[str, Any]
 ) -> None:
-    """`tolerated_loose` is feature 003's key too, and the recorded runs feature 008 replays
-    grade these rows as content. The owner decided the checker stops counting them (decision
-    20A), and that lands with 003 T090 to T092, which wait on the owner's question 20A-Q1;
-    until then the checker's reading is pinned unchanged here and the planner's alone moves."""
-    row = build_feature(type_name=type_name, name=f"{type_name}1")
-
-    assert type_name not in table.tolerated_loose
-    assert table.is_content(row)
-
-
-FEATURE_003 = Path(__file__).resolve().parents[3] / "specs" / "003-resilient-modeling"
-"""Feature 003's package, whose normative texts record decision 20A."""
-
-DECISION_20A_PENDING = {
-    FEATURE_003 / "contracts" / "rules.md": (
-        "*Status 2026-09-25 (review of decision 20A): not yet in effect.*"
-    ),
-    FEATURE_003 / "research.md": (
-        "*Status 2026-09-25 (review of decision 20A): decided, not yet in effect.*"
-    ),
-    FEATURE_003 / "spec.md": "*Not yet in effect (review of 2026-09-25):*",
-}
-"""Each text that records decision 20A as it will read, and the sentence saying it is pending."""
-
-
-@pytest.mark.parametrize("path", sorted(DECISION_20A_PENDING), ids=lambda path: path.name)
-def test_the_texts_say_decision_20a_is_pending_exactly_while_the_planner_only_key_stands(
-    path: Path,
-) -> None:
-    """Decision 20A is written into feature 003's normative texts as the table will read once
-    T090 to T092 land. While the shipped file still has decision 17A's `remodel_not_content`,
-    each of them says the decision is not yet in effect, and the day the key goes the sentence
-    goes with it, so no text describes a table that is not the one shipped (the review of
-    2026-09-25 found the contract written as if the key had already gone)."""
-    shipped = yaml.safe_load(DEFAULT_TYPES_PATH.read_text(encoding="utf-8"))
-    key_stands = "remodel_not_content" in shipped
-
-    assert (DECISION_20A_PENDING[path] in path.read_text(encoding="utf-8")) is key_stands
-
-
-def test_the_planner_view_tolerates_the_planners_system_types_and_changes_nothing_else(
-    table: RmsTypeTable,
-) -> None:
-    view = table.planner_view()
-
-    assert view.tolerated_loose == table.tolerated_loose | table.remodel_not_content
-    assert view.remodel_not_content == frozenset()
-    assert view.planner_view() == view
-    for name in ("version", "calibrated_version", "groups", "classes", "ambiguous",
-                 "default_group_by_class", "derived_base", "default_names_excluded",
-                 "constrained_status_map", "assembly"):
-        assert getattr(view, name) == getattr(table, name), name
-
-
-def test_the_planners_system_types_are_disjoint_from_every_other_answer(
-    table: RmsTypeTable,
-) -> None:
-    classified = table.ambiguous.union(*table.classes.values())
-
-    assert not table.remodel_not_content & table.tolerated_loose
-    assert not table.remodel_not_content & table.derived_base
-    assert not table.remodel_not_content & classified
-
-
-@pytest.mark.parametrize(
-    ("key", "name"),
-    [("tolerated_loose", "AmbientLight"), ("derived_base", "AmbientLight")],
-)
-def test_a_table_that_answers_for_a_planner_system_type_twice_is_refused(
-    tmp_path: Path, document: dict[str, Any], key: str, name: str
-) -> None:
-    document = dict(document, **{key: [*document[key], name]})
-
-    with pytest.raises(ValueError, match="remodel_not_content|derived_base"):
-        load_table(_write(tmp_path, document))
+    """Decision 20A (DRY): decision 17A's planner-only key and the view that read it are gone
+    from the file, the required keys, the model and the table's methods, so no reader can see
+    a second answer to "is this content?"."""
+    assert "remodel_not_content" not in document
+    assert "remodel_not_content" not in REQUIRED_KEYS
+    assert "remodel_not_content" not in {field.name for field in dataclass_fields(RmsTypeTable)}
+    assert not hasattr(table, "planner_view")
 
 
 def test_the_census_adds_no_type_the_real_packages_do_not_carry() -> None:

@@ -72,7 +72,9 @@ bill by exactly the size change of the results it carries - a zero residual on e
 none outside the rule (`contracts/replay.md` section 10; since feature 010's checklist items the
 drift reaches 1.55%, 1.75% and 1.75%, which the old 1% bar would have failed for good); on the
 big assembly's recording, 88 findings replayed and 11 not replayable offline (six interference,
-five standards without a profile). Skipped with a reason anywhere the dumps are absent.
+five standards without a profile); since feature 003's decision 20A, 20, 2 and 1 recorded
+`rms.grouping.all_features_in_a_group` findings narrowed by the type table (decision 23A),
+none lost or added. Skipped with a reason anywhere the dumps are absent.
 
 ## Scenario 4 (US2): checks first on the fixtures
 

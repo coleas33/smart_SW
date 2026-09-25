@@ -1,9 +1,9 @@
 {
-  "session_id": "ad249827-eede-45a6-b752-466ba1d10668",
+  "session_id": "9d946d25-2b06-47c7-8bd0-36d49892d1ea",
   "package_id": "011bb926-a012-4587-bdf8-d1480ac3ec90",
   "design_id": "dsn:681d2181ba04",
-  "started_at": "2026-09-25T14:22:14.762540Z",
-  "ended_at": "2026-09-25T14:22:14.830014Z",
+  "started_at": "2026-09-25T18:32:28.252120Z",
+  "ended_at": "2026-09-25T18:32:28.315523Z",
   "model": "gpt-5.6-luna",
   "provider_info": {
     "provider": "fake",
@@ -35,54 +35,54 @@
     "rounds": 37,
     "turns": 4,
     "totals": {
-      "input_tokens": 1505638,
+      "input_tokens": 1483228,
       "cached_input_tokens": 1413047,
       "cache_write_tokens": 51130,
       "output_tokens": 6311,
       "reasoning_tokens": 2357,
       "tool_result_input_tokens": null,
-      "total_tokens": 1511949,
+      "total_tokens": 1489539,
       "latency_s": 94.78629639997962
     },
     "by_turn": [
       {
-        "input_tokens": 1324985,
+        "input_tokens": 1305503,
         "cached_input_tokens": 1240045,
         "cache_write_tokens": 48981,
         "output_tokens": 5128,
         "reasoning_tokens": 1805,
         "tool_result_input_tokens": null,
-        "total_tokens": 1330113,
+        "total_tokens": 1310631,
         "latency_s": 79.63422639996861
       },
       {
-        "input_tokens": 59838,
+        "input_tokens": 58862,
         "cached_input_tokens": 56773,
         "cache_write_tokens": 1231,
         "output_tokens": 210,
         "reasoning_tokens": 74,
         "tool_result_input_tokens": null,
-        "total_tokens": 60048,
+        "total_tokens": 59072,
         "latency_s": 2.8785140000109095
       },
       {
-        "input_tokens": 60059,
+        "input_tokens": 59083,
         "cached_input_tokens": 58004,
         "cache_write_tokens": 221,
         "output_tokens": 687,
         "reasoning_tokens": 374,
         "tool_result_input_tokens": null,
-        "total_tokens": 60746,
+        "total_tokens": 59770,
         "latency_s": 7.736465699999826
       },
       {
-        "input_tokens": 60756,
+        "input_tokens": 59780,
         "cached_input_tokens": 58225,
         "cache_write_tokens": 697,
         "output_tokens": 286,
         "reasoning_tokens": 104,
         "tool_result_input_tokens": null,
-        "total_tokens": 61042,
+        "total_tokens": 60066,
         "latency_s": 4.537090300000273
       }
     ]
@@ -96,7 +96,7 @@
       "result_summary": "{\"design_id\":\"dsn:681d2181ba04\",\"design_name\":\"268-88428\",\"configuration\":\"Default\",\"root_assembly_document_id\":\"doc:681d2181ba04\",\"drawing_document_ids\":[],\"document_count\":3,\"component_count\":4,\"ma…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000022299995180219412,
+      "elapsed_s": 0.000024200009647756815,
       "result_bytes": 473,
       "result_tokens": 163
     },
@@ -107,7 +107,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000031400006264448166,
+      "elapsed_s": 0.000028300011763349175,
       "result_bytes": 3838,
       "result_tokens": 843
     },
@@ -118,7 +118,7 @@
       "result_summary": "{\"result\":[{\"kind\":\"not_extracted\",\"entity_kind\":\"component\",\"entity_id\":null,\"reason\":\"'ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2' has no loaded model document, so Toolbox identity could man be…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00004339998122304678,
+      "elapsed_s": 0.00003759999526664615,
       "result_bytes": 7215,
       "result_tokens": 2222
     },
@@ -132,7 +132,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0001\",\"name\":\"268-88428\",\"full_path\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"referenced_configuration\":\"Default\",\"suppression\":\"resolved\",\"pattern_id\":null,\"is_toolbox\":fa…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000018099992303177714,
+      "elapsed_s": 0.00001960000372491777,
       "result_bytes": 221,
       "result_tokens": 74
     },
@@ -146,7 +146,7 @@
       "result_summary": "{\"result\":[{\"id\":\"cmp:0002\",\"name\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"full_path\":\"ZALUD KAM, 3MM X 18MM ZI, PU, FOT, 17543T177-2\",\"document_id\":\"doc:792f2ea287a0\",\"referenced_configura…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000016399979358538985,
+      "elapsed_s": 0.000017699989257380366,
       "result_bytes": 801,
       "result_tokens": 325
     },
@@ -159,7 +159,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0001\",\"persist_ref\":\"aEIAAAUAAAD//v8AAAAAAA==\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-88428\",\"document_id\":\"doc:681d2181ba04\",\"parent_id\":null,\"referenced_configur…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00007460001506842673,
+      "elapsed_s": 0.00007619999814778566,
       "result_bytes": 3303,
       "result_tokens": 1382
     },
@@ -172,7 +172,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0002\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMgBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000037999998312443495,
+      "elapsed_s": 0.00003809999907389283,
       "result_bytes": 1260,
       "result_tokens": 554
     },
@@ -185,7 +185,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0003\",\"persist_ref\":\"aEIAAAUAAAD//v84WgBBAEwAVQBEACAASwBBAE0ALAAgADMATQBNACAAWAAgADEAOABNAE0AIABaAEkALAAgAFAAVQAsACAARgBPAFQALAAgADEANwA1ADQAMwBUADEANwA3AC0AMQBAADIANgA4AC0AOA…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00004539999645203352,
+      "elapsed_s": 0.0000467000063508749,
       "result_bytes": 4923,
       "result_tokens": 2380
     },
@@ -198,7 +198,7 @@
       "result_summary": "{\"component\":{\"id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAUAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"name\":\"268-8…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0002880000101868063,
+      "elapsed_s": 0.0003031000087503344,
       "result_bytes": 27503,
       "result_tokens": 12651
     },
@@ -212,7 +212,7 @@
       "result_summary": "{\"result\":[{\"id\":\"hol:0001\",\"persist_ref\":\"aEIAAAAAAAD//v8VMgA2ADgALQA4ADgANAAyADgALQAxAEAAMgA2ADgALQA4ADgANAAyADgABAAAABAAAAABAAAAAQAAABgAAAA=\",\"persist_ref_scope\":\"doc:8a412bc4633c\",\"component_id\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000052099989261478186,
+      "elapsed_s": 0.00005840000812895596,
       "result_bytes": 2820,
       "result_tokens": 1176
     },
@@ -226,7 +226,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000015700003132224083,
+      "elapsed_s": 0.000016200006939470768,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -239,7 +239,7 @@
       "result_summary": "{\"result\":[{\"id\":\"mat:0001\",\"persist_ref\":\"aEIAABgAAAD//v8AAAAAABkAAAA=\",\"persist_ref_scope\":\"doc:681d2181ba04\",\"type\":\"swMateCOORDINATE\",\"entities\":[{\"component_id\":\"cmp:0004\",\"persist_ref\":\"aEIAAAY…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003170000854879618,
+      "elapsed_s": 0.00003920000744983554,
       "result_bytes": 4371,
       "result_tokens": 2106
     },
@@ -252,9 +252,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-001\",\"check\":\"rms.folders.present\",\"title\":\"missing group folder(s): 1-Ref, 2-Construction, 3-Core, 4-Detail, 5-Modify, 6-Q\\u2026\",\"status\":\"suspected\",\"seve…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00627310000709258,
-      "result_bytes": 34484,
-      "result_tokens": 12593
+      "elapsed_s": 0.006546400021761656,
+      "result_bytes": 31852,
+      "result_tokens": 11637
     },
     {
       "index": 13,
@@ -263,7 +263,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-004\",\"check\":\"rms.assembly.mates_to_reference_geometry\",\"title\":\"mat:0002 (swMateCONCENTRIC) references swSelFACES on 268-88428-1, swSelFACES on\\u2026\",\"stat…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0013626999862026423,
+      "elapsed_s": 0.0013784999900963157,
       "result_bytes": 6219,
       "result_tokens": 2568
     },
@@ -276,9 +276,9 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-005\",\"check\":\"rms.params.global_variables_present\",\"title\":\"the equation manager holds no equations\",\"status\":\"demonstrated\",\"severity\":\"medium\",\"component_i…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0017041999963112175,
-      "result_bytes": 2376,
-      "result_tokens": 692
+      "elapsed_s": 0.0015372000052593648,
+      "result_bytes": 2320,
+      "result_tokens": 675
     },
     {
       "index": 15,
@@ -297,7 +297,7 @@
       "result_summary": "{\"status\":\"computed\",\"configuration\":\"Default\",\"interferences\":[],\"added_to_package\":0,\"gaps\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00003659998765215278,
+      "elapsed_s": 0.00003460000152699649,
       "result_bytes": 106,
       "result_tokens": 31
     },
@@ -311,7 +311,7 @@
       "result_summary": "{\"result\":[]}",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000015300000086426735,
+      "elapsed_s": 0.000015099998563528061,
       "result_bytes": 14,
       "result_tokens": 5
     },
@@ -322,7 +322,7 @@
       "result_summary": "{\"status\":\"recorded\",\"findings\":[{\"id\":\"F-007\",\"check\":\"standards.part.sketches_fully_defined\",\"title\":\"Sketch2 is under-defined, at the top level of the feature tree; Sketch2 is unde\\u2026\",\"status\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.005141999979969114,
+      "elapsed_s": 0.005242100014584139,
       "result_bytes": 5164,
       "result_tokens": 1587
     },
@@ -341,7 +341,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-001\",\"what\":\"Vault version and local-modified status for doc:681d2181ba04, doc:792f2ea287a0, and doc:8a412bc4633c; revision for doc:792f2ea287a0.\",\"why\":…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001677999971434474,
+      "elapsed_s": 0.00020179999410174787,
       "result_bytes": 520,
       "result_tokens": 164
     },
@@ -364,7 +364,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-002\",\"what\":\"Native part and assembly drawings for the reviewed Default configuration, with readable text layers, including material, general tolerance, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017260000458918512,
+      "elapsed_s": 0.00016319999122060835,
       "result_bytes": 745,
       "result_tokens": 205
     },
@@ -383,7 +383,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-003\",\"what\":\"Resolved geometry for dowel-pin instances cmp:0002 and cmp:0003, including their cylindrical axes/diameter and the mating 3.0 mm hole axes, …",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014769998961128294,
+      "elapsed_s": 0.0001443000219296664,
       "result_bytes": 598,
       "result_tokens": 155
     },
@@ -403,7 +403,7 @@
       "result_summary": "{\"status\":\"open\",\"evidence_request\":{\"id\":\"ER-004\",\"what\":\"Functional axial gap or preload requirement for the assembled Default configuration, with the complete contributing drawing dimensions and t…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000148899998748675,
+      "elapsed_s": 0.00015129998791962862,
       "result_bytes": 502,
       "result_tokens": 127
     },
@@ -434,7 +434,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"provenance\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00014220000593923032,
+      "elapsed_s": 0.00012680000509135425,
       "result_bytes": 507,
       "result_tokens": 152
     },
@@ -465,7 +465,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"drawing.manufacturing_inputs\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"D…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001264000020455569,
+      "elapsed_s": 0.0001317999849561602,
       "result_bytes": 540,
       "result_tokens": 161
     },
@@ -503,7 +503,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.fit\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:0004…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001264000020455569,
+      "elapsed_s": 0.00012740000966005027,
       "result_bytes": 543,
       "result_tokens": 168
     },
@@ -534,7 +534,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"interfaces.stack\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\":[\"a…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001255999959539622,
+      "elapsed_s": 0.00013070000568404794,
       "result_bytes": 465,
       "result_tokens": 132
     },
@@ -565,7 +565,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"out_of_scope\",\"coverage_item\":{\"check\":\"fasteners\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"position…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00013249999028630555,
+      "elapsed_s": 0.00013070000568404794,
       "result_bytes": 492,
       "result_tokens": 152
     },
@@ -605,7 +605,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"holes.alignment\",\"scope\":{\"component_ids\":[\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[[\"cmp:0003\",\"cmp:0004\"],[\"cmp:0002\",\"cmp:000…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00017980000120587647,
+      "elapsed_s": 0.00020480001694522798,
       "result_bytes": 587,
       "result_tokens": 175
     },
@@ -636,7 +636,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"checked\",\"coverage_item\":{\"check\":\"interference\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"positions\"…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00015430001076310873,
+      "elapsed_s": 0.0001336999994236976,
       "result_bytes": 668,
       "result_tokens": 159
     },
@@ -647,7 +647,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.000055100012104958296,
+      "elapsed_s": 0.00005679999594576657,
       "result_bytes": 3885,
       "result_tokens": 850
     },
@@ -678,7 +678,7 @@
       "result_summary": "{\"status\":\"recorded\",\"bucket\":\"unresolved\",\"coverage_item\":{\"check\":\"coverage.closeout\",\"scope\":{\"component_ids\":[\"cmp:0001\",\"cmp:0002\",\"cmp:0003\",\"cmp:0004\"],\"pairs\":[],\"configuration\":\"Default\",\"po…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.0001283000165130943,
+      "elapsed_s": 0.00013199998647905886,
       "result_bytes": 656,
       "result_tokens": 181
     },
@@ -689,7 +689,7 @@
       "result_summary": "{\"result\":[{\"id\":\"provenance\",\"title\":\"Provenance and manifest discrepancies\",\"check_prefix\":\"provenance.\",\"description\":\"Confirm every reviewed document matches the manifest (vault version, revision…",
       "status": "ok",
       "error": null,
-      "elapsed_s": 0.00005460000829771161,
+      "elapsed_s": 0.000053800002206116915,
       "result_bytes": 3891,
       "result_tokens": 851
     }
@@ -795,58 +795,13 @@
     {
       "id": "F-002",
       "check": "rms.grouping.all_features_in_a_group",
-      "title": "53 content feature(s) sit outside every group: Notes, Notes Area, Notes1___EndT…",
+      "title": "48 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Bo…",
       "status": "demonstrated",
       "severity": "medium",
       "component_ids": [
         "cmp:0004"
       ],
       "drawing_locations": [
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFsAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACAAAAD//v8AAAAAAMgAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAACQAAAD//v8AAAAAAFwAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAcAAAA=",
-          "page": null,
-          "bbox": null
-        },
-        {
-          "document_id": "doc:8a412bc4633c",
-          "sheet": null,
-          "view": null,
-          "annotation": null,
-          "persist_ref": "aEIAAAEAAAD//v8AAAAAAAgAAAA=",
-          "page": null,
-          "bbox": null
-        },
         {
           "document_id": "doc:8a412bc4633c",
           "sheet": null,
@@ -1294,14 +1249,9 @@
         }
       ],
       "configuration": "Default",
-      "observed": "53 content feature(s) sit outside every group: Notes, Notes Area, Notes1___EndTag___, Ambient, Directional1, Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch5, CBORE for M8 BEBE9, Sketch5, Sketch4, Sketch8, CBORE for M8 NUBI6, Sketch8, Sketch7, Sketch10, Cut-Extrude1, Sketch10, Sketch11, Cut-Extrude2, Sketch11, Sketch15, Cut-Extrude3, Sketch15, Sketch19, Cut-Extrude4, Sketch19, Sketch20, Cut-Extrude5, Sketch20, Chamfer1, Sketch14, M5x0.8 Tapped Hole1, Sketch14, Sketch13, Sketch18, Ø3.0mm Dowel Hole1, Sketch18, Sketch17, Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
+      "observed": "48 content feature(s) sit outside every group: Axis1, Axis2, Axis3, Sketch1, Boss-Extrude1, Sketch1, Sketch2, Boss-Extrude2, Sketch2, Sketch5, CBORE for M8 BEBE9, Sketch5, Sketch4, Sketch8, CBORE for M8 NUBI6, Sketch8, Sketch7, Sketch10, Cut-Extrude1, Sketch10, Sketch11, Cut-Extrude2, Sketch11, Sketch15, Cut-Extrude3, Sketch15, Sketch19, Cut-Extrude4, Sketch19, Sketch20, Cut-Extrude5, Sketch20, Chamfer1, Sketch14, M5x0.8 Tapped Hole1, Sketch14, Sketch13, Sketch18, Ø3.0mm Dowel Hole1, Sketch18, Sketch17, Fillet4, Fillet1, Fillet2, Fillet3, Fillet6, Fillet5, Fillet8",
       "requirement": "Every content feature lives inside a group.",
       "inputs": [
-        "feat:0007 Notes [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFsAAAA= scope=doc:8a412bc4633c",
-        "feat:0008 Notes Area [AnnotationViewFeat] persist_ref=aEIAACAAAAD//v8AAAAAAMgAAAA= scope=doc:8a412bc4633c",
-        "feat:0009 Notes1___EndTag___ [NotesAreaFtrFolder] persist_ref=aEIAACQAAAD//v8AAAAAAFwAAAA= scope=doc:8a412bc4633c",
-        "feat:0012 Ambient [AmbientLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAcAAAA= scope=doc:8a412bc4633c",
-        "feat:0013 Directional1 [DirectionLight] persist_ref=aEIAAAEAAAD//v8AAAAAAAgAAAA= scope=doc:8a412bc4633c",
         "feat:0023 Axis1 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAAC8AAAA= scope=doc:8a412bc4633c",
         "feat:0024 Axis2 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADAAAAA= scope=doc:8a412bc4633c",
         "feat:0025 Axis3 [RefAxis] persist_ref=aEIAAAEAAAD//v8AAAAAADEAAAA= scope=doc:8a412bc4633c",
@@ -1680,7 +1630,7 @@
     "F-005": "No model explanation was generated; read the finding evidence and status."
   },
   "explanations_enabled": true,
-  "finding_explanation_fingerprint": "36210321cc39d8c996029518cb02208092bd37f4f14f7a030423a03a95a963c6",
+  "finding_explanation_fingerprint": "33b67da99f9a4963eb58a91769842f6ca3ca4c48f7f629940450cda82d7cba6e",
   "model_view": {
     "payload_slimming": false,
     "history_pruning": false,
@@ -2476,20 +2426,6 @@
         "error": null
       },
       {
-        "check": "rms.types.unknown",
-        "scope": {
-          "component_ids": [],
-          "pairs": [],
-          "configuration": "Default",
-          "positions": [],
-          "document_ids": [
-            "doc:8a412bc4633c"
-          ]
-        },
-        "reason": "feature type names not in the calibrated table: NotesAreaFtrFolder x2, AnnotationViewFeat x1, AmbientLight x1, DirectionLight x1",
-        "error": null
-      },
-      {
         "check": "modeling.resilience",
         "scope": {
           "component_ids": [],
@@ -3157,7 +3093,7 @@
     "assisted_supervision_minutes": 0.0,
     "assisted_verification_minutes": 0.0,
     "false_alarm_handling_minutes": 0.0,
-    "unattended_runtime_minutes": 0.0011245666666666668,
+    "unattended_runtime_minutes": 0.0010567166666666666,
     "net_saved_minutes": null
   }
 }
