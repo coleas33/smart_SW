@@ -491,9 +491,10 @@ carry their references (section 5), and the fixture's references are the recorde
 the names and paths inside them replaced, every other byte kept. `scrambled_key` carries each
 location's reference through `FictionalMap.persist_ref`, the function `FictionalMap.package`
 scrambled the package's references with, beside the document id, sheet, view and annotation it
-already carried through `FictionalMap.value`; so a recorded finding and the fixture finding the
-current code makes on the scrambled package compare exactly, reference by reference, narrowed or
-not. The recorded arguments are scrambled as text (`FictionalMap.arguments`), not as references:
+already carried through `FictionalMap.value`, and puts the carried locations back in the key's
+order (`findings.subject_locations`, the order `finding_subject_key` sorts with), which a changed
+reference can change; so a recorded finding and the fixture finding the current code makes on the
+scrambled package compare exactly, reference by reference, narrowed or not. The recorded arguments are scrambled as text (`FictionalMap.arguments`), not as references:
 none of the three recordings passes a reference as an argument, and a finding whose reference came
 from one would be compared through two different scrambles, which can refuse the fixture but never
 pass a mismatch.

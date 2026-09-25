@@ -8,10 +8,10 @@ comparison read it as a recorded finding lost and a new one added. It is **narro
 when, after removing each drawing location whose `(scope, persist_ref)` names only rows the
 current type table does not count as content, its key equals the key of a finding in the
 requested pass that nothing else matched - one to one - and it is listed with the locations
-removed. A finding still unmatched after narrowing stays lost. The key's locations carry no
-persistent reference, so narrowing sees what the exact comparison sees - how many subjects a
-finding names in each scope, not which - and a question to the owner (008 T128) asks whether it
-should see more.
+removed. A finding still unmatched after narrowing stays lost. Since the owner's decision 25A (008
+T128) a key's location carries its persistent reference, so narrowing sees what the exact
+comparison sees - which subjects a finding names, reference by reference, not only how many in
+each scope - and a finding that swapped one subject for another is lost by both.
 
 The recordings are made by a copy of the shipped table that still counted `SensorFolder` as
 content and replayed by the shipped table, which tolerates it (`tests/support/narrowed.py`).
@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -38,10 +37,12 @@ from swreview.benchmark.replay import (
     replay,
     subject_of,
 )
+from swreview.checks import rms_types
 from swreview.checks.rms_types import load_table
 from swreview.findings import Finding, finding_subject_key
 from swreview.ir.loader import PACKAGE_FILE_NAME, load_package
 from swreview.ir.models import EvidencePackage, SourceRef
+from swreview.report.session import load_session
 from tests.support.narrowed import (
     BOSS,
     CORE,
@@ -50,11 +51,13 @@ from tests.support.narrowed import (
     PART,
     SENSORS,
     WIDGET,
+    edit_loose,
     loose_findings,
     older_table,
     part_package,
     record,
     row_named,
+    swap_reference,
 )
 from tests.support.packages import persist_ref
 from tests.support.replay import ALL_OFF, rewrite_session
@@ -63,9 +66,17 @@ pytestmark = pytest.mark.usefixtures("vocabulary")
 
 runner = CliRunner()
 
-NARROWED_SUBJECT = f"components cmp:0002; at {PART}; at {PART}; configuration Default"
+
+def at(name: str) -> str:
+    """How a printed subject names the location of row `name` on the part: its scope and, since
+    the owner's decision 25A, its reference (`contracts/replay.md` section 7)."""
+    return f"at {PART} persist_ref {row_named(part_package(), name).persist_ref}"
+
+
+NARROWED_SUBJECT = f"components cmp:0002; {at(SENSORS)}; {at(WIDGET)}; configuration Default"
 """The recorded finding's subject: its two loose subjects, `Sensors` and `Widget1`, each one
-location on the part; today's finding holds `Widget1`'s alone."""
+location on the part with its reference, in the key's order; today's finding holds `Widget1`'s
+alone."""
 
 
 @pytest.fixture
@@ -85,15 +96,6 @@ def run(tmp_path: Path, older: Path) -> Path:
 def recorded_loose(run: Path) -> Finding:
     [finding] = loose_findings(run)
     return finding
-
-
-def edit_loose(run: Path, change: Callable[[dict[str, Any]], None]) -> None:
-    def edited(session: dict[str, Any]) -> None:
-        for finding in session["findings"]:
-            if finding["check"] == LOOSE:
-                change(finding)
-
-    rewrite_session(run, edited)
 
 
 def replay_cli(run: Path, *extra: str) -> Any:
@@ -264,63 +266,64 @@ def test_a_system_row_whose_reference_a_content_row_shares_is_not_removed(
     assert [item.check for item in report.findings.added] == [LOOSE]
 
 
-# --- what the key can see (the review of decision 23A: 008 T127, T128) --------------------------
+# --- exact references (owner decision 25A, 008 T128) --------------------------------------------
 
 
-def swap_reference(run: Path, old: str, new: str) -> None:
-    """Each location of the recorded loose finding naming row `old` names row `new` instead."""
-    package = load_package(run).package
-    before, after = row_named(package, old).persist_ref, row_named(package, new).persist_ref
-
-    def swapped(finding: dict[str, Any]) -> None:
-        for location in finding["drawing_locations"]:
-            if location.get("persist_ref") == before:
-                location["persist_ref"] = after
-
-    edit_loose(run, swapped)
+def references(finding: Finding) -> list[str | None]:
+    return [location.persist_ref for location in finding.drawing_locations]
 
 
-def test_a_content_subject_swapped_at_the_same_count_narrows_because_the_key_cannot_see_it(
-    run: Path,
-) -> None:
+def replayed_by(table: Path, run: Path) -> Any:
+    """The replay of `run` with `table` as the type table the current code ships."""
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(rms_types, "DEFAULT_TYPES_PATH", table)
+        return replay(run, requested=ALL_OFF)
+
+
+def test_a_content_subject_swapped_at_the_same_count_is_lost_not_narrowed(run: Path) -> None:
     """The recorded finding names `Sensors` and `Boss1` where it named `Sensors` and `Widget1`.
-    Once `Sensors` goes it holds one location on the part, as today's finding - `Widget1` -
-    does, and a key's location carries no persistent reference (research R2.8): the keys are
-    equal and it narrows, though `Boss1` went and `Widget1` came. Decision 23A narrows on the
-    key, as every other outcome is decided; whether narrowing should also compare references is
-    the owner's question, T128. Until the owner answers, this is what the replay does."""
+    Once `Sensors` goes it holds one location on the part, as today's finding does, but naming
+    `Boss1`'s reference where today's names `Widget1`'s: its remaining subject is not the current
+    finding's, so it is lost - and today's added - and the exit is 1. Until decision 25A a key's
+    location carried no reference and this narrowed (008 T127)."""
     swap_reference(run, WIDGET, BOSS)
     boss = row_named(load_package(run).package, BOSS)
-    assert boss.persist_ref in {ref.persist_ref for ref in recorded_loose(run).drawing_locations}
+    assert boss.persist_ref in references(recorded_loose(run))
 
     report = replay(run, requested=ALL_OFF)
 
-    [item] = report.findings.narrowed
-    assert (item.check, item.removed_locations) == (LOOSE, 1)
-    assert report.findings.lost == []
-    assert report.findings.added == []
+    assert report.findings.narrowed == []
+    [lost] = report.findings.lost
+    [added] = report.findings.added
+    assert (lost.check, added.check) == (LOOSE, LOOSE)
+    assert replay_cli(run).exit_code == 1
 
 
-def test_the_exact_comparison_keeps_a_finding_whose_one_subject_was_swapped(
+def test_the_exact_comparison_loses_a_finding_whose_one_subject_was_swapped(
     tmp_path: Path,
 ) -> None:
     """With nothing to narrow - recorded by today's table - a recorded finding naming `Boss1`
-    where today's names `Widget1` is kept: one location on the part either way. Narrowing is
-    exactly as blind as this, and no blinder."""
+    where today's names `Widget1` is lost, and today's added: one location on the part either
+    way, but not the same item. The two lines differ in the reference, as the findings do."""
     run = record(tmp_path / "today", part_package())
     swap_reference(run, WIDGET, BOSS)
 
     report = replay(run, requested=ALL_OFF)
 
     assert report.findings.narrowed == []
-    assert report.findings.lost == []
-    assert report.findings.added == []
-    assert report.findings.recorded == report.findings.replayed
+    [lost] = report.findings.lost
+    [added] = report.findings.added
+    assert lost.subject == f"components cmp:0002; {at(BOSS)}; configuration Default"
+    assert added.subject == f"components cmp:0002; {at(WIDGET)}; configuration Default"
+    result = replay_cli(run)
+    assert result.exit_code == 1
+    assert f"  lost: {LOOSE} - {lost.subject}" in result.stdout
+    assert f"  added: {LOOSE} - {added.subject}" in result.stdout
 
 
 def test_a_content_subject_swapped_and_one_more_lost_is_still_lost(run: Path) -> None:
-    """What the key does see: the count. `Boss1` in place of `Widget1` and a second content
-    subject besides leaves two locations after narrowing, against today's one - lost."""
+    """`Boss1` in place of `Widget1` and a second content subject besides leaves two locations
+    after narrowing, against today's one - lost, by the count as by the references."""
     swap_reference(run, WIDGET, BOSS)
     widget = row_named(load_package(run).package, WIDGET)
     edit_loose(
@@ -335,6 +338,104 @@ def test_a_content_subject_swapped_and_one_more_lost_is_still_lost(run: Path) ->
     assert report.findings.narrowed == []
     assert [item.check for item in report.findings.lost] == [LOOSE]
     assert [item.check for item in report.findings.added] == [LOOSE]
+
+
+def test_the_same_subjects_in_another_order_are_the_same_finding(run: Path, older: Path) -> None:
+    """A key's locations are a multiset: the recorded finding's two locations reversed, replayed
+    by the table it was recorded with - which names both today - match today's exactly."""
+    before = references(recorded_loose(run))
+    edit_loose(run, lambda finding: finding["drawing_locations"].reverse())
+    assert references(recorded_loose(run)) == before[::-1] != before
+
+    report = replayed_by(older, run)
+
+    assert report.findings.lost == []
+    assert report.findings.added == []
+    assert report.findings.narrowed == []
+
+
+def test_the_same_subjects_in_another_order_narrow_as_before(run: Path) -> None:
+    edit_loose(run, lambda finding: finding["drawing_locations"].reverse())
+
+    report = replay(run, requested=ALL_OFF)
+
+    [item] = report.findings.narrowed
+    assert (item.check, item.subject, item.removed_locations) == (LOOSE, NARROWED_SUBJECT, 1)
+    assert report.findings.lost == []
+
+
+def test_a_narrowed_finding_whose_remaining_references_are_the_current_ones_narrows(
+    run: Path, tmp_path: Path
+) -> None:
+    """The narrowed key is today's finding's key, reference by reference: `Widget1`'s alone."""
+    narrowed = narrowed_key(recorded_loose(run), not_content_of(run))
+    [today] = loose_findings(record(tmp_path / "today", part_package()))
+    widget = row_named(load_package(run).package, WIDGET)
+
+    assert narrowed is not None
+    assert narrowed.key == finding_subject_key(today)
+    assert references(today) == [widget.persist_ref]
+    [item] = replay(run, requested=ALL_OFF).findings.narrowed
+    assert item.removed_locations == 1
+
+
+def test_a_reference_two_rows_share_counts_once_per_location(tmp_path: Path, older: Path) -> None:
+    """`Sensors` shares `Widget1`'s reference, so the finding the older table records names that
+    reference twice, and so does today's under the same table: kept. A recorded finding naming
+    it once, where today's names it twice, is lost."""
+    run = record(tmp_path / "run", part_package(share=(SENSORS, WIDGET)), older)
+    widget = row_named(load_package(run).package, WIDGET)
+    assert references(recorded_loose(run)) == [widget.persist_ref, widget.persist_ref]
+    kept = replayed_by(older, run)
+    assert (kept.findings.lost, kept.findings.added) == ([], [])
+
+    edit_loose(run, lambda finding: finding["drawing_locations"].pop())
+    once = replayed_by(older, run)
+
+    assert [item.check for item in once.findings.lost] == [LOOSE]
+    assert [item.check for item in once.findings.added] == [LOOSE]
+
+
+def test_a_location_naming_a_shared_reference_is_kept_whichever_row_it_meant(
+    tmp_path: Path,
+) -> None:
+    """`Widget1` carries `Boss1`'s reference, so the recorded location names both rows: the key
+    compares the reference the finding carries, and which of its rows was meant is not compared
+    (research R2.8: on the recordings, mostly one sketch listed twice)."""
+    run = record(tmp_path / "today", part_package(share=(WIDGET, BOSS)))
+    package = load_package(run).package
+    [location] = recorded_loose(run).drawing_locations
+    named = {
+        row.name
+        for row in package.features
+        if (row.persist_ref_scope, row.persist_ref) == (location.document_id, location.persist_ref)
+    }
+    assert named == {WIDGET, BOSS}
+
+    report = replay(run, requested=ALL_OFF)
+
+    assert (report.findings.lost, report.findings.added) == ([], [])
+
+
+def test_a_finding_with_no_reference_is_compared_as_before(tmp_path: Path) -> None:
+    """`rms.folders.present` names no location: kept untouched, and lost when its configuration
+    moved, exactly as before decision 25A."""
+    run = record(tmp_path / "today", part_package())
+    folders = "rms.folders.present"
+    [recorded] = [f for f in load_session(run / "session.json").findings if f.check == folders]
+    assert recorded.drawing_locations == []
+    assert replay(run, requested=ALL_OFF).findings.lost == []
+
+    def elsewhere(session: dict[str, Any]) -> None:
+        for finding in session["findings"]:
+            if finding["check"] == folders:
+                finding["configuration"] = "Other"
+
+    rewrite_session(run, elsewhere)
+    report = replay(run, requested=ALL_OFF)
+
+    assert [item.check for item in report.findings.lost] == [folders]
+    assert [item.check for item in report.findings.added] == [folders]
 
 
 # --- the rule's parts ---------------------------------------------------------------------------

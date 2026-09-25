@@ -154,10 +154,13 @@ ENTITY_ID = re.compile(r"^[a-z]{3,4}:[0-9]{4,}$")
 that merely mentions an id (`"int:0001 cmp:0015+cmp:0026 Default computed"`) is prose.
 """
 
+SubjectLocation = tuple[str, str | None, str | None, str | None, int | None, str | None]
+"""`(document_id, sheet, view, annotation, page, persist_ref)`: one drawing location in a key."""
+
 SubjectKey = tuple[
     str,
     tuple[str, ...],
-    tuple[tuple[str, str | None, str | None, str | None, int | None], ...],
+    tuple[SubjectLocation, ...],
     tuple[str, ...],
     str,
 ]
@@ -169,23 +172,35 @@ def _none_last(values: tuple[Any, ...]) -> tuple[tuple[bool, str], ...]:
     return tuple((value is None, "" if value is None else str(value)) for value in values)
 
 
+def subject_locations(locations: Iterable[SubjectLocation]) -> tuple[SubjectLocation, ...]:
+    """Drawing locations in the order a subject key holds them: sorted, `None` last.
+
+    The key's locations are a multiset; this order is how two keys holding the same locations
+    compare equal. The fixture generator orders a recorded key's locations again with it once
+    its map has changed their values (`generate_fixtures.scrambled_key`).
+    """
+    return tuple(sorted(locations, key=_none_last))
+
+
 def finding_subject_key(finding: Finding) -> SubjectKey:
     """What a finding is about, independent of how the run that made it was numbered.
 
     Feature 008's replay compares recorded and replayed findings as multisets of this key
-    (research R2.8): the check, the sorted component ids, the drawing locations without their
-    `persist_ref` (sheet, view, annotation and page locate a finding; a persistent reference
-    is an internal string a re-dump may re-encode), the sorted inputs that are whole entity
-    ids, and the configuration. It leaves out `id`, `tool_result_ids` and `capture_ids`,
-    which checks first renumbers. Entity ids among the inputs are what tell two
-    `hole.coaxiality` findings on one pair of components apart.
+    (research R2.8): the check, the sorted component ids, the sorted drawing locations each with
+    its `persist_ref` (`None` where it has none), the sorted inputs that are whole entity ids,
+    and the configuration. It leaves out `id`, `tool_result_ids` and `capture_ids`, which
+    checks first renumbers. Entity ids among the inputs are what tell two `hole.coaxiality`
+    findings on one pair of components apart; an RMS finding's references are what tell its
+    subjects apart, one location per subject (owner decision 25A, 008 T128).
+
+    A persistent reference is an internal string a re-dump may re-encode, so this key must
+    never join two dumps of a design. It does not: the replay compares a recording with a
+    replay of the recording's own package, and the fixture generator carries each recorded
+    reference into the fixture's through the map that scrambled the package's references.
     """
-    locations = sorted(
-        (
-            (ref.document_id, ref.sheet, ref.view, ref.annotation, ref.page)
-            for ref in finding.drawing_locations
-        ),
-        key=_none_last,
+    locations = subject_locations(
+        (ref.document_id, ref.sheet, ref.view, ref.annotation, ref.page, ref.persist_ref)
+        for ref in finding.drawing_locations
     )
     entity_inputs = sorted(
         value for value in finding.inputs if isinstance(value, str) and ENTITY_ID.fullmatch(value)
@@ -193,7 +208,7 @@ def finding_subject_key(finding: Finding) -> SubjectKey:
     return (
         finding.check,
         tuple(sorted(finding.component_ids)),
-        tuple(locations),
+        locations,
         tuple(entity_inputs),
         finding.configuration,
     )

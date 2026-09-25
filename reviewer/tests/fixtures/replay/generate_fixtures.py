@@ -147,7 +147,7 @@ from swreview.benchmark.replay import (  # noqa: E402
     same_summary,
     turn_plans,
 )
-from swreview.findings import SubjectKey, finding_subject_key  # noqa: E402
+from swreview.findings import SubjectKey, finding_subject_key, subject_locations  # noqa: E402
 from swreview.ir.loader import PACKAGE_FILE_NAME  # noqa: E402
 from swreview.ir.models import EvidencePackage  # noqa: E402
 from swreview.tokens import count_tokens  # noqa: E402
@@ -453,19 +453,29 @@ def adjusted(recorded: TokenUsage, delta: int) -> TokenUsage:
 
 
 def scrambled_key(fmap: FictionalMap, key: SubjectKey) -> SubjectKey:
+    """A recorded finding's key in the fixture's names, by the map that scrambled the package.
+
+    Each location's persistent reference goes through `FictionalMap.persist_ref`, the function
+    `FictionalMap.package` scrambled the package's references with, so a recorded finding and the
+    fixture finding the current code makes compare exactly, reference by reference (owner
+    decision 25A, `contracts/replay.md` section 8); the locations are put back in the key's
+    order (`subject_locations`), which new values can change. Component ids and entity inputs
+    are ids, which the map keeps.
+    """
     check, components, locations, inputs, configuration = key
     return (
         check,
         components,
-        tuple(
+        subject_locations(
             (
                 fmap.value(document_id),
                 None if sheet is None else fmap.value(sheet),
                 None if view is None else fmap.value(view),
                 None if annotation is None else fmap.value(annotation),
                 page,
+                None if persist_ref is None else fmap.persist_ref(persist_ref),
             )
-            for document_id, sheet, view, annotation, page in locations
+            for document_id, sheet, view, annotation, page, persist_ref in locations
         ),
         inputs,
         fmap.value(configuration),
