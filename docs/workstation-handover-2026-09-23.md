@@ -8,7 +8,7 @@ SOLIDWORKS before building or registering. This document replaces the 2026-09-20
 handover as the current work; it is one ordered list of every seat task of features 008, 009, 010
 and 011, and of four earlier ones the owner added (decision 15A, 2026-09-24: 006 T101 and T102 in
 step 2, 007 T059 and T060 in step 13), and of three items of feature 004 the owner added
-(decision 18A, 2026-09-25: 004 T142 in step 19, the packages for 004 T003 in step 20, the probes
+(decision 18A, 2026-09-25: 004 T164 in step 19, the packages for 004 T003 in step 20, the probes
 004 T033 to T039 in step 21), each with its command, what decides pass or fail, and
 where its record goes. The task
 texts in `specs/00N-*/tasks.md` stay the source of truth: where this document and a task
@@ -298,7 +298,7 @@ row per step and task id. The development machine moves each answer into the res
     the return stops at a gate, run it once more, then with `-SkipTests`, and if `dotnet build`
     fails, clear SwReview's boxes in Tools > Add-ins: never leave the seat on the older add-in (the
     test plan's step 5.5). Record both answers.
-19. **004 T142: FeatureWorks, for the record.** Feature 004's import path is on the back burner
+19. **004 T164: FeatureWorks, for the record.** Feature 004's import path is on the back burner
     (its spec, owner decision 2026-09-19); whether the seat has FeatureWorks, the add-in that
     recognises features in an imported solid, informs the feasibility probe if the owner reopens
     that path. Read only: the test plan's step 1.7 prints one registry line (installed, listed as
@@ -347,4 +347,4 @@ own, editing the one pin test the task names, and 011 T095 goes into the next ha
 feature 004: `swreview remodel plan` runs over each P folder's `package.json` for T003, counts
 only, into `specs/004-resilient-remodeler/phase0-decision.md` section 4; the three answers files
 of step 21 give T033 to T039 their verdicts, recorded as quickstart Scenario 4 says; step 19's
-record ticks T142. A refuted blocking probe goes to the owner.
+record ticks T164. A refuted blocking probe goes to the owner.

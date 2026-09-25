@@ -27,7 +27,7 @@ promises is held in its text:
   rows in their order, the timing line passes `swreview timing`'s four inputs, and the headline
   time is the steps' sum;
 - feature 004's three items the owner added (decision 18A, 2026-09-25) do the same: the
-  FeatureWorks record (004 T142, dated in 004's `tasks.md`) at step 1.7 is read only and prints
+  FeatureWorks record (004 T164, dated in 004's `tasks.md`) at step 1.7 is read only and prints
   one line; the owner's parts at step 5.1 give 004 T003 its packages and no name; the probes
   004 T033 to T039 are step 5.6, the last before the handoff, in three runs into three folders -
   every probe whose body never reorders first, PROBE-1 alone last - that cover the probe
@@ -901,30 +901,49 @@ FEATURE_004 = REPO / "specs" / "004-resilient-remodeler"
 RMS = REPO / "extractor" / "SwReview.Extractor" / "Rms"
 PROBE_RUNS = tuple(("004", f"T{number:03d}") for number in range(33, 40))
 """004 T033 to T039, the re-modeler probes step 5.6 runs."""
-DECISION_18A_TASKS = frozenset({("004", "T003"), ("004", "T142"), *PROBE_RUNS})
+DECISION_18A_TASKS = frozenset({("004", "T003"), ("004", "T164"), *PROBE_RUNS})
 """Feature 004's items the owner added to this sitting (decision 18A, 2026-09-25)."""
 OPEN_TASK = re.compile(r"^- \[ \] (T\d{3})\b", re.MULTILINE)
 """An open task of any kind; feature 004 marks its seat tasks `Workstation`, not `[W]`."""
+TASK_LINE = re.compile(r"^- \[[ xX]\] (T\d{3}[a-z]?)\b", re.MULTILINE)
+"""A task of any kind, open or done, by the id it is defined under."""
+
+
+def test_every_tasks_list_defines_each_task_id_once() -> None:
+    """A results row's `004 T164` must name one task. Two lanes that each add a task on the same
+    day can take the same next number, as decision 17A's T142 and decision 18A's FeatureWorks
+    record did before they met on main."""
+    lists = sorted((REPO / "specs").glob("*/tasks.md"))
+
+    assert len(lists) >= 11
+    for tasks in lists:
+        ids = TASK_LINE.findall(tasks.read_text(encoding="utf-8"))
+        assert ids, tasks.parent.name
+        assert sorted({task for task in ids if ids.count(task) > 1}) == [], tasks.parent.name
 
 
 def test_decision_18a_puts_feature_004s_three_items_in_the_sitting(
     plan: str, results: str
 ) -> None:
-    """Decision 18A: the FeatureWorks record (004 T142), the packages 004 T003 reads and the
+    """Decision 18A: the FeatureWorks record (004 T164), the packages 004 T003 reads and the
     probes 004 T033 to T039 each have a step that names them and a row, and are gone from the
     table of earlier tasks not asked, which keeps the stage-1 runs T135 to T141. Each is still
-    open in 004's `tasks.md`, and T142, which no task described before, is dated there with the
+    open in 004's `tasks.md`, and T164, which no task described before, is dated there with the
     decision that added it."""
     tasks = (FEATURE_004 / "tasks.md").read_text(encoding="utf-8")
-    [t142] = [line for line in tasks.splitlines() if line.startswith("- [ ] T142 ")]
+    [t164] = [line for line in tasks.splitlines() if line.startswith("- [ ] T164 ")]
 
     assert DECISION_18A_TASKS <= tagged_tasks(plan)
     assert DECISION_18A_TASKS <= rowed_tasks(results)
     assert DECISION_18A_TASKS.isdisjoint(earlier_tasks_not_asked(plan))
     assert {("004", f"T{number}") for number in range(135, 142)} <= earlier_tasks_not_asked(plan)
     assert {task for _, task in DECISION_18A_TASKS} <= set(OPEN_TASK.findall(tasks))
-    assert "added 2026-09-25, the owner's decision 18A" in t142
-    assert "FeatureWorks" in t142 and "step 1.7" in t142
+    assert "added 2026-09-25, the owner's decision 18A" in t164
+    assert "FeatureWorks" in t164 and "step 1.7" in t164
+    for document in (plan, results, HANDOVER.read_text(encoding="utf-8")):
+        assert ("004", "T142") not in qualified_tasks(document), (
+            "004 T142 is decision 17A's node test; the FeatureWorks record is T164"
+        )
     assert "decision 18A" in re.sub(r"\s+", " ", plan[: plan.index("## The rules")])
     assert "decision 18A" in re.sub(r"\s+", " ", HANDOVER.read_text(encoding="utf-8"))
     assert ("004", "T003") in qualified_tasks(
@@ -937,7 +956,7 @@ def test_each_decision_18a_item_has_its_one_place(plan: str, results: str) -> No
     owner's parts at step 5.1, on the Model check tab; the probes at step 5.6."""
     assert_named_only_at(
         {
-            ("004", "T142"): {"1.7"},
+            ("004", "T164"): {"1.7"},
             ("004", "T003"): {"5.1"},
             **{task: {"5.6"} for task in PROBE_RUNS},
         },
@@ -1195,7 +1214,7 @@ WRITING_COMMAND = re.compile(
 
 
 def test_the_featureworks_record_only_reads(plan: str) -> None:
-    """004 T142 is a record: the registry block writes nothing, the dialog is closed with Cancel
+    """004 T164 is a record: the registry block writes nothing, the dialog is closed with Cancel
     with no box changed, and any answer passes."""
     record = step(plan, "1.7")
     flat = re.sub(r"\s+", " ", record)
