@@ -74,7 +74,7 @@ from swreview.benchmark.recording import (
 from swreview.checks.interference import CHECK as INTERFERENCE_CHECK
 from swreview.checks.rms_types import RmsTypeTable, load_table
 from swreview.exceptions import RMS_CHECK_PREFIX
-from swreview.findings import Finding, SubjectKey, finding_subject_key
+from swreview.findings import Finding, SubjectKey, finding_subject_key, subject_locations
 from swreview.ir.loader import PACKAGE_FILE_NAME
 from swreview.ir.models import EvidencePackage
 from swreview.prerun import ALREADY_RUN
@@ -1695,6 +1695,32 @@ def _as_recorded(key: SubjectKey) -> SubjectKey:
     return key
 
 
+def _without_references(key: SubjectKey) -> SubjectKey:
+    """`key` with every drawing location's persistent reference left out, the locations back in
+    the key's order: what a carried finding is compared by once nothing matched it by reference."""
+    check, components, locations, inputs, configuration = key
+    return (
+        check,
+        components,
+        subject_locations(
+            (document_id, sheet, view, annotation, page, None)
+            for document_id, sheet, view, annotation, page, _ in locations
+        ),
+        inputs,
+        configuration,
+    )
+
+
+def _take_without_references(added: Counter[SubjectKey], target: SubjectKey) -> bool:
+    """Take one of `added` whose key, references left out, is `target` - the first in the
+    current findings' order - and say whether there was one."""
+    for key, count in added.items():
+        if count > 0 and _without_references(key) == target:
+            added[key] -= 1
+            return True
+    return False
+
+
 def compare_finding_keys(
     findings: Sequence[Finding],
     current: Iterable[SubjectKey],
@@ -1713,6 +1739,14 @@ def compare_finding_keys(
     equals its narrowed key, one to one in recorded order. What is still unmatched is lost.
     A key holds each drawing location's persistent reference (`finding_subject_key`, owner
     decision 25A), so both matches compare which subjects a finding names, not how many.
+
+    Last, each finding lever 11a carried that is still unmatched, in recorded order, takes one
+    current finding nothing else matched whose key equals its own with every reference left out
+    on both sides (review of decision 25A, 008 T129). A carried finding keeps the locations of
+    the session it was carried from, and carry-over's fingerprint hashes no reference, so its
+    references can be an earlier dump's: once nothing matched it by reference, a re-encoded
+    reference and a swapped subject cannot be told apart, and it is compared as every finding
+    was before decision 25A - its subjects counted per scope.
 
     `named` carries a recorded key, narrowed or not, into the current side's names: the replay
     compares as recorded, the fixture generator carries it into the fixture's. `uncompared`
@@ -1734,7 +1768,7 @@ def compare_finding_keys(
     if any(findings[position].check.startswith(RMS_CHECK_PREFIX) for position in unmatched):
         package = EvidencePackage.model_validate_json(package_path.read_bytes())
         not_content = not_content_locations(package, load_table())
-    lost: list[int] = []
+    still: list[int] = []
     narrowed: list[tuple[int, int]] = []
     for position in unmatched:
         candidate = narrowed_key(findings[position], not_content)
@@ -1744,6 +1778,14 @@ def compare_finding_keys(
                 added[target] -= 1
                 narrowed.append((position, candidate.removed_locations))
                 continue
+        still.append(position)
+    lost: list[int] = []
+    for position in still:
+        finding = findings[position]
+        if finding.carried_over_from is not None and _take_without_references(
+            added, named(_without_references(finding_subject_key(finding)))
+        ):
+            continue
         lost.append(position)
     return KeyComparison(lost=tuple(lost), narrowed=tuple(narrowed), added=+added)
 
@@ -1762,7 +1804,8 @@ def _findings(
     comparison stays a multiset. A finding of a step the requested pass answered from checks
     is compared against the whole requested session - the pre-run wrote it there - even
     when pass A had to estimate the step, and a missing one is lost unless the current type
-    table narrowed it (`compare_finding_keys`, owner decision 23A).
+    table narrowed it (`compare_finding_keys`, owner decision 23A) or, carried by lever 11a, it
+    equals a finding nothing else matched with its references left out (T129).
     """
     by_step = {item.recorded.step: item for item in classes}
     contacts = reclassifying_contacts(

@@ -38,8 +38,10 @@ from swreview.ir.models import EvidencePackage
 from tests.support import mechanical
 from tests.support.narrowed import (
     BOSS,
+    HISTORY,
     LOOSE,
     SCRIPT,
+    SENSORS,
     WIDGET,
     loose_findings,
     older_table,
@@ -262,3 +264,16 @@ def test_a_narrowed_finding_whose_remaining_subject_was_swapped_refuses(
         0,
         0,
     )
+
+
+def test_a_removed_subject_swapped_for_another_row_that_is_not_content_narrows(
+    generator: ModuleType, tmp_path: Path, recording: Path
+) -> None:
+    """As in the replay (review of decision 25A, T129): the recorded system subject swapped for
+    `History`, which no table counts, is removed like `Sensors` and compared with nothing, so the
+    fixture is written with the finding narrowed."""
+    fmap = a_map(recording)
+    fixture = fixture_of(tmp_path, recording, fmap)
+    swap_reference(recording, SENSORS, HISTORY)
+
+    assert check(generator, recording, fixture, fmap) == ([], 0, 1)
